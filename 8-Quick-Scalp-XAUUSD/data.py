@@ -2,12 +2,38 @@ import MetaTrader5 as mt5
 import pandas as pd
 
 
+_SYMBOL_CANDIDATES = {
+    'XAUUSD': ['XAUUSD', 'XAUUSD.s', 'XAUUSDm', 'XAUUSD.a', 'GOLD'],
+    'GER40':  ['GER40', 'GER40.s', 'GER40m', 'DAX40', 'DE40'],
+    'NAS100': ['NAS100', 'NAS100.s', 'NAS100m', 'NASDAQ'],
+}
+
+_resolved = {}   # cache so we only resolve once per session
+
+
+def _resolve(symbol):
+    if symbol in _resolved:
+        return _resolved[symbol]
+    available = {s.name for s in (mt5.symbols_get() or [])}
+    base = symbol.replace('.s', '').replace('m', '').upper()
+    candidates = _SYMBOL_CANDIDATES.get(base, [symbol])
+    for c in candidates:
+        if c in available:
+            mt5.symbol_select(c, True)
+            _resolved[symbol] = c
+            return c
+    # fallback — try the original and let MT5 error naturally
+    _resolved[symbol] = symbol
+    return symbol
+
+
 def initialize():
     if not mt5.initialize():
         raise RuntimeError(f'MT5 init failed: {mt5.last_error()}')
 
 
 def get_data(symbol, timeframe_minutes, bars=500):
+    symbol = _resolve(symbol)
     tf_map = {1: mt5.TIMEFRAME_M1, 5: mt5.TIMEFRAME_M5,
               15: mt5.TIMEFRAME_M15, 60: mt5.TIMEFRAME_H1,
               1440: mt5.TIMEFRAME_D1}

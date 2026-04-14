@@ -27,7 +27,25 @@ from telegram_sender import send_signal as _tg_send_signal
 STRATEGY_NAME = "Gold HA Bot"
 
 def send_telegram_message(symbol, direction, entry, sl, tp):
-    _tg_send_signal(symbol, direction, entry, sl, tp, STRATEGY_NAME, rr=1.5)
+    from telegram_sender import _post, SIGNAL_CHAT
+    from datetime import datetime
+    icon = "🟢" if direction == "BUY" else "🔴"
+    tp_str = f"{round(tp, 2)}" if tp and tp != 0.0 else "Trailing (ATR)"
+    msg = (
+        f"🚨 <b>CryptoNite Signal</b>\n"
+        f"━━━━━━━━━━━━━━━━━━━━\n"
+        f"📌 Strategy: {STRATEGY_NAME}\n"
+        f"📈 Asset: {symbol}\n"
+        f"{icon} Direction: <b>{direction}</b>\n"
+        f"━━━━━━━━━━━━━━━━━━━━\n"
+        f"💰 Entry: {round(entry, 2)}\n"
+        f"🛑 SL:    {round(sl, 2)}\n"
+        f"🎯 TP:    {tp_str}\n"
+        f"⚖️  R:R:   1:1.5\n"
+        f"━━━━━━━━━━━━━━━━━━━━\n"
+        f"🕐 {datetime.utcnow().strftime('%Y-%m-%d %H:%M')} UTC"
+    )
+    _post(msg, SIGNAL_CHAT)
 from datetime import datetime
 
 
@@ -217,7 +235,7 @@ def execute_trade(symbol, signal, cfg):
         "outcome":   "OPEN",
     })
 
-    # Telegram signal notification
-    send_telegram_message(symbol, signal, price, sl, tp)
+    # Telegram signal notification (no fixed TP — manager trails)
+    send_telegram_message(symbol, signal, price, sl, 0.0)
 
     return ticket

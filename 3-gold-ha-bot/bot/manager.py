@@ -39,6 +39,48 @@ def send_telegram_message(msg, message_type="report"):
     from telegram_sender import _post, SIGNAL_CHAT
     _post(msg, SIGNAL_CHAT)
 
+# Stores the ORIGINAL SL per ticket before breakeven modifies it.
+# Without this, risk=0 after BE fires and the trail never runs.
+_orig_sl = {}
+
+
+def _recover_orig_sl(ticket, current_sl, entry, symbol=None):
+    """
+    Return the original SL for a ticket.
+
+    Priority:
+      1. If current SL != entry it hasn't been moved to BE yet — use it directly.
+      2. Otherwise look through MT5 order history for the FIRST order on this
+         position (which has the original SL before any modifications).
+      3. ATR-based fallback using the symbol so trail still functions.
+      4. Return current SL as last resort (trail disabled for this trade).
+    """
+    # SL not yet at breakeven — this IS the original
+    if abs(current_sl - entry) > 0.01:
+        return current_sl
+
+    # SL is at (or very near) entry — it was already moved. Dig into history.
+    try:
+        orders = mt5.history_orders_get(datetime(2000, 1, 1), datetime.now())
+        if orders:
+            for order in orders:           # chronological → oldest first = original
+                if order.position_id == ticket and order.sl and order.sl > 0:
+                    if abs(order.sl - entry) > 0.01:   # skip if already at entry
+                        return order.sl
+    except Exception:
+        pass
+
+    # ATR-based fallback — at least gives trail something to work with
+    if symbol:
+        try:
+            atr = get_atr(symbol)
+            if atr and atr > 0:
+                return entry - atr * 1.5   # approximate original SL distance
+        except Exception:
+            pass
+
+    return current_sl   # genuinely cannot recover
+
 
 # -------------------------------------------------------
 # DAILY LOSS TRACKING
@@ -105,7 +147,7 @@ def manage_positions(signal_map):
         symbol    = pos.symbol
         ticket    = pos.ticket
         entry     = pos.price_open
-        sl        = pos.sl
+        sl        = pos.sl           # current SL (may be at BE after modification)
         direction = "BUY" if pos.type == 0 else "SELL"
 
         tick = mt5.symbol_info_tick(symbol)
@@ -119,11 +161,22 @@ def manage_positions(signal_map):
             log(f"{symbol} #{ticket}: no SL set — skipping management ⚠️")
             continue
 
-        risk = abs(entry - sl)
+        # Store original SL on first encounter.
+        # We MUST use original SL for risk calculation — after BE fires pos.sl == entry
+        # which makes risk=0 and kills the trail permanently.
+        # On restart the SL may already be at BE, so we look up order history first.
+        if ticket not in _orig_sl:
+            recovered = _recover_orig_sl(ticket, sl, entry, symbol)
+            _orig_sl[ticket] = recovered
+            log(f"{symbol} #{ticket}: original SL locked at {recovered:.2f}"
+                + (" (recovered from history)" if recovered != sl else ""))
+
+        orig_sl = _orig_sl[ticket]
+        risk    = abs(entry - orig_sl)
         if risk <= 0:
             continue
 
-        # R:R ratio — how many times the initial risk are we up/down?
+        # R:R ratio using original risk so it stays consistent after BE
         if direction == "BUY":
             rr = (price - entry) / risk
         else:
@@ -219,11 +272,12 @@ def close_position(position, reason="MANUAL"):
 
     if result and result.retcode == mt5.TRADE_RETCODE_DONE:
 
-        entry = position.price_open
-        sl    = position.sl
+        entry    = position.price_open
+        sl       = position.sl
+        orig_sl  = _orig_sl.pop(position.ticket, sl)  # get then remove
 
-        if sl and sl != 0:
-            risk = abs(entry - sl)
+        if orig_sl and orig_sl != 0:
+            risk = abs(entry - orig_sl)
             rr   = (price - entry) / risk if position.type == 0 else (entry - price) / risk
         else:
             rr = 0

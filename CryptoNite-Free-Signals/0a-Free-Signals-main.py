@@ -399,7 +399,7 @@ def check_signal(symbol: str) -> None:
     signal_time = str(closed_m1["time"])
 
     message = (
-        f"🚨 CryptoNite Free Signals\n"
+        f"🚨 CryptoNite Signals V2\n"
         f"\n"
         f"Time: {signal_time}\n"
         f"Asset: XAUUSD\n"

@@ -94,45 +94,47 @@ def run_bot():
                 if not signal:
                     continue
 
-                # Don't re-enter on the same signal IF we already placed a trade on it.
-                # FIXED: the original code locked last_signals BEFORE calling execute_trade,
-                # which meant a SKIPPED or failed trade permanently blocked the signal until
-                # the direction changed. Now we only lock after a successful trade placement.
+                # If no position is open, clear the signal lock so a new entry
+                # is allowed on the same direction after a trade has closed.
                 if last_signals.get(symbol) == signal:
-                    log(f"{symbol}: signal unchanged ({signal}) — waiting for new setup")
-                    continue
+                    open_pos = mt5.positions_get(symbol=symbol)
+                    if not open_pos:
+                        last_signals.pop(symbol, None)
+                        log(f"{symbol}: position closed — signal lock cleared, re-evaluating")
+                    else:
+                        log(f"{symbol}: signal unchanged ({signal}) — position still open")
+                        continue
 
                 log(f"{symbol}: NEW SIGNAL → {signal}")
 
                 result = execute_trade(symbol, signal, cfg)
 
                 if result == "STARTUP":
-                    pass  # already logged inside execute_trade
+                    pass  # not ready yet — don't lock, retry next scan
+
                 elif result == "COOLDOWN":
-                    pass  # cooldown handles timing — don't lock signal
+                    pass  # cooling down — don't lock, retry when cooldown expires
+
                 elif result == "IN_POSITION":
-                    pass  # manager is handling the open trade
+                    # Active trade — lock signal so we don't try to add another entry
+                    last_signals[symbol] = signal
+
                 elif result == "DAILY_LIMIT":
-                    pass  # already logged inside execute_trade
+                    # Hit the daily cap — lock for today
+                    last_signals[symbol] = signal
+
                 elif result == "SKIPPED":
                     # Spread or ATR filter fired — conditions may improve
-                    # next scan, so do NOT lock last_signals here.
-                    log(f"{symbol}: trade skipped (spread/ATR filter) — will retry next scan")
-                    continue  # skip the last_signals update below
+                    pass  # don't lock, retry next scan
+
                 elif result:
-                    # A ticket number — trade was successfully placed. Lock the signal
-                    # so we don't re-enter on the same setup until direction changes.
+                    # Ticket number returned — trade placed successfully
                     last_signals[symbol] = signal
                     log(f"{symbol}: ✅ Trade placed | ticket={result}")
-                else:
-                    # MT5 returned None — order error. Don't lock; let it retry.
-                    log(f"{symbol}: ❌ Trade failed — will retry next scan")
-                    continue  # skip the last_signals update below
 
-                # Lock signal for all non-continue paths (STARTUP, COOLDOWN, IN_POSITION, DAILY_LIMIT)
-                # These states mean we saw the signal but couldn't act. Lock it so we don't
-                # spam logs every scan — the signal will unlock when direction changes.
-                last_signals[symbol] = signal
+                else:
+                    # MT5 returned None — order error, don't lock, retry next scan
+                    log(f"{symbol}: ❌ Trade failed — will retry next scan")
 
             time.sleep(BOT_SETTINGS["scan_interval_seconds"])
 

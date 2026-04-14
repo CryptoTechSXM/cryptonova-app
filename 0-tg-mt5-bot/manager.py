@@ -55,11 +55,27 @@ class TradeManager:
             for pos in positions:
                 if pos.magic == settings.mt5_magic_number:
                     ticket = pos.ticket
+
+                    # Try to recover the ORIGINAL SL from order history.
+                    # pos.sl may already be at breakeven after a trail fired,
+                    # which would make sl_distance=0 and break the trail logic.
+                    orig_sl = pos.sl
+                    try:
+                        from_dt = datetime(2000, 1, 1)
+                        hist_orders = mt5.history_orders_get(from_dt, datetime.now())
+                        if hist_orders:
+                            for order in reversed(hist_orders):
+                                if order.position_id == ticket and order.sl > 0:
+                                    orig_sl = order.sl
+                                    break
+                    except Exception:
+                        pass
+
                     self.active_trades[ticket] = {
                         "symbol":         pos.symbol,
                         "side":           "BUY" if pos.type == mt5.ORDER_TYPE_BUY else "SELL",
                         "entry":          pos.price_open,
-                        "sl":             pos.sl,
+                        "sl":             orig_sl,   # original SL, not current (may be at BE)
                         "tp":             pos.tp,
                         "tp_levels":      [pos.tp] if pos.tp > 0 else [],
                         "partial_close_done": [],
@@ -465,6 +481,10 @@ class TradeManager:
                 if res and res.retcode == mt5.TRADE_RETCODE_DONE:
                     log(f"[TRAIL] SL moved to {new_sl:.5f} on {pos.symbol} "
                         f"ticket={ticket} (profit={profit_r:.2f}R, locked={(profit_r-0.5):.2f}R)", "INFO")
+                else:
+                    retcode = res.retcode if res else "None"
+                    log(f"[TRAIL] SL modify FAILED ticket={ticket} {pos.symbol} "
+                        f"new_sl={new_sl:.5f} retcode={retcode}", "ERROR")
 
     # =========================
     # CANCEL STALE PENDING ORDERS
