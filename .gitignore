@@ -7,6 +7,18 @@
 .env
 *.env
 
+# --- Telethon session files (contain auth tokens) ---
+*.session
+*.session-journal
+
+# --- Office lock files ---
+.~lock.*
+
+# --- Bot logs & notes ---
+trade_log.txt
+journal.txt
+*.txt
+
 # --- Python cache ---
 __pycache__/
 *.py[cod]
