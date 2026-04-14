@@ -46,7 +46,7 @@ MT5_SERVER   = os.getenv("MT5_SERVER",     "")
 BOT_TOKEN = os.getenv("BOT_TOKEN", "7716066914:AAEZATUSQXRRsTIO3xCIrYpNJ8dwzEnF1Iw")
 CHAT_ID   = os.getenv("CHAT_ID",   "-1003523601209")
 
-STRATEGY_LABEL = "HA Relaxed"
+STRATEGY_LABEL = "Free"   # heading → "CryptoNite Free Signals"
 
 # Relaxed HA parameters
 DOJI_THRESHOLD       = 0.25   # body/range < this → doji
@@ -399,7 +399,7 @@ def check_signal(symbol: str) -> None:
     signal_time = str(closed_m1["time"])
 
     message = (
-        f"🚨 CryptoNite Signals V2\n"
+        f"🚨 CryptoNite Free Signals\n"
         f"\n"
         f"Time: {signal_time}\n"
         f"Asset: XAUUSD\n"
