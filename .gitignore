@@ -1,0 +1,45 @@
+# ============================================================
+#  CryptoNite MT5 Bots — .gitignore
+#  NEVER commit credentials or generated files
+# ============================================================
+
+# --- Credentials (NEVER commit these) ---
+.env
+*.env
+
+# --- Python cache ---
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+
+# --- Logs ---
+*.log
+mt5_csv_updater.log
+
+# --- Trade & signal data (generated at runtime) ---
+*.csv
+!.env.example
+
+# --- Excel reports (generated) ---
+*.xlsx
+*.xls
+
+# --- MT5 data files ---
+h1.csv
+m1.csv
+m5.csv
+
+# --- Setup script (contains PAT, deletes itself after run) ---
+git_setup.bat
+
+# --- OS files ---
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# --- IDE ---
+.vscode/
+.idea/
+*.swp

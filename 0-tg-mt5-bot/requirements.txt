@@ -1,0 +1,16 @@
+# CryptoNite Bot — Python Dependencies
+# Install everything with:  pip install -r requirements.txt
+#
+# Python 3.10+ recommended. The bot is tested on 3.11.
+# MetaTrader5 package is Windows-only (MT5 terminal must also be installed).
+
+# Telegram client — used for listening to signal channels (user account)
+# and for sending bot commands (bot token)
+telethon>=1.34.0
+
+# Reads .env file into environment variables
+python-dotenv>=1.0.0
+
+# MetaTrader 5 bridge — Windows only
+# Install MT5 terminal from https://www.metatrader5.com/en/download first
+MetaTrader5>=5.0.45

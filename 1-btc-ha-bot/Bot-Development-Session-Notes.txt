@@ -1,0 +1,187 @@
+# Bot Development Session Notes
+**Date:** April 11, 2026  
+**Session:** 001  
+**Account:** PU Prime Demo — ETHUSD, BTCUSD  
+**Balance at session start:** $98.20 USD  
+
+---
+
+## What We Built This Session
+
+### 1. ETH HA Bot V1 (`eth_ha_bot_v1.zip`)
+A full port of the existing BTC HA Bot V3 adapted for Ethereum.
+
+**Key differences from BTC bot:**
+| Parameter | BTC Bot V3 | ETH Bot V1 |
+|---|---|---|
+| Symbol | BTCUSD | ETHUSD |
+| Min ATR | 50.0 | 3.0 |
+| Lot size | 0.01 | 0.1 |
+| Daily loss limit | -$200 | -$150 |
+| Magic number | 123456 | 654321 |
+| Log file | trade_log.csv | eth_trade_log.csv |
+
+**Strategy logic (identical to BTC — 7 filters must all pass):**
+1. M5 ATR above minimum (market is moving)
+2. H1 trend clear — 2 consecutive HA candles same direction
+3. M1 EMA100 trend agrees
+4. H1 and EMA must point same direction (no conflict)
+5. Previous M1 candle is a doji (body/range < 15%)
+6. M5 HA confirms direction
+7. Current M1 HA candle is strong with no opposing wick
+
+**Trade management (auto bot):**
+- Break-even: SL moves to entry + spread once 1× ATR profit reached
+- Trailing stop: trails at 3× ATR as price moves in favour
+- Reversal exit: closes after 2 consecutive opposite M5 HA candles
+- Session filter: 07:00–20:00 UTC only
+- Daily loss limit: -$150 (stops new entries, not management of open trades)
+- Cooldown: 60 seconds between trades
+- Reconnection: retries MT5 up to 5 times on disconnect
+
+---
+
+### 2. ETH Manual Trade Manager (`eth_ha_bot_v1_manual.zip`)
+Separate entry point (`main_manual.py`) — you open trades manually in MT5,
+the bot detects them and applies all management logic automatically.
+
+**What it manages:**
+- Sets SL/TP from ATR if your manual trade has none
+- Break-even at 1× ATR profit
+- Trailing stop at 3× ATR
+- Reversal exit on 2 consecutive M5 HA candles
+- Logs every closed trade to `eth_trade_log.csv`
+
+**What it does NOT do in manual mode:**
+- Does not open new trades
+- Does not block entries outside session hours (you made the call)
+- Does not enforce daily loss limit on existing positions
+
+**How to run:**
+```
+# Auto bot (finds signals and manages)
+python main.py
+
+# Manual manager (you enter, bot manages)
+python main_manual.py
+```
+
+---
+
+## Timezone Clarification (Important)
+
+| Clock | Time | Offset |
+|---|---|---|
+| Your local computer | 11:09 PM (Apr 10) | UTC-5 |
+| MT5 server (PU Prime) | 06:09 AM (Apr 11) | UTC+0 (GMT) |
+| Bot session filter | reads UTC directly | UTC+0 ✅ |
+
+**Conclusion:** PU Prime server runs on UTC+0. Bot session filter also uses UTC.
+They are perfectly aligned — no offset correction needed in config.  
+Session 07:00–20:00 UTC = 02:00 AM–03:00 PM your local time.  
+Session hours are for **bot trading only** — you can view charts any time.
+
+---
+
+## Key Decisions Made
+
+### Multi-Asset Trading (planned, not built yet)
+- Bot architecture already supports multi-asset via separate instances
+- Two options discussed:
+  - **Option A:** One folder per asset, run separate terminals (simplest, most robust)
+  - **Option B:** One script, loop over asset configs (cleaner, more complex)
+- Decision: **build after demo data is collected**
+
+### Risk Management Upgrade (planned, not built yet)
+Current system uses fixed $ daily loss limits. Agreed to move to **percentage-based risk**:
+
+| Level | Limit | Purpose |
+|---|---|---|
+| Per trade risk | 1–2% of account balance | Dynamic lot sizing |
+| Per asset daily loss | 3% of account equity | Stops one bad asset |
+| Portfolio daily loss | 6–8% of account equity | Hard stop all assets |
+
+**Dynamic lot sizing formula:**
+```
+Lot size = (Account balance × Risk %) / (ATR × ATR_MULTIPLIER)
+```
+Example: $500 account, 1% risk, ATR=8, multiplier=2
+→ Lot = $5 / $16 = 0.3125 ETH
+
+**Correlation rule (to add):**
+If ETH and BTC both signal same direction simultaneously → take strongest signal only, skip the other.
+
+**Changes required (when ready):**
+- `risk.py` → balance lookup + percentage calculation
+- `config.py` → replace fixed $ values with percentages
+- `trader.py` → dynamic lot size calculator
+
+---
+
+## Data Collection Plan
+
+Run ETH bot on **PU Prime Demo** and collect `eth_trade_log.csv`.
+Target: **30–50 closed trades minimum** before any parameter changes.
+
+**What to analyse when data comes in:**
+- Win rate (% of trades closed in profit)
+- Average winner vs average loser (actual R:R achieved)
+- Best and worst performing sessions (time of day)
+- ATR threshold — is 3.0 filtering enough choppy markets?
+- Doji threshold — is 15% too tight or too loose?
+- Reversal candles — is 2 exiting too early or too late?
+- Signal frequency — how many signals per day?
+- ETH vs BTC performance comparison
+
+---
+
+## About Claude (Important for Next Session)
+
+Claude does not retain memory between conversations.  
+At the start of the next session, upload this notes file and any trade log CSVs.  
+Claude will read them and continue exactly where we left off.
+
+**Quick brief for next session:**
+> "We are building a multi-asset Heikin-Ashi trading bot for MT5.  
+> BTC and ETH bots are built and running on PU Prime demo (UTC+0 server).  
+> Here is our session notes file and trade log. We want to analyse performance  
+> and implement percentage-based risk management across 3–5 crypto assets."
+
+---
+
+## Files In Your Bot Folder
+
+```
+eth_ha_bot_v1/
+├── main.py              ← Auto bot entry point
+├── main_manual.py       ← Manual trade manager entry point
+├── manual_manager.py    ← Manual management logic
+├── config.py            ← All parameters (edit this one only)
+├── strategy.py          ← 7-filter signal logic
+├── indicators.py        ← HA, EMA, ATR, doji, trend functions
+├── trader.py            ← MT5 order execution
+├── risk.py              ← Session filter + daily loss manager
+├── data.py              ← MT5 data fetching
+├── logger.py            ← CSV trade logging
+└── eth_trade_log.csv    ← Generated when trades close (bring this next session)
+
+session_notes/
+└── session_2026_04_11.md   ← This file
+```
+
+---
+
+## Next Session Checklist
+
+- [ ] Upload `eth_trade_log.csv` with at least 30 trades
+- [ ] Upload this session notes file
+- [ ] Report current demo account balance
+- [ ] Decide Option A vs Option B for multi-asset architecture
+- [ ] Build percentage-based risk management
+- [ ] Add dynamic lot sizing
+- [ ] Add portfolio-level daily loss cap
+- [ ] Add correlation check (ETH + BTC same signal = take strongest only)
+- [ ] Decide which additional assets to add (SOL? XRP? others?)
+
+---
+*Session notes generated automatically — save this file in your bot folder.*
