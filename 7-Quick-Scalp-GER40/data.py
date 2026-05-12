@@ -35,7 +35,7 @@ def get_data(symbol, timeframe_minutes, bars=500):
     symbol = _resolve(symbol)
     tf_map = {1: mt5.TIMEFRAME_M1, 5: mt5.TIMEFRAME_M5,
               15: mt5.TIMEFRAME_M15, 60: mt5.TIMEFRAME_H1,
-              1440: mt5.TIMEFRAME_D1}
+              240: mt5.TIMEFRAME_H4, 1440: mt5.TIMEFRAME_D1}
     tf = tf_map.get(timeframe_minutes)
     if tf is None:
         raise ValueError(f'Unknown timeframe: {timeframe_minutes}')
@@ -48,7 +48,35 @@ def get_data(symbol, timeframe_minutes, bars=500):
 
 
 def get_daily_atr(symbol, period=14):
-    df = get_data(symbol, 1440, bars=period + 5)
+    """
+    Calculate ATR using daily (D1) bars.
+    Falls back through H4 → H1 → M15 when higher timeframes are
+    unavailable — common for index/stock CFDs on some brokers.
+    """
+    def _compress(df):
+        df = df.copy()
+        df['date'] = df['time'].dt.date
+        daily = df.groupby('date').agg(
+            open=('open', 'first'),
+            high=('high', 'max'),
+            low=('low', 'min'),
+            close=('close', 'last')
+        ).reset_index()
+        return daily.tail(period + 5).reset_index(drop=True)
+
+    df = None
+    for tf, bars_per_day in [(1440, 1), (240, 6), (60, 24), (15, 32)]:
+        try:
+            raw = get_data(symbol, tf, bars=max(period + 5, (period + 2) * bars_per_day))
+            if raw is not None and len(raw) > period:
+                df = raw if tf == 1440 else _compress(raw)
+                break
+        except RuntimeError:
+            continue
+
+    if df is None:
+        raise RuntimeError(f"No data available for {symbol} on any timeframe for ATR calculation")
+
     df['prev_close'] = df['close'].shift(1)
     df['tr'] = df.apply(
         lambda x: max(

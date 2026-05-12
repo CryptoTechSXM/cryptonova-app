@@ -4,7 +4,8 @@
 #  Backtest: 63% WR | +0.87R expectancy | 2:1 RR
 # ============================================================
 
-SYMBOL          = 'NAS100.s'
+BASE_SYMBOL     = "NAS100"   # broker-agnostic base name
+SYMBOL          = BASE_SYMBOL  # resolved to broker symbol at startup
 
 # Session open (NY market open)
 SESSION_OPEN_HOUR   = 13   # 13:30 UTC = 09:30 ET
@@ -18,7 +19,7 @@ TF_1D   = 1440
 
 # Liquidity candle: opening range must be 20-35% of daily ATR
 LIQ_PCT_MIN = 0.20
-LIQ_PCT_MAX = 0.35
+LIQ_PCT_MAX = 0.50
 ATR_PERIOD  = 14
 
 # Entry window
@@ -29,9 +30,11 @@ RR           = 2.0     # 2:1 risk-reward (engulfing patterns only)
 TRAIL_RUNNERS = False  # set True to trail instead of fixed TP
 
 # Risk management
-RISK_PERCENT       = 1.0
-MAX_DAILY_TRADES   = 2     # QFS is selective: 1-2 quality setups/day
-MAX_DAILY_LOSS_PCT = 3.0
+RISK_PERCENT          = 1.0
+MAX_DAILY_TRADES      = 2     # QFS is selective: 1-2 quality setups/day
+MAX_DAILY_LOSS_PCT    = 3.0
+MAX_ACTUAL_RISK_PCT   = 3.0   # warn or block when actual risk exceeds this % of balance
+RISK_CAP_MODE         = "warn"  # "warn" = log but still trade | "block" = skip the trade
 
 MAGIC_NUMBER   = 20260415
 CHECK_INTERVAL = 10    # seconds

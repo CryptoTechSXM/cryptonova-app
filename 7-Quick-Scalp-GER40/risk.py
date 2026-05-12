@@ -13,21 +13,24 @@ def is_session_active(config):
 class DailyRiskManager:
 
     def __init__(self, config):
-        self.config       = config
-        self.trade_date   = datetime.now(timezone.utc).date()
-        self.trade_count  = 0
-        self.daily_pnl    = 0.0
-        self.open_balance = None
-        self.blocked      = False
+        self.config        = config
+        self.trade_date    = datetime.now(timezone.utc).date()
+        self.trade_count   = 0
+        self.daily_pnl     = 0.0
+        self.open_balance  = None
+        self.blocked       = False
+        self.consec_losses = 0
+        self.max_consec    = getattr(config, "MAX_CONSECUTIVE_LOSSES", 3)
 
     def _reset_if_new_day(self):
         today = datetime.now(timezone.utc).date()
         if today is not self.trade_date and today > self.trade_date:
-            self.trade_date   = today
-            self.trade_count  = 0
-            self.daily_pnl    = 0.0
-            self.open_balance = None
-            self.blocked      = False
+            self.trade_date    = today
+            self.trade_count   = 0
+            self.daily_pnl     = 0.0
+            self.open_balance  = None
+            self.blocked       = False
+            self.consec_losses = 0
 
     def _opening_balance(self):
         if self.open_balance is None:
@@ -38,7 +41,7 @@ class DailyRiskManager:
     def record_entry(self):
         self._reset_if_new_day()
         self.trade_count += 1
-        max_t = getattr(self.config, "MAX_DAILY_TRADES", 3)
+        max_t = getattr(self.config, "MAX_DAILY_TRADES", 2)
         print(f"Daily trades: {self.trade_count}/{max_t}")
         if self.trade_count >= max_t:
             print(f"Daily trade limit reached ({self.trade_count}/{max_t})")
@@ -51,6 +54,14 @@ class DailyRiskManager:
         pct     = (self.daily_pnl / bal * 100) if bal > 0 else 0
         max_pct = getattr(self.config, "MAX_DAILY_LOSS_PCT", 3.0)
         print(f"Daily P&L: {self.daily_pnl:+.2f} ({pct:+.1f}%) | limit: -{max_pct}%")
+        if profit_usd >= 0:
+            self.consec_losses = 0
+        else:
+            self.consec_losses += 1
+            print(f"Consecutive losses: {self.consec_losses}/{self.max_consec}")
+            if self.consec_losses >= self.max_consec:
+                print(f"[KILL SWITCH] {self.consec_losses} consecutive losses — trading PAUSED for today")
+                self.blocked = True
         if pct <= -max_pct:
             print(f"Daily loss limit hit ({pct:.1f}%)")
             self.blocked = True
@@ -58,6 +69,7 @@ class DailyRiskManager:
     def can_trade(self):
         self._reset_if_new_day()
         if self.blocked:
-            max_t = getattr(self.config, "MAX_DAILY_TRADES", 3)
+            max_t = getattr(self.config, "MAX_DAILY_TRADES", 2)
             print(f"Trading blocked - trades: {self.trade_count}/{max_t}  P&L: {self.daily_pnl:+.2f}")
         return not self.blocked
+

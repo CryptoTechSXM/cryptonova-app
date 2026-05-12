@@ -1,0 +1,893 @@
+"""
+CryptoNite Free Signals Executor
+=================================
+Generates signals using the same relaxed HA strategy as the Free Signals bot,
+then executes them directly in MT5 with a trailing stop profit lock.
+
+Trailing stop rules:
+  - Once floating profit >= max(MIN_BE_PIPS, 20% ATR)  → move SL to entry (breakeven)
+  - Once floating profit trails further                 → trail SL max(MIN_TRAIL_PIPS, 15% ATR) behind
+
+Concurrent position rules:
+  - At-risk positions (SL still at original) >= 2  → block new signal
+  - Total open positions >= 5                       → block new signal (margin guard)
+  - Positions at breakeven or better               → don't count toward at-risk limit
+
+Telegram control:
+  - Set CTRL_BOT_TOKEN + CTRL_CHAT_ID in .env to enable /status /pause /resume /positions
+  - Trade reports sent to REPORT_CHAT_ID
+"""
+
+import time
+import json
+import ssl
+import csv
+import os
+import urllib.request
+import threading
+from datetime import datetime, timezone
+
+# Bypass SSL verification — fixes self-signed certificate errors on some networks
+_SSL_CTX = ssl.create_default_context()
+_SSL_CTX.check_hostname = False
+_SSL_CTX.verify_mode    = ssl.CERT_NONE
+
+import MetaTrader5 as mt5
+import pandas as pd
+
+import config
+from lot import calculate_lot_size
+from telegram_control import TelegramControl
+
+
+# =============================================================
+# GLOBAL STATE
+# =============================================================
+_paused          = False
+_symbol          = None
+_last_signal_candle = None
+_daily_count     = 0
+_daily_count_date = None
+
+# ticket -> { entry, original_sl, current_sl, tp, atr_pips, direction, be_done }
+_positions      = {}
+_positions_lock = threading.Lock()
+
+_ctrl = None   # TelegramControl instance (set in run())
+
+
+# =============================================================
+# TELEGRAM — report channel (simple urllib, no library needed)
+# =============================================================
+def _tg_send(token, chat_id, text):
+    url  = "https://api.telegram.org/bot{}/sendMessage".format(token)
+    data = json.dumps({"chat_id": str(chat_id), "text": text,
+                       "parse_mode": "HTML"}).encode()
+    req  = urllib.request.Request(url, data=data,
+                                  headers={"Content-Type": "application/json"})
+    try:
+        urllib.request.urlopen(req, timeout=10, context=_SSL_CTX)
+    except Exception as e:
+        print("[TG ERROR] {}".format(e))
+
+
+def report(text):
+    """Send to the report channel (uses CTRL bot token if available, else signal token)."""
+    token   = config.CTRL_BOT_TOKEN or config.BOT_TOKEN
+    chat_id = config.REPORT_CHAT_ID
+    _tg_send(token, chat_id, text)
+
+
+def send_status(status):
+    report("🤖 <b>CNFS Executor</b> — {}".format(status))
+
+
+def send_trade_open(symbol, direction, entry, sl, tp, lot, ticket):
+    icon = "📈" if direction == "BUY" else "📉"
+    report(
+        "{} <b>CNFS TRADE OPENED</b>\n"
+        "🔷 {} | {}\n"
+        "📍 Entry : {:.2f}\n"
+        "🛑 SL    : {:.2f}\n"
+        "🎯 TP    : {:.2f}\n"
+        "📊 Lot   : {}\n"
+        "🎫 Ticket: {}".format(
+            icon, symbol, direction,
+            entry, sl, tp, lot, ticket)
+    )
+
+
+def send_trade_close(symbol, direction, entry, close_price, pips, pnl, ticket, reason):
+    icon  = "✅" if pnl >= 0 else "❌"
+    emoji = "📈" if direction == "BUY" else "📉"
+    report(
+        "{} <b>CNFS TRADE CLOSED</b>\n"
+        "{} {} | {}\n"
+        "📍 Entry : {:.2f}\n"
+        "🚪 Close : {:.2f}\n"
+        "📏 Pips  : {:+.1f}\n"
+        "💵 P&amp;L  : {:+.2f}\n"
+        "📋 Reason: {}\n"
+        "🎫 Ticket: {}".format(
+            icon, emoji, symbol, direction,
+            entry, close_price, pips, pnl, reason, ticket)
+    )
+
+
+def send_be_locked(symbol, ticket, entry, float_pips):
+    report(
+        "🔒 <b>Breakeven Locked</b>\n"
+        "📊 {} ticket={}\n"
+        "📍 Entry: {:.2f}\n"
+        "✅ SL moved to entry (+{:.1f} pips profit)".format(
+            symbol, ticket, entry, float_pips)
+    )
+
+
+# =============================================================
+# PAUSE / RESUME
+# =============================================================
+def pause_trading():
+    global _paused
+    _paused = True
+    print("[CTRL] Trading PAUSED")
+
+
+def resume_trading():
+    global _paused
+    _paused = False
+    print("[CTRL] Trading RESUMED")
+
+
+# =============================================================
+# STATE FOR /status AND /positions
+# =============================================================
+def get_bot_state():
+    sym    = _symbol or config.BASE_SYMBOL
+    acc    = mt5.account_info()
+    open_pos = get_open_positions(sym) if sym else []
+
+    positions_detail = []
+    at_risk  = 0
+    be_count = 0
+
+    for pos in open_pos:
+        with _positions_lock:
+            meta = _positions.get(pos.ticket, {})
+        direction  = "BUY" if pos.type == 0 else "SELL"
+        entry      = pos.price_open
+        current_sl = meta.get("current_sl", pos.sl)
+        tp         = pos.tp
+        be_done    = meta.get("be_done", False)
+
+        tick = mt5.symbol_info_tick(sym)
+        cur_price  = (tick.bid if direction == "BUY" else tick.ask) if tick else entry
+        float_pips = (cur_price - entry) / config.PIP_SIZE if direction == "BUY" \
+                     else (entry - cur_price) / config.PIP_SIZE
+        float_usd  = pos.profit
+
+        locked_pips = (current_sl - entry) / config.PIP_SIZE if direction == "BUY" \
+                      else (entry - current_sl) / config.PIP_SIZE
+
+        if be_done:
+            be_count += 1
+        else:
+            at_risk += 1
+
+        positions_detail.append({
+            "ticket":      pos.ticket,
+            "direction":   direction,
+            "entry":       entry,
+            "current_sl":  current_sl,
+            "tp":          tp,
+            "float_pips":  float_pips,
+            "float_usd":   float_usd,
+            "locked_pips": locked_pips,
+            "be_done":     be_done,
+        })
+
+    return {
+        "paused":           _paused,
+        "symbol":           sym,
+        "total_positions":  len(open_pos),
+        "at_risk":          at_risk,
+        "be_locked":        be_count,
+        "balance":          acc.balance if acc else 0,
+        "equity":           acc.equity  if acc else 0,
+        "positions_detail": positions_detail,
+    }
+
+
+# =============================================================
+# MT5 HELPERS
+# =============================================================
+def resolve_symbol():
+    symbols = {s.name for s in (mt5.symbols_get() or [])}
+    for sym in config.SYMBOL_CANDIDATES:
+        if sym in symbols:
+            return sym
+    raise RuntimeError("No XAUUSD variant found")
+
+
+def get_rates(symbol, timeframe, count):
+    rates = mt5.copy_rates_from_pos(symbol, timeframe, 0, count)
+    if rates is None or len(rates) == 0:
+        raise RuntimeError("No rates: {} tf={}".format(symbol, timeframe))
+    df = pd.DataFrame(rates)
+    df["time"] = pd.to_datetime(df["time"], unit="s")
+    return df[["time", "open", "high", "low", "close"]]
+
+
+# =============================================================
+# INDICATORS  (identical to Free Signals bot)
+# =============================================================
+def heikin_ashi(df):
+    ha = df.copy()
+    ha["ha_close"] = (df["open"] + df["high"] + df["low"] + df["close"]) / 4
+    ha_open = [(df["open"].iloc[0] + df["close"].iloc[0]) / 2]
+    for i in range(1, len(df)):
+        ha_open.append((ha_open[i-1] + ha["ha_close"].iloc[i-1]) / 2)
+    ha["ha_open"] = ha_open
+    ha["ha_high"] = ha[["high", "ha_open", "ha_close"]].max(axis=1)
+    ha["ha_low"]  = ha[["low",  "ha_open", "ha_close"]].min(axis=1)
+    return ha
+
+
+def get_current_atr_pips(symbol, default=50.0):
+    """Fetch a fresh ATR (in pips) for any symbol — used when adopting manual trades."""
+    try:
+        rates = mt5.copy_rates_from_pos(symbol, mt5.TIMEFRAME_M5, 0, config.ATR_PERIOD + 5)
+        if rates is None or len(rates) < config.ATR_PERIOD:
+            return default
+        df = pd.DataFrame(rates)
+        df.rename(columns={"open": "open", "high": "high", "low": "low", "close": "close"}, inplace=True)
+        atr_series = calc_atr(df, config.ATR_PERIOD)
+        val = atr_series.iloc[-1]
+        if pd.isna(val) or val <= 0:
+            return default
+        return val / config.PIP_SIZE
+    except Exception:
+        return default
+
+
+def calc_ema(series, period):
+    return series.ewm(span=period, adjust=False).mean()
+
+
+def calc_atr(df, period=14):
+    d = df.copy()
+    d["prev_close"] = d["close"].shift(1)
+    d["tr"] = d.apply(lambda x: max(
+        x["high"] - x["low"],
+        abs(x["high"] - x["prev_close"]) if pd.notna(x["prev_close"]) else 0,
+        abs(x["low"]  - x["prev_close"]) if pd.notna(x["prev_close"]) else 0,
+    ), axis=1)
+    return d["tr"].rolling(period).mean()
+
+
+def is_doji(candle):
+    body = abs(candle["ha_close"] - candle["ha_open"])
+    rng  = candle["ha_high"] - candle["ha_low"]
+    return rng > 0 and (body / rng) < config.DOJI_THRESHOLD
+
+
+def is_high_vol_doji(df_m1, lookback=3, doji_pos=3):
+    if len(df_m1) < lookback + doji_pos:
+        return False
+    doji       = df_m1.iloc[-doji_pos]
+    doji_range = doji["ha_high"] - doji["ha_low"]
+    recent     = df_m1.iloc[-(lookback + doji_pos):-doji_pos]
+    avg_range  = (recent["ha_high"] - recent["ha_low"]).mean()
+    return avg_range > 0 and doji_range >= avg_range * config.DOJI_VOL_THRESHOLD
+
+
+def has_clean_pullback(df_m1, trend, doji_pos=3):
+    n = config.PULLBACK_N
+    if len(df_m1) < n + doji_pos:
+        return False
+    pullback = df_m1.iloc[-(n + doji_pos):-doji_pos]
+    clean    = 0
+    for _, c in pullback.iterrows():
+        rng = c["ha_high"] - c["ha_low"]
+        if rng == 0:
+            continue
+        if trend == "BUY":
+            if c["ha_close"] < c["ha_open"]:
+                if (c["ha_high"] - c["ha_open"]) / rng <= config.PULLBACK_WICK_TOL:
+                    clean += 1
+        else:
+            if c["ha_close"] > c["ha_open"]:
+                if (c["ha_open"] - c["ha_low"]) / rng <= config.PULLBACK_WICK_TOL:
+                    clean += 1
+    return clean >= n
+
+
+def h1_trend(df_h1):
+    ha   = heikin_ashi(df_h1)
+    last = ha.iloc[-1]
+    if last["ha_close"] > last["ha_open"]: return "BUY"
+    if last["ha_close"] < last["ha_open"]: return "SELL"
+    return None
+
+
+# =============================================================
+# POSITION TRACKING
+# =============================================================
+def get_open_positions(symbol):
+    """Bot-opened positions only (magic number filter)."""
+    return [p for p in (mt5.positions_get(symbol=symbol) or [])
+            if p.magic == config.MAGIC_NUMBER]
+
+def get_all_positions(symbol):
+    """All positions matching the base symbol — includes manual trades on any variant."""
+    all_pos = mt5.positions_get() or []
+    base = config.BASE_SYMBOL.upper()
+    return [p for p in all_pos if base in p.symbol.upper()]
+
+
+def count_at_risk(symbol):
+    # Use get_all_positions so manual trades count toward the at-risk cap.
+    # Positions not yet in _positions (not adopted) are treated as at-risk (conservative).
+    # Positions adopted with be_done=True are protected and don't count.
+    with _positions_lock:
+        open_pos = get_all_positions(symbol)
+        at_risk  = 0
+        for p in open_pos:
+            meta = _positions.get(p.ticket)
+            if meta is None or not meta.get("be_done", False):
+                at_risk += 1
+        return at_risk
+
+
+def can_open_new(symbol):
+    if _paused:
+        print("  [GATE] Bot is paused — skipping signal scan")
+        return False
+    # Use get_all_positions so manual trades count toward total and at-risk caps.
+    open_pos = get_all_positions(symbol)
+    total    = len(open_pos)
+    at_risk  = count_at_risk(symbol)
+    if total >= config.MAX_TOTAL_POSITIONS:
+        print("  [GATE] Total positions {} >= {} (margin guard — includes manual)".format(
+            total, config.MAX_TOTAL_POSITIONS))
+        return False
+    if at_risk >= config.MAX_AT_RISK_POSITIONS:
+        print("  [GATE] At-risk positions {} >= {} (risk budget full — includes manual)".format(
+            at_risk, config.MAX_AT_RISK_POSITIONS))
+        return False
+    return True
+
+
+def close_position(ticket, symbol, direction):
+    """Market-close a single position by ticket."""
+    tick = mt5.symbol_info_tick(symbol)
+    if not tick:
+        return False
+    price    = tick.bid if direction == "BUY" else tick.ask
+    order_type = mt5.ORDER_TYPE_SELL if direction == "BUY" else mt5.ORDER_TYPE_BUY
+    pos      = next((p for p in (mt5.positions_get(symbol=symbol) or []) if p.ticket == ticket), None)
+    if not pos:
+        return False
+    req = {
+        "action":       mt5.TRADE_ACTION_DEAL,
+        "symbol":       symbol,
+        "volume":       pos.volume,
+        "type":         order_type,
+        "position":     ticket,
+        "price":        round(price, 2),
+        "deviation":    30,
+        "magic":        config.MAGIC_NUMBER,
+        "comment":      "CNFS-reversal",
+        "type_time":    mt5.ORDER_TIME_GTC,
+        "type_filling": mt5.ORDER_FILLING_IOC,
+    }
+    result = mt5.order_send(req)
+    return result and result.retcode == mt5.TRADE_RETCODE_DONE
+
+
+def close_opposite_at_risk(symbol, new_direction):
+    """Close any at-risk positions in the opposite direction before a new entry.
+    BE-locked positions are left to run — they're already protected."""
+    opposite = "SELL" if new_direction == "BUY" else "BUY"
+    closed   = []
+    with _positions_lock:
+        candidates = {t: m for t, m in _positions.items()
+                      if m["direction"] == opposite and not m.get("be_done", False)}
+    for ticket, meta in candidates.items():
+        print("  [REVERSAL] Closing at-risk {} ticket={} before new {}".format(
+            opposite, ticket, new_direction))
+        if close_position(ticket, symbol, opposite):
+            print("  [REVERSAL] Closed ticket={}".format(ticket))
+            closed.append(ticket)
+            if _ctrl:
+                _ctrl.send_report(
+                    "🔄 <b>Reversal — position closed</b>\n"
+                    "Closed at-risk {} ticket={} to open {} signal".format(
+                        opposite, ticket, new_direction))
+        else:
+            print("  [REVERSAL] Failed to close ticket={}".format(ticket))
+    return closed
+
+
+def modify_sl(ticket, symbol, new_sl, tp):
+    req = {
+        "action":   mt5.TRADE_ACTION_SLTP,
+        "symbol":   symbol,
+        "position": ticket,
+        "sl":       round(new_sl, 2),
+        "tp":       round(tp, 2),
+        "magic":    config.MAGIC_NUMBER,
+    }
+    result = mt5.order_send(req)
+    return result and result.retcode == mt5.TRADE_RETCODE_DONE
+
+
+# =============================================================
+# TRADE OUTCOME LOGGER
+# Appends one row per closed trade to trades_log.csv.
+# Used for daily analysis: TP hit rate, duration by hour, P&L trends.
+# =============================================================
+TRADES_LOG = "trades_log.csv"
+_TRADES_LOG_HEADER = [
+    "date", "time_open", "time_close", "ticket",
+    "direction", "entry", "close_price",
+    "original_sl", "original_tp", "lot",
+    "pnl", "pips", "duration_min",
+    "tp_hit", "be_done", "hour_open",
+]
+
+def log_trade_outcome(meta, close_px, pnl, lot=0.01):
+    """Write a single closed trade row to trades_log.csv."""
+    try:
+        now_utc   = datetime.now(timezone.utc)
+        open_time = meta.get("open_time", now_utc)
+        duration  = round((now_utc - open_time).total_seconds() / 60, 1)
+        direction = meta["direction"]
+        entry     = meta["entry"]
+        orig_tp   = meta.get("original_tp", meta.get("tp", 0))
+        orig_sl   = meta.get("original_sl", 0)
+        be_done   = meta.get("be_done", False)
+        pips      = round((close_px - entry) / config.PIP_SIZE if direction == "BUY"
+                          else (entry - close_px) / config.PIP_SIZE, 1)
+        # TP hit: close within $0.20 of original TP or beyond it
+        if orig_tp and orig_tp > 0:
+            tp_hit = (close_px >= orig_tp - 0.20) if direction == "BUY" \
+                     else (close_px <= orig_tp + 0.20)
+        else:
+            tp_hit = False
+
+        row = {
+            "date":        now_utc.strftime("%Y-%m-%d"),
+            "time_open":   open_time.strftime("%H:%M:%S"),
+            "time_close":  now_utc.strftime("%H:%M:%S"),
+            "ticket":      meta.get("ticket", ""),
+            "direction":   direction,
+            "entry":       round(entry, 2),
+            "close_price": round(close_px, 2),
+            "original_sl": round(orig_sl, 2),
+            "original_tp": round(orig_tp, 2),
+            "lot":         lot,
+            "pnl":         round(pnl, 2),
+            "pips":        pips,
+            "duration_min": duration,
+            "tp_hit":      tp_hit,
+            "be_done":     be_done,
+            "hour_open":   open_time.hour,
+        }
+        write_header = not os.path.exists(TRADES_LOG)
+        with open(TRADES_LOG, "a", newline="") as f:
+            w = csv.DictWriter(f, fieldnames=_TRADES_LOG_HEADER)
+            if write_header:
+                w.writeheader()
+            w.writerow(row)
+    except Exception as e:
+        print("[LOG] trade_outcome error: {}".format(e))
+
+
+# =============================================================
+# TRAILING STOP MONITOR  (background thread)
+# =============================================================
+def trail_monitor(symbol):
+    print("[TRAIL] Monitor started")
+    while True:
+        try:
+            open_pos     = get_all_positions(symbol)   # includes manual trades
+            open_tickets = {p.ticket for p in open_pos}
+
+            # Detect closed positions — send close report
+            with _positions_lock:
+                closed = [t for t in _positions if t not in open_tickets]
+                for ticket in closed:
+                    meta = _positions.pop(ticket)
+                    # Try to get close details from recent history
+                    from datetime import timedelta
+                    now   = datetime.now(timezone.utc)
+                    deals = mt5.history_deals_get(now - timedelta(hours=2), now)
+                    pnl   = 0.0
+                    close_px = meta["entry"]
+                    if deals:
+                        for d in deals:
+                            if d.position_id == ticket and d.entry == 1:
+                                pnl      = d.profit
+                                close_px = d.price
+                                break
+                    direction = meta["direction"]
+                    pips_val  = (close_px - meta["entry"]) / config.PIP_SIZE \
+                                if direction == "BUY" \
+                                else (meta["entry"] - close_px) / config.PIP_SIZE
+                    reason = "Trail/SL" if meta.get("be_done") else "SL hit"
+                    print("[TRAIL] ticket={} closed  P&L={:+.2f}  pips={:+.1f}  ({})".format(
+                        ticket, pnl, pips_val, reason))
+                    send_trade_close(symbol, direction,
+                                     meta["entry"], close_px,
+                                     pips_val, pnl, ticket, reason)
+                    log_trade_outcome(meta, close_px, pnl)
+
+            # Update trailing stop for each open position
+            for pos in open_pos:
+                ticket = pos.ticket
+                with _positions_lock:
+                    meta = _positions.get(ticket)
+                if meta is None:
+                    # Auto-adopt manually opened position
+                    direction = "BUY" if pos.type == 0 else "SELL"
+                    atr_pips  = get_current_atr_pips(symbol)
+                    atr_val   = atr_pips * config.PIP_SIZE
+                    sl = pos.sl if pos.sl and pos.sl > 0 else (
+                        pos.price_open - atr_val * config.ATR_SL_MULT if direction == "BUY"
+                        else pos.price_open + atr_val * config.ATR_SL_MULT)
+                    tp = pos.tp if pos.tp and pos.tp > 0 else (
+                        pos.price_open + atr_val * config.ATR_TP_MULT if direction == "BUY"
+                        else pos.price_open - atr_val * config.ATR_TP_MULT)
+                    sl = round(sl, 2)
+                    tp = round(tp, 2)
+                    if not (pos.sl and pos.sl > 0) or not (pos.tp and pos.tp > 0):
+                        modify_sl(ticket, symbol, sl, tp)
+                    adopted = {
+                        "ticket":      pos.ticket,
+                        "entry":       pos.price_open,
+                        "original_sl": sl,
+                        "original_tp": tp,
+                        "current_sl":  sl,
+                        "tp":          tp,
+                        "atr_pips":    atr_pips,
+                        "direction":   direction,
+                        "be_done":     False,
+                        "open_time":   datetime.fromtimestamp(pos.time, tz=timezone.utc),
+                    }
+                    with _positions_lock:
+                        _positions[ticket] = adopted
+                    print("[TRAIL] Auto-adopted manual trade ticket={} {} @ {:.2f}  SL={:.2f}  TP={:.2f}  ATR={:.1f}p".format(
+                        ticket, direction, pos.price_open, sl, tp, atr_pips))
+                    if _ctrl:
+                        _ctrl.send_report(
+                            "📋 <b>Manual Trade Adopted</b>\n"
+                            "Ticket: {}\nDirection: {}\nEntry: {:.2f}\n"
+                            "SL: {:.2f}  TP: {:.2f}\n"
+                            "ATR: {:.1f}p — trailing stop now active".format(
+                                ticket, direction, pos.price_open, sl, tp, atr_pips))
+                    meta = _positions[ticket]
+
+                entry     = meta["entry"]
+                tp        = meta["tp"]
+                atr_pips  = meta["atr_pips"]
+                direction = meta["direction"]
+                be_done   = meta.get("be_done", False)
+
+                tick = mt5.symbol_info_tick(symbol)
+                if not tick:
+                    continue
+
+                cur_price  = tick.bid if direction == "BUY" else tick.ask
+                float_pips = (cur_price - entry) / config.PIP_SIZE if direction == "BUY" \
+                             else (entry - cur_price) / config.PIP_SIZE
+
+                be_trigger  = max(config.MIN_BE_PIPS,  atr_pips * config.BE_TRIGGER_PCT)
+                trail_dist  = max(config.MIN_TRAIL_PIPS, atr_pips * config.TRAIL_DIST_PCT)
+                trail_price = trail_dist * config.PIP_SIZE
+
+                # --- Breakeven ---
+                if not be_done and float_pips >= be_trigger:
+                    be_sl  = entry + config.BE_BUFFER_PRICE if direction == "BUY" \
+                             else entry - config.BE_BUFFER_PRICE
+                    # Remove TP so the trail manages exit and winners can run past TP
+                    new_tp = 0.0 if config.REMOVE_TP_ON_BE else tp
+                    if modify_sl(ticket, symbol, be_sl, new_tp):
+                        with _positions_lock:
+                            _positions[ticket]["be_done"]    = True
+                            _positions[ticket]["current_sl"] = be_sl
+                            _positions[ticket]["tp"]         = new_tp
+                        tp_note = " TP removed — trail now manages exit" if config.REMOVE_TP_ON_BE else ""
+                        print("[TRAIL] ticket={} BE locked @ {:.2f} (+{:.1f}p buffer={:.1f}){}".format(
+                            ticket, be_sl, float_pips, config.BE_BUFFER_PRICE, tp_note))
+                        send_be_locked(symbol, ticket, be_sl, float_pips)
+                    continue
+
+                # --- Trail ---
+                if be_done:
+                    current_sl = meta.get("current_sl", entry)
+                    if direction == "BUY":
+                        ideal_sl = cur_price - trail_price
+                        if ideal_sl > current_sl + config.PIP_SIZE:
+                            if modify_sl(ticket, symbol, ideal_sl, tp):
+                                with _positions_lock:
+                                    _positions[ticket]["current_sl"] = ideal_sl
+                                locked = (ideal_sl - entry) / config.PIP_SIZE
+                                print("[TRAIL] ticket={} trail → {:.2f} (+{:.1f}p locked)".format(
+                                    ticket, ideal_sl, locked))
+                    else:
+                        ideal_sl = cur_price + trail_price
+                        if ideal_sl < current_sl - config.PIP_SIZE:
+                            if modify_sl(ticket, symbol, ideal_sl, tp):
+                                with _positions_lock:
+                                    _positions[ticket]["current_sl"] = ideal_sl
+                                locked = (entry - ideal_sl) / config.PIP_SIZE
+                                print("[TRAIL] ticket={} trail → {:.2f} (+{:.1f}p locked)".format(
+                                    ticket, ideal_sl, locked))
+
+        except Exception as e:
+            print("[TRAIL ERROR] {}".format(e))
+
+        time.sleep(config.TRAIL_INTERVAL)
+
+
+# =============================================================
+# SIGNAL DETECTION
+# =============================================================
+def check_signal(symbol):
+    global _last_signal_candle, _daily_count, _daily_count_date
+
+    today = datetime.now(timezone.utc).date()
+    if _daily_count_date != today:
+        _daily_count_date = today
+        _daily_count      = 0
+
+    m1 = heikin_ashi(get_rates(symbol, mt5.TIMEFRAME_M1, config.M1_BARS))
+    m5 = heikin_ashi(get_rates(symbol, mt5.TIMEFRAME_M5, config.M5_BARS))
+    h1 = get_rates(symbol, mt5.TIMEFRAME_H1, config.H1_BARS)
+
+    m1["ema"] = calc_ema(m1["close"], config.EMA_PERIOD)
+    m5["atr"] = calc_atr(m5, config.ATR_PERIOD)
+
+    current_m1  = m1.iloc[-1]
+    confirm_m1  = m1.iloc[-2]
+    doji_candle = m1.iloc[-3]
+    closed_m5   = m5.iloc[-2]
+
+    price       = current_m1["close"]
+    ema_val     = current_m1["ema"]
+    current_atr = closed_m5["atr"]
+
+    print("[{}]  Price: {:.2f}  ATR: {:.2f}".format(
+        datetime.now(timezone.utc).strftime("%H:%M:%S"), price, current_atr or 0))
+
+    if pd.isna(current_atr) or current_atr < config.MIN_ATR:
+        print("  ATR too low -- skip"); return None
+    h1_dir = h1_trend(h1)
+    if h1_dir is None:
+        print("  H1 unclear -- skip"); return None
+    trend = "BUY" if price > ema_val else ("SELL" if price < ema_val else None)
+    if trend is None or trend != h1_dir:
+        print("  EMA/H1 conflict -- skip"); return None
+    if not is_doji(doji_candle):
+        print("  No doji -- skip"); return None
+    if not is_high_vol_doji(m1):
+        print("  Doji too small -- skip"); return None
+    if not has_clean_pullback(m1, trend):
+        print("  No clean pullback -- skip"); return None
+    if trend == "BUY"  and closed_m5["ha_close"] <= closed_m5["ha_open"]:
+        print("  M5 not bullish -- skip"); return None
+    if trend == "SELL" and closed_m5["ha_close"] >= closed_m5["ha_open"]:
+        print("  M5 not bearish -- skip"); return None
+    if trend == "BUY"  and confirm_m1["ha_close"] <= confirm_m1["ha_open"]:
+        print("  M1 not confirming BUY -- skip"); return None
+    if trend == "SELL" and confirm_m1["ha_close"] >= confirm_m1["ha_open"]:
+        print("  M1 not confirming SELL -- skip"); return None
+
+    signal_ts = str(confirm_m1["time"])
+    if _last_signal_candle == signal_ts:
+        print("  Same candle -- skip"); return None
+
+    atr_val  = float(current_atr)
+    sl_dist  = atr_val * config.ATR_SL_MULT
+    tp_dist  = atr_val * config.ATR_TP_MULT
+    sl       = round(price - sl_dist, 2) if trend == "BUY" else round(price + sl_dist, 2)
+    tp       = round(price + tp_dist, 2) if trend == "BUY" else round(price - tp_dist, 2)
+    atr_pips = atr_val / config.PIP_SIZE
+
+    print("  SIGNAL {} | Entry={:.2f} SL={:.2f} TP={:.2f} ATR={:.1f}p".format(
+        trend, price, sl, tp, atr_pips))
+
+    return {"direction": trend, "price": price,
+            "sl": sl, "tp": tp, "atr_pips": atr_pips, "candle_ts": signal_ts}
+
+
+# =============================================================
+# ORDER EXECUTION
+# =============================================================
+def execute_signal(symbol, signal):
+    global _last_signal_candle, _daily_count
+
+    direction = signal["direction"]
+    sl        = signal["sl"]
+    tp        = signal["tp"]
+    atr_pips  = signal["atr_pips"]
+
+    sl_dist = abs(signal["price"] - sl)
+    lot     = calculate_lot_size(symbol, sl_dist, config.RISK_PERCENT,
+                                 config.MAX_ACTUAL_RISK_PCT, config.RISK_CAP_MODE)
+    if not lot:
+        print("  Lot=0 — skip"); return
+
+    # Close any at-risk opposite positions before entering new direction
+    close_opposite_at_risk(symbol, direction)
+
+    tick = mt5.symbol_info_tick(symbol)
+    if not tick:
+        print("  No tick — skip"); return
+
+    price = tick.ask if direction == "BUY" else tick.bid
+    req   = {
+        "action":       mt5.TRADE_ACTION_DEAL,
+        "symbol":       symbol,
+        "volume":       lot,
+        "type":         mt5.ORDER_TYPE_BUY if direction == "BUY" else mt5.ORDER_TYPE_SELL,
+        "price":        round(price, 2),
+        "sl":           round(sl, 2),
+        "tp":           round(tp, 2),
+        "deviation":    30,
+        "magic":        config.MAGIC_NUMBER,
+        "comment":      "CNFS",
+        "type_time":    mt5.ORDER_TIME_GTC,
+        "type_filling": mt5.ORDER_FILLING_IOC,
+    }
+    result = mt5.order_send(req)
+    if result and result.retcode == mt5.TRADE_RETCODE_DONE:
+        ticket = result.order
+        with _positions_lock:
+            _positions[ticket] = {
+                "ticket":      ticket,
+                "entry":       price,
+                "original_sl": sl,
+                "original_tp": tp,
+                "current_sl":  sl,
+                "tp":          tp,
+                "atr_pips":    atr_pips,
+                "direction":   direction,
+                "be_done":     False,
+                "open_time":   datetime.now(timezone.utc),
+            }
+        _last_signal_candle = signal["candle_ts"]
+        _daily_count       += 1
+        print("  ✅ Order placed ticket={} lot={} @ {:.2f}".format(ticket, lot, price))
+        send_trade_open(symbol, direction, price, sl, tp, lot, ticket)
+    else:
+        print("  ❌ Order FAILED retcode={} comment={}".format(
+            getattr(result, "retcode", "?"), getattr(result, "comment", "?")))
+
+
+# =============================================================
+# MAIN
+# =============================================================
+def run():
+    global _symbol, _ctrl
+
+    print("=" * 55)
+    print("  CRYPTONITE FREE SIGNALS EXECUTOR")
+    print("  Strategy : Relaxed HA | XAUUSD | 24/7")
+    print("  BE trigger: max({} pips, {}% ATR)".format(
+        config.MIN_BE_PIPS, int(config.BE_TRIGGER_PCT * 100)))
+    print("  Trail gap : max({} pips, {}% ATR)".format(
+        config.MIN_TRAIL_PIPS, int(config.TRAIL_DIST_PCT * 100)))
+    print("  At-risk cap: {}  |  Total cap: {}".format(
+        config.MAX_AT_RISK_POSITIONS, config.MAX_TOTAL_POSITIONS))
+    print("=" * 55)
+
+    # MT5 init
+    if config.MT5_LOGIN and config.MT5_PASSWORD and config.MT5_SERVER:
+        ok = mt5.initialize(login=config.MT5_LOGIN,
+                            password=config.MT5_PASSWORD,
+                            server=config.MT5_SERVER)
+    else:
+        ok = mt5.initialize()
+    if not ok:
+        raise RuntimeError("MT5 init failed: {}".format(mt5.last_error()))
+
+    _symbol = resolve_symbol()
+    mt5.symbol_select(_symbol, True)
+
+    acc = mt5.account_info()
+    if acc:
+        print("  Login  : {}".format(acc.login))
+        print("  Server : {}".format(acc.server))
+        print("  Balance: ${:,.2f}".format(acc.balance))
+    print("  Symbol : {}".format(_symbol))
+    print("=" * 55)
+
+    # Adopt existing positions (bot-opened AND manual)
+    _all = get_all_positions(_symbol)
+    print("  Found {} open position(s) to adopt".format(len(_all)))
+    for pos in _all:
+        with _positions_lock:
+            if pos.ticket not in _positions:
+                direction = "BUY" if pos.type == 0 else "SELL"
+                atr_pips  = get_current_atr_pips(_symbol)
+                atr_val   = atr_pips * config.PIP_SIZE
+                # Use existing SL/TP if set, otherwise calculate from ATR
+                sl = pos.sl if pos.sl and pos.sl > 0 else (
+                    pos.price_open - atr_val * config.ATR_SL_MULT if direction == "BUY"
+                    else pos.price_open + atr_val * config.ATR_SL_MULT)
+                tp = pos.tp if pos.tp and pos.tp > 0 else (
+                    pos.price_open + atr_val * config.ATR_TP_MULT if direction == "BUY"
+                    else pos.price_open - atr_val * config.ATR_TP_MULT)
+                sl = round(sl, 2)
+                tp = round(tp, 2)
+                # Apply SL/TP to MT5 if they were missing
+                if not (pos.sl and pos.sl > 0) or not (pos.tp and pos.tp > 0):
+                    modify_sl(pos.ticket, _symbol, sl, tp)
+                    print("  Applied ATR SL={:.2f} TP={:.2f} to ticket={}".format(
+                        sl, tp, pos.ticket))
+                _positions[pos.ticket] = {
+                    "entry":       pos.price_open,
+                    "original_sl": sl,
+                    "current_sl":  sl,
+                    "tp":          tp,
+                    "atr_pips":    atr_pips,
+                    "direction":   direction,
+                    "be_done":     False,
+                }
+                print("  Adopted existing position ticket={} {} @ {:.2f}  SL={:.2f}  TP={:.2f}".format(
+                    pos.ticket, direction, pos.price_open, sl, tp))
+
+    # Start trailing stop monitor
+    threading.Thread(target=trail_monitor, args=(_symbol,), daemon=True).start()
+
+    # Start Telegram control bot if configured
+    if config.CTRL_BOT_TOKEN and config.CTRL_CHAT_ID:
+        _ctrl = TelegramControl(
+            bot_token       = config.CTRL_BOT_TOKEN,
+            control_chat_id = config.CTRL_CHAT_ID,
+            report_chat_id  = config.REPORT_CHAT_ID,
+            get_state_fn    = get_bot_state,
+            pause_fn        = pause_trading,
+            resume_fn       = resume_trading,
+        )
+        _ctrl.start()
+        print("  Telegram control bot: ACTIVE (chat={})".format(config.CTRL_CHAT_ID))
+    else:
+        print("  Telegram control bot: NOT configured (set CTRL_BOT_TOKEN + CTRL_CHAT_ID in .env)")
+
+    send_status("ONLINE")
+    print("\n  Running 24/7 — Ctrl+C to stop\n")
+
+    try:
+        while True:
+            try:
+                open('heartbeat.txt', 'w').write(str(time.time()))
+            except Exception:
+                pass
+            try:
+                if can_open_new(_symbol):
+                    signal = check_signal(_symbol)
+                    if signal:
+                        execute_signal(_symbol, signal)
+                else:
+                    # Still run the signal check for logging even if gated
+                    check_signal(_symbol)
+            except Exception as e:
+                print("[ERROR] {}".format(e))
+
+            print("  Next check in {}s\n".format(config.CHECK_INTERVAL))
+            time.sleep(config.CHECK_INTERVAL)
+
+    except KeyboardInterrupt:
+        print("\nStopped.")
+    finally:
+        send_status("STOPPED")
+        if _ctrl:
+            _ctrl.stop()
+        mt5.shutdown()
+
+
+if __name__ == "__main__":
+    run()

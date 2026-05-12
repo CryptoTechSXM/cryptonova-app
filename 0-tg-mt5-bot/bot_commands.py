@@ -29,6 +29,8 @@ SETUP:
   3. To find your user ID: message @userinfobot in Telegram
 """
 
+from datetime import date
+
 from telethon import TelegramClient, events
 from telethon.sessions import StringSession
 
@@ -146,6 +148,24 @@ class BotCommandHandler:
                 return
             await self._handle_risk(event.raw_text)
 
+        @self.bot_client.on(events.NewMessage(pattern=r"^/daily"))
+        async def cmd_daily(event):
+            if not self._is_authorised(event):
+                return
+            await self._send(self._build_daily())
+
+        @self.bot_client.on(events.NewMessage(pattern=r"^/weekly"))
+        async def cmd_weekly(event):
+            if not self._is_authorised(event):
+                return
+            await self._send(self._build_weekly())
+
+        @self.bot_client.on(events.NewMessage(pattern=r"^/monthly"))
+        async def cmd_monthly(event):
+            if not self._is_authorised(event):
+                return
+            await self._send(self._build_monthly())
+
     # =========================
     # SECURITY CHECK
     # Only process commands from the configured control chat.
@@ -162,7 +182,7 @@ class BotCommandHandler:
             log(
                 f"[BOT CMD] Ignored command from unauthorised source: "
                 f"chat={chat_id} sender={sender_id}",
-                "INFO"
+                "DEBUG"
             )
 
         return authorised
@@ -175,15 +195,134 @@ class BotCommandHandler:
     def _help_text(self) -> str:
         return (
             "📋 CryptoNite Bot Commands\n\n"
-            "/status  — Bot state, daily losses, open trades\n"
+            "/status  — Bot state, W/L/BE results, open trades\n"
             "/pause   — Stop accepting new signals\n"
             "/resume  — Re-enable signal processing\n"
-            "/stats   — Today's P&L, balance, equity\n"
-            "/trades  — List all open positions with live P&L\n"
+            "/daily   — Today's full P&L and W/L/BE breakdown\n"
+            "/weekly  — Last 7 days W/L/BE and P&L from MT5 history\n"
+            "/monthly — Month-to-date P&L and W/L/BE from MT5 history\n"
+            "/stats   — Today's P&L, W/L/BE, balance, equity\n"
+            "/trades  — All open positions with live P&L\n"
             "/risk N  — Set base risk % (e.g. /risk 0.3)\n"
-            "           Use /risk reset to go back to config value\n"
+            "           Use /risk reset to restore config value\n"
             "/help    — Show this message"
         )
+
+    def _build_daily(self) -> str:
+        """Today's W/L/BE/P&L — mirrors /stats with a daily label."""
+        try:
+            stats = self.manager.get_stats()
+            pnl_emoji = "📈" if stats["today_pnl"] >= 0 else "📉"
+            pnl_sign  = "+" if stats["today_pnl"] >= 0 else ""
+            if stats["win_streak"] >= 2:
+                streak = "🔥 W{}".format(stats["win_streak"])
+            elif stats["loss_streak"] >= 2:
+                streak = "❄️ L{}".format(stats["loss_streak"])
+            else:
+                streak = "—"
+            closed_label = "{} closed".format(stats["daily_total"]) if stats["daily_total"] else "no trades yet"
+            today_str = date.today().isoformat()
+            return (
+                f"📊 Daily Summary — {today_str}\n\n"
+                f"Results:  ✅ {stats['daily_wins']} W  |  ❌ {stats['daily_losses']} L  |  ➡️ {stats['daily_be']} BE  ({closed_label})\n"
+                f"Win rate: {stats['daily_win_rate']}%  |  Streak: {streak}\n"
+                f"Loss cap: {stats['daily_losses']}/{stats['daily_loss_limit']}\n\n"
+                f"P&L:     {pnl_emoji} {pnl_sign}{stats['today_pnl']:.2f}\n"
+                f"Balance: ${stats['balance']:,.2f}\n"
+                f"Equity:  ${stats['equity']:,.2f}\n"
+                f"Open:    {stats['open_trades']} position(s)"
+            )
+        except Exception as e:
+            return f"❌ Daily error: {e}"
+
+    def _build_weekly(self) -> str:
+        """Last 7 calendar days computed from MT5 deal history."""
+        try:
+            import MetaTrader5 as mt5
+            from datetime import datetime, date, timezone, timedelta
+            today = date.today()
+            start_dt = datetime.combine(today - timedelta(days=6), datetime.min.time()).replace(tzinfo=timezone.utc)
+            end_dt   = datetime.now(timezone.utc)
+            deals = mt5.history_deals_get(start_dt, end_dt) or []
+            wins = losses = be = 0
+            total_pnl = 0.0
+            for d in deals:
+                if d.type not in (mt5.DEAL_TYPE_BUY, mt5.DEAL_TYPE_SELL):
+                    continue
+                if d.entry != mt5.DEAL_ENTRY_OUT:
+                    continue
+                pnl = d.profit
+                total_pnl += pnl
+                if pnl > 0.5:
+                    wins += 1
+                elif pnl < -0.5:
+                    losses += 1
+                else:
+                    be += 1
+            total = wins + losses + be
+            wr = round(wins / total * 100) if total > 0 else 0
+            pnl_emoji = "📈" if total_pnl >= 0 else "📉"
+            pnl_sign  = "+" if total_pnl >= 0 else ""
+            acc = mt5.account_info()
+            balance = acc.balance if acc else 0.0
+            equity  = acc.equity  if acc else 0.0
+            date_range = f"{(today - timedelta(days=6)).isoformat()} → {today.isoformat()}"
+            closed_label = f"{total} closed" if total else "no trades"
+            return (
+                f"📅 Weekly Summary\n"
+                f"{date_range}\n\n"
+                f"Results:  ✅ {wins} W  |  ❌ {losses} L  |  ➡️ {be} BE  ({closed_label})\n"
+                f"Win rate: {wr}%\n\n"
+                f"P&L:     {pnl_emoji} {pnl_sign}{total_pnl:.2f}\n"
+                f"Balance: ${balance:,.2f}\n"
+                f"Equity:  ${equity:,.2f}"
+            )
+        except Exception as e:
+            return f"❌ Weekly error: {e}"
+
+    def _build_monthly(self) -> str:
+        """Month-to-date computed from MT5 deal history."""
+        try:
+            import MetaTrader5 as mt5
+            from datetime import datetime, date, timezone
+            today = date.today()
+            month_start = datetime(today.year, today.month, 1, tzinfo=timezone.utc)
+            end_dt = datetime.now(timezone.utc)
+            deals = mt5.history_deals_get(month_start, end_dt) or []
+            wins = losses = be = 0
+            total_pnl = 0.0
+            for d in deals:
+                if d.type not in (mt5.DEAL_TYPE_BUY, mt5.DEAL_TYPE_SELL):
+                    continue
+                if d.entry != mt5.DEAL_ENTRY_OUT:
+                    continue
+                pnl = d.profit
+                total_pnl += pnl
+                if pnl > 0.5:
+                    wins += 1
+                elif pnl < -0.5:
+                    losses += 1
+                else:
+                    be += 1
+            total = wins + losses + be
+            wr = round(wins / total * 100) if total > 0 else 0
+            pnl_emoji = "📈" if total_pnl >= 0 else "📉"
+            pnl_sign  = "+" if total_pnl >= 0 else ""
+            acc = mt5.account_info()
+            balance = acc.balance if acc else 0.0
+            equity  = acc.equity  if acc else 0.0
+            month_label = today.strftime("%B %Y")
+            closed_label = f"{total} closed" if total else "no trades"
+            return (
+                f"📆 Monthly Summary — {month_label}\n\n"
+                f"Results:  ✅ {wins} W  |  ❌ {losses} L  |  ➡️ {be} BE  ({closed_label})\n"
+                f"Win rate: {wr}%\n\n"
+                f"P&L:     {pnl_emoji} {pnl_sign}{total_pnl:.2f}\n"
+                f"Balance: ${balance:,.2f}\n"
+                f"Equity:  ${equity:,.2f}"
+            )
+        except Exception as e:
+            return f"❌ Monthly error: {e}"
 
     def _build_status(self) -> str:
         stats = self.manager.get_stats()
@@ -204,12 +343,11 @@ class BotCommandHandler:
 
         return (
             "📡 Bot Status\n\n"
-            f"Trading: {trading_status}\n"
-            f"Daily losses: {stats['daily_losses']}/{stats['daily_loss_limit']}\n"
-            f"Open trades: {stats['open_trades']}\n\n"
-            f"Session: {tf_status}\n"
-            f"Partial close: {'✅' if settings.partial_close_enabled else '❌'} "
-            f"({settings.partial_close_percent:.0f}%)\n"
+            f"Trading:  {trading_status}\n"
+            f"Results:  ✅ {stats['daily_wins']} W  |  ❌ {stats['daily_losses']} L  |  ➡️ {stats['daily_be']} BE\n"
+            f"Loss cap: {stats['daily_losses']}/{stats['daily_loss_limit']}\n"
+            f"Open:     {stats['open_trades']} position(s)\n\n"
+            f"Session:  {tf_status}\n"
             f"Base risk: {settings.base_risk_pct:.2f}%"
             f"{risk_note}"
         )
@@ -220,22 +358,33 @@ class BotCommandHandler:
         pnl_emoji = "📈" if stats["today_pnl"] >= 0 else "📉"
         pnl_sign  = "+" if stats["today_pnl"] >= 0 else ""
 
+        if stats["win_streak"] >= 2:
+            streak = "🔥 W{}".format(stats["win_streak"])
+        elif stats["loss_streak"] >= 2:
+            streak = "❄️ L{}".format(stats["loss_streak"])
+        else:
+            streak = "—"
+
+        closed_label = "{} closed".format(stats["daily_total"]) if stats["daily_total"] else "no trades yet"
+
         return (
             "📊 Today's Stats\n\n"
-            f"P&L: {pnl_emoji} {pnl_sign}{stats['today_pnl']:.2f}\n"
-            f"Losses today: {stats['daily_losses']}/{stats['daily_loss_limit']}\n"
-            f"Open trades: {stats['open_trades']}\n\n"
+            f"Results:  ✅ {stats['daily_wins']} W  |  ❌ {stats['daily_losses']} L  |  ➡️ {stats['daily_be']} BE  ({closed_label})\n"
+            f"Win rate: {stats['daily_win_rate']}%  |  Streak: {streak}\n"
+            f"Loss cap: {stats['daily_losses']}/{stats['daily_loss_limit']}\n\n"
+            f"P&L:     {pnl_emoji} {pnl_sign}{stats['today_pnl']:.2f}\n"
             f"Balance: ${stats['balance']:,.2f}\n"
-            f"Equity:  ${stats['equity']:,.2f}"
+            f"Equity:  ${stats['equity']:,.2f}\n"
+            f"Open:    {stats['open_trades']} position(s)"
         )
 
     def _build_trades(self) -> str:
         trades = self.manager.get_open_trades_summary()
 
         if not trades:
-            return "📭 No open trades right now."
+            return "📭 No open positions right now."
 
-        lines = [f"📂 Open Trades ({len(trades)})\n"]
+        lines = [f"📂 Open Positions ({len(trades)})\n"]
 
         for t in trades:
             pnl_sign  = "+" if t["pnl"] >= 0 else ""

@@ -10,6 +10,7 @@ from bot_commands import BotCommandHandler
 from daily_report import DailyReporter
 from time_filter import allow_trade, current_session_label
 from logger import log
+from telegram_sender import send_status
 
 
 # =========================
@@ -68,12 +69,70 @@ def create_message_handler(executor):
 # Checks for closed trades, updates trailing stops, cancels stale orders.
 # =========================
 async def manager_loop(manager):
+    _mt5_was_down = False
+
     while True:
+        # MT5 health check — detect broker disconnect and reinitialise
+        try:
+            if not mt5.terminal_info():
+                if not _mt5_was_down:
+                    log("[MT5] Connection lost — attempting reinitialise...", "WARNING")
+                    _mt5_was_down = True
+                mt5.shutdown()
+                try:
+                    await asyncio.sleep(5)
+                except asyncio.CancelledError:
+                    raise  # don't swallow shutdown signal during reconnect wait
+                if mt5.initialize():
+                    log("[MT5] Reconnected successfully", "INFO")
+                    _mt5_was_down = False
+                else:
+                    log("[MT5] Reinitialise failed — will retry in 10s", "WARNING")
+                    try:
+                        await asyncio.sleep(10)
+                    except asyncio.CancelledError:
+                        raise  # don't swallow shutdown signal during reconnect wait
+                continue
+            elif _mt5_was_down:
+                log("[MT5] Connection restored", "INFO")
+                _mt5_was_down = False
+        except asyncio.CancelledError:
+            raise  # always propagate cancellation out of the health check block
+        except Exception as e:
+            log(f"mt5 health check error: {e}", "ERROR")
+
+        # 0. Live adoption scan — picks up manual trades opened while the bot
+        #    is running. Runs before everything else so newly adopted positions
+        #    are tracked before check_trades, partial close, and trail fire.
+        try:
+            manager.adopt_open_positions()
+        except Exception as e:
+            log(f"adopt error: {e}", "ERROR")
+
         # 1. Check for newly closed positions and update win/loss streaks
         try:
             manager.check_trades()
         except Exception as e:
             log(f"check_trades error: {e}", "ERROR")
+
+        # 1b. Drain outbound notification queue (close alerts, kill-switch, etc.)
+        # Using a queue instead of asyncio.create_task() in sync code ensures
+        # notifications always fire — even on Python 3.12+ where create_task
+        # from sync context can silently fail if the loop yields before the task runs.
+        if manager._tg_queue and manager.tg:
+            for _kind, _data in list(manager._tg_queue):
+                try:
+                    if _kind == 'close_trade':
+                        await manager.tg.send_close_trade(_data)
+                    elif _kind == 'kill_switch':
+                        await manager.tg.send_kill_switch_alert(_data)
+                    elif _kind == 'alert':
+                        await manager.tg.send_alert(_data)
+                    elif _kind == 'partial_close':
+                        await manager.tg.send_partial_close(_data)
+                except Exception as _e:
+                    log(f"tg_queue drain error ({_kind}): {_e}", "ERROR")
+            manager._tg_queue.clear()
 
         # 2. Partial close - check if any open position has hit a TP level
         try:
@@ -92,6 +151,83 @@ async def manager_loop(manager):
             manager.cancel_expired_orders()
         except Exception as e:
             log(f"cancel error: {e}", "ERROR")
+
+        # 5. Session close guard — close unprotected profitable positions at END_HOUR
+        try:
+            manager.session_close_guard()
+        except Exception as e:
+            log(f"session_close error: {e}", "ERROR")
+
+        # 6. Session open snapshot — fires once at session start
+        try:
+            manager.session_open_brief()
+        except Exception as e:
+            log(f"session_brief error: {e}", "ERROR")
+
+        # 7. Drawdown alert
+        try:
+            manager.check_drawdown_alert()
+        except Exception as e:
+            log(f"drawdown_alert error: {e}", "ERROR")
+
+        # 8. Daily profit target alert
+        try:
+            manager.check_profit_target()
+        except Exception as e:
+            log(f"profit_target error: {e}", "ERROR")
+
+        # 9. Pre-news cleanup — close unprotected positions ahead of events
+        try:
+            if getattr(settings, 'news_filter_enabled', False):
+                from news_filter import get_positions_to_close_before_news
+                all_pos = mt5.positions_get() or []
+                managed = {
+                    t: d for t, d in manager.active_trades.items()
+                    if mt5.positions_get(ticket=t)
+                }
+                to_close = get_positions_to_close_before_news(
+                    settings, all_pos, manager.active_trades
+                )
+                for pos in to_close:
+                    tick = mt5.symbol_info_tick(pos.symbol)
+                    if not tick:
+                        continue
+                    close_price = tick.bid if pos.type == 0 else tick.ask
+                    req = {
+                        'action':       mt5.TRADE_ACTION_DEAL,
+                        'symbol':       pos.symbol,
+                        'volume':       pos.volume,
+                        'type':         mt5.ORDER_TYPE_SELL if pos.type == 0 else mt5.ORDER_TYPE_BUY,
+                        'position':     pos.ticket,
+                        'price':        close_price,
+                        'deviation':    30,
+                        'magic':        settings.mt5_magic_number,
+                        'comment':      'news pre-close',
+                        'type_time':    mt5.ORDER_TIME_GTC,
+                        'type_filling': mt5.ORDER_FILLING_IOC,
+                    }
+                    res = mt5.order_send(req)
+                    if res and res.retcode == mt5.TRADE_RETCODE_DONE:
+                        log(f"[NEWS] Pre-closed ticket={pos.ticket} {pos.symbol} "
+                            f"pnl={pos.profit:+.2f} @ {close_price}", "WARNING")
+                        if manager.tg:
+                            await manager.tg.send_alert(
+                                f"⚠️ <b>Pre-News Close</b>\n"
+                                f"Closed {pos.symbol} ticket={pos.ticket} "
+                                f"(unprotected, news imminent)\n"
+                                f"P/L: <b>{pos.profit:+.2f}</b>"
+                            )
+                    else:
+                        code = res.retcode if res else "no response"
+                        log(f"[NEWS] Pre-close FAILED ticket={pos.ticket} code={code}", "ERROR")
+        except Exception as e:
+            log(f"news_pre_close error: {e}", "ERROR")
+
+        try:
+            import time as _t
+            open('heartbeat.txt', 'w').write(str(_t.time()))
+        except Exception:
+            pass
 
         await asyncio.sleep(2)
 
@@ -204,6 +340,7 @@ async def run():
 
         log("Bot is LIVE", "INFO")
         log("=" * 50, "INFO")
+        send_status("CryptoNite Signal Bot", "ONLINE")
 
         # =========================
         # REGISTER HANDLER
@@ -223,12 +360,29 @@ async def run():
         #   3. Bot commands    - listens for /commands from you via Telegram bot
         #   4. Daily reporter  - fires end-of-day summary at configured UTC hour
         # =========================
-        await asyncio.gather(
-            client.run_until_disconnected(),
-            manager_loop(manager),
-            bot_cmd.run(),
-            daily_reporter.run(),
-        )
+
+        # Diagnostic wrapper — logs which task exits and why so we can identify
+        # the root cause if the bot exits unexpectedly.
+        async def _guarded(coro, name):
+            try:
+                await coro
+                log(f"[GATHER] '{name}' returned (exited cleanly) — this causes bot restart", "WARNING")
+            except asyncio.CancelledError:
+                log(f"[GATHER] '{name}' cancelled (normal shutdown)", "INFO")
+                raise
+            except Exception as e:
+                log(f"[GATHER] '{name}' raised exception: {e}", "ERROR")
+                raise
+
+        try:
+            await asyncio.gather(
+                _guarded(client.run_until_disconnected(), "TG signal client"),
+                _guarded(manager_loop(manager),           "Manager loop"),
+                _guarded(bot_cmd.run(),                   "Bot commands"),
+                _guarded(daily_reporter.run(),            "Daily reporter"),
+            )
+        except asyncio.CancelledError:
+            pass  # normal Ctrl+C shutdown — suppress traceback
 
     finally:
         # =========================
@@ -240,15 +394,57 @@ async def run():
         except Exception:
             pass
 
+        try:
+            await client.disconnect()
+        except Exception:
+            pass
+
+        # Cancel any lingering tasks created during this run (e.g. stray
+        # asyncio.create_task calls) so they don't accumulate across restarts
+        # on the same event loop inside main_with_restart().
+        _current = asyncio.current_task()
+        _pending = [t for t in asyncio.all_tasks() if t is not _current and not t.done()]
+        if _pending:
+            log(f"[SHUTDOWN] Cancelling {len(_pending)} lingering task(s)...", "INFO")
+            for _t in _pending:
+                _t.cancel()
+            await asyncio.gather(*_pending, return_exceptions=True)
+
+        send_status("CryptoNite Signal Bot", "STOPPED")
         mt5.shutdown()
-        log("MT5 shutdown complete", "INFO")
+        log("MT5 shutdown complete.", "INFO")
 
 
-# =========================
-# ENTRY POINT
-# =========================
+async def main_with_restart():
+    """Outer restart loop — if the bot crashes or the broker drops Telegram,
+    wait 30 seconds and restart automatically instead of staying dead."""
+    restart_count = 0
+    while True:
+        try:
+            await run()
+            log("[RESTART] Bot exited cleanly. Restarting in 30s...", "WARNING")
+        except asyncio.CancelledError:
+            # Ctrl+C or external shutdown — exit the restart loop cleanly.
+            log("[RESTART] Shutdown signal received — stopping.", "INFO")
+            return
+        except Exception as e:
+            log(f"[RESTART] Bot crashed: {e}. Restarting in 30s...", "ERROR")
+        restart_count += 1
+        log(f"[RESTART] Attempt #{restart_count} in 30 seconds...", "INFO")
+        try:
+            await asyncio.sleep(30)
+        except asyncio.CancelledError:
+            log("[RESTART] Shutdown during restart wait — stopping.", "INFO")
+            return
+
+
 if __name__ == "__main__":
+    # Telethon requires SelectorEventLoop on Windows — ProactorEventLoop (the default
+    # in Python 3.8+ on Windows) causes random connection drops and task cancellations.
+    import sys
+    if sys.platform == "win32":
+        asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
     try:
-        asyncio.run(run())
+        asyncio.run(main_with_restart())
     except KeyboardInterrupt:
-        log("Bot stopped manually", "INFO")
+        pass  # suppress the traceback — shutdown message already logged above

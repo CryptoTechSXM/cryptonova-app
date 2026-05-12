@@ -50,7 +50,12 @@ def log_closed_trade(ticket, trade: dict, profit: float, exit_price: float = Non
     """
     try:
         now    = datetime.now()
-        result = "WIN" if profit > 0 else "LOSS"
+        if profit > 0:
+            result = "WIN"
+        elif profit < 0:
+            result = "LOSS"
+        else:
+            result = "BE"   # breakeven — trail locked SL at entry, closed at $0
 
         entry  = trade.get("entry", 0)
         sl     = trade.get("sl", 0)

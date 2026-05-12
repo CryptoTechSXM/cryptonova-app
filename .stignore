@@ -1,0 +1,31 @@
+// RUNTIME FILES - written every few seconds by running bots
+**/heartbeat.txt
+**/heartbeat.sync-conflict-*.txt
+**/events.log
+**/bot.log
+**/free_signals.log
+**/free_signals_pre_fix_*.log
+**/state.json
+signal_bridge.json
+**/backups/
+**/stignore_NEW.txt
+**/*.session
+**/*.session-journal
+**/__pycache__
+**/*.pyc
+**/*.pyo
+**/*.pyd
+**/*.sync-conflict-*
+**/*.tmp
+**/*.bak
+**/*~
+**/.DS_Store
+**/Thumbs.db
+**/*.swp
+
+// TRADE LOGS - actively written by running bots, machine-specific
+**/trade_log*.txt
+**/trade_log*.csv
+
+// GIT INTERNALS - changes on every push/pull, use GitHub as source of truth
+.git/

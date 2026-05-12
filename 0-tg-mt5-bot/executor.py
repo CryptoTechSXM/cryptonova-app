@@ -77,7 +77,7 @@ class TradeExecutor:
         if "BTC" in symbol:
             risk = 100
         elif "XAU" in symbol:
-            risk = 5
+            risk = 20   # gold moves 5 pts in seconds — 20 is a realistic floor
         elif "NAS" in symbol:
             risk = 30
         else:
@@ -105,7 +105,7 @@ class TradeExecutor:
         if "BTC" in symbol:
             min_sl = 100
         elif "XAU" in symbol:
-            min_sl = 5
+            min_sl = 20   # gold moves 5 pts in seconds — 20 is a realistic floor
         elif "NAS" in symbol:
             min_sl = 30
         else:
@@ -126,6 +126,71 @@ class TradeExecutor:
 
         log(f"[NORMALIZED] {symbol} | Entry={entry:.5f} SL={sl:.5f} TP={tp:.5f}", "INFO")
         return sl, tp, risk
+
+    # =========================
+    # REVERSAL — CLOSE OPPOSITE POSITIONS
+    # Before entering a new direction, close any open positions on the same
+    # symbol in the opposite direction (same source channel only, by default).
+    # =========================
+    def close_opposite_positions(self, symbol: str, new_side: str, new_source: str) -> int:
+        if not settings.close_opposite_on_signal:
+            return 0
+
+        opposite_pos_type = 0 if new_side == "SELL" else 1  # 0=BUY pos, 1=SELL pos
+        positions = mt5.positions_get(symbol=symbol)
+        if not positions:
+            return 0
+
+        closed = 0
+        for pos in positions:
+            if pos.type != opposite_pos_type:
+                continue
+
+            # Same-source check — look up the source from active_trades
+            pos_src = ""
+            trade = self.manager.active_trades.get(pos.ticket, {})
+            pos_src = trade.get("source_channel", "")
+
+            if settings.close_opposite_same_source_only:
+                if pos_src and pos_src != new_source:
+                    log(f"[REVERSAL] Skip ticket={pos.ticket} src={pos_src} ≠ new={new_source}", "INFO")
+                    continue
+
+            # Send close order
+            tick = mt5.symbol_info_tick(symbol)
+            if not tick:
+                continue
+
+            close_type  = mt5.ORDER_TYPE_SELL if pos.type == 0 else mt5.ORDER_TYPE_BUY
+            close_price = tick.bid if pos.type == 0 else tick.ask
+            pnl_sign    = "+" if pos.profit >= 0 else ""
+
+            req = {
+                "action":       mt5.TRADE_ACTION_DEAL,
+                "position":     int(pos.ticket),
+                "symbol":       symbol,
+                "volume":       float(pos.volume),
+                "type":         close_type,
+                "price":        float(close_price),
+                "deviation":    30,
+                "magic":        settings.mt5_magic_number,
+                "comment":      "reversal close",
+                "type_time":    mt5.ORDER_TIME_GTC,
+                "type_filling": mt5.ORDER_FILLING_IOC,
+            }
+            res = mt5.order_send(req)
+            if res and res.retcode == mt5.TRADE_RETCODE_DONE:
+                log(f"[REVERSAL] Closed ticket={pos.ticket} {symbol} "
+                    f"{'BUY' if pos.type == 0 else 'SELL'} vol={pos.volume} "
+                    f"P&L={pnl_sign}{pos.profit:.2f}", "INFO")
+                # Remove from active tracking
+                self.manager.active_trades.pop(pos.ticket, None)
+                closed += 1
+            else:
+                retcode = res.retcode if res else "None"
+                log(f"[REVERSAL] Close FAILED ticket={pos.ticket} retcode={retcode}", "ERROR")
+
+        return closed
 
     # =========================
     # MAIN EXECUTION
@@ -191,6 +256,25 @@ class TradeExecutor:
 
             lot = calculate_lot(symbol, sl_distance, self.manager, channel_risk_mult)
 
+            # SELL lot multiplier — scale down SELL positions during uptrends
+            if side == "SELL" and settings.sell_lot_multiplier != 1.0:
+                if settings.sell_lot_multiplier <= 0.0:
+                    log(f"[DIRECTION] SELL blocked (sell_lot_multiplier=0): {symbol}", "INFO")
+                    return {"ok": False, "message": "SELL signals blocked by direction filter"}
+                info = mt5.symbol_info(symbol)
+                orig_lot = lot
+                lot = max(float(info.volume_min), lot * settings.sell_lot_multiplier)
+                step = info.volume_step
+                lot = round(int(lot / step) * step, 10)
+                lot = max(float(info.volume_min), lot)
+                log(f"[DIRECTION] SELL lot scaled: {orig_lot} → {lot} (x{settings.sell_lot_multiplier})", "INFO")
+
+            # Reversal — close opposite positions before entering new direction
+            if settings.close_opposite_on_signal:
+                n_closed = self.close_opposite_positions(symbol, side, source_channel)
+                if n_closed:
+                    log(f"[REVERSAL] Closed {n_closed} opposite position(s) on {symbol} before {side}", "INFO")
+
             order_type = mt5.ORDER_TYPE_BUY if side == "BUY" else mt5.ORDER_TYPE_SELL
 
             request = {
@@ -222,11 +306,22 @@ class TradeExecutor:
 
             # =========================
             # REGISTER TRADE
-            # tp_levels holds all TP targets from the parser (TP1, TP2, TP3...).
-            # The manager uses this list to know when to fire partial closes.
-            # If there was only one TP, tp_levels is just [tp].
+            # tp_levels holds all TP targets for partial closes.
+            # We use the NORMALIZED tp (2R in the correct direction) as the
+            # single reliable target.  Parser-supplied tp_levels are filtered
+            # to discard any level on the wrong side of entry (direction guard)
+            # — these appear when the parser mis-extracts a TP that is above
+            # entry for a SELL or below entry for a BUY.
             # =========================
-            tp_levels = signal.get("tp_levels", [tp] if tp > 0 else [])
+            raw_tp_levels = signal.get("tp_levels", [])
+            if raw_tp_levels:
+                if side == "BUY":
+                    valid_tp_levels = [t for t in raw_tp_levels if t > entry]
+                else:
+                    valid_tp_levels = [t for t in raw_tp_levels if t < entry]
+                tp_levels = valid_tp_levels if valid_tp_levels else ([tp] if tp > 0 else [])
+            else:
+                tp_levels = [tp] if tp > 0 else []
 
             registered_signal = {
                 "symbol":         symbol,

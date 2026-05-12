@@ -117,6 +117,9 @@ MULTI_PENDING_FRACTIONS = _parse_fractions(os.getenv("MULTI_PENDING_FRACTIONS", 
 COOLDOWN_SECONDS = int(os.getenv("COOLDOWN_SECONDS", "60"))
 MAX_OPEN_POSITIONS_PER_SYMBOL = int(os.getenv("MAX_OPEN_POSITIONS_PER_SYMBOL", "1"))
 MAX_PENDING_ORDERS_PER_SYMBOL = int(os.getenv("MAX_PENDING_ORDERS_PER_SYMBOL", "1"))
+# Global cap across ALL symbols — prevents correlated multi-symbol exposure during news events.
+# 0 = disabled.
+MAX_OPEN_POSITIONS_TOTAL = int(os.getenv("MAX_OPEN_POSITIONS_TOTAL", "0"))
 COUNT_ONLY_MAGIC = (os.getenv("COUNT_ONLY_MAGIC", "true").strip().lower() == "true")
 REPLACE_PENDING_ON_NEW_SIGNAL = (os.getenv("REPLACE_PENDING_ON_NEW_SIGNAL", "true").strip().lower() == "true")
 
@@ -176,6 +179,56 @@ TRAIL_DISTANCE_USD = float(os.getenv("TRAIL_DISTANCE_USD", "2.0"))
 TRAIL_STEP_USD     = float(os.getenv("TRAIL_STEP_USD", "1.0"))
 TRAIL_DISTANCE_R   = float(os.getenv("TRAIL_DISTANCE_R", "0.5"))
 TRAIL_STEP_R       = float(os.getenv("TRAIL_STEP_R", "0.1"))
+# Hybrid trail: 0.0 = trail fires with scalp lock; >0 = trail delayed until this R level
+TRAIL_TRIGGER_R    = float(os.getenv("TRAIL_TRIGGER_R", "0.0"))
+# Fixed-pip trail: overrides R-based when > 0. Per-symbol smart defaults used when 0.
+TRAIL_FIXED_PIPS   = float(os.getenv("TRAIL_FIXED_PIPS", "0.0"))
+
+# ATR-based BE and trail (fires alongside TP1 trigger — whichever comes first)
+ATR_BE_TRIGGER_PCT  = float(os.getenv("ATR_BE_TRIGGER_PCT",  "0.30"))  # 30% of ATR
+ATR_TRAIL_DIST_PCT  = float(os.getenv("ATR_TRAIL_DIST_PCT",  "0.25"))  # 25% of ATR
+ATR_TRAIL_ENABLED   = (os.getenv("ATR_TRAIL_ENABLED", "true").strip().lower() == "true")
+MIN_BE_PIPS_PRICE   = float(os.getenv("MIN_BE_PIPS_PRICE",   "1.0"))   # price-unit floor for BE trigger
+MIN_TRAIL_PRICE     = float(os.getenv("MIN_TRAIL_PRICE",     "0.80"))  # price-unit floor for trail dist
+
+
+def _trail_pips_for_symbol(symbol: str) -> float:
+    """Fixed trail distance in price-points for each asset class.
+    Uses TRAIL_FIXED_PIPS env override when > 0, otherwise smart per-symbol defaults."""
+    if TRAIL_FIXED_PIPS > 0:
+        return TRAIL_FIXED_PIPS
+    sym = symbol.upper()
+    if "BTC" in sym:
+        return 50.0     # BTC: $50 trail
+    if "ETH" in sym:
+        return 5.0      # ETH: $5 trail
+    if "XAU" in sym or "GOLD" in sym:
+        return 3.0      # Gold: 3pt trail — tight on typical 8-15pt SLs
+    if "XAG" in sym or "SILVER" in sym:
+        return 0.05
+    if "NAS" in sym or "US100" in sym or "NDX" in sym:
+        return 8.0      # NAS100: 8pt trail
+    if "GER" in sym or "DAX" in sym:
+        return 8.0
+    if "SPX" in sym or "SP500" in sym or "US500" in sym:
+        return 8.0
+    return 0.00050      # Default FX: 5 pips
+
+
+class _Mt5CalendarSettings:
+    """Minimal settings shim so news_filter.py works in the 247-bot context."""
+    def __init__(self):
+        self.news_filter_enabled     = True
+        self.news_filter_countries   = [c.strip().upper() for c in os.getenv("NEWS_FILTER_COUNTRIES", "US,EU,GB").split(",") if c.strip()]
+        self.news_filter_importance  = [v.strip().upper() for v in os.getenv("NEWS_FILTER_IMPORTANCE", "RED,ORANGE").split(",") if v.strip()]
+        self.news_filter_before_min  = int(os.getenv("NEWS_FILTER_BEFORE_MIN", "30"))
+        self.news_filter_after_min   = int(os.getenv("NEWS_FILTER_AFTER_MIN",  "30"))
+        self.news_close_before_min   = int(os.getenv("NEWS_CLOSE_BEFORE_MIN",  "10"))
+
+
+def _mt5_calendar_settings() -> _Mt5CalendarSettings:
+    return _Mt5CalendarSettings()
+
 
 # Simple TP/SL model
 SL_MODEL = os.getenv("SL_MODEL", "HYBRID").strip().upper()  # FIXED | ATR | HYBRID
@@ -227,7 +280,36 @@ DEBUG_INTAKE_FILTER = (os.getenv("DEBUG_INTAKE_FILTER", "true").strip().lower() 
 DAILY_REPORT_ENABLED = (os.getenv("DAILY_REPORT_ENABLED", "false").strip().lower() == "true")
 DAILY_REPORT_CHAT_ID = (os.getenv("DAILY_REPORT_CHAT_ID") or "").strip()
 DAILY_REPORT_SEND_TIME = (os.getenv("DAILY_REPORT_SEND_TIME", "00:05") or "00:05").strip()
-EXECUTION_CHAT_ID = (os.getenv("EXECUTION_CHAT_ID") or "").strip()
+EXECUTION_CHAT_ID     = (os.getenv("EXECUTION_CHAT_ID") or "").strip()
+ADOPT_MANUAL_TRADES   = (os.getenv("ADOPT_MANUAL_TRADES", "false").strip().lower() == "true")
+DRAWDOWN_ALERT_PCT      = float(os.getenv("DRAWDOWN_ALERT_PCT",      "3.0"))
+DAILY_PROFIT_TARGET_PCT = float(os.getenv("DAILY_PROFIT_TARGET_PCT", "2.0"))
+# When true, no new entries are accepted once DAILY_PROFIT_TARGET_PCT is banked.
+DAILY_PROFIT_LOCK       = (os.getenv("DAILY_PROFIT_LOCK", "false").strip().lower() == "true")
+ORDER_TIMEOUT_MINUTES   = int(os.getenv("ORDER_TIMEOUT_MINUTES",   "60"))
+# Block new entries for this many minutes when a high-impact news message is detected.
+# 0 = disabled.
+NEWS_PAUSE_MINUTES      = int(os.getenv("NEWS_PAUSE_MINUTES", "0"))
+
+# Time filter — block signals outside the configured UTC window
+TIME_FILTER_ENABLED    = (os.getenv("TIME_FILTER_ENABLED", "false").strip().lower() == "true")
+TIME_FILTER_START_HOUR = int(os.getenv("TIME_FILTER_START_HOUR", "7"))
+TIME_FILTER_END_HOUR   = int(os.getenv("TIME_FILTER_END_HOUR", "19"))
+BLOCKED_HOURS          = [int(h.strip()) for h in os.getenv("BLOCKED_HOURS", "").split(",") if h.strip().isdigit()]
+
+# Direction filter — scale lot size on SELL signals (1.0=normal, 0.5=half, 0.0=block)
+SELL_LOT_MULTIPLIER    = float(os.getenv("SELL_LOT_MULTIPLIER", "1.0"))
+
+# Reversal logic — close opposite positions when a new signal arrives
+CLOSE_OPPOSITE_ON_SIGNAL        = (os.getenv("CLOSE_OPPOSITE_ON_SIGNAL",        "false").strip().lower() == "true")
+CLOSE_OPPOSITE_SAME_SOURCE_ONLY = (os.getenv("CLOSE_OPPOSITE_SAME_SOURCE_ONLY", "true").strip().lower()  == "true")
+# When true, only reverse a position if it is currently in profit.
+# Protects against compounding a losing trade by flipping direction.
+REVERSAL_REQUIRE_PROFIT         = (os.getenv("REVERSAL_REQUIRE_PROFIT",         "true").strip().lower()  == "true")
+
+# Bot command interface
+BOT_TOKEN        = (os.getenv("BOT_TOKEN") or "").strip()
+CONTROL_CHAT_ID  = (os.getenv("CONTROL_CHAT_ID") or "").strip()
 
 
 # ----------------- SYMBOL POLICY -----------------
@@ -340,8 +422,17 @@ def _prune_state(state):
             k: v for k, v in state["days"].items() if k >= cutoff
         }
 
-    # Prune position_sources and position_templates for closed positions
-    # Keep only tickets that still have open positions
+    # Prune position_templates and managed_positions for closed positions.
+    # Keep only tickets that still have open positions.
+    #
+    # IMPORTANT: position_sources is deliberately NOT included here.
+    # Pruning it by open_tickets caused the UNKNOWN channel bug:
+    #   save_state() would strip the source mapping for a just-closed
+    #   position before log_new_closed_deals() could read it, so every
+    #   trade was logged and notified as "Source: UNKNOWN".
+    # position_sources stays in state until explicitly cleared or until
+    # the bot has been running long enough that entries are stale.
+    # The dict is tiny (one entry per executed trade) so this is safe.
     open_tickets = set()
     try:
         positions = mt5.positions_get()
@@ -351,7 +442,7 @@ def _prune_state(state):
         pass
 
     if open_tickets is not None:
-        for key in ("position_templates", "position_sources", "managed_positions"):
+        for key in ("position_templates", "managed_positions"):
             if key in state:
                 state[key] = {k: v for k, v in state[key].items() if k in open_tickets}
 
@@ -584,11 +675,9 @@ def stats_add_trade_close(state, channel_id: str, profit: float, symbol: str = "
 
 CHANNEL_NAME_MAP = {
     "-1003523601209": "CryptoNite Free Signals",
-    "-1003700973551": "CryptoNite Premium",
     "-1002717527369": "Free TAG Signals",
-    "-1003628454081": "95% TAG Signals",
-    "-1003660487270": "CryptoNite HA Premium",
-    "-1003685899545": "CryptoNite QFS Premium",
+    "-1003889406756": "Limitless Abundance VIP",
+    "-1003731092037": "Limitless Abundance Free",
 }
 CHANNEL_ACTIVITY = {}
 
@@ -666,7 +755,30 @@ def resolve_symbol_live(raw_symbol_text: str) -> str:
     raw_base = raw_norm.replace("/", "").upper()
 
     if raw_base in SYMBOL_MAP:
-        return SYMBOL_MAP[raw_base]
+        mapped = SYMBOL_MAP[raw_base]
+        # If the mapped symbol is directly in MT5, use it
+        if mapped.upper() in MT5_SYMBOLS_UPPER:
+            return mapped
+        # Mapped symbol not found — try suffixes on the mapped name
+        # (e.g. SYMBOL_XAU=XAUUSD but broker has XAUUSD.f)
+        mapped_base = mapped.upper()
+        if SYMBOL_SUFFIX_FORCE:
+            candidate = f"{mapped_base}{SYMBOL_SUFFIX_FORCE}"
+            if candidate.upper() in MT5_SYMBOLS_UPPER:
+                log_event(f"[SYMBOL] SYMBOL_MAP {raw_base}→{mapped} not found; using {candidate}")
+                return candidate
+        for suf in SYMBOL_SUFFIX_PREFER:
+            candidate = f"{mapped_base}{suf}"
+            if candidate.upper() in MT5_SYMBOLS_UPPER:
+                log_event(f"[SYMBOL] SYMBOL_MAP {raw_base}→{mapped} not found; using {candidate}")
+                return candidate
+        starts = [s for s in MT5_SYMBOLS_ALL if s.upper().startswith(mapped_base)]
+        if starts:
+            starts.sort(key=lambda x: (len(x), x))
+            log_event(f"[SYMBOL] SYMBOL_MAP {raw_base}→{mapped} not found; using {starts[0]}")
+            return starts[0]
+        # Nothing found — return the mapped value and let the caller handle failure
+        return mapped
 
     if raw_base in SYMBOL_RESOLVE_CACHE:
         return SYMBOL_RESOLVE_CACHE[raw_base]
@@ -882,6 +994,16 @@ ANALYZER_ENGINE_RE = re.compile(
     r"(?is)(?:gold\s+analyzer|analyzer\s+engine|cryptonite(?:\s+\w+)*\s+signals).*?(?:asset\s*[:;]\s*([A-Z0-9_./-]+))?.*?direction\s*[:;]\s*(buy|sell).*?entry\s*[:;]\s*(\d+(?:\.\d+)?).*?sl\s*[:;]\s*(\d+(?:\.\d+)?).*?tp\s*[:;]\s*(\d+(?:\.\d+)?)"
 )
 
+# New CryptoNite icon format:
+# 🚨 CryptoNite Signal | 📡 ... | 📈 XAUUSD | BUY | ⏰ ... | 📍 Entry: X | 🛑 SL: X | 🎯 TP: X
+CRYPTONITE_ICON_RE = re.compile(
+    r"(?:📈|📉)\s*(?P<symbol>[A-Z0-9./]+)\s*[|\n]\s*(?P<side>BUY|SELL)"
+    r".*?📍\s*Entry:\s*(?P<entry>[\d.]+)"
+    r".*?🛑\s*SL:\s*(?P<sl>[\d.]+)"
+    r".*?🎯\s*TP:\s*(?P<tp>[\d.]+)",
+    re.IGNORECASE | re.DOTALL,
+)
+
 GOLD_RANGE_FULL_RE = re.compile(
     r"""
     ^\s*
@@ -904,6 +1026,68 @@ GOLD_RANGE_SIMPLE_RE = re.compile(
     (?P<z1>\d+(?:\.\d+)?)\s*[-]\s*(?P<z2>\d+(?:\.\d+)?)
     .*?\bSL\b\s*[:;@-]?\s*(?P<sl>\d+(?:\.\d+)?)
     .*?\bTP\b\s*[:;@-]?\s*(?P<tp_raw>[0-9 .]+PIPS?)
+    """,
+    re.IGNORECASE | re.DOTALL | re.VERBOSE,
+)
+
+# -----------------------------------------------------------------------
+# TAG INLINE: "XAUUSD 4709-4689 buy" / "XAUUSD | 4543.5-4559 | sell"
+# Symbol first, range, then explicit BUY/SELL (no ENTRY/SL/TP needed).
+# -----------------------------------------------------------------------
+SYMBOL_RANGE_SIDE_RE = re.compile(
+    r"""
+    ^\s*
+    (?P<symbol>XAU(?:USD)?|GOLD|BTC(?:USD)?|NAS(?:DAQ|100)?|US30|GER\d*|EUR(?:USD)?|GBP(?:USD)?)\s*
+    (?:\|\s*)?
+    (?P<z1>\d{4,5}(?:\.\d+)?)\s*[-]\s*(?P<z2>\d{4,5}(?:\.\d+)?)\s*
+    (?:\|\s*)?
+    (?P<side>BUY|SELL)
+    \b
+    """,
+    re.IGNORECASE | re.VERBOSE,
+)
+
+# -----------------------------------------------------------------------
+# LIKING RANGE: "Liking buys | 4697-4678 | XAUUSD buy"
+#               "Liking sells | 4865-4880 XAUUSD"
+#               "Liking buys again XAUUSD | 4598.6-4579"
+# Side extracted from "buys"/"buy"/"sells"/"sell" near "liking"/"like".
+# -----------------------------------------------------------------------
+LIKING_SIDE_RANGE_RE = re.compile(
+    r"""
+    (?:liking|like)\s+
+    (?P<side>buy(?:s)?|sell(?:s)?)\s*
+    .*?
+    (?P<z1>\d{4,5}(?:\.\d+)?)\s*[-]\s*(?P<z2>\d{4,5}(?:\.\d+)?)
+    """,
+    re.IGNORECASE | re.DOTALL | re.VERBOSE,
+)
+
+# -----------------------------------------------------------------------
+# LIMITLESS FULL: "Sell Gold 4808 - 4800 | Stop Loss 4812 | TP1 4798 | TP2 4796 | TP3 4794 | TP4 Open (...)"
+# -----------------------------------------------------------------------
+LIMITLESS_FULL_RE = re.compile(
+    r"""
+    ^\s*(?P<side>BUY|SELL)\s+(?:GOLD|XAU(?:USD)?)\s+
+    (?P<z1>\d{4,5}(?:\.\d+)?)\s*[-]\s*(?P<z2>\d{4,5}(?:\.\d+)?)
+    .*?STOP\s*LOSS\s+(?P<sl>\d{4,5}(?:\.\d+)?)
+    .*?TP1\s+(?P<tp1>\d{4,5}(?:\.\d+)?)
+    .*?TP2\s+(?P<tp2>\d{4,5}(?:\.\d+)?)
+    .*?TP3\s+(?P<tp3>\d{4,5}(?:\.\d+)?)
+    """,
+    re.IGNORECASE | re.DOTALL | re.VERBOSE,
+)
+
+# -----------------------------------------------------------------------
+# LIMITLESS MARKET: "Sell market | XAUUSD | 4592-4612"
+# -----------------------------------------------------------------------
+LIMITLESS_MARKET_RE = re.compile(
+    r"""
+    ^\s*(?P<side>BUY|SELL)\s+MARKET\s*
+    (?:\|[^|]*)?\|?\s*
+    (?:XAU(?:USD)?|GOLD)\s*
+    (?:\|[^|]*)?\|?\s*
+    (?P<z1>\d{4,5}(?:\.\d+)?)\s*[-]\s*(?P<z2>\d{4,5}(?:\.\d+)?)
     """,
     re.IGNORECASE | re.DOTALL | re.VERBOSE,
 )
@@ -933,11 +1117,19 @@ STRUCTURED_ENTRY_SIDE_FIRST_RE = re.compile(
 )
 
 PARSER_PROFILE_MAP = {
-    "-1002717527369": ["analyzer_engine", "structured_entry", "simple", "reverse_simple", "gold_range_full", "gold_range_simple", "generic_pending_sltp", "hashtag", "sig", "pending", "simple_pending", "signal_alert"],
-    "-1003523601209": ["analyzer_engine", "structured_entry", "simple_pending", "simple", "reverse_simple", "gold_range_full", "gold_range_simple", "generic_pending_sltp", "hashtag", "sig", "pending", "signal_alert"],
+    # cryptonite_icon is first for any channel that posts the 🚨 CryptoNite Signal emoji format.
+    # Added to -1002717527369 after observing parse failures
+    # when the same format arrived from this source (forwards/relays CryptoNite signals).
+    "-1002717527369": ["cryptonite_icon", "analyzer_engine", "structured_entry", "symbol_range_side", "liking_range", "simple", "reverse_simple", "gold_range_full", "gold_range_simple", "generic_pending_sltp", "hashtag", "sig", "pending", "simple_pending", "signal_alert"],
+    "-1003523601209": ["cryptonite_icon", "analyzer_engine", "structured_entry", "simple_pending", "simple", "reverse_simple", "gold_range_full", "gold_range_simple", "generic_pending_sltp", "hashtag", "sig", "pending", "signal_alert"],
     "-1002623109215": ["analyzer_engine", "structured_entry", "sig", "hashtag", "generic_pending_sltp", "simple", "reverse_simple", "pending", "simple_pending", "signal_alert", "gold_range_full", "gold_range_simple"],
     "-1003628454081": ["analyzer_engine", "structured_entry", "gold_range_full", "gold_range_simple", "simple", "reverse_simple", "simple_pending", "generic_pending_sltp", "hashtag", "sig", "pending", "signal_alert"],
-    "default": ["analyzer_engine", "structured_entry", "sig", "simple_pending", "generic_pending_sltp", "gold_range_full", "gold_range_simple", "hashtag", "reverse_simple", "signal_alert", "simple", "pending"],
+    # New channels — use broad default profile until signal format is confirmed
+    "-1003271148230": ["analyzer_engine", "structured_entry", "sig", "simple_pending", "generic_pending_sltp", "gold_range_full", "gold_range_simple", "hashtag", "reverse_simple", "signal_alert", "simple", "pending"],
+    "-1003882026187": ["analyzer_engine", "structured_entry", "sig", "simple_pending", "generic_pending_sltp", "gold_range_full", "gold_range_simple", "hashtag", "reverse_simple", "signal_alert", "simple", "pending"],
+    "-1003889406756": ["cryptonite_icon", "limitless_full", "limitless_market", "analyzer_engine", "structured_entry", "sig", "simple_pending", "generic_pending_sltp", "gold_range_full", "gold_range_simple", "hashtag", "reverse_simple", "signal_alert", "simple", "pending"],
+    "-1003731092037": ["cryptonite_icon", "limitless_full", "limitless_market", "analyzer_engine", "structured_entry", "sig", "simple_pending", "generic_pending_sltp", "gold_range_full", "gold_range_simple", "hashtag", "reverse_simple", "signal_alert", "simple", "pending"],
+    "default": ["cryptonite_icon", "analyzer_engine", "structured_entry", "sig", "simple_pending", "generic_pending_sltp", "gold_range_full", "gold_range_simple", "hashtag", "reverse_simple", "signal_alert", "simple", "pending"],
 }
 
 
@@ -1020,6 +1212,69 @@ def parse_gold_range_simple_signal(t: str, upper: str):
     return _mk_sig("SIMPLE", raw_symbol, side, zone_low, zone_high, [0.0, 0.0, 0.0], 0.0, t, high_risk=(("HIGH RISK" in upper) or ("HIGHRISK" in upper)))
 
 
+def parse_symbol_range_side_signal(t: str, upper: str):
+    """Handles: 'XAUUSD 4709-4689 buy' / 'XAUUSD | 4543.5-4559 | sell'"""
+    m = SYMBOL_RANGE_SIDE_RE.search(t)
+    if not m:
+        return None
+    raw_symbol = normalize_raw_symbol(m.group("symbol").upper())
+    side = m.group("side").upper()
+    z1 = float(normalize_price_str(raw_symbol, m.group("z1")))
+    z2 = float(normalize_price_str(raw_symbol, m.group("z2")))
+    zone_low, zone_high = min(z1, z2), max(z1, z2)
+    return _mk_sig("SIMPLE", raw_symbol, side, zone_low, zone_high, [0.0, 0.0, 0.0], 0.0, t)
+
+
+def parse_liking_side_range_signal(t: str, upper: str):
+    """Handles informal signals: 'Liking sells | 4865-4880 XAUUSD', 'Liking buys | 4697-4678 | XAUUSD buy'"""
+    m = LIKING_SIDE_RANGE_RE.search(t)
+    if not m:
+        return None
+    raw_side = m.group("side").upper()
+    # Normalize: "BUYS" -> "BUY", "SELLS" -> "SELL"
+    side = "BUY" if raw_side.startswith("BUY") else "SELL"
+    z1 = float(normalize_price_str("XAUUSD", m.group("z1")))
+    z2 = float(normalize_price_str("XAUUSD", m.group("z2")))
+    zone_low, zone_high = min(z1, z2), max(z1, z2)
+    # Try to find an explicit symbol in the full text (XAUUSD, GOLD, etc.)
+    sym_m = re.search(r"\b(XAU(?:USD)?|GOLD|BTC(?:USD)?|NAS(?:100)?|US30)\b", t, re.IGNORECASE)
+    raw_symbol = normalize_raw_symbol(sym_m.group(1).upper() if sym_m else "XAUUSD")
+    return _mk_sig("SIMPLE", raw_symbol, side, zone_low, zone_high, [0.0, 0.0, 0.0], 0.0, t)
+
+
+def parse_limitless_full_signal(t: str, upper: str):
+    """Handles: 'Sell Gold 4808 - 4800 | Stop Loss 4812 | TP1 4798 | TP2 4796 | TP3 4794 | TP4 Open (...)'"""
+    m = LIMITLESS_FULL_RE.search(t)
+    if not m:
+        return None
+    raw_symbol = "XAUUSD"
+    side = m.group("side").upper()
+    z1 = float(normalize_price_str(raw_symbol, m.group("z1")))
+    z2 = float(normalize_price_str(raw_symbol, m.group("z2")))
+    zone_low, zone_high = min(z1, z2), max(z1, z2)
+    sl  = float(normalize_price_str(raw_symbol, m.group("sl")))
+    tp1 = float(normalize_price_str(raw_symbol, m.group("tp1")))
+    tp2 = float(normalize_price_str(raw_symbol, m.group("tp2")))
+    tp3 = float(normalize_price_str(raw_symbol, m.group("tp3")))
+    # Extract TP4 from the "TP4 Open (N N N N)" parenthetical if present
+    tp4_m = re.search(r"TP4\s+Open\s*\(\s*(\d+(?:\.\d+)?)", t, re.IGNORECASE)
+    tp4 = float(normalize_price_str(raw_symbol, tp4_m.group(1))) if tp4_m else tp3
+    return _mk_sig("FULL", raw_symbol, side, zone_low, zone_high, [tp1, tp2, tp3, tp4], sl, t)
+
+
+def parse_limitless_market_signal(t: str, upper: str):
+    """Handles: 'Sell market | XAUUSD | 4592-4612'"""
+    m = LIMITLESS_MARKET_RE.search(t)
+    if not m:
+        return None
+    raw_symbol = "XAUUSD"
+    side = m.group("side").upper()
+    z1 = float(normalize_price_str(raw_symbol, m.group("z1")))
+    z2 = float(normalize_price_str(raw_symbol, m.group("z2")))
+    zone_low, zone_high = min(z1, z2), max(z1, z2)
+    return _mk_sig("SIMPLE", raw_symbol, side, zone_low, zone_high, [0.0, 0.0, 0.0], 0.0, t)
+
+
 def parse_generic_pending_sltp_signal(t: str, upper: str):
     m = GENERIC_PENDING_SLTP_RE.search(t)
     if not m:
@@ -1092,6 +1347,21 @@ def parse_structured_entry_signal(t: str, upper: str):
     return None
 
 
+def parse_cryptonite_icon_signal(t: str, upper: str):
+    """Parses the new CryptoNite icon-based format:
+    🚨 CryptoNite Signal | 📡 ... | 📈 XAUUSD | BUY | ⏰ ... | 📍 Entry: X | 🛑 SL: X | 🎯 TP: X
+    """
+    m = CRYPTONITE_ICON_RE.search(t)
+    if not m:
+        return None
+    raw_symbol = normalize_raw_symbol(m.group("symbol").upper())
+    side = m.group("side").upper()
+    entry = float(normalize_price_str(raw_symbol, m.group("entry")))
+    sl    = float(normalize_price_str(raw_symbol, m.group("sl")))
+    tp    = float(normalize_price_str(raw_symbol, m.group("tp")))
+    return _mk_sig("FULL", raw_symbol, side, entry, entry, [tp, tp, tp], sl, t, high_risk=False)
+
+
 def parse_signal_by_source(chat_id: str, text: str):
     t = clean_signal_text(text)
     upper = t.upper()
@@ -1109,7 +1379,11 @@ def parse_signal_by_source(chat_id: str, text: str):
 
     profile = PARSER_PROFILE_MAP.get(str(chat_id), PARSER_PROFILE_MAP["default"])
     for name in profile:
-        if name == "analyzer_engine":
+        if name == "cryptonite_icon":
+            sig = parse_cryptonite_icon_signal(t, upper)
+            if sig:
+                return sig
+        elif name == "analyzer_engine":
             sig = parse_analyzer_engine_signal(t, upper)
             if sig:
                 return sig
@@ -1119,6 +1393,22 @@ def parse_signal_by_source(chat_id: str, text: str):
                 return sig
         elif name == "reverse_simple":
             sig = parse_reverse_simple_signal(t, upper)
+            if sig:
+                return sig
+        elif name == "symbol_range_side":
+            sig = parse_symbol_range_side_signal(t, upper)
+            if sig:
+                return sig
+        elif name == "liking_range":
+            sig = parse_liking_side_range_signal(t, upper)
+            if sig:
+                return sig
+        elif name == "limitless_full":
+            sig = parse_limitless_full_signal(t, upper)
+            if sig:
+                return sig
+        elif name == "limitless_market":
+            sig = parse_limitless_market_signal(t, upper)
             if sig:
                 return sig
         elif name == "hashtag":
@@ -1355,6 +1645,18 @@ def mt5_connect(retries: int = 3):
                 mt5_refresh_symbol_cache()
                 return
             last_err = mt5.last_error()
+            # -6 = Authorization failed: terminal is open but credentials rejected.
+            # Try attaching to the already-logged-in terminal without re-logging in.
+            if last_err and last_err[0] == -6:
+                mt5.shutdown()
+                if mt5.initialize(timeout=10000):
+                    # Verify we got an account
+                    acc = mt5.account_info()
+                    if acc is not None:
+                        log_event(f"[MT5] Auth failed with credentials; attached to open terminal (login={acc.login})")
+                        mt5_refresh_symbol_cache()
+                        return
+                    mt5.shutdown()
         else:
             last_err = mt5.last_error()
         time.sleep(1.0 + i)
@@ -1547,6 +1849,34 @@ def remove_my_pending_orders_for_symbol(symbol: str) -> int:
             removed += 1
     return removed
 
+
+def cancel_all_my_pending_orders() -> int:
+    """Cancel ALL pending orders placed by this bot across all symbols.
+    Called on MT5 reconnect to flush orders that were placed at stale prices
+    during the outage — prevents them from filling unexpectedly on reconnect.
+    Returns the number of orders successfully cancelled."""
+    orders = mt5.orders_get()
+    if not orders:
+        return 0
+    removed = 0
+    for o in orders:
+        if int(getattr(o, "magic", 0)) != MAGIC:
+            continue
+        req = {"action": mt5.TRADE_ACTION_REMOVE, "order": int(o.ticket)}
+        res = mt5.order_send(req)
+        rc = getattr(res, "retcode", None)
+        if rc in (mt5.TRADE_RETCODE_DONE, mt5.TRADE_RETCODE_PLACED, 10009):
+            removed += 1
+            log_event(
+                f"🧹 Cancelled stale pending: ticket={o.ticket} "
+                f"{getattr(o, 'symbol', '?')} (MT5 reconnect cleanup)"
+            )
+        else:
+            log_event(
+                f"🧹 Cancel pending FAILED: ticket={o.ticket} retcode={rc}"
+            )
+    return removed
+
 def min_stop_distance(symbol: str) -> float:
     info = mt5.symbol_info(symbol)
     if not info:
@@ -1573,6 +1903,28 @@ def floor_to_step(lots: float, step: float) -> float:
         return lots
     return math.floor(lots / step) * step
 
+def _balance_scale_factor(balance: float) -> float:
+    """Return a lot-size multiplier based on account balance tier.
+    Allows small accounts to trade proportionally smaller positions
+    rather than being stuck at the broker minimum lot floor.
+      $0    - $499  : 0.10x (10x smaller)
+      $500  - $999  : 0.25x (4x smaller)
+      $1000 - $1999 : 0.50x (2x smaller)
+      $2000 - $4999 : 0.75x (1.33x smaller)
+      $5000+        : 1.00x (full size)
+    """
+    if balance < 500:
+        return 0.10
+    elif balance < 1000:
+        return 0.25
+    elif balance < 2000:
+        return 0.50
+    elif balance < 5000:
+        return 0.75
+    else:
+        return 1.00
+
+
 def lot_from_risk(symbol: str, entry: float, sl: float, risk_frac: float, raw_hint: str = "") -> float:
     acc = mt5.account_info()
     info = mt5.symbol_info(symbol)
@@ -1590,14 +1942,26 @@ def lot_from_risk(symbol: str, entry: float, sl: float, risk_frac: float, raw_hi
     if stop_dist <= 0:
         raise ValueError("Invalid SL distance")
 
-    lots = risk_amount / (stop_dist * value_per_price_unit)
-    lots = cap_max_lot(symbol, lots, raw_hint)
+    ideal_lots = risk_amount / (stop_dist * value_per_price_unit)
+    ideal_lots = cap_max_lot(symbol, ideal_lots, raw_hint)
 
-    lots = max(info.volume_min, min(lots, info.volume_max))
-    lots = floor_to_step(lots, info.volume_step)
-    lots = max(info.volume_min, lots)
+    # Balance-tier scaling — small accounts get proportionally smaller lots
+    # so signals fire rather than being forced to broker minimum floor
+    scale = _balance_scale_factor(float(acc.balance))
+    scaled_lots = ideal_lots * scale
 
-    return round(lots, 2)
+    # Round to step; do NOT enforce volume_min floor (stock CFDs accept sub-min)
+    step = info.volume_step if info.volume_step > 0 else 0.01
+    lots = round(scaled_lots / step) * step
+    if lots <= 0:
+        lots = step
+    lots = min(lots, info.volume_max)
+
+    tier_label = "x{:.0f}".format(1.0 / scale) if scale < 1.0 else "full"
+    print(f"[LOT] {symbol} balance={acc.balance:.2f} [{tier_label}] "
+          f"ideal={ideal_lots:.4f} scaled={scaled_lots:.4f} → lots={round(lots,8)}")
+
+    return round(lots, 8)
 
 def downscale_lots_to_margin(symbol: str, order_type: int, lots: float, price: float, raw_hint: str = "") -> float:
     acc = mt5.account_info()
@@ -1715,6 +2079,99 @@ def close_partial_position(position_ticket: int, symbol: str, pos_type: int, cur
     }
     res = order_send_with_filling_fallback(req, symbol, mt5.TRADE_ACTION_DEAL)
     return res, volume
+
+
+def close_full_position(ticket: int, symbol: str, pos_type: int, volume: float) -> bool:
+    """
+    Close an entire position at market.
+    pos_type: 0 = BUY (close with SELL), 1 = SELL (close with BUY)
+    Returns True if MT5 accepted the close.
+    """
+    tick = mt5.symbol_info_tick(symbol)
+    if not tick:
+        return False
+    close_type = mt5.ORDER_TYPE_SELL if pos_type == 0 else mt5.ORDER_TYPE_BUY
+    price      = float(tick.bid)    if pos_type == 0 else float(tick.ask)
+    req = {
+        "action":   mt5.TRADE_ACTION_DEAL,
+        "position": int(ticket),
+        "symbol":   symbol,
+        "volume":   float(volume),
+        "type":     close_type,
+        "price":    price,
+        "deviation": 30,
+        "magic":    MAGIC,
+        "comment":  "reversal close",
+    }
+    res = order_send_with_filling_fallback(req, symbol, mt5.TRADE_ACTION_DEAL)
+    return res is not None and res.retcode in (mt5.TRADE_RETCODE_DONE, mt5.TRADE_RETCODE_PLACED, 10009)
+
+
+def close_opposite_positions(symbol: str, new_side: str, new_source: str, state: dict) -> int:
+    """
+    Close all open market positions on `symbol` that are in the opposite direction
+    to `new_side`.  If CLOSE_OPPOSITE_SAME_SOURCE_ONLY is True, only closes positions
+    opened by the same source channel as the incoming signal.
+    Returns the number of positions closed.
+    """
+    if not CLOSE_OPPOSITE_ON_SIGNAL:
+        return 0
+
+    opposite_type = mt5.ORDER_TYPE_SELL if new_side.upper() == "BUY" else mt5.ORDER_TYPE_BUY
+    # MT5 position type: 0 = BUY, 1 = SELL
+    opposite_pos_type = 0 if new_side.upper() == "SELL" else 1
+
+    positions = mt5.positions_get(symbol=symbol)
+    if not positions:
+        return 0
+
+    position_sources = state.get("position_sources", {})
+    closed = 0
+
+    for pos in positions:
+        if pos.type != opposite_pos_type:
+            continue
+
+        pos_src = position_sources.get(str(pos.ticket), "")
+
+        if CLOSE_OPPOSITE_SAME_SOURCE_ONLY:
+            # Only close if same source channel, or if position source is unknown (adopted)
+            if pos_src and pos_src != "ADOPTED" and pos_src != new_source:
+                log_event(
+                    f"↔️  REVERSAL skip: ticket={pos.ticket} {pos.symbol} src={pos_src} "
+                    f"≠ new_src={new_source} (same-source-only mode)"
+                )
+                continue
+
+        pnl = pos.profit
+
+        # Profit guard — don't flip a position that's currently at a loss.
+        # Reversing a loser locks in the loss AND opens new directional risk.
+        # Only skip if REVERSAL_REQUIRE_PROFIT is enabled (default: True).
+        if REVERSAL_REQUIRE_PROFIT and pnl <= 0:
+            log_event(
+                f"↔️  REVERSAL skip: ticket={pos.ticket} {pos.symbol} "
+                f"P&L={pnl:.2f} (not in profit — require-profit guard active)"
+            )
+            continue
+
+        sign = "+" if pnl >= 0 else ""
+        ok = close_full_position(pos.ticket, symbol, pos.type, pos.volume)
+        if ok:
+            log_event(
+                f"↔️  REVERSAL closed: ticket={pos.ticket} {pos.symbol} "
+                f"{'BUY' if pos.type == 0 else 'SELL'} vol={pos.volume} "
+                f"P&L={sign}{pnl:.2f} src={pos_src or 'UNKNOWN'}"
+            )
+            # Clean up tracking dicts for the closed position
+            tk = str(pos.ticket)
+            state.get("position_templates", {}).pop(tk, None)
+            state.get("position_sources",   {}).pop(tk, None)
+            closed += 1
+        else:
+            log_event(f"↔️  REVERSAL close FAILED: ticket={pos.ticket} {pos.symbol}")
+
+    return closed
 
 
 # ----------------- ATR / SIMPLE SL MODEL -----------------
@@ -1958,9 +2415,17 @@ def current_risk_from_dd(dd_pct: float) -> float:
 def enforce_pause_logic(month_bucket, dd_pct: float) -> bool:
     now_ts = time.time()
     paused_until = month_bucket.get("paused_until")
+
+    # If cooldown is disabled (0 days), clear any stale paused_until from
+    # previous runs that used a longer cooldown, so it never blocks trading.
+    if PAUSE_COOLDOWN_DAYS == 0 and paused_until:
+        month_bucket["paused_until"] = None
+        paused_until = None
+
     if dd_pct >= MONTHLY_MAX_DD_PCT:
-        if not paused_until or now_ts > paused_until:
-            month_bucket["paused_until"] = now_ts + PAUSE_COOLDOWN_DAYS * 86400
+        if PAUSE_COOLDOWN_DAYS > 0:
+            if not paused_until or now_ts > paused_until:
+                month_bucket["paused_until"] = now_ts + PAUSE_COOLDOWN_DAYS * 86400
         month_bucket["min_risk_until_new_high"] = True
         return True
     if paused_until and now_ts < paused_until:
@@ -2351,6 +2816,13 @@ def place_trade(sig, state):
         log_event(f"Skip: already have {MAX_OPEN_POSITIONS_PER_SYMBOL}+ open positions on {symbol}")
         return None
 
+    if MAX_OPEN_POSITIONS_TOTAL > 0:
+        all_pos = mt5.positions_get()
+        total_open = len([p for p in (all_pos or []) if not COUNT_ONLY_MAGIC or getattr(p, "magic", 0) == MAGIC])
+        if total_open >= MAX_OPEN_POSITIONS_TOTAL:
+            log_event(f"Skip: global position cap reached ({total_open}/{MAX_OPEN_POSITIONS_TOTAL} open across all symbols)")
+            return None
+
     tick = mt5.symbol_info_tick(symbol)
     if not tick:
         log_event("Skip: no tick data")
@@ -2469,11 +2941,68 @@ def place_trade(sig, state):
         log_event(f"🛑 PAUSED (monthly DD {dd_pct:.2f}% / limit {MONTHLY_MAX_DD_PCT:.2f}%). No new trades.")
         return None
 
+    if state.get("manual_pause"):
+        log_event("🛑 PAUSED by manual /pause command. No new trades.")
+        return None
+
+    # Weekend check — markets closed Saturday & Sunday
+    if datetime.now(timezone.utc).weekday() >= 5:
+        return None
+
+    # Time filter — block signals outside the allowed UTC trading window
+    if TIME_FILTER_ENABLED:
+        now_hour = datetime.now(timezone.utc).hour
+        in_window = (
+            (TIME_FILTER_START_HOUR < TIME_FILTER_END_HOUR and TIME_FILTER_START_HOUR <= now_hour < TIME_FILTER_END_HOUR)
+            or
+            (TIME_FILTER_START_HOUR >= TIME_FILTER_END_HOUR and (now_hour >= TIME_FILTER_START_HOUR or now_hour < TIME_FILTER_END_HOUR))
+        )
+        if not in_window:
+            log_event(f"⏰ TIME FILTER blocked signal at {now_hour:02d}:00 UTC (window {TIME_FILTER_START_HOUR:02d}:00-{TIME_FILTER_END_HOUR:02d}:00)")
+            return None
+        if now_hour in BLOCKED_HOURS:
+            log_event(f"⏰ TIME FILTER blocked signal at {now_hour:02d}:00 UTC (blocked hour)")
+            return None
+
     dloss = daily_loss_pct(day_bucket, float(acc.equity))
     if dloss >= MAX_DAILY_LOSS_PCT:
         day_bucket["blocked_today"] = True
         log_event(f"🛑 Daily loss stop hit: {dloss:.2f}% >= {MAX_DAILY_LOSS_PCT:.2f}%.")
         return None
+
+    # News pause gate (text-based) — block entries after a Telegram news message.
+    if NEWS_PAUSE_MINUTES > 0:
+        import time as _t
+        remaining = _news_pause_until - _t.time()
+        if remaining > 0:
+            log_event(
+                f"📰 NEWS PAUSE: ~{int(remaining / 60) + 1} min remaining — signal blocked."
+            )
+            return None
+
+    # MT5 calendar news gate — block entries near high-impact scheduled events.
+    _nf_enabled = os.getenv("NEWS_FILTER_ENABLED", "false").strip().lower() == "true"
+    if _nf_enabled:
+        try:
+            from news_filter import is_news_blackout as _is_blackout
+            _blackout, _reason = _is_blackout(_mt5_calendar_settings())
+            if _blackout:
+                log_event(f"📰 MT5 CALENDAR BLOCK: {_reason}")
+                return None
+        except Exception as _ne:
+            log_event(f"[NEWS] Calendar gate error: {_ne}")
+
+    # Profit lock — stop new entries once daily target is banked.
+    # Enabled via DAILY_PROFIT_LOCK=true in .env (default: off).
+    if DAILY_PROFIT_LOCK and DAILY_PROFIT_TARGET_PCT > 0 and acc.balance > 0:
+        _pnl = load_state().get("realised_pnl_today", 0.0)
+        _tgt = acc.balance * DAILY_PROFIT_TARGET_PCT / 100
+        if _pnl >= _tgt:
+            log_event(
+                f"🎯 Profit lock: target +{_tgt:.2f} ({DAILY_PROFIT_TARGET_PCT:.1f}%) "
+                f"reached (today P&L={_pnl:+.2f}). No new trades."
+            )
+            return None
 
     cap = max_trades_cap_today()
     if cap > 0 and int(day_bucket.get("trades", 0)) >= cap:
@@ -2599,12 +3128,31 @@ def place_trade(sig, state):
 
         return res_last
 
+    # Reversal — close any open opposite-direction positions on this symbol
+    # before placing the new order so we're not hedged against ourselves.
+    # Only fires for market orders (not pending), same-source by default.
+    if action == mt5.TRADE_ACTION_DEAL:
+        n_closed = close_opposite_positions(symbol, sig["side"], str(sig.get("source", "")), state)
+        if n_closed:
+            log_event(f"↔️  Reversal: closed {n_closed} opposite position(s) on {symbol} before opening {sig['side']}")
+
     # SINGLE order placement
     if USE_FIXED_LOT:
         lots = fixed_lot_size(symbol, raw_symbol)
     else:
         lots_risk = lot_from_risk(symbol, float(entry), float(sl), risk_frac, raw_symbol)
         lots = downscale_lots_to_margin(symbol, order_type, lots_risk, float(entry), raw_symbol)
+
+    # Direction filter — scale down SELL lots when SELL_LOT_MULTIPLIER < 1.0
+    if sig.get("side", "").upper() == "SELL" and SELL_LOT_MULTIPLIER != 1.0:
+        if SELL_LOT_MULTIPLIER <= 0.0:
+            log_event(f"🚫 SELL signal blocked (SELL_LOT_MULTIPLIER=0): {symbol}")
+            return None
+        info = mt5.symbol_info(symbol)
+        orig_lots = lots
+        lots = max(float(info.volume_min), lots * SELL_LOT_MULTIPLIER)
+        lots = floor_to_step(lots, float(info.volume_step))
+        log_event(f"📉 SELL lot scaled: {orig_lots} → {lots} (multiplier={SELL_LOT_MULTIPLIER})")
 
     if lots <= 0:
         log_event(f"Skip: insufficient lot/margin. symbol={symbol}")
@@ -2640,6 +3188,15 @@ def place_trade(sig, state):
     if res.retcode in (mt5.TRADE_RETCODE_DONE, mt5.TRADE_RETCODE_PLACED, 10009):
         day_bucket["trades"] = int(day_bucket.get("trades", 0)) + 1
         log_event(f"✅ Accepted. trades_today={day_bucket['trades']} retcode={res.retcode} order={res.order} deal={res.deal}")
+
+        # Write bridge with ACTUAL executed SL/TP — after multiplier, ATR model, TP ladder.
+        # Gold HA bot reads this to cross-confirm direction and use the proven levels.
+        _write_signal_bridge_executed(
+            raw_symbol=raw_symbol,
+            direction=sig["side"],
+            entry=entry, sl=sl, tp=tp,
+            channel_id=sig.get("source", ""),
+        )
 
         state.setdefault("templates", {})
         state.setdefault("position_templates", {})
@@ -2828,6 +3385,24 @@ def manage_positions_once(state):
                 log_event(f"💸 Partial TP2: ticket={p.ticket} vol={vol:.2f} retcode={getattr(res,'retcode',None)}")
                 meta["tp2_partial_done"] = True
 
+        # ATR-based BE/trail trigger — fires when float reaches % of ATR, regardless of TP levels
+        if ATR_TRAIL_ENABLED and not meta.get("moved_be", False):
+            _atr_val = atr_value(symbol, ATR_TIMEFRAME, ATR_PERIOD)
+            if _atr_val > 0:
+                _be_threshold  = max(MIN_BE_PIPS_PRICE, _atr_val * ATR_BE_TRIGGER_PCT)
+                _float_dist    = (current_price - entry) if pos_type == 0 else (entry - current_price)
+                if _float_dist >= _be_threshold:
+                    _new_sl = entry if pos_type == 0 else entry
+                    _ok = (pos_type == 0 and (cur_sl == 0.0 or _new_sl > cur_sl + eps) and _new_sl < current_price) \
+                       or (pos_type == 1 and (cur_sl == 0.0 or _new_sl < cur_sl - eps) and _new_sl > current_price)
+                    if _ok:
+                        res = modify_sl_tp(int(p.ticket), getattr(p, "symbol", symbol), round(_new_sl, 2), cur_tp)
+                        if getattr(res, 'retcode', None) in (mt5.TRADE_RETCODE_DONE, 10009):
+                            log_event(f"🛡️ ATR-BE locked: ticket={p.ticket} entry={entry} float={_float_dist:.3f} threshold={_be_threshold:.3f}")
+                            meta["moved_be"] = True
+                            meta["trail_on"] = True
+                            cur_sl = _new_sl
+
         # Legacy BE/TP-based manager
         if not SCALP_LOCK_ENABLED:
             if BE_AT_TP1 and not meta["moved_be"] and tp1_hit:
@@ -2883,7 +3458,18 @@ def manage_positions_once(state):
                 lock_dist = SCALP_LOCK_AMOUNT_USD
 
             if triggered:
-                meta["trail_on"] = True
+                # Hybrid trail: lock SL at entry+buffer immediately, but only
+                # enable the trailing stop once profit reaches TRAIL_TRIGGER_R.
+                # If TRAIL_TRIGGER_R == 0 the trail fires together with the lock (old behaviour).
+                if TRAIL_TRIGGER_R > 0:
+                    trail_r_threshold = TRAIL_TRIGGER_R
+                    if sl_dist > 0 and (price_move / sl_dist) >= trail_r_threshold:
+                        meta["trail_on"] = True
+                    elif sl_dist <= 0:
+                        # USD fallback: no precise R, activate trail once lock fires
+                        meta["trail_on"] = True
+                else:
+                    meta["trail_on"] = True
 
                 lock_sl = (entry + lock_dist) if pos_type == 0 else (entry - lock_dist)
                 lock_sl = round_price(symbol, lock_sl)
@@ -2898,10 +3484,10 @@ def manage_positions_once(state):
                     res = modify_sl_tp(int(p.ticket), getattr(p, "symbol", symbol), lock_sl, cur_tp)
                     if getattr(res, 'retcode', None) in (mt5.TRADE_RETCODE_DONE, 10009):
                         label = f"{profit_r:.2f}R" if sl_dist > 0 else f"${float(getattr(p,'profit',0)):+.2f}"
-                        log_event(f"💰 Scalp lock: ticket={p.ticket} trigger={label} new_sl={lock_sl}")
+                        log_event(f"💰 Scalp lock: ticket={p.ticket} trigger={label} new_sl={lock_sl} trail_on={meta['trail_on']}")
                         cur_sl = lock_sl
 
-                if REMOVE_TP_ON_TRAIL and not meta.get("tp_removed", False):
+                if REMOVE_TP_ON_TRAIL and not meta.get("tp_removed", False) and meta["trail_on"]:
                     res = modify_sl_tp(int(p.ticket), getattr(p, "symbol", symbol), cur_sl, 0.0)
                     if getattr(res, 'retcode', None) in (mt5.TRADE_RETCODE_DONE, 10009):
                         log_event(f"🎯 TP removed: ticket={p.ticket} retcode={getattr(res,'retcode',None)}")
@@ -2911,14 +3497,15 @@ def manage_positions_once(state):
             orig_sl = float(meta.get("orig_sl", 0.0) or 0.0)
             sl_dist = abs(entry - orig_sl) if orig_sl > 0 else 0.0
 
-            if sl_dist > 0:
-                # R-based trail: SL follows price at TRAIL_DISTANCE_R × sl_dist behind
-                trail_dist = TRAIL_DISTANCE_R * sl_dist
-                step_dist  = TRAIL_STEP_R * sl_dist
+            # ATR-based trail distance (25% of ATR) with fixed-pip fallback
+            if ATR_TRAIL_ENABLED:
+                _atr_val   = atr_value(symbol, ATR_TIMEFRAME, ATR_PERIOD)
+                trail_dist = max(MIN_TRAIL_PRICE, _atr_val * ATR_TRAIL_DIST_PCT) if _atr_val > 0 \
+                             else _trail_pips_for_symbol(symbol)
             else:
-                # USD fallback
-                trail_dist = TRAIL_DISTANCE_USD
-                step_dist  = TRAIL_STEP_USD
+                trail_dist = _trail_pips_for_symbol(symbol)
+            # Minimum step before SL is moved: 20% of trail distance (avoids micro-adjustments)
+            step_dist  = trail_dist * 0.2
 
             desired_sl = (current_price - trail_dist) if pos_type == 0 else (current_price + trail_dist)
             desired_sl = round_price(symbol, desired_sl)
@@ -2931,12 +3518,12 @@ def manage_positions_once(state):
                 should_send = (cur_sl == 0.0 or desired_sl < cur_sl - step_dist) and desired_sl > current_price + eps
 
             if should_send and abs(desired_sl - last_attempt) > eps:
-                res = modify_sl_tp(int(p.ticket), getattr(p, "symbol", symbol), desired_sl, float(p.tp) if p.tp else 0.0)
+                tp_to_send = 0.0 if meta.get("tp_removed", False) else (float(p.tp) if p.tp else 0.0)
+                res = modify_sl_tp(int(p.ticket), getattr(p, "symbol", symbol), desired_sl, tp_to_send)
                 rc  = getattr(res, 'retcode', None)
                 meta["last_trail_sl"] = desired_sl
                 if rc in (mt5.TRADE_RETCODE_DONE, 10009):
-                    label = f"{sl_dist:.5f} sl_dist" if sl_dist > 0 else "USD"
-                    log_event(f"🏃 Trail: ticket={p.ticket} new_sl={desired_sl} basis={label} retcode={rc}")
+                    log_event(f"🏃 Trail: ticket={p.ticket} new_sl={desired_sl} trail={trail_dist}pt retcode={rc}")
 
 
 # ----------------- CSV -----------------
@@ -3001,14 +3588,55 @@ def log_new_closed_deals(state, notifications=None):
 
         # Queue close notification for async send in manager_loop
         if EXECUTION_CHAT_ID and notifications is not None:
-            outcome = "WIN" if profit > 0 else ("LOSS" if profit < 0 else "BE")
-            icon    = "✅" if profit > 0 else ("❌" if profit < 0 else "➖")
-            src_name = CHANNEL_NAME_MAP.get(channel_id, channel_id)
+            outcome   = "WIN" if profit > 0 else ("LOSS" if profit < 0 else "BE")
+            icon      = "✅" if profit > 0 else ("❌" if profit < 0 else "➖")
+            src_name  = CHANNEL_NAME_MAP.get(channel_id, channel_id)
+            clean_sym = symbol.split(".")[0] if "." in symbol else symbol
+            dir_icon  = "📈" if side == "BUY" else "📉"
+            from datetime import datetime as _dt, timezone as _tz
+            now_str   = _dt.now(_tz.utc).strftime("%Y-%m-%d %H:%M UTC")
+
+            # Resolve entry price from today's deal history (entry deal for this position)
+            exit_price  = float(getattr(d, "price", 0.0))
+            entry_price = None
+            orig_sl_v   = None
+            for _ed in deals:
+                if (str(getattr(_ed, "position_id", "")) == pos_id
+                        and getattr(_ed, "entry", None) == mt5.DEAL_ENTRY_IN):
+                    entry_price = float(getattr(_ed, "price", 0.0))
+                    break
+            # Fallback: managed_positions (rare — usually already cleaned up)
+            if entry_price is None:
+                _mp = state.get("managed_positions", {}).get(pos_id, {})
+                if _mp:
+                    entry_price = _mp.get("entry")
+                    orig_sl_v   = _mp.get("orig_sl")
+
+            # R:R calculation
+            rr_line = ""
+            if entry_price and entry_price > 0:
+                if orig_sl_v is None:
+                    orig_sl_v = state.get("managed_positions", {}).get(pos_id, {}).get("orig_sl")
+                if orig_sl_v and abs(entry_price - float(orig_sl_v)) > 0:
+                    sl_dist    = abs(entry_price - float(orig_sl_v))
+                    price_diff = (exit_price - entry_price) if side == "BUY" else (entry_price - exit_price)
+                    rr_val     = round(price_diff / sl_dist, 2)
+                    rr_line    = f"📊 R:R:    {rr_val:+.2f}R\n"
+
+            entry_str = f"{entry_price:.2f}" if entry_price else "—"
+            exit_str  = f"{exit_price:.2f}"  if exit_price  else "—"
+
             notifications.append(
                 f"{icon} <b>Trade Closed — {outcome}</b>\n"
-                f"📈 {symbol} | {side}\n"
-                f"💰 P/L: <b>{profit:+.2f}</b>\n"
-                f"📡 Source: {src_name}"
+                f"📡 {src_name}\n"
+                f"\n"
+                f"{dir_icon} <b>{clean_sym} | {side}</b>\n"
+                f"⏰ {now_str}\n"
+                f"\n"
+                f"📍 Entry:  {entry_str}\n"
+                f"🏁 Exit:   {exit_str}\n"
+                f"{rr_line}"
+                f"💰 P/L:    <b>{profit:+.2f}</b>"
             )
 
         append_trade_csv({
@@ -3117,10 +3745,48 @@ SPAM_MESSAGE_RE = re.compile(
 )
 
 
+# High-impact news detection — triggers a trading pause when matched.
+# Catches common channel patterns: "High Impact news", named releases (NFP/CPI/FOMC),
+# "cancelling orders due to news", "waiting for news to pass", etc.
+NEWS_TRIGGER_RE = re.compile(
+    r"""
+    (?:HIGH[- ]IMPACT\s+NEWS)
+    |(?:NEWS\s+IN\s+\d+\s+MINUTES?)
+    |(?:BEFORE\s+(?:THE\s+)?NEWS)
+    |(?:NEWS\s+(?:EVENT|RELEASE|COMING|TONIGHT|TOMORROW))
+    |(?:CANCELL?ING.*(?:ORDER|TRADE|POSITION)S?.*NEWS)
+    |(?:(?:WAIT(?:ING)?|HOLD(?:ING)?).*NEWS\s*(?:OVER|PASS|DONE|CLEAR|SETTLE))
+    |(?:\bNFP\b)
+    |(?:\bFOMC\b)
+    |(?:NON[- ]FARM\s+PAYROLL)
+    |(?:\bCPI\b.*(?:DATA|RELEASE|REPORT|TODAY|TOMORROW))
+    |(?:\bPPI\b.*(?:DATA|RELEASE|REPORT|TODAY|TOMORROW))
+    |(?:INTEREST\s+RATE\s+DECISION)
+    |(?:CENTRAL\s+BANK\s+(?:MEETING|DECISION|STATEMENT))
+    """,
+    re.IGNORECASE | re.VERBOSE | re.DOTALL,
+)
+
+# Module-level timestamp: non-zero while a news pause is active.
+# Written by the async Telegram handler, read by execute_signal() in the thread pool.
+_news_pause_until: float = 0.0
+
+# Bot lifecycle messages (ONLINE / STOPPED / FROZEN / RECOVERED)
+# sent by all bots to the same channel — silently ignore them.
+BOT_STATUS_RE = re.compile(
+    r'(?:Bot\s+(?:ONLINE|STOPPED|FROZEN|RECOVERED)|'
+    r'\U0001f7e2|\U0001f534).*(?:QFS|HA Bot|Signal Bot|CryptoNite)',
+    re.IGNORECASE | re.DOTALL,
+)
+
 def classify_source_message(text: str):
     t = clean_signal_text(text)
     if not t:
         return "UNKNOWN", "empty_text"
+
+    # Bot status messages — silently drop, don't log as UNKNOWN
+    if BOT_STATUS_RE.search(t):
+        return "SPAM", "bot_status_message"
 
     # Analyzer-engine signals contain TP as a target field, not a TP-hit update.
     # They must bypass result filtering and go straight to the parser layer.
@@ -3172,6 +3838,111 @@ def classify_source_message(text: str):
 client = TelegramClient(SESSION_NAME, API_ID, API_HASH)
 last_trade_ts = 0.0
 
+def _activate_news_pause(source_hint: str = "") -> None:
+    """Set the module-level news pause timestamp and log the event."""
+    global _news_pause_until
+    import time as _t
+    _news_pause_until = _t.time() + NEWS_PAUSE_MINUTES * 60
+    until_str = datetime.fromtimestamp(_news_pause_until, tz=timezone.utc).strftime("%H:%M UTC")
+    log_event(
+        f"📰 NEWS PAUSE activated — new entries blocked for {NEWS_PAUSE_MINUTES} min "
+        f"(until {until_str}){' src=' + source_hint if source_hint else ''}"
+    )
+
+def _write_signal_bridge(sig: dict, chat_id) -> None:
+    """
+    Write a validated XAUUSD signal to signal_bridge.json so the Gold HA bot
+    can cross-confirm its own M1 pattern signals against the analyst's levels.
+    Only writes for XAUUSD signals — other assets are not bridged.
+    """
+    raw_sym = (sig.get("raw_symbol") or "").upper()
+    if raw_sym not in ("XAU", "XAUUSD"):
+        return
+    direction = (sig.get("side") or "").upper()
+    if direction not in ("BUY", "SELL"):
+        return
+    sl   = sig.get("sl")
+    tps  = sig.get("tps") or []
+    tp   = float(tps[0]) if tps else None
+    if not sl or not tp:
+        return
+    import json as _json, os as _os
+    bridge_file = _os.path.join(
+        _os.path.dirname(_os.path.abspath(__file__)), '..', 'signal_bridge.json'
+    )
+    try:
+        try:
+            with open(bridge_file, 'r', encoding='utf-8') as f:
+                data = _json.load(f)
+        except Exception:
+            data = {}
+        data["XAUUSD"] = {
+            "direction":    direction,
+            "entry":        sig.get("entry"),
+            "sl":           float(sl),
+            "tp":           float(tp),
+            "sl_dist":      round(abs(float(sig.get("entry") or 0) - float(sl)), 2) if sig.get("entry") else None,
+            "channel_id":   str(chat_id),
+            "channel_name": CHANNEL_NAME_MAP.get(str(chat_id), str(chat_id)),
+            "timestamp":    datetime.now(timezone.utc).isoformat(),
+        }
+        with open(bridge_file, 'w', encoding='utf-8') as f:
+            _json.dump(data, f, indent=2)
+        log_event(
+            f"🌉 Signal bridge updated: XAUUSD {direction} "
+            f"SL={sl} TP={tp} src={CHANNEL_NAME_MAP.get(str(chat_id), str(chat_id))}"
+        )
+    except Exception as e:
+        log_event(f"⚠️ Signal bridge write failed: {e}")
+
+
+def _write_signal_bridge_executed(raw_symbol: str, direction: str,
+                                  entry, sl, tp, channel_id) -> None:
+    """
+    Write CONFIRMED EXECUTED signal parameters to signal_bridge.json.
+    Called only after MT5 accepts the order — sl/tp are the exact values sent to
+    the broker (after SL_MULTIPLIER, ATR model, TP ladder, sanitize_market_stops).
+    These are the battle-tested parameters that achieve 83% WR — the Gold HA bot
+    uses these levels rather than the raw signal values.
+    """
+    base = raw_symbol.upper().replace('.S', '').replace('.P', '').replace('.F', '').replace('.PRO', '')
+    if base not in ("XAU", "XAUUSD"):
+        return
+    direction = direction.upper()
+    if direction not in ("BUY", "SELL"):
+        return
+    import json as _json, os as _os
+    bridge_file = _os.path.join(
+        _os.path.dirname(_os.path.abspath(__file__)), '..', 'signal_bridge.json'
+    )
+    try:
+        try:
+            with open(bridge_file, 'r', encoding='utf-8') as f:
+                data = _json.load(f)
+        except Exception:
+            data = {}
+        data["XAUUSD"] = {
+            "direction":    direction,
+            "entry":        float(entry) if entry else None,
+            "sl":           float(sl),
+            "tp":           float(tp),
+            "sl_dist":      round(abs(float(entry or 0) - float(sl)), 2) if entry else None,
+            "channel_id":   str(channel_id),
+            "channel_name": CHANNEL_NAME_MAP.get(str(channel_id), str(channel_id)),
+            "timestamp":    datetime.now(timezone.utc).isoformat(),
+            "executed":     True,
+        }
+        with open(bridge_file, 'w', encoding='utf-8') as f:
+            _json.dump(data, f, indent=2)
+        log_event(
+            f"🌉 Bridge updated (EXECUTED): XAUUSD {direction} "
+            f"entry={entry} SL={sl} TP={tp} "
+            f"src={CHANNEL_NAME_MAP.get(str(channel_id), str(channel_id))}"
+        )
+    except Exception as e:
+        log_event(f"⚠️ Signal bridge write failed: {e}")
+
+
 def is_from_signal_source(event) -> bool:
     if CHANNEL_IDS:
         return str(getattr(event, "chat_id", "")) in CHANNEL_IDS
@@ -3207,6 +3978,22 @@ async def handler(event):
             )
         return
 
+    # News pause detection — runs on every accepted message, even COMMENTARY/UNKNOWN,
+    # because news warnings don't arrive in signal format.
+    if NEWS_PAUSE_MINUTES > 0 and NEWS_TRIGGER_RE.search(text):
+        _activate_news_pause(source_hint=chat_id)
+        if EXECUTION_CHAT_ID:
+            until_str = datetime.fromtimestamp(_news_pause_until, tz=timezone.utc).strftime("%H:%M UTC")
+            asyncio.create_task(safe_send(
+                int(EXECUTION_CHAT_ID),
+                f"📰 <b>News Pause Active</b>\n"
+                f"📡 CryptoNite 247\n"
+                f"High-impact news detected from <code>{chat_id}</code>.\n"
+                f"⏸ New entries blocked for <b>{NEWS_PAUSE_MINUTES} min</b> "
+                f"(until {until_str}).\n"
+                f"⏰ {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')}"
+            ))
+
     classification, class_reason = classify_source_message(text)
     archive_signal_intake(
         chat_id=chat_id,
@@ -3236,7 +4023,7 @@ async def handler(event):
     if classification == "SPAM":
         activity_inc(chat_id, "spam")
         activity_inc(chat_id, "ignored")
-        if DEBUG_INTAKE_FILTER:
+        if class_reason != "bot_status_message" and DEBUG_INTAKE_FILTER:
             preview = clean_signal_text(text)[:180].replace("\n", " | ")
             log_event(f"🚫 FILTER SPAM src={chat_id} reason={class_reason} text={preview}")
         return
@@ -3349,25 +4136,40 @@ async def handler(event):
             if EXECUTION_CHAT_ID:
                 side   = (sig.get("side") or "").upper()
                 icon   = "🟢" if side == "BUY" else "🔴"
-                sym    = sig.get("raw_symbol", "?")
+                # Use resolved broker symbol, fall back to raw if not yet resolved
+                sym    = resolve_symbol_live(sig.get("raw_symbol", "?"))
                 ticket = getattr(res, "order", 0)
                 sl     = sig.get("sl", 0)
                 tps    = sig.get("tps", [])
-                tp1    = tps[0] if len(tps) > 0 else 0
-                tp2    = tps[1] if len(tps) > 1 else 0
-                tp3    = tps[2] if len(tps) > 2 else 0
                 src    = CHANNEL_NAME_MAP.get(str(chat_id), str(chat_id))
+
+                # Only show TP levels that are actually distinct
+                unique_tps = []
+                for tp in tps:
+                    if tp and tp > 0 and tp not in unique_tps:
+                        unique_tps.append(tp)
+
+                clean_sym   = sym.split(".")[0] if "." in sym else sym
+                dir_icon    = "📈" if side == "BUY" else "📉"
+                from datetime import datetime as _dt, timezone as _tz
+                now_str     = _dt.now(_tz.utc).strftime("%Y-%m-%d %H:%M UTC")
+                entry_price = getattr(res, "price", None)
+                entry_str   = f"{float(entry_price):.2f}" if entry_price else "—"
+                sl_str      = f"{float(sl):.2f}" if sl else "—"
+                # Use the final executed TP (SET_BROKER_TP = last unique TP)
+                exec_tp  = unique_tps[-1] if unique_tps else None
+                tp_str   = f"{float(exec_tp):.2f}" if exec_tp else "—"
                 notify = (
-                    f"✅ <b>Trade Executed</b>\n"
-                    f"{icon} <b>{side}</b> {sym}\n"
-                    f"━━━━━━━━━━━━━━━━━━━━\n"
-                    f"🎫 Ticket: {ticket}\n"
-                    f"🛑 SL:  {sl}\n"
-                    f"🎯 TP1: {tp1}\n"
-                    f"🎯 TP2: {tp2}\n"
-                    f"🎯 TP3: {tp3}\n"
-                    f"━━━━━━━━━━━━━━━━━━━━\n"
-                    f"📡 Source: {src}"
+                    f"🚨 <b>CryptoNite Signal</b>\n"
+                    f"📡 {src}\n"
+                    f"\n"
+                    f"{dir_icon} <b>{clean_sym} | {side}</b>\n"
+                    f"⏰ {now_str}\n"
+                    f"\n"
+                    f"📍 Entry:  {entry_str}\n"
+                    f"🛑 SL:     {sl_str}\n"
+                    f"🎯 TP:     {tp_str}\n"
+                    f"🎫 Ticket: {ticket}"
                 )
                 await safe_send(int(EXECUTION_CHAT_ID), notify)
 
@@ -3391,6 +4193,196 @@ def process_signal_sync(sig):
     finally:
         mt5_disconnect_safe()
 
+def adopt_manual_trades(state, notifications=None):
+    """
+    Scan all open positions that lack the bot's magic number and bring
+    them under bot management (BE + trailing stop).
+
+    For each unmanaged position:
+      1. Skip if already adopted this session.
+      2. Use the position's existing SL — if none, calculate ATR × 1.5.
+      3. Use the position's existing TP — if none, project 1R/2R/3R levels.
+      4. Register in managed_positions so the manager loop takes over.
+
+    Controlled by ADOPT_MANUAL_TRADES=true in the env.
+    """
+    if not ADOPT_MANUAL_TRADES:
+        return
+
+    state.setdefault("adopted_tickets", [])
+    state.setdefault("managed_positions", {})
+    state.setdefault("position_sources", {})
+
+    already = set(str(t) for t in state["adopted_tickets"])
+
+    positions = mt5.positions_get()
+    if not positions:
+        return
+
+    for pos in positions:
+        ticket     = str(pos.ticket)
+        pos_magic  = int(getattr(pos, "magic", 0) or 0)
+        pos_type   = int(pos.type)   # 0=BUY, 1=SELL
+        symbol     = safe_symbol_text(pos.symbol)
+        entry      = float(pos.price_open)
+        cur_sl     = float(pos.sl or 0.0)
+        cur_tp     = float(pos.tp or 0.0)
+
+        # Already managed (bot's own) or already adopted
+        if pos_magic == MAGIC:
+            continue
+        if ticket in already or ticket in state["managed_positions"]:
+            continue
+
+        # ── SL: use existing or calculate ATR × 1.5 ──────────────────
+        if cur_sl and cur_sl != 0.0:
+            orig_sl = cur_sl
+        else:
+            atr = atr_value(symbol, ATR_TIMEFRAME, ATR_PERIOD)
+            if atr <= 0:
+                log_event(f"⚠️  ADOPT: no ATR for {symbol} #{ticket} — skipping")
+                continue
+            orig_sl = (entry - atr * 1.5) if pos_type == 0 else (entry + atr * 1.5)
+            log_event(f"📐 ADOPT: no SL on {symbol} #{ticket} — applied ATR SL={orig_sl:.5f}")
+
+        sl_dist = abs(entry - orig_sl)
+        if sl_dist <= 0:
+            continue
+
+        # ── TP: use existing or project 1R/2R/3R ─────────────────────
+        if cur_tp and cur_tp != 0.0:
+            tp1 = cur_tp
+            tp2 = entry + (2 * sl_dist) if pos_type == 0 else entry - (2 * sl_dist)
+            tp3 = entry + (3 * sl_dist) if pos_type == 0 else entry - (3 * sl_dist)
+        else:
+            tp1 = entry + (1 * sl_dist) if pos_type == 0 else entry - (1 * sl_dist)
+            tp2 = entry + (2 * sl_dist) if pos_type == 0 else entry - (2 * sl_dist)
+            tp3 = entry + (3 * sl_dist) if pos_type == 0 else entry - (3 * sl_dist)
+
+        side = "BUY" if pos_type == 0 else "SELL"
+
+        # ── Register in managed_positions ────────────────────────────
+        state["managed_positions"][ticket] = {
+            "symbol":           symbol,
+            "type":             pos_type,
+            "entry":            entry,
+            "orig_sl":          orig_sl,
+            "tp1":              round(tp1, 5),
+            "tp2":              round(tp2, 5),
+            "tp3":              round(tp3, 5),
+            "moved_be":         False,
+            "trail_on":         False,
+            "tp_removed":       False,
+            "tp1_partial_done": False,
+            "tp2_partial_done": False,
+            "created":          time.time(),
+        }
+        state["position_sources"][ticket] = "ADOPTED"
+        state["adopted_tickets"].append(int(ticket))
+
+        log_event(
+            f"🤝 ADOPTED: {symbol} #{ticket} {side} @ {entry} | "
+            f"SL={orig_sl:.5f} | TP1={tp1:.5f} | magic={pos_magic}"
+        )
+
+        if EXECUTION_CHAT_ID and notifications is not None:
+            _clean_sym = symbol.split(".")[0] if "." in symbol else symbol
+            _dir_icon  = "📈" if side == "BUY" else "📉"
+            _fmt_v     = lambda v: f"{v:.5f}" if v <= 10 else f"{v:.2f}"
+            _now_str   = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+            notifications.append(
+                f"📎 <b>Trade Adopted</b>\n"
+                f"📡 CryptoNite 247 Bot\n"
+                f"\n"
+                f"{_dir_icon} <b>{_clean_sym} | {side}</b>\n"
+                f"⏰ {_now_str}\n"
+                f"\n"
+                f"📍 Entry: {_fmt_v(entry)}\n"
+                f"🛑 SL:    {_fmt_v(orig_sl)}  (ATR-based)\n"
+                f"🎯 TP1:   {_fmt_v(tp1)}\n"
+                f"\n"
+                f"🤖 Now managed by bot"
+            )
+
+
+# =========================
+# SESSION CLOSE GUARD
+# Fires once per day at TIME_FILTER_END_HOUR UTC.
+# Closes any open managed positions that are in profit but have NOT yet had
+# their SL moved to breakeven — they still carry full original downside risk.
+# Positions with SL already at/above entry are left for the trail to handle.
+# =========================
+def session_close_guard(state):
+    now_utc = datetime.now(timezone.utc)
+    end_hour = TIME_FILTER_END_HOUR
+
+    # Only fire at or after the session end hour
+    if now_utc.hour < end_hour:
+        return []
+
+    # Fire once per calendar day only
+    today_str = now_utc.date().isoformat()
+    if state.get("session_close_guard_fired") == today_str:
+        return []
+    state["session_close_guard_fired"] = today_str
+
+    managed  = state.get("managed_positions", {})
+    if not managed:
+        return []
+
+    poss = mt5.positions_get()
+    if not poss:
+        return []
+
+    pos_by_ticket = {str(p.ticket): p for p in poss}
+    notifications = []
+    closed = 0
+
+    for ticket_str, meta in list(managed.items()):
+        p = pos_by_ticket.get(ticket_str)
+        if p is None:
+            continue
+
+        # Skip if not in profit
+        if float(getattr(p, "profit", 0.0) or 0.0) <= 0:
+            continue
+
+        entry    = float(meta.get("entry", 0.0))
+        pos_type = int(meta.get("type", 0))   # 0=BUY 1=SELL
+        cur_sl   = float(p.sl) if p.sl else 0.0
+        symbol   = safe_symbol_text(meta.get("symbol", getattr(p, "symbol", "")))
+        info     = mt5.symbol_info(symbol)
+        point    = float(getattr(info, "point", 0.0) or 0.0)
+        eps      = max(point * 2.0, 0.00001)
+
+        # Check if SL is still on the wrong side of entry (not yet at BE)
+        sl_unprotected = (
+            (pos_type == 0 and (cur_sl == 0.0 or cur_sl < entry - eps)) or
+            (pos_type == 1 and (cur_sl == 0.0 or cur_sl > entry + eps))
+        )
+        if not sl_unprotected:
+            log_event(f"🔒 Session guard: ticket={ticket_str} {symbol} SL={cur_sl:.5f} protected — leaving for trail")
+            continue
+
+        # Close the unprotected profitable position
+        pnl   = float(getattr(p, "profit", 0.0) or 0.0)
+        side  = "BUY" if pos_type == 0 else "SELL"
+        ok    = close_full_position(int(ticket_str), symbol, pos_type, float(p.volume))
+        if ok:
+            log_event(f"🔒 Session guard: closed ticket={ticket_str} {symbol} {side} P&L={pnl:+.2f} (SL not at BE)")
+            managed.pop(ticket_str, None)
+            closed += 1
+        else:
+            log_event(f"⚠️ Session guard: close FAILED ticket={ticket_str} {symbol}")
+
+    if closed:
+        msg = f"🔒 <b>Session Close Guard</b>\n\nSecured {closed} unprotected position(s) at {end_hour:02d}:00 UTC"
+        log_event(msg)
+        notifications.append(msg)
+
+    return notifications
+
+
 def process_manager_sync():
     state = load_state()
     notifications = []
@@ -3398,7 +4390,9 @@ def process_manager_sync():
         mt5_connect_safe()
         enforce_account_lock()
         expire_pending_orders(state)
+        adopt_manual_trades(state, notifications)   # ← adoption before management
         manage_positions_once(state)
+        notifications.extend(session_close_guard(state))  # close unprotected profitable positions at session end
         log_new_closed_deals(state, notifications)
         save_state(state)
     finally:
@@ -3409,7 +4403,7 @@ async def safe_send(chat_id: int, message: str):
     try:
         if not client.is_connected():
             await client.connect()
-        await client.send_message(chat_id, message)
+        await client.send_message(chat_id, message, parse_mode="html")
         return True
     except Exception:
         log_event("Telegram send failed:\n" + traceback.format_exc())
@@ -3418,15 +4412,52 @@ async def safe_send(chat_id: int, message: str):
 async def manager_loop():
     last_report_day = None
     rep_hh, rep_mm = parse_hhmm(DAILY_REPORT_SEND_TIME)
+    _mt5_was_down = False          # tracks whether an alert was already sent
+    _mt5_fail_count = 0            # consecutive failure counter for backoff
+    _dd_alerted          = False   # drawdown alert fired today
+    _profit_alerted      = False   # profit target alert fired today
+    _session_brief_sent  = False   # session open snapshot sent today
+    _alerted_orders      = set()   # stale order tickets already alerted
+    _last_alert_day      = None    # track UTC date for daily resets
 
     while True:
+        # Weekend guard — skip main loop on Saturday & Sunday
+        if datetime.now(timezone.utc).weekday() >= 5:
+            await asyncio.sleep(60)
+            continue
         try:
             async with MT5_ASYNC_LOCK:
                 notifications = await asyncio.to_thread(process_manager_sync)
             if EXECUTION_CHAT_ID and notifications:
                 for msg in notifications:
                     await safe_send(int(EXECUTION_CHAT_ID), msg)
-        except Exception:
+            # MT5 came back — flush stale pending orders then send recovery alert
+            if _mt5_was_down:
+                log_event("[MT5] Connection recovered.")
+                # Cancel any pending orders placed before/during the outage —
+                # their entry prices are now stale and could fill at wrong levels.
+                async with MT5_ASYNC_LOCK:
+                    n_cancelled = await asyncio.to_thread(cancel_all_my_pending_orders)
+                if n_cancelled:
+                    log_event(f"🧹 Reconnect: cancelled {n_cancelled} stale pending order(s).")
+                if EXECUTION_CHAT_ID:
+                    cancel_note = f"\n🧹 Cancelled {n_cancelled} stale pending order(s)." if n_cancelled else ""
+                    await safe_send(int(EXECUTION_CHAT_ID),
+                        f"✅ MT5 connection RECOVERED — bot is trading again.{cancel_note}")
+                _mt5_was_down = False
+                _mt5_fail_count = 0
+        except Exception as exc:
+            _mt5_fail_count += 1
+            err_str = str(exc)
+            is_auth = "Authorization failed" in err_str or "-6" in err_str
+            # Send Telegram alert on first failure (or every 60 consecutive ones = ~10 min)
+            if not _mt5_was_down or _mt5_fail_count % 60 == 0:
+                reason = "Authorization failed (-6) — MT5 terminal may be logged out or disconnected" if is_auth else err_str[:200]
+                alert = f"⚠️ MT5 CONNECTION LOST\n\n{reason}\n\nBot is paused until MT5 reconnects. Restart the bot or re-login to MT5."
+                log_event(f"[MT5 DOWN] {reason}")
+                if EXECUTION_CHAT_ID:
+                    await safe_send(int(EXECUTION_CHAT_ID), alert)
+            _mt5_was_down = True
             log_event("Manager exception:\n" + traceback.format_exc())
 
         if DAILY_REPORT_ENABLED:
@@ -3449,7 +4480,572 @@ async def manager_loop():
 
                     last_report_day = today
 
-        await asyncio.sleep(MANAGER_INTERVAL_SECONDS)
+        # Daily reset of alert flags at midnight UTC
+        _today = datetime.now(timezone.utc).date()
+        if _last_alert_day != _today:
+            _last_alert_day      = _today
+            _dd_alerted          = False
+            _profit_alerted      = False
+            _session_brief_sent  = False
+            _alerted_orders      = set()
+
+        # Session open snapshot
+        _now_h = datetime.now(timezone.utc).hour
+        if not _session_brief_sent and TIME_FILTER_ENABLED and _now_h >= TIME_FILTER_START_HOUR and EXECUTION_CHAT_ID:
+            _session_brief_sent = True
+            _acc = mt5.account_info()
+            if _acc:
+                _brief = (
+                    f'\U0001f4ca <b>Session Open</b>\n'
+                    f'\u23f0 {datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")}\n'
+                    f'\U0001f4b0 Balance: <b>{_acc.balance:.2f}</b>  |  Equity: <b>{_acc.equity:.2f}</b>\n'
+                    f'\U0001f916 CryptoNite 247 — ready'
+                )
+                await safe_send(int(EXECUTION_CHAT_ID), _brief)
+
+        # Drawdown alert
+        if not _dd_alerted and DRAWDOWN_ALERT_PCT > 0 and EXECUTION_CHAT_ID:
+            _acc = mt5.account_info()
+            if _acc and _acc.balance > 0:
+                _dd = (_acc.balance - _acc.equity) / _acc.balance * 100
+                if _dd >= DRAWDOWN_ALERT_PCT:
+                    _dd_alerted = True
+                    await safe_send(int(EXECUTION_CHAT_ID),
+                        f'\u26a0\ufe0f <b>Drawdown Alert</b>\n'
+                        f'\U0001f4e1 CryptoNite 247\n'
+                        f'\U0001f4c9 Equity dropped <b>{_dd:.1f}%</b> below balance\n'
+                        f'\U0001f4b0 Balance: <b>{_acc.balance:.2f}</b>  |  Equity: <b>{_acc.equity:.2f}</b>\n'
+                        f'\u23f0 {datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")}\n'
+                        f'\U0001f4a1 Consider pausing signal execution.')
+
+
+        # Daily profit target alert
+        if not _profit_alerted and DAILY_PROFIT_TARGET_PCT > 0 and EXECUTION_CHAT_ID:
+            try:
+                _acc = mt5.account_info()
+                if _acc and _acc.balance > 0:
+                    _st  = load_state()
+                    _pnl = _st.get("realised_pnl_today", 0.0)
+                    _tgt = _acc.balance * DAILY_PROFIT_TARGET_PCT / 100
+                    if _pnl >= _tgt:
+                        _profit_alerted = True
+                        _ps = "+" if _pnl >= 0 else ""
+                        await safe_send(int(EXECUTION_CHAT_ID),
+                            f"\U0001f3af <b>Daily Profit Target Hit</b>\n"
+                            f"\U0001f4e1 CryptoNite 247\n"
+                            f"\u2705 Today's P&L: <b>{_ps}{_pnl:.2f}</b> ({_pnl/_acc.balance*100:.1f}% of balance)\n"
+                            f"\U0001f3c6 Target: +{_tgt:.2f} ({DAILY_PROFIT_TARGET_PCT:.1f}%)\n"
+                            f"\u23f0 {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')}\n"
+                            f"\U0001f4a1 Consider calling it a day.")
+            except Exception:
+                pass
+
+        # Heartbeat — lets watchdog.py detect a frozen loop
+        try:
+            import time as _t
+            open('heartbeat.txt', 'w').write(str(_t.time()))
+        except Exception:
+            pass
+
+        # Pending order timeout alert
+        if EXECUTION_CHAT_ID and ORDER_TIMEOUT_MINUTES > 0:
+            try:
+                _orders = mt5.orders_get() or []
+                for _ord in _orders:
+                    if _ord.ticket in _alerted_orders:
+                        continue
+                    _age = (datetime.now(timezone.utc) - datetime.fromtimestamp(_ord.time_setup, tz=timezone.utc)).total_seconds() / 60
+                    if _age >= ORDER_TIMEOUT_MINUTES:
+                        _alerted_orders.add(_ord.ticket)
+                        _side = 'BUY' if _ord.type in (0,4,6) else 'SELL'
+                        await safe_send(int(EXECUTION_CHAT_ID),
+                            f'\U0001f5d1 <b>Stale Order Cancelled</b>\n'
+                            f'\U0001f4e1 CryptoNite 247\n'
+                            f'\U0001f4cc {_ord.symbol} {_side}\n'
+                            f'\u23f1 Pending for <b>{_age:.0f} min</b> (limit: {ORDER_TIMEOUT_MINUTES}min)\n'
+                            f'\U0001f3ab Ticket: {_ord.ticket}\n'
+                            f'\u23f0 {datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")}')
+            except Exception:
+                pass
+
+        # When MT5 is down, back off to 60s retries instead of hammering every 8s
+        sleep_secs = min(60, MANAGER_INTERVAL_SECONDS * (1 + _mt5_fail_count // 5)) if _mt5_was_down else MANAGER_INTERVAL_SECONDS
+        await asyncio.sleep(sleep_secs)
+
+# =============================================================
+# BOT COMMAND HANDLER
+# Runs a second Telegram client (bot token) alongside the main
+# user client. Accepts /commands from CONTROL_CHAT_ID only.
+#
+# Commands:
+#   /status   — trading flags, daily loss %, monthly DD, open trades
+#   /pause    — block new signal execution
+#   /resume   — unblock
+#   /stats    — today's P&L, wins/losses/BE, balance/equity
+#   /trades   — list open managed positions with live P&L
+#   /monthly  — monthly DD, high equity, pause status
+#   /help     — show all commands
+#
+# Setup: add to .env
+#   BOT_TOKEN=<your bot token from @BotFather>
+#   CONTROL_CHAT_ID=<your Telegram user or group ID>
+# =============================================================
+class BotCommandHandler:
+
+    def __init__(self):
+        self.bot_client = None
+
+    async def start(self):
+        if not BOT_TOKEN or not CONTROL_CHAT_ID:
+            log_event("[BOT CMD] BOT_TOKEN or CONTROL_CHAT_ID not set — commands disabled.")
+            return
+        self.bot_client = TelegramClient("bot247_session", API_ID, API_HASH)
+        await self.bot_client.start(bot_token=BOT_TOKEN)
+        self._register()
+        log_event(f"[BOT CMD] Command interface active. Control chat: {CONTROL_CHAT_ID}")
+        await self._send("🤖 CryptoNite 247 Bot is ONLINE\n\nSend /help to see available commands.")
+
+    def _register(self):
+
+        @self.bot_client.on(events.NewMessage(pattern=r"^/help"))
+        async def _(event):
+            if not self._auth(event): return
+            await self._send(
+                "📋 CryptoNite 247 Commands\n\n"
+                "/status  — Bot state, W/L/BE results, open trades\n"
+                "/pause   — Stop accepting new signals\n"
+                "/resume  — Re-enable signal processing\n"
+                "/daily   — Today's full P&L breakdown by channel\n"
+                "/weekly  — Last 7 days W/L/BE and P&L summary\n"
+                "/monthly — Monthly DD %, high equity, pause status\n"
+                "/stats   — Today's P&L, W/L/BE, balance, equity\n"
+                "/trades  — All open positions with live P&L\n"
+                "/help    — Show this message"
+            )
+
+        @self.bot_client.on(events.NewMessage(pattern=r"^/status"))
+        async def _(event):
+            if not self._auth(event): return
+            await self._send(await asyncio.to_thread(self._build_status))
+
+        @self.bot_client.on(events.NewMessage(pattern=r"^/pause"))
+        async def _(event):
+            if not self._auth(event): return
+            def _do():
+                state = load_state()
+                state["manual_pause"] = True
+                save_state(state)
+            await asyncio.to_thread(_do)
+            await self._send(
+                "⏸ Trading PAUSED\n\n"
+                "No new signals will be executed.\n"
+                "Open trades are unaffected.\n\n"
+                "Send /resume to re-enable."
+            )
+            log_event("[BOT CMD] Manual pause activated.")
+
+        @self.bot_client.on(events.NewMessage(pattern=r"^/resume"))
+        async def _(event):
+            if not self._auth(event): return
+            def _do():
+                state = load_state()
+                state["manual_pause"] = False
+                save_state(state)
+            await asyncio.to_thread(_do)
+            await self._send("▶️ Trading RESUMED\n\nBot is now accepting signals again.")
+            log_event("[BOT CMD] Manual pause cleared.")
+
+        @self.bot_client.on(events.NewMessage(pattern=r"^/stats"))
+        async def _(event):
+            if not self._auth(event): return
+            await self._send(await asyncio.to_thread(self._build_stats))
+
+        @self.bot_client.on(events.NewMessage(pattern=r"^/trades"))
+        async def _(event):
+            if not self._auth(event): return
+            await self._send(await asyncio.to_thread(self._build_trades))
+
+        @self.bot_client.on(events.NewMessage(pattern=r"^/daily"))
+        async def _(event):
+            if not self._auth(event): return
+            await self._send(await asyncio.to_thread(self._build_daily))
+
+        @self.bot_client.on(events.NewMessage(pattern=r"^/weekly"))
+        async def _(event):
+            if not self._auth(event): return
+            await self._send(await asyncio.to_thread(self._build_weekly))
+
+        @self.bot_client.on(events.NewMessage(pattern=r"^/monthly"))
+        async def _(event):
+            if not self._auth(event): return
+            await self._send(await asyncio.to_thread(self._build_monthly))
+
+    # ----------------------------------------------------------
+    def _auth(self, event) -> bool:
+        chat_id   = str(event.chat_id)
+        sender_id = str(getattr(event, "sender_id", ""))
+        ok = (chat_id == CONTROL_CHAT_ID) or (sender_id == CONTROL_CHAT_ID)
+        if not ok:
+            log_event(f"[BOT CMD] Unauthorised: chat={chat_id} sender={sender_id}")
+        return ok
+
+    async def _send(self, text: str):
+        try:
+            await self.bot_client.send_message(int(CONTROL_CHAT_ID), text, parse_mode="html")
+        except Exception as e:
+            log_event(f"[BOT CMD] Send failed: {e}")
+
+    # ----------------------------------------------------------
+    def _build_status(self) -> str:
+        try:
+            mt5_connect_safe()
+            acc   = mt5.account_info()
+            state = load_state()
+
+            manual_pause = state.get("manual_pause", False)
+            dk = day_key()
+            day_bucket = state.get("days", {}).get(dk, {})
+            blocked = day_bucket.get("blocked_today", False)
+
+            mk = month_key()
+            month_bucket = state.get("months", {}).get(mk, {})
+            dd_pct = compute_monthly_dd_pct(month_bucket, float(acc.equity)) if acc else 0.0
+            monthly_paused = enforce_pause_logic(month_bucket, dd_pct) if acc else False
+
+            if manual_pause:
+                trading_status = "⏸ PAUSED (manual)"
+            elif monthly_paused:
+                trading_status = f"⏸ PAUSED (monthly DD {dd_pct:.2f}%)"
+            elif blocked:
+                trading_status = "🛑 BLOCKED (daily loss)"
+            else:
+                trading_status = "✅ ACTIVE"
+
+            positions = mt5.positions_get() or []
+            managed   = state.get("managed_positions", {})
+            open_count = len(positions)
+            managed_count = len(managed)
+
+            dloss_pct = daily_loss_pct(day_bucket, float(acc.equity)) if acc else 0.0
+            trades_today = day_bucket.get("trades", 0)
+
+            balance = acc.balance if acc else 0.0
+            equity  = acc.equity  if acc else 0.0
+
+            # W/L/BE from today's channel stats
+            today_str   = day_key_local()
+            ch_stats    = state.get("channel_stats", {}).get(today_str, {})
+            t_wins = t_losses = t_be = 0
+            for b in ch_stats.values():
+                t_wins   += b.get("wins",      0)
+                t_losses += b.get("losses",    0)
+                t_be     += b.get("breakeven", 0)
+            loss_cap = int(MAX_CONSECUTIVE_LOSSES) if MAX_CONSECUTIVE_LOSSES < 999 else "∞"
+
+            return (
+                "📡 Bot Status\n\n"
+                f"Trading:  {trading_status}\n"
+                f"Results:  ✅ {t_wins} W  |  ❌ {t_losses} L  |  ➡️ {t_be} BE\n"
+                f"Loss cap: {t_losses}/{loss_cap} daily\n"
+                f"Open:     {open_count} position(s)\n\n"
+                f"Daily loss:  {dloss_pct:.2f}% / {MAX_DAILY_LOSS_PCT:.2f}% limit\n"
+                f"Monthly DD:  {dd_pct:.2f}% / {MONTHLY_MAX_DD_PCT:.2f}% limit\n\n"
+                f"Balance: ${balance:,.2f}\n"
+                f"Equity:  ${equity:,.2f}"
+            )
+        except Exception as e:
+            return f"❌ Status error: {e}"
+        finally:
+            mt5_disconnect_safe()
+
+    def _build_daily(self) -> str:
+        """Full daily breakdown — per-channel W/L/BE/P&L for today."""
+        try:
+            mt5_connect_safe()
+            acc   = mt5.account_info()
+            state = load_state()
+
+            today_str = day_key_local()
+            ch_stats  = state.get("channel_stats", {}).get(today_str, {})
+
+            total_wins = total_losses = total_be = 0
+            total_pnl  = 0.0
+
+            ch_lines = []
+            for ch_id, b in ch_stats.items():
+                w = b.get("wins", 0); l = b.get("losses", 0); be = b.get("breakeven", 0)
+                total_wins   += w
+                total_losses += l
+                total_be     += be
+                pnl = b.get("profit", 0.0)
+                total_pnl    += pnl
+                if w + l + be == 0:
+                    continue
+                name = CHANNEL_NAME_MAP.get(str(ch_id), str(ch_id))
+                pnl_s = f"{'+' if pnl >= 0 else ''}{pnl:.2f}"
+                ch_lines.append(f"  📌 {name}\n     {w}W  {l}L  {be}BE  →  {pnl_s}")
+
+            total_trades = total_wins + total_losses + total_be
+            win_rate = round(total_wins / total_trades * 100) if total_trades > 0 else 0
+            pnl_emoji = "📈" if total_pnl >= 0 else "📉"
+            pnl_sign  = "+" if total_pnl >= 0 else ""
+            balance = acc.balance if acc else 0.0
+            equity  = acc.equity  if acc else 0.0
+            win_streak  = state.get("win_streak",  0)
+            loss_streak = state.get("loss_streak", 0)
+            if win_streak >= 2:
+                streak = f"🔥 W{win_streak}"
+            elif loss_streak >= 2:
+                streak = f"❄️ L{loss_streak}"
+            else:
+                streak = "—"
+
+            ch_section = "\n\n" + "\n".join(ch_lines) if ch_lines else "\n\n  No closed trades today yet."
+            closed_label = f"{total_trades} closed" if total_trades else "no trades yet"
+
+            return (
+                f"📊 Daily Summary — {today_str}\n\n"
+                f"Results:  ✅ {total_wins} W  |  ❌ {total_losses} L  |  ➡️ {total_be} BE  ({closed_label})\n"
+                f"Win rate: {win_rate}%  |  Streak: {streak}\n\n"
+                f"P&L:     {pnl_emoji} {pnl_sign}{total_pnl:.2f}\n"
+                f"Balance: ${balance:,.2f}\n"
+                f"Equity:  ${equity:,.2f}"
+                f"{ch_section}"
+            )
+        except Exception as e:
+            return f"❌ Daily error: {e}"
+        finally:
+            mt5_disconnect_safe()
+
+    def _build_weekly(self) -> str:
+        """Aggregate last 7 calendar days from channel_stats."""
+        try:
+            mt5_connect_safe()
+            acc   = mt5.account_info()
+            state = load_state()
+
+            all_ch_stats = state.get("channel_stats", {})
+            today = date.today()
+            week_days = [(today - timedelta(days=i)) for i in range(6, -1, -1)]  # Mon→today
+
+            total_wins = total_losses = total_be = 0
+            total_pnl  = 0.0
+            per_channel: dict = {}  # ch_id -> {w, l, be, pnl}
+
+            for d in week_days:
+                dk = day_key_local(d)
+                day_bucket = all_ch_stats.get(dk, {})
+                for ch_id, b in day_bucket.items():
+                    w  = b.get("wins",      0)
+                    l  = b.get("losses",    0)
+                    be = b.get("breakeven", 0)
+                    pnl = b.get("profit",   0.0)
+                    total_wins   += w
+                    total_losses += l
+                    total_be     += be
+                    total_pnl    += pnl
+                    agg = per_channel.setdefault(ch_id, {"w": 0, "l": 0, "be": 0, "pnl": 0.0})
+                    agg["w"]   += w
+                    agg["l"]   += l
+                    agg["be"]  += be
+                    agg["pnl"] += pnl
+
+            total_trades = total_wins + total_losses + total_be
+            win_rate = round(total_wins / total_trades * 100) if total_trades > 0 else 0
+            pnl_emoji = "📈" if total_pnl >= 0 else "📉"
+            pnl_sign  = "+" if total_pnl >= 0 else ""
+            balance = acc.balance if acc else 0.0
+            equity  = acc.equity  if acc else 0.0
+
+            date_range = f"{day_key_local(week_days[0])} → {day_key_local(today)}"
+
+            ch_lines = []
+            for ch_id, agg in per_channel.items():
+                if agg["w"] + agg["l"] + agg["be"] == 0:
+                    continue
+                name = CHANNEL_NAME_MAP.get(str(ch_id), str(ch_id))
+                p = agg["pnl"]
+                ch_lines.append(
+                    f"  📌 {name}\n"
+                    f"     {agg['w']}W  {agg['l']}L  {agg['be']}BE  →  {'+' if p >= 0 else ''}{p:.2f}"
+                )
+
+            ch_section = "\n\n" + "\n".join(ch_lines) if ch_lines else "\n\n  No trades in the last 7 days."
+            closed_label = f"{total_trades} closed" if total_trades else "no trades"
+
+            return (
+                f"📅 Weekly Summary\n"
+                f"{date_range}\n\n"
+                f"Results:  ✅ {total_wins} W  |  ❌ {total_losses} L  |  ➡️ {total_be} BE  ({closed_label})\n"
+                f"Win rate: {win_rate}%\n\n"
+                f"P&L:     {pnl_emoji} {pnl_sign}{total_pnl:.2f}\n"
+                f"Balance: ${balance:,.2f}\n"
+                f"Equity:  ${equity:,.2f}"
+                f"{ch_section}"
+            )
+        except Exception as e:
+            return f"❌ Weekly error: {e}"
+        finally:
+            mt5_disconnect_safe()
+
+    def _build_stats(self) -> str:
+        try:
+            mt5_connect_safe()
+            acc   = mt5.account_info()
+            state = load_state()
+
+            today_str = day_key_local()
+            ch_stats  = state.get("channel_stats", {}).get(today_str, {})
+
+            total_wins = total_losses = total_be = 0
+            total_pnl  = 0.0
+
+            for ch_id, b in ch_stats.items():
+                total_wins   += b.get("wins",      0)
+                total_losses += b.get("losses",     0)
+                total_be     += b.get("breakeven",  0)
+                total_pnl    += b.get("profit",     0.0)
+
+            total_trades = total_wins + total_losses + total_be
+            win_rate = round(total_wins / total_trades * 100) if total_trades > 0 else 0
+
+            pnl_emoji = "📈" if total_pnl >= 0 else "📉"
+            pnl_sign  = "+" if total_pnl >= 0 else ""
+
+            balance = acc.balance if acc else 0.0
+            equity  = acc.equity  if acc else 0.0
+
+            # Streak from state
+            win_streak  = state.get("win_streak",  0)
+            loss_streak = state.get("loss_streak", 0)
+            if win_streak >= 2:
+                streak = "🔥 W{}".format(win_streak)
+            elif loss_streak >= 2:
+                streak = "❄️ L{}".format(loss_streak)
+            else:
+                streak = "—"
+
+            closed_label = "{} closed".format(total_trades) if total_trades else "no trades yet"
+            loss_cap = int(MAX_CONSECUTIVE_LOSSES) if MAX_CONSECUTIVE_LOSSES < 999 else "∞"
+
+            # Per-channel breakdown (only channels with activity today)
+            ch_lines = []
+            for ch_id, b in ch_stats.items():
+                if b.get("wins", 0) + b.get("losses", 0) + b.get("breakeven", 0) == 0:
+                    continue
+                name = CHANNEL_NAME_MAP.get(str(ch_id), str(ch_id))
+                ch_pnl = b.get("profit", 0.0)
+                ch_lines.append(
+                    f"  {name}: {b.get('wins',0)}W {b.get('losses',0)}L "
+                    f"{b.get('breakeven',0)}BE  {'+' if ch_pnl >= 0 else ''}{ch_pnl:.2f}"
+                )
+
+            ch_section = "\n\n" + "\n".join(ch_lines) if ch_lines else ""
+
+            return (
+                "📊 Today's Stats\n\n"
+                f"Results:  ✅ {total_wins} W  |  ❌ {total_losses} L  |  ➡️ {total_be} BE  ({closed_label})\n"
+                f"Win rate: {win_rate}%  |  Streak: {streak}\n"
+                f"Loss cap: {total_losses}/{loss_cap}\n\n"
+                f"P&L:     {pnl_emoji} {pnl_sign}{total_pnl:.2f}\n"
+                f"Balance: ${balance:,.2f}\n"
+                f"Equity:  ${equity:,.2f}"
+                f"{ch_section}"
+            )
+        except Exception as e:
+            return f"❌ Stats error: {e}"
+        finally:
+            mt5_disconnect_safe()
+
+    def _build_trades(self) -> str:
+        try:
+            mt5_connect_safe()
+            state     = load_state()
+            positions = mt5.positions_get() or []
+            managed   = state.get("managed_positions", {})
+
+            if not positions:
+                return "📭 No open positions right now."
+
+            lines = [f"📂 Open Positions ({len(positions)})\n"]
+            for pos in positions:
+                tick = mt5.symbol_info_tick(pos.symbol)
+                current = (tick.bid if pos.type == mt5.ORDER_TYPE_BUY else tick.ask) if tick else 0.0
+                pnl = pos.profit
+                pnl_sign  = "+" if pnl >= 0 else ""
+                pnl_emoji = "🟢" if pnl >= 0 else "🔴"
+                side = "BUY" if pos.type == mt5.ORDER_TYPE_BUY else "SELL"
+                is_managed = str(pos.ticket) in managed or pos.ticket in managed
+                tag = "" if is_managed else " ⚠️ manual"
+
+                lines.append(
+                    f"{pnl_emoji} {pos.symbol} {side}{tag}\n"
+                    f"   Entry: {pos.price_open:.5f}  Now: {current:.5f}\n"
+                    f"   SL: {pos.sl:.5f}  TP: {pos.tp:.5f}\n"
+                    f"   Lot: {pos.volume}  P&L: {pnl_sign}{pnl:.2f}\n"
+                    f"   Ticket: #{pos.ticket}"
+                )
+
+            return "\n".join(lines)
+        except Exception as e:
+            return f"❌ Trades error: {e}"
+        finally:
+            mt5_disconnect_safe()
+
+    def _build_monthly(self) -> str:
+        try:
+            mt5_connect_safe()
+            acc   = mt5.account_info()
+            state = load_state()
+
+            mk = month_key()
+            month_bucket = state.get("months", {}).get(mk, {})
+
+            equity      = acc.equity  if acc else 0.0
+            balance     = acc.balance if acc else 0.0
+            high_equity = month_bucket.get("high_equity") or equity
+            dd_pct      = compute_monthly_dd_pct(month_bucket, equity)
+            paused_until= month_bucket.get("paused_until")
+            min_risk    = month_bucket.get("min_risk_until_new_high", False)
+
+            if paused_until and time.time() < paused_until:
+                from datetime import datetime
+                until_str = datetime.fromtimestamp(paused_until).strftime("%Y-%m-%d %H:%M UTC")
+                pause_str = f"⏸ Paused until {until_str}"
+            else:
+                pause_str = "✅ Not paused"
+
+            return (
+                "\U0001f4c5 <b>Monthly Summary</b>\n\n"
+                f"Month:      {mk}\n"
+                f"DD:         {dd_pct:.2f}% / {MONTHLY_MAX_DD_PCT:.2f}% limit\n"
+                f"High equity: ${high_equity:,.2f}\n"
+                f"Current equity: ${equity:,.2f}\n"
+                f"Balance:    ${balance:,.2f}\n"
+                f"Pause status: {pause_str}\n"
+                f"Min risk mode: {'✅ ON' if min_risk else '❌ OFF'}"
+            )
+        except Exception as e:
+            return f"❌ Monthly error: {e}"
+        finally:
+            mt5_disconnect_safe()
+
+    async def run(self):
+        if self.bot_client:
+            try:
+                await self.bot_client.run_until_disconnected()
+            except Exception as e:
+                log_event(f"[BOT CMD] Disconnected: {e}")
+
+    async def stop(self):
+        if self.bot_client:
+            try:
+                await self._send("\U0001f534 CryptoNite 247 Bot going OFFLINE.")
+            except Exception:
+                pass
+            await self.bot_client.disconnect()
+
+
 
 async def main_async():
     has_sources = bool(CHANNEL_IDS) or bool(CHANNEL_USERNAME)
@@ -3502,7 +5098,33 @@ async def main_async():
 
     await client.start()
     asyncio.create_task(manager_loop())
-    await client.run_until_disconnected()
+    if EXECUTION_CHAT_ID:
+        _now_str = __import__('datetime').datetime.now(__import__('datetime').timezone.utc).strftime('%Y-%m-%d %H:%M UTC')
+        await safe_send(int(EXECUTION_CHAT_ID),
+            f'\U0001f7e2 <b>Bot ONLINE</b>\n'
+            f'\U0001f4e1 CryptoNite 247\n'
+            f'\u23f0 {_now_str}')
+
+    bot_cmd = BotCommandHandler()
+    await bot_cmd.start()
+
+    try:
+        await asyncio.gather(
+            client.run_until_disconnected(),
+            bot_cmd.run(),
+        )
+    finally:
+        if EXECUTION_CHAT_ID:
+            try:
+                _now_str = __import__('datetime').datetime.now(__import__('datetime').timezone.utc).strftime('%Y-%m-%d %H:%M UTC')
+                await safe_send(int(EXECUTION_CHAT_ID),
+                    f'\U0001f534 <b>Bot STOPPED</b>\n'
+                    f'\U0001f4e1 CryptoNite 247\n'
+                    f'\u23f0 {_now_str}')
+            except Exception:
+                pass
+        await bot_cmd.stop()
+
 
 def main():
     try:
@@ -3510,194 +5132,7 @@ def main():
     except KeyboardInterrupt:
         log_event("Shutdown requested (Ctrl+C).")
 
+
 if __name__ == "__main__":
     main()
 
-# ----------------- STEP 4 PARSER OVERRIDES -----------------
-def _pip_size_for_symbol(raw_symbol: str) -> float:
-    sym = normalize_raw_symbol(raw_symbol)
-    if sym in ("XAU", "XAUUSD", "GOLD"):
-        return 0.1
-    if sym in ("XAG", "XAGUSD", "SILVER"):
-        return 0.01
-    if sym in ("BTC", "BTCUSD"):
-        return 1.0
-    if sym.endswith("JPY"):
-        return 0.01
-    if looks_like_fx(sym):
-        return 0.0001
-    return 0.1
-
-
-def _extract_numeric_tp_values(raw_symbol: str, text: str):
-    vals = re.findall(r"\bTP\d*\b\s*[:;=@-]?\s*(\d+(?:\.\d+)?)", text, flags=re.IGNORECASE)
-    out = []
-    for v in vals[:4]:
-        try:
-            out.append(float(normalize_price_str(raw_symbol, v)))
-        except Exception:
-            pass
-    return out
-
-
-def _extract_pip_tp_values(raw_symbol: str, side: str, zone_low: float, zone_high: float, text: str):
-    m = re.search(r"\bTP\b\s*[:;=@-]?\s*(\d+(?:\.\d+)?)(?:\s+(\d+(?:\.\d+)?))?(?:\s+(\d+(?:\.\d+)?))?\s*PIPS?", text, flags=re.IGNORECASE)
-    if not m:
-        return []
-    pip_values = [x for x in m.groups() if x]
-    if not pip_values:
-        return []
-    pip_size = _pip_size_for_symbol(raw_symbol)
-    anchor = zone_high if side.upper() == 'BUY' else zone_low
-    out = []
-    for pv in pip_values[:3]:
-        dist = float(pv) * pip_size
-        tp = anchor + dist if side.upper() == 'BUY' else anchor - dist
-        out.append(float(tp))
-    return out
-
-
-def _find_symbol_side_anywhere(text: str):
-    patterns = [
-        r"#?(?P<symbol>GOLD|XAU(?:USD)?|[A-Z0-9/._-]{3,15})\s+(?P<side>BUY|SELL)\b",
-        r"(?P<side>BUY|SELL)\s+(?P<symbol>GOLD|XAU(?:USD)?|[A-Z0-9/._-]{3,15})\b",
-    ]
-    for p in patterns:
-        m = re.search(p, text, flags=re.IGNORECASE)
-        if m:
-            raw_symbol = normalize_raw_symbol((m.group('symbol') or '').upper())
-            side = (m.group('side') or '').upper()
-            if raw_symbol and side:
-                return raw_symbol, side
-    return None, None
-
-
-def _find_entry_range(raw_symbol: str, text: str):
-    patterns = [
-        r"\bENTRY\b\s*[:;=@-]?\s*(\d+(?:\.\d+)?)(?:\s*[-]\s*(\d+(?:\.\d+)?))?",
-        r"@\s*(\d+(?:\.\d+)?)(?:\s*[-]\s*(\d+(?:\.\d+)?))?",
-        r"\b(?:BUY|SELL)\b[^\n]*?\b(?:GOLD|XAU(?:USD)?)\b[^\n@]*?(\d+(?:\.\d+)?)\s*[-]\s*(\d+(?:\.\d+)?)",
-        r"\b(?:GOLD|XAU(?:USD)?)\b[^\n]*?\b(?:BUY|SELL)\b[^\n@]*?(\d+(?:\.\d+)?)\s*[-]\s*(\d+(?:\.\d+)?)",
-    ]
-    for p in patterns:
-        m = re.search(p, text, flags=re.IGNORECASE | re.DOTALL)
-        if m:
-            a = m.group(1)
-            b = m.group(2) if m.lastindex and m.lastindex >= 2 and m.group(2) else a
-            try:
-                z1 = float(normalize_price_str(raw_symbol, a))
-                z2 = float(normalize_price_str(raw_symbol, b))
-                return min(z1, z2), max(z1, z2)
-            except Exception:
-                pass
-    return None, None
-
-
-def _find_sl_value(raw_symbol: str, text: str):
-    m = re.search(r"\bSL\b\s*[:;=@-]?\s*(\d+(?:\.\d+)?)", text, flags=re.IGNORECASE)
-    if not m:
-        return None
-    try:
-        return float(normalize_price_str(raw_symbol, m.group(1)))
-    except Exception:
-        return None
-
-
-def parse_gold_range_full_signal(t: str, upper: str):
-    raw_symbol, side = _find_symbol_side_anywhere(t)
-    if raw_symbol not in ('XAU', 'XAUUSD', 'GOLD') or not side:
-        return None
-    zone_low, zone_high = _find_entry_range(raw_symbol, t)
-    sl = _find_sl_value(raw_symbol, t)
-    if zone_low is None or sl is None:
-        return None
-    tps = _extract_numeric_tp_values(raw_symbol, t)
-    if len(tps) < 2:
-        return None
-    while len(tps) < 3:
-        tps.append(tps[-1])
-    return _mk_sig('FULL', raw_symbol, side, zone_low, zone_high, tps[:3], sl, t, high_risk=(('HIGH RISK' in upper) or ('HIGHRISK' in upper)))
-
-
-def parse_gold_range_simple_signal(t: str, upper: str):
-    raw_symbol, side = _find_symbol_side_anywhere(t)
-    if raw_symbol not in ('XAU', 'XAUUSD', 'GOLD') or not side:
-        return None
-    zone_low, zone_high = _find_entry_range(raw_symbol, t)
-    sl = _find_sl_value(raw_symbol, t)
-    if zone_low is None or sl is None:
-        return None
-    # If there are numeric TP labels, let the FULL parser own it.
-    if len(_extract_numeric_tp_values(raw_symbol, t)) >= 2:
-        return None
-    return _mk_sig('SIMPLE', raw_symbol, side, zone_low, zone_high, [0.0, 0.0, 0.0], sl, t, high_risk=(('HIGH RISK' in upper) or ('HIGHRISK' in upper)))
-
-
-def parse_structured_entry_signal(t: str, upper: str):
-    raw_symbol, side = _find_symbol_side_anywhere(t)
-    if not raw_symbol or not side:
-        return None
-    zone_low, zone_high = _find_entry_range(raw_symbol, t)
-    sl = _find_sl_value(raw_symbol, t)
-    if zone_low is None or sl is None:
-        return None
-
-    # Pending-style structured signal
-    ptype_match = re.search(r"\b(LIMIT|STOP)\b", t, flags=re.IGNORECASE)
-    tps = _extract_numeric_tp_values(raw_symbol, t)
-    if ptype_match:
-        ptype = ptype_match.group(1).upper()
-        if tps:
-            while len(tps) < 3:
-                tps.append(tps[-1])
-        else:
-            tps = [0.0, 0.0, 0.0]
-        return _mk_sig('PENDING', raw_symbol, side, zone_low, zone_high, tps[:3], sl, t, pending_type=ptype, high_risk=(('HIGH RISK' in upper) or ('HIGHRISK' in upper)))
-
-    if tps:
-        while len(tps) < 3:
-            tps.append(tps[-1])
-        return _mk_sig('FULL', raw_symbol, side, zone_low, zone_high, tps[:3], sl, t, high_risk=(('HIGH RISK' in upper) or ('HIGHRISK' in upper)))
-
-    # TP in pips shorthand: parse it as SIMPLE so the engine can compute its own TP ladder.
-    if re.search(r"\bTP\b\s*[:;=@-]?\s*\d+(?:\.\d+)?(?:\s+\d+(?:\.\d+)?)*\s*PIPS?", t, flags=re.IGNORECASE):
-        return _mk_sig('SIMPLE', raw_symbol, side, zone_low, zone_high, [0.0, 0.0, 0.0], sl, t, high_risk=(('HIGH RISK' in upper) or ('HIGHRISK' in upper)))
-
-    return None
-
-
-def parse_generic_pending_sltp_signal(t: str, upper: str):
-    t2 = clean_signal_text(t).replace("|", " | ")
-    m = re.search(
-        r"\b(?P<symbol>GOLD|XAU(?:USD)?|[A-Z0-9/._-]+)\b\s+"
-        r"(?P<side>BUY|SELL)\s+"
-        r"(?P<ptype>LIMIT|STOP)\b"
-        r"(?:\s+AT|\s+@|\s+ENTRY\s*[:;=@-]?|\s+)?\s*"
-        r"(?P<entry>\d+(?:\.\d+)?)"
-        r".*?\bSL\b\s*[:;=@-]?\s*(?P<sl>\d+(?:\.\d+)?)"
-        r"(?P<tail>.*)$",
-        t2,
-        flags=re.IGNORECASE | re.DOTALL,
-    )
-    if not m:
-        return None
-    raw_symbol = normalize_raw_symbol(m.group('symbol').upper())
-    side = m.group('side').upper()
-    ptype = m.group('ptype').upper()
-    entry = float(normalize_price_str(raw_symbol, m.group('entry')))
-    sl = float(normalize_price_str(raw_symbol, m.group('sl')))
-    tail = m.group('tail') or ''
-    tps = _extract_numeric_tp_values(raw_symbol, tail)
-    if not tps:
-        for tp_m in re.finditer(r"\bTP\d*\b\s*[:;=@-]?\s*(\d+(?:\.\d+)?)", tail, flags=re.IGNORECASE):
-            try:
-                tps.append(float(normalize_price_str(raw_symbol, tp_m.group(1))))
-            except Exception:
-                pass
-    if not tps:
-        tps = _extract_pip_tp_values(raw_symbol, side, entry, entry, tail)
-    if not tps:
-        tps = [0.0, 0.0, 0.0]
-    while len(tps) < 3:
-        tps.append(tps[-1])
-    return _mk_sig('PENDING', raw_symbol, side, entry, entry, tps[:3], sl, t, pending_type=ptype, high_risk=(('HIGH RISK' in upper) or ('HIGHRISK' in upper)))
