@@ -30,7 +30,7 @@ TRAIL_ATR_BUFFER        = 0.50    # SL trails 0.50x ATR behind price (was 0.25 â
 BE_BUFFER_PTS           = 0.0003  # Lock in 3 pips above entry before trailing free (was 0.0005)
 
 # --- Entry filters ---
-DOJI_THRESHOLD = 0.15
+DOJI_THRESHOLD = 0.25    # was 0.15 â€” relaxed to match BTC bot and CNFS executor
 # Below 0.0003 (3 pips) = market is ranging/dead, skip.
 MIN_ATR = 0.0003
 

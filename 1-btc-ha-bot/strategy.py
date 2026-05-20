@@ -11,8 +11,7 @@ Entry filters:
 import os
 from datetime import datetime, timezone
 from indicators import *
-
-SILENT = os.getenv("SILENT_MODE", "false").lower() == "true"
+from logger import log_event
 
 
 def _session_close_ok(config):
@@ -23,9 +22,8 @@ def _session_close_ok(config):
     total = now.hour * 60 + now.minute
     for end in [16 * 60, 19 * 60]:
         if end - buf <= total < end:
-            if not SILENT:
-                print('Session close buffer: {}min to {:02d}:00 UTC -- skipping'.format(
-                    end - total, end // 60))
+            log_event('[{}] Session close buffer: {}min to {:02d}:00 UTC -- skipping'.format(
+                getattr(__import__('config'), 'SYMBOL', ''), end - total, end // 60))
             return False
     return True
 
@@ -54,14 +52,13 @@ def check_signal(df_m1, df_m5, df_h1, config):
     price   = current_m1['close']
     ema_val = current_m1['ema']
 
-    if not SILENT:
-        print('Price: {:.2f} | EMA100: {:.2f} | ATR: {:.2f}'.format(price, ema_val, current_atr))
+    log_event('[{}] Price: {:.2f} | EMA100: {:.2f} | ATR: {:.2f}'.format(config.SYMBOL, price, ema_val, current_atr))
 
     # ------------------------------------------------------------------
     # ATR floor -- skip dead/choppy market
     # ------------------------------------------------------------------
     if pd.isna(current_atr) or current_atr < config.MIN_ATR:
-        if not SILENT: print('ATR too low -- skipping')
+        log_event('[{}] ATR too low -- skipping'.format(config.SYMBOL))
         return None
 
     # ------------------------------------------------------------------
@@ -70,9 +67,8 @@ def check_signal(df_m1, df_m5, df_h1, config):
     # ------------------------------------------------------------------
     max_atr = getattr(config, 'MAX_ATR', 3000.0)
     if current_atr > max_atr:
-        if not SILENT:
-            print('ATR too high ({:.2f} > {:.2f}) -- news spike, skipping'.format(
-                current_atr, max_atr))
+        log_event('[{}] ATR too high ({:.2f} > {:.2f}) -- news spike, skipping'.format(
+            config.SYMBOL, current_atr, max_atr))
         return None
 
     # ------------------------------------------------------------------
@@ -88,16 +84,16 @@ def check_signal(df_m1, df_m5, df_h1, config):
     if price > ema_val:
         trend = 'BUY'
         if m5_price < m5_ema:
-            if not SILENT: print('M5 EMA conflict: price below M5 EMA for BUY -- skipping')
+            log_event('[{}] M5 EMA conflict: price below M5 EMA for BUY -- skipping'.format(config.SYMBOL))
             return None
     elif price < ema_val:
         trend = 'SELL'
         if m5_price > m5_ema:
-            if not SILENT: print('M5 EMA conflict: price above M5 EMA for SELL -- skipping')
+            log_event('[{}] M5 EMA conflict: price above M5 EMA for SELL -- skipping'.format(config.SYMBOL))
             return None
     else:
         return None
-    if not SILENT: print('Trend: {}'.format(trend))
+    log_event('[{}] Trend: {}'.format(config.SYMBOL, trend))
 
     # ------------------------------------------------------------------
     # Rules 3/4: Market structure
@@ -105,33 +101,33 @@ def check_signal(df_m1, df_m5, df_h1, config):
     # SELL: doji high must be below EMA (lower high below EMA)
     # ------------------------------------------------------------------
     if trend == 'BUY' and doji['ha_low'] < ema_val * 0.999:
-        if not SILENT: print('Market structure fail: doji below EMA -- skipping')
+        log_event('[{}] Market structure fail: doji below EMA -- skipping'.format(config.SYMBOL))
         return None
     if trend == 'SELL' and doji['ha_high'] > ema_val * 1.001:
-        if not SILENT: print('Market structure fail: doji above EMA -- skipping')
+        log_event('[{}] Market structure fail: doji above EMA -- skipping'.format(config.SYMBOL))
         return None
-    if not SILENT: print('Market structure OK')
+    log_event('[{}] Market structure OK'.format(config.SYMBOL))
 
     # ------------------------------------------------------------------
     # Rule 5: Clean pullback -- 2 clean no-wick opposite-color candles
     # (doji_pos=2 since doji is at iloc[-2])
     # ------------------------------------------------------------------
     if not has_clean_pullback(df_m1, trend, n=2, doji_pos=2):
-        if not SILENT: print('No clean pullback -- skipping')
+        log_event('[{}] No clean pullback -- skipping'.format(config.SYMBOL))
         return None
 
     # ------------------------------------------------------------------
     # Rule 6: Doji -- body/range < threshold (color irrelevant)
     # ------------------------------------------------------------------
     if not is_doji(doji, threshold=config.DOJI_THRESHOLD):
-        if not SILENT: print('No doji -- skipping')
+        log_event('[{}] No doji -- skipping'.format(config.SYMBOL))
         return None
 
     # Rule 6: High-volume doji -- same or larger than last 1-3 candles
     if not is_high_volume_doji(df_m1, lookback=3, doji_pos=2):
-        if not SILENT: print('Doji too small -- skipping')
+        log_event('[{}] Doji too small -- skipping'.format(config.SYMBOL))
         return None
-    if not SILENT: print('Doji OK')
+    log_event('[{}] Doji OK'.format(config.SYMBOL))
 
     # ------------------------------------------------------------------
     # Rule 7: SL = ATR x ATR_MULTIPLIER
@@ -141,7 +137,7 @@ def check_signal(df_m1, df_m5, df_h1, config):
     tp_dist = current_atr * getattr(config, 'TP_ATR_MULTIPLIER', 1.5)
 
     if sl_dist <= 0:
-        if not SILENT: print('Zero SL distance -- skipping')
+        log_event('[{}] Zero SL distance -- skipping'.format(config.SYMBOL))
         return None
 
     if trend == 'BUY':
@@ -152,6 +148,6 @@ def check_signal(df_m1, df_m5, df_h1, config):
         tp = price - tp_dist
 
     rr = tp_dist / sl_dist if sl_dist > 0 else 0
-    print('[{}] SIGNAL: {} | Entry={:.2f} SL={:.2f} TP={:.2f} | R:R=1:{:.1f}'.format(
+    log_event('[{}] SIGNAL: {} | Entry={:.2f} SL={:.2f} TP={:.2f} | R:R=1:{:.1f}'.format(
         config.SYMBOL, trend, price, sl, tp, rr))
     return {'type': trend, 'sl': float(sl), 'tp': float(tp)}

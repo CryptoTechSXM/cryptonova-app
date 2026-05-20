@@ -79,10 +79,12 @@ def has_clean_pullback(df_m1, trend, n=2, doji_pos=2):
         if rng == 0:
             continue
         if trend == 'BUY':
-            if c['ha_close'] < c['ha_open'] and (c['ha_high'] - c['ha_open']) / rng <= 0.05:
+            # Bearish pullback: upper wick ≤ 15% of range (was 5% — too strict, filtered valid setups)
+            if c['ha_close'] < c['ha_open'] and (c['ha_high'] - c['ha_open']) / rng <= 0.15:
                 clean_count += 1
         else:
-            if c['ha_close'] > c['ha_open'] and (c['ha_open'] - c['ha_low']) / rng <= 0.05:
+            # Bullish pullback: lower wick ≤ 15% of range (was 5%)
+            if c['ha_close'] > c['ha_open'] and (c['ha_open'] - c['ha_low']) / rng <= 0.15:
                 clean_count += 1
     result = clean_count >= n
     if not SILENT:

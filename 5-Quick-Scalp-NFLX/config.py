@@ -18,13 +18,15 @@ TF_5M   = 5
 TF_15M  = 15
 TF_1D   = 1440
 
-# Liquidity candle: opening range must be 15-50% of daily ATR
+# Liquidity candle: opening range must be 15-70% of daily ATR
+# Raised MAX from 0.50 → 0.70: 52% box on 2026-05-12 was filtered incorrectly.
+# Stock opens regularly reach 50-65% of ATR on active days — not explosive.
 LIQ_PCT_MIN = 0.15   # below this = dead open, skip
-LIQ_PCT_MAX = 0.50   # above this = too explosive, skip
+LIQ_PCT_MAX = 0.85   # above this = truly explosive / news-driven, skip
 ATR_PERIOD  = 14
 
 # Entry window -- 90 min from open (same as NAS100)
-WINDOW_MINUTES = 90
+WINDOW_MINUTES = 120
 
 # Take profit
 RR            = 2.0    # 2:1 risk-reward
@@ -37,5 +39,5 @@ MAX_DAILY_LOSS_PCT    = 3.0
 MAX_ACTUAL_RISK_PCT   = 3.0   # warn or block when actual risk exceeds this % of balance
 RISK_CAP_MODE         = "warn"  # "warn" = log but still trade | "block" = skip the trade
 
-MAGIC_NUMBER   = 20260916   # unique per bot
-CHECK_INTERVAL = 10         # seconds
+MAGIC_NUMBER   = 20260006   # unique -- bot 6
+CHECK_INTERVAL = 10    # seconds

@@ -66,6 +66,34 @@ signal_bridge.json
 
 ---
 
+## Key Fixes Applied (2026-05-12)
+
+### TAG + Limitless parser support (`0-tg-mt5-bot/signal_parser.py`)
+- **Root cause**: 0-tg-mt5-bot parser only knew structured/inline/market_now — had silently dropped ALL TAG and Limitless signals since deployment
+- **Fix**: Added 4 new parsers + per-channel profile routing in `_CHANNEL_PROFILES`:
+  - TAG `-1002717527369`: `tag_range` ("XAUUSD 3320-3310 buy") + `liking_range` ("Liking buys ... 3320-3310")
+  - Limitless VIP `-1003889406756`: `limitless_full` (pipe + SL + TP1-3) + `limitless_market` ("Sell market | XAUUSD | 3320-3310")
+  - Limitless Free `-1003731092037`: same as VIP
+  - All fall through to `auto` if no match
+- TAG signals (no SL/TP) return `type=MARKET` with `sl=0` → executor's `build_market_levels()` derives ATR-based SL/TP
+- Limitless full signals have explicit SL + TP1-4 → treated as NORMAL signals
+
+### GER40 + NAS100 data.py resilience (`7-Quick-Scalp-GER40/data.py`, `6-Quick-Scalp-NAS100/data.py`)
+- **Root cause**: `copy_rates_from_pos` returned empty immediately after `symbol_select(True)` — MT5 needs a moment to sync bars
+- **Fix**: `get_data()` calls `symbol_select` on every request (idempotent) + retries 3× with 2s gap; `get_daily_atr()` retries full D1→H4→H1→M15 chain 3× with 5s outer gap
+
+### asyncio floating tasks (`0-tg-mt5-bot/manager.py` + `main.py`)
+- Replaced all 6 `asyncio.create_task` calls with `_tg_queue.append()` entries
+- Added lingering task cleanup in `run()` finally block
+- Result: bot no longer restarts every 7–12 seconds
+
+### ATR trail → R-based trail (`0-tg-mt5-bot/.env`)
+- `ATR_TRAIL_ENABLED=false`, `TRAIL_FIXED_PIPS=5` ($5.00 trail)
+- Root cause: `MIN_BE_PIPS=10 × 0.10 = $1.00` BE trigger, `$0.80` trail → 42/43 trades closed at $0 BE
+
+### CNFS trail/BE/TP fix (`0-CryptoNite-Free-Signals-Executor/config.py`)
+- `MIN_BE_PIPS=80` ($8), `MIN_TRAIL_PIPS=50` ($5), `REMOVE_TP_ON_BE=False`
+
 ## Key Fixes Applied (2026-05-10)
 
 ### EURUSD HA Bot (`2-eurusd-ha-bot`)

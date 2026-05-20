@@ -32,7 +32,7 @@ last_scan_candle = None   # gate: only scan on new 5M candle
 # This tracker detects closes and calls record_trade() so the P&L limit
 # and consecutive loss kill switch actually fire.
 # --------------------------------------------------------------------------
-_tracked_tickets = {}   # ticket -> entry_price for positions we placed
+_tracked_tickets = {}   # ticket -> {direction, entry, sl, tp, lot, open_time}
 
 
 def update_position_tracking():
@@ -45,7 +45,14 @@ def update_position_tracking():
     # Add any newly adopted positions
     for p in open_pos:
         if p.magic == config.MAGIC_NUMBER and p.ticket not in _tracked_tickets:
-            _tracked_tickets[p.ticket] = p.price_open
+            _tracked_tickets[p.ticket] = {
+                'direction': 'BUY' if p.type == 0 else 'SELL',
+                'entry':     p.price_open,
+                'sl':        p.sl,
+                'tp':        p.tp,
+                'lot':       p.volume,
+                'open_time': datetime.fromtimestamp(p.time) if p.time else None,
+            }
 
     # Check for tickets that are no longer open (TP/SL hit)
     for ticket in list(_tracked_tickets.keys()):
@@ -59,8 +66,26 @@ def update_position_tracking():
                         pnl = d.profit
                         break
             risk_manager.record_trade(pnl)
-            log_event('[{}] Position {} closed -- P&L: {:+.2f}'.format(
-                config.SYMBOL, ticket, pnl))
+            info = _tracked_tickets[ticket]
+            exit_price_found = None
+            if deals:
+                for d in deals:
+                    if d.position_id == ticket and d.entry == 1:
+                        exit_price_found = d.price
+                        break
+            log_trade(
+                config.SYMBOL,
+                info.get('direction', ''),
+                info.get('entry', 0),
+                info.get('sl', 0),
+                info.get('tp', 0),
+                exit_price_found or 0,
+                info.get('lot', 0),
+                pnl,
+                info.get('open_time'),
+            )
+            log_event('[{}] Position {} closed -- {} P&L: {:+.2f}'.format(
+                config.SYMBOL, ticket, info.get('direction', ''), pnl))
             del _tracked_tickets[ticket]
 
 
@@ -219,15 +244,27 @@ def run():
             if today_box == 'invalid':
                 time.sleep(config.CHECK_INTERVAL)
                 continue
-            # Sync today_traded with MT5 on every cycle — prevents double-entry on restart
+            # Sync today_traded with MT5 on every cycle — prevents double-entry on restart.
+            # Check BOTH open positions AND pending orders (pending stops aren't positions yet).
             if not today_traded:
-                open_pos = mt5.positions_get(symbol=config.SYMBOL) or []
-                if any(p.magic == config.MAGIC_NUMBER for p in open_pos):
-                    log_event('[{}] Existing position detected on startup — marking today as traded'.format(config.SYMBOL))
+                open_pos    = mt5.positions_get(symbol=config.SYMBOL) or []
+                open_orders = mt5.orders_get(symbol=config.SYMBOL) or []
+                if (any(p.magic == config.MAGIC_NUMBER for p in open_pos) or
+                        any(o.magic == config.MAGIC_NUMBER for o in open_orders)):
+                    log_event('[{}] Existing position/pending order detected — marking today as traded'.format(config.SYMBOL))
                     today_traded = True
 
             if today_traded:
                 log_event('[{}] Already traded today -- waiting for next session'.format(config.SYMBOL))
+                # Cancel stale pending orders past the window
+                open_orders = mt5.orders_get(symbol=config.SYMBOL) or []
+                for o in open_orders:
+                    if o.magic == config.MAGIC_NUMBER:
+                        age_min = (datetime.utcnow() - datetime.utcfromtimestamp(o.time_setup)).total_seconds() / 60
+                        if age_min > config.WINDOW_MINUTES:
+                            res = mt5.order_send({'action': mt5.TRADE_ACTION_REMOVE, 'order': o.ticket})
+                            if res and res.retcode == mt5.TRADE_RETCODE_DONE:
+                                log_event('[{}] Pending order {} cancelled — stale after {:.0f} min'.format(config.SYMBOL, o.ticket, age_min))
                 time.sleep(60)
                 continue
             if not risk_manager.can_trade():
@@ -319,4 +356,21 @@ def run():
 
 
 if __name__ == '__main__':
-    run()
+    import time as _time
+    restart_count = 0
+    while True:
+        try:
+            run()
+            log_event('[RESTART] Bot exited cleanly — restarting in 30s...')
+        except KeyboardInterrupt:
+            log_event('[RESTART] Shutdown requested.')
+            break
+        except Exception as exc:
+            log_event('[RESTART] Bot crashed: {} — restarting in 30s...'.format(exc))
+        restart_count += 1
+        log_event('[RESTART] Attempt #{} in 30 seconds...'.format(restart_count))
+        try:
+            _time.sleep(30)
+        except KeyboardInterrupt:
+            log_event('[RESTART] Shutdown during wait — stopping.')
+            break

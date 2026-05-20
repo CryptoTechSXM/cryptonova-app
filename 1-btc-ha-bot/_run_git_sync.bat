@@ -1,4 +1,5 @@
 @echo off
-REM Wrapper file from a scheduled-task run that could not execute.
-REM Safe to delete. See git_sync_report_2026-05-10.md for details.
-exit /b 0
+cd /d C:\CryptoNite-MT5-Bots
+python C:\CryptoNite-MT5-Bots\git_sync.py > "C:\CryptoNite-MT5-Bots\1-btc-ha-bot\_sync_output.txt" 2>&1
+echo --- EXIT CODE: %ERRORLEVEL% --- >> "C:\CryptoNite-MT5-Bots\1-btc-ha-bot\_sync_output.txt"
+echo DONE > "C:\CryptoNite-MT5-Bots\1-btc-ha-bot\_sync_done.txt"

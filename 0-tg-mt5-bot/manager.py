@@ -95,11 +95,13 @@ class TradeManager:
     def __init__(self):
         self.active_trades   = {}   # ticket -> signal dict
         self.symbol_data     = {}   # symbol -> {last_trade_time, trade_count}
+        self._channel_last_trade = {}  # channel_id -> last trade timestamp
         self.win_streak      = 0
         self.loss_streak     = 0
         self.daily_loss      = 0
         self.daily_wins      = 0
         self.daily_be        = 0
+        self.daily_be_plus   = 0   # protected BE exits with small profit (0 < profit < $5)
         self.today_pnl       = 0.0
         self.trading_enabled = True
         self.tg              = None  # set by main.py after TelegramSender is created
@@ -137,14 +139,15 @@ class TradeManager:
 
         today_str = date.today().isoformat()
         if state.get("date") == today_str:
-            self.daily_loss      = state.get("daily_loss",  0)
-            self.daily_wins      = state.get("daily_wins",  0)
-            self.daily_be        = state.get("daily_be",    0)
-            self.today_pnl       = state.get("today_pnl",  0.0)
+            self.daily_loss      = state.get("daily_loss",    0)
+            self.daily_wins      = state.get("daily_wins",    0)
+            self.daily_be        = state.get("daily_be",      0)
+            self.daily_be_plus   = state.get("daily_be_plus", 0)
+            self.today_pnl       = state.get("today_pnl",    0.0)
             self.trading_enabled = state.get("trading_enabled", True)
             log(f"[STATE] Restored today's counters: "
                 f"wins={self.daily_wins} losses={self.daily_loss} "
-                f"be={self.daily_be} pnl={self.today_pnl:.2f}", "INFO")
+                f"be+={self.daily_be_plus} be={self.daily_be} pnl={self.today_pnl:.2f}", "INFO")
 
         self.win_streak  = state.get("win_streak",  0)
         self.loss_streak = state.get("loss_streak", 0)
@@ -238,6 +241,7 @@ class TradeManager:
             "daily_loss":      self.daily_loss,
             "daily_wins":      self.daily_wins,
             "daily_be":        self.daily_be,
+            "daily_be_plus":   self.daily_be_plus,
             "today_pnl":       self.today_pnl,
             "trading_enabled": self.trading_enabled,
             "win_streak":      self.win_streak,
@@ -442,6 +446,7 @@ class TradeManager:
             self.daily_loss       = 0
             self.daily_wins       = 0
             self.daily_be         = 0
+            self.daily_be_plus    = 0
             self.today_pnl        = 0.0
             self.trading_enabled     = True
             self._dd_alerted         = False
@@ -458,7 +463,7 @@ class TradeManager:
     # =========================
     # CAN WE TRADE THIS SYMBOL?
     # =========================
-    def can_trade(self, symbol: str) -> bool:
+    def can_trade(self, symbol: str, source_channel: str = "") -> bool:
         self._check_daily_reset()
 
         if not self.trading_enabled:
@@ -472,7 +477,16 @@ class TradeManager:
             log(f"[BLOCK] {symbol} at max trades ({self.max_per_symbol})", "INFO")
             return False
 
-        # Cooldown
+        # Per-channel cooldown
+        if source_channel:
+            ch_last = self._channel_last_trade.get(source_channel)
+            if ch_last is not None:
+                ch_elapsed = (datetime.now() - ch_last).total_seconds()
+                if ch_elapsed < self.cooldown_secs:
+                    log(f"[BLOCK] channel {source_channel} cooldown {ch_elapsed:.0f}s/{self.cooldown_secs}s", "INFO")
+                    return False
+
+        # Per-symbol cooldown
         last = data.get("last_trade_time")
         if last:
             elapsed = (datetime.now() - last).total_seconds()
@@ -503,6 +517,10 @@ class TradeManager:
 
         self.symbol_data[symbol]["last_trade_time"] = datetime.now()
         self.symbol_data[symbol]["trade_count"]     += 1
+        # Per-channel cooldown timestamp
+        src_ch = signal.get("source_channel", "")
+        if src_ch:
+            self._channel_last_trade[src_ch] = datetime.now()
 
         log_opened_trade(ticket, signal)
         log(f"[REGISTER] ticket={ticket} {symbol} {signal['side']} ATR={signal['atr_pips']:.1f}p", "INFO")
@@ -644,18 +662,25 @@ class TradeManager:
 
             self.today_pnl += profit
 
-            # Update streak
-            # profit >  BE_THRESHOLD → WIN  (resets loss streak)
+            # Update streak / daily counters
+            # profit >= BE_PLUS_MAX  → WIN  (genuine profit — TP or good trail)
+            # 0 < profit < BE_PLUS_MAX → BE+ (protected exit — small profit from BE buffer)
             # profit < -BE_THRESHOLD → LOSS (counts toward kill switch)
-            # |profit| <= BE_THRESHOLD → BE (SL at/near entry; swap/commission may cause tiny non-zero)
-            BE_THRESHOLD = 0.05  # treat closes within ±$0.05 of zero as breakeven
-            # $0.05 is narrow enough that BE_BUFFER_DOLLARS closes count as wins
-            if profit > BE_THRESHOLD:
+            # |profit| <= BE_THRESHOLD → BE (SL at exactly entry; swap/commission noise)
+            BE_THRESHOLD = 0.05   # ±$0.05 = true breakeven noise floor
+            BE_PLUS_MAX  = 5.00   # below this + above BE_THRESHOLD = protected BE exit
+
+            if profit >= BE_PLUS_MAX:
                 self.win_streak  += 1
                 self.loss_streak  = 0
                 self.daily_wins  += 1
                 log("[CLOSE] WIN ticket={} {} profit={:.2f} (streak W{})".format(
                     ticket, symbol, profit, self.win_streak), "INFO")
+            elif profit > BE_THRESHOLD:
+                # Protected exit — BE buffer closed with small profit; doesn't reset loss streak
+                self.daily_be_plus += 1
+                log("[CLOSE] BE+ ticket={} {} profit={:.2f} (protected exit)".format(
+                    ticket, symbol, profit), "INFO")
             elif profit < -BE_THRESHOLD:
                 self.loss_streak += 1
                 self.win_streak   = 0
@@ -679,8 +704,7 @@ class TradeManager:
                     if self.tg:
                         self._tg_queue.append(('kill_switch', self.loss_streak))
             else:
-                # Breakeven — SL was at/near entry; tiny P&L due to swap or commission.
-                # Does NOT count as a daily loss or affect streaks.
+                # True breakeven — SL was at entry, closed at $0
                 self.daily_be += 1
                 log("[CLOSE] BE ticket={} {} profit={:.2f} (within ±{:.2f} threshold)".format(
                     ticket, symbol, profit, BE_THRESHOLD), "INFO")
@@ -688,9 +712,11 @@ class TradeManager:
             # Log to CSV
             log_closed_trade(ticket, trade, profit, exit_price)
 
-            # Determine result label for notification (matches ±BE_THRESHOLD counter)
-            if profit > BE_THRESHOLD:
+            # Determine result label for notification
+            if profit >= BE_PLUS_MAX:
                 result = "WIN"
+            elif profit > BE_THRESHOLD:
+                result = "BE+"
             elif profit < -BE_THRESHOLD:
                 result = "LOSS"
             else:
@@ -710,6 +736,8 @@ class TradeManager:
                 exit_type = "🔒 Trailing stop"
             elif result == "WIN":
                 exit_type = "🎯 Take profit"
+            elif result == "BE+":
+                exit_type = "🛡️ BE+ protected"
             elif result == "BE":
                 exit_type = "🛡️ BE protected"
             else:
@@ -1021,9 +1049,10 @@ class TradeManager:
 
                 if side == "BUY":
                     float_dist = current_price - entry
-                    # Phase 1 — BE lock
+                    # Phase 1 — BE lock: SL → entry + buffer (10 pips / $1 above entry)
                     if float_dist >= be_trigger and current_sl < entry:
-                        new_sl = entry
+                        be_buf = self._be_buffer_for_symbol(pos.symbol)
+                        new_sl = entry + min(be_buf, float_dist * 0.5)
                     # Phase 2 — trail behind price
                     elif current_sl >= entry:
                         ideal_sl = current_price - trail_dist
@@ -1031,9 +1060,10 @@ class TradeManager:
                             new_sl = ideal_sl
                 else:
                     float_dist = entry - current_price
-                    # Phase 1 — BE lock
+                    # Phase 1 — BE lock: SL → entry - buffer (10 pips / $1 below entry)
                     if float_dist >= be_trigger and (current_sl == 0 or current_sl > entry):
-                        new_sl = entry
+                        be_buf = self._be_buffer_for_symbol(pos.symbol)
+                        new_sl = entry - min(be_buf, float_dist * 0.5)
                     # Phase 2 — trail behind price
                     elif current_sl > 0 and current_sl <= entry:
                         ideal_sl = current_price + trail_dist
@@ -1330,26 +1360,28 @@ class TradeManager:
     # SESSION OPEN SNAPSHOT
     # Fires once per day at session open — balance, equity, P&L so far.
     # =========================
-    def session_open_brief(self):
+    def session_open_brief(self, force: bool = False):
         if self._session_brief_sent:
             return
         now_h = datetime.now(timezone.utc).hour
-        if now_h < settings.time_filter_start_hour:
+        # Allow forced call (e.g. on startup) to bypass the session-hour gate.
+        # Normal loop calls still respect the time filter.
+        if not force and now_h < settings.time_filter_start_hour:
             return
         self._session_brief_sent = True
         account = mt5.account_info()
         if not account:
             return
-        total  = self.daily_wins + self.daily_loss + self.daily_be
+        total    = self.daily_wins + self.daily_loss + self.daily_be_plus + self.daily_be
         pnl_sign = "+" if self.today_pnl >= 0 else ""
-        status = "\u2705 Trading enabled" if self.trading_enabled else "\u26d4 Trading PAUSED"
+        status   = "\u2705 Trading enabled" if self.trading_enabled else "\u26d4 Trading PAUSED"
         msg = (
             f"\U0001f4ca <b>Session Open</b>\n"
             f"\U0001f4e1 CryptoNite Signal Bot\n"
             f"\u23f0 {self._now_utc()}\n"
             f"\U0001f4b0 Balance: <b>{account.balance:.2f}</b>  |  Equity: <b>{account.equity:.2f}</b>\n"
             f"\U0001f4c8 Today P&L: <b>{pnl_sign}{self.today_pnl:.2f}</b>\n"
-            f"\U0001f522 Trades: {total} ({self.daily_wins}W / {self.daily_loss}L / {self.daily_be}BE)\n"
+            f"\U0001f522 Trades: {total} ({self.daily_wins}W / {self.daily_loss}L / {self.daily_be_plus}BE+ / {self.daily_be}BE)\n"
             f"{status}"
         )
         log(f"[SESSION BRIEF] Sent at {now_h:02d}:00 UTC", "INFO")

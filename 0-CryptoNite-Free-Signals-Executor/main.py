@@ -25,7 +25,12 @@ import csv
 import os
 import urllib.request
 import threading
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
+try:
+    from zoneinfo import ZoneInfo
+    _ET = ZoneInfo("America/New_York")
+except Exception:
+    _ET = timezone(timedelta(hours=-4))  # EDT fallback if tzdata not installed
 
 # Bypass SSL verification — fixes self-signed certificate errors on some networks
 _SSL_CTX = ssl.create_default_context()
@@ -41,11 +46,51 @@ from telegram_control import TelegramControl
 
 
 # =============================================================
+# EVENT LOGGER  (writes to events.log + console, syncs via Syncthing)
+# =============================================================
+_SCRIPT_DIR  = os.path.dirname(os.path.abspath(__file__))
+_EVENT_FILE  = os.path.join(_SCRIPT_DIR, "events.log")
+_EVENT_MAX_LINES = 3000
+
+def log_event(msg: str) -> None:
+    """Timestamped log to events.log AND console."""
+    import sys
+    now_utc = datetime.now(timezone.utc)
+    now_et  = now_utc.astimezone(_ET)
+    now     = now_utc.strftime("%Y-%m-%dT%H:%M:%S.%f+00:00")
+    et_str  = now_et.strftime("%H:%M %Z")
+    line = "{} ({}) | {}".format(now, et_str, msg)
+    print(line, flush=True)
+    try:
+        with open(_EVENT_FILE, "a", encoding="utf-8") as f:
+            f.write(line + "\n")
+        # Rotate to keep file manageable
+        with open(_EVENT_FILE, "r", encoding="utf-8", errors="ignore") as f:
+            lines = f.readlines()
+        if len(lines) > _EVENT_MAX_LINES:
+            with open(_EVENT_FILE, "w", encoding="utf-8") as f:
+                f.writelines(lines[-_EVENT_MAX_LINES:])
+    except Exception as e:
+        print("[LOG ERROR] {}".format(e), file=sys.stderr)
+
+
+# =============================================================
 # GLOBAL STATE
 # =============================================================
 _paused          = False
 _symbol          = None
 _last_signal_candle = None
+_LAST_TRADE_FILE    = "last_trade_time.txt"
+def _load_last_trade_time():
+    """Read persisted last-trade timestamp so cooldown survives restarts."""
+    try:
+        with open(_LAST_TRADE_FILE) as f:
+            ts = float(f.read().strip())
+            return datetime.fromtimestamp(ts, tz=timezone.utc)
+    except Exception:
+        return None
+
+_last_trade_time    = _load_last_trade_time()   # wall-clock time of last executed trade (cooldown guard)
 _daily_count     = 0
 _daily_count_date = None
 
@@ -82,27 +127,133 @@ def send_status(status):
     report("🤖 <b>CNFS Executor</b> — {}".format(status))
 
 
+# =============================================================
+# TODAY'S TRADE TALLY  — reads MT5 deal history as primary source.
+# Falls back to trades_log.csv if MT5 is unavailable.
+#
+# Why MT5 history?  trades_log.csv is only written when the trail
+# monitor detects a close during the CURRENT session.  Any trade
+# that opened and closed while the bot was down (e.g. an SL hit
+# overnight) is invisible to the CSV.  MT5 deal history captures
+# everything, regardless of bot uptime.
+# =============================================================
+def _tally_today_trades():
+    """
+    Returns (wins, losses, be_plus, be, total_pnl) for today (ET date).
+    BE_PLUS_MAX = $5: anything >= $5 counts as a win, $0–$4.99 is BE+.
+    Reads MT5 deal history first; falls back to trades_log.csv.
+    """
+    BE_PLUS_MAX = 5.0
+    wins = losses = be_plus = be = 0
+    total_pnl = 0.0
+
+    # ── Primary: MT5 deal history ─────────────────────────────
+    try:
+        now_et      = datetime.now(timezone.utc).astimezone(_ET)
+        et_midnight = now_et.replace(hour=0, minute=0, second=0, microsecond=0)
+        utc_from    = et_midnight.astimezone(timezone.utc)
+        utc_to      = datetime.now(timezone.utc) + timedelta(minutes=1)
+        deals = mt5.history_deals_get(utc_from, utc_to)
+        if deals is not None:
+            for d in deals:
+                # Only closing legs; skip deposits, adjustments, commissions
+                if d.entry != mt5.DEAL_ENTRY_OUT:
+                    continue
+                # Skip zero-value book entries (some brokers emit these)
+                if d.profit == 0.0 and d.commission == 0.0 and d.swap == 0.0:
+                    continue
+                pnl = round(d.profit + d.commission + d.swap, 2)
+                total_pnl += pnl
+                if pnl >= BE_PLUS_MAX:
+                    wins += 1
+                elif pnl > 0:
+                    be_plus += 1
+                elif pnl < 0:
+                    losses += 1
+                else:
+                    be += 1
+            return wins, losses, be_plus, be, round(total_pnl, 2)
+    except Exception as _e:
+        print("[TALLY] MT5 history unavailable, falling back to CSV: {}".format(_e))
+
+    # ── Fallback: trades_log.csv ──────────────────────────────
+    today_str = datetime.now(timezone.utc).astimezone(_ET).strftime("%Y-%m-%d")
+    try:
+        with open(TRADES_LOG, newline="") as f:
+            for row in csv.DictReader(f):
+                if not row.get("date", "").startswith(today_str):
+                    continue
+                pnl = float(row.get("pnl", 0) or 0)
+                total_pnl += pnl
+                if pnl >= BE_PLUS_MAX:
+                    wins += 1
+                elif pnl > 0:
+                    be_plus += 1
+                elif pnl < 0:
+                    losses += 1
+                else:
+                    be += 1
+    except Exception:
+        pass
+    return wins, losses, be_plus, be, round(total_pnl, 2)
+
+
+def send_session_open():
+    """Send a uniform session-open card matching the tg-bot format."""
+    acc = mt5.account_info()
+    if not acc:
+        send_status("ONLINE")
+        return
+
+    # Tally today's closed trades — MT5 history is the source of truth
+    t_wins, t_losses, t_be_plus, t_be, today_pnl = _tally_today_trades()
+    total    = t_wins + t_losses + t_be_plus + t_be
+    pnl_sign = "+" if today_pnl >= 0 else ""
+    now_utc  = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+    paused   = "⛔ PAUSED" if _paused else "✅ Trading enabled"
+
+    report(
+        "📊 <b>Session Open</b>\n"
+        "📡 CNFS Executor\n"
+        "⏰ {}\n"
+        "💰 Balance: <b>{:.2f}</b>  |  Equity: <b>{:.2f}</b>\n"
+        "📈 Today P&amp;L: <b>{}{:.2f}</b>\n"
+        "🔢 Trades: {} ({}W / {}L / {}BE+ / {}BE)\n"
+        "{}".format(
+            now_utc,
+            acc.balance, acc.equity,
+            pnl_sign, today_pnl,
+            total, t_wins, t_losses, t_be_plus, t_be,
+            paused
+        )
+    )
+
+
 def send_trade_open(symbol, direction, entry, sl, tp, lot, ticket):
-    icon = "📈" if direction == "BUY" else "📉"
+    icon   = "📈" if direction == "BUY" else "📉"
+    now_et = datetime.now(timezone.utc).astimezone(_ET).strftime("%H:%M %Z")
     report(
         "{} <b>CNFS TRADE OPENED</b>\n"
         "🔷 {} | {}\n"
+        "🕐 Time  : {}\n"
         "📍 Entry : {:.2f}\n"
         "🛑 SL    : {:.2f}\n"
         "🎯 TP    : {:.2f}\n"
         "📊 Lot   : {}\n"
         "🎫 Ticket: {}".format(
             icon, symbol, direction,
-            entry, sl, tp, lot, ticket)
+            now_et, entry, sl, tp, lot, ticket)
     )
 
 
 def send_trade_close(symbol, direction, entry, close_price, pips, pnl, ticket, reason):
-    icon  = "✅" if pnl >= 0 else "❌"
-    emoji = "📈" if direction == "BUY" else "📉"
+    icon   = "✅" if pnl >= 0 else "❌"
+    emoji  = "📈" if direction == "BUY" else "📉"
+    now_et = datetime.now(timezone.utc).astimezone(_ET).strftime("%H:%M %Z")
     report(
         "{} <b>CNFS TRADE CLOSED</b>\n"
         "{} {} | {}\n"
+        "🕐 Time  : {}\n"
         "📍 Entry : {:.2f}\n"
         "🚪 Close : {:.2f}\n"
         "📏 Pips  : {:+.1f}\n"
@@ -110,7 +261,7 @@ def send_trade_close(symbol, direction, entry, close_price, pips, pnl, ticket, r
         "📋 Reason: {}\n"
         "🎫 Ticket: {}".format(
             icon, emoji, symbol, direction,
-            entry, close_price, pips, pnl, reason, ticket)
+            now_et, entry, close_price, pips, pnl, reason, ticket)
     )
 
 
@@ -122,6 +273,81 @@ def send_be_locked(symbol, ticket, entry, float_pips):
         "✅ SL moved to entry (+{:.1f} pips profit)".format(
             symbol, ticket, entry, float_pips)
     )
+
+
+# =============================================================
+# DAILY END-OF-DAY REPORT  (fires once at 21:00 UTC)
+# =============================================================
+_eod_report_date = None   # date string of last sent report (YYYY-MM-DD)
+
+def send_daily_report():
+    """Read today's closed trades from MT5 history (primary) and send a summary."""
+    global _eod_report_date
+
+    today_str = datetime.now(timezone.utc).astimezone(_ET).strftime("%Y-%m-%d")
+    _eod_report_date = today_str   # mark as sent even if history read fails
+
+    # Core counts from MT5 history — catches trades closed while bot was down
+    wins, losses, be_plus, be, total_pnl = _tally_today_trades()
+
+    # Duration / TP-hit stats still come from CSV (richer metadata)
+    tp_hits = 0
+    durations = []
+    try:
+        with open(TRADES_LOG, newline="") as f:
+            for row in csv.DictReader(f):
+                if not row.get("date", "").startswith(today_str):
+                    continue
+                if str(row.get("tp_hit", "")).lower() == "true":
+                    tp_hits += 1
+                try:
+                    durations.append(float(row.get("duration_min", 0) or 0))
+                except Exception:
+                    pass
+    except Exception:
+        pass
+
+    total = wins + losses + be_plus + be
+    if total == 0:
+        report(
+            "📊 <b>End-of-Day Report</b>\n"
+            "📡 CNFS Executor\n"
+            "📅 {}\n"
+            "ℹ️ No trades logged today.".format(today_str)
+        )
+        return
+
+    win_rate  = round(wins / total * 100, 1)
+    pnl_sign  = "+" if total_pnl >= 0 else ""
+    avg_dur   = round(sum(durations) / len(durations), 1) if durations else 0
+    tp_rate   = round(tp_hits / total * 100, 1)
+
+    lines = [
+        "📊 <b>End-of-Day Report</b>",
+        "📡 CNFS Executor",
+        "📅 {}".format(today_str),
+        "",
+        "🔢 Trades: <b>{}</b>  ({}W / {}L / {}BE+ / {}BE)".format(
+            total, wins, losses, be_plus, be),
+        "💰 P&L: <b>{}{:.2f}</b>".format(pnl_sign, total_pnl),
+        "🎯 Win rate: <b>{:.1f}%</b>  |  TP hit: <b>{:.1f}%</b>".format(win_rate, tp_rate),
+        "⏱ Avg duration: <b>{:.1f} min</b>".format(avg_dur),
+    ]
+    if _paused:
+        lines.append("⛔ Bot currently PAUSED")
+
+    report("\n".join(lines))
+    log_event("[EOD] Daily report sent ({} trades, P&L={}{:.2f})".format(
+        total, pnl_sign, total_pnl))
+
+
+def _maybe_send_eod_report():
+    """Call from main loop — sends EOD report once per day at 21:00 UTC (5 PM ET)."""
+    global _eod_report_date
+    now_utc   = datetime.now(timezone.utc)
+    today_str = now_utc.astimezone(_ET).strftime("%Y-%m-%d")
+    if now_utc.hour == 21 and _eod_report_date != today_str:
+        send_daily_report()
 
 
 # =============================================================
@@ -343,6 +569,13 @@ def can_open_new(symbol):
     if _paused:
         print("  [GATE] Bot is paused — skipping signal scan")
         return False
+    # Trade cooldown — prevent re-entry cascade from persistent HA signals
+    if _last_trade_time is not None:
+        elapsed = (datetime.now(timezone.utc) - _last_trade_time).total_seconds()
+        if elapsed < config.TRADE_COOLDOWN:
+            remaining = int(config.TRADE_COOLDOWN - elapsed)
+            print("  [GATE] Trade cooldown — {}s remaining".format(remaining))
+            return False
     # Use get_all_positions so manual trades count toward total and at-risk caps.
     open_pos = get_all_positions(symbol)
     total    = len(open_pos)
@@ -427,7 +660,7 @@ def modify_sl(ticket, symbol, new_sl, tp):
 # Appends one row per closed trade to trades_log.csv.
 # Used for daily analysis: TP hit rate, duration by hour, P&L trends.
 # =============================================================
-TRADES_LOG = "trades_log.csv"
+TRADES_LOG = os.path.join(_SCRIPT_DIR, "trades_log.csv")
 _TRADES_LOG_HEADER = [
     "date", "time_open", "time_close", "ticket",
     "direction", "entry", "close_price",
@@ -456,10 +689,11 @@ def log_trade_outcome(meta, close_px, pnl, lot=0.01):
         else:
             tp_hit = False
 
+        now_et = now_utc.astimezone(_ET)
         row = {
-            "date":        now_utc.strftime("%Y-%m-%d"),
-            "time_open":   open_time.strftime("%H:%M:%S"),
-            "time_close":  now_utc.strftime("%H:%M:%S"),
+            "date":        now_et.strftime("%Y-%m-%d"),
+            "time_open":   open_time.astimezone(_ET).strftime("%H:%M:%S"),
+            "time_close":  now_et.strftime("%H:%M:%S"),
             "ticket":      meta.get("ticket", ""),
             "direction":   direction,
             "entry":       round(entry, 2),
@@ -499,18 +733,28 @@ def trail_monitor(symbol):
                 closed = [t for t in _positions if t not in open_tickets]
                 for ticket in closed:
                     meta = _positions.pop(ticket)
-                    # Try to get close details from recent history
-                    from datetime import timedelta
-                    now   = datetime.now(timezone.utc)
-                    deals = mt5.history_deals_get(now - timedelta(hours=2), now)
-                    pnl   = 0.0
+                    # Query closing deal directly by position ticket — more reliable
+                    # than a time-range scan (avoids timing gaps and window limits).
+                    pnl      = 0.0
                     close_px = meta["entry"]
-                    if deals:
-                        for d in deals:
-                            if d.position_id == ticket and d.entry == 1:
+                    pos_deals = mt5.history_deals_get(position=ticket)
+                    if pos_deals:
+                        for d in pos_deals:
+                            if d.entry == mt5.DEAL_ENTRY_OUT:
                                 pnl      = d.profit
                                 close_px = d.price
                                 break
+                    # Fallback: time-range scan (handles brokers where position= is unsupported)
+                    if close_px == meta["entry"]:
+                        from datetime import timedelta
+                        now   = datetime.utcnow()
+                        deals = mt5.history_deals_get(now - timedelta(hours=12), now)
+                        if deals:
+                            for d in deals:
+                                if d.position_id == ticket and d.entry == mt5.DEAL_ENTRY_OUT:
+                                    pnl      = d.profit
+                                    close_px = d.price
+                                    break
                     direction = meta["direction"]
                     pips_val  = (close_px - meta["entry"]) / config.PIP_SIZE \
                                 if direction == "BUY" \
@@ -658,35 +902,41 @@ def check_signal(symbol):
     ema_val     = current_m1["ema"]
     current_atr = closed_m5["atr"]
 
-    print("[{}]  Price: {:.2f}  ATR: {:.2f}".format(
-        datetime.now(timezone.utc).strftime("%H:%M:%S"), price, current_atr or 0))
+    log_event("Scan  Price={:.2f}  ATR={:.2f}  EMA={:.2f}".format(
+        price, current_atr or 0, ema_val))
 
     if pd.isna(current_atr) or current_atr < config.MIN_ATR:
-        print("  ATR too low -- skip"); return None
+        log_event("  skip: ATR too low — floor ({:.2f} < {})".format(current_atr or 0, config.MIN_ATR)); return None
+    atr_series = m5["atr"].dropna()
+    if len(atr_series) >= 20:
+        atr_avg = float(atr_series.iloc[-20:].mean())
+        if current_atr < config.MIN_ATR_RATIO * atr_avg:
+            log_event("  skip: ATR too low — ratio ({:.2f} < {:.0f}% of {:.2f} avg)".format(
+                current_atr, config.MIN_ATR_RATIO * 100, atr_avg)); return None
     h1_dir = h1_trend(h1)
     if h1_dir is None:
-        print("  H1 unclear -- skip"); return None
+        log_event("  skip: H1 trend unclear"); return None
     trend = "BUY" if price > ema_val else ("SELL" if price < ema_val else None)
     if trend is None or trend != h1_dir:
-        print("  EMA/H1 conflict -- skip"); return None
+        log_event("  skip: EMA says {} but H1 says {}".format(trend, h1_dir)); return None
     if not is_doji(doji_candle):
-        print("  No doji -- skip"); return None
+        log_event("  skip: no doji"); return None
     if not is_high_vol_doji(m1):
-        print("  Doji too small -- skip"); return None
+        log_event("  skip: doji too small"); return None
     if not has_clean_pullback(m1, trend):
-        print("  No clean pullback -- skip"); return None
+        log_event("  skip: no clean pullback"); return None
     if trend == "BUY"  and closed_m5["ha_close"] <= closed_m5["ha_open"]:
-        print("  M5 not bullish -- skip"); return None
+        log_event("  skip: M5 HA not bullish"); return None
     if trend == "SELL" and closed_m5["ha_close"] >= closed_m5["ha_open"]:
-        print("  M5 not bearish -- skip"); return None
+        log_event("  skip: M5 HA not bearish"); return None
     if trend == "BUY"  and confirm_m1["ha_close"] <= confirm_m1["ha_open"]:
-        print("  M1 not confirming BUY -- skip"); return None
+        log_event("  skip: M1 HA not confirming BUY"); return None
     if trend == "SELL" and confirm_m1["ha_close"] >= confirm_m1["ha_open"]:
-        print("  M1 not confirming SELL -- skip"); return None
+        log_event("  skip: M1 HA not confirming SELL"); return None
 
     signal_ts = str(confirm_m1["time"])
     if _last_signal_candle == signal_ts:
-        print("  Same candle -- skip"); return None
+        log_event("  skip: same candle already acted on"); return None
 
     atr_val  = float(current_atr)
     sl_dist  = atr_val * config.ATR_SL_MULT
@@ -695,7 +945,7 @@ def check_signal(symbol):
     tp       = round(price + tp_dist, 2) if trend == "BUY" else round(price - tp_dist, 2)
     atr_pips = atr_val / config.PIP_SIZE
 
-    print("  SIGNAL {} | Entry={:.2f} SL={:.2f} TP={:.2f} ATR={:.1f}p".format(
+    log_event("  *** SIGNAL {} | Entry={:.2f} SL={:.2f} TP={:.2f} ATR={:.1f}p ***".format(
         trend, price, sl, tp, atr_pips))
 
     return {"direction": trend, "price": price,
@@ -706,7 +956,7 @@ def check_signal(symbol):
 # ORDER EXECUTION
 # =============================================================
 def execute_signal(symbol, signal):
-    global _last_signal_candle, _daily_count
+    global _last_signal_candle, _daily_count, _last_trade_time
 
     direction = signal["direction"]
     sl        = signal["sl"]
@@ -758,6 +1008,12 @@ def execute_signal(symbol, signal):
                 "open_time":   datetime.now(timezone.utc),
             }
         _last_signal_candle = signal["candle_ts"]
+        _last_trade_time    = datetime.now(timezone.utc)
+        try:
+            with open(_LAST_TRADE_FILE, "w") as f:
+                f.write(str(_last_trade_time.timestamp()))
+        except Exception:
+            pass
         _daily_count       += 1
         print("  ✅ Order placed ticket={} lot={} @ {:.2f}".format(ticket, lot, price))
         send_trade_open(symbol, direction, price, sl, tp, lot, ticket)
@@ -798,15 +1054,21 @@ def run():
 
     acc = mt5.account_info()
     if acc:
-        print("  Login  : {}".format(acc.login))
-        print("  Server : {}".format(acc.server))
-        print("  Balance: ${:,.2f}".format(acc.balance))
-    print("  Symbol : {}".format(_symbol))
-    print("=" * 55)
+        log_event("  Login  : {}".format(acc.login))
+        log_event("  Server : {}".format(acc.server))
+        log_event("  Balance: ${:,.2f}".format(acc.balance))
+    log_event("  Symbol : {}".format(_symbol))
+    if _last_trade_time is not None:
+        elapsed = (datetime.now(timezone.utc) - _last_trade_time).total_seconds()
+        remaining = max(0, int(config.TRADE_COOLDOWN - elapsed))
+        if remaining > 0:
+            log_event("  Trade cooldown active: {}s remaining (persisted from last run)".format(remaining))
+        else:
+            log_event("  Last trade: {:.0f}s ago — cooldown clear".format(elapsed))
 
     # Adopt existing positions (bot-opened AND manual)
     _all = get_all_positions(_symbol)
-    print("  Found {} open position(s) to adopt".format(len(_all)))
+    log_event("  Found {} open position(s) to adopt".format(len(_all)))
     for pos in _all:
         with _positions_lock:
             if pos.ticket not in _positions:
@@ -825,9 +1087,10 @@ def run():
                 # Apply SL/TP to MT5 if they were missing
                 if not (pos.sl and pos.sl > 0) or not (pos.tp and pos.tp > 0):
                     modify_sl(pos.ticket, _symbol, sl, tp)
-                    print("  Applied ATR SL={:.2f} TP={:.2f} to ticket={}".format(
+                    log_event("  Applied ATR SL={:.2f} TP={:.2f} to ticket={}".format(
                         sl, tp, pos.ticket))
                 _positions[pos.ticket] = {
+                    "ticket":      pos.ticket,
                     "entry":       pos.price_open,
                     "original_sl": sl,
                     "current_sl":  sl,
@@ -843,6 +1106,7 @@ def run():
     threading.Thread(target=trail_monitor, args=(_symbol,), daemon=True).start()
 
     # Start Telegram control bot if configured
+    _ctrl = None
     if config.CTRL_BOT_TOKEN and config.CTRL_CHAT_ID:
         _ctrl = TelegramControl(
             bot_token       = config.CTRL_BOT_TOKEN,
@@ -857,7 +1121,7 @@ def run():
     else:
         print("  Telegram control bot: NOT configured (set CTRL_BOT_TOKEN + CTRL_CHAT_ID in .env)")
 
-    send_status("ONLINE")
+    send_session_open()
     print("\n  Running 24/7 — Ctrl+C to stop\n")
 
     try:
@@ -872,8 +1136,8 @@ def run():
                     if signal:
                         execute_signal(_symbol, signal)
                 else:
-                    # Still run the signal check for logging even if gated
                     check_signal(_symbol)
+                _maybe_send_eod_report()
             except Exception as e:
                 print("[ERROR] {}".format(e))
 

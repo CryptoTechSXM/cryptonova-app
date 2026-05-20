@@ -23,7 +23,7 @@ LIQ_PCT_MAX = 0.50
 ATR_PERIOD  = 14
 
 # Entry window
-WINDOW_MINUTES = 90
+WINDOW_MINUTES = 120
 
 # Take profit
 RR           = 2.0     # 2:1 risk-reward (engulfing patterns only)

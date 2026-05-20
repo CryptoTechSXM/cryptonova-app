@@ -41,8 +41,8 @@ class TradeExecutor:
         rates = mt5.copy_rates_from_pos(symbol, mt5.TIMEFRAME_M5, 0, 120)
 
         if rates is None or len(rates) < 100:
-            log("[EMA] Not enough data — skipping filter", "ERROR")
-            return True   # fail open so we don't miss trades on data issues
+            log("[EMA] Not enough data — blocking trade (fail closed)", "ERROR")
+            return False  # fail closed — no data = no trade
 
         closes = [r["close"] for r in rates[-100:]]
 
@@ -232,7 +232,7 @@ class TradeExecutor:
             # MANAGER FILTER
             # Checks: trading_enabled, cooldown, per-symbol cap, duplicates
             # =========================
-            if not self.manager.can_trade(symbol):
+            if not self.manager.can_trade(symbol, source_channel):
                 log(f"[FILTER] Trade blocked by manager ({symbol})", "INFO")
                 return {"ok": False, "message": "Filtered by manager"}
 

@@ -50,15 +50,16 @@ STRATEGY_LABEL = "Free"   # heading -> "CryptoNite Free Signals"
 SILENT         = os.getenv("SILENT_MODE", "false").lower() == "true"
 
 # Relaxed HA parameters
-DOJI_THRESHOLD       = 0.25   # body/range < this -> doji
+DOJI_THRESHOLD       = 0.20   # body/range < this -> doji  (was 0.25 — tightened 2026-05-19, backtest: best median R + lowest worst-DD)
 DOJI_VOL_THRESHOLD   = 0.70   # doji range must be >= 70% of recent avg range
-PULLBACK_N           = 1      # min clean pullback candles before doji
+PULLBACK_N           = 2      # was 1 — 2 HA pullback candles required, tighter filter 2026-05-14
 PULLBACK_WICK_TOL    = 0.15   # wick/range <= 15% counts as "clean"
 ATR_PERIOD           = 14
 EMA_PERIOD           = 100
 ATR_SL_MULT          = 2.0    # SL = ATR x 2.0
 ATR_TP_MULT          = 3.0    # TP = ATR x 3.0  ->  1.5 R:R
-MIN_ATR              = 0.30   # minimum M5 ATR in price units (filters dead market)
+MIN_ATR              = 4.0    # absolute floor — block when market is dead quiet (was 0.30, raised 2026-05-19)
+MIN_ATR_RATIO        = 0.70   # also block if ATR < 70% of its 20-bar rolling average
 
 M1_BARS  = 200
 M5_BARS  = 100
@@ -317,8 +318,16 @@ def check_signal(symbol: str) -> None:
     # --- ATR floor (skip dead/choppy market) ---
     if pd.isna(current_atr) or current_atr < MIN_ATR:
         if not SILENT:
-            print("  ATR {:.4f} < {} -- skipping (low volatility)".format(current_atr, MIN_ATR))
+            print("  ATR {:.4f} < {} -- skipping (ATR floor)".format(current_atr, MIN_ATR))
         return
+    atr_series = m5["atr"].dropna()
+    if len(atr_series) >= 20:
+        atr_avg = float(atr_series.iloc[-20:].mean())
+        if current_atr < MIN_ATR_RATIO * atr_avg:
+            if not SILENT:
+                print("  ATR {:.4f} < {:.0f}% of {:.4f} avg -- skipping (ATR ratio)".format(
+                    current_atr, MIN_ATR_RATIO * 100, atr_avg))
+            return
 
     # --- H1 trend (1-candle, relaxed) ---
     h1_dir = h1_trend(h1)
@@ -468,19 +477,13 @@ def run():
             try:
                 check_signal(symbol)
             except Exception as e:
-                print("[ERROR] {}".format(e))
-                logging.exception("Signal check error")
-
-            print("  Next check in {}s...\n".format(CHECK_INTERVAL))
+                logging.error("Scan error: %s", e)
             time.sleep(CHECK_INTERVAL)
-
     except KeyboardInterrupt:
-        print("\nStopped by user.")
-        logging.info("Bot stopped by user")
-
+        print("Stopped by user.")
+        logging.info("Bot stopped by user.")
     finally:
         mt5.shutdown()
-        logging.info("MT5 shutdown")
 
 
 if __name__ == "__main__":

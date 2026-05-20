@@ -19,13 +19,13 @@ TF_1D   = 1440
 
 # Liquidity candle: opening range must be 15-50% of daily ATR.
 # META price ~$500-600, daily ATR typically $10-20.
-# Widen LIQ_PCT_MAX if too many days are filtered after 2 weeks.
+# Raised MAX from 0.50 → 0.70: stock opens regularly hit 50-65% of ATR.
 LIQ_PCT_MIN = 0.15   # below this = dead open, skip
-LIQ_PCT_MAX = 0.50   # above this = too explosive, skip
+LIQ_PCT_MAX = 0.85   # above this = truly explosive / news-driven, skip
 ATR_PERIOD  = 14
 
 # Entry window -- 90 min from open
-WINDOW_MINUTES = 90
+WINDOW_MINUTES = 120
 
 # Take profit
 RR            = 2.0    # 2:1 risk-reward
@@ -39,4 +39,4 @@ MAX_ACTUAL_RISK_PCT   = 3.0   # warn or block when actual risk exceeds this % of
 RISK_CAP_MODE         = "warn"  # "warn" = log but still trade | "block" = skip the trade
 
 MAGIC_NUMBER   = 20260005   # unique -- bot 5
-CHECK_INTERVAL = 10         # seconds
+CHECK_INTERVAL = 10    # seconds

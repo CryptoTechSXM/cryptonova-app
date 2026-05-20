@@ -1,21 +1,37 @@
-// RUNTIME FILES - written every few seconds by running bots
+// Syncthing ignore rules for C:\CryptoNite-MT5-Bots\
+// Apply on EVERY device: Syncthing UI -> Folder -> Edit -> Ignore Patterns
+// Editing .stignore file alone is NOT enough — must paste into the UI on each device.
+//
+// WHAT CHANGED vs old rules:
+//   REMOVED from ignore: bot.log, events.log, signal_intake.csv, trade_log*, free_signals.log
+//   These are now SYNCED so logs are visible on all devices for troubleshooting.
+//   Heartbeat and state.json remain excluded (they were the actual cause of perpetual sync).
+
+// ── RUNTIME FILES (written every 10s -- main cause of perpetual syncing) ──
 **/heartbeat.txt
 **/heartbeat.sync-conflict-*.txt
-**/events.log
-**/bot.log
-**/free_signals.log
-**/free_signals_pre_fix_*.log
+
+// ── STATE FILES (machine-specific, not useful to share) ──
 **/state.json
-signal_bridge.json
-**/backups/
-**/stignore_NEW.txt
+**/signal_bridge.json
+
+// ── TELEGRAM SESSION FILES (machine-specific login -- NEVER share) ──
 **/*.session
 **/*.session-journal
+
+// ── GIT (rewrites index/objects constantly) ──
+.git/
+
+// ── PYTHON CACHE (auto-generated per machine) ──
 **/__pycache__
 **/*.pyc
 **/*.pyo
 **/*.pyd
+
+// ── SYNCTHING CONFLICT COPIES (auto-cleanup) ──
 **/*.sync-conflict-*
+
+// ── EDITOR / OS JUNK ──
 **/*.tmp
 **/*.bak
 **/*~
@@ -23,9 +39,5 @@ signal_bridge.json
 **/Thumbs.db
 **/*.swp
 
-// TRADE LOGS - actively written by running bots, machine-specific
-**/trade_log*.txt
-**/trade_log*.csv
-
-// GIT INTERNALS - changes on every push/pull, use GitHub as source of truth
-.git/
+// ── BACKUPS (large, already on source machine) ──
+**/backups/

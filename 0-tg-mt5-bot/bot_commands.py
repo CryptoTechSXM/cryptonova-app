@@ -38,6 +38,16 @@ from config import settings
 from logger import log
 from time_filter import current_session_label
 
+# ── Channel name map (shared across all report functions) ──────────────────
+CHANNEL_NAME_MAP = {
+    "-1003523601209": "CryptoNite Free Signals",
+    "-1002717527369": "Free Tag Signals",
+    "-1003882026187": "Limitless Abundance 2.0",
+    "-1003889406756": "Limitless Abundance VIP",
+    "-1003628454081": "XFUSION SIGNALS",
+}
+
+
 
 # =========================
 # BOT COMMAND HANDLER
@@ -209,120 +219,125 @@ class BotCommandHandler:
         )
 
     def _build_daily(self) -> str:
-        """Today's W/L/BE/P&L — mirrors /stats with a daily label."""
-        try:
-            stats = self.manager.get_stats()
-            pnl_emoji = "📈" if stats["today_pnl"] >= 0 else "📉"
-            pnl_sign  = "+" if stats["today_pnl"] >= 0 else ""
-            if stats["win_streak"] >= 2:
-                streak = "🔥 W{}".format(stats["win_streak"])
-            elif stats["loss_streak"] >= 2:
-                streak = "❄️ L{}".format(stats["loss_streak"])
-            else:
-                streak = "—"
-            closed_label = "{} closed".format(stats["daily_total"]) if stats["daily_total"] else "no trades yet"
-            today_str = date.today().isoformat()
-            return (
-                f"📊 Daily Summary — {today_str}\n\n"
-                f"Results:  ✅ {stats['daily_wins']} W  |  ❌ {stats['daily_losses']} L  |  ➡️ {stats['daily_be']} BE  ({closed_label})\n"
-                f"Win rate: {stats['daily_win_rate']}%  |  Streak: {streak}\n"
-                f"Loss cap: {stats['daily_losses']}/{stats['daily_loss_limit']}\n\n"
-                f"P&L:     {pnl_emoji} {pnl_sign}{stats['today_pnl']:.2f}\n"
-                f"Balance: ${stats['balance']:,.2f}\n"
-                f"Equity:  ${stats['equity']:,.2f}\n"
-                f"Open:    {stats['open_trades']} position(s)"
-            )
-        except Exception as e:
-            return f"❌ Daily error: {e}"
+        """Today's trades broken down by source channel."""
+        from datetime import date as _date
+        today_str = _date.today().isoformat()
+        rows = self._read_trades_csv([today_str])
+        return self._channel_breakdown(rows, f"📊 Daily Report — {today_str}")
 
     def _build_weekly(self) -> str:
-        """Last 7 calendar days computed from MT5 deal history."""
-        try:
-            import MetaTrader5 as mt5
-            from datetime import datetime, date, timezone, timedelta
-            today = date.today()
-            start_dt = datetime.combine(today - timedelta(days=6), datetime.min.time()).replace(tzinfo=timezone.utc)
-            end_dt   = datetime.now(timezone.utc)
-            deals = mt5.history_deals_get(start_dt, end_dt) or []
-            wins = losses = be = 0
-            total_pnl = 0.0
-            for d in deals:
-                if d.type not in (mt5.DEAL_TYPE_BUY, mt5.DEAL_TYPE_SELL):
-                    continue
-                if d.entry != mt5.DEAL_ENTRY_OUT:
-                    continue
-                pnl = d.profit
-                total_pnl += pnl
-                if pnl > 0.5:
-                    wins += 1
-                elif pnl < -0.5:
-                    losses += 1
-                else:
-                    be += 1
-            total = wins + losses + be
-            wr = round(wins / total * 100) if total > 0 else 0
-            pnl_emoji = "📈" if total_pnl >= 0 else "📉"
-            pnl_sign  = "+" if total_pnl >= 0 else ""
-            acc = mt5.account_info()
-            balance = acc.balance if acc else 0.0
-            equity  = acc.equity  if acc else 0.0
-            date_range = f"{(today - timedelta(days=6)).isoformat()} → {today.isoformat()}"
-            closed_label = f"{total} closed" if total else "no trades"
-            return (
-                f"📅 Weekly Summary\n"
-                f"{date_range}\n\n"
-                f"Results:  ✅ {wins} W  |  ❌ {losses} L  |  ➡️ {be} BE  ({closed_label})\n"
-                f"Win rate: {wr}%\n\n"
-                f"P&L:     {pnl_emoji} {pnl_sign}{total_pnl:.2f}\n"
-                f"Balance: ${balance:,.2f}\n"
-                f"Equity:  ${equity:,.2f}"
-            )
-        except Exception as e:
-            return f"❌ Weekly error: {e}"
+        """Last 7 calendar days broken down by source channel."""
+        from datetime import date as _date, timedelta
+        today = _date.today()
+        date_list = [(today - timedelta(days=i)).isoformat() for i in range(7)]
+        rows = self._read_trades_csv(date_list)
+        start = date_list[-1]; end = date_list[0]
+        return self._channel_breakdown(rows, f"📅 Weekly Report — {start} → {end}")
 
     def _build_monthly(self) -> str:
-        """Month-to-date computed from MT5 deal history."""
+        """Month-to-date broken down by source channel."""
+        from datetime import date as _date, timedelta
+        today = _date.today()
+        month_start = _date(today.year, today.month, 1)
+        date_list = []
+        d = month_start
+        while d <= today:
+            date_list.append(d.isoformat())
+            from datetime import timedelta as _td
+            d += _td(days=1)
+        rows = self._read_trades_csv(date_list)
+        month_label = today.strftime("%B %Y")
+        return self._channel_breakdown(rows, f"📆 Monthly Report — {month_label}")
+
+    # ── CSV channel-breakdown helpers ─────────────────────────────────────────
+
+    def _read_trades_csv(self, date_list: list) -> list:
+        """Return rows from trades.csv whose date is in date_list, skipping OPEN rows."""
+        import csv, os
+        path = os.path.join(os.path.dirname(__file__), "trades.csv")
+        rows = []
+        if not os.path.exists(path):
+            return rows
+        date_set = set(date_list)
         try:
-            import MetaTrader5 as mt5
-            from datetime import datetime, date, timezone
-            today = date.today()
-            month_start = datetime(today.year, today.month, 1, tzinfo=timezone.utc)
-            end_dt = datetime.now(timezone.utc)
-            deals = mt5.history_deals_get(month_start, end_dt) or []
-            wins = losses = be = 0
-            total_pnl = 0.0
-            for d in deals:
-                if d.type not in (mt5.DEAL_TYPE_BUY, mt5.DEAL_TYPE_SELL):
-                    continue
-                if d.entry != mt5.DEAL_ENTRY_OUT:
-                    continue
-                pnl = d.profit
-                total_pnl += pnl
-                if pnl > 0.5:
-                    wins += 1
-                elif pnl < -0.5:
-                    losses += 1
-                else:
-                    be += 1
-            total = wins + losses + be
-            wr = round(wins / total * 100) if total > 0 else 0
-            pnl_emoji = "📈" if total_pnl >= 0 else "📉"
-            pnl_sign  = "+" if total_pnl >= 0 else ""
-            acc = mt5.account_info()
-            balance = acc.balance if acc else 0.0
-            equity  = acc.equity  if acc else 0.0
-            month_label = today.strftime("%B %Y")
-            closed_label = f"{total} closed" if total else "no trades"
-            return (
-                f"📆 Monthly Summary — {month_label}\n\n"
-                f"Results:  ✅ {wins} W  |  ❌ {losses} L  |  ➡️ {be} BE  ({closed_label})\n"
-                f"Win rate: {wr}%\n\n"
-                f"P&L:     {pnl_emoji} {pnl_sign}{total_pnl:.2f}\n"
-                f"Balance: ${balance:,.2f}\n"
-                f"Equity:  ${equity:,.2f}"
-            )
-        except Exception as e:
-            return f"❌ Monthly error: {e}"
+            with open(path, newline="", encoding="utf-8") as f:
+                for row in csv.DictReader(f):
+                    if row.get("date", "") in date_set and row.get("result", "") != "OPEN":
+                        rows.append(row)
+        except Exception:
+            pass
+        return rows
+
+    def _channel_breakdown(self, rows: list, header: str) -> str:
+        """Format per-channel W/L/BE+/BE breakdown from trades.csv rows."""
+        from collections import defaultdict
+        channels = defaultdict(lambda: {
+            "trades": 0, "wins": 0, "losses": 0, "be_plus": 0, "be": 0,
+            "profit": 0.0, "sum_win": 0.0, "sum_loss": 0.0, "sum_be_plus": 0.0,
+        })
+        for row in rows:
+            ch     = str(row.get("source_channel", "") or "unknown")
+            result = row.get("result", "")
+            try:
+                profit = float(row.get("profit", 0) or 0)
+            except Exception:
+                profit = 0.0
+            b = channels[ch]
+            b["trades"] += 1
+            b["profit"] += profit
+            if result == "WIN":
+                b["wins"]    += 1; b["sum_win"]    += profit
+            elif result == "LOSS":
+                b["losses"]  += 1; b["sum_loss"]   += profit
+            elif result == "BE+":
+                b["be_plus"] += 1; b["sum_be_plus"] += profit
+            else:
+                b["be"]      += 1
+
+        lines = [header, ""]
+
+        if not channels:
+            lines.append("No closed trades recorded.")
+            return "\n".join(lines)
+
+        items = sorted(channels.items(), key=lambda kv: kv[1]["profit"], reverse=True)
+
+        total_pnl  = sum(b["profit"]  for _, b in items)
+        total_t    = sum(b["trades"]  for _, b in items)
+        total_w    = sum(b["wins"]    for _, b in items)
+        total_l    = sum(b["losses"]  for _, b in items)
+        total_bep  = sum(b["be_plus"] for _, b in items)
+        total_be   = sum(b["be"]      for _, b in items)
+        total_wr   = round(total_w / (total_w + total_l) * 100, 1) if (total_w + total_l) > 0 else 0.0
+        pnl_sign   = "+" if total_pnl >= 0 else ""
+        lines.append(
+            f"Overall: {total_t}t | {total_w}W/{total_l}L/{total_bep}BE+/{total_be}BE"
+            f" | WR {total_wr:.0f}% | P&L {pnl_sign}{total_pnl:.2f}"
+        )
+        lines.append("")
+
+        for cid, b in items:
+            cname  = CHANNEL_NAME_MAP.get(cid, cid)
+            wins   = b["wins"];  losses = b["losses"]
+            bep    = b["be_plus"]; be = b["be"]
+            trades = b["trades"]; profit = b["profit"]
+            denom  = wins + losses
+            wr     = round(wins / denom * 100, 1) if denom > 0 else 0.0
+            avg_w  = round(b["sum_win"]  / wins,   2) if wins   > 0 else 0.0
+            avg_l  = round(b["sum_loss"] / losses, 2) if losses > 0 else 0.0
+            p_sign = "+" if profit >= 0 else ""
+
+            line2  = (f"P/L={profit:+.2f} | {trades}t | "
+                      f"{wins}W/{losses}L/{bep}BE+/{be}BE | WR={wr:.0f}%")
+            if wins   > 0: line2 += f" | avgW={avg_w:+.2f}"
+            if losses > 0: line2 += f" | avgL={avg_l:+.2f}"
+            if bep    > 0: line2 += f" | BE+={b['sum_be_plus']:+.2f}"
+
+            lines.append(f"• {cname}")
+            lines.append(line2)
+            lines.append("")
+
+        return "\n".join(lines).rstrip()
 
     def _build_status(self) -> str:
         stats = self.manager.get_stats()

@@ -8,8 +8,7 @@ Enter as soon as doji candle closes.
 import os
 from datetime import datetime, timezone
 from indicators import *
-
-SILENT = os.getenv("SILENT_MODE", "false").lower() == "true"
+from logger import log_event
 
 def _session_close_ok(config):
     """Block new entries within SESSION_CLOSE_BUFFER minutes of London (16:00)
@@ -19,9 +18,8 @@ def _session_close_ok(config):
     total = now.hour * 60 + now.minute
     for end in [16 * 60, 19 * 60]:
         if end - buf <= total < end:
-            if not SILENT:
-                print('Session close buffer: {}min to {:02d}:00 UTC -- skipping'.format(
-                    end - total, end // 60))
+            log_event('[{}] Session close buffer: {}min to {:02d}:00 UTC -- skipping'.format(
+                getattr(__import__('config'), 'SYMBOL', ''), end - total, end // 60))
             return False
     return True
 
@@ -43,11 +41,10 @@ def check_signal(df_m1, df_m5, df_h1, config):
     price      = current_m1['close']
     ema_val    = current_m1['ema']
 
-    if not SILENT:
-        print(f'Price: {price:.5f} | EMA100: {ema_val:.5f} | ATR: {current_atr:.5f}')
+    log_event('[{}] Price: {:.5f} | EMA100: {:.5f} | ATR: {:.5f}'.format(config.SYMBOL, price, ema_val, current_atr))
 
     if pd.isna(current_atr) or current_atr < config.MIN_ATR:
-        if not SILENT: print('ATR too low - skipping')
+        log_event('[{}] ATR too low - skipping'.format(config.SYMBOL))
         return None
 
     # Session close buffer
@@ -57,37 +54,37 @@ def check_signal(df_m1, df_m5, df_h1, config):
     if price > ema_val:
         trend = 'BUY'
         if m5_price < m5_ema:
-            if not SILENT: print('M5 EMA conflict: below M5 EMA for BUY - skipping')
+            log_event('[{}] M5 EMA conflict: below M5 EMA for BUY - skipping'.format(config.SYMBOL))
             return None
     elif price < ema_val:
         trend = 'SELL'
         if m5_price > m5_ema:
-            if not SILENT: print('M5 EMA conflict: above M5 EMA for SELL - skipping')
+            log_event('[{}] M5 EMA conflict: above M5 EMA for SELL - skipping'.format(config.SYMBOL))
             return None
     else:
         return None
-    if not SILENT: print(f'Trend: {trend}')
+    log_event('[{}] Trend: {}'.format(config.SYMBOL, trend))
 
     if trend == 'BUY' and doji['ha_low'] < ema_val * 0.999:
-        if not SILENT: print('Market structure fail - skipping')
+        log_event('[{}] Market structure fail - skipping'.format(config.SYMBOL))
         return None
     if trend == 'SELL' and doji['ha_high'] > ema_val * 1.001:
-        if not SILENT: print('Market structure fail - skipping')
+        log_event('[{}] Market structure fail - skipping'.format(config.SYMBOL))
         return None
-    if not SILENT: print('Market structure OK')
+    log_event('[{}] Market structure OK'.format(config.SYMBOL))
 
     if not has_clean_pullback(df_m1, trend, n=2, doji_pos=2):
-        if not SILENT: print('No clean pullback - skipping')
+        log_event('[{}] No clean pullback - skipping'.format(config.SYMBOL))
         return None
 
     if not is_doji(doji, threshold=config.DOJI_THRESHOLD):
-        if not SILENT: print('No doji - skipping')
+        log_event('[{}] No doji - skipping'.format(config.SYMBOL))
         return None
 
     if not is_high_volume_doji(df_m1, lookback=3, doji_pos=2):
-        if not SILENT: print('Doji too small - skipping')
+        log_event('[{}] Doji too small - skipping'.format(config.SYMBOL))
         return None
-    if not SILENT: print('Doji OK')
+    log_event('[{}] Doji OK'.format(config.SYMBOL))
 
     sl_dist = current_atr * config.ATR_MULTIPLIER
     tp_dist = current_atr * getattr(config, 'TP_ATR_MULTIPLIER', 1.5)
@@ -102,5 +99,6 @@ def check_signal(df_m1, df_m5, df_h1, config):
         return None
 
     rr = tp_dist / sl_dist if sl_dist > 0 else 0
-    print(f'[{config.SYMBOL}] SIGNAL: {trend} | Entry={price:.5f} SL={sl:.5f} TP={tp:.5f} | R:R=1:{rr:.1f}')
+    log_event('[{}] SIGNAL: {} | Entry={:.5f} SL={:.5f} TP={:.5f} | R:R=1:{:.1f}'.format(
+        config.SYMBOL, trend, price, sl, tp, rr))
     return {'type': trend, 'sl': float(sl), 'tp': float(tp)}

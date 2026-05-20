@@ -1,29 +1,85 @@
 """
-logger.py - Trade and Event Logging
-
-Two log files:
-  trade_log.csv  -- one row per completed trade (entry, exit, profit)
-  events.log     -- timestamped record of every bot decision:
-                    box evaluations, signal scans, skips, orders, errors.
-                    Capped at 2000 lines to prevent unbounded growth.
+logger.py — Trade Journal + Events Log
+trade_log.csv : one row per completed trade with full details
+events.log    : timestamped activity log (signals, decisions, errors)
 """
-
 import csv
 import os
-from datetime import datetime, timezone
+from datetime import datetime
 
-TRADE_FILE = "trade_log.csv"
+CSV_FILE   = "trade_log.csv"
 EVENT_FILE = "events.log"
 MAX_LINES  = 2000
 
+FIELDNAMES = [
+    "date", "time", "symbol", "type",
+    "entry", "sl", "tp", "exit",
+    "lot", "result", "profit", "rr", "duration_min",
+]
 
-# ==========================================================
-# EVENT LOG  (human-readable, timestamped)
-# ==========================================================
+
+def init_log():
+    """Create trade_log.csv with header if it does not exist."""
+    if not os.path.exists(CSV_FILE):
+        with open(CSV_FILE, mode='w', newline='', encoding='utf-8') as f:
+            csv.DictWriter(f, fieldnames=FIELDNAMES).writeheader()
+
+
+def log_trade(symbol, direction, entry, sl, tp, exit_price, lot, profit, open_time=None):
+    """
+    Append one completed trade row to trade_log.csv.
+    Args:
+        symbol      : instrument name e.g. 'BTCUSD'
+        direction   : 'BUY' or 'SELL'  (original position direction, NOT closing deal direction)
+        entry       : fill price
+        sl          : stop-loss price at open
+        tp          : take-profit price at open (0 if removed)
+        exit_price  : closing price
+        lot         : position size
+        profit      : realised P&L in account currency
+        open_time   : datetime the position opened (for duration calculation)
+    """
+    try:
+        now    = datetime.now()
+        result = "WIN" if profit > 0 else ("LOSS" if profit < 0 else "BE")
+        risk   = abs(entry - sl) if sl else 0
+        reward = abs(exit_price - entry) if exit_price and entry else 0
+        rr     = round(reward / risk, 2) if risk > 0 else ""
+        duration_min = ""
+        if open_time:
+            try:
+                duration_min = round((now - open_time).total_seconds() / 60, 1)
+            except Exception:
+                pass
+        row = {
+            "date":         now.strftime("%Y-%m-%d"),
+            "time":         now.strftime("%H:%M:%S"),
+            "symbol":       symbol,
+            "type":         direction,
+            "entry":        round(entry, 5) if entry else "",
+            "sl":           round(sl, 5) if sl else "",
+            "tp":           round(tp, 5) if tp else "",
+            "exit":         round(exit_price, 5) if exit_price else "",
+            "lot":          lot,
+            "result":       result,
+            "profit":       round(profit, 2),
+            "rr":           rr,
+            "duration_min": duration_min,
+        }
+        file_exists = os.path.isfile(CSV_FILE)
+        with open(CSV_FILE, mode='a', newline='', encoding='utf-8') as f:
+            writer = csv.DictWriter(f, fieldnames=FIELDNAMES)
+            if not file_exists:
+                writer.writeheader()
+            writer.writerow(row)
+    except Exception as e:
+        print("[TRADE LOGGER] Failed to write row: {}".format(e))
+
 
 def log_event(msg: str) -> None:
     """Write a timestamped line to events.log AND print to console."""
-    now  = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
+    import sys
+    now  = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     line = "[{}] {}".format(now, msg)
     print(line)
     try:
@@ -31,11 +87,11 @@ def log_event(msg: str) -> None:
             f.write(line + "\n")
         _rotate_events()
     except Exception as e:
-        print("[LOGGER ERROR] {}".format(e))
+        print("[LOGGER ERROR] {}".format(e), file=sys.stderr)
 
 
 def _rotate_events() -> None:
-    """Trim events.log to the last MAX_LINES lines."""
+    """Trim events.log to the last MAX_LINES lines to prevent unbounded growth."""
     try:
         with open(EVENT_FILE, "r", encoding="utf-8", errors="ignore") as f:
             lines = f.readlines()
@@ -44,39 +100,3 @@ def _rotate_events() -> None:
                 f.writelines(lines[-MAX_LINES:])
     except FileNotFoundError:
         pass
-
-
-# ==========================================================
-# TRADE LOG  (CSV, one row per closed trade)
-# ==========================================================
-
-def init_log() -> None:
-    """Create trade_log.csv with header if it does not exist."""
-    if not os.path.exists(TRADE_FILE):
-        with open(TRADE_FILE, mode="w", newline="", encoding="utf-8") as f:
-            writer = csv.writer(f)
-            writer.writerow([
-                "date", "time", "symbol", "type",
-                "entry", "sl", "tp",
-                "close_price", "profit", "lot",
-            ])
-
-
-def log_trade(trade_type, entry, sl, close_price, profit,
-              symbol="NAS100", tp=None, lot=None) -> None:
-    """Append one row to trade_log.csv when a trade closes."""
-    now = datetime.now(timezone.utc)
-    with open(TRADE_FILE, mode="a", newline="", encoding="utf-8") as f:
-        writer = csv.writer(f)
-        writer.writerow([
-            now.strftime("%Y-%m-%d"),
-            now.strftime("%H:%M:%S"),
-            symbol,
-            trade_type,
-            round(entry, 4)       if entry       else "",
-            round(sl, 4)          if sl          else "",
-            round(tp, 4)          if tp          else "",
-            round(close_price, 4) if close_price else "",
-            round(profit, 2)      if profit is not None else "",
-            lot or "",
-        ])

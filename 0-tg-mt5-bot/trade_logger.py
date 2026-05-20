@@ -16,7 +16,7 @@ import csv
 import os
 from datetime import datetime
 
-CSV_FILE = "trades.csv"
+CSV_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "trades.csv")
 
 FIELDNAMES = [
     "date",
@@ -50,12 +50,15 @@ def log_closed_trade(ticket, trade: dict, profit: float, exit_price: float = Non
     """
     try:
         now    = datetime.now()
-        if profit > 0:
-            result = "WIN"
+        BE_PLUS_MAX = 5.0   # below this = protected BE exit; at/above = genuine win
+        if profit >= BE_PLUS_MAX:
+            result = "WIN"         # genuine profit — TP hit or good trail
+        elif profit > 0:
+            result = "BE+"         # protected exit — BE buffer closed with small profit
         elif profit < 0:
             result = "LOSS"
         else:
-            result = "BE"   # breakeven — trail locked SL at entry, closed at $0
+            result = "BE"          # exactly breakeven — SL at entry, closed at $0
 
         entry  = trade.get("entry", 0)
         sl     = trade.get("sl", 0)

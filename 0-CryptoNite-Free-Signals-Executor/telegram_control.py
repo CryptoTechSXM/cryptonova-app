@@ -9,7 +9,7 @@ Commands (sent to the bot in Telegram):
   /status     — bot state, position summary, paused/active
   /pause      — stop accepting new signals (open trades unaffected)
   /resume     — re-enable signal processing
-  /positions  — list all open positions with floating P&L and trail status
+  /trades  — list all open positions with floating P&L and trail status
   /stats      — today's W/L/BE, P&L, balance, equity
   /daily      — today's closed trade breakdown
   /weekly     — last 7 days performance
@@ -31,6 +31,11 @@ import ssl
 import urllib.request
 import urllib.parse
 from datetime import datetime, date, timezone, timedelta
+try:
+    from zoneinfo import ZoneInfo
+    _ET = ZoneInfo("America/New_York")
+except Exception:
+    _ET = timezone(timedelta(hours=-4))  # EDT fallback if tzdata not installed
 
 # Bypass SSL verification — fixes self-signed certificate errors on some networks
 _SSL_CTX = ssl.create_default_context()
@@ -85,8 +90,8 @@ class TelegramControl:
     def _cmd_help(self):
         return (
             "\U0001f916 <b>CNFS Executor Commands</b>\n\n"
-            "/status     — Bot state &amp; open positions\n"
-            "/positions  — Open positions with P&amp;L &amp; trail info\n"
+            "/status     — Bot state &amp; open trades\n"
+            "/trades     — Open trades with P&amp;L &amp; trail info\n"
             "/stats      — Today's W/L/BE, P&amp;L, balance\n"
             "/daily      — Today's closed trades breakdown\n"
             "/weekly     — Last 7 days performance\n"
@@ -115,22 +120,25 @@ class TelegramControl:
             "{} Trading: <b>{}</b>".format(status_icon, status_txt),
             "\U0001f4ca Symbol: {}".format(symbol),
             "",
-            "\U0001f4c2 Open positions: {}".format(total),
+            "\U0001f4c2 Open trades: {}".format(total),
             "  \u26a0\ufe0f  At risk (original SL): {}".format(at_risk),
             "  \U0001f512 Breakeven locked: {}".format(be_locked),
             "",
             "\U0001f4b0 Balance: ${:,.2f}".format(balance),
             "\U0001f4c8 Equity:  ${:,.2f}".format(equity),
             "",
-            "\U0001f550 {}".format(datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")),
+            "\U0001f550 {} ({})".format(
+                datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC"),
+                datetime.now(timezone.utc).astimezone(_ET).strftime("%H:%M %Z"),
+            ),
         ]
         return "\n".join(lines)
 
-    def _cmd_positions(self):
+    def _cmd_trades(self):
         state = self._get_state()
         positions = state.get("positions_detail", [])
         if not positions:
-            return "\U0001f4c2 No open positions"
+            return "\U0001f4c2 No open trades"
         lines = ["\U0001f4c2 <b>Open Positions</b>\n"]
         for p in positions:
             trail_icon = "\U0001f512" if p["be_done"] else "\u26a0\ufe0f"
@@ -165,18 +173,30 @@ class TelegramControl:
             "Bot is now accepting signals again."
         )
 
+    def _bot_position_ids(self, deals):
+        """Return the set of position_ids that were OPENED by the bot (magic matches).
+        Closing deals from TP/SL auto-close have magic=0 from the broker, so we cannot
+        rely on the closing deal's magic — we must match via the opening deal instead."""
+        import MetaTrader5 as mt5
+        import config
+        return {
+            d.position_id for d in deals
+            if getattr(d, "magic", 0) == config.MAGIC_NUMBER
+            and d.entry == mt5.DEAL_ENTRY_IN
+        }
+
     def _deal_stats(self, start_dt, end_dt):
         """Fetch closed deal stats between two datetimes. Returns (wins,losses,be,total_pnl)."""
         try:
             import MetaTrader5 as mt5
-            import config
             deals = mt5.history_deals_get(start_dt, end_dt) or []
+            bot_pos_ids = self._bot_position_ids(deals)
             wins = losses = be = 0
             total_pnl = 0.0
             for d in deals:
                 if d.type not in (mt5.DEAL_TYPE_BUY, mt5.DEAL_TYPE_SELL): continue
                 if d.entry != mt5.DEAL_ENTRY_OUT: continue
-                if getattr(d, "magic", 0) != config.MAGIC_NUMBER: continue
+                if d.position_id not in bot_pos_ids: continue  # match by position, not deal magic
                 pnl = d.profit
                 total_pnl += pnl
                 if pnl > 0.05:    wins += 1
@@ -189,8 +209,8 @@ class TelegramControl:
     def _cmd_stats(self):
         try:
             import MetaTrader5 as mt5
-            today    = date.today()
-            start_dt = datetime.combine(today, datetime.min.time()).replace(tzinfo=timezone.utc)
+            today    = datetime.now(_ET).date()
+            start_dt = datetime.combine(today, datetime.min.time()).replace(tzinfo=_ET)
             wins, losses, be, total_pnl = self._deal_stats(start_dt, datetime.now(timezone.utc))
             total = wins + losses + be
             wr    = round(wins / total * 100) if total > 0 else 0
@@ -217,29 +237,31 @@ class TelegramControl:
     def _cmd_daily(self):
         try:
             import MetaTrader5 as mt5
-            import config
-            today    = date.today()
-            start_dt = datetime.combine(today, datetime.min.time()).replace(tzinfo=timezone.utc)
+            today    = datetime.now(_ET).date()
+            start_dt = datetime.combine(today, datetime.min.time()).replace(tzinfo=_ET)
             end_dt   = datetime.now(timezone.utc)
             deals    = mt5.history_deals_get(start_dt, end_dt) or []
+            bot_pos_ids = self._bot_position_ids(deals)
             wins = losses = be = 0
             total_pnl = 0.0
             lines = []
             for d in deals:
                 if d.type not in (mt5.DEAL_TYPE_BUY, mt5.DEAL_TYPE_SELL): continue
                 if d.entry != mt5.DEAL_ENTRY_OUT: continue
-                if getattr(d, "magic", 0) != config.MAGIC_NUMBER: continue
+                if d.position_id not in bot_pos_ids: continue  # match by position, not deal magic
                 pnl = d.profit
                 total_pnl += pnl
                 icon = "\u2705" if pnl > 0.05 else ("\u274c" if pnl < -0.05 else "\u27a1\ufe0f")
                 if pnl > 0.05: wins += 1
                 elif pnl < -0.05: losses += 1
                 else: be += 1
-                t = datetime.fromtimestamp(d.time, tz=timezone.utc).strftime("%H:%M")
+                t_utc = datetime.fromtimestamp(d.time, tz=timezone.utc)
+                t_et  = t_utc.astimezone(_ET)
+                t     = "{} / {}".format(t_utc.strftime("%H:%M UTC"), t_et.strftime("%H:%M %Z"))
                 lines.append("{} {} {:+.2f}".format(icon, t, pnl))
             pnl_e = "\U0001f4c8" if total_pnl >= 0 else "\U0001f4c9"
             pnl_s = "+" if total_pnl >= 0 else ""
-            header = "\U0001f4c5 <b>Daily — {}</b>\n\n".format(today.isoformat())
+            header = "\U0001f4c5 <b>Daily \u2014 {}</b>\n\n".format(today.isoformat())
             if not lines:
                 return header + "No closed trades today."
             return (header + "\n".join(lines) +
@@ -251,8 +273,8 @@ class TelegramControl:
     def _cmd_weekly(self):
         try:
             import MetaTrader5 as mt5
-            today    = date.today()
-            start_dt = datetime.combine(today - timedelta(days=6), datetime.min.time()).replace(tzinfo=timezone.utc)
+            today    = datetime.now(_ET).date()
+            start_dt = datetime.combine(today - timedelta(days=6), datetime.min.time()).replace(tzinfo=_ET)
             wins, losses, be, total_pnl = self._deal_stats(start_dt, datetime.now(timezone.utc))
             total = wins + losses + be
             wr    = round(wins / total * 100) if total > 0 else 0
@@ -278,8 +300,8 @@ class TelegramControl:
     def _cmd_monthly(self):
         try:
             import MetaTrader5 as mt5
-            today    = date.today()
-            start_dt = datetime(today.year, today.month, 1, tzinfo=timezone.utc)
+            today    = datetime.now(_ET).date()
+            start_dt = datetime(today.year, today.month, 1, tzinfo=_ET)
             wins, losses, be, total_pnl = self._deal_stats(start_dt, datetime.now(timezone.utc))
             total = wins + losses + be
             wr    = round(wins / total * 100) if total > 0 else 0
@@ -327,8 +349,8 @@ class TelegramControl:
             reply = self._cmd_help()
         elif cmd == "status":
             reply = self._cmd_status()
-        elif cmd == "positions":
-            reply = self._cmd_positions()
+        elif cmd == "trades":
+            reply = self._cmd_trades()
         elif cmd == "stats":
             reply = self._cmd_stats()
         elif cmd == "daily":

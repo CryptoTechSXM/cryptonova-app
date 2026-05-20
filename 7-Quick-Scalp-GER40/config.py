@@ -25,7 +25,7 @@ LIQ_PCT_MAX = 0.50  # raised ceiling slightly to match
 ATR_PERIOD  = 14
 
 # Entry window: 90 min from EU open
-WINDOW_MINUTES = 90
+WINDOW_MINUTES = 120
 
 # Take profit
 RR            = 2.0    # 2:1 RR (backtest: 67% WR, +1.02R expectancy)

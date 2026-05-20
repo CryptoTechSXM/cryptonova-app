@@ -1,7 +1,7 @@
 # bot_live_final_clean.py
 # ExFusion MT5 Telegram Signal Bot (single file for DEMO + LIVE via DOTENV_FILE)
 
-import os, re, time, math, json, asyncio, csv, traceback
+import os, re, time, math, json, asyncio, csv, traceback, urllib.request, urllib.parse
 from datetime import datetime, timezone, date, timedelta
 
 from dotenv import load_dotenv
@@ -114,7 +114,10 @@ def _parse_fractions(raw: str):
 MULTI_PENDING_FRACTIONS = _parse_fractions(os.getenv("MULTI_PENDING_FRACTIONS", "0,0.25,0.5"))
 
 # Filters / limits
-COOLDOWN_SECONDS = int(os.getenv("COOLDOWN_SECONDS", "60"))
+COOLDOWN_SECONDS = int(os.getenv("COOLDOWN_SECONDS", "120"))  # per-channel cooldown
+EMA_FILTER_ENABLED = os.getenv("EMA_FILTER_ENABLED", "true").strip().lower() == "true"
+EMA_PERIOD         = int(os.getenv("EMA_PERIOD", "100"))  # M5 EMA period
+EMA_TIMEFRAME      = os.getenv("EMA_TIMEFRAME", "M5")     # M5 or M15
 MAX_OPEN_POSITIONS_PER_SYMBOL = int(os.getenv("MAX_OPEN_POSITIONS_PER_SYMBOL", "1"))
 MAX_PENDING_ORDERS_PER_SYMBOL = int(os.getenv("MAX_PENDING_ORDERS_PER_SYMBOL", "1"))
 # Global cap across ALL symbols — prevents correlated multi-symbol exposure during news events.
@@ -336,6 +339,17 @@ STATE_FILE = "state.json"
 EVENT_LOG = "events.log"
 
 MT5_ASYNC_LOCK = asyncio.Lock()
+
+# -----------------------------------------------------------------------
+# DIRECTIONAL CHANNELS — post "BUY/SELL SYMBOL" as the first message.
+# Bot executes immediately at market price using its own ATR SL/TP/trail.
+# The classifier normally drops symbol-only messages as UNKNOWN; we bypass
+# that filter for these channels so the directional parser can fire.
+# -----------------------------------------------------------------------
+_DIRECTIONAL_CHANNELS = {
+    "-1003882026187",   # Limitless 2.0
+    "-1003889406756",   # also sends bare "XAUUSD BUY NOW" directional messages
+}
 
 FILLING_CACHE = {}
 MT5_SYMBOLS_ALL = []
@@ -609,9 +623,12 @@ def clean_signal_text(text: str) -> str:
     t = re.sub(r"[ \t]+", " ", t)
     t = re.sub(r"\n{3,}", "\n\n", t)
     t = t.replace("mercado", "market").replace("MERCADO", "MARKET")
-    t = t.replace("venta", "sell")
-    t = t.replace("compra", "buy")
+    t = re.sub(r'\bventa\b', 'sell', t, flags=re.IGNORECASE)
+    t = re.sub(r'\bcompra\b', 'buy', t, flags=re.IGNORECASE)
     t = t.replace("límite", "limit").replace("limite", "limit")
+    # Normalise "XAU USD" (space-separated) → "XAUUSD" so all downstream parsers
+    # see the standard form. Limitless 2.0 sends the symbol with a space.
+    t = re.sub(r'\bXAU\s+USD\b', 'XAUUSD', t, flags=re.IGNORECASE)
     return t.strip()
 
 def activity_inc(chat_id, field):
@@ -651,17 +668,22 @@ def ensure_channel_day_bucket(state, day_str: str):
 def stats_add_trade_close(state, channel_id: str, profit: float, symbol: str = "", side: str = ""):
     day_str = day_key_local()
     day_bucket = ensure_channel_day_bucket(state, day_str)
+    BE_PLUS_MAX = 5.0   # $0.01–$4.99 = protected BE exit; $5+ = genuine win
+
     b = day_bucket.setdefault(channel_id, {
-        "trades": 0, "wins": 0, "losses": 0, "breakeven": 0,
-        "profit": 0.0, "sum_win": 0.0, "sum_loss": 0.0, "symbols": {},
+        "trades": 0, "wins": 0, "losses": 0, "breakeven": 0, "be_plus": 0,
+        "profit": 0.0, "sum_win": 0.0, "sum_loss": 0.0, "sum_be_plus": 0.0, "symbols": {},
     })
 
     b["trades"] += 1
     b["profit"] += float(profit)
 
-    if profit > 0:
+    if profit >= BE_PLUS_MAX:
         b["wins"] += 1
         b["sum_win"] += float(profit)
+    elif profit > 0:
+        b["be_plus"] = b.get("be_plus", 0) + 1
+        b["sum_be_plus"] = b.get("sum_be_plus", 0.0) + float(profit)
     elif profit < 0:
         b["losses"] += 1
         b["sum_loss"] += float(profit)
@@ -675,9 +697,10 @@ def stats_add_trade_close(state, channel_id: str, profit: float, symbol: str = "
 
 CHANNEL_NAME_MAP = {
     "-1003523601209": "CryptoNite Free Signals",
-    "-1002717527369": "Free TAG Signals",
+    "-1002717527369": "Free Tag Signals",
+    "-1003882026187": "Limitless Abundance 2.0",
     "-1003889406756": "Limitless Abundance VIP",
-    "-1003731092037": "Limitless Abundance Free",
+    "-1003628454081": "XFUSION SIGNALS",
 }
 CHANNEL_ACTIVITY = {}
 
@@ -690,16 +713,18 @@ def format_channel_report(state, day_str: str) -> str:
         items = sorted(stats.items(), key=lambda kv: float(kv[1].get("profit", 0.0)), reverse=True)
 
         for cid, b in items:
-            trades = int(b.get("trades", 0))
-            wins = int(b.get("wins", 0))
-            losses = int(b.get("losses", 0))
-            be = int(b.get("breakeven", 0))
-            prof = float(b.get("profit", 0.0))
+            trades  = int(b.get("trades",    0))
+            wins    = int(b.get("wins",      0))
+            losses  = int(b.get("losses",    0))
+            be_plus = int(b.get("be_plus",   0))
+            be      = int(b.get("breakeven", 0))
+            prof    = float(b.get("profit",  0.0))
+            be_plus_sum = float(b.get("sum_be_plus", 0.0))
 
-            denom = (wins + losses)
+            denom   = (wins + losses)
             winrate = (wins / denom * 100.0) if denom > 0 else 0.0
 
-            avg_win = (float(b.get("sum_win", 0.0)) / wins) if wins > 0 else 0.0
+            avg_win  = (float(b.get("sum_win",  0.0)) / wins)   if wins   > 0 else 0.0
             avg_loss = (float(b.get("sum_loss", 0.0)) / losses) if losses > 0 else 0.0
 
             cname = CHANNEL_NAME_MAP.get(cid, "Unknown Channel")
@@ -707,8 +732,9 @@ def format_channel_report(state, day_str: str) -> str:
             lines.append(f"• {cname}")
             lines.append(
                 f"P/L={prof:+.2f} | trades={trades} | "
-                f"W/L/BE={wins}/{losses}/{be} | "
+                f"W/L/BE+/BE={wins}/{losses}/{be_plus}/{be} | "
                 f"WR={winrate:.1f}% | avgW={avg_win:+.2f} | avgL={avg_loss:+.2f}"
+                + (f" | BE+={be_plus_sum:+.2f}" if be_plus > 0 else "")
             )
             lines.append("")
     else:
@@ -1048,6 +1074,22 @@ SYMBOL_RANGE_SIDE_RE = re.compile(
 )
 
 # -----------------------------------------------------------------------
+# RANGE SIDE SYMBOL: "4687-4700 sell market | XAUUSD"  (numbers first, symbol last)
+# Complements SYMBOL_RANGE_SIDE_RE (symbol first). Free Tag uses both orders.
+# -----------------------------------------------------------------------
+RANGE_SIDE_SYMBOL_RE = re.compile(
+    r"""
+    ^\s*
+    (?P<z1>\d{4,5}(?:\.\d+)?)\s*[-]\s*(?P<z2>\d{4,5}(?:\.\d+)?)
+    [\s|]*
+    (?P<side>BUY|SELL)(?:\s+MARKET)?
+    .*?
+    (?P<symbol>XAU(?:USD)?|GOLD|BTC(?:USD)?|NAS(?:DAQ|100)?|US30)
+    """,
+    re.IGNORECASE | re.DOTALL | re.VERBOSE,
+)
+
+# -----------------------------------------------------------------------
 # LIKING RANGE: "Liking buys | 4697-4678 | XAUUSD buy"
 #               "Liking sells | 4865-4880 XAUUSD"
 #               "Liking buys again XAUUSD | 4598.6-4579"
@@ -1068,28 +1110,105 @@ LIKING_SIDE_RANGE_RE = re.compile(
 # -----------------------------------------------------------------------
 LIMITLESS_FULL_RE = re.compile(
     r"""
-    ^\s*(?P<side>BUY|SELL)\s+(?:GOLD|XAU(?:USD)?)\s+
-    (?P<z1>\d{4,5}(?:\.\d+)?)\s*[-]\s*(?P<z2>\d{4,5}(?:\.\d+)?)
-    .*?STOP\s*LOSS\s+(?P<sl>\d{4,5}(?:\.\d+)?)
-    .*?TP1\s+(?P<tp1>\d{4,5}(?:\.\d+)?)
-    .*?TP2\s+(?P<tp2>\d{4,5}(?:\.\d+)?)
-    .*?TP3\s+(?P<tp3>\d{4,5}(?:\.\d+)?)
+    # No ^ anchor — allow emoji/headers before BUY/SELL (use search not match)
+    (?P<side>BUY|SELL)\s+(?:GOLD|XAU(?:USD)?)\s+
+    (?P<z1>\d{3,5}(?:\.\d+)?)\s*[-]\s*(?P<z2>\d{3,5}(?:\.\d+)?)
+    .*?STOP\s*LOSS\s+(?P<sl>\d{3,5}(?:\.\d+)?)
+    .*?TP1\s*[:\-]?\s*(?P<tp1>\d{3,5}(?:\.\d+)?)
+    .*?TP2\s*[:\-]?\s*(?P<tp2>\d{3,5}(?:\.\d+)?)
+    .*?TP3\s*[:\-]?\s*(?P<tp3>\d{3,5}(?:\.\d+)?)
     """,
     re.IGNORECASE | re.DOTALL | re.VERBOSE,
 )
 
 # -----------------------------------------------------------------------
 # LIMITLESS MARKET: "Sell market | XAUUSD | 4592-4612"
+# No ^ anchor — allows emoji/text before BUY/SELL; \d{3,5} covers all price ranges.
+# [^\d|]* used instead of [^|]* so the pipe filler never consumes leading digits.
 # -----------------------------------------------------------------------
 LIMITLESS_MARKET_RE = re.compile(
     r"""
-    ^\s*(?P<side>BUY|SELL)\s+MARKET\s*
-    (?:\|[^|]*)?\|?\s*
+    (?P<side>BUY|SELL)\s+MARKET\s*
+    (?:\|[^\d|]*)?\|?\s*
     (?:XAU(?:USD)?|GOLD)\s*
-    (?:\|[^|]*)?\|?\s*
-    (?P<z1>\d{4,5}(?:\.\d+)?)\s*[-]\s*(?P<z2>\d{4,5}(?:\.\d+)?)
+    (?:\|[^\d|]*)?\|?\s*
+    (?P<z1>\d{3,5}(?:\.\d+)?)\s*[-]\s*(?P<z2>\d{3,5}(?:\.\d+)?)
     """,
     re.IGNORECASE | re.DOTALL | re.VERBOSE,
+)
+
+# -----------------------------------------------------------------------
+# LIMITLESS VIP PIPE:
+#   "Direction BUY | Currency: XAUUSD | ENTRY: 4690-4688 | TP1: 4691 | TP2: 4692"
+# No SL provided — bot will auto-calculate SL from ATR.
+# -----------------------------------------------------------------------
+LIMITLESS_VIP_PIPE_RE = re.compile(
+    r"""
+    (?:direction|dir)[\ \t:|]+(?P<side>BUY|SELL)
+    .*?
+    (?:currency|asset|symbol|instrument)[\ \t:|]+(?P<symbol>[A-Z0-9]+(?:/[A-Z0-9]+)?)
+    .*?
+    (?:entry|enter)[\ \t:|]+(?P<z1>\d{3,5}(?:\.\d+)?)\s*[-–]\s*(?P<z2>\d{3,5}(?:\.\d+)?)
+    """,
+    re.IGNORECASE | re.DOTALL | re.VERBOSE,
+)
+
+# -----------------------------------------------------------------------
+# DIRECTIONAL: fires on symbol + BUY/SELL alone — no price required.
+#   "XAU USD SELL", "XAUUSD BUY", "GOLD SELL NOW", "BUY XAUUSD"
+# Returns entry=0, sl=0, tp=0 so executor uses ATR-based auto-calc.
+# -----------------------------------------------------------------------
+DIRECTIONAL_RE = re.compile(
+    r"""
+    (?:
+        \b(?P<sym1>XAU(?:USD)?|XAUEUR|GOLD|GBP(?:JPY|USD|CHF)?|EUR(?:USD|JPY|GBP)?|USD(?:JPY|CHF|CAD)?|AUD(?:USD|JPY)?|NZD(?:USD)?|BTC(?:USD)?|NAS(?:DAQ|100)?|US30)\b
+        [\s,|]*
+        (?P<side1>BUY|SELL)\b
+    |
+        \b(?P<side2>BUY|SELL)\b
+        [\s,|]*
+        \b(?P<sym2>XAU(?:USD)?|XAUEUR|GOLD|GBP(?:JPY|USD|CHF)?|EUR(?:USD|JPY|GBP)?|USD(?:JPY|CHF|CAD)?|AUD(?:USD|JPY)?|NZD(?:USD)?|BTC(?:USD)?|NAS(?:DAQ|100)?|US30)\b
+    )
+    """,
+    re.IGNORECASE | re.VERBOSE,
+)
+
+# -----------------------------------------------------------------------
+# LIMITLESS EMOJI: Limitless Abundance 2.0 format (after clean_signal_text normalises "XAU USD" → "XAUUSD")
+#   "XAUUSD SELL NOW4537.50-4541.50🥇TP1 4535🥈TP2 4533🥉TP3 4531🏅TP4 4529TP5 4525"
+#   "XAUUSD BUY NOW4537-4533🥇TP1 4540🥈TP2 4542🥉TP3 4544🏅TP4 4546TP5 4550🚫SL 4527"
+# SL is optional (SELL signals sometimes omit it — executor falls back to ATR SL).
+# Must run BEFORE directional for -1003882026187 — directional would steal the signal
+# and discard all the zone/TP/SL data.
+# -----------------------------------------------------------------------
+LIMITLESS_EMOJI_RE = re.compile(
+    r"""
+    (?P<sym>XAUUSD|XAU(?:USD)?|GOLD)\s+
+    (?P<side>BUY|SELL)\s+NOW\s*
+    (?P<z1>\d+(?:\.\d+)?)\s*[-]\s*(?P<z2>\d+(?:\.\d+)?)
+    .*?TP1\s*(?P<tp1>\d+(?:\.\d+)?)
+    (?:.*?TP2\s*(?P<tp2>\d+(?:\.\d+)?))?
+    (?:.*?TP3\s*(?P<tp3>\d+(?:\.\d+)?))?
+    (?:.*?SL\s*(?P<sl>\d+(?:\.\d+)?))?
+    """,
+    re.IGNORECASE | re.DOTALL | re.VERBOSE,
+)
+
+# -----------------------------------------------------------------------
+# XFUSION: "GOLD SELL | ENTRY: 4703-4706 | SL: 4716 |  | TP1: 4698 | TP2: 4695 | TP3: 4690 | TP4: Open"
+#           "GOLD BUY | ENTRY: 4583-4585 | SL: 4577 |  | TP1: 4588 | TP2: 4592 | TP3: 4597 | TP4: Open"
+#           "GOLD SELL - SMALL SIZE | High Risk Setup | ENTRY: 4581-4584 | SL: 4590 | ..."
+# NOTE: NOT compiled with re.VERBOSE — VERBOSE+DOTALL combination silently breaks STRUCTURED_ENTRY
+# patterns on the pipe-separated multi-segment format XFusion uses.
+# -----------------------------------------------------------------------
+XFUSION_RE = re.compile(
+    r"(?:GOLD|XAU(?:USD)?)\s+(?P<side>BUY|SELL)"
+    r".*?ENTRY\s*:\s*(?P<z1>\d{3,5}(?:\.\d+)?)\s*[-]\s*(?P<z2>\d{3,5}(?:\.\d+)?)"
+    r".*?SL\s*:\s*(?P<sl>\d{3,5}(?:\.\d+)?)"
+    r".*?TP1\s*:\s*(?P<tp1>\d{3,5}(?:\.\d+)?)"
+    r".*?TP2\s*:\s*(?P<tp2>\d{3,5}(?:\.\d+)?)"
+    r".*?TP3\s*:\s*(?P<tp3>\d{3,5}(?:\.\d+)?)",
+    re.IGNORECASE | re.DOTALL,
 )
 
 STRUCTURED_ENTRY_SYMBOL_FIRST_RE = re.compile(
@@ -1120,15 +1239,15 @@ PARSER_PROFILE_MAP = {
     # cryptonite_icon is first for any channel that posts the 🚨 CryptoNite Signal emoji format.
     # Added to -1002717527369 after observing parse failures
     # when the same format arrived from this source (forwards/relays CryptoNite signals).
-    "-1002717527369": ["cryptonite_icon", "analyzer_engine", "structured_entry", "symbol_range_side", "liking_range", "simple", "reverse_simple", "gold_range_full", "gold_range_simple", "generic_pending_sltp", "hashtag", "sig", "pending", "simple_pending", "signal_alert"],
+    "-1002717527369": ["cryptonite_icon", "analyzer_engine", "structured_entry", "symbol_range_side", "range_side_symbol", "liking_range", "simple", "reverse_simple", "gold_range_full", "gold_range_simple", "generic_pending_sltp", "hashtag", "sig", "pending", "simple_pending", "signal_alert"],
     "-1003523601209": ["cryptonite_icon", "analyzer_engine", "structured_entry", "simple_pending", "simple", "reverse_simple", "gold_range_full", "gold_range_simple", "generic_pending_sltp", "hashtag", "sig", "pending", "signal_alert"],
     "-1002623109215": ["analyzer_engine", "structured_entry", "sig", "hashtag", "generic_pending_sltp", "simple", "reverse_simple", "pending", "simple_pending", "signal_alert", "gold_range_full", "gold_range_simple"],
-    "-1003628454081": ["analyzer_engine", "structured_entry", "gold_range_full", "gold_range_simple", "simple", "reverse_simple", "simple_pending", "generic_pending_sltp", "hashtag", "sig", "pending", "signal_alert"],
+    "-1003628454081": ["xfusion", "analyzer_engine", "structured_entry", "gold_range_full", "gold_range_simple", "simple", "reverse_simple", "simple_pending", "generic_pending_sltp", "hashtag", "sig", "pending", "signal_alert"],  # xfusion first — dedicated parser for pipe-separated GOLD signals
     # New channels — use broad default profile until signal format is confirmed
     "-1003271148230": ["analyzer_engine", "structured_entry", "sig", "simple_pending", "generic_pending_sltp", "gold_range_full", "gold_range_simple", "hashtag", "reverse_simple", "signal_alert", "simple", "pending"],
-    "-1003882026187": ["analyzer_engine", "structured_entry", "sig", "simple_pending", "generic_pending_sltp", "gold_range_full", "gold_range_simple", "hashtag", "reverse_simple", "signal_alert", "simple", "pending"],
-    "-1003889406756": ["cryptonite_icon", "limitless_full", "limitless_market", "analyzer_engine", "structured_entry", "sig", "simple_pending", "generic_pending_sltp", "gold_range_full", "gold_range_simple", "hashtag", "reverse_simple", "signal_alert", "simple", "pending"],
-    "-1003731092037": ["cryptonite_icon", "limitless_full", "limitless_market", "analyzer_engine", "structured_entry", "sig", "simple_pending", "generic_pending_sltp", "gold_range_full", "gold_range_simple", "hashtag", "reverse_simple", "signal_alert", "simple", "pending"],
+    "-1003882026187": ["limitless_emoji", "directional", "analyzer_engine", "structured_entry", "sig", "simple_pending", "generic_pending_sltp", "gold_range_full", "gold_range_simple", "hashtag", "reverse_simple", "signal_alert", "simple", "pending"],  # limitless_emoji FIRST — captures zone+TP+SL from emoji format before directional steals the signal
+    "-1003889406756": ["directional", "limitless_vip_pipe", "cryptonite_icon", "limitless_full", "limitless_market", "analyzer_engine", "structured_entry", "sig", "simple_pending", "generic_pending_sltp", "gold_range_full", "gold_range_simple", "hashtag", "reverse_simple", "signal_alert", "simple", "pending"],  # directional first — fires on bare "XAUUSD BUY NOW"; limitless_vip_pipe second — captures full pipe-format follow-up (Direction|Currency|ENTRY|TP|SL)
+    "-1003731092037": ["cryptonite_icon", "limitless_vip_pipe", "limitless_full", "limitless_market", "analyzer_engine", "structured_entry", "sig", "simple_pending", "generic_pending_sltp", "gold_range_full", "gold_range_simple", "hashtag", "reverse_simple", "signal_alert", "simple", "pending"],
     "default": ["cryptonite_icon", "analyzer_engine", "structured_entry", "sig", "simple_pending", "generic_pending_sltp", "gold_range_full", "gold_range_simple", "hashtag", "reverse_simple", "signal_alert", "simple", "pending"],
 }
 
@@ -1225,6 +1344,20 @@ def parse_symbol_range_side_signal(t: str, upper: str):
     return _mk_sig("SIMPLE", raw_symbol, side, zone_low, zone_high, [0.0, 0.0, 0.0], 0.0, t)
 
 
+def parse_range_side_symbol_signal(t: str, upper: str):
+    """Handles: '4687-4700 sell market | XAUUSD' (range first, side, then symbol).
+    Complement to parse_symbol_range_side_signal — Free Tag uses both orderings."""
+    m = RANGE_SIDE_SYMBOL_RE.search(upper)
+    if not m:
+        return None
+    raw_symbol = normalize_raw_symbol((m.group("symbol") or "XAU").upper())
+    side = m.group("side").upper()
+    z1 = float(normalize_price_str(raw_symbol, m.group("z1")))
+    z2 = float(normalize_price_str(raw_symbol, m.group("z2")))
+    zone_low, zone_high = min(z1, z2), max(z1, z2)
+    return _mk_sig("SIMPLE", raw_symbol, side, zone_low, zone_high, [0.0, 0.0, 0.0], 0.0, t)
+
+
 def parse_liking_side_range_signal(t: str, upper: str):
     """Handles informal signals: 'Liking sells | 4865-4880 XAUUSD', 'Liking buys | 4697-4678 | XAUUSD buy'"""
     m = LIKING_SIDE_RANGE_RE.search(t)
@@ -1273,6 +1406,111 @@ def parse_limitless_market_signal(t: str, upper: str):
     z2 = float(normalize_price_str(raw_symbol, m.group("z2")))
     zone_low, zone_high = min(z1, z2), max(z1, z2)
     return _mk_sig("SIMPLE", raw_symbol, side, zone_low, zone_high, [0.0, 0.0, 0.0], 0.0, t)
+
+
+def parse_limitless_emoji_signal(t: str, upper: str):
+    """Handles Limitless Abundance 2.0 emoji format (after clean_signal_text):
+    'XAUUSD SELL NOW4537.50-4541.50🥇TP1 4535🥈TP2 4533🥉TP3 4531🏅TP4 4529TP5 4525'
+    'XAUUSD BUY NOW4537-4533🥇TP1 4540🥈TP2 4542🥉TP3 4544🏅TP4 4546TP5 4550🚫SL 4527'
+    SL is optional — if absent, executor falls back to ATR-based SL (sl=0).
+    MUST run before directional in the chain — directional would steal the signal
+    and discard zone/TP/SL data."""
+    m = LIMITLESS_EMOJI_RE.search(t)
+    if not m:
+        return None
+    raw_symbol = normalize_raw_symbol((m.group("sym") or "XAUUSD").upper())
+    side       = m.group("side").upper()
+    z1         = float(normalize_price_str(raw_symbol, m.group("z1")))
+    z2         = float(normalize_price_str(raw_symbol, m.group("z2")))
+    zone_low, zone_high = min(z1, z2), max(z1, z2)
+    tp1s = m.group("tp1"); tp2s = m.group("tp2"); tp3s = m.group("tp3"); sls = m.group("sl")
+    tp1  = float(normalize_price_str(raw_symbol, tp1s)) if tp1s else 0.0
+    tp2  = float(normalize_price_str(raw_symbol, tp2s)) if tp2s else tp1
+    tp3  = float(normalize_price_str(raw_symbol, tp3s)) if tp3s else tp2
+    sl   = float(normalize_price_str(raw_symbol, sls))  if sls  else 0.0
+    high_risk = ("HIGH RISK" in upper) or ("HIGHRISK" in upper)
+    return _mk_sig("FULL", raw_symbol, side, zone_low, zone_high, [tp1, tp2, tp3], sl, t, high_risk=high_risk)
+
+
+def parse_xfusion_signal(t: str, upper: str):
+    """Handles XFusion GOLD signals:
+    'GOLD SELL | ENTRY: 4703-4706 | SL: 4716 |  | TP1: 4698 | TP2: 4695 | TP3: 4690 | TP4: Open'
+    'GOLD SELL - SMALL SIZE | High Risk Setup | ENTRY: 4581-4584 | SL: 4590 | ...'
+    Uses a non-VERBOSE regex — VERBOSE+DOTALL silently breaks this pipe-separated format.
+    """
+    m = XFUSION_RE.search(t)
+    if not m:
+        return None
+    raw_symbol = "XAUUSD"
+    side = m.group("side").upper()
+    z1 = float(normalize_price_str(raw_symbol, m.group("z1")))
+    z2 = float(normalize_price_str(raw_symbol, m.group("z2")))
+    zone_low, zone_high = min(z1, z2), max(z1, z2)
+    sl  = float(normalize_price_str(raw_symbol, m.group("sl")))
+    tp1 = float(normalize_price_str(raw_symbol, m.group("tp1")))
+    tp2 = float(normalize_price_str(raw_symbol, m.group("tp2")))
+    tp3 = float(normalize_price_str(raw_symbol, m.group("tp3")))
+    # TP4 is often "Open" — try to extract it from the parenthetical fallback
+    tp4_m = re.search(r"TP4\s+Open\s*\(\s*(\d+(?:\.\d+)?)", t, re.IGNORECASE)
+    tp4 = float(normalize_price_str(raw_symbol, tp4_m.group(1))) if tp4_m else tp3
+    high_risk = bool(re.search(r"SMALL\s+SIZE|HIGH\s+RISK", upper))
+    return _mk_sig("FULL", raw_symbol, side, zone_low, zone_high, [tp1, tp2, tp3, tp4], sl, t, high_risk=high_risk)
+
+def parse_limitless_vip_pipe_signal(t: str, upper: str):
+    """Handles: 'Direction BUY | Currency: XAUUSD | ENTRY: 4690-4688 | TP1: 4691 | TP2: 4692 | SL: 4680'
+    Also handles emoji variants: 'Direction  BUY  |  | Currency: XAUUSD | ENTRY : 4552-4550 | 🤑TP1: 4554 | 🛑 SL: 4546'
+    Extracts SL and up to 7 TPs when present; falls back to SIMPLE (ATR auto-calc) when absent."""
+    m = LIMITLESS_VIP_PIPE_RE.search(t)
+    if not m:
+        return None
+    raw_symbol = normalize_raw_symbol(m.group("symbol").upper().replace("/", ""))
+    side = m.group("side").upper()
+    z1 = float(normalize_price_str(raw_symbol, m.group("z1")))
+    z2 = float(normalize_price_str(raw_symbol, m.group("z2")))
+    zone_low, zone_high = min(z1, z2), max(z1, z2)
+    # Extract TPs — handles both "TP1: 4554" and "🤑TP1: 4554"
+    tp_matches = re.findall(r"TP\d+\s*:\s*(\d+(?:\.\d+)?)", t, re.IGNORECASE)
+    tps = [float(normalize_price_str(raw_symbol, x)) for x in tp_matches[:4]] if tp_matches else []
+    while len(tps) < 3:
+        tps.append(tps[-1] if tps else 0.0)
+    # Extract SL — handles "SL: 4546" and "🛑 SL:  4546"
+    sl_m = re.search(r"(?:🛑\s*)?SL\s*:\s*(\d+(?:\.\d+)?)", t, re.IGNORECASE)
+    sl = float(normalize_price_str(raw_symbol, sl_m.group(1))) if sl_m else 0.0
+    high_risk = bool(re.search(r"SMALL\s+SIZE|HIGH\s+RISK", upper))
+    if sl > 0 and any(tp > 0 for tp in tps):
+        return _mk_sig("FULL", raw_symbol, side, zone_low, zone_high, tps, sl, t, high_risk=high_risk)
+    return _mk_sig("SIMPLE", raw_symbol, side, zone_low, zone_high, tps, sl, t, high_risk=high_risk)
+
+
+def parse_directional_signal(t: str, upper: str):
+    """Handles bare directional signals: 'XAU USD SELL', 'XAUUSD BUY', 'GOLD SELL NOW', 'BUY XAUUSD'.
+    Returns entry=0, sl=0, tp=0 — executor will auto-calculate SL/TP from ATR and use
+    configured trail settings. Designed for channels that send direction first, then setup."""
+    m = DIRECTIONAL_RE.search(t)
+    if not m:
+        return None
+    side = (m.group("side1") or m.group("side2") or "").upper()
+    sym_raw = (m.group("sym1") or m.group("sym2") or "").upper().replace(" ", "")
+    if not side or not sym_raw:
+        return None
+    raw_symbol = normalize_raw_symbol(sym_raw)
+    return {
+        "kind":       "MARKET",
+        "raw_symbol": raw_symbol,   # fix: place_trade() reads sig.get("raw_symbol"), not "symbol"
+        "side":       side,
+        "entry":      0.0,
+        "zone_low":   0.0,
+        "zone_high":  0.0,
+        "sl":         0.0,
+        "tp1":        0.0,
+        "tp2":        0.0,
+        "tp3":        0.0,
+        "tp_levels":  [],
+        "tps":        [],   # place_trade expects this key; will be rebuilt via build_simple_sl_tp
+        "ts":         None, # fix: place_trade() does sig["ts"] — must exist even if None for MARKET sigs
+        "raw":        t,
+        "high_risk":  False,
+    }
 
 
 def parse_generic_pending_sltp_signal(t: str, upper: str):
@@ -1399,8 +1637,28 @@ def parse_signal_by_source(chat_id: str, text: str):
             sig = parse_symbol_range_side_signal(t, upper)
             if sig:
                 return sig
+        elif name == "range_side_symbol":
+            sig = parse_range_side_symbol_signal(t, upper)
+            if sig:
+                return sig
         elif name == "liking_range":
             sig = parse_liking_side_range_signal(t, upper)
+            if sig:
+                return sig
+        elif name == "directional":
+            sig = parse_directional_signal(t, upper)
+            if sig:
+                return sig
+        elif name == "xfusion":
+            sig = parse_xfusion_signal(t, upper)
+            if sig:
+                return sig
+        elif name == "limitless_vip_pipe":
+            sig = parse_limitless_vip_pipe_signal(t, upper)
+            if sig:
+                return sig
+        elif name == "limitless_emoji":
+            sig = parse_limitless_emoji_signal(t, upper)
             if sig:
                 return sig
         elif name == "limitless_full":
@@ -2893,7 +3151,10 @@ def place_trade(sig, state):
             order_type = mt5.ORDER_TYPE_SELL_LIMIT if ptype2 == "LIMIT" else mt5.ORDER_TYPE_SELL_STOP
 
     # Build SL/TP
-    if sig["kind"] in ("SIMPLE", "SIMPLE_PENDING", "SCALP_MARKET", "EARLY_SCALP"):
+    # Directional signals (kind=MARKET, sl=0) need ATR auto-calc just like SIMPLE signals
+    _needs_auto_sl = sig["kind"] in ("SIMPLE", "SIMPLE_PENDING", "SCALP_MARKET", "EARLY_SCALP") \
+                     or (sig["kind"] == "MARKET" and float(sig.get("sl") or 0) == 0.0)
+    if _needs_auto_sl:
         sl, _, tps = build_simple_sl_tp(symbol, sig["side"], float(entry), raw_symbol)
         sl = apply_sl_multiplier(sig["side"], float(entry), float(sl))
         sig["sl"] = round_price(symbol, sl)
@@ -3107,7 +3368,7 @@ def place_trade(sig, state):
                     "tp2": float(tps_save[1]),
                     "tp3": float(tps_save[2]),
                     "sl": float(sl_i),
-                    "ts": sig["ts"],
+                    "ts": sig.get("ts"),
                     "source": str(sig.get("source", "")),
                 }
 
@@ -3212,7 +3473,7 @@ def place_trade(sig, state):
             "tp2": float(tps[1]),
             "tp3": float(tps[2]),
             "sl": float(sl),
-            "ts": sig["ts"],
+            "ts": sig.get("ts"),
             "source": str(sig.get("source", "")),
         }
 
@@ -3230,13 +3491,20 @@ def place_trade(sig, state):
             })
         else:
             # market order: try to bind template directly to real position ticket
-            pos_ticket = find_recent_position_ticket(symbol, float(lots))
+            # res.order IS the position ticket for market fills in MT5 — avoids
+            # race condition where positions_get() hasn't updated yet.
+            pos_ticket = int(res.order) if getattr(res, "order", 0) else find_recent_position_ticket(symbol, float(lots))
             if pos_ticket:
                 state["position_templates"][str(pos_ticket)] = dict(tpl)
-                src = str(sig.get("source", "") or "")
-                if src:
-                    state["position_sources"][str(pos_ticket)] = src
-                log_event(f"🧾 Stored position template: ticket={pos_ticket} symbol={symbol} src={src}")
+                sig_src = str(sig.get("source", "") or "")
+                if sig_src:
+                    state["position_sources"][str(pos_ticket)] = sig_src
+                # Store EMA context captured in process_signal_sync
+                state.setdefault("position_ema", {})[str(pos_ticket)] = {
+                    "ema_at_entry": sig.get("ema_at_entry"),
+                    "ema_aligned":  sig.get("ema_aligned"),
+                }
+                log_event(f"🧾 Stored position template: ticket={pos_ticket} symbol={symbol} src={sig_src} ema={sig.get('ema_at_entry')}")
 
     else:
         log_event(f"❌ Rejected. reason={decision_reason} retcode={res.retcode} comment={getattr(res,'comment',None)}")
@@ -3388,17 +3656,20 @@ def manage_positions_once(state):
         # ATR-based BE/trail trigger — fires when float reaches % of ATR, regardless of TP levels
         if ATR_TRAIL_ENABLED and not meta.get("moved_be", False):
             _atr_val = atr_value(symbol, ATR_TIMEFRAME, ATR_PERIOD)
-            if _atr_val > 0:
-                _be_threshold  = max(MIN_BE_PIPS_PRICE, _atr_val * ATR_BE_TRIGGER_PCT)
+            # When ATR unavailable or ATR_BE_TRIGGER_PCT is huge (>1), use MIN floor directly
+            if _atr_val > 0 or MIN_BE_PIPS_PRICE > 0:
+                _effective_atr = _atr_val if _atr_val > 0 else 0.0
+                _be_threshold  = max(MIN_BE_PIPS_PRICE, _effective_atr * ATR_BE_TRIGGER_PCT)
                 _float_dist    = (current_price - entry) if pos_type == 0 else (entry - current_price)
                 if _float_dist >= _be_threshold:
-                    _new_sl = entry if pos_type == 0 else entry
+                    _be_buf = be_buffer_for_symbol(getattr(p, "symbol", symbol))
+                    _new_sl = (entry + _be_buf) if pos_type == 0 else (entry - _be_buf)
                     _ok = (pos_type == 0 and (cur_sl == 0.0 or _new_sl > cur_sl + eps) and _new_sl < current_price) \
                        or (pos_type == 1 and (cur_sl == 0.0 or _new_sl < cur_sl - eps) and _new_sl > current_price)
                     if _ok:
                         res = modify_sl_tp(int(p.ticket), getattr(p, "symbol", symbol), round(_new_sl, 2), cur_tp)
                         if getattr(res, 'retcode', None) in (mt5.TRADE_RETCODE_DONE, 10009):
-                            log_event(f"🛡️ ATR-BE locked: ticket={p.ticket} entry={entry} float={_float_dist:.3f} threshold={_be_threshold:.3f}")
+                            log_event(f"🛡️ ATR-BE locked: ticket={p.ticket} entry={entry} SL→{_new_sl:.2f} float={_float_dist:.2f}pt threshold={_be_threshold:.2f}pt buffer={_be_buf:.2f}")
                             meta["moved_be"] = True
                             meta["trail_on"] = True
                             cur_sl = _new_sl
@@ -3532,7 +3803,7 @@ def ensure_csv_header():
         return
     with open(TRADES_CSV, "w", newline="", encoding="utf-8") as f:
         w = csv.writer(f)
-        w.writerow(["time_utc","symbol","side","volume","profit","commission","swap","position_id","deal_id","channel_id"])
+        w.writerow(["time_utc","symbol","side","volume","profit","commission","swap","position_id","deal_id","channel_id","ema_at_entry","ema_aligned"])
 
 def append_trade_csv(row: dict):
     ensure_csv_header()
@@ -3542,6 +3813,7 @@ def append_trade_csv(row: dict):
             row.get("time_utc"), row.get("symbol"), row.get("side"), row.get("volume"),
             row.get("profit"), row.get("commission"), row.get("swap"),
             row.get("position_id"), row.get("deal_id"), row.get("channel_id"),
+            row.get("ema_at_entry"), row.get("ema_aligned"),
         ])
 
 def log_new_closed_deals(state, notifications=None):
@@ -3583,13 +3855,21 @@ def log_new_closed_deals(state, notifications=None):
 
         channel_id = state["position_sources"].get(pos_id, "") or "UNKNOWN"
         stats_add_trade_close(state, channel_id, float(profit), symbol=symbol, side=side)
+        save_state(state)   # flush channel_stats immediately so reports are current
 
         log_event(f"🏁 CLOSED | {symbol} | {side} | vol={volume:.2f} | P/L={profit:+.2f} | pos={pos_id} | deal={deal_id} | src={channel_id}")
 
         # Queue close notification for async send in manager_loop
         if EXECUTION_CHAT_ID and notifications is not None:
-            outcome   = "WIN" if profit > 0 else ("LOSS" if profit < 0 else "BE")
-            icon      = "✅" if profit > 0 else ("❌" if profit < 0 else "➖")
+            _BE_PLUS_MAX = 5.0
+            if profit >= _BE_PLUS_MAX:
+                outcome, icon = "WIN",  "✅"
+            elif profit > 0:
+                outcome, icon = "BE+",  "🛡️"
+            elif profit < 0:
+                outcome, icon = "LOSS", "❌"
+            else:
+                outcome, icon = "BE",   "➖"
             src_name  = CHANNEL_NAME_MAP.get(channel_id, channel_id)
             clean_sym = symbol.split(".")[0] if "." in symbol else symbol
             dir_icon  = "📈" if side == "BUY" else "📉"
@@ -3639,6 +3919,7 @@ def log_new_closed_deals(state, notifications=None):
                 f"💰 P/L:    <b>{profit:+.2f}</b>"
             )
 
+        ema_info = state.get("position_ema", {}).get(str(pos_id), {})
         append_trade_csv({
             "time_utc": t_utc,
             "symbol": symbol,
@@ -3650,6 +3931,8 @@ def log_new_closed_deals(state, notifications=None):
             "position_id": pos_id,
             "deal_id": deal_id,
             "channel_id": channel_id,
+            "ema_at_entry": ema_info.get("ema_at_entry"),
+            "ema_aligned": ema_info.get("ema_aligned"),
         })
 
         state["last_logged_deal_id"] = deal_id
@@ -3719,11 +4002,26 @@ COMMENTARY_MESSAGE_RE = re.compile(
     |(?:\bWAITING\s+FOR\s+(?:A\s+)?CONFIRMATION\b)
     |(?:\bBREAK\s*OUT\s+INCOMING\b)
     |(?:\bBREAKOUT\s+INCOMING\b)
-    |(?:\bI[’']?M\s+SEEING\s+(?:BUYS|SELLS)\b)
+    |(?:\bI[‘’]?M\s+SEEING\s+(?:BUYS|SELLS)\b)
     |(?:\bDID\s+YOU\s+GUYS\s+SEE\b)
     |(?:\bWHAT\s+AN\s+AMAZING\s+WEEK\b)
     |(?:\bREACT\s+HERE\b)
     |(?:\bGOOD\s+LUCK\b)
+    # ---- Limitless VIP commentary false-positives ----
+    # "Are we all in Gold buy" / "Are we in"
+    |(?:\bARE\s+WE\s+(?:ALL\s+)?IN\b)
+    # "Now active Within entry zone XAUUSD Buy" / "Within entry zone"
+    |(?:\bWITHIN\s+(?:THE\s+)?ENTRY\s+ZONE\b)
+    |(?:\bNOW\s+ACTIVE\b)
+    # "Today’s results so far | ✅XAUUSD Buy +70"
+    |(?:\bRESULTS?\s+SO\s+FAR\b)
+    |(?:\bTODAY[‘’]?S\s+RESULTS?\b)
+    # symbol+side followed immediately by a +/- pnl number — always a results update
+    |(?:(?:XAU(?:USD)?|GOLD|GBPJPY|EURUSD)\s+(?:BUY|SELL)\s+[+\-]\d)
+    # "Im going again" status updates
+    |(?:\bIM\s+GOING\s+AGAIN\b)
+    # "Check in" / "Update" commentary without price data
+    |(?:\bWE\s+(?:ARE|WERE)\s+(?:NOW\s+)?(?:IN\s+)?(?:PROFIT|PIPS?)\b)
     """,
     re.IGNORECASE | re.DOTALL | re.VERBOSE,
 )
@@ -3836,7 +4134,7 @@ def classify_source_message(text: str):
 
 # ----------------- TELEGRAM -----------------
 client = TelegramClient(SESSION_NAME, API_ID, API_HASH)
-last_trade_ts = 0.0
+_channel_last_trade: dict = {}  # chat_id -> last trade timestamp (per-channel cooldown)
 
 def _activate_news_pause(source_hint: str = "") -> None:
     """Set the module-level news pause timestamp and log the event."""
@@ -3955,7 +4253,6 @@ def is_from_signal_source(event) -> bool:
 
 @client.on(events.NewMessage)
 async def handler(event):
-    global last_trade_ts
 
     raw_text = event.raw_text or ""
     text = normalize_multilang_signal(raw_text)
@@ -4029,12 +4326,16 @@ async def handler(event):
         return
 
     if classification == "UNKNOWN":
-        activity_inc(chat_id, "unknown")
-        activity_inc(chat_id, "ignored")
-        if DEBUG_INTAKE_FILTER:
-            preview = clean_signal_text(text)[:180].replace("\n", " | ")
-            log_event(f"❓ FILTER UNKNOWN src={chat_id} reason={class_reason} text={preview}")
-        return
+        # Directional channels (e.g. Limitless 2.0) send bare "XAUUSD SELL" messages
+        # with no price numbers — the classifier marks these UNKNOWN, but we want to
+        # fire immediately. Let them fall through to parse_signal_by_source.
+        if chat_id not in _DIRECTIONAL_CHANNELS:
+            activity_inc(chat_id, "unknown")
+            activity_inc(chat_id, "ignored")
+            if DEBUG_INTAKE_FILTER:
+                preview = clean_signal_text(text)[:180].replace("\n", " | ")
+                log_event(f"❓ FILTER UNKNOWN src={chat_id} reason={class_reason} text={preview}")
+            return
 
     activity_inc(chat_id, "entry_candidates")
     sig = parse_signal_by_source(chat_id, text)
@@ -4118,8 +4419,8 @@ async def handler(event):
 
     now = time.time()
 
-    if COOLDOWN_SECONDS > 0 and (now - last_trade_ts) < COOLDOWN_SECONDS:
-        log_event("Cooldown: skipping")
+    if COOLDOWN_SECONDS > 0 and (now - _channel_last_trade.get(str(chat_id), 0)) < COOLDOWN_SECONDS:
+        log_event(f"Cooldown: skipping (channel {chat_id} — {COOLDOWN_SECONDS}s)")
         return
 
     try:
@@ -4132,7 +4433,7 @@ async def handler(event):
             and getattr(res, "retcode", None)
             in (mt5.TRADE_RETCODE_DONE, mt5.TRADE_RETCODE_PLACED, 10009)
         ):
-            last_trade_ts = time.time()
+            _channel_last_trade[str(chat_id)] = time.time()
             if EXECUTION_CHAT_ID:
                 side   = (sig.get("side") or "").upper()
                 icon   = "🟢" if side == "BUY" else "🔴"
@@ -4182,11 +4483,54 @@ async def handler(event):
     except Exception:
         log_event("Exception:\n" + traceback.format_exc())
 
+
+def calc_ema_m5(symbol: str):
+    """Return (ema_value, current_price) using M5 EMA_PERIOD.
+    Returns (None, None) on data failure."""
+    tf_map = {"M5": mt5.TIMEFRAME_M5, "M15": mt5.TIMEFRAME_M15, "H1": mt5.TIMEFRAME_H1}
+    tf = tf_map.get(EMA_TIMEFRAME.upper(), mt5.TIMEFRAME_M5)
+    needed = EMA_PERIOD + 20  # a few extra bars for a warm EMA
+    rates = mt5.copy_rates_from_pos(symbol, tf, 0, needed)
+    if rates is None or len(rates) < EMA_PERIOD:
+        return None, None
+    closes = [r["close"] for r in rates[-EMA_PERIOD:]]
+    ema = closes[0]
+    k = 2.0 / (EMA_PERIOD + 1)
+    for price in closes[1:]:
+        ema = price * k + ema * (1 - k)
+    tick = mt5.symbol_info_tick(symbol)
+    if not tick:
+        return ema, None
+    return ema, tick.bid  # use bid as proxy for current price
+
 def process_signal_sync(sig):
     state = load_state()
     try:
         mt5_connect_safe()
         enforce_account_lock()
+
+        # ── EMA FILTER ──────────────────────────────────────────────
+        if EMA_FILTER_ENABLED:
+            raw_sym = sig.get('raw_symbol', '')
+            broker_sym = resolve_symbol_live(raw_sym) if raw_sym else None
+            side = (sig.get('side') or '').upper()
+            if broker_sym and side:
+                ema_val, cur_price = calc_ema_m5(broker_sym)
+                if ema_val is None:
+                    # Insufficient data — block and log (fail closed)
+                    log_event(f'[EMA FILTER BLOCK] {side} {broker_sym} — insufficient M5 data')
+                    return None
+                sig['ema_at_entry'] = round(ema_val, 2)
+                aligned = (side == 'BUY' and cur_price >= ema_val) or \
+                          (side == 'SELL' and cur_price <= ema_val)
+                sig['ema_aligned'] = aligned
+                if aligned:
+                    log_event(f'[EMA FILTER PASS] {side} {broker_sym} price={cur_price:.2f} EMA={ema_val:.2f}')
+                else:
+                    log_event(f'[EMA FILTER BLOCK] {side} {broker_sym} price={cur_price:.2f} EMA={ema_val:.2f} — counter-trend, skipping')
+                    return None
+        # ────────────────────────────────────────────────────────────
+
         res = place_trade(sig, state)
         save_state(state)
         return res
@@ -4405,9 +4749,93 @@ async def safe_send(chat_id: int, message: str):
             await client.connect()
         await client.send_message(chat_id, message, parse_mode="html")
         return True
+    except asyncio.CancelledError:
+        # CancelledError is BaseException (not Exception) in Python 3.8+ —
+        # catch it explicitly so a Telethon internal cancellation doesn't
+        # propagate out and kill the bot.
+        log_event("Telegram send cancelled (CancelledError) — treating as failure")
+        return False
     except Exception:
         log_event("Telegram send failed:\n" + traceback.format_exc())
         return False
+
+
+def send_bot_api_sync(message: str):
+    """Generic synchronous Bot-API send — no event loop required.
+    Used for startup and shutdown notifications where asyncio may not be
+    fully running.  Silently ignores failures."""
+    if not BOT_TOKEN or not EXECUTION_CHAT_ID:
+        return
+    try:
+        payload = urllib.parse.urlencode({
+            "chat_id": EXECUTION_CHAT_ID,
+            "text": message,
+            "parse_mode": "HTML",
+        }).encode()
+        url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
+        req = urllib.request.Request(url, data=payload, method="POST")
+        with urllib.request.urlopen(req, timeout=10):
+            pass
+        log_event("[BOT API] Sync send OK")
+    except Exception as _e:
+        log_event(f"[BOT API] Sync send failed: {_e}")
+
+
+def send_shutdown_notify_sync(message: str):
+    """Synchronous shutdown notification via Bot API — no event loop needed."""
+    send_bot_api_sync(message)
+
+
+async def send_session_open_247():
+    """Send the full session-open card on startup (mirrors tg-bot / CNFS format).
+    Returns True if the message was sent successfully, False otherwise."""
+    if not EXECUTION_CHAT_ID:
+        return True  # nothing to send \u2014 treat as success
+    # process_manager_sync calls mt5_disconnect_safe() in its finally block on
+    # every cycle, so mt5.account_info() returns None between ticks.  Acquire
+    # MT5_ASYNC_LOCK and do our own connect/read/disconnect \u2014 same pattern as
+    # process_manager_sync \u2014 to guarantee we get live account data.
+    acc = None
+    try:
+        async with MT5_ASYNC_LOCK:
+            def _read_account():
+                try:
+                    mt5_connect_safe()
+                    return mt5.account_info()
+                finally:
+                    mt5_disconnect_safe()
+            acc = await asyncio.to_thread(_read_account)
+    except Exception as _e:
+        log_event(f'[STARTUP] account_info fetch error: {_e}')
+    if not acc:
+        return await safe_send(int(EXECUTION_CHAT_ID),
+            f'\U0001f7e2 <b>Bot ONLINE</b>\n'
+            f'\U0001f4e1 CryptoNite 247\n'
+            f'\u23f0 {datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")}')
+    st       = load_state()
+    today_s  = day_key_local()
+    ch_s     = st.get("channel_stats", {}).get(today_s, {})
+    _tw = _tl = _tbep = _tbe = 0
+    for b in ch_s.values():
+        _tw   += b.get("wins",      0)
+        _tl   += b.get("losses",    0)
+        _tbep += b.get("be_plus",   0)
+        _tbe  += b.get("breakeven", 0)
+    _total   = _tw + _tl + _tbep + _tbe
+    _pnl     = st.get("realised_pnl_today", 0.0)
+    _pnl_sgn = "+" if _pnl >= 0 else ""
+    _blocked = st.get("blocked_today", False)
+    _status  = "\u26d4 BLOCKED" if _blocked else "\u2705 Trading enabled"
+    brief = (
+        f'\U0001f4ca <b>Session Open</b>\n'
+        f'\U0001f4e1 CryptoNite 247\n'
+        f'\u23f0 {datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")}\n'
+        f'\U0001f4b0 Balance: <b>{acc.balance:.2f}</b>  |  Equity: <b>{acc.equity:.2f}</b>\n'
+        f'\U0001f4c8 Today P&L: <b>{_pnl_sgn}{_pnl:.2f}</b>\n'
+        f'\U0001f522 Trades: {_total} ({_tw}W / {_tl}L / {_tbep}BE+ / {_tbe}BE)\n'
+        f'{_status}'
+    )
+    return await safe_send(int(EXECUTION_CHAT_ID), brief)
 
 async def manager_loop():
     last_report_day = None
@@ -4495,11 +4923,29 @@ async def manager_loop():
             _session_brief_sent = True
             _acc = mt5.account_info()
             if _acc:
+                # Gather today's W/L/BE+/BE from channel stats
+                _st      = load_state()
+                _today_s = day_key_local()
+                _ch_s    = _st.get("channel_stats", {}).get(_today_s, {})
+                _tw = _tl = _tbep = _tbe = 0
+                for _b in _ch_s.values():
+                    _tw   += _b.get("wins",      0)
+                    _tl   += _b.get("losses",    0)
+                    _tbep += _b.get("be_plus",   0)
+                    _tbe  += _b.get("breakeven", 0)
+                _total   = _tw + _tl + _tbep + _tbe
+                _pnl     = _st.get("realised_pnl_today", 0.0)
+                _pnl_sgn = "+" if _pnl >= 0 else ""
+                _blocked = _st.get("blocked_today", False)
+                _status  = "\u26d4 BLOCKED" if _blocked else "\u2705 Trading enabled"
                 _brief = (
                     f'\U0001f4ca <b>Session Open</b>\n'
+                    f'\U0001f4e1 CryptoNite Signal Bot\n'
                     f'\u23f0 {datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")}\n'
                     f'\U0001f4b0 Balance: <b>{_acc.balance:.2f}</b>  |  Equity: <b>{_acc.equity:.2f}</b>\n'
-                    f'\U0001f916 CryptoNite 247 — ready'
+                    f'\U0001f4c8 Today P&L: <b>{_pnl_sgn}{_pnl:.2f}</b>\n'
+                    f'\U0001f522 Trades: {_total} ({_tw}W / {_tl}L / {_tbep}BE+ / {_tbe}BE)\n'
+                    f'{_status}'
                 )
                 await safe_send(int(EXECUTION_CHAT_ID), _brief)
 
@@ -5052,6 +5498,13 @@ async def main_async():
     if LIVE_MODE and not has_sources:
         raise RuntimeError("LIVE_MODE=true but no CHANNEL_IDS/CHANNEL_USERNAME set. Refusing to run.")
 
+    log_event("=" * 55)
+    log_event("  CRYPTONITE 247 BOT")
+    log_event(f"  Strategy : Multi-channel | XAUUSD | 24/7")
+    log_event(f"  BE trigger: ${SCALP_LOCK_TRIGGER_USD} ({SCALP_LOCK_TRIGGER_R}R) lock ${SCALP_LOCK_AMOUNT_USD} ({SCALP_LOCK_AMOUNT_R}R)")
+    log_event(f"  Trail gap : {TRAIL_DISTANCE_USD}pt ({int(TRAIL_DISTANCE_USD / 0.10):.0f} pips) behind price")
+    log_event(f"  Caps: {MAX_OPEN_POSITIONS_PER_SYMBOL}/symbol  |  {MAX_OPEN_POSITIONS_TOTAL} total  |  lot: {FIXED_LOT}  |  sell: x{SELL_LOT_MULTIPLIER}")
+    log_event("=" * 55)
     log_event("Bot starting...")
     log_event(f"DOTENV_FILE={DOTENV_FILE}  CWD={os.getcwd()}")
     log_event(f"Mode: ACCOUNT_MODE={ACCOUNT_MODE} LIVE_MODE={LIVE_MODE}")
@@ -5080,11 +5533,9 @@ async def main_async():
         log_event(f"EARLY_SCALP: ENABLED={EARLY_SCALP_ENABLED} ONLY_DEMO={EARLY_SCALP_ONLY_DEMO} WINDOW={EARLY_SCALP_SYNC_WINDOW_SECONDS}s SYMBOLS={EARLY_SCALP_SYMBOLS} RISK_MULT={EARLY_SCALP_FORCE_RISK_MULT}")
 
     log_event(
-        f"MULTI_PENDING: ENABLED={MULTI_PENDING_ENABLED} ONLY_DEMO={MULTI_PENDING_ONLY_DEMO} "
-        f"SOURCES={sorted(MULTI_PENDING_SOURCE_IDS) if MULTI_PENDING_SOURCE_IDS else '(none)'} "
-        f"FRACTIONS={MULTI_PENDING_FRACTIONS}"
+        f"KillSwitch: MAX_DAILY_LOSS={MAX_DAILY_LOSS_PCT}% MAX_CONSEC_LOSSES={MAX_CONSECUTIVE_LOSSES} "
+        f"DRAWDOWN_ALERT={DRAWDOWN_ALERT_PCT}% DAILY_PROFIT_TARGET={DAILY_PROFIT_TARGET_PCT}%"
     )
-
     log_event(f"TRADE CAPS: WINNING={MAX_TRADES_PER_DAY_WINNING} AFTER_LOSS={MAX_TRADES_PER_DAY_AFTER_LOSS} (0=unlimited)")
     log_event(f"Daily report: ENABLED={DAILY_REPORT_ENABLED} TIME={DAILY_REPORT_SEND_TIME} CHAT_ID={DAILY_REPORT_CHAT_ID or '(none)'}")
     log_event(f"Debug: ALL={DEBUG_ALL_MESSAGES} SRC_MISMATCH={DEBUG_SOURCE_MISMATCH} PARSE_FAIL={DEBUG_PARSE_FAIL}")
@@ -5098,14 +5549,28 @@ async def main_async():
 
     await client.start()
     asyncio.create_task(manager_loop())
-    if EXECUTION_CHAT_ID:
-        _now_str = __import__('datetime').datetime.now(__import__('datetime').timezone.utc).strftime('%Y-%m-%d %H:%M UTC')
-        await safe_send(int(EXECUTION_CHAT_ID),
-            f'\U0001f7e2 <b>Bot ONLINE</b>\n'
-            f'\U0001f4e1 CryptoNite 247\n'
-            f'\u23f0 {_now_str}')
 
     bot_cmd = BotCommandHandler()
+    await bot_cmd.start()
+
+    # Session-open runs INSIDE asyncio.gather as a third coroutine.
+    # This is the only reliable way: Telethon's receive loop must be
+    # active (i.e. run_until_disconnected must be running concurrently)
+    # before client.send_message can complete without CancelledError.
+    # A 1-second delay is enough for Telethon to fully authenticate.
+    async def _session_open_on_start():
+        try:
+            await asyncio.sleep(1)
+            sent = await send_session_open_247()
+            if not sent:
+                log_event('[STARTUP] Session open retry in 5s')
+                await asyncio.sleep(5)
+                await send_session_open_247()
+        except asyncio.CancelledError:
+            pass
+        except Exception as _e:
+            log_event(f'[STARTUP] Session open error: {_e}')
+
     await bot_cmd.start()
 
     try:
@@ -5135,4 +5600,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-

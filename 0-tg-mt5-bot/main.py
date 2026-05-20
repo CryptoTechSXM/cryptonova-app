@@ -236,9 +236,17 @@ async def manager_loop(manager):
 # MAIN RUNNER
 # =========================
 async def run():
-    log("=" * 50, "INFO")
-    log("CryptoNite Bot starting...", "INFO")
-    log("=" * 50, "INFO")
+    log("=" * 55, "INFO")
+    log("  CRYPTONITE SIGNAL BOT", "INFO")
+    log("  Strategy : Multi-channel | XAUUSD | London/NY", "INFO")
+    log("  BE trigger: max({} pips, {}% ATR)".format(
+        int(settings.min_be_pips), int(settings.atr_be_trigger_pct * 100)), "INFO")
+    log("  Trail gap : max({} pips, {}% ATR)".format(
+        int(settings.min_trail_pips), int(settings.atr_trail_dist_pct * 100)), "INFO")
+    log("  Risk: {}%  |  Sell mult: {}  |  BE buf: ${}".format(
+        settings.base_risk_pct, settings.sell_lot_multiplier,
+        getattr(settings, 'be_buffer_dollars', 1.0)), "INFO")
+    log("=" * 55, "INFO")
 
     # =========================
     # VALIDATE CONFIG FIRST
@@ -340,7 +348,9 @@ async def run():
 
         log("Bot is LIVE", "INFO")
         log("=" * 50, "INFO")
-        send_status("CryptoNite Signal Bot", "ONLINE")
+        # Send full session-open card immediately on startup (force=True bypasses
+        # the time-filter gate so it fires at any hour, not just after 04:00 UTC).
+        manager.session_open_brief(force=True)
 
         # =========================
         # REGISTER HANDLER
@@ -439,12 +449,11 @@ async def main_with_restart():
 
 
 if __name__ == "__main__":
-    # Telethon requires SelectorEventLoop on Windows — ProactorEventLoop (the default
-    # in Python 3.8+ on Windows) causes random connection drops and task cancellations.
+    # Telethon requires SelectorEventLoop on Windows
     import sys
     if sys.platform == "win32":
         asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
     try:
         asyncio.run(main_with_restart())
     except KeyboardInterrupt:
-        pass  # suppress the traceback — shutdown message already logged above
+        pass  # suppress the traceback

@@ -6,7 +6,7 @@ from data            import get_data, initialize
 from strategy        import check_signal
 from trader          import get_positions, close_position, modify_sl
 from indicators      import atr, heikin_ashi
-from logger          import log_trade, init_log
+from logger          import log_trade, init_log, log_event
 from risk            import DailyRiskManager, is_session_active
 from _order          import order_with_risk
 from telegram_sender import send_signal, send_close, send_adoption, send_status
@@ -160,11 +160,12 @@ def _close_and_log(position, direction, entry, cur_price):
     profit_usd = position.profit
     print('[{}] Closing {} -- reversal confirmed'.format(config.SYMBOL, direction))
     close_position(position)
-    diff = (cur_price - entry) if direction == 'BUY' else (entry - cur_price)
-    log_trade(direction, entry, position.sl, cur_price, diff)
+    log_trade(config.SYMBOL, direction, entry, position.sl, position.tp,
+              cur_price, position.volume, profit_usd)
     risk_manager.record_trade(profit_usd)
     closed_tickets.add(position.ticket)
     reversal_counter.pop(position.ticket, None)
+    diff     = (cur_price - entry) if direction == 'BUY' else (entry - cur_price)
     sl_dist  = abs(entry - position.sl)
     result_r = diff / sl_dist if sl_dist > 0 else 0
     send_close(config.SYMBOL, direction, entry, cur_price, result_r, STRATEGY_NAME)
@@ -272,23 +273,28 @@ def track_open_positions(positions):
         entry     = info['entry']
         sl        = info['sl']
         if exit_price is None:
-            print(f'[{config.SYMBOL}] BROKER-CLOSE #{ticket} {direction} — no deal found in history')
+            log_event(f'[{config.SYMBOL}] BROKER-CLOSE #{ticket} {direction} — no deal found in history')
         else:
             diff = (exit_price - entry) if direction == 'BUY' else (entry - exit_price)
             sl_dist = abs(entry - sl) if sl and sl != entry else 0
             result_r = diff / sl_dist if sl_dist > 0 else 0
             tag = 'TP' if profit_usd > 0.01 else ('SL' if profit_usd < -0.01 else 'BE')
-            print(f'[{config.SYMBOL}] BROKER-CLOSE #{ticket} {direction} {tag} '
+            log_event(f'[{config.SYMBOL}] BROKER-CLOSE #{ticket} {direction} {tag} '
                   f'entry={entry:.2f} exit={exit_price:.2f} P&L={profit_usd:+.2f} ({result_r:+.2f}R)')
-            log_trade(direction, entry, sl, exit_price, diff)
+            log_trade(config.SYMBOL, direction, entry, sl, info.get('tp', 0),
+                      exit_price, info.get('lot', 0), profit_usd,
+                      info.get('open_time'))
             risk_manager.record_trade(profit_usd)
             send_close(config.SYMBOL, direction, entry, exit_price, result_r, STRATEGY_NAME)
         closed_tickets.add(ticket)
     _tracked_positions = {
         p.ticket: {
             'direction': 'BUY' if p.type == 0 else 'SELL',
-            'entry': p.price_open,
-            'sl': p.sl,
+            'entry':     p.price_open,
+            'sl':        p.sl,
+            'tp':        p.tp,
+            'lot':       p.volume,
+            'open_time': datetime.fromtimestamp(p.time) if p.time else None,
         }
         for p in (positions or [])
     }
@@ -305,10 +311,6 @@ def run():
     try:
         while True:
             try:
-                # Weekend check — broker CFD markets closed Saturday & Sunday
-                from datetime import datetime, timezone as _tz
-                if datetime.now(_tz.utc).weekday() >= 5:
-                    import time as _t; _t.sleep(60); continue
                 df_m1 = get_data(config.SYMBOL, config.TIMEFRAMES['M1'])
                 df_m5 = get_data(config.SYMBOL, config.TIMEFRAMES['M5'])
                 df_h1 = get_data(config.SYMBOL, config.TIMEFRAMES['H1'])
@@ -401,4 +403,21 @@ def run():
 
 
 if __name__ == '__main__':
-    run()
+    import time as _time
+    restart_count = 0
+    while True:
+        try:
+            run()
+            print('[RESTART] Bot exited cleanly — restarting in 30s...')
+        except KeyboardInterrupt:
+            print('[RESTART] Shutdown requested (Ctrl+C).')
+            break
+        except Exception as exc:
+            print('[RESTART] Bot crashed: {} — restarting in 30s...'.format(exc))
+        restart_count += 1
+        print('[RESTART] Attempt #{} in 30 seconds...'.format(restart_count))
+        try:
+            _time.sleep(30)
+        except KeyboardInterrupt:
+            print('[RESTART] Shutdown during restart wait — stopping.')
+            break

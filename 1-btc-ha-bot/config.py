@@ -33,7 +33,7 @@ TRAIL_ATR_BUFFER        = 0.50  # SL trails 0.50x ATR behind price (tighter trai
 BE_BUFFER_PTS           = 30.0  # SL placed 30 pts above entry when trail first fires (BTC floor)
 
 # --- Entry filters ---
-DOJI_THRESHOLD = 0.15    # Max body/range ratio to qualify as a doji (tighter = fewer signals)
+DOJI_THRESHOLD = 0.25    # Max body/range ratio to qualify as a doji (was 0.15 — too strict, 0 signals)
 MIN_ATR        = 50.0    # Minimum M5 ATR to trade — skips flat/choppy markets
 MAX_ATR        = 3000.0  # Maximum M5 ATR — skips news spikes / extreme volatility
                           # BTC normal ATR: 100–800 pts. Spike > 3000 = avoid.

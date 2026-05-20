@@ -6,7 +6,7 @@ from data            import get_data, initialize
 from strategy        import check_signal
 from trader          import get_positions, close_position, modify_sl
 from indicators      import atr, heikin_ashi
-from logger          import log_trade, init_log
+from logger          import log_trade, init_log, log_event
 from risk            import DailyRiskManager, is_session_active
 from _order          import order_with_risk
 from telegram_sender import send_signal, send_close, send_adoption, send_status
@@ -145,13 +145,14 @@ def manage_trade(position, df_m1, df_m5):
 
 def _close_and_log(position, direction, entry, cur_price):
     profit_usd = position.profit
-    print(f'[{config.SYMBOL}] Closing {direction} -- reversal confirmed')
+    log_event(f'[{config.SYMBOL}] Closing {direction} -- reversal confirmed')
     close_position(position)
-    diff = (cur_price - entry) if direction == 'BUY' else (entry - cur_price)
-    log_trade(direction, entry, position.sl, cur_price, diff)
+    log_trade(config.SYMBOL, direction, entry, position.sl, position.tp,
+              cur_price, position.volume, profit_usd)
     risk_manager.record_trade(profit_usd)
     closed_tickets.add(position.ticket)
     reversal_counter.pop(position.ticket, None)
+    diff     = (cur_price - entry) if direction == 'BUY' else (entry - cur_price)
     sl_dist  = abs(entry - position.sl)
     result_r = diff / sl_dist if sl_dist > 0 else 0
     send_close(config.SYMBOL, direction, entry, cur_price, result_r, STRATEGY_NAME)
@@ -188,25 +189,29 @@ def track_open_positions(positions):
         entry     = info['entry']
         sl        = info['sl']
         if exit_price is None:
-            print(f'[{config.SYMBOL}] BROKER-CLOSE #{ticket} {direction} — no deal found in history')
+            log_event(f'[{config.SYMBOL}] BROKER-CLOSE #{ticket} {direction} — no deal found in history')
         else:
             diff = (exit_price - entry) if direction == 'BUY' else (entry - exit_price)
             sl_dist = abs(entry - sl) if sl and sl != entry else 0
             result_r = diff / sl_dist if sl_dist > 0 else 0
             tag = 'TP' if profit_usd > 0.01 else ('SL' if profit_usd < -0.01 else 'BE')
-            print(f'[{config.SYMBOL}] BROKER-CLOSE #{ticket} {direction} {tag} '
+            log_event(f'[{config.SYMBOL}] BROKER-CLOSE #{ticket} {direction} {tag} '
                   f'entry={entry:.5f} exit={exit_price:.5f} P&L={profit_usd:+.2f} ({result_r:+.2f}R)')
-            log_trade(direction, entry, sl, exit_price, diff)
+            log_trade(config.SYMBOL, direction, entry, sl, info.get('tp', 0),
+                      exit_price, info.get('lot', 0), profit_usd,
+                      info.get('open_time'))
             risk_manager.record_trade(profit_usd)
-            sl_dist_label = abs(entry - sl) if sl else 0
             send_close(config.SYMBOL, direction, entry, exit_price, result_r, STRATEGY_NAME)
         closed_tickets.add(ticket)
     # Update tracking: add new positions, remove gone ones
     _tracked_positions = {
         p.ticket: {
             'direction': 'BUY' if p.type == 0 else 'SELL',
-            'entry': p.price_open,
-            'sl': p.sl,
+            'entry':     p.price_open,
+            'sl':        p.sl,
+            'tp':        p.tp,
+            'lot':       p.volume,
+            'open_time': datetime.fromtimestamp(p.time) if p.time else None,
         }
         for p in (positions or [])
     }
@@ -308,7 +313,7 @@ def run():
                     time.sleep(config.CHECK_INTERVAL)
                     continue
                 last_candle_time = ct
-                if not SILENT: print(f'[{config.SYMBOL}] New M1 candle: {ct}')
+                if not SILENT: log_event(f'[{config.SYMBOL}] New M1 candle: {ct}')
 
                 signal = check_signal(df_m1, df_m5, df_h1, config)
 
@@ -340,7 +345,7 @@ def run():
                         elapsed = time.time() - last_trade_time
                         if elapsed < config.TRADE_COOLDOWN:
                             if not SILENT:
-                                print(f'[{config.SYMBOL}] Cooldown -- no execution')
+                                log_event(f'[{config.SYMBOL}] Cooldown -- no execution')
                         else:
                             closed_tickets.clear()
                             reversal_counter.clear()
@@ -351,16 +356,16 @@ def run():
                                 config.MAGIC_NUMBER, config.MAX_SPREAD
                             )
                             if result and result.retcode == mt5.TRADE_RETCODE_DONE:
-                                print(f'[{config.SYMBOL}] Order filled: {result.price}')
+                                log_event(f'[{config.SYMBOL}] Order filled: {result.price}')
                                 last_trade_time = time.time()
                                 risk_manager.record_entry()
                                 send_signal(config.SYMBOL, signal['type'], result.price,
                                             signal['sl'], signal['tp'], STRATEGY_NAME, 1.0)
                             else:
-                                print(f'[{config.SYMBOL}] Not filled: {result}')
+                                log_event(f'[{config.SYMBOL}] Not filled: {result}')
                 elif not positions and not signal:
                     if not SILENT:
-                        print(f'[{config.SYMBOL}] No signal this candle')
+                        log_event(f'[{config.SYMBOL}] No signal this candle')
 
             except Exception as e:
                 consecutive_errors += 1
@@ -378,4 +383,21 @@ def run():
 
 
 if __name__ == '__main__':
-    run()
+    import time as _time
+    restart_count = 0
+    while True:
+        try:
+            run()
+            print('[RESTART] Bot exited cleanly — restarting in 30s...')
+        except KeyboardInterrupt:
+            print('[RESTART] Shutdown requested (Ctrl+C).')
+            break
+        except Exception as exc:
+            print('[RESTART] Bot crashed: {} — restarting in 30s...'.format(exc))
+        restart_count += 1
+        print('[RESTART] Attempt #{} in 30 seconds...'.format(restart_count))
+        try:
+            _time.sleep(30)
+        except KeyboardInterrupt:
+            print('[RESTART] Shutdown during restart wait — stopping.')
+            break

@@ -1,3 +1,4 @@
+import time as _time
 import MetaTrader5 as mt5
 import pandas as pd
 
@@ -39,12 +40,19 @@ def get_data(symbol, timeframe_minutes, bars=500):
     tf = tf_map.get(timeframe_minutes)
     if tf is None:
         raise ValueError(f'Unknown timeframe: {timeframe_minutes}')
-    rates = mt5.copy_rates_from_pos(symbol, tf, 0, bars)
-    if rates is None or len(rates) == 0:
-        raise RuntimeError(f'No data for {symbol} TF={timeframe_minutes}')
-    df = pd.DataFrame(rates)
-    df['time'] = pd.to_datetime(df['time'], unit='s')
-    return df
+    # Ensure symbol is subscribed in Market Watch before requesting data.
+    # symbol_select is idempotent — safe to call every time.  After a fresh
+    # subscription MT5 may need a moment to load bars, so retry up to 3×.
+    mt5.symbol_select(symbol, True)
+    for attempt in range(3):
+        rates = mt5.copy_rates_from_pos(symbol, tf, 0, bars)
+        if rates is not None and len(rates) > 0:
+            df = pd.DataFrame(rates)
+            df['time'] = pd.to_datetime(df['time'], unit='s')
+            return df
+        if attempt < 2:
+            _time.sleep(2)   # give MT5 a moment to sync bars after subscription
+    raise RuntimeError(f'No data for {symbol} TF={timeframe_minutes}')
 
 
 def get_daily_atr(symbol, period=14):
@@ -52,6 +60,8 @@ def get_daily_atr(symbol, period=14):
     Calculate ATR using daily (D1) bars.
     Falls back through H4 → H1 → M15 when higher timeframes are
     unavailable — common for index/stock CFDs on some brokers.
+    Retries the full chain up to 3 times (5 s apart) to handle MT5
+    data-sync delay after a fresh symbol_select subscription.
     """
     def _compress(df):
         df = df.copy()
@@ -65,14 +75,19 @@ def get_daily_atr(symbol, period=14):
         return daily.tail(period + 5).reset_index(drop=True)
 
     df = None
-    for tf, bars_per_day in [(1440, 1), (240, 6), (60, 24), (15, 32)]:
-        try:
-            raw = get_data(symbol, tf, bars=max(period + 5, (period + 2) * bars_per_day))
-            if raw is not None and len(raw) > period:
-                df = raw if tf == 1440 else _compress(raw)
-                break
-        except RuntimeError:
-            continue
+    for outer_attempt in range(3):
+        for tf, bars_per_day in [(1440, 1), (240, 6), (60, 24), (15, 32)]:
+            try:
+                raw = get_data(symbol, tf, bars=max(period + 5, (period + 2) * bars_per_day))
+                if raw is not None and len(raw) > period:
+                    df = raw if tf == 1440 else _compress(raw)
+                    break
+            except RuntimeError:
+                continue
+        if df is not None:
+            break
+        if outer_attempt < 2:
+            _time.sleep(5)   # wait for MT5 to finish syncing bars
 
     if df is None:
         raise RuntimeError(f"No data available for {symbol} on any timeframe for ATR calculation")

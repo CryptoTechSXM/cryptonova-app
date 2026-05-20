@@ -7,7 +7,7 @@ from resolver          import resolve_symbol
 from strategy        import get_opening_range, validate_liquidity_candle, scan_for_signal
 from lot             import calculate_lot_size
 from risk            import DailyRiskManager
-from logger          import log_trade, init_log
+from logger          import log_trade, init_log, log_event
 from telegram_sender import send_signal, send_status
 
 STRATEGY_NAME = "QFS META"
@@ -32,7 +32,7 @@ last_scan_candle = None   # gate: only scan on new 5M candle
 # --------------------------------------------------------------------------
 # Position close detection — detect TP/SL closes and record P&L
 # --------------------------------------------------------------------------
-_tracked_tickets = {}   # ticket -> entry_price
+_tracked_tickets = {}   # ticket -> {direction, entry, sl, tp, lot, open_time}
 
 
 def update_position_tracking():
@@ -44,7 +44,14 @@ def update_position_tracking():
 
     for p in open_pos:
         if p.magic == config.MAGIC_NUMBER and p.ticket not in _tracked_tickets:
-            _tracked_tickets[p.ticket] = p.price_open
+            _tracked_tickets[p.ticket] = {
+                'direction': 'BUY' if p.type == 0 else 'SELL',
+                'entry':     p.price_open,
+                'sl':        p.sl,
+                'tp':        p.tp,
+                'lot':       p.volume,
+                'open_time': datetime.fromtimestamp(p.time) if p.time else None,
+            }
 
     for ticket in list(_tracked_tickets.keys()):
         if ticket not in open_tickets:
@@ -58,8 +65,26 @@ def update_position_tracking():
                         pnl = d.profit
                         break
             risk_manager.record_trade(pnl)
-            print('[{}] Position {} closed -- P&L: {:+.2f}'.format(
-                config.SYMBOL, ticket, pnl))
+            info = _tracked_tickets[ticket]
+            exit_price_found = None
+            if deals:
+                for d in deals:
+                    if d.position_id == ticket and d.entry == 1:
+                        exit_price_found = d.price
+                        break
+            log_trade(
+                config.SYMBOL,
+                info.get('direction', ''),
+                info.get('entry', 0),
+                info.get('sl', 0),
+                info.get('tp', 0),
+                exit_price_found or 0,
+                info.get('lot', 0),
+                pnl,
+                info.get('open_time'),
+            )
+            log_event('[{}] Position {} closed -- {} P&L: {:+.2f}'.format(
+                config.SYMBOL, ticket, info.get('direction', ''), pnl))
             del _tracked_tickets[ticket]
 
 
@@ -100,14 +125,13 @@ def session_close_guard():
         }
         result = mt5.order_send(req)
         if result and result.retcode == mt5.TRADE_RETCODE_DONE:
-            pnl_note = f"profit={pos.profit:+.2f}" if pos.profit >= 0 else f"loss={pos.profit:+.2f}"
-            print('[{}] SESSION CLOSE GUARD: closed pos @ {:.4f}  {} (ticket={})'.format(
-                config.SYMBOL, close_price, pnl_note, pos.ticket))
+            log_event('[{}] SESSION CLOSE GUARD: closed {} @ {:.4f} P&L:{:+.2f}'.format(
+                config.SYMBOL, pos.ticket, close_price, pos.profit))
             risk_manager.record_trade(pos.profit)
             _tracked_tickets.pop(pos.ticket, None)
         else:
             code = result.retcode if result else "no response"
-            print('[{}] SESSION CLOSE GUARD: FAILED to close ticket={} code={}'.format(
+            log_event('[{}] SESSION CLOSE GUARD: FAILED ticket={} code={}'.format(
                 config.SYMBOL, pos.ticket, code))
 
 
@@ -157,7 +181,7 @@ def reset_day():
     today_traded     = False
     last_scan_candle = None
     risk_manager._reset_if_new_day()
-    print(f'[{config.SYMBOL}] New trading day: {now}')
+    log_event(f'[{config.SYMBOL}] New trading day: {now}')
 
 
 def try_box_opening_range():
@@ -179,16 +203,15 @@ def try_box_opening_range():
         valid, pct = validate_liquidity_candle(box_high, box_low, daily_atr,
                                                config.LIQ_PCT_MIN, config.LIQ_PCT_MAX)
         if not valid:
-            max_label = '{}%'.format(int(config.LIQ_PCT_MAX * 100)) if config.LIQ_PCT_MAX else 'no cap'
-            print('[{}] Box {}% of ATR - below {}% floor, no trade today'.format(
+            log_event('[{}] Box INVALID -- {}% of ATR | floor {}% | no trade today'.format(
                 config.SYMBOL, pct, int(config.LIQ_PCT_MIN * 100)))
             today_box = 'invalid'
             return
         today_box = (box_high, box_low, open_time, daily_atr)
-        print('[{}] Opening box: ${:.2f} - ${:.2f} | ATR ${:.2f} | Range {}%'.format(
+        log_event('[{}] Opening box: ${:.2f} - ${:.2f} | ATR ${:.2f} | Range {}%'.format(
             config.SYMBOL, box_low, box_high, daily_atr, pct))
     except Exception as e:
-        print(f'[{config.SYMBOL}] Box error: {e}')
+        log_event(f'[{config.SYMBOL}] Box error: {e}')
 
 
 def run():
@@ -196,7 +219,7 @@ def run():
     if not safe_initialize():
         return
     init_log()
-    print(f'[{config.SYMBOL}] Bot running...')
+    log_event(f'[{config.SYMBOL}] Bot running...')
     try:
         while True:
             reset_day()
@@ -221,14 +244,28 @@ def run():
             if today_box is None or today_box == 'invalid':
                 time.sleep(config.CHECK_INTERVAL)
                 continue
-            # Sync today_traded with MT5 on every cycle — prevents double-entry on restart
+            # Sync today_traded with MT5 on every cycle — prevents double-entry on restart.
+            # Check BOTH open positions AND pending orders (pending stops aren't positions yet).
             if not today_traded:
-                open_pos = mt5.positions_get(symbol=config.SYMBOL) or []
-                if any(p.magic == config.MAGIC_NUMBER for p in open_pos):
-                    print(f'[{config.SYMBOL}] Existing position detected on startup — marking today as traded')
+                open_pos    = mt5.positions_get(symbol=config.SYMBOL) or []
+                open_orders = mt5.orders_get(symbol=config.SYMBOL) or []
+                if (any(p.magic == config.MAGIC_NUMBER for p in open_pos) or
+                        any(o.magic == config.MAGIC_NUMBER for o in open_orders)):
+                    log_event(f'[{config.SYMBOL}] Existing position/pending order detected — marking today as traded')
                     today_traded = True
-            # Already traded today
-            if today_traded or not risk_manager.can_trade():
+            # Already traded today — cancel stale pending orders past the window
+            if today_traded:
+                open_orders = mt5.orders_get(symbol=config.SYMBOL) or []
+                for o in open_orders:
+                    if o.magic == config.MAGIC_NUMBER:
+                        age_min = (datetime.utcnow() - datetime.utcfromtimestamp(o.time_setup)).total_seconds() / 60
+                        if age_min > config.WINDOW_MINUTES:
+                            res = mt5.order_send({'action': mt5.TRADE_ACTION_REMOVE, 'order': o.ticket})
+                            if res and res.retcode == mt5.TRADE_RETCODE_DONE:
+                                log_event(f'[{config.SYMBOL}] Pending order {o.ticket} cancelled — stale after {age_min:.0f} min')
+                time.sleep(config.CHECK_INTERVAL)
+                continue
+            if not risk_manager.can_trade():
                 time.sleep(config.CHECK_INTERVAL)
                 continue
             # Scan for signal
@@ -243,12 +280,12 @@ def run():
                 signal = scan_for_signal(df_5m, box_high, box_low, open_time,
                                          config.WINDOW_MINUTES, config.RR)
                 if signal:
-                    print(f'[{config.SYMBOL}] {signal["pattern"].upper()} {signal["type"]} | Entry=${signal["entry"]:.2f} SL=${signal["sl"]:.2f} TP=${signal["tp"]:.2f}')
+                    log_event(f'[{config.SYMBOL}] {signal["pattern"].upper()} {signal["type"]} | Entry=${signal["entry"]:.2f} SL=${signal["sl"]:.2f} TP=${signal["tp"]:.2f}')
                     sl_dist = abs(signal['entry'] - signal['sl'])
                     lot = calculate_lot_size(config.SYMBOL, sl_dist, config.RISK_PERCENT,
                                              config.MAX_ACTUAL_RISK_PCT, config.RISK_CAP_MODE)
                     if not lot:
-                        print(f'[{config.SYMBOL}] Trade skipped — account too small for this SL distance')
+                        log_event(f'[{config.SYMBOL}] Trade skipped — account too small for this SL distance')
                         time.sleep(config.CHECK_INTERVAL)
                         continue
                     direction = signal['type']
@@ -274,7 +311,7 @@ def run():
                             'type_time':    mt5.ORDER_TIME_GTC,
                             'type_filling': mt5.ORDER_FILLING_IOC,
                         }
-                        print(f'[{config.SYMBOL}] Price past entry — market order @ {market_px:.2f}')
+                        log_event(f'[{config.SYMBOL}] Price past entry — market order @ {market_px:.2f}')
                     else:
                         req = {
                             'action':       mt5.TRADE_ACTION_PENDING,
@@ -291,22 +328,42 @@ def run():
                         }
                     result = mt5.order_send(req)
                     if result and result.retcode == mt5.TRADE_RETCODE_DONE:
-                        print(f'[{config.SYMBOL}] Order placed: ticket={result.order}')
+                        log_event(f'[{config.SYMBOL}] Order placed: ticket={result.order}')
                         risk_manager.record_entry()
                         today_traded = True
                         send_signal(config.SYMBOL, direction, price,
                                     signal['sl'], signal['tp'], STRATEGY_NAME, config.RR)
                     else:
-                        print(f'[{config.SYMBOL}] Order failed: {result}')
+                        log_event(f'[{config.SYMBOL}] Order failed: {result}')
+                else:
+                    log_event(f'[{config.SYMBOL}] Scan -- no signal this bar')
+
             except Exception as e:
-                print(f'[{config.SYMBOL}] Scan error: {e}')
+                log_event(f'[{config.SYMBOL}] Scan error: {e}')
             time.sleep(config.CHECK_INTERVAL)
     except KeyboardInterrupt:
-        print(f'[{config.SYMBOL}] Bot stopped')
+        log_event('[{}] Bot stopped by user'.format(config.SYMBOL))
     finally:
         send_status(STRATEGY_NAME, 'STOPPED')
         mt5.shutdown()
 
 
 if __name__ == '__main__':
-    run()
+    import time as _time
+    restart_count = 0
+    while True:
+        try:
+            run()
+            log_event('[RESTART] Bot exited cleanly — restarting in 30s...')
+        except KeyboardInterrupt:
+            log_event('[RESTART] Shutdown requested.')
+            break
+        except Exception as exc:
+            log_event('[RESTART] Bot crashed: {} — restarting in 30s...'.format(exc))
+        restart_count += 1
+        log_event('[RESTART] Attempt #{} in 30 seconds...'.format(restart_count))
+        try:
+            _time.sleep(30)
+        except KeyboardInterrupt:
+            log_event('[RESTART] Shutdown during wait — stopping.')
+            break
