@@ -20,16 +20,17 @@ SYMBOL_CANDIDATES = [
 ]
 
 # --- Strategy (same as Free Signals bot) ---
-DOJI_THRESHOLD     = 0.20   # was 0.25 — tightened 2026-05-19, backtest: best median R + lowest worst-DD
-DOJI_VOL_THRESHOLD = 0.70
-PULLBACK_N         = 2    # was 1 — 2 HA pullback candles required, tighter filter 2026-05-14
-PULLBACK_WICK_TOL  = 0.15
+DOJI_THRESHOLD     = 0.25   # relaxed 2026-05-21: backtest Option B — wider doji, more signals (was 0.20)
+DOJI_VOL_THRESHOLD = 0.60   # relaxed 2026-05-21: backtest shows 0.60 gives best EV (was 0.70)
+PULLBACK_N         = 2      # 2 HA pullback candles required (unchanged)
+PULLBACK_WICK_TOL  = 0.15   # wick tolerance (unchanged)
 ATR_PERIOD         = 14
 EMA_PERIOD         = 100
 ATR_SL_MULT        = 2.0    # SL = ATR x 2.0
 ATR_TP_MULT        = 3.0    # TP = ATR x 3.0
 MIN_ATR            = 4.0    # absolute floor — block when market is dead quiet (was 0.30, raised 2026-05-19)
-MIN_ATR_RATIO      = 0.70   # also block if ATR < 70% of its 20-bar rolling average (catches unusually quiet candles)
+MIN_ATR_RATIO      = 0.85   # tightened 2026-05-21: ATR must be >= 85% of 20-bar avg — filters low-vol noise (was 0.70)
+H1_CONSECUTIVE     = 2      # new 2026-05-21: require 2 consecutive same-direction H1 HA candles (was 1)
 
 M1_BARS = 200
 M5_BARS = 100
@@ -42,10 +43,10 @@ BE_TRIGGER_PCT  = 0.20   # 20% of ATR
 TRAIL_DIST_PCT  = 0.15   # 15% of ATR
 # MIN_BE_PIPS: trigger BE lock when floating profit reaches this level.
 # 50 pips = $5.00 at 0.01 lot — protects sooner. Was 80 ($8) — lowered 2026-05-13.
-MIN_BE_PIPS     = 40     # $4.00 trigger — Scenario B 4pt / +1pt buffer (was 50 = $5.00)
+MIN_BE_PIPS     = 20     # $2.00 trigger — aligned to 247A (was 40 = $4.00, 2026-05-20)
 # MIN_TRAIL_PIPS: distance trail SL sits behind current price once BE is active.
-# 30 pips = $3.00 — tighter trail, gives back less. Was 50 ($5) — lowered 2026-05-13.
-MIN_TRAIL_PIPS  = 30     # $3.00 trail gap (was 50 = $5.00)
+# 20 pips = $2.00 — tighter trail, aligned to 247A. Was 30 ($3.00) — lowered 2026-05-20.
+MIN_TRAIL_PIPS  = 20     # $2.00 trail gap (was 30 = $3.00)
 PIP_SIZE        = 0.10   # 1 pip = $0.10 price move for XAUUSD
 # BE_BUFFER_PRICE: how far ABOVE entry the SL is placed when BE fires.
 # Must be LESS than trail_dist ($5.00) so the trail activates immediately at
@@ -80,7 +81,7 @@ TRAIL_INTERVAL = 8     # seconds between trail checks
 # Prevents candle-by-candle re-entry cascade when a persistent HA signal fires
 # a new trade every 60s while previous ones are still hitting SL.
 # 300s = 5 min gap — lets market settle before the next entry attempt.
-TRADE_COOLDOWN = 300
+TRADE_COOLDOWN = 1800   # 30-min cooldown between entries — backtest: biggest single EV gain (was 300 = 5 min)
 
 # --- Telegram (status messages) ---
 BOT_TOKEN = os.getenv("BOT_TOKEN", "7716066914:AAEZATUSQXRRsTIO3xCIrYpNJ8dwzEnF1Iw")

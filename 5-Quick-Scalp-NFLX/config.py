@@ -21,7 +21,7 @@ TF_1D   = 1440
 # Liquidity candle: opening range must be 15-70% of daily ATR
 # Raised MAX from 0.50 → 0.70: 52% box on 2026-05-12 was filtered incorrectly.
 # Stock opens regularly reach 50-65% of ATR on active days — not explosive.
-LIQ_PCT_MIN = 0.15   # below this = dead open, skip
+LIQ_PCT_MIN = 0.03   # below this = dead open, skip (was 0.15 — NFLX consistently 0-6%, 2026-05-20)
 LIQ_PCT_MAX = 0.85   # above this = truly explosive / news-driven, skip
 ATR_PERIOD  = 14
 

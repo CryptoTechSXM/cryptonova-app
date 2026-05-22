@@ -18,7 +18,7 @@ TF_15M  = 15
 TF_1D   = 1440
 
 # Liquidity candle: opening range must be 20-35% of daily ATR
-LIQ_PCT_MIN = 0.20
+LIQ_PCT_MIN = 0.03   # was 0.20 — NAS100 readings all 1-6%, floor was far too high (2026-05-20)
 LIQ_PCT_MAX = 0.50
 ATR_PERIOD  = 14
 

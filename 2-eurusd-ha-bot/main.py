@@ -100,11 +100,16 @@ def manage_trade(position, df_m1, df_m5):
     entry      = position.price_open
     ticket     = position.ticket
 
-    trig_mult    = getattr(config, 'TRAIL_ATR_TRIGGER', 0.30)
-    buf_mult     = getattr(config, 'TRAIL_ATR_BUFFER',  0.25)
-    be_buf       = getattr(config, 'BE_BUFFER_PTS',     0.0005)
-    trigger_dist = cur_atr * trig_mult
-    buffer_dist  = cur_atr * buf_mult
+    # CNFS-style trail: max(pip_floor, pct_of_ATR) — asset-specific floors
+    # EURUSD: trigger=max(10pips, 20%xATR), trail=max(8pips, 15%xATR) behind price
+    pip_size     = getattr(config, 'PIP_SIZE',          0.0001)
+    min_be       = getattr(config, 'MIN_BE_PIPS',       10)   * pip_size
+    min_trail    = getattr(config, 'MIN_TRAIL_PIPS',    8)    * pip_size
+    trig_mult    = getattr(config, 'TRAIL_ATR_TRIGGER', 0.20)
+    buf_mult     = getattr(config, 'TRAIL_ATR_BUFFER',  0.15)
+    be_buf       = getattr(config, 'BE_BUFFER_PTS',     0.0002)
+    trigger_dist = max(min_be,    cur_atr * trig_mult)
+    buffer_dist  = max(min_trail, cur_atr * buf_mult)
     profit = (cur_price - entry) if position.type == 0 else (entry - cur_price)
 
     if profit >= trigger_dist > 0:

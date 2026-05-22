@@ -5,8 +5,8 @@ Generates signals using the same relaxed HA strategy as the Free Signals bot,
 then executes them directly in MT5 with a trailing stop profit lock.
 
 Trailing stop rules:
-  - Once floating profit >= max(MIN_BE_PIPS, 20% ATR)  → move SL to entry (breakeven)
-  - Once floating profit trails further                 → trail SL max(MIN_TRAIL_PIPS, 15% ATR) behind
+  - Once floating profit >= max(MIN_BE_PIPS, 20% ATR)  → move SL to entry (breakeven)  [MIN_BE_PIPS=20 / $2.00]
+  - Once floating profit trails further                 → trail SL max(MIN_TRAIL_PIPS, 15% ATR) behind  [MIN_TRAIL_PIPS=20 / $2.00]
 
 Concurrent position rules:
   - At-risk positions (SL still at original) >= 2  → block new signal
@@ -529,11 +529,25 @@ def has_clean_pullback(df_m1, trend, doji_pos=3):
 
 
 def h1_trend(df_h1):
-    ha   = heikin_ashi(df_h1)
-    last = ha.iloc[-1]
-    if last["ha_close"] > last["ha_open"]: return "BUY"
-    if last["ha_close"] < last["ha_open"]: return "SELL"
-    return None
+    """Return H1 trend direction, or None if unclear.
+
+    config.H1_CONSECUTIVE controls how many back-to-back same-direction
+    H1 HA candles are required before a trend is declared:
+      1 = single candle (original — faster but noisier)
+      2 = two consecutive candles (backtest Option B — blocks flip-flop entries)
+    """
+    required = getattr(config, "H1_CONSECUTIVE", 1)
+    ha = heikin_ashi(df_h1)
+    if len(ha) < required:
+        return None
+    dirs = []
+    for i in range(1, required + 1):
+        c = ha.iloc[-i]
+        if   c["ha_close"] > c["ha_open"]: dirs.append("BUY")
+        elif c["ha_close"] < c["ha_open"]: dirs.append("SELL")
+        else: return None                  # doji H1 candle — no trend
+    # All required candles must point the same way
+    return dirs[0] if len(set(dirs)) == 1 else None
 
 
 # =============================================================

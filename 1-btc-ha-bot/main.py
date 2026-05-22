@@ -108,16 +108,18 @@ def manage_trade(position, df_m1, df_m5):
     ticket     = position.ticket
 
     # ------------------------------------------------------------------
-    # ATR-based trail -- aggressive scalp lock
-    # Fires when profit >= TRAIL_ATR_TRIGGER x M5 ATR (adapts to volatility)
-    # SL then stays TRAIL_ATR_BUFFER x ATR behind price (tight trail)
-    # TP removed when trail first fires (Rule 10)
+    # CNFS-style trail: max(pip_floor, pct_of_ATR) — asset-specific floors
+    # BTC: trigger=max(20pts, 20%xATR), trail=max(15pts, 15%xATR) behind price
+    # TP removed once trail SL crosses entry (true BE+)
     # ------------------------------------------------------------------
-    trig_mult    = getattr(config, 'TRAIL_ATR_TRIGGER', 0.30)
-    buf_mult     = getattr(config, 'TRAIL_ATR_BUFFER',  0.25)
-    be_buf       = getattr(config, 'BE_BUFFER_PTS',     30.0)
-    trigger_dist = cur_atr * trig_mult
-    buffer_dist  = cur_atr * buf_mult
+    pip_size     = getattr(config, 'PIP_SIZE',          1.0)
+    min_be       = getattr(config, 'MIN_BE_PIPS',       20)  * pip_size
+    min_trail    = getattr(config, 'MIN_TRAIL_PIPS',    15)  * pip_size
+    trig_mult    = getattr(config, 'TRAIL_ATR_TRIGGER', 0.20)
+    buf_mult     = getattr(config, 'TRAIL_ATR_BUFFER',  0.15)
+    be_buf       = getattr(config, 'BE_BUFFER_PTS',     10.0)
+    trigger_dist = max(min_be,    cur_atr * trig_mult)
+    buffer_dist  = max(min_trail, cur_atr * buf_mult)
 
     profit = (cur_price - entry) if position.type == 0 else (entry - cur_price)
 

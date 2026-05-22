@@ -20,7 +20,7 @@ TF_1D   = 1440
 # Liquidity candle: opening range must be 15-50% of daily ATR.
 # TSLA is high volatility -- wide daily ATR (~$8-15 typical).
 # Raised MAX from 0.50 → 0.70: stock opens regularly hit 50-65% of ATR.
-LIQ_PCT_MIN = 0.15   # below this = dead open, skip
+LIQ_PCT_MIN = 0.05   # below this = dead open, skip (was 0.15 — too high, never fired 2026-05-20)
 LIQ_PCT_MAX = 0.85   # above this = truly explosive / news-driven, skip
 ATR_PERIOD  = 14
 

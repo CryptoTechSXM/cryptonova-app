@@ -6,6 +6,7 @@ from datetime import datetime, timezone, date, timedelta
 
 from dotenv import load_dotenv
 from telethon import TelegramClient, events
+from telethon.sessions import StringSession
 import MetaTrader5 as mt5
 
 
@@ -3568,6 +3569,7 @@ def attach_templates_to_positions(state):
             "tp_removed":        False,
             "tp1_partial_done":  False,
             "tp2_partial_done":  False,
+            "peak_profit_usd":   0.0,
             "created":           time.time(),
         }
 
@@ -3636,6 +3638,11 @@ def manage_positions_once(state):
         cur_tp = float(p.tp) if p.tp else 0.0
         point = float(getattr(mt5.symbol_info(getattr(p, "symbol", symbol)), "point", 0.0) or 0.0)
         eps = max(point * 2.0, 0.01)
+
+        # MFE tracking — update peak unrealised profit each loop tick
+        _unrealised = (current_price - entry) if pos_type == 0 else (entry - current_price)
+        if _unrealised > float(meta.get("peak_profit_usd", 0.0) or 0.0):
+            meta["peak_profit_usd"] = round(_unrealised, 4)
 
         tp1_hit = (current_price >= tp1) if pos_type == 0 else (current_price <= tp1)
         tp2_hit = (current_price >= tp2) if pos_type == 0 else (current_price <= tp2)
@@ -3803,7 +3810,7 @@ def ensure_csv_header():
         return
     with open(TRADES_CSV, "w", newline="", encoding="utf-8") as f:
         w = csv.writer(f)
-        w.writerow(["time_utc","symbol","side","volume","profit","commission","swap","position_id","deal_id","channel_id","ema_at_entry","ema_aligned"])
+        w.writerow(["time_utc","symbol","side","volume","profit","commission","swap","position_id","deal_id","channel_id","ema_at_entry","ema_aligned","mfe_pips"])
 
 def append_trade_csv(row: dict):
     ensure_csv_header()
@@ -3813,7 +3820,7 @@ def append_trade_csv(row: dict):
             row.get("time_utc"), row.get("symbol"), row.get("side"), row.get("volume"),
             row.get("profit"), row.get("commission"), row.get("swap"),
             row.get("position_id"), row.get("deal_id"), row.get("channel_id"),
-            row.get("ema_at_entry"), row.get("ema_aligned"),
+            row.get("ema_at_entry"), row.get("ema_aligned"), row.get("mfe_pips"),
         ])
 
 def log_new_closed_deals(state, notifications=None):
@@ -3919,7 +3926,9 @@ def log_new_closed_deals(state, notifications=None):
                 f"💰 P/L:    <b>{profit:+.2f}</b>"
             )
 
-        ema_info = state.get("position_ema", {}).get(str(pos_id), {})
+        ema_info  = state.get("position_ema", {}).get(str(pos_id), {})
+        _mfe_usd  = float(state.get("managed_positions", {}).get(pos_id, {}).get("peak_profit_usd", 0.0) or 0.0)
+        _mfe_pips = round(_mfe_usd / 0.10, 1) if _mfe_usd > 0 else 0.0
         append_trade_csv({
             "time_utc": t_utc,
             "symbol": symbol,
@@ -3933,6 +3942,7 @@ def log_new_closed_deals(state, notifications=None):
             "channel_id": channel_id,
             "ema_at_entry": ema_info.get("ema_at_entry"),
             "ema_aligned": ema_info.get("ema_aligned"),
+            "mfe_pips": _mfe_pips,
         })
 
         state["last_logged_deal_id"] = deal_id
@@ -4572,10 +4582,13 @@ def adopt_manual_trades(state, notifications=None):
         cur_sl     = float(pos.sl or 0.0)
         cur_tp     = float(pos.tp or 0.0)
 
-        # Already managed (bot's own) or already adopted
-        if pos_magic == MAGIC:
+        # Skip if already tracked in managed_positions (bot own or previously adopted)
+        if ticket in state["managed_positions"]:
             continue
-        if ticket in already or ticket in state["managed_positions"]:
+        # Bot's own position not in managed_positions = orphaned after restart — recover it
+        # Manual position (different magic) = adopt as usual
+        is_orphaned_bot = (pos_magic == MAGIC)
+        if ticket in already and not is_orphaned_bot:
             continue
 
         # ── SL: use existing or calculate ATR × 1.5 ──────────────────
@@ -4619,13 +4632,17 @@ def adopt_manual_trades(state, notifications=None):
             "tp_removed":       False,
             "tp1_partial_done": False,
             "tp2_partial_done": False,
+            "peak_profit_usd":  0.0,
             "created":          time.time(),
         }
-        state["position_sources"][ticket] = "ADOPTED"
-        state["adopted_tickets"].append(int(ticket))
+        src_label = "RECOVERED" if is_orphaned_bot else "ADOPTED"
+        state["position_sources"][ticket] = src_label
+        if not is_orphaned_bot:
+            state["adopted_tickets"].append(int(ticket))
 
+        action_label = "RECOVERED" if is_orphaned_bot else "ADOPTED"
         log_event(
-            f"🤝 ADOPTED: {symbol} #{ticket} {side} @ {entry} | "
+            f"🤝 {action_label}: {symbol} #{ticket} {side} @ {entry} | "
             f"SL={orig_sl:.5f} | TP1={tp1:.5f} | magic={pos_magic}"
         )
 
@@ -5045,7 +5062,7 @@ class BotCommandHandler:
         if not BOT_TOKEN or not CONTROL_CHAT_ID:
             log_event("[BOT CMD] BOT_TOKEN or CONTROL_CHAT_ID not set — commands disabled.")
             return
-        self.bot_client = TelegramClient("bot247_session", API_ID, API_HASH)
+        self.bot_client = TelegramClient(StringSession(), API_ID, API_HASH)
         await self.bot_client.start(bot_token=BOT_TOKEN)
         self._register()
         log_event(f"[BOT CMD] Command interface active. Control chat: {CONTROL_CHAT_ID}")
@@ -5571,12 +5588,11 @@ async def main_async():
         except Exception as _e:
             log_event(f'[STARTUP] Session open error: {_e}')
 
-    await bot_cmd.start()
-
     try:
         await asyncio.gather(
             client.run_until_disconnected(),
             bot_cmd.run(),
+            _session_open_on_start(),
         )
     finally:
         if EXECUTION_CHAT_ID:

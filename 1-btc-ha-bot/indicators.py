@@ -1,5 +1,6 @@
 import os
 import pandas as pd
+import config
 
 SILENT = os.getenv("SILENT_MODE", "false").lower() == "true"
 
@@ -44,9 +45,10 @@ def is_doji(candle, threshold=0.15):
 
 def is_high_volume_doji(df_m1, lookback=3, doji_pos=2):
     """
-    Doji range must be >= 85% of the average range of the previous
+    Doji range must be >= DOJI_VOL_THRESHOLD % of the average range of the previous
     `lookback` candles. Confirms meaningful market participation.
     doji_pos: index position of doji from the right (default 2 = df_m1.iloc[-2])
+    Threshold: 0.70 (was 0.85 — too strict, 2026-05-20)
     """
     if len(df_m1) < lookback + doji_pos:
         return False
@@ -56,7 +58,7 @@ def is_high_volume_doji(df_m1, lookback=3, doji_pos=2):
     avg_range  = (recent['ha_high'] - recent['ha_low']).mean()
     if avg_range == 0:
         return False
-    result = doji_range >= avg_range * 0.85
+    result = doji_range >= avg_range * config.DOJI_VOL_THRESHOLD
     if not SILENT:
         print(f"Doji size: {doji_range:.5f} vs avg {doji_range/avg_range*100:.0f}% "
               f"({'OK' if result else 'LOW VOL'})")

@@ -50,16 +50,18 @@ STRATEGY_LABEL = "Free"   # heading -> "CryptoNite Free Signals"
 SILENT         = os.getenv("SILENT_MODE", "false").lower() == "true"
 
 # Relaxed HA parameters
-DOJI_THRESHOLD       = 0.20   # body/range < this -> doji  (was 0.25 — tightened 2026-05-19, backtest: best median R + lowest worst-DD)
-DOJI_VOL_THRESHOLD   = 0.70   # doji range must be >= 70% of recent avg range
-PULLBACK_N           = 2      # was 1 — 2 HA pullback candles required, tighter filter 2026-05-14
-PULLBACK_WICK_TOL    = 0.15   # wick/range <= 15% counts as "clean"
+DOJI_THRESHOLD       = 0.25   # body/range < this -> doji  (Option B 2026-05-21, was 0.20)
+DOJI_VOL_THRESHOLD   = 0.60   # doji range must be >= 60% of recent avg range (Option B 2026-05-21, was 0.70)
+PULLBACK_N           = 2      # 2 HA pullback candles required (unchanged)
+PULLBACK_WICK_TOL    = 0.15   # wick/range <= 15% counts as "clean" (unchanged)
 ATR_PERIOD           = 14
 EMA_PERIOD           = 100
 ATR_SL_MULT          = 2.0    # SL = ATR x 2.0
 ATR_TP_MULT          = 3.0    # TP = ATR x 3.0  ->  1.5 R:R
 MIN_ATR              = 4.0    # absolute floor — block when market is dead quiet (was 0.30, raised 2026-05-19)
-MIN_ATR_RATIO        = 0.70   # also block if ATR < 70% of its 20-bar rolling average
+MIN_ATR_RATIO        = 0.85   # block if ATR < 85% of 20-bar rolling avg (Option B 2026-05-21, was 0.70)
+H1_CONSECUTIVE       = 2      # consecutive same-direction H1 HA candles required (Option B 2026-05-21, was 1)
+MIN_SIGNAL_GAP_MIN   = 30     # minimum minutes between any two signals — kills rapid-fire reversals (Option B 2026-05-21)
 
 M1_BARS  = 200
 M5_BARS  = 100
@@ -245,14 +247,24 @@ def bearish_candle(c) -> bool:
 
 
 def h1_trend(df_h1: pd.DataFrame):
-    """Single-candle H1 trend (relaxed -- standard needs 2 consecutive)."""
-    ha   = heikin_ashi(df_h1)
-    last = ha.iloc[-1]
-    if last["ha_close"] > last["ha_open"]:
-        return "BUY"
-    elif last["ha_close"] < last["ha_open"]:
-        return "SELL"
-    return None
+    """H1 trend direction, or None if unclear.
+
+    H1_CONSECUTIVE controls how many back-to-back same-direction H1 HA candles
+    are required before a trend is declared:
+      1 = single candle (original — faster, noisier)
+      2 = two consecutive candles (Option B — blocks flip-flop entries)
+    """
+    required = H1_CONSECUTIVE
+    ha = heikin_ashi(df_h1)
+    if len(ha) < required:
+        return None
+    dirs = []
+    for i in range(1, required + 1):
+        c = ha.iloc[-i]
+        if   c["ha_close"] > c["ha_open"]: dirs.append("BUY")
+        elif c["ha_close"] < c["ha_open"]: dirs.append("SELL")
+        else: return None   # doji H1 candle — no clear trend
+    return dirs[0] if len(set(dirs)) == 1 else None
 
 
 # ==========================================================
@@ -329,7 +341,7 @@ def check_signal(symbol: str) -> None:
                     current_atr, MIN_ATR_RATIO * 100, atr_avg))
             return
 
-    # --- H1 trend (1-candle, relaxed) ---
+    # --- H1 trend (consecutive candles per H1_CONSECUTIVE) ---
     h1_dir = h1_trend(h1)
     if h1_dir is None:
         if not SILENT: print("  H1 unclear -- skipping")
@@ -399,6 +411,15 @@ def check_signal(symbol: str) -> None:
         if not SILENT: print("  Already sent for this candle -- skipping")
         return
 
+    # 30-min cooldown between signals (Option B) — blocks rapid-fire reversals
+    now_utc = datetime.now(timezone.utc)
+    if last_signal_datetime is not None and MIN_SIGNAL_GAP_MIN > 0:
+        gap_mins = (now_utc - last_signal_datetime).total_seconds() / 60
+        if gap_mins < MIN_SIGNAL_GAP_MIN:
+            if not SILENT:
+                print("  Cooldown: {:.1f}/{} min elapsed -- skipping".format(gap_mins, MIN_SIGNAL_GAP_MIN))
+            return
+
     # Daily cap
     if daily_signal_count >= MAX_DAILY_SIGNALS:
         if not SILENT: print("  Daily cap reached ({}) -- skipping".format(MAX_DAILY_SIGNALS))
@@ -424,7 +445,7 @@ def check_signal(symbol: str) -> None:
         "\U0001f4e1 CryptoNite Free Signals\n"
         "\n"
         "{} <b>XAUUSD | {}</b>\n"
-        "\u23f0 {}\n"
+        "⏰ {}\n"
         "\n"
         "\U0001f4cd Entry:  {}\n"
         "\U0001f6d1 SL:     {}\n"
@@ -436,16 +457,18 @@ def check_signal(symbol: str) -> None:
     log_signal(trend, price, sl, tp)
     logging.info("Signal: %s  price=%.2f  sl=%.2f  tp=%.2f", trend, price, sl, tp)
 
-    last_signal_time   = signal_ts
-    daily_signal_count += 1
+    last_signal_time     = signal_ts
+    last_signal_datetime = now_utc
+    daily_signal_count  += 1
 
 
 # ==========================================================
 # MAIN
 # ==========================================================
-last_signal_time   = None
-daily_signal_count = 0
-signal_count_date  = datetime.now(timezone.utc).date()
+last_signal_time     = None
+last_signal_datetime = None   # datetime of last fired signal — used for MIN_SIGNAL_GAP_MIN cooldown
+daily_signal_count   = 0
+signal_count_date    = datetime.now(timezone.utc).date()
 
 
 def run():

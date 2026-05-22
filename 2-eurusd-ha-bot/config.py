@@ -25,14 +25,20 @@ TP_ATR_MULTIPLIER       = 1.5   # TP = ATR x this (was 1.0 → 1:1; now 1.5R giv
 TRAILING_ATR_MULTIPLIER = 1.0
 # Trail fires at 0.75x ATR profit (~3-4 pips) — was 0.30 (1.5 pips) which caused instant BE exits.
 # TP is only removed once trail SL crosses entry (true breakeven+), not at first trail tick.
-TRAIL_ATR_TRIGGER       = 0.75
-TRAIL_ATR_BUFFER        = 0.50    # SL trails 0.50x ATR behind price (was 0.25 — too tight, caused noise stops)
-BE_BUFFER_PTS           = 0.0003  # Lock in 3 pips above entry before trailing free (was 0.0005)
+# Trail: CNFS-style max(pip_floor, pct_of_ATR) — aligned 2026-05-20
+# At ATR ~5pips: trigger=max(10pips, 1pip)=10pips, trail=max(8pips, 0.75pip)=8pips behind price
+TRAIL_ATR_TRIGGER       = 0.20    # fire trail when profit >= 20% of ATR (was 0.75)
+TRAIL_ATR_BUFFER        = 0.15    # SL trails 15% of ATR behind price (was 0.50)
+MIN_BE_PIPS             = 10      # floor: 10pip minimum trigger (EURUSD-specific — $1.00 at 0.01 lot)
+MIN_TRAIL_PIPS          = 8       # floor: 8pip minimum trail gap behind price
+PIP_SIZE                = 0.0001  # EURUSD: 1 pip = 0.0001 price units
+BE_BUFFER_PTS           = 0.0002  # 2 pips above entry at lock (was 0.0003)
 
 # --- Entry filters ---
-DOJI_THRESHOLD = 0.25    # was 0.15 — relaxed to match BTC bot and CNFS executor
-# Below 0.0003 (3 pips) = market is ranging/dead, skip.
-MIN_ATR = 0.0003
+DOJI_THRESHOLD     = 0.25    # was 0.15 — relaxed to match BTC bot and CNFS executor
+DOJI_VOL_THRESHOLD = 0.70    # Doji range >= this % of avg recent candle range (was 0.85 — 2026-05-20)
+# Below 0.000175 (1.75 pips) = market truly dead, skip. Was 0.0003 (3 pips) — blocked most sessions 2026-05-20.
+MIN_ATR = 0.000175
 
 # --- Timing ---
 SESSION_CLOSE_BUFFER = 30  # minutes — no new entries within 30min of session close

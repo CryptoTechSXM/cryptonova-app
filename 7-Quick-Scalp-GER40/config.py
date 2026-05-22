@@ -20,7 +20,7 @@ TF_1D   = 1440
 
 # Liquidity candle: opening range must be 20-35% of daily ATR
 # Same thresholds as NAS100 -- both are high-vol indices
-LIQ_PCT_MIN = 0.10  # lowered from 0.20 -- DAX opening candles typically 10-15% of daily ATR
+LIQ_PCT_MIN = 0.03  # lowered from 0.10 — GER40 readings 2-9%, floor still too high (2026-05-20)
 LIQ_PCT_MAX = 0.50  # raised ceiling slightly to match
 ATR_PERIOD  = 14
 

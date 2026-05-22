@@ -1,5 +1,5 @@
 import time
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 import MetaTrader5 as mt5
 import config
 from data            import initialize, get_data, get_daily_atr
@@ -210,6 +210,19 @@ def try_box_opening_range():
         log_event('[{}] Box error: {}'.format(config.SYMBOL, e))
 
 
+def _secs_to_next_session():
+    """Seconds until next session open (UTC). Skips weekends."""
+    now    = datetime.now(timezone.utc).replace(tzinfo=None)
+    open_h = config.SESSION_OPEN_HOUR
+    open_m = getattr(config, 'SESSION_OPEN_MIN', 0)
+    nxt    = now.replace(hour=open_h, minute=open_m, second=0, microsecond=0)
+    if nxt <= now:
+        nxt += timedelta(days=1)
+    while nxt.weekday() >= 5:
+        nxt += timedelta(days=1)
+    return max(60, (nxt - now).total_seconds())
+
+
 def run():
     global today_traded, last_scan_candle
     if not safe_initialize():
@@ -242,7 +255,9 @@ def run():
                 time.sleep(config.CHECK_INTERVAL)
                 continue
             if today_box == 'invalid':
-                time.sleep(config.CHECK_INTERVAL)
+                secs = _secs_to_next_session()
+                log_event('[{}] Box invalid — sleeping {:.1f}h until next session'.format(config.SYMBOL, secs/3600))
+                time.sleep(min(secs, 1800))
                 continue
             # Sync today_traded with MT5 on every cycle — prevents double-entry on restart.
             # Check BOTH open positions AND pending orders (pending stops aren't positions yet).
@@ -255,7 +270,6 @@ def run():
                     today_traded = True
 
             if today_traded:
-                log_event('[{}] Already traded today -- waiting for next session'.format(config.SYMBOL))
                 # Cancel stale pending orders past the window
                 open_orders = mt5.orders_get(symbol=config.SYMBOL) or []
                 for o in open_orders:
@@ -265,7 +279,14 @@ def run():
                             res = mt5.order_send({'action': mt5.TRADE_ACTION_REMOVE, 'order': o.ticket})
                             if res and res.retcode == mt5.TRADE_RETCODE_DONE:
                                 log_event('[{}] Pending order {} cancelled — stale after {:.0f} min'.format(config.SYMBOL, o.ticket, age_min))
-                time.sleep(60)
+                open_pos = mt5.positions_get(symbol=config.SYMBOL) or []
+                has_pos  = any(p.magic == config.MAGIC_NUMBER for p in open_pos)
+                if has_pos:
+                    time.sleep(30)  # position open — keep polling for trail/close
+                else:
+                    secs = _secs_to_next_session()
+                    log_event('[{}] Traded, no open position — sleeping {:.1f}h until next session'.format(config.SYMBOL, secs/3600))
+                    time.sleep(min(secs, 1800))
                 continue
             if not risk_manager.can_trade():
                 log_event('[{}] Risk manager blocked -- daily limit reached'.format(config.SYMBOL))
