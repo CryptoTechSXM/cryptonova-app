@@ -915,28 +915,28 @@ def check_signal(symbol):
         _daily_count_date = today
         _daily_count      = 0
 
-    m1 = heikin_ashi(get_rates(symbol, mt5.TIMEFRAME_M1, config.M1_BARS))
-    m5 = heikin_ashi(get_rates(symbol, mt5.TIMEFRAME_M5, config.M5_BARS))
-    h1 = get_rates(symbol, mt5.TIMEFRAME_H1, config.H1_BARS)
+    m1  = heikin_ashi(get_rates(symbol, mt5.TIMEFRAME_M1,  config.M1_BARS))
+    m15 = heikin_ashi(get_rates(symbol, mt5.TIMEFRAME_M15, config.M15_BARS))
+    h1  = get_rates(symbol, mt5.TIMEFRAME_H1, config.H1_BARS)
 
-    m1["ema"] = calc_ema(m1["close"], config.EMA_PERIOD)
-    m5["atr"] = calc_atr(m5, config.ATR_PERIOD)
+    m1["ema"]  = calc_ema(m1["close"], config.EMA_PERIOD)
+    m15["atr"] = calc_atr(m15, config.ATR_PERIOD)
 
     current_m1  = m1.iloc[-1]
     confirm_m1  = m1.iloc[-2]
     doji_candle = m1.iloc[-3]
-    closed_m5   = m5.iloc[-2]
+    closed_m15  = m15.iloc[-2]   # last fully-closed M15 candle
 
     price       = current_m1["close"]
     ema_val     = current_m1["ema"]
-    current_atr = closed_m5["atr"]
+    current_atr = closed_m15["atr"]   # ATR sourced from M15 — less noisy than M5
 
-    log_event("Scan  Price={:.2f}  ATR={:.2f}  EMA={:.2f}".format(
+    log_event("Scan  Price={:.2f}  ATR(M15)={:.2f}  EMA={:.2f}".format(
         price, current_atr or 0, ema_val))
 
     if pd.isna(current_atr) or current_atr < config.MIN_ATR:
         log_event("  skip: ATR too low — floor ({:.2f} < {})".format(current_atr or 0, config.MIN_ATR)); return None
-    atr_series = m5["atr"].dropna()
+    atr_series = m15["atr"].dropna()
     if len(atr_series) >= 20:
         atr_avg = float(atr_series.iloc[-20:].mean())
         if current_atr < config.MIN_ATR_RATIO * atr_avg:
@@ -954,10 +954,10 @@ def check_signal(symbol):
         log_event("  skip: doji too small"); return None
     if not has_clean_pullback(m1, trend):
         log_event("  skip: no clean pullback"); return None
-    if trend == "BUY"  and closed_m5["ha_close"] <= closed_m5["ha_open"]:
-        log_event("  skip: M5 HA not bullish"); return None
-    if trend == "SELL" and closed_m5["ha_close"] >= closed_m5["ha_open"]:
-        log_event("  skip: M5 HA not bearish"); return None
+    if trend == "BUY"  and closed_m15["ha_close"] <= closed_m15["ha_open"]:
+        log_event("  skip: M15 HA not bullish"); return None
+    if trend == "SELL" and closed_m15["ha_close"] >= closed_m15["ha_open"]:
+        log_event("  skip: M15 HA not bearish"); return None
     if trend == "BUY"  and confirm_m1["ha_close"] <= confirm_m1["ha_open"]:
         log_event("  skip: M1 HA not confirming BUY"); return None
     if trend == "SELL" and confirm_m1["ha_close"] >= confirm_m1["ha_open"]:

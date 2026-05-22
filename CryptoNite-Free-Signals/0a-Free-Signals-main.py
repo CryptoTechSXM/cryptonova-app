@@ -52,19 +52,20 @@ SILENT         = os.getenv("SILENT_MODE", "false").lower() == "true"
 # Relaxed HA parameters
 DOJI_THRESHOLD       = 0.25   # body/range < this -> doji  (Option B 2026-05-21, was 0.20)
 DOJI_VOL_THRESHOLD   = 0.60   # doji range must be >= 60% of recent avg range (Option B 2026-05-21, was 0.70)
-PULLBACK_N           = 2      # 2 HA pullback candles required (unchanged)
+PULLBACK_N           = 3      # 2026-05-22: raised to 3 M1 pullback candles — higher conviction (was 2)
 PULLBACK_WICK_TOL    = 0.15   # wick/range <= 15% counts as "clean" (unchanged)
 ATR_PERIOD           = 14
 EMA_PERIOD           = 100
 ATR_SL_MULT          = 2.0    # SL = ATR x 2.0
 ATR_TP_MULT          = 3.0    # TP = ATR x 3.0  ->  1.5 R:R
 MIN_ATR              = 4.0    # absolute floor — block when market is dead quiet (was 0.30, raised 2026-05-19)
-MIN_ATR_RATIO        = 0.85   # block if ATR < 85% of 20-bar rolling avg (Option B 2026-05-21, was 0.70)
+MIN_ATR_RATIO        = 0.75   # eased 2026-05-22: 75% of 20-bar avg — less aggressive gate (was 0.85)
 H1_CONSECUTIVE       = 2      # consecutive same-direction H1 HA candles required (Option B 2026-05-21, was 1)
-MIN_SIGNAL_GAP_MIN   = 30     # minimum minutes between any two signals — kills rapid-fire reversals (Option B 2026-05-21)
+MIN_SIGNAL_GAP_MIN   = 5      # 2026-05-22: 5-min gap — M1 pattern reset takes ~3-5 min naturally (was 30)
 
 M1_BARS  = 200
 M5_BARS  = 100
+M15_BARS = 100    # M15 bars for HA confirmation + ATR source (replaces M5)
 H1_BARS  = 50
 
 CHECK_INTERVAL    = 30    # seconds between signal checks
@@ -299,28 +300,28 @@ def check_signal(symbol: str) -> None:
         daily_signal_count = 0
 
     # --- Fetch data directly from MT5 ---
-    m1 = get_rates(symbol, mt5.TIMEFRAME_M1, M1_BARS)
-    m5 = get_rates(symbol, mt5.TIMEFRAME_M5, M5_BARS)
-    h1 = get_rates(symbol, mt5.TIMEFRAME_H1, H1_BARS)
+    m1  = get_rates(symbol, mt5.TIMEFRAME_M1,  M1_BARS)
+    m15 = get_rates(symbol, mt5.TIMEFRAME_M15, M15_BARS)
+    h1  = get_rates(symbol, mt5.TIMEFRAME_H1,  H1_BARS)
 
     # --- Apply HA transform ---
-    m1 = heikin_ashi(m1)
-    m5 = heikin_ashi(m5)
+    m1  = heikin_ashi(m1)
+    m15 = heikin_ashi(m15)
 
     # --- Compute indicators ---
-    m1["ema"] = calc_ema(m1["close"], EMA_PERIOD)
-    m5["atr"] = calc_atr(m5, ATR_PERIOD)
+    m1["ema"]  = calc_ema(m1["close"], EMA_PERIOD)
+    m15["atr"] = calc_atr(m15, ATR_PERIOD)
 
     # Reference candles
     # Doji at [-3], M1 confirmation at [-2], live candle at [-1]
-    current_m1  = m1.iloc[-1]   # live forming candle
-    confirm_m1  = m1.iloc[-2]   # M1 confirmation candle (must agree with trend)
-    doji_candle = m1.iloc[-3]   # doji / indecision candle
-    closed_m5   = m5.iloc[-2]
+    current_m1  = m1.iloc[-1]    # live forming candle
+    confirm_m1  = m1.iloc[-2]    # M1 confirmation candle (must agree with trend)
+    doji_candle = m1.iloc[-3]    # doji / indecision candle
+    closed_m15  = m15.iloc[-2]   # last fully-closed M15 candle
 
     price       = current_m1["close"]
     ema_val     = current_m1["ema"]
-    current_atr = closed_m5["atr"]
+    current_atr = closed_m15["atr"]   # ATR sourced from M15 — less noisy than M5
 
     if not SILENT:
         print("\n[{} UTC]  Price: {:.2f}  EMA{}: {:.2f}  ATR: {:.4f}".format(
@@ -332,7 +333,7 @@ def check_signal(symbol: str) -> None:
         if not SILENT:
             print("  ATR {:.4f} < {} -- skipping (ATR floor)".format(current_atr, MIN_ATR))
         return
-    atr_series = m5["atr"].dropna()
+    atr_series = m15["atr"].dropna()
     if len(atr_series) >= 20:
         atr_avg = float(atr_series.iloc[-20:].mean())
         if current_atr < MIN_ATR_RATIO * atr_avg:
@@ -381,14 +382,14 @@ def check_signal(symbol: str) -> None:
         return
     if not SILENT: print("  Clean pullback OK")
 
-    # --- M5 direction confirmation ---
-    if trend == "BUY" and closed_m5["ha_close"] <= closed_m5["ha_open"]:
-        if not SILENT: print("  M5 not bullish -- skipping")
+    # --- M15 direction confirmation ---
+    if trend == "BUY" and closed_m15["ha_close"] <= closed_m15["ha_open"]:
+        if not SILENT: print("  M15 not bullish -- skipping")
         return
-    if trend == "SELL" and closed_m5["ha_close"] >= closed_m5["ha_open"]:
-        if not SILENT: print("  M5 not bearish -- skipping")
+    if trend == "SELL" and closed_m15["ha_close"] >= closed_m15["ha_open"]:
+        if not SILENT: print("  M15 not bearish -- skipping")
         return
-    if not SILENT: print("  M5 {} OK".format(trend.lower()))
+    if not SILENT: print("  M15 {} OK".format(trend.lower()))
 
     # --- M1 confirmation candle (relaxed -- direction only, 15% wick tolerance) ---
     if trend == "BUY":
