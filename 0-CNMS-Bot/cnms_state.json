@@ -1,22 +1,5 @@
 {
-  "managed_positions": {
-    "237550888": {
-      "symbol": "XAUUSD.s",
-      "type": 1,
-      "side": "SELL",
-      "entry": 4515.03,
-      "sl_init": 4524.7375,
-      "tp_init": 4466.5525,
-      "lots": 0.01,
-      "sl_delta": 9.697500000000218,
-      "opened_at": "2026-05-22T15:00:02.943361",
-      "moved_be": true,
-      "trail_on": true,
-      "scalp_locked": true,
-      "peak_profit_pts": 8.94,
-      "source": "MACD_M15"
-    }
-  },
+  "managed_positions": {},
   "manual_pause": false,
   "last_bar_times": {},
   "last_signal_times": {

@@ -1131,7 +1131,6 @@ def manage_positions_once(state: dict) -> list[str]:
                     log_event(f"🏃 ATR trail: ticket={p.ticket} SL→{desired_sl:.4f}")
 
     save_state(state)
-    mt5_disconnect()
     return notifications
 
 
@@ -1284,7 +1283,6 @@ def _signal_tick(last_bar_time: dict) -> dict:
             log_event(f"[SIGNAL] Error processing {raw_sym}:\n" + traceback.format_exc())
 
     save_state(state)
-    mt5_disconnect()
     return {"alerts": alerts, "mirrors": mirrors}
 
 
