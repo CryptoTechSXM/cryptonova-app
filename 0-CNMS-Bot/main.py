@@ -1065,11 +1065,10 @@ def manage_positions_once(state: dict) -> list[str]:
         p = pos_by_ticket.get(ticket_str)
 
         if p is None:
-            # Position has closed — record it and remove from tracking
+            # Position has closed — remove from tracking.
+            # Recording is handled by _sync_closed_deals (deal poller) which
+            # runs each manager tick and writes to trades.csv + daily_stats.
             managed.pop(ticket_str, None)
-            notif = _record_closed_position(state, int(ticket_str), meta)
-            if notif:
-                notifications.append(notif)
             continue
 
         symbol   = meta["symbol"]
@@ -1546,7 +1545,9 @@ async def manager_loop():
         try:
             async with MT5_ASYNC_LOCK:
                 state         = await asyncio.to_thread(load_state)
+                sync_notifs   = await asyncio.to_thread(_sync_closed_deals, state)
                 notifications = await asyncio.to_thread(manage_positions_once, state)
+                notifications = sync_notifs + notifications
 
             if _mt5_was_down:
                 log_event("[MT5] Connection recovered.")
@@ -1595,8 +1596,318 @@ async def manager_loop():
 # DAILY REPORT
 # ════════════════════════════════════════════════════════════════════════════════
 
+# ════════════════════════════════════════════════════════════════════════════════
+# DEAL HISTORY SYNC  — catches closes that happened outside an active session
+# ════════════════════════════════════════════════════════════════════════════════
+
+def _load_csv_tickets() -> set:
+    """Return the set of ticket (position) IDs already recorded in trades.csv."""
+    tickets: set = set()
+    if not os.path.exists(TRADES_CSV):
+        return tickets
+    try:
+        with open(TRADES_CSV, newline="", encoding="utf-8") as f:
+            for row in csv.DictReader(f):
+                t = row.get("ticket")
+                if t:
+                    try:
+                        tickets.add(int(t))
+                    except ValueError:
+                        pass
+    except Exception:
+        pass
+    return tickets
+
+
+def _tally_cnms_today() -> dict:
+    """
+    Read today's closed CNMS deals straight from MT5 history.
+    Returns a stats bucket dict identical to what daily_stats stores.
+    Used by format_daily_report as primary data source so the report is
+    accurate even after a crash that wiped state.
+    """
+    _BE_PLUS_MAX = 5.0
+    b = {"trades": 0, "wins": 0, "losses": 0, "be_plus": 0, "breakeven": 0,
+         "profit": 0.0, "sum_win": 0.0, "sum_loss": 0.0}
+    try:
+        today_start = datetime.combine(date.today(), datetime.min.time())
+        deals = mt5.history_deals_get(today_start, datetime.now() + timedelta(seconds=5))
+        if deals is None:
+            return b
+        for d in deals:
+            if getattr(d, "magic", None) != MAGIC:
+                continue
+            if getattr(d, "entry", None) not in (mt5.DEAL_ENTRY_OUT, mt5.DEAL_ENTRY_OUT_BY):
+                continue
+            profit = round(
+                float(getattr(d, "profit",     0.0))
+                + float(getattr(d, "commission", 0.0))
+                + float(getattr(d, "swap",       0.0)),
+                4
+            )
+            b["trades"] += 1
+            b["profit"]  = round(b["profit"] + profit, 4)
+            if profit >= _BE_PLUS_MAX:
+                b["wins"]    += 1
+                b["sum_win"]  = round(b["sum_win"] + profit, 4)
+            elif profit > 0:
+                b["be_plus"] += 1
+                b["sum_win"]  = round(b["sum_win"] + profit, 4)
+            elif profit < 0:
+                b["losses"]   += 1
+                b["sum_loss"] = round(b["sum_loss"] + profit, 4)
+            else:
+                b["breakeven"] += 1
+    except Exception:
+        log_event("[TALLY] MT5 history unavailable:\n" + traceback.format_exc())
+    return b
+
+
+def _sync_closed_deals(state: dict) -> list:
+    """
+    Poll MT5 deal history for CNMS closes that have not been recorded yet.
+    Runs every manager tick — guarantees no close is missed regardless of
+    crash timing or whether the position was in managed_positions.
+
+    Uses state["last_synced_deal_id"] as a monotonic watermark.
+    Deduplicates against trades.csv to handle closes already written by
+    MACD_UNWIND or the legacy _record_closed_position path.
+    """
+    notifications = []
+    try:
+        mt5_connect()
+        state.setdefault("last_synced_deal_id", 0)
+        last_id = int(state.get("last_synced_deal_id", 0))
+
+        now   = datetime.now()
+        start = now - timedelta(hours=24)
+        deals = mt5.history_deals_get(start, now + timedelta(seconds=5))
+        if not deals:
+            return notifications
+
+        # Separate IN (open) and OUT (close) deals for entry price lookup
+        in_deals: dict = {}   # position_id → opening deal
+        out_deals: list = []  # closing deals not yet watermarked
+
+        for d in deals:
+            if getattr(d, "magic", None) != MAGIC:
+                continue
+            entry_flag = getattr(d, "entry", None)
+            pos_id     = int(getattr(d, "position_id", 0))
+            if entry_flag == mt5.DEAL_ENTRY_IN:
+                in_deals[pos_id] = d
+            elif entry_flag in (mt5.DEAL_ENTRY_OUT, mt5.DEAL_ENTRY_OUT_BY):
+                deal_id = int(getattr(d, "ticket", 0))
+                if deal_id > last_id:
+                    out_deals.append(d)
+
+        if not out_deals:
+            return notifications
+
+        out_deals.sort(key=lambda x: int(getattr(x, "ticket", 0)))
+        existing_tickets = _load_csv_tickets()
+
+        for d in out_deals:
+            deal_id  = int(getattr(d, "ticket",      0))
+            pos_id   = int(getattr(d, "position_id", 0))
+            profit   = round(
+                float(getattr(d, "profit",     0.0))
+                + float(getattr(d, "commission", 0.0))
+                + float(getattr(d, "swap",       0.0)),
+                4
+            )
+            close_px = float(getattr(d, "price",  0.0))
+            symbol   = str(getattr(d, "symbol",  ""))
+            volume   = float(getattr(d, "volume", 0.0))
+            comment  = str(getattr(d, "comment", ""))
+            close_ts = datetime.fromtimestamp(
+                int(getattr(d, "time", 0)), tz=timezone.utc
+            ).strftime("%Y-%m-%d %H:%M:%S")
+
+            # Resolve entry price + side from the paired IN deal
+            in_d     = in_deals.get(pos_id)
+            entry_px = float(getattr(in_d, "price", 0.0)) if in_d else 0.0
+            # The IN deal type is the direction the position was opened:
+            # DEAL_TYPE_BUY = bought (BUY position); DEAL_TYPE_SELL = sold (SELL position)
+            in_type  = int(getattr(in_d, "type", -1)) if in_d else -1
+            side     = "BUY" if in_type == mt5.DEAL_TYPE_BUY else "SELL"
+
+            # Supplement from managed_positions metadata where available
+            meta     = state.get("managed_positions", {}).get(str(pos_id), {})
+            sl_init  = float(meta.get("sl_init", 0.0))
+            tp_init  = float(meta.get("tp_init", 0.0))
+            sl_delta = float(meta.get("sl_delta", 0.0))
+            if not entry_px and meta:
+                entry_px = float(meta.get("entry", 0.0))
+            if meta.get("side"):
+                side = meta["side"]
+
+            # Always advance watermark
+            state["last_synced_deal_id"] = max(last_id, deal_id)
+            last_id = state["last_synced_deal_id"]
+
+            is_new = pos_id not in existing_tickets
+
+            if is_new:
+                # Write CSV row
+                log_trade_csv({
+                    "time":        close_ts,
+                    "ticket":      pos_id,
+                    "symbol":      symbol,
+                    "side":        side,
+                    "lots":        volume,
+                    "entry":       entry_px,
+                    "sl":          sl_init,
+                    "tp":          tp_init,
+                    "close_price": close_px,
+                    "profit":      profit,
+                    "exit_reason": comment,
+                })
+                existing_tickets.add(pos_id)
+                # Update daily stats in state
+                record_trade_close(state, profit)
+                log_event(f"[SYNC] Recorded close: pos={pos_id} {symbol} {side} "
+                          f"profit={profit:+.2f} deal={deal_id}")
+
+                # Build Telegram notification
+                _BE_PLUS_MAX = 5.0
+                if profit >= _BE_PLUS_MAX:
+                    close_icon, outcome_s = "\u2705", "WIN"
+                elif profit > 0:
+                    close_icon, outcome_s = "\U0001f6e1\ufe0f", "BE+"
+                elif profit < 0:
+                    close_icon, outcome_s = "\u274c", "LOSS"
+                else:
+                    close_icon, outcome_s = "\u2796", "BE"
+                dir_icon  = "\U0001f4c8" if side == "BUY" else "\U0001f4c9"
+                clean_sym = symbol.split(".")[0] if "." in symbol else symbol
+                now_str   = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+                rr_line   = ""
+                if sl_delta > 0 and entry_px > 0:
+                    price_diff = (close_px - entry_px) if side == "BUY" else (entry_px - close_px)
+                    rr_line    = f"\U0001f4ca R:R:    {price_diff/sl_delta:+.2f}R\n"
+                elif sl_init > 0 and entry_px > 0:
+                    sl_d = abs(entry_px - sl_init)
+                    if sl_d > 0:
+                        price_diff = (close_px - entry_px) if side == "BUY" else (entry_px - close_px)
+                        rr_line    = f"\U0001f4ca R:R:    {price_diff/sl_d:+.2f}R\n"
+                notifications.append(
+                    f"{close_icon} <b>Trade Closed \u2014 {outcome_s}</b>\n"
+                    f"\U0001f4ca {INSTANCE_NAME}  |  \U0001f4e1 MACD {MACD_TIMEFRAME}\n"
+                    f"\n"
+                    f"{dir_icon} <b>{clean_sym} | {side}</b>\n"
+                    f"\u23f0 {now_str}\n"
+                    f"\n"
+                    f"\U0001f4cd Entry:  {entry_px:.5f}\n"
+                    f"\U0001f3c1 Exit:   {close_px:.5f}\n"
+                    f"{rr_line}"
+                    f"\U0001f4b0 P/L:    <b>{profit:+.2f}</b>\n"
+                    f"\U0001f3ab Ticket: {pos_id}"
+                )
+            else:
+                log_event(f"[SYNC] Already recorded pos={pos_id}, advancing watermark to {deal_id}")
+
+    except Exception:
+        log_event("[SYNC] _sync_closed_deals error:\n" + traceback.format_exc())
+    return notifications
+
+
+def _backfill_historical_deals(state: dict) -> int:
+    """
+    Run ONCE on startup. Scans last 30 days of MT5 history for CNMS closes
+    that are missing from trades.csv and patches the CSV.
+    Does NOT update daily_stats or send Telegram — silent CSV repair only.
+    Returns the number of rows backfilled.
+    """
+    count = 0
+    try:
+        mt5_connect()
+        now       = datetime.now()
+        start     = now - timedelta(days=30)
+        deals     = mt5.history_deals_get(start, now + timedelta(seconds=5))
+        if not deals:
+            return 0
+
+        in_deals: dict = {}
+        out_deals: list = []
+        for d in deals:
+            if getattr(d, "magic", None) != MAGIC:
+                continue
+            entry_flag = getattr(d, "entry", None)
+            pos_id     = int(getattr(d, "position_id", 0))
+            if entry_flag == mt5.DEAL_ENTRY_IN:
+                in_deals[pos_id] = d
+            elif entry_flag in (mt5.DEAL_ENTRY_OUT, mt5.DEAL_ENTRY_OUT_BY):
+                out_deals.append(d)
+
+        existing_tickets = _load_csv_tickets()
+
+        out_deals.sort(key=lambda x: int(getattr(x, "time", 0)))
+        for d in out_deals:
+            pos_id   = int(getattr(d, "position_id", 0))
+            if pos_id in existing_tickets:
+                continue
+
+            profit   = round(
+                float(getattr(d, "profit",     0.0))
+                + float(getattr(d, "commission", 0.0))
+                + float(getattr(d, "swap",       0.0)),
+                4
+            )
+            close_px = float(getattr(d, "price",  0.0))
+            symbol   = str(getattr(d, "symbol",  ""))
+            volume   = float(getattr(d, "volume", 0.0))
+            comment  = str(getattr(d, "comment", ""))
+            close_ts = datetime.fromtimestamp(
+                int(getattr(d, "time", 0)), tz=timezone.utc
+            ).strftime("%Y-%m-%d %H:%M:%S")
+
+            in_d     = in_deals.get(pos_id)
+            entry_px = float(getattr(in_d, "price", 0.0)) if in_d else 0.0
+            in_type  = int(getattr(in_d, "type", -1)) if in_d else -1
+            side     = "BUY" if in_type == mt5.DEAL_TYPE_BUY else "SELL"
+
+            meta     = state.get("managed_positions", {}).get(str(pos_id), {})
+            sl_init  = float(meta.get("sl_init", 0.0))
+            tp_init  = float(meta.get("tp_init", 0.0))
+            if not entry_px and meta:
+                entry_px = float(meta.get("entry", 0.0))
+            if meta.get("side"):
+                side = meta["side"]
+
+            log_trade_csv({
+                "time":        close_ts,
+                "ticket":      pos_id,
+                "symbol":      symbol,
+                "side":        side,
+                "lots":        volume,
+                "entry":       entry_px,
+                "sl":          sl_init,
+                "tp":          tp_init,
+                "close_price": close_px,
+                "profit":      profit,
+                "exit_reason": comment,
+            })
+            existing_tickets.add(pos_id)
+            count += 1
+            log_event(f"[BACKFILL] Patched pos={pos_id} {symbol} {side} "
+                      f"profit={profit:+.2f} close={close_ts}")
+
+    except Exception:
+        log_event("[BACKFILL] Error:\n" + traceback.format_exc())
+    return count
+
+
+
 def format_daily_report(state: dict, day_str: str) -> str:
-    b = state.get("daily_stats", {}).get(day_str, {})
+    # For today use MT5 deal history as primary source (survives crashes/restarts).
+    # For past days fall back to state["daily_stats"] which was populated by the
+    # continuous deal poller while those days were current.
+    from datetime import date as _date
+    if day_str == _date.today().isoformat():
+        b = _tally_cnms_today()
+    else:
+        b = state.get("daily_stats", {}).get(day_str, {})
 
     tot_trades  = int(b.get("trades",    0))
     tot_wins    = int(b.get("wins",      0))
@@ -1943,6 +2254,23 @@ async def main():
                     )
     except Exception:
         log_event("[RECOVER] Startup position recovery failed:\n" + traceback.format_exc())
+
+    # ── Backfill any closes missed during downtime (30-day window) ────────────
+    try:
+        _bst = load_state()
+        if mt5_connect():
+            _bfilled = await asyncio.to_thread(_backfill_historical_deals, _bst)
+            if _bfilled > 0:
+                save_state(_bst)
+                log_event(f"[BACKFILL] {_bfilled} historical deal(s) written to trades.csv.")
+                if EXECUTION_CHAT_ID and BOT_TOKEN:
+                    await safe_send(
+                        int(EXECUTION_CHAT_ID),
+                        f"📂 <b>{INSTANCE_NAME} — backfill complete</b>\n"
+                        f"{_bfilled} closed deal(s) recovered from MT5 history."
+                    )
+    except Exception:
+        log_event("[BACKFILL] Startup backfill failed:\n" + traceback.format_exc())
 
     # ── Shutdown event — set by OS signal handlers ────────────────────────────
     shutdown_event = asyncio.Event()
