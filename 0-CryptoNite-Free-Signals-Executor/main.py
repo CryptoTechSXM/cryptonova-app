@@ -686,6 +686,161 @@ def modify_sl(ticket, symbol, new_sl, tp):
 
 # =============================================================
 # TRADE OUTCOME LOGGER
+
+# =============================================================
+# DEAL HISTORY SYNC  — catches closes missed by trail_monitor
+# =============================================================
+
+_LAST_DEAL_FILE = os.path.join(_SCRIPT_DIR, "last_synced_deal_id.txt")
+
+def _load_synced_deal_id():
+    try:
+        return int(open(_LAST_DEAL_FILE).read().strip())
+    except Exception:
+        return 0
+
+def _save_synced_deal_id(deal_id):
+    try:
+        open(_LAST_DEAL_FILE, "w").write(str(deal_id))
+    except Exception:
+        pass
+
+def _load_csv_tickets():
+    """Return set of ticket IDs already in trades_log.csv (for dedup)."""
+    tickets = set()
+    try:
+        if os.path.exists(TRADES_LOG):
+            with open(TRADES_LOG, newline="") as f:
+                for row in csv.DictReader(f):
+                    t = row.get("ticket", "")
+                    if t:
+                        tickets.add(str(t))
+    except Exception:
+        pass
+    return tickets
+
+def _sync_closed_deals():
+    """
+    Query MT5 deal history (24h window) and write any CNFS closes
+    not yet in trades_log.csv.  Called every scan tick.
+    Returns count of new rows written.
+    """
+    try:
+        from datetime import timedelta as _td
+        now   = datetime.now(timezone.utc)
+        since = now - _td(hours=24)
+        deals = mt5.history_deals_get(
+            since.replace(tzinfo=None), now.replace(tzinfo=None))
+        if not deals:
+            return 0
+
+        last_id    = _load_synced_deal_id()
+        csv_tix    = _load_csv_tickets()
+        by_pos     = {}
+        for d in deals:
+            if d.magic != config.MAGIC_NUMBER:
+                continue
+            by_pos.setdefault(d.position_id, []).append(d)
+
+        written     = 0
+        new_last_id = last_id
+        for pos_id, pos_deals in by_pos.items():
+            open_deal  = next((d for d in pos_deals if d.entry == 0), None)
+            close_deal = next((d for d in pos_deals if d.entry == 1), None)
+            if not close_deal or not open_deal:
+                continue
+            if close_deal.ticket <= last_id:
+                continue
+            new_last_id = max(new_last_id, close_deal.ticket)
+            if str(close_deal.ticket) in csv_tix:
+                continue
+            direction = "BUY" if open_deal.type == 0 else "SELL"
+            open_time = datetime.fromtimestamp(open_deal.time, tz=timezone.utc)
+            meta = {
+                "direction":   direction,
+                "entry":       open_deal.price,
+                "original_sl": 0.0,
+                "original_tp": 0.0,
+                "be_done":     False,
+                "open_time":   open_time,
+                "ticket":      close_deal.ticket,
+            }
+            log_trade_outcome(meta, close_deal.price, close_deal.profit,
+                              lot=close_deal.volume)
+            log_event("[SYNC] Recorded missed close: ticket={} {} @ {:.2f} → {:.2f}  P&L={:.2f}".format(
+                close_deal.ticket, direction, open_deal.price,
+                close_deal.price, close_deal.profit))
+            written += 1
+
+        if new_last_id > last_id:
+            _save_synced_deal_id(new_last_id)
+        return written
+    except Exception:
+        import traceback as _tb
+        log_event("[SYNC] _sync_closed_deals error:\n" + _tb.format_exc())
+        return 0
+
+
+def _backfill_historical_deals():
+    """
+    Startup: scan 30 days of MT5 history for CNFS closes missing from
+    trades_log.csv (e.g. bot was down when the position closed).
+    Returns count of rows written.
+    """
+    try:
+        from datetime import timedelta as _td
+        now   = datetime.now(timezone.utc)
+        since = now - _td(days=30)
+        deals = mt5.history_deals_get(
+            since.replace(tzinfo=None), now.replace(tzinfo=None))
+        if not deals:
+            log_event("[BACKFILL] No deals in 30-day window.")
+            return 0
+
+        csv_tix = _load_csv_tickets()
+        by_pos  = {}
+        for d in deals:
+            if d.magic != config.MAGIC_NUMBER:
+                continue
+            by_pos.setdefault(d.position_id, []).append(d)
+
+        written     = 0
+        max_deal_id = 0
+        for pos_id, pos_deals in by_pos.items():
+            open_deal  = next((d for d in pos_deals if d.entry == 0), None)
+            close_deal = next((d for d in pos_deals if d.entry == 1), None)
+            if not close_deal or not open_deal:
+                continue
+            max_deal_id = max(max_deal_id, close_deal.ticket)
+            if str(close_deal.ticket) in csv_tix:
+                continue
+            direction = "BUY" if open_deal.type == 0 else "SELL"
+            open_time = datetime.fromtimestamp(open_deal.time, tz=timezone.utc)
+            meta = {
+                "direction":   direction,
+                "entry":       open_deal.price,
+                "original_sl": 0.0,
+                "original_tp": 0.0,
+                "be_done":     False,
+                "open_time":   open_time,
+                "ticket":      close_deal.ticket,
+            }
+            log_trade_outcome(meta, close_deal.price, close_deal.profit,
+                              lot=close_deal.volume)
+            log_event("[BACKFILL] Recovered: ticket={} {} @ {:.2f} → {:.2f}  P&L={:.2f}".format(
+                close_deal.ticket, direction, open_deal.price,
+                close_deal.price, close_deal.profit))
+            written += 1
+
+        if max_deal_id > 0:
+            _save_synced_deal_id(max_deal_id)
+        log_event("[BACKFILL] Complete — {} deal(s) recovered.".format(written))
+        return written
+    except Exception:
+        import traceback as _tb
+        log_event("[BACKFILL] error:\n" + _tb.format_exc())
+        return 0
+
 # Appends one row per closed trade to trades_log.csv.
 # Used for daily analysis: TP hit rate, duration by hour, P&L trends.
 # =============================================================
@@ -1131,6 +1286,12 @@ def run():
                 print("  Adopted existing position ticket={} {} @ {:.2f}  SL={:.2f}  TP={:.2f}".format(
                     pos.ticket, direction, pos.price_open, sl, tp))
 
+    # Backfill any closes missed while bot was down (30-day window)
+    _bf = _backfill_historical_deals()
+    if _bf > 0:
+        log_event("[BACKFILL] {} deal(s) recovered to trades_log.csv.".format(_bf))
+        report("📂 <b>Backfill complete</b> — {} missed close(s) recovered from MT5 history.".format(_bf))
+
     # Start trailing stop monitor
     threading.Thread(target=trail_monitor, args=(_symbol,), daemon=True).start()
 
@@ -1160,6 +1321,7 @@ def run():
             except Exception:
                 pass
             try:
+                _sync_closed_deals()
                 if can_open_new(_symbol):
                     signal = check_signal(_symbol)
                     if signal:

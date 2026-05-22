@@ -291,7 +291,7 @@ def log_signal(signal: str, price: float, sl: float, tp: float) -> None:
 # STRATEGY
 # ==========================================================
 def check_signal(symbol: str) -> None:
-    global last_signal_time, daily_signal_count, signal_count_date
+    global last_signal_time, daily_signal_count, signal_count_date, last_signal_datetime
 
     # Reset daily counter at midnight UTC
     today = datetime.now(timezone.utc).date()
