@@ -10,10 +10,10 @@
       "lots": 0.01,
       "sl_delta": 9.697500000000218,
       "opened_at": "2026-05-22T15:00:02.943361",
-      "moved_be": false,
-      "trail_on": false,
-      "scalp_locked": false,
-      "peak_profit_pts": 0.37,
+      "moved_be": true,
+      "trail_on": true,
+      "scalp_locked": true,
+      "peak_profit_pts": 8.94,
       "source": "MACD_M15"
     }
   },
@@ -35,5 +35,6 @@
     }
   },
   "trades_today_date": "2026-05-22",
-  "trades_today_count": 5
+  "trades_today_count": 5,
+  "last_synced_deal_id": 186462308
 }
