@@ -1,5 +1,5 @@
 # =============================================================
-#  CryptoNite Free Signals Executor — Config
+#  CNFS Bot — Config
 # =============================================================
 import os
 try:
@@ -76,7 +76,7 @@ RISK_CAP_MODE       = "warn"
 
 # --- Bot identity ---
 MAGIC_NUMBER   = 20261001
-STRATEGY_NAME  = "CNFS Executor"
+STRATEGY_NAME  = "CNFS Bot"
 CHECK_INTERVAL = 30    # seconds between signal scans
 TRAIL_INTERVAL = 8     # seconds between trail checks
 # Minimum seconds between consecutive trade executions.

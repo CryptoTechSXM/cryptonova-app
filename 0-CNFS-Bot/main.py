@@ -1,7 +1,7 @@
 """
-CryptoNite Free Signals Executor
-=================================
-Generates signals using the same relaxed HA strategy as the Free Signals bot,
+CNFS Bot
+========
+Generates signals using the relaxed HA strategy,
 then executes them directly in MT5 with a trailing stop profit lock.
 
 Trailing stop rules:
@@ -18,6 +18,7 @@ Telegram control:
   - Trade reports sent to REPORT_CHAT_ID
 """
 
+import re
 import time
 import json
 import ssl
@@ -124,7 +125,7 @@ def report(text):
 
 
 def send_status(status):
-    report("🤖 <b>CNFS Executor</b> — {}".format(status))
+    report("🤖 <b>CNFS Bot</b> — {}".format(status))
 
 
 # =============================================================
@@ -214,7 +215,7 @@ def send_session_open():
 
     report(
         "📊 <b>Session Open</b>\n"
-        "📡 CNFS Executor\n"
+        "📡 CNFS Bot\n"
         "⏰ {}\n"
         "💰 Balance: <b>{:.2f}</b>  |  Equity: <b>{:.2f}</b>\n"
         "📈 Today P&amp;L: <b>{}{:.2f}</b>\n"
@@ -228,6 +229,37 @@ def send_session_open():
         )
     )
 
+
+
+def _post_signal_to_free_channel(symbol, direction, entry, sl, tp):
+    """
+    Broadcast the fired signal to the Free Signals customer channel
+    in the standard CryptoNite icon format so members receive it and
+    247A/B can also parse it.
+    """
+    try:
+        token   = config.BOT_TOKEN
+        chat_id = config.CHAT_ID   # -1003523601209 — Free Signals channel
+        if not token or not chat_id:
+            return
+        sl_delta  = abs(entry - sl)
+        side_icon = "📈" if direction == "BUY" else "📉"
+        ts_str    = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
+        clean_sym = re.sub(r'\.[a-zA-Z0-9]+$', '', symbol) or symbol
+        msg = (
+            "🚨 CryptoNite Signal\n"
+            "📡 CryptoNite CNFS Signals\n"
+            "{} {} | {}\n"
+            "⏰ {}\n"
+            "📍 Entry:  {:.2f}\n"
+            "🛑 SL:     {:.2f}\n"
+            "🎯 TP:     {:.2f}"
+        ).format(side_icon, clean_sym, direction, ts_str, entry, sl, tp)
+        _tg_send(token, chat_id, msg)
+        log_event("[SIGNAL] Broadcast → Free Signals channel: {} {} E={:.2f}".format(
+            clean_sym, direction, entry))
+    except Exception as e:
+        log_event("[SIGNAL] Broadcast failed: {}".format(e))
 
 def send_trade_open(symbol, direction, entry, sl, tp, lot, ticket):
     open_icon = "🟢" if direction == "BUY" else "🔴"
@@ -326,7 +358,7 @@ def send_daily_report():
     if total == 0:
         report(
             "📊 <b>End-of-Day Report</b>\n"
-            "📡 CNFS Executor\n"
+            "📡 CNFS Bot\n"
             "📅 {}\n"
             "ℹ️ No trades logged today.".format(today_str)
         )
@@ -339,7 +371,7 @@ def send_daily_report():
 
     lines = [
         "📊 <b>End-of-Day Report</b>",
-        "📡 CNFS Executor",
+        "📡 CNFS Bot",
         "📅 {}".format(today_str),
         "",
         "🔢 Trades: <b>{}</b>  ({}W / {}L / {}BE+ / {}BE)".format(
@@ -1201,6 +1233,7 @@ def execute_signal(symbol, signal):
         _daily_count       += 1
         print("  ✅ Order placed ticket={} lot={} @ {:.2f}".format(ticket, lot, price))
         send_trade_open(symbol, direction, price, sl, tp, lot, ticket)
+        _post_signal_to_free_channel(symbol, direction, price, sl, tp)
     else:
         print("  ❌ Order FAILED retcode={} comment={}".format(
             getattr(result, "retcode", "?"), getattr(result, "comment", "?")))

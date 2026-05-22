@@ -710,7 +710,8 @@ CHANNEL_NAME_MAP = {
     "-1003882026187": "Limitless Abundance 2.0",
     "-1003889406756": "Limitless Abundance VIP",
     "-1003628454081": "XFUSION SIGNALS",
-    "-1003660487270": "CNMS Signals",
+    "-1003660487270": "CryptoNite MACD Premium (internal)",
+    "-1003685899545": "CryptoNite MACD Signals",
 }
 CHANNEL_ACTIVITY = {}
 
@@ -1301,7 +1302,7 @@ PARSER_PROFILE_MAP = {
     "-1003731092037": ["cryptonite_icon", "limitless_vip_pipe", "limitless_full", "limitless_market", "analyzer_engine", "structured_entry", "sig", "simple_pending", "generic_pending_sltp", "gold_range_full", "gold_range_simple", "hashtag", "reverse_simple", "signal_alert", "simple", "pending"],
     # CNMS Signals — tight profile: only the icon format fires here.
     # This prevents daily reports, /status replies, etc. from triggering parsers.
-    "-1003660487270": ["cryptonite_icon"],
+    "-1003685899545": ["cryptonite_icon"],  # CryptoNite MACD Signals — CNMS customer channel
     "default": ["cryptonite_icon", "analyzer_engine", "structured_entry", "sig", "simple_pending", "generic_pending_sltp", "gold_range_full", "gold_range_simple", "hashtag", "reverse_simple", "signal_alert", "simple", "pending"],
 }
 
