@@ -4003,7 +4003,7 @@ def log_new_closed_deals(state, notifications=None):
 
             notifications.append(
                 f"{icon} <b>Trade Closed — {outcome}</b>\n"
-                f"📡 {src_name}\n"
+                f"📊 {INSTANCE_NAME}  |  📡 {src_name}\n"
                 f"\n"
                 f"{dir_icon} <b>{clean_sym} | {side}</b>\n"
                 f"⏰ {now_str}\n"
@@ -4011,7 +4011,8 @@ def log_new_closed_deals(state, notifications=None):
                 f"📍 Entry:  {entry_str}\n"
                 f"🏁 Exit:   {exit_str}\n"
                 f"{rr_line}"
-                f"💰 P/L:    <b>{profit:+.2f}</b>"
+                f"💰 P/L:    <b>{profit:+.2f}</b>\n"
+                f"🎫 Ticket: {pos_id}"
             )
 
         ema_info  = state.get("position_ema", {}).get(str(pos_id), {})
@@ -4558,9 +4559,11 @@ async def handler(event):
                 # Use the final executed TP (SET_BROKER_TP = last unique TP)
                 exec_tp  = unique_tps[-1] if unique_tps else None
                 tp_str   = f"{float(exec_tp):.2f}" if exec_tp else "—"
+                lots_val = getattr(res, "volume", None)
+                lots_str = f"{float(lots_val):.2f}" if lots_val else "—"
                 notify = (
-                    f"🚨 <b>CryptoNite Signal</b>\n"
-                    f"📡 {src}\n"
+                    f"{icon} <b>Trade Opened</b>\n"
+                    f"📊 {INSTANCE_NAME}  |  📡 {src}\n"
                     f"\n"
                     f"{dir_icon} <b>{clean_sym} | {side}</b>\n"
                     f"⏰ {now_str}\n"
@@ -4568,6 +4571,7 @@ async def handler(event):
                     f"📍 Entry:  {entry_str}\n"
                     f"🛑 SL:     {sl_str}\n"
                     f"🎯 TP:     {tp_str}\n"
+                    f"📦 Lots:   {lots_str}\n"
                     f"🎫 Ticket: {ticket}"
                 )
                 await safe_send(int(EXECUTION_CHAT_ID), notify)

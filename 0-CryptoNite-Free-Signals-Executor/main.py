@@ -230,38 +230,53 @@ def send_session_open():
 
 
 def send_trade_open(symbol, direction, entry, sl, tp, lot, ticket):
-    icon   = "📈" if direction == "BUY" else "📉"
-    now_et = datetime.now(timezone.utc).astimezone(_ET).strftime("%H:%M %Z")
+    open_icon = "🟢" if direction == "BUY" else "🔴"
+    dir_icon  = "📈" if direction == "BUY" else "📉"
+    clean_sym = symbol.split(".")[0] if "." in symbol else symbol
+    now_str   = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
     report(
-        "{} <b>CNFS TRADE OPENED</b>\n"
-        "🔷 {} | {}\n"
-        "🕐 Time  : {}\n"
-        "📍 Entry : {:.2f}\n"
-        "🛑 SL    : {:.2f}\n"
-        "🎯 TP    : {:.2f}\n"
-        "📊 Lot   : {}\n"
+        "{} <b>Trade Opened</b>\n"
+        "📊 CNFS  |  📡 HA Signal\n"
+        "\n"
+        "{} <b>{} | {}</b>\n"
+        "⏰ {}\n"
+        "\n"
+        "📍 Entry:  {:.2f}\n"
+        "🛑 SL:     {:.2f}\n"
+        "🎯 TP:     {:.2f}\n"
+        "📦 Lots:   {}\n"
         "🎫 Ticket: {}".format(
-            icon, symbol, direction,
-            now_et, entry, sl, tp, lot, ticket)
+            open_icon, dir_icon, clean_sym, direction,
+            now_str, entry, sl, tp, lot, ticket)
     )
 
 
 def send_trade_close(symbol, direction, entry, close_price, pips, pnl, ticket, reason):
-    icon   = "✅" if pnl >= 0 else "❌"
-    emoji  = "📈" if direction == "BUY" else "📉"
-    now_et = datetime.now(timezone.utc).astimezone(_ET).strftime("%H:%M %Z")
+    _BE_PLUS_MAX = 5.0
+    if pnl >= _BE_PLUS_MAX:
+        close_icon, outcome = "✅", "WIN"
+    elif pnl > 0:
+        close_icon, outcome = "🛡️", "BE+"
+    elif pnl < 0:
+        close_icon, outcome = "❌", "LOSS"
+    else:
+        close_icon, outcome = "➖", "BE"
+    dir_icon  = "📈" if direction == "BUY" else "📉"
+    clean_sym = symbol.split(".")[0] if "." in symbol else symbol
+    now_str   = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
     report(
-        "{} <b>CNFS TRADE CLOSED</b>\n"
-        "{} {} | {}\n"
-        "🕐 Time  : {}\n"
-        "📍 Entry : {:.2f}\n"
-        "🚪 Close : {:.2f}\n"
-        "📏 Pips  : {:+.1f}\n"
-        "💵 P&amp;L  : {:+.2f}\n"
-        "📋 Reason: {}\n"
+        "{} <b>Trade Closed — {}</b>\n"
+        "📊 CNFS  |  📡 HA Signal\n"
+        "\n"
+        "{} <b>{} | {}</b>\n"
+        "⏰ {}\n"
+        "\n"
+        "📍 Entry:  {:.2f}\n"
+        "🏁 Exit:   {:.2f}\n"
+        "💰 P/L:    <b>{:+.2f}</b>\n"
         "🎫 Ticket: {}".format(
-            icon, emoji, symbol, direction,
-            now_et, entry, close_price, pips, pnl, reason, ticket)
+            close_icon, outcome, dir_icon, clean_sym, direction,
+            now_str, entry, close_price, pnl, ticket)
     )
 
 

@@ -162,7 +162,8 @@ TRADES_CSV     = os.getenv("TRADES_CSV", "trades.csv").strip()
 STATE_FILE     = os.getenv("STATE_FILE", "cnms_state.json").strip()
 EVENT_LOG      = "cnms_events.log"
 MAGIC          = int(os.getenv("MAGIC_NUMBER", "20250521"))   # unique CNMS magic
-MT5_ASYNC_LOCK = asyncio.Lock()
+MT5_ASYNC_LOCK  = asyncio.Lock()
+_MT5_CONNECTED  = False   # True once successfully initialised; prevents repeat log spam
 
 # Symbol cache (populated on connect)
 MT5_SYMBOLS_ALL   = []
@@ -268,17 +269,21 @@ async def _post_signal_to_mirror(symbol: str, side: str, entry: float, sl: float
         side_icon = "📈" if side == "BUY" else "📉"
         ts_str    = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
 
+        # Strip broker suffix (e.g. XAUUSD.s → XAUUSD) so 247 bots resolve the
+        # symbol through their own SYMBOL_MAP / SYMBOL_SUFFIX_PREFER chain cleanly.
+        clean_sym = re.sub(r'\.[a-zA-Z0-9]+$', '', symbol) or symbol
+
         msg = (
             f"🚨 CryptoNite Signal\n"
             f"📡 CryptoNite CNMS Signals\n"
-            f"{side_icon} {symbol} | {side}\n"
+            f"{side_icon} {clean_sym} | {side}\n"
             f"⏰ {ts_str}\n"
             f"📍 Entry:  {entry:.5f}\n"
             f"🛑 SL:     {sl:.5f}\n"
             f"🎯 TP:     {tp1:.5f}"
         )
         await safe_send(int(SIGNAL_MIRROR_ID), msg)
-        log_event(f"[MIRROR] Signal posted → {SIGNAL_MIRROR_ID}: {symbol} {side} E={entry:.5f} SL={sl:.5f} TP={tp1:.5f}")
+        log_event(f"[MIRROR] Signal posted → {SIGNAL_MIRROR_ID}: {clean_sym} {side} E={entry:.5f} SL={sl:.5f} TP={tp1:.5f}")
     except Exception:
         log_event("[MIRROR] Post failed:\n" + traceback.format_exc())
 
@@ -296,6 +301,15 @@ def parse_hhmm(s: str):
 # ════════════════════════════════════════════════════════════════════════════════
 
 def mt5_connect(retries: int = 3) -> bool:
+    global _MT5_CONNECTED
+    # Fast path: already connected — skip re-init and skip the log line so we
+    # don't fill the log with "[MT5] Connected" every 5-second manager tick.
+    if _MT5_CONNECTED and mt5.account_info() is not None:
+        return True
+
+    was_connected  = _MT5_CONNECTED
+    _MT5_CONNECTED = False
+
     for attempt in range(retries):
         try:
             if MT5_LOGIN:
@@ -305,7 +319,9 @@ def mt5_connect(retries: int = 3) -> bool:
             if ok:
                 acc = mt5.account_info()
                 if acc:
-                    log_event(f"[MT5] Connected #{acc.login} balance={acc.balance:.2f} mode={ACCOUNT_MODE}")
+                    label = "Reconnected" if was_connected else "Connected"
+                    log_event(f"[MT5] {label} #{acc.login} balance={acc.balance:.2f} mode={ACCOUNT_MODE}")
+                _MT5_CONNECTED = True
                 _refresh_symbol_cache()
                 return True
         except Exception:
@@ -316,6 +332,8 @@ def mt5_connect(retries: int = 3) -> bool:
 
 
 def mt5_disconnect():
+    global _MT5_CONNECTED
+    _MT5_CONNECTED = False
     try:
         mt5.shutdown()
     except Exception:
@@ -969,6 +987,58 @@ def place_macd_trade(symbol: str, side: str, state: dict):
 # POSITION MANAGER  — Layers 1 & 2 (runs every MANAGER_INTERVAL_SECONDS)
 # ════════════════════════════════════════════════════════════════════════════════
 
+def _recover_orphan_positions(state: dict) -> int:
+    """
+    On startup, scan MT5 for any open positions with our MAGIC number that are
+    NOT already tracked in managed_positions (e.g. after a crash mid-session).
+    Re-adopt them with minimal metadata so all exit layers can resume immediately.
+    Returns the number of positions recovered.
+    """
+    mt5_connect()
+    poss    = mt5.positions_get() or []
+    managed = state.setdefault("managed_positions", {})
+    recovered = 0
+
+    for p in poss:
+        if getattr(p, "magic", None) != MAGIC:
+            continue
+        ticket_str = str(p.ticket)
+        if ticket_str in managed:
+            continue  # already tracked
+
+        symbol   = p.symbol
+        pos_type = int(p.type)           # 0=BUY, 1=SELL
+        entry    = float(p.price_open)
+        cur_sl   = float(p.sl) if p.sl else 0.0
+        cur_tp   = float(p.tp) if p.tp else 0.0
+        sl_delta = abs(entry - cur_sl) if cur_sl else 0.0
+
+        managed[ticket_str] = {
+            "symbol":          symbol,
+            "type":            pos_type,
+            "side":            "BUY" if pos_type == 0 else "SELL",
+            "entry":           entry,
+            "sl_init":         cur_sl,
+            "tp_init":         cur_tp,
+            "lots":            float(p.volume),
+            "sl_delta":        sl_delta,
+            "opened_at":       datetime.utcfromtimestamp(int(p.time)).isoformat() if p.time else "",
+            "moved_be":        False,   # conservative — assume layers haven't fired
+            "trail_on":        False,
+            "scalp_locked":    False,
+            "peak_profit_pts": 0.0,
+            "source":          "RECOVERED",
+        }
+        log_event(
+            f"[RECOVER] Adopted orphan ticket={p.ticket} "
+            f"{'BUY' if pos_type==0 else 'SELL'} {symbol} "
+            f"@{entry:.4f}  SL={cur_sl:.4f}  lots={float(p.volume):.2f}"
+        )
+        recovered += 1
+
+    return recovered
+
+
 def manage_positions_once(state: dict) -> list[str]:
     """
     One management tick. Returns list of Telegram notification strings.
@@ -997,7 +1067,9 @@ def manage_positions_once(state: dict) -> list[str]:
         if p is None:
             # Position has closed — record it and remove from tracking
             managed.pop(ticket_str, None)
-            _record_closed_position(state, int(ticket_str), meta)
+            notif = _record_closed_position(state, int(ticket_str), meta)
+            if notif:
+                notifications.append(notif)
             continue
 
         symbol   = meta["symbol"]
@@ -1064,14 +1136,14 @@ def manage_positions_once(state: dict) -> list[str]:
     return notifications
 
 
-def _record_closed_position(state: dict, ticket: int, meta: dict):
-    """Look up closed deal in history and record the outcome."""
+def _record_closed_position(state: dict, ticket: int, meta: dict) -> str | None:
+    """Look up closed deal in history, record outcome, return Telegram notification string."""
     try:
         now   = datetime.now()
         start = now - timedelta(hours=4)
         deals = mt5.history_deals_get(start, now + timedelta(seconds=5))
         if deals is None:
-            return
+            return None
         for d in deals:
             if getattr(d, "magic", None) != MAGIC:
                 continue
@@ -1079,25 +1151,63 @@ def _record_closed_position(state: dict, ticket: int, meta: dict):
                 continue
             if getattr(d, "entry", None) not in (mt5.DEAL_ENTRY_OUT, mt5.DEAL_ENTRY_OUT_BY):
                 continue
-            profit = float(getattr(d, "profit", 0.0))
-            log_event(f"[CLOSE] ticket={ticket} {meta.get('symbol','')} {meta.get('side','')} profit={profit:+.2f}")
+            profit      = float(getattr(d, "profit", 0.0))
+            close_price = float(getattr(d, "price", 0.0))
+            symbol      = meta.get("symbol", "")
+            side        = meta.get("side", "")
+            entry       = float(meta.get("entry", 0.0))
+            d_val       = float(meta.get("sl_delta", 0.0))
+
+            log_event(f"[CLOSE] ticket={ticket} {symbol} {side} profit={profit:+.2f}")
             record_trade_close(state, profit)
             log_trade_csv({
                 "time":        now.strftime("%Y-%m-%d %H:%M:%S"),
                 "ticket":      ticket,
-                "symbol":      meta.get("symbol", ""),
-                "side":        meta.get("side", ""),
+                "symbol":      symbol,
+                "side":        side,
                 "lots":        meta.get("lots", 0.0),
-                "entry":       meta.get("entry", 0.0),
+                "entry":       entry,
                 "sl":          meta.get("sl_init", 0.0),
                 "tp":          meta.get("tp_init", 0.0),
-                "close_price": float(getattr(d, "price", 0.0)),
+                "close_price": close_price,
                 "profit":      profit,
                 "exit_reason": str(getattr(d, "comment", "")),
             })
-            return
+
+            # Build standard close notification
+            _BE_PLUS_MAX = 5.0
+            if profit >= _BE_PLUS_MAX:
+                close_icon, outcome_s = "✅", "WIN"
+            elif profit > 0:
+                close_icon, outcome_s = "🛡️", "BE+"
+            elif profit < 0:
+                close_icon, outcome_s = "❌", "LOSS"
+            else:
+                close_icon, outcome_s = "➖", "BE"
+            dir_icon  = "📈" if side == "BUY" else "📉"
+            clean_sym = symbol.split(".")[0] if "." in symbol else symbol
+            now_str   = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+            rr_line   = ""
+            if d_val > 0 and entry > 0:
+                price_diff = (close_price - entry) if side == "BUY" else (entry - close_price)
+                rr_val  = round(price_diff / d_val, 2)
+                rr_line = f"📊 R:R:    {rr_val:+.2f}R\n"
+            return (
+                f"{close_icon} <b>Trade Closed — {outcome_s}</b>\n"
+                f"📊 {INSTANCE_NAME}  |  📡 MACD {MACD_TIMEFRAME}\n"
+                f"\n"
+                f"{dir_icon} <b>{clean_sym} | {side}</b>\n"
+                f"⏰ {now_str}\n"
+                f"\n"
+                f"📍 Entry:  {entry:.5f}\n"
+                f"🏁 Exit:   {close_price:.5f}\n"
+                f"{rr_line}"
+                f"💰 P/L:    <b>{profit:+.2f}</b>\n"
+                f"🎫 Ticket: {ticket}"
+            )
     except Exception:
         log_event("_record_closed_position error:\n" + traceback.format_exc())
+    return None
 
 
 # ════════════════════════════════════════════════════════════════════════════════
@@ -1304,14 +1414,23 @@ def _process_symbol(symbol: str, state: dict, last_bar_time: dict, alerts: list,
     lots_val  = pos_meta["lots"]
     h1_icon   = "✅" if H1_FILTER_ENABLED else "—"
 
+    open_icon = "🟢" if cross == "BUY" else "🔴"
+    clean_sym = symbol.split(".")[0] if "." in symbol else symbol
+    tp_val    = pos_meta.get("tp_init", 0.0)
+    tp_str    = f"{tp_val:.5f}" if tp_val else "—"
+    now_str   = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
     alerts.append(
-        f"{side_icon} <b>MACD {cross} — {symbol}</b>\n"
-        f"📡 {INSTANCE_NAME}\n"
-        f"⏰ {datetime.now().strftime('%H:%M:%S')}  Bar: {bar_str}\n\n"
-        f"📍 Entry: {entry_val:.4f}\n"
-        f"🛑 SL:    {sl_val:.4f}  (Δ{d_val:.4f})\n"
-        f"📊 MACD({MACD_FAST},{MACD_SLOW},{MACD_SIGNAL_PERIOD}) {MACD_TIMEFRAME}  H1: {h1_icon}\n"
-        f"🎫 Ticket: {ticket}  Lots: {lots_val:.4f}"
+        f"{open_icon} <b>Trade Opened</b>\n"
+        f"📊 {INSTANCE_NAME}  |  📡 MACD {MACD_TIMEFRAME}\n"
+        f"\n"
+        f"{side_icon} <b>{clean_sym} | {cross}</b>\n"
+        f"⏰ {now_str}\n"
+        f"\n"
+        f"📍 Entry:  {entry_val:.5f}\n"
+        f"🛑 SL:     {sl_val:.5f}\n"
+        f"🎯 TP:     {tp_str}\n"
+        f"📦 Lots:   {lots_val:.2f}\n"
+        f"🎫 Ticket: {ticket}"
     )
 
     # Queue mirror signal for async posting by signal_loop after this thread returns.
@@ -1368,14 +1487,38 @@ def _macd_unwind(symbol: str, cross: str, managed: dict, state: dict, alerts: li
                 "exit_reason": f"MACD_UNWIND_{cross}",
             })
             managed.pop(ticket_str, None)
-            icon   = "🔴" if pos_type == 0 else "🟢"
-            pnl_s  = f"+{profit:.2f}" if profit >= 0 else f"{profit:.2f}"
+            _BE_PLUS_MAX = 5.0
+            if profit >= _BE_PLUS_MAX:
+                close_icon, outcome_s = "✅", "WIN"
+            elif profit > 0:
+                close_icon, outcome_s = "🛡️", "BE+"
+            elif profit < 0:
+                close_icon, outcome_s = "❌", "LOSS"
+            else:
+                close_icon, outcome_s = "➖", "BE"
+            dir_icon   = "📈" if side_str == "BUY" else "📉"
+            clean_sym  = symbol.split(".")[0] if "." in symbol else symbol
+            entry_v    = float(meta.get("entry", p.price_open))
+            exit_v     = float(getattr(mt5.symbol_info_tick(symbol), "bid" if pos_type == 0 else "ask", 0.0))
+            d_v        = float(meta.get("sl_delta", 0.0))
+            rr_line    = ""
+            if d_v > 0 and entry_v > 0:
+                price_diff = (exit_v - entry_v) if pos_type == 0 else (entry_v - exit_v)
+                rr_val  = round(price_diff / d_v, 2)
+                rr_line = f"📊 R:R:    {rr_val:+.2f}R\n"
+            now_str  = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
             alerts.append(
-                f"{icon} <b>MACD Unwind — {symbol}</b>\n"
-                f"📡 {INSTANCE_NAME}\n"
-                f"Closed {side_str} ticket={p.ticket}\n"
-                f"💰 P&L: <b>{pnl_s}</b>\n"
-                f"Trigger: MACD {cross} crossover"
+                f"{close_icon} <b>Trade Closed — {outcome_s}</b>\n"
+                f"📊 {INSTANCE_NAME}  |  📡 MACD {MACD_TIMEFRAME}\n"
+                f"\n"
+                f"{dir_icon} <b>{clean_sym} | {side_str}</b>\n"
+                f"⏰ {now_str}\n"
+                f"\n"
+                f"📍 Entry:  {entry_v:.5f}\n"
+                f"🏁 Exit:   {exit_v:.5f}\n"
+                f"{rr_line}"
+                f"💰 P/L:    <b>{profit:+.2f}</b>\n"
+                f"🎫 Ticket: {p.ticket}"
             )
         else:
             log_event(f"[UNWIND] Close failed: retcode={retcode} "
@@ -1783,6 +1926,23 @@ async def main():
             f"Symbols: {', '.join(SYMBOLS)}\n"
             f"Risk: {'fixed ' + str(FIXED_LOT) + ' lot' if USE_FIXED_LOT else str(RISK_BASE*100) + '% per trade'}"
         )
+
+    # ── Recover orphaned positions from a previous crash ─────────────────────
+    try:
+        _st = load_state()
+        if mt5_connect():
+            _n = _recover_orphan_positions(_st)
+            if _n > 0:
+                save_state(_st)
+                log_event(f"[RECOVER] {_n} position(s) re-adopted into managed_positions.")
+                if EXECUTION_CHAT_ID and BOT_TOKEN:
+                    await safe_send(
+                        int(EXECUTION_CHAT_ID),
+                        f"♻️ <b>{INSTANCE_NAME} — {_n} orphaned position(s) recovered</b>\n"
+                        f"Scalp lock / ATR trail / MACD unwind monitoring has resumed."
+                    )
+    except Exception:
+        log_event("[RECOVER] Startup position recovery failed:\n" + traceback.format_exc())
 
     # ── Shutdown event — set by OS signal handlers ────────────────────────────
     shutdown_event = asyncio.Event()
