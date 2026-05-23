@@ -30,10 +30,10 @@ input ENUM_TIMEFRAMES InpEntryTF = PERIOD_H1;  // Entry TF  (H1 default)
 
 input group "══ ATR Risk Management ══"
 input int    InpAtrPeriod   = 14;   // ATR period
-input double InpSlMulti     = 1.5;  // Stop Loss     (× ATR)
-input double InpTpMulti     = 3.0;  // Take Profit   (× ATR)  →  1:2 R:R
-input double InpTrailStart  = 1.0;  // Trail activates when profit ≥ (× ATR)
-input double InpTrailDist   = 1.0;  // Trail distance behind price (× ATR)
+input double InpSlMulti     = 1.0;  // Stop Loss     (× ATR)          ← backtest optimised
+input double InpTpMulti     = 2.0;  // Take Profit   (× ATR)  →  1:2 R:R
+input double InpTrailStart  = 0.8;  // Trail activates when profit ≥ (× ATR)
+input double InpTrailDist   = 0.8;  // Trail distance behind price (× ATR)
 input double InpTrailStep   = 0.3;  // Min move before trail updates (× ATR)
 
 input group "══ Trade Execution ══"

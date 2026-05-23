@@ -1,0 +1,23 @@
+; CNMS_MACD_Adaptive — Standard (H4+H1 | MACD 12/26/9 | SL 1.5x | TP 3.0x)
+; Backtest result: +109%  WR 55.7%  Sharpe 1.61  DD -13.6%
+
+InpMacdFast=12
+InpMacdSlow=26
+InpMacdSignal=9
+InpMacdPrice=0
+InpTrendTF=16408
+InpEntryTF=16385
+InpAtrPeriod=14
+InpSlMulti=1.5
+InpTpMulti=3.0
+InpTrailStart=1.0
+InpTrailDist=1.0
+InpTrailStep=0.3
+InpMagicNumber=202600
+InpLotSize=0.01
+InpSlippage=50
+InpMaxPositions=1
+InpAdoptManual=true
+InpAlertOnAdopt=true
+InpOverrideSL=false
+InpOverrideTP=false

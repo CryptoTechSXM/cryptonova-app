@@ -1,0 +1,25 @@
+; CNMS_MACD_Adaptive — Conservative (D1 trend + H4 entry | MACD 12/26/9 | SL 2.0x | TP 4.0x)
+; Backtest result: -7.8%  WR 51.7%  Sharpe -0.24  DD -14.9%
+; ⚠ Underperformed in backtest — use only if you prefer very high conviction swing trades
+;   and are willing to accept far fewer signals (116 trades / 2 years)
+
+InpMacdFast=12
+InpMacdSlow=26
+InpMacdSignal=9
+InpMacdPrice=0
+InpTrendTF=16408
+InpEntryTF=16385
+InpAtrPeriod=14
+InpSlMulti=2.0
+InpTpMulti=4.0
+InpTrailStart=1.5
+InpTrailDist=1.5
+InpTrailStep=0.5
+InpMagicNumber=202602
+InpLotSize=0.01
+InpSlippage=50
+InpMaxPositions=1
+InpAdoptManual=true
+InpAlertOnAdopt=true
+InpOverrideSL=false
+InpOverrideTP=false

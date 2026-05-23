@@ -1,0 +1,24 @@
+; CNMS_MACD_Adaptive — Fast MACD (H4+H1 | MACD 8/21/5 | SL 1.5x | TP 3.0x)
+; Backtest result: +208%  WR 57.8%  Sharpe 2.30  DD -11.0%
+; More signals, faster reaction — monitor for over-trading in choppy BTC periods
+
+InpMacdFast=8
+InpMacdSlow=21
+InpMacdSignal=5
+InpMacdPrice=0
+InpTrendTF=16408
+InpEntryTF=16385
+InpAtrPeriod=14
+InpSlMulti=1.5
+InpTpMulti=3.0
+InpTrailStart=1.0
+InpTrailDist=1.0
+InpTrailStep=0.3
+InpMagicNumber=202601
+InpLotSize=0.01
+InpSlippage=50
+InpMaxPositions=1
+InpAdoptManual=true
+InpAlertOnAdopt=true
+InpOverrideSL=false
+InpOverrideTP=false
