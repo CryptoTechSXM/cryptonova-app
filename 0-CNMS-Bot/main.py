@@ -1225,6 +1225,11 @@ async def signal_loop():
 
     while True:
         try:
+            # Weekend guard — markets closed, sleep 5 min and check again.
+            if datetime.now(timezone.utc).weekday() >= 5:
+                await asyncio.sleep(300)
+                continue
+
             # Sleep precisely until 2 s after the next bar close — no blind polling.
             await _sleep_until_next_bar_close(tf_minutes, buffer_seconds=2.0)
 
@@ -2015,6 +2020,8 @@ class BotCommandHandler:
                 "/pause   — Stop opening new positions\n"
                 "/resume  — Re-enable signal processing\n"
                 "/daily   — Today's full P&L breakdown\n"
+                "/weekly  — Last 7 days W/L and P&L\n"
+                "/monthly — Current month W/L and P&L\n"
                 "/trades  — All open CNMS positions\n"
                 "/stats   — Account snapshot\n"
                 "/help    — Show this message"
@@ -2053,6 +2060,18 @@ class BotCommandHandler:
         async def _(event):
             if not self._auth(event): return
             msg = await asyncio.to_thread(self._build_daily)
+            await self._send(msg)
+
+        @self.bot_client.on(events.NewMessage(pattern=r"^/weekly"))
+        async def _(event):
+            if not self._auth(event): return
+            msg = await asyncio.to_thread(self._build_weekly)
+            await self._send(msg)
+
+        @self.bot_client.on(events.NewMessage(pattern=r"^/monthly"))
+        async def _(event):
+            if not self._auth(event): return
+            msg = await asyncio.to_thread(self._build_monthly)
             await self._send(msg)
 
         @self.bot_client.on(events.NewMessage(pattern=r"^/trades"))
@@ -2101,6 +2120,108 @@ class BotCommandHandler:
     def _build_daily(self) -> str:
         s = load_state()
         return format_daily_report(s, day_key())
+
+
+    def _build_weekly(self) -> str:
+        """Aggregate last 7 calendar days from daily_stats."""
+        try:
+            s = load_state()
+            today = date.today()
+            week_days = [(today - timedelta(days=i)) for i in range(6, -1, -1)]
+            date_range = f"{week_days[0].isoformat()} → {today.isoformat()}"
+
+            total_trades = total_wins = total_losses = total_bep = total_be = 0
+            total_profit = 0.0
+
+            for d in week_days:
+                dk = d.isoformat()
+                # Today: pull from MT5 for accuracy
+                if dk == today.isoformat():
+                    b = _tally_cnms_today()
+                else:
+                    b = s.get("daily_stats", {}).get(dk, {})
+                total_trades  += int(b.get("trades",    0))
+                total_wins    += int(b.get("wins",       0))
+                total_losses  += int(b.get("losses",     0))
+                total_bep     += int(b.get("be_plus",    0))
+                total_be      += int(b.get("breakeven",  0))
+                total_profit  += float(b.get("profit",   0.0))
+
+            denom   = total_wins + total_losses
+            winrate = (total_wins / denom * 100.0) if denom > 0 else 0.0
+            pnl_sign  = "+" if total_profit >= 0 else ""
+            pnl_emoji = "📈" if total_profit >= 0 else "📉"
+
+            acc_line = ""
+            try:
+                mt5_connect()
+                acc = mt5.account_info()
+                if acc:
+                    acc_line = f"\n💼 Balance: <b>${acc.balance:.2f}</b>  Equity: <b>${acc.equity:.2f}</b>"
+                mt5_disconnect()
+            except Exception:
+                pass
+
+            return (
+                f"📅 <b>Weekly Summary</b>\n"
+                f"📡 {INSTANCE_NAME}\n"
+                f"🗓 {date_range}\n\n"
+                f"🔢 Trades: <b>{total_trades}</b>  ({total_wins}W / {total_losses}L / {total_bep}BE+ / {total_be}BE)\n"
+                f"💰 P&L: <b>{pnl_sign}{total_profit:.2f}</b>  {pnl_emoji}\n"
+                f"🎯 Win rate: <b>{winrate:.1f}%</b>"
+                f"{acc_line}"
+            )
+        except Exception as e:
+            return f"❌ Weekly report error: {e}"
+
+    def _build_monthly(self) -> str:
+        """Current month summary from daily_stats."""
+        try:
+            s = load_state()
+            today = date.today()
+            month_str = today.strftime("%Y-%m")
+
+            total_trades = total_wins = total_losses = total_bep = total_be = 0
+            total_profit = 0.0
+
+            for dk, b in s.get("daily_stats", {}).items():
+                if not dk.startswith(month_str):
+                    continue
+                if dk == today.isoformat():
+                    b = _tally_cnms_today()
+                total_trades  += int(b.get("trades",    0))
+                total_wins    += int(b.get("wins",       0))
+                total_losses  += int(b.get("losses",     0))
+                total_bep     += int(b.get("be_plus",    0))
+                total_be      += int(b.get("breakeven",  0))
+                total_profit  += float(b.get("profit",   0.0))
+
+            denom   = total_wins + total_losses
+            winrate = (total_wins / denom * 100.0) if denom > 0 else 0.0
+            pnl_sign  = "+" if total_profit >= 0 else ""
+            pnl_emoji = "📈" if total_profit >= 0 else "📉"
+
+            acc_line = ""
+            try:
+                mt5_connect()
+                acc = mt5.account_info()
+                if acc:
+                    acc_line = f"\n💼 Balance: <b>${acc.balance:.2f}</b>  Equity: <b>${acc.equity:.2f}</b>"
+                mt5_disconnect()
+            except Exception:
+                pass
+
+            return (
+                f"📆 <b>Monthly Summary</b>\n"
+                f"📡 {INSTANCE_NAME}\n"
+                f"🗓 {month_str}\n\n"
+                f"🔢 Trades: <b>{total_trades}</b>  ({total_wins}W / {total_losses}L / {total_bep}BE+ / {total_be}BE)\n"
+                f"💰 P&L: <b>{pnl_sign}{total_profit:.2f}</b>  {pnl_emoji}\n"
+                f"🎯 Win rate: <b>{winrate:.1f}%</b>"
+                f"{acc_line}"
+            )
+        except Exception as e:
+            return f"❌ Monthly report error: {e}"
 
     def _build_trades(self) -> str:
         try:

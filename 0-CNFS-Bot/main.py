@@ -389,11 +389,11 @@ def send_daily_report():
 
 
 def _maybe_send_eod_report():
-    """Call from main loop — sends EOD report once per day at 21:00 UTC (5 PM ET)."""
+    """Call from main loop — sends EOD report once per day at EOD_REPORT_HOUR UTC."""
     global _eod_report_date
     now_utc   = datetime.now(timezone.utc)
     today_str = now_utc.astimezone(_ET).strftime("%Y-%m-%d")
-    if now_utc.hour == 21 and _eod_report_date != today_str:
+    if now_utc.hour == config.EOD_REPORT_HOUR and _eod_report_date != today_str:
         send_daily_report()
 
 

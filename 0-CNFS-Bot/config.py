@@ -94,4 +94,5 @@ CHAT_ID   = os.getenv("CHAT_ID",   "-1003523601209")
 # Set CTRL_BOT_TOKEN + CTRL_CHAT_ID in .env to enable /status /pause /resume
 CTRL_BOT_TOKEN = os.getenv("CTRL_BOT_TOKEN", "")
 CTRL_CHAT_ID   = os.getenv("CTRL_CHAT_ID",   "")
-REPORT_CHAT_ID = os.getenv("REPORT_CHAT_ID", CHAT_ID)  # trade reports; defaults to CHAT_ID
+REPORT_CHAT_ID    = os.getenv("REPORT_CHAT_ID", CHAT_ID)  # trade reports; defaults to CHAT_ID
+EOD_REPORT_HOUR   = int(os.getenv("EOD_REPORT_HOUR", "21"))  # UTC hour for scheduled daily report (default 21:00 UTC = 5 PM ET)
