@@ -4036,6 +4036,84 @@ def log_new_closed_deals(state, notifications=None):
 
         state["last_logged_deal_id"] = deal_id
 
+def backfill_historical_deals():
+    """
+    Startup one-shot: scan last 30 days of MT5 deal history and write any
+    MAGIC closes missing from trades.csv.  Runs once on boot so restarts
+    never leave gaps in the trade record.
+    Returns the number of rows added.
+    """
+    try:
+        existing = set()
+        if os.path.exists(TRADES_CSV):
+            with open(TRADES_CSV, "r", encoding="utf-8") as f:
+                rdr = csv.DictReader(f)
+                for row in rdr:
+                    did = row.get("deal_id", "").strip()
+                    if did:
+                        existing.add(did)
+
+        now   = datetime.now()
+        start = now - timedelta(days=30)
+        deals = mt5.history_deals_get(start, now + timedelta(seconds=5))
+        if not deals:
+            return 0
+
+        # Build position_id → entry deal map for entry price lookup
+        in_deals = {}
+        for d in deals:
+            if getattr(d, "entry", None) == mt5.DEAL_ENTRY_IN and getattr(d, "magic", None) == MAGIC:
+                in_deals[str(getattr(d, "position_id", ""))] = d
+
+        added = 0
+        for d in sorted(deals, key=lambda x: int(getattr(x, "ticket", 0))):
+            if getattr(d, "magic", None) != MAGIC:
+                continue
+            if getattr(d, "entry", None) not in (mt5.DEAL_ENTRY_OUT, mt5.DEAL_ENTRY_OUT_BY):
+                continue
+            deal_id = str(int(getattr(d, "ticket", 0)))
+            if deal_id in existing:
+                continue
+
+            pos_id  = str(getattr(d, "position_id", ""))
+            symbol  = safe_symbol_text(getattr(d, "symbol", ""))
+            volume  = float(getattr(d, "volume", 0.0))
+            profit  = float(getattr(d, "profit", 0.0))
+            commission = float(getattr(d, "commission", 0.0))
+            swap    = float(getattr(d, "swap", 0.0))
+            side    = "BUY" if int(getattr(d, "type", 0)) == mt5.DEAL_TYPE_BUY else "SELL"
+            t_utc   = datetime.fromtimestamp(int(getattr(d, "time", 0)), tz=timezone.utc).isoformat()
+
+            entry_price = None
+            ed = in_deals.get(pos_id)
+            if ed:
+                entry_price = float(getattr(ed, "price", 0.0))
+
+            ensure_csv_header()
+            append_trade_csv({
+                "time_utc":    t_utc,
+                "symbol":      symbol,
+                "side":        side,
+                "volume":      volume,
+                "profit":      profit,
+                "commission":  commission,
+                "swap":        swap,
+                "position_id": pos_id,
+                "deal_id":     deal_id,
+                "channel_id":  "BACKFILL",
+                "ema_at_entry": "",
+                "ema_aligned":  "",
+                "mfe_pips":     "",
+            })
+            existing.add(deal_id)
+            added += 1
+            log_event(f"[BACKFILL] {symbol} {side} P/L={profit:+.2f} deal={deal_id} pos={pos_id}")
+
+        return added
+    except Exception:
+        log_event("[BACKFILL] Error:\n" + traceback.format_exc())
+        return 0
+
 
 # ----------------- SOURCE INTAKE ARCHIVE -----------------
 def ensure_intake_csv_header():
@@ -4728,7 +4806,10 @@ def adopt_manual_trades(state, notifications=None):
             "created":          time.time(),
         }
         src_label = "RECOVERED" if is_orphaned_bot else "ADOPTED"
-        state["position_sources"][ticket] = src_label
+        # Preserve original channel if we already know it — don't overwrite with RECOVERED
+        existing_src = state["position_sources"].get(ticket, "")
+        if not existing_src or existing_src == "RECOVERED":
+            state["position_sources"][ticket] = src_label
         if not is_orphaned_bot:
             state["adopted_tickets"].append(int(ticket))
 
@@ -5704,6 +5785,19 @@ async def main_async():
     log_event(f"Manager: SCALP_LOCK_ENABLED={SCALP_LOCK_ENABLED} TRIGGER={SCALP_LOCK_TRIGGER_USD} LOCK={SCALP_LOCK_AMOUNT_USD}")
 
     await client.start()
+
+    # Startup backfill — recover any deals closed while bot was down (up to 30 days)
+    try:
+        if mt5_connect_safe():
+            bf_count = await asyncio.to_thread(backfill_historical_deals)
+            if bf_count > 0:
+                log_event(f"[BACKFILL] {bf_count} historical deal(s) written to trades.csv on startup.")
+                if EXECUTION_CHAT_ID:
+                    await safe_send(int(EXECUTION_CHAT_ID),
+                        f"📂 <b>Startup backfill</b>: {bf_count} missed deal(s) recovered to trades.csv.")
+    except Exception:
+        log_event("[BACKFILL] Startup backfill failed:\n" + traceback.format_exc())
+
     asyncio.create_task(manager_loop())
 
     bot_cmd = BotCommandHandler()
