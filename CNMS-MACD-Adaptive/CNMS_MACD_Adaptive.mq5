@@ -18,6 +18,15 @@
 // INPUT GROUPS
 //────────────────────────────────────────────────────────────────────
 
+input group "══ Telegram Notifications ══"
+input string InpTgToken      = "";                  // Bot token  (from @BotFather)
+input string InpTgChatId     = "";                  // Chat / channel ID
+input string InpTgBotName    = "MACD-Adaptive";     // Bot name shown in messages
+input bool   InpTgOnOpen     = true;                // Notify on trade opened
+input bool   InpTgOnClose    = true;                // Notify on trade closed
+input bool   InpTgOnSL       = true;                // Notify on stop loss hit
+input bool   InpTgOnAdopt    = true;                // Notify on manual trade adopted
+
 input group "══ MACD Parameters ══"
 input int                InpMacdFast   = 12;           // Fast EMA period
 input int                InpMacdSlow   = 26;           // Slow EMA period
@@ -93,6 +102,105 @@ int OnInit()
                g_sym, InpMagicNumber,
                EnumToString(InpTrendTF), EnumToString(InpEntryTF));
    return INIT_SUCCEEDED;
+}
+
+//+------------------------------------------------------------------+
+//| TRADE TRANSACTION — detect closes and SL hits                   |
+//+------------------------------------------------------------------+
+void OnTradeTransaction(const MqlTradeTransaction &trans,
+                        const MqlTradeRequest     &request,
+                        const MqlTradeResult      &result)
+{
+   // We only care about a new deal being added to history
+   if(trans.type != TRADE_TRANSACTION_DEAL_ADD) return;
+   if(!HistoryDealSelect(trans.deal))           return;
+
+   // Only closing deals
+   ENUM_DEAL_ENTRY entry = (ENUM_DEAL_ENTRY)HistoryDealGetInteger(trans.deal, DEAL_ENTRY);
+   if(entry != DEAL_ENTRY_OUT) return;
+
+   string sym   = HistoryDealGetString (trans.deal, DEAL_SYMBOL);
+   if(sym != g_sym) return;
+
+   long   magic  = HistoryDealGetInteger(trans.deal, DEAL_MAGIC);
+   ulong  posId  = (ulong)HistoryDealGetInteger(trans.deal, DEAL_POSITION_ID);
+   bool   isBotOwned = (magic == InpMagicNumber);
+   bool   isAdopted  = IsAlreadyAdopted(posId);
+   if(!isBotOwned && !isAdopted) return;
+
+   double profit    = HistoryDealGetDouble (trans.deal, DEAL_PROFIT);
+   double closePrice= HistoryDealGetDouble (trans.deal, DEAL_PRICE);
+   double entryPrice= 0.0;
+   long   reason    = HistoryDealGetInteger(trans.deal, DEAL_REASON);
+   ENUM_DEAL_TYPE dealType = (ENUM_DEAL_TYPE)HistoryDealGetInteger(trans.deal, DEAL_TYPE);
+   string sideStr   = (dealType == DEAL_TYPE_BUY) ? "BUY"  : "SELL";
+   string sideIcon  = (dealType == DEAL_TYPE_BUY) ? "📈" : "📉";
+   string cleanSym  = sym;
+   int    dotPos    = StringFind(cleanSym, ".");
+   if(dotPos > 0) cleanSym = StringSubstr(cleanSym, 0, dotPos);
+   string nowStr    = TimeToString(TimeGMT(), TIME_DATE|TIME_MINUTES) + " UTC";
+
+   // Determine outcome icon + label
+   string closeIcon, outcomeStr;
+   if(profit >= 5.0)       { closeIcon = "✅"; outcomeStr = "WIN"; }
+   else if(profit > 0.0)   { closeIcon = "🛡️"; outcomeStr = "BE+"; }
+   else if(profit < 0.0)   { closeIcon = "❌"; outcomeStr = "LOSS"; }
+   else                    { closeIcon = "➖"; outcomeStr = "BE"; }
+
+   // Retrieve entry from position history for R:R calc
+   if(HistorySelectByPosition(posId))
+   {
+      for(int d = HistoryDealsTotal() - 1; d >= 0; d--)
+      {
+         ulong dTicket = HistoryDealGetTicket(d);
+         ENUM_DEAL_ENTRY dEntry = (ENUM_DEAL_ENTRY)HistoryDealGetInteger(dTicket, DEAL_ENTRY);
+         if(dEntry == DEAL_ENTRY_IN)
+         {
+            entryPrice = HistoryDealGetDouble(dTicket, DEAL_PRICE);
+            break;
+         }
+      }
+   }
+
+   // R:R line
+   double slDelta = InpSlMulti * HistoryDealGetDouble(trans.deal, DEAL_SL);
+   string rrLine  = "";
+   if(entryPrice > 0 && InpSlMulti > 0)
+   {
+      double atrBuf[];
+      if(ReadAtr(hAtr, atrBuf))
+      {
+         double atrSL    = InpSlMulti * atrBuf[1];
+         double priceDiff= (dealType == DEAL_TYPE_BUY) ? (closePrice - entryPrice) : (entryPrice - closePrice);
+         if(atrSL > 0)
+            rrLine = StringFormat("📊 R:R:    %+.2fR\n", priceDiff / atrSL);
+      }
+   }
+
+   // SL hit — use ❌ LOSS format (same block, just return after)
+   bool isSL = (reason == DEAL_REASON_SL);
+   if(isSL && !InpTgOnSL)  return;
+   if(!isSL && !InpTgOnClose) return;
+
+   SendTelegram(StringFormat(
+      "%s <b>Trade Closed — %s</b>\n"
+      "📊 %s  |  📡 MACD H4H1\n"
+      "\n"
+      "%s <b>%s | %s</b>\n"
+      "⏰ %s\n"
+      "\n"
+      "📍 Entry:  %.5f\n"
+      "🏁 Exit:   %.5f\n"
+      "%s"
+      "💰 P/L:    <b>%+.2f</b>\n"
+      "🎫 Ticket: %I64u",
+      closeIcon, outcomeStr,
+      InpTgBotName,
+      sideIcon, cleanSym, sideStr,
+      nowStr,
+      entryPrice, closePrice,
+      rrLine,
+      profit, posId));
 }
 
 //+------------------------------------------------------------------+
@@ -194,8 +302,40 @@ void OpenTrade(ENUM_ORDER_TYPE type, double atrVal)
              : trade.Sell(InpLotSize, g_sym, entry, sl, tp, comment);
 
    if(ok && trade.ResultRetcode() == TRADE_RETCODE_DONE)
+   {
       PrintFormat("CNMS: Opened %s | Entry=%.5f SL=%.5f TP=%.5f ATR=%.5f",
                   comment, entry, sl, tp, atrVal);
+
+      if(InpTgOnOpen)
+      {
+         string openIcon  = (type == ORDER_TYPE_BUY) ? "🟢" : "🔴";
+         string sideIcon  = (type == ORDER_TYPE_BUY) ? "📈" : "📉";
+         string sideStr   = (type == ORDER_TYPE_BUY) ? "BUY"  : "SELL";
+         string cleanSym  = g_sym;
+         int    dotPos    = StringFind(cleanSym, ".");
+         if(dotPos > 0) cleanSym = StringSubstr(cleanSym, 0, dotPos);
+         string nowStr    = TimeToString(TimeGMT(), TIME_DATE|TIME_MINUTES) + " UTC";
+         ulong  ticket    = trade.ResultDeal();
+         string tpStr     = (tp > 0) ? StringFormat("%.5f", tp) : "—";
+
+         SendTelegram(StringFormat(
+            "%s <b>Trade Opened</b>\n"
+            "📊 %s  |  📡 MACD H4H1\n"
+            "\n"
+            "%s <b>%s | %s</b>\n"
+            "⏰ %s\n"
+            "\n"
+            "📍 Entry:  %.5f\n"
+            "🛑 SL:     %.5f\n"
+            "🎯 TP:     %s\n"
+            "📦 Lots:   %.2f\n"
+            "🎫 Ticket: %I64u",
+            openIcon, InpTgBotName,
+            sideIcon, cleanSym, sideStr,
+            nowStr,
+            entry, sl, tpStr, InpLotSize, ticket));
+      }
+   }
    else
       PrintFormat("CNMS: Trade FAILED — %s (%d)", trade.ResultRetcodeDescription(), trade.ResultRetcode());
 }
@@ -274,6 +414,32 @@ void AdoptOneTrade(ulong ticket, double atrVal)
 
    if(InpAlertOnAdopt)
       Alert(StringFormat("CNMS: Manual trade #%I64u adopted — trailing stop active", ticket));
+
+   if(InpTgOnAdopt)
+   {
+      string adoptSide = (posType == POSITION_TYPE_BUY) ? "BUY" : "SELL";
+      string adoptIcon = (posType == POSITION_TYPE_BUY) ? "📈" : "📉";
+      string cleanSym  = g_sym;
+      int    dotPos2   = StringFind(cleanSym, ".");
+      if(dotPos2 > 0) cleanSym = StringSubstr(cleanSym, 0, dotPos2);
+      string nowStr2   = TimeToString(TimeGMT(), TIME_DATE|TIME_MINUTES) + " UTC";
+
+      SendTelegram(StringFormat(
+         "🤝 <b>Manual Trade Adopted</b>\n"
+         "📊 %s  |  📡 MACD H4H1\n"
+         "\n"
+         "%s <b>%s | %s</b>\n"
+         "⏰ %s\n"
+         "\n"
+         "🛑 SL:     %.5f\n"
+         "🎯 TP:     %.5f\n"
+         "🎫 Ticket: %I64u\n"
+         "Trailing stop is now active.",
+         InpTgBotName,
+         adoptIcon, cleanSym, adoptSide,
+         nowStr2,
+         newSL, newTP, ticket));
+   }
 }
 
 //+------------------------------------------------------------------+
@@ -390,6 +556,55 @@ bool ReadAtr(int handle, double &buf[])
 {
    ArraySetAsSeries(buf, true);
    return (CopyBuffer(handle, 0, 0, 3, buf) >= 3);
+}
+
+//────────────────────────────────────────────────────────────────────
+// TELEGRAM HELPERS
+//────────────────────────────────────────────────────────────────────
+
+// Minimal URL-encoder — encodes the characters that break query strings
+string UrlEncode(string raw)
+{
+   string out = "";
+   int len = StringLen(raw);
+   for(int i = 0; i < len; i++)
+   {
+      ushort c = StringGetCharacter(raw, i);
+      if((c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') ||
+         (c >= '0' && c <= '9') || c == '-' || c == '_' || c == '.' || c == '~')
+         out += ShortToString(c);
+      else
+         out += StringFormat("%%%02X", c);
+   }
+   return out;
+}
+
+void SendTelegram(string msg)
+{
+   if(InpTgToken == "" || InpTgChatId == "")
+   {
+      Print("CNMS Telegram: token or chat ID not set — skipping notification.");
+      return;
+   }
+
+   string url  = "https://api.telegram.org/bot" + InpTgToken + "/sendMessage";
+   string body = "chat_id=" + InpTgChatId +
+                 "&parse_mode=HTML" +
+                 "&text=" + UrlEncode(msg);
+
+   char   postData[];
+   char   result[];
+   string resHeaders;
+   string reqHeaders = "Content-Type: application/x-www-form-urlencoded\r\n";
+
+   StringToCharArray(body, postData, 0, StringLen(body));
+
+   int code = WebRequest("POST", url, reqHeaders, 10000, postData, result, resHeaders);
+   if(code == -1)
+      Print("CNMS Telegram: WebRequest failed (error ", GetLastError(),
+            "). Add https://api.telegram.org to MT5 Tools → Options → Expert Advisors → Allow WebRequest.");
+   else if(code != 200)
+      PrintFormat("CNMS Telegram: HTTP %d — %s", code, CharArrayToString(result));
 }
 
 //────────────────────────────────────────────────────────────────────
