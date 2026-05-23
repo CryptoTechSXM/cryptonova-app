@@ -1246,7 +1246,7 @@ def run():
     global _symbol, _ctrl
 
     print("=" * 55)
-    print("  CRYPTONITE FREE SIGNALS EXECUTOR")
+    print("  CNFS BOT")
     print("  Strategy : Relaxed HA | XAUUSD | 24/7")
     print("  BE trigger: max({} pips, {}% ATR)".format(
         config.MIN_BE_PIPS, int(config.BE_TRIGGER_PCT * 100)))
@@ -1353,6 +1353,12 @@ def run():
                 open('heartbeat.txt', 'w').write(str(time.time()))
             except Exception:
                 pass
+
+            # Weekend guard — markets closed, sleep 5 min and check again
+            if datetime.now(timezone.utc).weekday() >= 5:
+                time.sleep(300)
+                continue
+
             try:
                 _sync_closed_deals()
                 if can_open_new(_symbol):

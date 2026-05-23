@@ -1,7 +1,7 @@
 """
 telegram_control.py
 ====================
-Lightweight Telegram command interface for the CNFS Executor bot.
+Lightweight Telegram command interface for the CNFS Bot bot.
 Uses Bot API polling — no Telethon / API_ID needed, just a BOT_TOKEN.
 
 Commands (sent to the bot in Telegram):
@@ -89,7 +89,7 @@ class TelegramControl:
     # ----------------------------------------------------------
     def _cmd_help(self):
         return (
-            "\U0001f916 <b>CNFS Executor Commands</b>\n\n"
+            "\U0001f916 <b>CNFS Bot Commands</b>\n\n"
             "/status     — Bot state &amp; open trades\n"
             "/trades     — Open trades with P&amp;L &amp; trail info\n"
             "/stats      — Today's W/L/BE, P&amp;L, balance\n"
@@ -115,7 +115,7 @@ class TelegramControl:
         status_txt  = "PAUSED" if paused else "ACTIVE"
 
         lines = [
-            "\U0001f916 <b>CNFS Executor — Status</b>",
+            "\U0001f916 <b>CNFS Bot — Status</b>",
             "",
             "{} Trading: <b>{}</b>".format(status_icon, status_txt),
             "\U0001f4ca Symbol: {}".format(symbol),

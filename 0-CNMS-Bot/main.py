@@ -2348,14 +2348,41 @@ async def main():
 
     # ── Startup Telegram announcement ────────────────────────────────────────
     if EXECUTION_CHAT_ID and BOT_TOKEN:
-        await safe_send(
-            int(EXECUTION_CHAT_ID),
-            f"🚀 <b>{INSTANCE_NAME} ONLINE</b>\n\n"
-            f"MACD({MACD_FAST},{MACD_SLOW},{MACD_SIGNAL_PERIOD}) on {MACD_TIMEFRAME}\n"
-            f"H1 filter: {'✅' if H1_FILTER_ENABLED else '❌'}  "
-            f"Symbols: {', '.join(SYMBOLS)}\n"
-            f"Risk: {'fixed ' + str(FIXED_LOT) + ' lot' if USE_FIXED_LOT else str(RISK_BASE*100) + '% per trade'}"
-        )
+        # Build session-open card matching 247A/B format
+        _so_acc = None
+        try:
+            if mt5_connect():
+                _so_acc = mt5.account_info()
+                mt5_disconnect()
+        except Exception:
+            pass
+        _so_st   = load_state()
+        _so_dk   = day_key()
+        _so_ds   = _so_st.get("daily_stats", {}).get(_so_dk, {})
+        _so_tw   = _so_ds.get("wins",      0)
+        _so_tl   = _so_ds.get("losses",    0)
+        _so_tbep = _so_ds.get("be_plus",   0)
+        _so_tbe  = _so_ds.get("breakeven", 0)
+        _so_tot  = _so_tw + _so_tl + _so_tbep + _so_tbe
+        _so_pnl  = _so_ds.get("profit",    0.0)
+        _so_sgn  = "+" if _so_pnl >= 0 else ""
+        if _so_acc:
+            _so_msg = (
+                f"📊 <b>Session Open</b>\n"
+                f"📡 {INSTANCE_NAME}\n"
+                f"⏰ {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')}\n"
+                f"💰 Balance: <b>{_so_acc.balance:.2f}</b>  |  Equity: <b>{_so_acc.equity:.2f}</b>\n"
+                f"📈 Today P&L: <b>{_so_sgn}{_so_pnl:.2f}</b>\n"
+                f"🔢 Trades: {_so_tot} ({_so_tw}W / {_so_tl}L / {_so_tbep}BE+ / {_so_tbe}BE)\n"
+                f"✅ Trading enabled"
+            )
+        else:
+            _so_msg = (
+                f"🟢 <b>{INSTANCE_NAME} ONLINE</b>\n"
+                f"⏰ {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')}\n"
+                f"MACD({MACD_FAST},{MACD_SLOW},{MACD_SIGNAL_PERIOD}) on {MACD_TIMEFRAME}"
+            )
+        await safe_send(int(EXECUTION_CHAT_ID), _so_msg)
 
     # ── Recover orphaned positions from a previous crash ─────────────────────
     try:
