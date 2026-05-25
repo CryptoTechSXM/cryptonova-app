@@ -358,9 +358,7 @@
             <div class="info-row"><span class="info-key">USDC Balance</span><span class="info-val" id="reg-usdc-bal">—</span></div>
             <div class="info-row"><span class="info-key">USDC Approved</span><span class="info-val" id="reg-allowance">—</span></div>
             <div id="usdc-low-warn" style="display:none;margin-top:10px;background:rgba(245,158,11,.08);border:1px solid rgba(245,158,11,.3);border-radius:8px;padding:12px;font-size:13px;color:var(--yellow)">
-              ⚠️ Need test USDC? Run this in your terminal:<br>
-              <code style="display:block;margin-top:8px;background:rgba(0,0,0,.3);padding:8px 10px;border-radius:6px;font-size:12px;color:var(--text);word-break:break-all">$env:RECIPIENT="<span id="warn-addr">0xYourAddress</span>"; npx hardhat run scripts/mint-test-usdc.js --network baseSepolia</code>
-              <div style="margin-top:6px;font-size:12px;color:var(--text3)">Run in PowerShell from: <code>C:\CryptoNite-Smat-Contracts\CryptoNova</code></div>
+              ⚠️ Your USDC balance is too low to register. Need test USDC? Contact the dev team on Telegram — we'll get you sorted. 💬
             </div>
           </div>
 
@@ -986,7 +984,6 @@ async function loadRegisterTab() {
   const allowanceEl = document.getElementById('reg-allowance');
   const balanceEl   = document.getElementById('reg-usdc-bal');
   const warnEl      = document.getElementById('usdc-low-warn');
-  const warnAddr    = document.getElementById('warn-addr');
   const alreadyEl   = document.getElementById('register-already');
   const walletWarn  = document.getElementById('register-wallet-warn');
   const refCard     = document.getElementById('referral-link-card');
@@ -999,7 +996,6 @@ async function loadRegisterTab() {
     return;
   }
   walletWarn.style.display = 'none';
-  if (warnAddr) warnAddr.textContent = userAddr;
 
   try {
     const usdc   = new ethers.Contract(ADDRESSES.usdc,   USDC_ABI,   readProvider);
