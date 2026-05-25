@@ -30,6 +30,23 @@
     .logo-text span { color: var(--green); }
     .back-btn { color: var(--text2); text-decoration: none; font-size: 14px; display: flex; align-items: center; gap: 6px; transition: color .2s; }
     .back-btn:hover { color: var(--green); }
+    body.light {
+      --bg:        #f1f5f9;
+      --bg2:       #ffffff;
+      --bg3:       #e2e8f0;
+      --border:    #cbd5e1;
+      --green:     #00966a;
+      --green2:    #007a56;
+      --green-dim: rgba(0,150,106,0.10);
+      --blue:      #2563eb;
+      --yellow:    #d97706;
+      --red:       #dc2626;
+      --text:      #0f172a;
+      --text2:     #475569;
+      --text3:     #94a3b8;
+    }
+    .theme-toggle { background: var(--bg3); border: 1px solid var(--border); border-radius: 8px; padding: 6px 12px; font-size: 13px; color: var(--text2); cursor: pointer; transition: all .2s; }
+    .theme-toggle:hover { color: var(--text); border-color: var(--green); }
 
     main { max-width: 780px; margin: 0 auto; padding: 48px 24px 80px; }
 
@@ -71,10 +88,29 @@
     <div class="logo-icon">N</div>
     <div class="logo-text">Crypto<span>Nova</span></div>
   </a>
-  <a href="index.html" class="back-btn">
-    ← Back to App
-  </a>
+  <div style="display:flex;align-items:center;gap:10px">
+    <button class="theme-toggle" id="theme-btn" onclick="toggleTheme()">☀️ Light</button>
+    <a href="index.html" class="back-btn">← Back to App</a>
+  </div>
 </header>
+
+<script>
+function toggleTheme() {
+  const isLight = document.body.classList.toggle('light');
+  localStorage.setItem('theme', isLight ? 'light' : 'dark');
+  document.getElementById('theme-btn').textContent = isLight ? '🌙 Dark' : '☀️ Light';
+}
+(function() {
+  const saved = localStorage.getItem('theme');
+  if (saved === 'light') {
+    document.body.classList.add('light');
+    document.addEventListener('DOMContentLoaded', () => {
+      const btn = document.getElementById('theme-btn');
+      if (btn) btn.textContent = '🌙 Dark';
+    });
+  }
+})();
+</script>
 
 <main>
 

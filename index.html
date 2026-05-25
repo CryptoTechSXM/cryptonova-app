@@ -21,6 +21,23 @@
       --text2:     #94a3b8;
       --text3:     #64748b;
     }
+    body.light {
+      --bg:        #f1f5f9;
+      --bg2:       #ffffff;
+      --bg3:       #e2e8f0;
+      --border:    #cbd5e1;
+      --green:     #00966a;
+      --green2:    #007a56;
+      --green-dim: rgba(0,150,106,0.10);
+      --blue:      #2563eb;
+      --yellow:    #d97706;
+      --red:       #dc2626;
+      --text:      #0f172a;
+      --text2:     #475569;
+      --text3:     #94a3b8;
+    }
+    .theme-toggle { background: var(--bg3); border: 1px solid var(--border); border-radius: 8px; padding: 6px 12px; font-size: 13px; color: var(--text2); cursor: pointer; transition: all .2s; }
+    .theme-toggle:hover { color: var(--text); border-color: var(--green); }
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body { background: var(--bg); color: var(--text); font-family: 'Segoe UI', system-ui, sans-serif; min-height: 100vh; }
 
@@ -276,7 +293,10 @@
     <div class="logo-text">Crypto<span>Nova</span></div>
     <span class="logo-badge" id="network-badge">Base Sepolia</span>
   </div>
-  <button id="btn-connect" onclick="connectWallet()">Connect Wallet</button>
+  <div style="display:flex;align-items:center;gap:10px">
+    <button class="theme-toggle" id="theme-btn" onclick="toggleTheme()">☀️ Light</button>
+    <button id="btn-connect" onclick="connectWallet()">Connect Wallet</button>
+  </div>
 </header>
 
 <nav>
@@ -1022,7 +1042,10 @@ async function loadHomeStats() {
       statusEl.innerHTML = '<span class="pill pill-blue">' + remaining + ' slots open</span>';
     }
 
-    document.getElementById('stat-epoch').textContent     = '#' + epoch.toString();
+    const EPOCH_NAMES = ['Nebula Genesis','Mercury Rise','Lunar Cluster','Aurora Zenith','Solaris Echo','Cosmic Core','Galaxy Grid','Supernova Spark'];
+    const epochNum = Number(epoch);
+    const epochName = EPOCH_NAMES[epochNum - 1] || ('Epoch ' + epochNum);
+    document.getElementById('stat-epoch').textContent = epochName + ' (Epoch ' + epochNum + ')';
     document.getElementById('stat-reward').textContent    =
       parseFloat(ethers.formatUnits(reward, 18)).toLocaleString(undefined, {maximumFractionDigits: 0}) + ' CNOVA';
     document.getElementById('stat-epoch-rem').textContent = epochRem.toString() + ' entries';
@@ -1475,6 +1498,25 @@ async function addUSDCtoMetaMask() {
     toast('Could not add token: ' + (e.message || e), 'error');
   }
 }
+
+// ── Theme toggle ─────────────────────────────────────────────────────────────
+function toggleTheme() {
+  const isLight = document.body.classList.toggle('light');
+  localStorage.setItem('theme', isLight ? 'light' : 'dark');
+  document.getElementById('theme-btn').textContent = isLight ? '🌙 Dark' : '☀️ Light';
+}
+
+// Apply saved theme on load
+(function() {
+  const saved = localStorage.getItem('theme');
+  if (saved === 'light') {
+    document.body.classList.add('light');
+    document.addEventListener('DOMContentLoaded', () => {
+      const btn = document.getElementById('theme-btn');
+      if (btn) btn.textContent = '🌙 Dark';
+    });
+  }
+})();
 </script>
 
 <!-- MetaMask Install Modal -->
