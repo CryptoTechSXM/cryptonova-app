@@ -1,0 +1,629 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>FAQ & Glossary — CryptoNova</title>
+  <style>
+    :root {
+      --bg:        #0a0e1a;
+      --bg2:       #111827;
+      --bg3:       #1a2236;
+      --border:    #1f2d47;
+      --green:     #00e5a0;
+      --green2:    #00b37d;
+      --green-dim: rgba(0,229,160,0.12);
+      --blue:      #3b82f6;
+      --yellow:    #f59e0b;
+      --red:       #ef4444;
+      --text:      #e2e8f0;
+      --text2:     #94a3b8;
+      --text3:     #64748b;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { background: var(--bg); color: var(--text); font-family: 'Segoe UI', system-ui, sans-serif; min-height: 100vh; line-height: 1.7; }
+
+    body.light {
+      --bg:        #f1f5f9;
+      --bg2:       #ffffff;
+      --bg3:       #e2e8f0;
+      --border:    #cbd5e1;
+      --green:     #00966a;
+      --green2:    #007a56;
+      --green-dim: rgba(0,150,106,0.10);
+      --blue:      #2563eb;
+      --yellow:    #d97706;
+      --red:       #dc2626;
+      --text:      #0f172a;
+      --text2:     #475569;
+      --text3:     #94a3b8;
+    }
+
+    header { background: var(--bg2); border-bottom: 1px solid var(--border); padding: 14px 24px; display: flex; align-items: center; justify-content: space-between; }
+    .logo { display: flex; align-items: center; gap: 10px; text-decoration: none; }
+    .logo-icon { width: 34px; height: 34px; background: linear-gradient(135deg, var(--green), var(--blue)); border-radius: 8px; display: flex; align-items: center; justify-content: center; font-weight: 900; font-size: 16px; color: #000; }
+    .logo-text { font-size: 18px; font-weight: 700; letter-spacing: -0.5px; color: var(--text); }
+    .logo-text span { color: var(--green); }
+    .header-right { display: flex; align-items: center; gap: 10px; }
+    .back-btn { color: var(--text2); text-decoration: none; font-size: 14px; display: flex; align-items: center; gap: 6px; transition: color .2s; }
+    .back-btn:hover { color: var(--green); }
+    .theme-toggle { background: var(--bg3); border: 1px solid var(--border); border-radius: 8px; padding: 6px 12px; font-size: 13px; color: var(--text2); cursor: pointer; transition: all .2s; }
+    .theme-toggle:hover { color: var(--text); border-color: var(--green); }
+
+    main { max-width: 780px; margin: 0 auto; padding: 48px 24px 80px; }
+
+    .page-title { font-size: 28px; font-weight: 800; margin-bottom: 6px; }
+    .page-title span { color: var(--green); }
+    .page-subtitle { font-size: 14px; color: var(--text3); margin-bottom: 40px; }
+
+    /* Search */
+    .search-wrap { position: relative; margin-bottom: 36px; }
+    .search-input { width: 100%; background: var(--bg2); border: 1px solid var(--border); border-radius: 10px; padding: 12px 16px 12px 42px; font-size: 14px; color: var(--text); outline: none; transition: border-color .2s; }
+    .search-input::placeholder { color: var(--text3); }
+    .search-input:focus { border-color: var(--green); }
+    .search-icon { position: absolute; left: 14px; top: 50%; transform: translateY(-50%); color: var(--text3); pointer-events: none; }
+
+    /* Section headings */
+    h2 { font-size: 13px; font-weight: 700; color: var(--green); text-transform: uppercase; letter-spacing: 1px; margin: 40px 0 16px; padding-bottom: 8px; border-bottom: 1px solid var(--border); }
+
+    /* Glossary grid */
+    .glossary-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 12px; margin-bottom: 8px; }
+    .glossary-card { background: var(--bg2); border: 1px solid var(--border); border-radius: 10px; padding: 16px 18px; }
+    .glossary-card .acronym { font-size: 15px; font-weight: 800; color: var(--green); margin-bottom: 2px; }
+    .glossary-card .full-name { font-size: 12px; color: var(--text3); margin-bottom: 6px; font-style: italic; }
+    .glossary-card .definition { font-size: 13px; color: var(--text2); line-height: 1.6; }
+
+    /* FAQ accordion */
+    .faq-list { display: flex; flex-direction: column; gap: 8px; }
+    .faq-item { background: var(--bg2); border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
+    .faq-question { width: 100%; background: none; border: none; text-align: left; padding: 16px 18px; font-size: 14px; font-weight: 600; color: var(--text); cursor: pointer; display: flex; align-items: center; justify-content: space-between; gap: 12px; transition: color .2s; }
+    .faq-question:hover { color: var(--green); }
+    .faq-chevron { flex-shrink: 0; width: 18px; height: 18px; color: var(--text3); transition: transform .25s; }
+    .faq-item.open .faq-chevron { transform: rotate(180deg); color: var(--green); }
+    .faq-answer { max-height: 0; overflow: hidden; transition: max-height .3s ease, padding .3s; }
+    .faq-item.open .faq-answer { max-height: 600px; }
+    .faq-answer-inner { padding: 0 18px 16px; font-size: 14px; color: var(--text2); line-height: 1.7; border-top: 1px solid var(--border); padding-top: 14px; }
+    .faq-answer-inner p { margin-bottom: 10px; }
+    .faq-answer-inner p:last-child { margin-bottom: 0; }
+    .faq-answer-inner strong { color: var(--text); }
+    .faq-answer-inner code { background: var(--bg3); border: 1px solid var(--border); border-radius: 4px; padding: 1px 6px; font-size: 12px; color: var(--green); font-family: monospace; }
+    .faq-answer-inner ul { padding-left: 18px; margin-top: 6px; }
+    .faq-answer-inner li { margin-bottom: 4px; }
+
+    /* No results */
+    .no-results { text-align: center; padding: 48px 0; color: var(--text3); font-size: 14px; display: none; }
+
+    footer { background: var(--bg2); border-top: 1px solid var(--border); padding: 20px 24px; text-align: center; font-size: 13px; color: var(--text3); }
+    footer a { color: var(--text2); text-decoration: none; }
+    footer a:hover { color: var(--green); }
+
+    @media (max-width: 640px) {
+      main { padding: 32px 16px 60px; }
+      .page-title { font-size: 22px; }
+      .glossary-grid { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <a href="index.html" class="logo">
+    <div class="logo-icon">N</div>
+    <div class="logo-text">Crypto<span>Nova</span></div>
+  </a>
+  <div class="header-right">
+    <button class="theme-toggle" id="theme-btn" onclick="toggleTheme()">☀️ Light</button>
+    <a href="index.html" class="back-btn">← Back to App</a>
+  </div>
+</header>
+
+<script>
+function toggleTheme() {
+  const isLight = document.body.classList.toggle('light');
+  localStorage.setItem('theme', isLight ? 'light' : 'dark');
+  document.getElementById('theme-btn').textContent = isLight ? '🌙 Dark' : '☀️ Light';
+}
+(function() {
+  const saved = localStorage.getItem('theme');
+  if (saved === 'light') {
+    document.body.classList.add('light');
+    document.addEventListener('DOMContentLoaded', () => {
+      const btn = document.getElementById('theme-btn');
+      if (btn) btn.textContent = '🌙 Dark';
+    });
+  }
+})();
+</script>
+
+<main>
+
+  <div class="page-title">FAQ &amp; <span>Glossary</span></div>
+  <div class="page-subtitle">Common questions and acronym definitions — bookmark this page for quick reference.</div>
+
+  <div class="search-wrap">
+    <svg class="search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+    <input class="search-input" id="search" type="text" placeholder="Search questions and terms…" oninput="filterAll()" />
+  </div>
+
+  <!-- ── GLOSSARY ─────────────────────────────────────────────────── -->
+  <h2 id="glossary-heading">📖 Acronym Glossary</h2>
+
+  <div class="glossary-grid" id="glossary-grid">
+
+    <div class="glossary-card" data-terms="bfs binary forced spillover matrix">
+      <div class="acronym">BFS</div>
+      <div class="full-name">Binary Forced Spillover</div>
+      <div class="definition">When all direct positions under a node in the binary tree are already occupied, new entries automatically "spill over" to the next available open slot further down your downline. This means you can gain team members even without directly referring them.</div>
+    </div>
+
+    <div class="glossary-card" data-terms="cnova token reward crypto nova">
+      <div class="acronym">CNOVA</div>
+      <div class="full-name">CryptoNova Token</div>
+      <div class="definition">The native reward token of the CryptoNova protocol. Distributed to participants on each matrix entry. Has a rising floor price backed by USDC treasury reserves. Not a stablecoin — its market value can fluctuate above the floor.</div>
+    </div>
+
+    <div class="glossary-card" data-terms="usdc usd coin stablecoin circle">
+      <div class="acronym">USDC</div>
+      <div class="full-name">USD Coin</div>
+      <div class="definition">A stablecoin pegged 1:1 to the US Dollar, issued by Circle. Used as the entry fee currency and for withdrawals on the Base blockchain. Always carries 6 decimal places on-chain (1,000,000 = $1.00).</div>
+    </div>
+
+    <div class="glossary-card" data-terms="usdt tether stablecoin bsc">
+      <div class="acronym">USDT</div>
+      <div class="full-name">Tether USD</div>
+      <div class="definition">A stablecoin pegged 1:1 to the US Dollar, issued by Tether. Used as the entry fee currency on the BNB Chain (BSC) version of CryptoNova.</div>
+    </div>
+
+    <div class="glossary-card" data-terms="defi decentralized finance">
+      <div class="acronym">DeFi</div>
+      <div class="full-name">Decentralized Finance</div>
+      <div class="definition">Financial systems and protocols that operate on blockchains without a central authority, bank, or intermediary. CryptoNova is a DeFi protocol — smart contracts execute all logic automatically, with no admin able to pause or alter them.</div>
+    </div>
+
+    <div class="glossary-card" data-terms="bsc bnb smart chain binance">
+      <div class="acronym">BSC</div>
+      <div class="full-name">BNB Smart Chain</div>
+      <div class="definition">The blockchain network operated by Binance. CryptoNova will be deployed on BSC in addition to Base, allowing participants to enter using USDT on the BNB ecosystem.</div>
+    </div>
+
+    <div class="glossary-card" data-terms="evm ethereum virtual machine">
+      <div class="acronym">EVM</div>
+      <div class="full-name">Ethereum Virtual Machine</div>
+      <div class="definition">The runtime environment that executes smart contract code. Both Base and BSC are EVM-compatible, meaning the same smart contract code and wallet addresses work across both chains.</div>
+    </div>
+
+    <div class="glossary-card" data-terms="tx transaction hash on-chain">
+      <div class="acronym">TX / TXN</div>
+      <div class="full-name">Transaction</div>
+      <div class="definition">A blockchain transaction. Every entry, withdrawal, or token distribution is a TX recorded permanently on-chain. You can verify any TX on BaseScan or BscScan using the transaction hash.</div>
+    </div>
+
+    <div class="glossary-card" data-terms="gas fee network blockchain">
+      <div class="acronym">Gas</div>
+      <div class="full-name">Gas Fee (Network Fee)</div>
+      <div class="definition">A small fee paid in the native blockchain currency (ETH on Base, BNB on BSC) to compensate validators for processing your transaction. Gas fees are separate from the USDC entry fee and are typically very small on Base.</div>
+    </div>
+
+    <div class="glossary-card" data-terms="roi return on investment earnings">
+      <div class="acronym">ROI</div>
+      <div class="full-name">Return on Investment</div>
+      <div class="definition">The percentage of profit relative to the amount invested. In CryptoNova, ROI comes from matrix cycle payouts and CNOVA token rewards. <strong>ROI is not guaranteed</strong> and depends on network participation.</div>
+    </div>
+
+  </div>
+  <div class="no-results" id="glossary-empty">No glossary terms match your search.</div>
+
+  <!-- ── FAQ ──────────────────────────────────────────────────────── -->
+
+  <h2 id="started-heading">🚀 Getting Started</h2>
+  <div class="faq-list" id="faq-started">
+
+    <div class="faq-item" data-terms="what is cryptonova protocol">
+      <button class="faq-question" onclick="toggleFaq(this)">
+        What is CryptoNova?
+        <svg class="faq-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="m6 9 6 6 6-6"/></svg>
+      </button>
+      <div class="faq-answer">
+        <div class="faq-answer-inner">
+          <p>CryptoNova is a decentralized, autonomous smart contract protocol deployed on the Base blockchain (and BNB Chain). It runs a binary matrix compensation structure where participants pay an entry fee in USDC/USDT and receive payments from subsequent participants according to predefined on-chain rules.</p>
+          <p>The protocol is fully autonomous — no admin can pause, modify, or redirect funds. All logic is enforced by immutable smart contracts.</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="faq-item" data-terms="how join register entry fee wallet">
+      <button class="faq-question" onclick="toggleFaq(this)">
+        How do I join?
+        <svg class="faq-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="m6 9 6 6 6-6"/></svg>
+      </button>
+      <div class="faq-answer">
+        <div class="faq-answer-inner">
+          <p>Connect a Web3 wallet (MetaMask, Coinbase Wallet, etc.) to the CryptoNova app on the Base network. Make sure you have USDC in your wallet for the entry fee plus a small amount of ETH for gas.</p>
+          <p>You can register with a referral link from an existing member, or use the default referral if you found the platform independently. Approve USDC spending, then click <strong>Register</strong> — the smart contract handles the rest instantly.</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="faq-item" data-terms="referral required need sponsor">
+      <button class="faq-question" onclick="toggleFaq(this)">
+        Do I need a referral to join?
+        <svg class="faq-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="m6 9 6 6 6-6"/></svg>
+      </button>
+      <div class="faq-answer">
+        <div class="faq-answer-inner">
+          <p>A referral address is required by the smart contract, but if you don't have a personal referral you can enter the default/root address. Anyone who joins through your personal referral link is placed directly in your downline.</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="faq-item" data-terms="entry fee cost how much usdc">
+      <button class="faq-question" onclick="toggleFaq(this)">
+        How much does it cost to join?
+        <svg class="faq-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="m6 9 6 6 6-6"/></svg>
+      </button>
+      <div class="faq-answer">
+        <div class="faq-answer-inner">
+          <p>The entry fee is set in USDC (Base) or USDT (BSC) and is defined in the smart contract. You'll also need a small amount of ETH (Base) or BNB (BSC) to cover gas fees for your transactions — typically less than $0.10 on Base.</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="faq-item" data-terms="wallet metamask coinbase base network">
+      <button class="faq-question" onclick="toggleFaq(this)">
+        Which wallet should I use?
+        <svg class="faq-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="m6 9 6 6 6-6"/></svg>
+      </button>
+      <div class="faq-answer">
+        <div class="faq-answer-inner">
+          <p>Any EVM-compatible wallet works — MetaMask, Coinbase Wallet, Trust Wallet, and Rabby are all supported. Make sure your wallet is connected to the <strong>Base</strong> network (or BNB Chain for BSC). Never share your seed phrase or private key with anyone.</p>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <h2 id="matrix-heading">🌐 How the Matrix Works</h2>
+  <div class="faq-list" id="faq-matrix">
+
+    <div class="faq-item" data-terms="binary matrix tree structure how works">
+      <button class="faq-question" onclick="toggleFaq(this)">
+        What is the binary matrix?
+        <svg class="faq-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="m6 9 6 6 6-6"/></svg>
+      </button>
+      <div class="faq-answer">
+        <div class="faq-answer-inner">
+          <p>The binary matrix is a tree structure where each participant has exactly two positions directly below them (left and right). When both positions are filled, the next incoming entry spills over to the next open slot deeper in the tree — this is <strong>Binary Forced Spillover (BFS)</strong>.</p>
+          <p>Each "cycle" consists of 254 filled positions in the tree. When a cycle completes, it triggers automatic re-entry for qualifying members and a payout event.</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="faq-item" data-terms="bfs binary forced spillover explain">
+      <button class="faq-question" onclick="toggleFaq(this)">
+        What is BFS (Binary Forced Spillover)?
+        <svg class="faq-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="m6 9 6 6 6-6"/></svg>
+      </button>
+      <div class="faq-answer">
+        <div class="faq-answer-inner">
+          <p>BFS stands for <strong>Binary Forced Spillover</strong>. In a binary matrix, each node has only two direct slots. When both slots below you are occupied, any new member that would have gone there is "forced" to spill over to the next available open slot further down the tree.</p>
+          <p>This means members above you in the matrix contribute to filling your downline even if they didn't personally refer anyone to you — the spillover effect benefits everyone deeper in the tree.</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="faq-item" data-terms="cycle what is 254 slots complete trigger">
+      <button class="faq-question" onclick="toggleFaq(this)">
+        What is a Cycle?
+        <svg class="faq-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="m6 9 6 6 6-6"/></svg>
+      </button>
+      <div class="faq-answer">
+        <div class="faq-answer-inner">
+          <p>A cycle is completed when 254 positions in the binary tree are filled (a full 7-level binary tree minus the root). When a cycle completes, it triggers a payout event and automatically re-enters qualifying members into the next cycle. The current cycle number and progress are shown on the Home tab.</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="faq-item" data-terms="epoch mining period halving cnova reward">
+      <button class="faq-question" onclick="toggleFaq(this)">
+        What is an Epoch?
+        <svg class="faq-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="m6 9 6 6 6-6"/></svg>
+      </button>
+      <div class="faq-answer">
+        <div class="faq-answer-inner">
+          <p>An epoch is a mining period that tracks CNOVA token distribution. Each epoch starts with a set CNOVA reward per entry. After a certain number of entries, the epoch advances and the reward per entry is halved — similar to Bitcoin's halving mechanism.</p>
+          <p>Earlier participants receive higher CNOVA rewards per entry. Epochs are named: <em>Nebula Genesis, Mercury Rise, Lunar Cluster, Aurora Zenith, Solaris Echo, Cosmic Core, Galaxy Grid, Supernova Spark</em>.</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="faq-item" data-terms="upline downline sponsor referral tree position">
+      <button class="faq-question" onclick="toggleFaq(this)">
+        What is an upline and downline?
+        <svg class="faq-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="m6 9 6 6 6-6"/></svg>
+      </button>
+      <div class="faq-answer">
+        <div class="faq-answer-inner">
+          <p><strong>Upline</strong> — members above you in the binary tree. Your upline referred you or you were spilled into their downline. When your cycle completes, a portion of the payout flows upward.</p>
+          <p><strong>Downline</strong> — members below you in the tree. These are people you referred directly, plus anyone who was spilled down into your subtree via BFS from members above you.</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="faq-item" data-terms="re-entry automatic cycle complete reentry">
+      <button class="faq-question" onclick="toggleFaq(this)">
+        What is automatic re-entry?
+        <svg class="faq-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="m6 9 6 6 6-6"/></svg>
+      </button>
+      <div class="faq-answer">
+        <div class="faq-answer-inner">
+          <p>When a cycle completes, a portion of the payout is set aside in a re-entry pool. Once the pool reaches the entry fee threshold, the smart contract automatically re-enters the participant into the next cycle — no manual action required. This keeps your position active without needing to reinvest manually.</p>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <h2 id="earnings-heading">💰 Earning & Withdrawals</h2>
+  <div class="faq-list" id="faq-earnings">
+
+    <div class="faq-item" data-terms="how earn income payment matrix payout">
+      <button class="faq-question" onclick="toggleFaq(this)">
+        How do I earn with CryptoNova?
+        <svg class="faq-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="m6 9 6 6 6-6"/></svg>
+      </button>
+      <div class="faq-answer">
+        <div class="faq-answer-inner">
+          <p>There are two income streams:</p>
+          <ul>
+            <li><strong>Matrix payouts (USDC/USDT)</strong> — earned when positions in your downline complete cycles. Payments flow directly to your wallet according to on-chain rules.</li>
+            <li><strong>CNOVA token rewards</strong> — distributed to you every time someone in your downline registers a new entry. The amount per entry decreases each epoch (halving model).</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="faq-item" data-terms="withdraw how withdrawal wallet usdc">
+      <button class="faq-question" onclick="toggleFaq(this)">
+        How do I withdraw my earnings?
+        <svg class="faq-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="m6 9 6 6 6-6"/></svg>
+      </button>
+      <div class="faq-answer">
+        <div class="faq-answer-inner">
+          <p>USDC payouts from matrix cycles are sent directly to your wallet by the smart contract — no manual withdrawal step needed for the matrix income. Any CNOVA tokens earned accumulate in your account and can be claimed or transferred via the Wallet tab.</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="faq-item" data-terms="guaranteed earnings income promises">
+      <button class="faq-question" onclick="toggleFaq(this)">
+        Are earnings guaranteed?
+        <svg class="faq-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="m6 9 6 6 6-6"/></svg>
+      </button>
+      <div class="faq-answer">
+        <div class="faq-answer-inner">
+          <p><strong>No.</strong> Earnings depend on continued network participation. If growth slows significantly, cycle completions slow down, re-entry pools may not accumulate fast enough, and income may decrease or stop. Past results from any matrix structure do not guarantee future results.</p>
+          <p>This is a high-risk protocol. Only participate with funds you can afford to lose entirely.</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="faq-item" data-terms="refund cancel get money back exit">
+      <button class="faq-question" onclick="toggleFaq(this)">
+        Can I get a refund?
+        <svg class="faq-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="m6 9 6 6 6-6"/></svg>
+      </button>
+      <div class="faq-answer">
+        <div class="faq-answer-inner">
+          <p><strong>No.</strong> All entry fees are processed directly by the smart contract and distributed instantly to upline wallets and the treasury. Blockchain transactions are irreversible. There are no refunds under any circumstances.</p>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <h2 id="cnova-heading">🪙 CNOVA Token</h2>
+  <div class="faq-list" id="faq-cnova">
+
+    <div class="faq-item" data-terms="cnova token what floor price value">
+      <button class="faq-question" onclick="toggleFaq(this)">
+        What is the CNOVA token?
+        <svg class="faq-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="m6 9 6 6 6-6"/></svg>
+      </button>
+      <div class="faq-answer">
+        <div class="faq-answer-inner">
+          <p>CNOVA is the native reward token of the CryptoNova protocol. It is distributed to participants each time a new entry occurs in their downline. It is <strong>not a stablecoin</strong> and not a security — it is an in-protocol utility token.</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="faq-item" data-terms="floor price treasury backed guaranteed minimum">
+      <button class="faq-question" onclick="toggleFaq(this)">
+        What is the floor price?
+        <svg class="faq-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="m6 9 6 6 6-6"/></svg>
+      </button>
+      <div class="faq-answer">
+        <div class="faq-answer-inner">
+          <p>A portion of every entry fee is sent to the on-chain CryptoNova Treasury. The treasury holds USDC and uses it to back a <strong>rising floor price</strong> for CNOVA — the minimum price at which the protocol will buy back CNOVA from the market.</p>
+          <p>The floor price only rises over time as the treasury grows. However, the market price above the floor is determined by supply and demand and may be volatile.</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="faq-item" data-terms="cnova sell trade exchange liquidity market">
+      <button class="faq-question" onclick="toggleFaq(this)">
+        Can I sell or trade CNOVA?
+        <svg class="faq-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="m6 9 6 6 6-6"/></svg>
+      </button>
+      <div class="faq-answer">
+        <div class="faq-answer-inner">
+          <p>CNOVA can be transferred like any ERC-20 token. Market liquidity may be limited, especially early on. The treasury's floor price mechanism provides a backstop, but selling above floor price requires willing market buyers. You should assume CNOVA may have little or no external market liquidity at any given time.</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="faq-item" data-terms="cnova add metamask token wallet see balance">
+      <button class="faq-question" onclick="toggleFaq(this)">
+        How do I see CNOVA in my wallet?
+        <svg class="faq-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="m6 9 6 6 6-6"/></svg>
+      </button>
+      <div class="faq-answer">
+        <div class="faq-answer-inner">
+          <p>In MetaMask (or any EVM wallet), go to <strong>Import Token</strong> and paste the CNOVA contract address. Once imported, your CNOVA balance will show in your wallet. You can also check your balance and transaction history on BaseScan using your wallet address.</p>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <h2 id="tech-heading">⚙️ Technical & Security</h2>
+  <div class="faq-list" id="faq-tech">
+
+    <div class="faq-item" data-terms="smart contract immutable audited safe secure">
+      <button class="faq-question" onclick="toggleFaq(this)">
+        Are the smart contracts audited?
+        <svg class="faq-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="m6 9 6 6 6-6"/></svg>
+      </button>
+      <div class="faq-answer">
+        <div class="faq-answer-inner">
+          <p>The CryptoNova contracts have undergone internal review and testing on Base Sepolia testnet. The source code is verified and publicly readable on BaseScan so anyone can inspect the logic. Despite all efforts, smart contracts may still contain undiscovered bugs — participation always carries smart contract risk.</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="faq-item" data-terms="basescan verify contract view code">
+      <button class="faq-question" onclick="toggleFaq(this)">
+        How can I verify the contracts on-chain?
+        <svg class="faq-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="m6 9 6 6 6-6"/></svg>
+      </button>
+      <div class="faq-answer">
+        <div class="faq-answer-inner">
+          <p>All three CryptoNova contracts (Matrix, CNOVAToken, CNOVATreasury) are verified on BaseScan. Visit <a href="https://basescan.org" target="_blank" rel="noopener" style="color:var(--blue)">basescan.org</a> and search for any of the contract addresses shown in the app footer or About section to read the full source code and transaction history.</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="faq-item" data-terms="admin pause stop shut down rug pull">
+      <button class="faq-question" onclick="toggleFaq(this)">
+        Can the team shut down or modify the protocol?
+        <svg class="faq-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="m6 9 6 6 6-6"/></svg>
+      </button>
+      <div class="faq-answer">
+        <div class="faq-answer-inner">
+          <p><strong>No.</strong> The core matrix logic is immutable — once deployed, no party can alter, pause, or redirect the entry fee distributions. The team has no ability to access participant USDC in the matrix contract. Admin rights are limited to minting CNOVA (capped at 100M total supply) and updating the CNOVA floor price upward only — never downward.</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="faq-item" data-terms="which blockchain base bnb chain network">
+      <button class="faq-question" onclick="toggleFaq(this)">
+        Which blockchain is CryptoNova on?
+        <svg class="faq-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="m6 9 6 6 6-6"/></svg>
+      </button>
+      <div class="faq-answer">
+        <div class="faq-answer-inner">
+          <p>Currently deploying on <strong>Base</strong> (an Ethereum L2 built by Coinbase) using USDC. A parallel deployment on <strong>BNB Smart Chain (BSC)</strong> using USDT is planned. Both chains share the same wallet addresses since they are both EVM-compatible.</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="faq-item" data-terms="legal jurisdiction country banned restricted">
+      <button class="faq-question" onclick="toggleFaq(this)">
+        Is CryptoNova legal in my country?
+        <svg class="faq-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="m6 9 6 6 6-6"/></svg>
+      </button>
+      <div class="faq-answer">
+        <div class="faq-answer-inner">
+          <p>Laws governing cryptocurrency, DeFi, and compensation structures vary significantly by jurisdiction and are subject to change. The platform does not perform KYC or geo-blocking. <strong>It is entirely your responsibility</strong> to determine whether participation is legal in your country or region before joining. Consult a local legal advisor if unsure.</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="faq-item" data-terms="taxes report income earnings tax obligation">
+      <button class="faq-question" onclick="toggleFaq(this)">
+        Do I need to pay taxes on my earnings?
+        <svg class="faq-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="m6 9 6 6 6-6"/></svg>
+      </button>
+      <div class="faq-answer">
+        <div class="faq-answer-inner">
+          <p>Tax obligations vary by country. In many jurisdictions, cryptocurrency earnings — including stablecoin payouts and token rewards — are taxable events. The CryptoNova protocol does not withhold or report taxes on your behalf. Consult a qualified tax professional in your jurisdiction.</p>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <div class="no-results" id="faq-empty">No FAQ results match your search.</div>
+
+  <div style="background:var(--bg2);border:1px solid var(--border);border-radius:12px;padding:24px;margin-top:48px;text-align:center">
+    <p style="font-size:14px;color:var(--text2);margin-bottom:14px">Still have questions? Join the community — we're happy to help.</p>
+    <a href="https://t.me/+21K4teAVfYdlMTdi" target="_blank" rel="noopener"
+       style="display:inline-block;background:var(--blue);color:#fff;font-weight:700;font-size:15px;padding:12px 32px;border-radius:8px;text-decoration:none;opacity:1;transition:opacity .2s"
+       onmouseover="this.style.opacity='.85'" onmouseout="this.style.opacity='1'">
+      Join Telegram Community
+    </a>
+  </div>
+
+</main>
+
+<footer>
+  <a href="index.html">← Back to CryptoNova App</a>
+  &nbsp;·&nbsp;
+  <a href="terms.html">Terms &amp; Risk Disclaimer</a>
+  &nbsp;·&nbsp;
+  <a href="https://t.me/+21K4teAVfYdlMTdi" target="_blank" rel="noopener">Telegram</a>
+  &nbsp;·&nbsp;
+  © 2026 CryptoNova
+</footer>
+
+<script>
+// ── Accordion ────────────────────────────────────────────────────────────────
+function toggleFaq(btn) {
+  const item = btn.closest('.faq-item');
+  const isOpen = item.classList.contains('open');
+  // Close all open items in same list
+  const list = item.closest('.faq-list');
+  list.querySelectorAll('.faq-item.open').forEach(el => el.classList.remove('open'));
+  if (!isOpen) item.classList.add('open');
+}
+
+// ── Search / Filter ──────────────────────────────────────────────────────────
+function filterAll() {
+  const q = document.getElementById('search').value.toLowerCase().trim();
+
+  // Glossary cards
+  const cards = document.querySelectorAll('.glossary-card');
+  let glossaryVisible = 0;
+  cards.forEach(card => {
+    const text = (card.dataset.terms + ' ' + card.textContent).toLowerCase();
+    const show = !q || text.includes(q);
+    card.style.display = show ? '' : 'none';
+    if (show) glossaryVisible++;
+  });
+  document.getElementById('glossary-empty').style.display = glossaryVisible === 0 ? 'block' : 'none';
+  document.getElementById('glossary-heading').style.display = glossaryVisible === 0 && q ? 'none' : '';
+
+  // FAQ items
+  const faqItems = document.querySelectorAll('.faq-item');
+  let faqVisible = 0;
+  faqItems.forEach(item => {
+    const text = (item.dataset.terms + ' ' + item.textContent).toLowerCase();
+    const show = !q || text.includes(q);
+    item.style.display = show ? '' : 'none';
+    if (show) faqVisible++;
+  });
+  document.getElementById('faq-empty').style.display = faqVisible === 0 ? 'block' : 'none';
+
+  // Hide section headings if no visible items in that section
+  ['started','matrix','earnings','cnova','tech'].forEach(id => {
+    const list = document.getElementById('faq-' + id);
+    const heading = document.getElementById(id + '-heading');
+    if (!list || !heading) return;
+    const hasVisible = Array.from(list.querySelectorAll('.faq-item')).some(el => el.style.display !== 'none');
+    heading.style.display = (!q || hasVisible) ? '' : 'none';
+    list.style.display = hasVisible || !q ? '' : 'none';
+  });
+}
+</script>
+
+</body>
+</html>

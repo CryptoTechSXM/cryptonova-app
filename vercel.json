@@ -6,6 +6,8 @@
   "routes": [
     { "src": "/terms", "dest": "/terms.html" },
     { "src": "/terms.html", "dest": "/terms.html" },
+    { "src": "/faq", "dest": "/faq.html" },
+    { "src": "/faq.html", "dest": "/faq.html" },
     { "src": "/(.*)\\.html", "dest": "/$1.html" },
     { "src": "/(.*)", "dest": "/index.html" }
   ]
