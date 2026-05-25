@@ -144,9 +144,46 @@
 
     /* ── Responsive ──────────────────────────── */
     @media (max-width: 640px) {
+      /* ── Header ── */
+      header { padding: 10px 16px; }
+      .logo-text { font-size: 16px; }
+      .logo-badge { display: none; }
+      #btn-connect { padding: 7px 12px; font-size: 13px; }
+
+      /* ── Nav: horizontal scroll so all tabs stay reachable ── */
+      nav { padding: 0 8px; overflow-x: auto; -webkit-overflow-scrolling: touch; scrollbar-width: none; }
+      nav::-webkit-scrollbar { display: none; }
+      nav button { padding: 12px 14px; font-size: 12px; white-space: nowrap; flex-shrink: 0; }
+
+      /* ── Layout ── */
+      main { padding: 20px 16px; }
       .grid-2 { grid-template-columns: 1fr; }
-      nav button { padding: 12px 12px; font-size: 13px; }
+
+      /* ── Hero ── */
+      .hero { padding: 36px 0 28px; }
       h1 { font-size: 26px; }
+      .hero p { font-size: 15px; }
+      .hero-actions { flex-direction: column; }
+      .btn-primary { width: 100%; text-align: center; justify-content: center; }
+
+      /* ── Cards ── */
+      .card-sm { padding: 14px 16px; }
+
+      /* ── Token cards ── */
+      .token-addr { word-break: break-all; font-size: 10px; }
+      .btn-metamask { width: 100%; justify-content: center; margin-top: 4px; }
+
+      /* ── Register tab ── */
+      .full-w { width: 100%; }
+      .btn { font-size: 14px; }
+
+      /* ── Info / split rows ── */
+      .info-row { font-size: 13px; gap: 8px; }
+      .info-val { text-align: right; word-break: break-all; max-width: 58%; }
+      .split-row { font-size: 13px; }
+
+      /* ── Section title ── */
+      .section-title { font-size: 16px; }
     }
 
     /* ── Loading spinner ──────────────────────── */
@@ -203,9 +240,16 @@
     .prelaunch-block ul li::before { content: "›"; color: var(--green); font-weight: 700; flex-shrink: 0; }
 
     @media (max-width: 640px) {
-      .roadmap-phase { grid-template-columns: 80px 1fr; }
-      .phase-label { font-size: 10px; }
+      /* ── Roadmap ── */
+      .roadmap-phase { grid-template-columns: 72px 1fr; }
+      .phase-label { font-size: 9px; letter-spacing: .4px; }
+      .phase-card { padding: 14px 16px; }
+
+      /* ── Token cards stack vertically ── */
       .token-card { flex-direction: column; align-items: flex-start; }
+
+      /* ── Pre-launch grid single column ── */
+      .prelaunch-grid { grid-template-columns: 1fr; }
     }
 
     /* ── Switch network banner ───────────────── */
