@@ -271,6 +271,20 @@
       </button>
     </div>
 
+    <div class="token-card" style="background:linear-gradient(135deg,rgba(59,130,246,.08),rgba(99,102,241,.06));border-color:rgba(59,130,246,.35)">
+      <div class="token-card-left">
+        <div class="token-icon" style="background:linear-gradient(135deg,#2775ca,#5b8dee)">$</div>
+        <div>
+          <div class="token-name">USD Coin <span class="pill" style="font-size:10px;vertical-align:middle;background:rgba(59,130,246,.15);color:#5b8dee;border:1px solid rgba(59,130,246,.3)">USDC · Base</span></div>
+          <div class="token-addr">0x32090959aD707f3E4c2e0c29865E74b467a4bDe7 · 6 decimals</div>
+          <div style="font-size:12px;color:var(--text2);margin-top:4px">Required to join the matrix. $10 USDC per registration. Approve once, enter anytime.</div>
+        </div>
+      </div>
+      <button class="btn-metamask" style="background:#2775ca" onclick="addUSDCtoMetaMask()">
+        🦊 Add USDC to MetaMask
+      </button>
+    </div>
+
     <!-- Live Stats -->
     <div class="section-title"><div class="dot"></div> Live Stats <span id="stats-refresh" style="font-size:12px;color:var(--text3);font-weight:400;margin-left:8px;cursor:pointer" onclick="loadHomeStats()">↻ Refresh</span></div>
     <div class="grid-4" id="stats-grid">
@@ -1369,6 +1383,37 @@ async function addCNOVAtoMetaMask() {
     });
     if (added) {
       toast('✅ CNOVA added to MetaMask!', 'success');
+    } else {
+      toast('Token add was cancelled.', 'info');
+    }
+  } catch(e) {
+    toast('Could not add token: ' + (e.message || e), 'error');
+  }
+}
+
+async function addUSDCtoMetaMask() {
+  if (!window.ethereum) {
+    if (window.location.protocol === 'file:') {
+      document.getElementById('file-protocol-banner').style.display = 'block';
+    } else {
+      showMetaMaskModal();
+    }
+    return;
+  }
+  try {
+    const added = await window.ethereum.request({
+      method: 'wallet_watchAsset',
+      params: {
+        type: 'ERC20',
+        options: {
+          address:  ADDRESSES.usdc,
+          symbol:   'USDC',
+          decimals: 6,
+        },
+      },
+    });
+    if (added) {
+      toast('✅ USDC added to MetaMask!', 'success');
     } else {
       toast('Token add was cancelled.', 'info');
     }
