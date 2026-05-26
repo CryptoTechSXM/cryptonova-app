@@ -1231,8 +1231,9 @@ async function loadHomeStats() {
     }
 
     const EPOCH_NAMES = ['Nebula Genesis','Mercury Rise','Lunar Cluster','Aurora Zenith','Solaris Echo','Cosmic Core','Galaxy Grid','Supernova Spark'];
-    const epochNum  = Number(epoch);
-    const epochName = EPOCH_NAMES[epochNum - 1] || ('Epoch ' + epochNum);
+    const epochNum  = Number(epoch);                                  // 0-indexed from contract
+    const epochName = EPOCH_NAMES[epochNum] || ('Epoch ' + (epochNum + 1));
+    const epochDisp = epochNum + 1;                                   // show 1-based to users
     const rewardFmt = parseFloat(ethers.formatUnits(reward, 18)).toLocaleString(undefined, {maximumFractionDigits: 0});
     const mintedFmt = parseFloat(ethers.formatUnits(minted, 18)).toLocaleString(undefined, {maximumFractionDigits: 0});
     const supplyFmt = parseFloat(ethers.formatUnits(supply, 18)).toLocaleString(undefined, {maximumFractionDigits: 0});
@@ -1242,7 +1243,7 @@ async function loadHomeStats() {
     document.getElementById('stat-epoch-reward-sub').textContent = rewardFmt + ' CNOVA per entry';
 
     // Mining Epoch detail card
-    document.getElementById('stat-epoch').textContent     = epochName + '  (Epoch ' + epochNum + ')';
+    document.getElementById('stat-epoch').textContent     = epochName + '  (Epoch ' + epochDisp + ')';
     document.getElementById('stat-reward').textContent    = rewardFmt + ' CNOVA';
     document.getElementById('stat-epoch-rem').textContent = epochRem.toString() + ' entries';
     document.getElementById('stat-minted').textContent    = mintedFmt;
