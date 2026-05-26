@@ -597,7 +597,7 @@
           <button onclick="loadTxHistory()" id="btn-reload-tx" style="background:none;border:1px solid var(--border);color:var(--text2);border-radius:6px;padding:5px 12px;font-size:12px;cursor:pointer">🔄 Refresh</button>
         </div>
         <div id="tx-history-list">
-          <div style="color:var(--text3);font-size:13px;text-align:center;padding:20px 0">Loading transactions…</div>
+          <div style="color:var(--text3);font-size:13px;text-align:center;padding:20px 0">Tap 🔄 Refresh to load your transactions.</div>
         </div>
       </div>
 
@@ -1392,7 +1392,6 @@ async function loadDashboard() {
       notReg.style.display = 'block'; content.style.display = 'none'; return;
     }
     notReg.style.display = 'none'; content.style.display = 'block';
-    loadTxHistory(); // load TX history in parallel (non-blocking)
 
     const withdrawable = summary.withdrawable;
     const reentry      = summary.reentryPool;
@@ -1466,27 +1465,16 @@ async function loadTxHistory() {
     const rp = readProvider || new ethers.JsonRpcProvider(RPC_URL);
     const matrix = new ethers.Contract(ADDRESSES.matrix, MATRIX_ABI, rp);
 
-    // Base Sepolia public RPC limits getLogs to ~2000 blocks per call.
-    // Query in chunks to cover all history since deployment (~3M blocks = 69 days).
+    // Single query per event — no chunking to avoid flooding the RPC.
+    // Covers the last 500,000 blocks (~10 days on Base Sepolia).
     const currentBlock = await rp.getBlockNumber();
-    const CHUNK    = 2000;
-    const LOOKBACK = 3000000;
-    const startBlock = Math.max(0, currentBlock - LOOKBACK);
-
-    async function chunkedQuery(filter, from, to) {
-      const results = [];
-      for (let b = from; b <= to; b += CHUNK) {
-        const end = Math.min(b + CHUNK - 1, to);
-        try { results.push(...await matrix.queryFilter(filter, b, end)); } catch(e) {}
-      }
-      return results;
-    }
+    const fromBlock = Math.max(0, currentBlock - 500000);
 
     const [regLogs, referrerLogs, chainLogs, withdrawLogs] = await Promise.all([
-      chunkedQuery(matrix.filters.MemberRegistered(userAddr), startBlock, currentBlock),
-      chunkedQuery(matrix.filters.ReferrerBonus(userAddr),    startBlock, currentBlock),
-      chunkedQuery(matrix.filters.ChainPayment(userAddr),     startBlock, currentBlock),
-      chunkedQuery(matrix.filters.EarningsWithdrawn(userAddr),startBlock, currentBlock),
+      matrix.queryFilter(matrix.filters.MemberRegistered(userAddr), fromBlock, currentBlock).catch(() => []),
+      matrix.queryFilter(matrix.filters.ReferrerBonus(userAddr),    fromBlock, currentBlock).catch(() => []),
+      matrix.queryFilter(matrix.filters.ChainPayment(userAddr),     fromBlock, currentBlock).catch(() => []),
+      matrix.queryFilter(matrix.filters.EarningsWithdrawn(userAddr),fromBlock, currentBlock).catch(() => []),
     ]);
 
     // Collect all events with type labels
