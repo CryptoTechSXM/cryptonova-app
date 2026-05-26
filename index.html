@@ -269,9 +269,9 @@
       .prelaunch-grid { grid-template-columns: 1fr; }
     }
 
-    /* ── Switch network banner ───────────────── */
-    #network-banner { background: rgba(245,158,11,.1); border-bottom: 1px solid rgba(245,158,11,.3); padding: 10px 24px; text-align: center; font-size: 13px; color: var(--yellow); display: none; }
-    #network-banner button { background: var(--yellow); color: #000; border: none; border-radius: 6px; padding: 4px 12px; font-weight: 700; cursor: pointer; margin-left: 12px; font-size: 12px; }
+    /* ── Switch network overlay (fixed, centered) ───────────────── */
+    #network-banner { position: fixed; inset: 0; background: rgba(0,0,0,.65); z-index: 600; display: none; align-items: center; justify-content: center; padding: 20px; }
+    #network-banner-card { background: var(--bg2); border: 2px solid rgba(245,158,11,.5); border-radius: 16px; padding: 32px 28px; max-width: 380px; width: 100%; text-align: center; }
   </style>
 </head>
 <body>
@@ -283,8 +283,18 @@
 </div>
 
 <div id="network-banner">
-  ⚠️ Wrong network — please switch to Base Sepolia (testnet)
-  <button onclick="switchToBaseSepolia()">Switch Network</button>
+  <div id="network-banner-card">
+    <div style="font-size:44px;margin-bottom:12px">⚠️</div>
+    <div style="font-size:20px;font-weight:800;color:var(--yellow);margin-bottom:8px">Wrong Network</div>
+    <div style="font-size:14px;color:var(--text2);line-height:1.6;margin-bottom:24px">
+      CryptoNova is on <strong style="color:var(--text)">Base Sepolia Testnet</strong>.<br>
+      Please switch networks to continue.
+    </div>
+    <button onclick="switchToBaseSepolia()" style="background:var(--yellow);color:#000;border:none;border-radius:10px;padding:13px 28px;font-weight:700;font-size:15px;cursor:pointer;width:100%;margin-bottom:10px">
+      🔀 Switch to Base Sepolia
+    </button>
+    <div style="font-size:12px;color:var(--text3);margin-top:4px">On mobile: open MetaMask app → Settings → Networks → Base Sepolia</div>
+  </div>
 </div>
 
 <header>
@@ -431,7 +441,7 @@
             <button class="btn btn-ghost full-w" id="btn-approve" onclick="approveUSDC()" disabled title="Approves exactly $10 USDC — the contract cannot take more than this amount">
               Step 1: Approve $10 USDC 🔒
             </button>
-            <button class="btn btn-green full-w" id="btn-register" onclick="doRegister()" disabled>
+            <button class="btn btn-ghost full-w" id="btn-register" onclick="doRegister()" disabled>
               Step 2: Register ($10 USDC)
             </button>
           </div>
@@ -880,6 +890,24 @@ window.addEventListener('DOMContentLoaded', async () => {
     try { await connectWallet(true); } catch(e) {}
   }
 
+  // Listen for network switches — auto-show banner if user leaves Base Sepolia
+  if (window.ethereum) {
+    window.ethereum.on('chainChanged', (chainId) => {
+      const correct = parseInt(chainId, 16) === CHAIN_ID;
+      document.getElementById('network-banner').style.display = correct ? 'none' : 'flex';
+      if (correct) connectWallet(true).catch(() => {});
+    });
+    window.ethereum.on('accountsChanged', (accounts) => {
+      if (accounts.length === 0) {
+        userAddr = null; signer = null;
+        document.getElementById('btn-connect').textContent = 'Connect Wallet';
+        document.getElementById('btn-connect').classList.remove('connected');
+      } else {
+        connectWallet(true).catch(() => {});
+      }
+    });
+  }
+
   // Handle ?ref= in URL
   const params = new URLSearchParams(window.location.search);
   if (params.get('ref')) {
@@ -912,7 +940,7 @@ async function connectWallet(silent = false) {
 
     const network = await provider.getNetwork();
     if (Number(network.chainId) !== CHAIN_ID) {
-      document.getElementById('network-banner').style.display = 'block';
+      document.getElementById('network-banner').style.display = 'flex';
     } else {
       document.getElementById('network-banner').style.display = 'none';
     }
@@ -940,18 +968,25 @@ async function switchToBaseSepolia() {
       method: 'wallet_switchEthereumChain',
       params: [{ chainId: '0x' + CHAIN_ID.toString(16) }]
     });
+    // chainChanged listener will hide the banner automatically
   } catch(e) {
     if (e.code === 4902) {
-      await window.ethereum.request({
-        method: 'wallet_addEthereumChain',
-        params: [{
-          chainId: '0x' + CHAIN_ID.toString(16),
-          chainName: 'Base Sepolia',
-          nativeCurrency: { name: 'ETH', symbol: 'ETH', decimals: 18 },
-          rpcUrls: ['https://sepolia.base.org'],
-          blockExplorerUrls: ['https://sepolia.basescan.org']
-        }]
-      });
+      try {
+        await window.ethereum.request({
+          method: 'wallet_addEthereumChain',
+          params: [{
+            chainId: '0x' + CHAIN_ID.toString(16),
+            chainName: 'Base Sepolia',
+            nativeCurrency: { name: 'ETH', symbol: 'ETH', decimals: 18 },
+            rpcUrls: ['https://sepolia.base.org'],
+            blockExplorerUrls: ['https://sepolia.basescan.org']
+          }]
+        });
+      } catch(addErr) {
+        toast('Could not add Base Sepolia. Please add it manually in MetaMask.', 'error');
+      }
+    } else if (e.code !== 4001) {
+      toast('Network switch failed: ' + (e.message || e), 'error');
     }
   }
 }
@@ -1076,6 +1111,8 @@ async function loadRegisterTab() {
     alreadyEl.style.display   = 'none';
     approveBtn.disabled       = true;
     registerBtn.disabled      = true;
+    approveBtn.className      = 'btn btn-ghost full-w';
+    registerBtn.className     = 'btn btn-ghost full-w';
     return;
   }
   walletWarn.style.display = 'none';
@@ -1109,6 +1146,8 @@ async function loadRegisterTab() {
       alreadyEl.style.display  = 'block';
       approveBtn.disabled      = true;
       registerBtn.disabled     = true;
+      approveBtn.className     = 'btn btn-ghost full-w';
+      registerBtn.className    = 'btn btn-ghost full-w';
       // Show referral link
       refCard.style.display    = 'block';
       const refUrl = window.location.origin + window.location.pathname + '?ref=' + userAddr;
@@ -1121,8 +1160,15 @@ async function loadRegisterTab() {
     const hasBalance  = bal >= 10_000_000n;
     const hasApproval = allowance >= 10_000_000n;
 
-    approveBtn.disabled  = !hasBalance || hasApproval;
-    registerBtn.disabled = !hasApproval;
+    const step1Active = hasBalance && !hasApproval;
+    const step2Active = hasApproval;
+
+    approveBtn.disabled   = !step1Active;
+    registerBtn.disabled  = !step2Active;
+
+    // Green = the step you need to click right now; grey = waiting / done
+    approveBtn.className  = 'btn full-w ' + (step1Active ? 'btn-green' : 'btn-ghost');
+    registerBtn.className = 'btn full-w ' + (step2Active ? 'btn-green' : 'btn-ghost');
 
     if (hasApproval) {
       setStatus('reg-status', '✅ USDC approved! You can now register.', 'var(--green)');
@@ -1157,6 +1203,7 @@ async function approveUSDC() {
     const msg = e.reason || e.message || 'Unknown error';
     setStatus('reg-status', '❌ Approval failed: ' + msg, 'var(--red)');
     btn.disabled = false;
+    btn.className = 'btn full-w btn-green';
     btn.innerHTML = 'Step 1: Approve $10 USDC 🔒';
     toast('Approval failed', 'error');
   }
@@ -1430,6 +1477,25 @@ async function loadMatrixTree() {
 // METAMASK MODAL
 // ═══════════════════════════════════════════════════════════════════════
 function showMetaMaskModal() {
+  const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+  const mobileSection = document.getElementById('mm-mobile-section');
+  const installBtn    = document.getElementById('mm-install-btn');
+  const footerHint    = document.getElementById('mm-footer-hint');
+  const deeplink      = document.getElementById('mm-deeplink');
+
+  if (isMobile) {
+    // Build deeplink — opens this exact page inside MetaMask's in-app browser
+    const url = window.location.href.replace(/^https?:\/\//, '');
+    deeplink.href = 'https://metamask.app.link/dapp/' + url;
+    mobileSection.style.display = 'block';
+    installBtn.textContent = '📲 Download MetaMask App';
+    footerHint.innerHTML = 'Install MetaMask, open the app, then use its built-in browser to visit this page — Web3 will work automatically.';
+  } else {
+    mobileSection.style.display = 'none';
+    installBtn.textContent = 'Install MetaMask — Free';
+    footerHint.innerHTML = 'After installing, refresh this page and click Connect Wallet.<br>Switch to <strong>Base Sepolia</strong> when prompted.';
+  }
+
   document.getElementById('metamask-modal').style.display = 'flex';
 }
 function closeMetaMaskModal() {
@@ -1448,6 +1514,8 @@ async function addCNOVAtoMetaMask() {
     }
     return;
   }
+  // Ensure on correct chain before adding token
+  try { const n = await provider.getNetwork(); if(Number(n.chainId)!==CHAIN_ID){toast('Switch to Base Sepolia first','error');return;} } catch(e) {}
   try {
     const added = await window.ethereum.request({
       method: 'wallet_watchAsset',
@@ -1522,23 +1590,32 @@ function toggleTheme() {
 </script>
 
 <!-- MetaMask Install Modal -->
-<div id="metamask-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:1000;align-items:center;justify-content:center" onclick="if(event.target===this)closeMetaMaskModal()">
-  <div style="background:var(--bg2);border:1px solid var(--border);border-radius:16px;padding:36px 32px;max-width:420px;width:90%;text-align:center">
-    <div style="font-size:48px;margin-bottom:16px">🦊</div>
+<div id="metamask-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:1000;align-items:center;justify-content:center;padding:20px" onclick="if(event.target===this)closeMetaMaskModal()">
+  <div style="background:var(--bg2);border:1px solid var(--border);border-radius:16px;padding:32px 28px;max-width:420px;width:100%;text-align:center">
+    <div style="font-size:48px;margin-bottom:14px">🦊</div>
     <div style="font-size:20px;font-weight:800;margin-bottom:10px">MetaMask Required</div>
-    <div style="color:var(--text2);font-size:14px;line-height:1.6;margin-bottom:24px">
-      CryptoNova runs on Base chain and needs MetaMask (or another Web3 wallet) to connect, approve USDC, and sign transactions.<br><br>
-      <strong style="color:var(--text)">Live stats load without a wallet</strong> — you only need MetaMask to register or withdraw.
+    <div style="color:var(--text2);font-size:14px;line-height:1.6;margin-bottom:20px">
+      CryptoNova needs MetaMask to connect your wallet, approve USDC, and sign transactions.<br><br>
+      <strong style="color:var(--text)">Live stats work without a wallet</strong> — MetaMask is only needed to register or withdraw.
     </div>
+
+    <!-- Mobile section (shown on phones/tablets) -->
+    <div id="mm-mobile-section" style="display:none;margin-bottom:16px;background:rgba(59,130,246,.08);border:1px solid rgba(59,130,246,.3);border-radius:10px;padding:14px">
+      <div style="font-size:13px;font-weight:700;color:var(--blue);margin-bottom:8px">📱 On Mobile?</div>
+      <div style="font-size:12px;color:var(--text2);margin-bottom:12px">The easiest way is to open this site directly inside the MetaMask app's built-in browser.</div>
+      <a id="mm-deeplink" href="#" target="_blank" style="text-decoration:none;display:block">
+        <button class="btn full-w" style="background:var(--blue);color:#fff;font-size:14px;margin-bottom:0">Open in MetaMask Browser</button>
+      </a>
+    </div>
+
     <div style="display:flex;flex-direction:column;gap:10px">
       <a href="https://metamask.io/download/" target="_blank" style="text-decoration:none">
-        <button class="btn btn-green full-w" style="font-size:15px">Install MetaMask — Free</button>
+        <button class="btn btn-green full-w" style="font-size:15px" id="mm-install-btn">Install MetaMask — Free</button>
       </a>
       <button class="btn btn-ghost full-w" onclick="closeMetaMaskModal()">Close</button>
     </div>
-    <div style="margin-top:18px;font-size:12px;color:var(--text3)">
-      After installing, refresh this page and click Connect Wallet again.<br>
-      Switch to <strong>Base Sepolia</strong> when prompted.
+    <div style="margin-top:16px;font-size:12px;color:var(--text3)" id="mm-footer-hint">
+      After installing, refresh this page and click Connect Wallet.<br>Switch to <strong>Base Sepolia</strong> when prompted.
     </div>
   </div>
 </div>
