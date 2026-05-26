@@ -316,8 +316,9 @@
     <div class="logo-text">Crypto<span>Nova</span></div>
     <span class="logo-badge" id="network-badge">Base Sepolia</span>
   </div>
-  <div style="display:flex;align-items:center;gap:10px">
+  <div style="display:flex;align-items:center;gap:8px">
     <button class="theme-toggle" id="theme-btn" onclick="toggleTheme()">☀️ Light</button>
+    <button id="btn-switch-network" onclick="switchToBaseSepolia()" style="display:none;background:var(--yellow);color:#000;border:none;border-radius:8px;padding:7px 12px;font-weight:700;font-size:12px;cursor:pointer;transition:opacity .2s">⚠️ Wrong Network</button>
     <button id="btn-connect" onclick="connectWallet()">Connect Wallet</button>
   </div>
 </header>
@@ -962,8 +963,9 @@ async function connectWallet(silent = false) {
     signer   = await provider.getSigner();
     userAddr = accounts[0];
 
-    const network = await provider.getNetwork();
-    if (Number(network.chainId) !== CHAIN_ID) {
+    // Use synchronous chainId — more reliable on mobile than async getNetwork()
+    const currentChainId = parseInt(window.ethereum.chainId || '0x0', 16);
+    if (currentChainId !== CHAIN_ID) {
       showNetworkBanner();
     } else {
       hideNetworkBanner();
@@ -993,9 +995,13 @@ function showNetworkBanner() {
   const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
   document.getElementById('nb-mobile-guide').style.display = isMobile ? 'block' : 'none';
   document.getElementById('network-banner').style.display  = 'flex';
+  const sw = document.getElementById('btn-switch-network');
+  if (sw) sw.style.display = 'inline-block';
 }
 function hideNetworkBanner() {
   document.getElementById('network-banner').style.display = 'none';
+  const sw = document.getElementById('btn-switch-network');
+  if (sw) sw.style.display = 'none';
 }
 
 async function switchToBaseSepolia() {
@@ -1559,6 +1565,27 @@ function closeMetaMaskModal() {
   document.getElementById('metamask-modal').style.display = 'none';
 }
 
+// ─── Manual token add modal (fallback when wallet_watchAsset fails) ───────────
+function showManualTokenModal(address, symbol, decimals) {
+  document.getElementById('manual-token-address').textContent  = address;
+  document.getElementById('manual-token-symbol').textContent   = symbol;
+  document.getElementById('manual-token-decimals').textContent = decimals;
+  document.getElementById('manual-token-modal').style.display  = 'flex';
+}
+function closeManualTokenModal() {
+  document.getElementById('manual-token-modal').style.display = 'none';
+}
+function copyManualTokenAddress() {
+  const addr = document.getElementById('manual-token-address').textContent;
+  const btn  = document.getElementById('manual-copy-btn');
+  navigator.clipboard.writeText(addr).then(() => {
+    btn.textContent = '✓ Copied!';
+    setTimeout(() => { btn.textContent = 'Copy'; }, 2500);
+  }).catch(() => {
+    toast('Copy failed — select the address manually.', 'error');
+  });
+}
+
 // ═══════════════════════════════════════════════════════════════════════
 // ADD CNOVA TO METAMASK (wallet_watchAsset)
 // ═══════════════════════════════════════════════════════════════════════
@@ -1571,15 +1598,13 @@ async function addCNOVAtoMetaMask() {
     }
     return;
   }
-  // Must be on Base Sepolia — token is on that chain only
-  try {
-    const n = await (provider || new ethers.BrowserProvider(window.ethereum)).getNetwork();
-    if (Number(n.chainId) !== CHAIN_ID) {
-      showNetworkBanner();
-      toast('Switch to Base Sepolia first, then tap Add Token again.', 'info');
-      return;
-    }
-  } catch(e) {}
+  // Synchronous chainId check — reliable on mobile (async getNetwork() can be stale)
+  const currentChainId = parseInt(window.ethereum.chainId || '0x0', 16);
+  if (currentChainId !== CHAIN_ID) {
+    showNetworkBanner();
+    toast('Switch to Base Sepolia first, then tap Add Token again.', 'info');
+    return;
+  }
   try {
     const added = await window.ethereum.request({
       method: 'wallet_watchAsset',
@@ -1598,7 +1623,8 @@ async function addCNOVAtoMetaMask() {
       toast('Token add was cancelled.', 'info');
     }
   } catch(e) {
-    toast('Could not add token: ' + (e.message || e), 'error');
+    // wallet_watchAsset unreliable on MetaMask mobile for testnet tokens — show manual fallback
+    showManualTokenModal(ADDRESSES.token, 'CNOVA', 18);
   }
 }
 
@@ -1611,15 +1637,13 @@ async function addUSDCtoMetaMask() {
     }
     return;
   }
-  // Must be on Base Sepolia
-  try {
-    const n = await (provider || new ethers.BrowserProvider(window.ethereum)).getNetwork();
-    if (Number(n.chainId) !== CHAIN_ID) {
-      showNetworkBanner();
-      toast('Switch to Base Sepolia first, then tap Add Token again.', 'info');
-      return;
-    }
-  } catch(e) {}
+  // Synchronous chainId check — reliable on mobile (async getNetwork() can be stale)
+  const currentChainId = parseInt(window.ethereum.chainId || '0x0', 16);
+  if (currentChainId !== CHAIN_ID) {
+    showNetworkBanner();
+    toast('Switch to Base Sepolia first, then tap Add Token again.', 'info');
+    return;
+  }
   try {
     const added = await window.ethereum.request({
       method: 'wallet_watchAsset',
@@ -1638,7 +1662,8 @@ async function addUSDCtoMetaMask() {
       toast('Token add was cancelled.', 'info');
     }
   } catch(e) {
-    toast('Could not add token: ' + (e.message || e), 'error');
+    // wallet_watchAsset unreliable on MetaMask mobile for testnet tokens — show manual fallback
+    showManualTokenModal(ADDRESSES.usdc, 'USDC', 6);
   }
 }
 
@@ -1690,6 +1715,44 @@ function toggleTheme() {
     <div style="margin-top:16px;font-size:12px;color:var(--text3)" id="mm-footer-hint">
       After installing, refresh this page and click Connect Wallet.<br>Switch to <strong>Base Sepolia</strong> when prompted.
     </div>
+  </div>
+</div>
+
+<!-- Manual Token Add Modal (shown when wallet_watchAsset fails on mobile) -->
+<div id="manual-token-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:1000;align-items:center;justify-content:center;padding:20px" onclick="if(event.target===this)closeManualTokenModal()">
+  <div style="background:var(--bg2);border:1px solid var(--border);border-radius:16px;padding:28px 24px;max-width:440px;width:100%;text-align:center">
+    <div style="font-size:36px;margin-bottom:10px">🪙</div>
+    <div style="font-size:18px;font-weight:800;margin-bottom:6px">Add Token Manually</div>
+    <div style="color:var(--text2);font-size:13px;margin-bottom:18px;line-height:1.6">
+      MetaMask couldn't auto-add this token. Copy the details below and import it manually — takes 30 seconds.
+    </div>
+    <div style="background:rgba(0,0,0,.2);border:1px solid var(--border);border-radius:10px;padding:14px;text-align:left;margin-bottom:14px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+        <span style="color:var(--text2);font-size:12px">Symbol</span>
+        <span id="manual-token-symbol" style="font-weight:800;color:var(--green)"></span>
+      </div>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+        <span style="color:var(--text2);font-size:12px">Decimals</span>
+        <span id="manual-token-decimals" style="font-weight:700"></span>
+      </div>
+      <div style="color:var(--text2);font-size:12px;margin-bottom:5px">Contract Address</div>
+      <div style="display:flex;gap:8px;align-items:stretch">
+        <div id="manual-token-address" style="font-family:monospace;font-size:10px;word-break:break-all;background:rgba(0,0,0,.3);border:1px solid var(--border);border-radius:6px;padding:8px;flex:1;line-height:1.5"></div>
+        <button onclick="copyManualTokenAddress()" id="manual-copy-btn" style="background:var(--green);color:#000;border:none;border-radius:6px;padding:0 12px;font-weight:800;font-size:12px;cursor:pointer;white-space:nowrap;align-self:stretch">Copy</button>
+      </div>
+    </div>
+    <div style="background:rgba(0,229,160,.06);border:1px solid rgba(0,229,160,.2);border-radius:10px;padding:12px;text-align:left;margin-bottom:18px">
+      <div style="font-size:12px;font-weight:800;color:var(--green);margin-bottom:8px">📱 How to import in MetaMask</div>
+      <div style="font-size:12px;color:var(--text2);line-height:1.9">
+        1. Open MetaMask &amp; make sure you're on <strong style="color:var(--text)">Base Sepolia</strong><br>
+        2. Tap the <strong style="color:var(--text)">Assets</strong> tab at the bottom<br>
+        3. Scroll down → tap <strong style="color:var(--text)">Import tokens</strong><br>
+        4. Select <strong style="color:var(--text)">Custom Token</strong> tab<br>
+        5. Paste the contract address — symbol fills automatically<br>
+        6. Tap <strong style="color:var(--text)">Import</strong> to confirm
+      </div>
+    </div>
+    <button class="btn btn-ghost full-w" onclick="closeManualTokenModal()">Close</button>
   </div>
 </div>
 
