@@ -1459,22 +1459,34 @@ async function doWithdraw() {
 async function loadTxHistory() {
   const el = document.getElementById('tx-history-list');
   if (!el || !userAddr) return;
-  el.innerHTML = '<div style="color:var(--text3);font-size:13px;text-align:center;padding:20px 0">⏳ Loading…</div>';
+  el.innerHTML = '<div style="color:var(--text3);font-size:13px;text-align:center;padding:20px 0">⏳ Scanning blockchain…</div>';
 
   try {
     const rp = readProvider || new ethers.JsonRpcProvider(RPC_URL);
     const matrix = new ethers.Contract(ADDRESSES.matrix, MATRIX_ABI, rp);
 
-    // Single query per event — no chunking to avoid flooding the RPC.
-    // Covers the last 500,000 blocks (~10 days on Base Sepolia).
+    // Base Sepolia public RPC allows max 10,000 blocks per eth_getLogs call.
+    // We chunk in 10k windows across the last 2M blocks (~46 days).
+    // 4 query types run in parallel; each type loops ~200 chunks sequentially.
     const currentBlock = await rp.getBlockNumber();
-    const fromBlock = Math.max(0, currentBlock - 500000);
+    const CHUNK    = 10000;
+    const LOOKBACK = 2000000;
+    const startBlock = Math.max(0, currentBlock - LOOKBACK);
+
+    async function chunkedQuery(filter) {
+      const out = [];
+      for (let b = startBlock; b <= currentBlock; b += CHUNK) {
+        try { out.push(...await matrix.queryFilter(filter, b, Math.min(b + CHUNK - 1, currentBlock))); }
+        catch(e) {}
+      }
+      return out;
+    }
 
     const [regLogs, referrerLogs, chainLogs, withdrawLogs] = await Promise.all([
-      matrix.queryFilter(matrix.filters.MemberRegistered(userAddr), fromBlock, currentBlock).catch(() => []),
-      matrix.queryFilter(matrix.filters.ReferrerBonus(userAddr),    fromBlock, currentBlock).catch(() => []),
-      matrix.queryFilter(matrix.filters.ChainPayment(userAddr),     fromBlock, currentBlock).catch(() => []),
-      matrix.queryFilter(matrix.filters.EarningsWithdrawn(userAddr),fromBlock, currentBlock).catch(() => []),
+      chunkedQuery(matrix.filters.MemberRegistered(userAddr)),
+      chunkedQuery(matrix.filters.ReferrerBonus(userAddr)),
+      chunkedQuery(matrix.filters.ChainPayment(userAddr)),
+      chunkedQuery(matrix.filters.EarningsWithdrawn(userAddr)),
     ]);
 
     // Collect all events with type labels
@@ -1488,7 +1500,11 @@ async function loadTxHistory() {
     all.sort((a, b) => b.block - a.block);
 
     if (all.length === 0) {
-      el.innerHTML = '<div style="color:var(--text3);font-size:13px;text-align:center;padding:20px 0">No transactions found yet.</div>';
+      el.innerHTML = '<div style="color:var(--text3);font-size:13px;text-align:center;padding:16px 0">' +
+        'No transactions found in the last 46 days.<br>' +
+        '<a href="https://sepolia.basescan.org/address/' + userAddr + '" target="_blank" rel="noopener" ' +
+        'style="color:var(--green);font-size:12px;margin-top:6px;display:inline-block">View full history on BaseScan ↗</a>' +
+        '</div>';
       return;
     }
 
