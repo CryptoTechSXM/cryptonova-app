@@ -676,9 +676,6 @@
         No direct referrals found yet. Share your referral link to grow your team!
       </div>
       <div id="my-directs-list" style="display:none">
-        <div style="display:grid;grid-template-columns:1fr 80px 90px 90px 100px;gap:0;font-size:12px;font-weight:700;color:var(--text3);padding:8px 12px;border-bottom:1px solid var(--border);text-transform:uppercase;letter-spacing:.5px">
-          <span>Wallet</span><span style="text-align:center">Member #</span><span style="text-align:center">Node #</span><span style="text-align:center">Cycle</span><span style="text-align:right">Status</span>
-        </div>
         <div id="my-directs-rows"></div>
       </div>
     </div>
@@ -1632,14 +1629,16 @@ async function loadMyDirects() {
       const status   = m.isPaused
         ? '<span class="pill pill-yellow" style="font-size:11px">⏸ Paused</span>'
         : '<span class="pill pill-green"  style="font-size:11px">✅ Active</span>';
-      const nodeLink = `<span style="color:var(--green);cursor:pointer;font-weight:700"
-          onclick="navigateToNode(${m.matrixNodeId})" title="Click to view in tree">#${m.matrixNodeId}</span>`;
-      return `<div style="display:grid;grid-template-columns:1fr 80px 90px 90px 100px;gap:0;align-items:center;padding:10px 12px;border-bottom:1px solid var(--border);font-size:13px">
-        <span style="color:var(--text2);font-size:12px;word-break:break-all" title="${addr}">${shortAddr(addr)}</span>
-        <span style="text-align:center;font-weight:600">#${m.id}</span>
-        <span style="text-align:center">${nodeLink}</span>
-        <span style="text-align:center;color:var(--text3)">C${m.cycleId}</span>
-        <span style="text-align:right">${status}</span>
+      return `<div style="padding:12px 14px;border-bottom:1px solid var(--border)">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;gap:8px">
+          <span style="font-size:13px;font-weight:600;color:var(--text);font-family:monospace">${shortAddr(addr)}</span>
+          ${status}
+        </div>
+        <div style="display:flex;gap:16px;flex-wrap:wrap;font-size:12px;color:var(--text3)">
+          <span>Member <strong style="color:var(--text)">#${m.id}</strong></span>
+          <span>Node <strong style="color:var(--green);cursor:pointer" onclick="navigateToNode(${m.matrixNodeId})" title="Click to view in tree">#${m.matrixNodeId} ↗</strong></span>
+          <span>Cycle <strong style="color:var(--text)">C${m.cycleId}</strong></span>
+        </div>
       </div>`;
     }).join('');
 
