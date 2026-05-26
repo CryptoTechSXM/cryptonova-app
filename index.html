@@ -337,7 +337,7 @@
   <div id="tab-home" class="tab-panel active">
     <div class="hero">
       <h1>Binary Matrix System<br><span>on Base Chain</span></h1>
-      <p>Join the CryptoNova matrix. Earn $4 USDC per referral + automatic chain payments up to 7 levels deep. Every entry auto-compounds through BFS placement.</p>
+      <p>Join the CryptoNova matrix. Earn $3 USDC per referral + automatic chain payments up to 7 levels deep. Your referrer follows you for life — and so do yours. Every entry auto-compounds through BFS placement.</p>
       <div class="hero-actions">
         <button class="btn-primary" onclick="showTab('register')">Join Now — $10 USDC</button>
         <button class="btn-outline" onclick="showTab('dashboard')">View Dashboard</button>
@@ -356,7 +356,7 @@
         <div class="token-icon">CN</div>
         <div>
           <div class="token-name">CNOVA Token <span class="pill pill-green" style="font-size:10px;vertical-align:middle">ERC-20 · Base</span></div>
-          <div class="token-addr">0xe0050e4CD45eE4d3F8Efeb476744222eF7D31F01 · 18 decimals</div>
+          <div class="token-addr">0xeC749BFF00f94632268d6f46e6DbF126594E7fC5 · 18 decimals</div>
           <div style="font-size:12px;color:var(--text2);margin-top:4px">Earned automatically on every registration. Floor price backed by treasury USDC.</div>
         </div>
       </div>
@@ -415,9 +415,9 @@
     <!-- Entry split -->
     <div class="card">
       <div class="section-title"><div class="dot"></div> How Your $10 Entry is Split</div>
-      <div class="split-row"><span class="split-label">🤝 Referrer bonus</span><span><span class="split-amount">$4.00</span> <span class="split-pct">40%</span></span></div>
-      <div class="split-row"><span class="split-label">🔗 Matrix chain pay (L1–L7)</span><span><span class="split-amount">$3.00</span> <span class="split-pct">30%</span></span></div>
-      <div class="split-row"><span class="split-label">♻️ Your re-entry pool</span><span><span class="split-amount">$1.00</span> <span class="split-pct">10%</span></span></div>
+      <div class="split-row"><span class="split-label">🤝 Referrer bonus</span><span><span class="split-amount">$3.00</span> <span class="split-pct">30%</span></span></div>
+      <div class="split-row"><span class="split-label">🔗 Matrix chain pay (L1–L7)</span><span><span class="split-amount">$4.00</span> <span class="split-pct">40%</span></span></div>
+      <div class="split-row"><span class="split-label">♻️ Re-entry pool (flat $1 + 20% chain pay)</span><span><span class="split-amount">$1.00+</span> <span class="split-pct">10%+</span></span></div>
       <div class="split-row"><span class="split-label">🏦 USDC treasury reserve</span><span><span class="split-amount">$1.50</span> <span class="split-pct">15%</span></span></div>
       <div class="split-row"><span class="split-label">⚙️ Dev + Ops</span><span><span class="split-amount">$0.50</span> <span class="split-pct">5%</span></span></div>
     </div>
@@ -555,7 +555,10 @@
         <div class="card-sm">
           <div class="stat-label">Re-entry Pool</div>
           <div class="stat-value" id="dash-reentry">—</div>
-          <div class="stat-sub">Auto-used for cycle</div>
+          <div style="margin:6px 0 2px;background:var(--bg3);border-radius:4px;height:6px;overflow:hidden">
+            <div id="reentry-bar" style="height:100%;background:var(--green);border-radius:4px;width:0%;transition:width .4s ease"></div>
+          </div>
+          <div class="stat-sub"><span id="reentry-pct">0%</span> to auto re-entry</div>
         </div>
         <div class="card-sm">
           <div class="stat-label">CNOVA Balance</div>
@@ -880,14 +883,45 @@ const CHAIN_ID = 84532; // Base Sepolia
 const RPC_URL  = 'https://sepolia.base.org';
 
 const ADDRESSES = {
-  matrix:   '0x075CB5C3e730e70eA4e559C6e224101B738a4812',
-  treasury: '0x23f495D28856d511f15F4B3e33bAa51Ecdc95166',
-  token:    '0xe0050e4CD45eE4d3F8Efeb476744222eF7D31F01',
+  matrix:   '0x26E95Ce814e388fd5aFDd46A66A8d3Ad8fF6196F',  // v2 — deployed 2026-05-26
+  treasury: '0xF039FA905D0ce7E0451a2A0Cf75fad4b55381B93',
+  token:    '0xeC749BFF00f94632268d6f46e6DbF126594E7fC5',
   usdc:     '0xc7D007D60210eAF1C291B4873A0d285De0B97C8F',
 };
 
-// ── ABIs ──────────────────────────────────────────────────────────────
-const MATRIX_ABI = [{"inputs":[],"name":"CYCLE_TRIGGER","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"ENTRY_FEE","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"REACTIVATION_FEE","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"TOTAL_POSITIONS","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"uint256","name":"","type":"uint256"}],"name":"bfsHead","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"currentCycleId","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"address","name":"member","type":"address"}],"name":"earningsSummary","outputs":[{"internalType":"uint256","name":"withdrawable","type":"uint256"},{"internalType":"uint256","name":"reentryPool","type":"uint256"},{"internalType":"uint256","name":"cnovaBalance","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"getCycleStatus","outputs":[{"internalType":"uint256","name":"cycleId","type":"uint256"},{"internalType":"uint256","name":"filled","type":"uint256"},{"internalType":"uint256","name":"remaining","type":"uint256"},{"internalType":"bool","name":"complete","type":"bool"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"address","name":"member","type":"address"}],"name":"getMember","outputs":[{"components":[{"internalType":"uint256","name":"id","type":"uint256"},{"internalType":"address","name":"referrer","type":"address"},{"internalType":"uint256","name":"cycleId","type":"uint256"},{"internalType":"uint256","name":"matrixNodeId","type":"uint256"},{"internalType":"uint256","name":"earnings","type":"uint256"},{"internalType":"uint256","name":"reentryPool","type":"uint256"},{"internalType":"uint256","name":"lastActivityTime","type":"uint256"},{"internalType":"bool","name":"isRegistered","type":"bool"},{"internalType":"bool","name":"isPaused","type":"bool"}],"internalType":"struct CryptoNovaMatrix.Member","name":"","type":"tuple"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"uint256","name":"nodeId","type":"uint256"}],"name":"getNode","outputs":[{"components":[{"internalType":"address","name":"owner","type":"address"},{"internalType":"uint256","name":"cycleId","type":"uint256"},{"internalType":"uint256","name":"parentNodeId","type":"uint256"},{"internalType":"uint8","name":"depth","type":"uint8"},{"internalType":"uint8","name":"childCount","type":"uint8"},{"internalType":"uint256[2]","name":"children","type":"uint256[2]"},{"internalType":"bool","name":"isPaused","type":"bool"}],"internalType":"struct CryptoNovaMatrix.MatrixNode","name":"","type":"tuple"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"uint256","name":"","type":"uint256"}],"name":"memberById","outputs":[{"internalType":"address","name":"","type":"address"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"nextNodeId","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"address","name":"referrer","type":"address"}],"name":"register","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[],"name":"totalMembers","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"withdraw","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[{"internalType":"address","name":"member","type":"address"}],"name":"withdrawableBalance","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"anonymous":false,"inputs":[{"indexed":true,"internalType":"address","name":"member","type":"address"},{"indexed":false,"internalType":"uint256","name":"amount","type":"uint256"}],"name":"EarningsWithdrawn","type":"event"},{"anonymous":false,"inputs":[{"indexed":true,"internalType":"address","name":"member","type":"address"},{"indexed":true,"internalType":"address","name":"referrer","type":"address"},{"indexed":false,"internalType":"uint256","name":"memberId","type":"uint256"},{"indexed":false,"internalType":"uint256","name":"cycleId","type":"uint256"},{"indexed":false,"internalType":"uint256","name":"nodeId","type":"uint256"},{"indexed":false,"internalType":"uint256","name":"cnovaRewarded","type":"uint256"}],"name":"MemberRegistered","type":"event"},{"anonymous":false,"inputs":[{"indexed":true,"internalType":"uint256","name":"cycleId","type":"uint256"}],"name":"NewCycleStarted","type":"event"},{"anonymous":false,"inputs":[{"indexed":true,"internalType":"address","name":"referrer","type":"address"},{"indexed":true,"internalType":"address","name":"from","type":"address"},{"indexed":false,"internalType":"uint256","name":"amount","type":"uint256"}],"name":"ReferrerBonus","type":"event"},{"anonymous":false,"inputs":[{"indexed":true,"internalType":"address","name":"recipient","type":"address"},{"indexed":false,"internalType":"uint256","name":"level","type":"uint256"},{"indexed":false,"internalType":"uint256","name":"amount","type":"uint256"}],"name":"ChainPayment","type":"event"}];
+// ── ABIs (v2 — auto re-entry, referrer-for-life) ──────────────────────
+const MATRIX_ABI = [
+  // ── View functions ──────────────────────────────────────────────────
+  {"inputs":[],"name":"CYCLE_TRIGGER","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},
+  {"inputs":[],"name":"ENTRY_FEE","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},
+  {"inputs":[],"name":"REENTRY_RATE","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},
+  {"inputs":[],"name":"TOTAL_POSITIONS","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},
+  {"inputs":[{"internalType":"uint256","name":"","type":"uint256"}],"name":"bfsHead","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},
+  {"inputs":[],"name":"currentCycleId","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},
+  {"inputs":[],"name":"nextNodeId","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},
+  {"inputs":[],"name":"totalMembers","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},
+  {"inputs":[{"internalType":"uint256","name":"","type":"uint256"}],"name":"memberById","outputs":[{"internalType":"address","name":"","type":"address"}],"stateMutability":"view","type":"function"},
+  // earningsSummary — v2 returns 4 values (added reentryProgress 0-100)
+  {"inputs":[{"internalType":"address","name":"member","type":"address"}],"name":"earningsSummary","outputs":[{"internalType":"uint256","name":"withdrawable","type":"uint256"},{"internalType":"uint256","name":"reentryPool","type":"uint256"},{"internalType":"uint256","name":"reentryProgress","type":"uint256"},{"internalType":"uint256","name":"cnovaBalance","type":"uint256"}],"stateMutability":"view","type":"function"},
+  {"inputs":[],"name":"getCycleStatus","outputs":[{"internalType":"uint256","name":"cycleId","type":"uint256"},{"internalType":"uint256","name":"filled","type":"uint256"},{"internalType":"uint256","name":"remaining","type":"uint256"},{"internalType":"bool","name":"complete","type":"bool"}],"stateMutability":"view","type":"function"},
+  // getMember — v2 struct includes originalReferrer
+  {"inputs":[{"internalType":"address","name":"member","type":"address"}],"name":"getMember","outputs":[{"components":[{"internalType":"uint256","name":"id","type":"uint256"},{"internalType":"address","name":"referrer","type":"address"},{"internalType":"address","name":"originalReferrer","type":"address"},{"internalType":"uint256","name":"cycleId","type":"uint256"},{"internalType":"uint256","name":"matrixNodeId","type":"uint256"},{"internalType":"uint256","name":"earnings","type":"uint256"},{"internalType":"uint256","name":"reentryPool","type":"uint256"},{"internalType":"uint256","name":"lastActivityTime","type":"uint256"},{"internalType":"bool","name":"isRegistered","type":"bool"},{"internalType":"bool","name":"isPaused","type":"bool"}],"internalType":"struct CryptoNovaMatrix.Member","name":"","type":"tuple"}],"stateMutability":"view","type":"function"},
+  {"inputs":[{"internalType":"uint256","name":"nodeId","type":"uint256"}],"name":"getNode","outputs":[{"components":[{"internalType":"address","name":"owner","type":"address"},{"internalType":"uint256","name":"cycleId","type":"uint256"},{"internalType":"uint256","name":"parentNodeId","type":"uint256"},{"internalType":"uint8","name":"depth","type":"uint8"},{"internalType":"uint8","name":"childCount","type":"uint8"},{"internalType":"uint256[2]","name":"children","type":"uint256[2]"},{"internalType":"bool","name":"isPaused","type":"bool"}],"internalType":"struct CryptoNovaMatrix.MatrixNode","name":"","type":"tuple"}],"stateMutability":"view","type":"function"},
+  {"inputs":[{"internalType":"address","name":"member","type":"address"}],"name":"withdrawableBalance","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},
+  // ── Write functions ─────────────────────────────────────────────────
+  {"inputs":[{"internalType":"address","name":"referrer","type":"address"}],"name":"register","outputs":[],"stateMutability":"nonpayable","type":"function"},
+  {"inputs":[],"name":"withdraw","outputs":[],"stateMutability":"nonpayable","type":"function"},
+  {"inputs":[{"internalType":"uint256","name":"amount","type":"uint256"}],"name":"topUpReentryPool","outputs":[],"stateMutability":"nonpayable","type":"function"},
+  // ── Events ──────────────────────────────────────────────────────────
+  {"anonymous":false,"inputs":[{"indexed":true,"internalType":"address","name":"member","type":"address"},{"indexed":true,"internalType":"address","name":"referrer","type":"address"},{"indexed":false,"internalType":"uint256","name":"memberId","type":"uint256"},{"indexed":false,"internalType":"uint256","name":"cycleId","type":"uint256"},{"indexed":false,"internalType":"uint256","name":"nodeId","type":"uint256"},{"indexed":false,"internalType":"uint256","name":"cnovaRewarded","type":"uint256"}],"name":"MemberRegistered","type":"event"},
+  {"anonymous":false,"inputs":[{"indexed":true,"internalType":"address","name":"member","type":"address"},{"indexed":false,"internalType":"uint256","name":"amount","type":"uint256"}],"name":"EarningsWithdrawn","type":"event"},
+  {"anonymous":false,"inputs":[{"indexed":true,"internalType":"address","name":"recipient","type":"address"},{"indexed":false,"internalType":"uint256","name":"level","type":"uint256"},{"indexed":false,"internalType":"uint256","name":"amount","type":"uint256"}],"name":"ChainPayment","type":"event"},
+  {"anonymous":false,"inputs":[{"indexed":true,"internalType":"address","name":"referrer","type":"address"},{"indexed":true,"internalType":"address","name":"from","type":"address"},{"indexed":false,"internalType":"uint256","name":"amount","type":"uint256"}],"name":"ReferrerBonus","type":"event"},
+  {"anonymous":false,"inputs":[{"indexed":true,"internalType":"uint256","name":"cycleId","type":"uint256"}],"name":"NewCycleStarted","type":"event"},
+  {"anonymous":false,"inputs":[{"indexed":true,"internalType":"address","name":"recipient","type":"address"},{"indexed":false,"internalType":"uint256","name":"level","type":"uint256"},{"indexed":false,"internalType":"uint256","name":"amount","type":"uint256"}],"name":"ReentryPoolContribution","type":"event"},
+  {"anonymous":false,"inputs":[{"indexed":true,"internalType":"address","name":"member","type":"address"},{"indexed":false,"internalType":"uint256","name":"newCycleId","type":"uint256"},{"indexed":false,"internalType":"uint256","name":"newNodeId","type":"uint256"}],"name":"ReentryTriggered","type":"event"},
+  {"anonymous":false,"inputs":[{"indexed":true,"internalType":"address","name":"member","type":"address"},{"indexed":false,"internalType":"uint256","name":"poolBalance","type":"uint256"}],"name":"ReentryDeferred","type":"event"}
+];
 
 const TREASURY_ABI = [{"inputs":[],"name":"floorPrice","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"floorPriceFormatted","outputs":[{"internalType":"uint256","name":"dollars6dec","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"isUniverseMode","outputs":[{"internalType":"bool","name":"","type":"bool"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"reserveBalance","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"usdcReserve","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"}];
 
@@ -1399,15 +1433,18 @@ async function loadDashboard() {
     }
     notReg.style.display = 'none'; content.style.display = 'block';
 
-    const withdrawable = summary.withdrawable;
-    const reentry      = summary.reentryPool;
-    const cnovaWei     = summary.cnovaBalance;
+    const withdrawable    = summary.withdrawable;
+    const reentry         = summary.reentryPool;
+    const reentryProgress = Number(summary.reentryProgress);  // 0–100
+    const cnovaWei        = summary.cnovaBalance;
 
     // CNOVA value at floor: cnovaWei (18dec) * floor (18dec) / 1e18 → 6dec USDC
     const cnovaVal = (BigInt(cnovaWei) * BigInt(floor)) / BigInt(1e18);
 
     document.getElementById('dash-withdrawable').textContent  = u6(withdrawable);
     document.getElementById('dash-reentry').textContent       = u6(reentry);
+    document.getElementById('reentry-bar').style.width        = reentryProgress + '%';
+    document.getElementById('reentry-pct').textContent        = reentryProgress + '%';
     document.getElementById('dash-cnova').textContent         = parseFloat(ethers.formatUnits(cnovaWei, 18)).toFixed(2) + ' CNOVA';
     document.getElementById('dash-cnova-val').textContent     = u6(cnovaVal);
 
