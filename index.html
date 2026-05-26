@@ -906,7 +906,6 @@
 // ═══════════════════════════════════════════════════════════════════════
 const CHAIN_ID = 84532; // Base Sepolia
 const RPC_URL     = 'https://sepolia.base.org';
-const DEPLOY_BLOCK = 41480000; // Base Sepolia — CryptoNova v2 deployed 2026-05-26
 
 const ADDRESSES = {
   matrix:   '0x26E95Ce814e388fd5aFDd46A66A8d3Ad8fF6196F',  // v2 — deployed 2026-05-26
@@ -1491,13 +1490,13 @@ async function loadDashboard() {
 
     document.getElementById('matrix-my-node').textContent = member.matrixNodeId.toString();
 
-    // Direct referrals — count MemberRegistered events where referrer == userAddr
+    // Direct referrals — scan all members, filter by originalReferrer (no event logs)
     try {
-      const latest  = await readProvider.getBlockNumber();
-      const filter  = matrix.filters.MemberRegistered(null, userAddr);
-      const events  = await queryFilterChunked(matrix, filter, DEPLOY_BLOCK, latest);
-      const unique  = new Set(events.map(e => e.args[0].toLowerCase()));
-      document.getElementById('dash-directs').textContent = unique.size + ' member' + (unique.size !== 1 ? 's' : '');
+      const all     = await fetchAllMembers(matrix);
+      const count   = all.filter(
+        ({ data: m }) => m.originalReferrer.toLowerCase() === userAddr.toLowerCase()
+      ).length;
+      document.getElementById('dash-directs').textContent = count + ' member' + (count !== 1 ? 's' : '');
     } catch(_) {
       document.getElementById('dash-directs').textContent = '—';
     }
@@ -1572,15 +1571,29 @@ async function loadMyTree() {
   } catch(e) { toast('Error: ' + e.message, 'error'); }
 }
 
-// Base Sepolia public RPC caps eth_getLogs at 2000 blocks — query in chunks
-async function queryFilterChunked(contract, filter, fromBlock, toBlock, chunkSize = 1999) {
-  const all = [];
-  for (let from = fromBlock; from <= toBlock; from += chunkSize) {
-    const to    = Math.min(from + chunkSize - 1, toBlock);
-    const chunk = await contract.queryFilter(filter, from, to);
-    all.push(...chunk);
+// Fetch all members by scanning memberById — avoids eth_getLogs entirely
+async function fetchAllMembers(matrix) {
+  const total = Number(await matrix.totalMembers());
+  if (total === 0) return [];
+  // Batch in groups of 15 with a small delay between batches to avoid rate limits
+  const BATCH = 15;
+  const delay = ms => new Promise(r => setTimeout(r, ms));
+  const allAddrs = [];
+  for (let i = 1; i <= total; i += BATCH) {
+    const ids   = Array.from({ length: Math.min(BATCH, total - i + 1) }, (_, k) => i + k);
+    const addrs = await Promise.all(ids.map(id => matrix.memberById(id)));
+    allAddrs.push(...addrs);
+    if (i + BATCH <= total) await delay(300);
   }
-  return all;
+  // Now fetch member structs in batches
+  const memberData = [];
+  for (let i = 0; i < allAddrs.length; i += BATCH) {
+    const slice = allAddrs.slice(i, i + BATCH);
+    const chunk = await Promise.all(slice.map(a => matrix.getMember(a)));
+    chunk.forEach((m, k) => memberData.push({ addr: allAddrs[i + k], data: m }));
+    if (i + BATCH < allAddrs.length) await delay(300);
+  }
+  return memberData;
 }
 
 async function loadMyDirects() {
@@ -1592,25 +1605,20 @@ async function loadMyDirects() {
   const listWrap = document.getElementById('my-directs-list');
   const rows     = document.getElementById('my-directs-rows');
 
-  card.style.display    = 'block';
-  loading.style.display = 'block';
-  empty.style.display   = 'none';
+  card.style.display     = 'block';
+  loading.style.display  = 'block';
+  empty.style.display    = 'none';
   listWrap.style.display = 'none';
-  rows.innerHTML        = '';
+  rows.innerHTML         = '';
 
   try {
     const matrix  = new ethers.Contract(ADDRESSES.matrix, MATRIX_ABI, readProvider);
-    const latest  = await readProvider.getBlockNumber();
-    const filter  = matrix.filters.MemberRegistered(null, userAddr);
-    const events  = await queryFilterChunked(matrix, filter, DEPLOY_BLOCK, latest);
+    const all     = await fetchAllMembers(matrix);
 
-    // Unique direct addresses (de-dup re-entries)
-    const seen    = new Set();
-    const directs = [];
-    for (const ev of events) {
-      const addr = ev.args[0].toLowerCase();
-      if (!seen.has(addr)) { seen.add(addr); directs.push(ev.args[0]); }
-    }
+    // Filter to members whose originalReferrer matches the connected wallet
+    const directs = all.filter(
+      ({ data: m }) => m.originalReferrer.toLowerCase() === userAddr.toLowerCase()
+    );
 
     loading.style.display = 'none';
 
@@ -1618,19 +1626,15 @@ async function loadMyDirects() {
       empty.style.display = 'block'; return;
     }
 
-    // Fetch member data for each direct
-    const members = await Promise.all(directs.map(a => matrix.getMember(a)));
-
     listWrap.style.display = 'block';
-    rows.innerHTML = directs.map((addr, i) => {
-      const m      = members[i];
-      const status = m.isPaused
+    rows.innerHTML = directs.map(({ addr, data: m }) => {
+      const status   = m.isPaused
         ? '<span class="pill pill-yellow" style="font-size:11px">⏸ Paused</span>'
         : '<span class="pill pill-green"  style="font-size:11px">✅ Active</span>';
-      const nodeLink = `<span style="color:var(--green);cursor:pointer;font-weight:700" onclick="navigateToNode(${m.matrixNodeId})" title="Click to view in tree">
-          #${m.matrixNodeId}</span>`;
+      const nodeLink = `<span style="color:var(--green);cursor:pointer;font-weight:700"
+          onclick="navigateToNode(${m.matrixNodeId})" title="Click to view in tree">#${m.matrixNodeId}</span>`;
       return `<div style="display:grid;grid-template-columns:1fr 80px 90px 90px 100px;gap:0;align-items:center;padding:10px 12px;border-bottom:1px solid var(--border);font-size:13px">
-        <span class="addr" style="color:var(--text2);font-size:12px" title="${addr}">${shortAddr(addr)}</span>
+        <span style="color:var(--text2);font-size:12px;word-break:break-all" title="${addr}">${shortAddr(addr)}</span>
         <span style="text-align:center;font-weight:600">#${m.id}</span>
         <span style="text-align:center">${nodeLink}</span>
         <span style="text-align:center;color:var(--text3)">C${m.cycleId}</span>
@@ -1638,9 +1642,13 @@ async function loadMyDirects() {
       </div>`;
     }).join('');
 
+    // Also update the dashboard direct count if visible
+    const el = document.getElementById('dash-directs');
+    if (el) el.textContent = directs.length + ' member' + (directs.length !== 1 ? 's' : '');
+
   } catch(e) {
     loading.style.display = 'none';
-    empty.textContent = 'Could not load directs: ' + (e.message || e);
+    empty.textContent = 'Could not load directs: ' + (e.shortMessage || e.message || String(e));
     empty.style.display = 'block';
     console.error('loadMyDirects', e);
   }
