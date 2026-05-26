@@ -284,16 +284,29 @@
 
 <div id="network-banner">
   <div id="network-banner-card">
-    <div style="font-size:44px;margin-bottom:12px">⚠️</div>
-    <div style="font-size:20px;font-weight:800;color:var(--yellow);margin-bottom:8px">Wrong Network</div>
-    <div style="font-size:14px;color:var(--text2);line-height:1.6;margin-bottom:24px">
-      CryptoNova is on <strong style="color:var(--text)">Base Sepolia Testnet</strong>.<br>
-      Please switch networks to continue.
+    <div style="font-size:40px;margin-bottom:10px">⚠️</div>
+    <div style="font-size:20px;font-weight:800;color:var(--yellow);margin-bottom:6px">Wrong Network</div>
+    <div style="font-size:14px;color:var(--text2);line-height:1.6;margin-bottom:16px">
+      CryptoNova uses <strong style="color:var(--text)">Base Sepolia Testnet</strong>.
     </div>
-    <button onclick="switchToBaseSepolia()" style="background:var(--yellow);color:#000;border:none;border-radius:10px;padding:13px 28px;font-weight:700;font-size:15px;cursor:pointer;width:100%;margin-bottom:10px">
-      🔀 Switch to Base Sepolia
+
+    <!-- Mobile: step-by-step enable testnets first -->
+    <div id="nb-mobile-guide" style="display:none;text-align:left;background:rgba(245,158,11,.08);border:1px solid rgba(245,158,11,.3);border-radius:10px;padding:14px 16px;margin-bottom:16px">
+      <div style="font-size:13px;font-weight:700;color:var(--yellow);margin-bottom:10px">📱 Enable testnets first (one-time setup)</div>
+      <div style="font-size:13px;color:var(--text2);line-height:2">
+        <strong style="color:var(--text)">1.</strong> In MetaMask tap <strong style="color:var(--text)">☰ menu</strong> (top-left)<br>
+        <strong style="color:var(--text)">2.</strong> Go to <strong style="color:var(--text)">Settings → Advanced</strong><br>
+        <strong style="color:var(--text)">3.</strong> Turn ON <strong style="color:var(--text)">"Show test networks"</strong><br>
+        <strong style="color:var(--text)">4.</strong> Come back and tap the button below ↓
+      </div>
+    </div>
+
+    <button onclick="switchToBaseSepolia()" id="nb-switch-btn" style="background:var(--yellow);color:#000;border:none;border-radius:10px;padding:13px 20px;font-weight:700;font-size:15px;cursor:pointer;width:100%;margin-bottom:10px">
+      🔀 Add &amp; Switch to Base Sepolia
     </button>
-    <div style="font-size:12px;color:var(--text3);margin-top:4px">On mobile: open MetaMask app → Settings → Networks → Base Sepolia</div>
+    <div id="nb-hint" style="font-size:12px;color:var(--text3)">
+      This will prompt MetaMask to add and switch to Base Sepolia automatically.
+    </div>
   </div>
 </div>
 
@@ -940,9 +953,9 @@ async function connectWallet(silent = false) {
 
     const network = await provider.getNetwork();
     if (Number(network.chainId) !== CHAIN_ID) {
-      document.getElementById('network-banner').style.display = 'flex';
+      showNetworkBanner();
     } else {
-      document.getElementById('network-banner').style.display = 'none';
+      hideNetworkBanner();
     }
 
     // Update header
@@ -962,32 +975,63 @@ async function connectWallet(silent = false) {
   }
 }
 
+// ─── show/hide network banner (updates mobile guide visibility) ───────────
+function showNetworkBanner() {
+  const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+  document.getElementById('nb-mobile-guide').style.display = isMobile ? 'block' : 'none';
+  document.getElementById('network-banner').style.display  = 'flex';
+}
+function hideNetworkBanner() {
+  hideNetworkBanner();
+}
+
 async function switchToBaseSepolia() {
+  const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+  const btn = document.getElementById('nb-switch-btn');
+  const hint = document.getElementById('nb-hint');
+
+  const chainParams = [{
+    chainId:           '0x' + CHAIN_ID.toString(16),
+    chainName:         'Base Sepolia',
+    nativeCurrency:    { name: 'ETH', symbol: 'ETH', decimals: 18 },
+    rpcUrls:           ['https://sepolia.base.org'],
+    blockExplorerUrls: ['https://sepolia.basescan.org']
+  }];
+
+  if (btn) { btn.disabled = true; btn.textContent = 'Switching…'; }
+
   try {
-    await window.ethereum.request({
-      method: 'wallet_switchEthereumChain',
-      params: [{ chainId: '0x' + CHAIN_ID.toString(16) }]
-    });
-    // chainChanged listener will hide the banner automatically
-  } catch(e) {
-    if (e.code === 4902) {
+    // On mobile: wallet_addEthereumChain adds the network AND switches to it —
+    // this works even when Base Sepolia is already added (MetaMask just switches).
+    // wallet_switchEthereumChain alone fails silently on mobile when testnets are hidden.
+    if (isMobile) {
+      await window.ethereum.request({ method: 'wallet_addEthereumChain', params: chainParams });
+      // chainChanged listener will hide the banner and reconnect
+    } else {
+      // Desktop: try switch first; add if chain is unknown (4902)
       try {
         await window.ethereum.request({
-          method: 'wallet_addEthereumChain',
-          params: [{
-            chainId: '0x' + CHAIN_ID.toString(16),
-            chainName: 'Base Sepolia',
-            nativeCurrency: { name: 'ETH', symbol: 'ETH', decimals: 18 },
-            rpcUrls: ['https://sepolia.base.org'],
-            blockExplorerUrls: ['https://sepolia.basescan.org']
-          }]
+          method: 'wallet_switchEthereumChain',
+          params: [{ chainId: '0x' + CHAIN_ID.toString(16) }]
         });
-      } catch(addErr) {
-        toast('Could not add Base Sepolia. Please add it manually in MetaMask.', 'error');
+      } catch(e) {
+        if (e.code === 4902) {
+          await window.ethereum.request({ method: 'wallet_addEthereumChain', params: chainParams });
+        } else if (e.code !== 4001) {
+          throw e;
+        }
       }
-    } else if (e.code !== 4001) {
-      toast('Network switch failed: ' + (e.message || e), 'error');
     }
+  } catch(e) {
+    if (e.code === 4001) {
+      // User rejected — restore button
+    } else {
+      // Show manual fallback hint inside the modal
+      if (hint) hint.innerHTML = '<strong style="color:var(--yellow)">Auto-switch failed.</strong> In MetaMask: Settings → Networks → Add Network manually with chain ID <strong>84532</strong> and RPC <strong>https://sepolia.base.org</strong>';
+      toast('Could not switch automatically — see instructions in the modal.', 'error');
+    }
+  } finally {
+    if (btn) { btn.disabled = false; btn.innerHTML = '🔀 Add &amp; Switch to Base Sepolia'; }
   }
 }
 
@@ -1514,8 +1558,15 @@ async function addCNOVAtoMetaMask() {
     }
     return;
   }
-  // Ensure on correct chain before adding token
-  try { const n = await provider.getNetwork(); if(Number(n.chainId)!==CHAIN_ID){toast('Switch to Base Sepolia first','error');return;} } catch(e) {}
+  // Must be on Base Sepolia — token is on that chain only
+  try {
+    const n = await (provider || new ethers.BrowserProvider(window.ethereum)).getNetwork();
+    if (Number(n.chainId) !== CHAIN_ID) {
+      showNetworkBanner();
+      toast('Switch to Base Sepolia first, then tap Add Token again.', 'info');
+      return;
+    }
+  } catch(e) {}
   try {
     const added = await window.ethereum.request({
       method: 'wallet_watchAsset',
@@ -1547,6 +1598,15 @@ async function addUSDCtoMetaMask() {
     }
     return;
   }
+  // Must be on Base Sepolia
+  try {
+    const n = await (provider || new ethers.BrowserProvider(window.ethereum)).getNetwork();
+    if (Number(n.chainId) !== CHAIN_ID) {
+      showNetworkBanner();
+      toast('Switch to Base Sepolia first, then tap Add Token again.', 'info');
+      return;
+    }
+  } catch(e) {}
   try {
     const added = await window.ethereum.request({
       method: 'wallet_watchAsset',
