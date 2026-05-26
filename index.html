@@ -643,6 +643,7 @@
         </div>
         <button class="btn btn-green" style="margin-top:20px" onclick="loadMatrixTree()">Load Tree</button>
         <button class="btn btn-ghost" style="margin-top:20px" onclick="loadMyTree()">My Position</button>
+        <button class="btn btn-ghost" style="margin-top:20px;border-color:var(--green2);color:var(--green)" onclick="loadMyDirects()">👥 My Directs</button>
       </div>
     </div>
 
@@ -663,6 +664,23 @@
       <span><span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:var(--green-dim);border:1px solid var(--green2);margin-right:4px"></span>Your node</span>
       <span><span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:var(--bg3);border:1px solid var(--text3);margin-right:4px"></span>Filled</span>
       <span><span style="display:inline-block;width:10px;height:10px;border-radius:2px;border:1px dashed var(--border);margin-right:4px"></span>Empty slot</span>
+    </div>
+
+    <!-- My Directs Panel -->
+    <div class="card" id="my-directs-card" style="margin-top:24px;display:none">
+      <div class="section-title" style="margin-bottom:14px"><div class="dot"></div> My Direct Referrals</div>
+      <div id="my-directs-loading" style="font-size:14px;color:var(--text3);padding:12px 0">
+        <span class="spinner"></span> Loading your direct referrals…
+      </div>
+      <div id="my-directs-empty" style="display:none;font-size:14px;color:var(--text3);padding:12px 0;text-align:center">
+        No direct referrals found yet. Share your referral link to grow your team!
+      </div>
+      <div id="my-directs-list" style="display:none">
+        <div style="display:grid;grid-template-columns:1fr 80px 90px 90px 100px;gap:0;font-size:12px;font-weight:700;color:var(--text3);padding:8px 12px;border-bottom:1px solid var(--border);text-transform:uppercase;letter-spacing:.5px">
+          <span>Wallet</span><span style="text-align:center">Member #</span><span style="text-align:center">Node #</span><span style="text-align:center">Cycle</span><span style="text-align:right">Status</span>
+        </div>
+        <div id="my-directs-rows"></div>
+      </div>
     </div>
   </div>
 
@@ -1133,7 +1151,7 @@ function showTab(name) {
   document.querySelectorAll('nav button')[idx].classList.add('active');
 
   if (name === 'dashboard') loadDashboard();
-  if (name === 'matrix')    loadMatrixStats();
+  if (name === 'matrix')  { loadMatrixStats(); if (userAddr) loadMyDirects(); }
   if (name === 'register')  loadRegisterTab();
 }
 
@@ -1474,9 +1492,13 @@ async function loadDashboard() {
 
     // Direct referrals — count MemberRegistered events where referrer == userAddr
     try {
-      const filter  = matrix.filters.MemberRegistered(null, userAddr);
-      const events  = await matrix.queryFilter(filter, 0, 'latest');
-      document.getElementById('dash-directs').textContent = events.length + ' member' + (events.length !== 1 ? 's' : '');
+      const latest   = await readProvider.getBlockNumber();
+      const fromBlk  = Math.max(0, latest - 200000);
+      const filter   = matrix.filters.MemberRegistered(null, userAddr);
+      const events   = await matrix.queryFilter(filter, fromBlk, 'latest');
+      // Unique member addresses only (ignore re-entries of same address)
+      const unique = new Set(events.map(e => e.args[0].toLowerCase()));
+      document.getElementById('dash-directs').textContent = unique.size + ' member' + (unique.size !== 1 ? 's' : '');
     } catch(_) {
       document.getElementById('dash-directs').textContent = '—';
     }
@@ -1549,6 +1571,70 @@ async function loadMyTree() {
     document.getElementById('matrix-input').value = member.matrixNodeId.toString();
     await loadMatrixTree();
   } catch(e) { toast('Error: ' + e.message, 'error'); }
+}
+
+async function loadMyDirects() {
+  if (!userAddr) { toast('Connect wallet first', 'error'); return; }
+
+  const card     = document.getElementById('my-directs-card');
+  const loading  = document.getElementById('my-directs-loading');
+  const empty    = document.getElementById('my-directs-empty');
+  const listWrap = document.getElementById('my-directs-list');
+  const rows     = document.getElementById('my-directs-rows');
+
+  card.style.display    = 'block';
+  loading.style.display = 'block';
+  empty.style.display   = 'none';
+  listWrap.style.display = 'none';
+  rows.innerHTML        = '';
+
+  try {
+    const matrix  = new ethers.Contract(ADDRESSES.matrix, MATRIX_ABI, readProvider);
+    const latest  = await readProvider.getBlockNumber();
+    const fromBlk = Math.max(0, latest - 200000);
+    const filter  = matrix.filters.MemberRegistered(null, userAddr);
+    const events  = await matrix.queryFilter(filter, fromBlk, 'latest');
+
+    // Unique direct addresses (de-dup re-entries)
+    const seen    = new Set();
+    const directs = [];
+    for (const ev of events) {
+      const addr = ev.args[0].toLowerCase();
+      if (!seen.has(addr)) { seen.add(addr); directs.push(ev.args[0]); }
+    }
+
+    loading.style.display = 'none';
+
+    if (directs.length === 0) {
+      empty.style.display = 'block'; return;
+    }
+
+    // Fetch member data for each direct
+    const members = await Promise.all(directs.map(a => matrix.getMember(a)));
+
+    listWrap.style.display = 'block';
+    rows.innerHTML = directs.map((addr, i) => {
+      const m      = members[i];
+      const status = m.isPaused
+        ? '<span class="pill pill-yellow" style="font-size:11px">⏸ Paused</span>'
+        : '<span class="pill pill-green"  style="font-size:11px">✅ Active</span>';
+      const nodeLink = `<span style="color:var(--green);cursor:pointer;font-weight:700" onclick="navigateToNode(${m.matrixNodeId})" title="Click to view in tree">
+          #${m.matrixNodeId}</span>`;
+      return `<div style="display:grid;grid-template-columns:1fr 80px 90px 90px 100px;gap:0;align-items:center;padding:10px 12px;border-bottom:1px solid var(--border);font-size:13px">
+        <span class="addr" style="color:var(--text2);font-size:12px" title="${addr}">${shortAddr(addr)}</span>
+        <span style="text-align:center;font-weight:600">#${m.id}</span>
+        <span style="text-align:center">${nodeLink}</span>
+        <span style="text-align:center;color:var(--text3)">C${m.cycleId}</span>
+        <span style="text-align:right">${status}</span>
+      </div>`;
+    }).join('');
+
+  } catch(e) {
+    loading.style.display = 'none';
+    empty.textContent = 'Could not load directs: ' + (e.message || e);
+    empty.style.display = 'block';
+    console.error('loadMyDirects', e);
+  }
 }
 
 async function loadMatrixTree() {
