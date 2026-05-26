@@ -885,7 +885,7 @@ const ADDRESSES = {
 };
 
 // ── ABIs ──────────────────────────────────────────────────────────────
-const MATRIX_ABI = [{"inputs":[],"name":"CYCLE_TRIGGER","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"ENTRY_FEE","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"REACTIVATION_FEE","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"TOTAL_POSITIONS","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"uint256","name":"","type":"uint256"}],"name":"bfsHead","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"currentCycleId","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"address","name":"member","type":"address"}],"name":"earningsSummary","outputs":[{"internalType":"uint256","name":"withdrawable","type":"uint256"},{"internalType":"uint256","name":"reentryPool","type":"uint256"},{"internalType":"uint256","name":"cnovaBalance","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"getCycleStatus","outputs":[{"internalType":"uint256","name":"cycleId","type":"uint256"},{"internalType":"uint256","name":"filled","type":"uint256"},{"internalType":"uint256","name":"remaining","type":"uint256"},{"internalType":"bool","name":"complete","type":"bool"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"address","name":"member","type":"address"}],"name":"getMember","outputs":[{"components":[{"internalType":"uint256","name":"id","type":"uint256"},{"internalType":"address","name":"referrer","type":"address"},{"internalType":"uint256","name":"cycleId","type":"uint256"},{"internalType":"uint256","name":"matrixNodeId","type":"uint256"},{"internalType":"uint256","name":"earnings","type":"uint256"},{"internalType":"uint256","name":"reentryPool","type":"uint256"},{"internalType":"uint256","name":"lastActivityTime","type":"uint256"},{"internalType":"bool","name":"isRegistered","type":"bool"},{"internalType":"bool","name":"isPaused","type":"bool"}],"internalType":"struct CryptoNovaMatrix.Member","name":"","type":"tuple"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"uint256","name":"nodeId","type":"uint256"}],"name":"getNode","outputs":[{"components":[{"internalType":"address","name":"owner","type":"address"},{"internalType":"uint256","name":"cycleId","type":"uint256"},{"internalType":"uint256","name":"parentNodeId","type":"uint256"},{"internalType":"uint8","name":"depth","type":"uint8"},{"internalType":"uint8","name":"childCount","type":"uint8"},{"internalType":"uint256[2]","name":"children","type":"uint256[2]"},{"internalType":"bool","name":"isPaused","type":"bool"}],"internalType":"struct CryptoNovaMatrix.MatrixNode","name":"","type":"tuple"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"uint256","name":"","type":"uint256"}],"name":"memberById","outputs":[{"internalType":"address","name":"","type":"address"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"nextNodeId","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"address","name":"referrer","type":"address"}],"name":"register","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[],"name":"totalMembers","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"withdraw","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[{"internalType":"address","name":"member","type":"address"}],"name":"withdrawableBalance","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"anonymous":false,"inputs":[{"indexed":true,"internalType":"address","name":"member","type":"address"},{"indexed":false,"internalType":"uint256","name":"amount","type":"uint256"}],"name":"EarningsWithdrawn","type":"event"},{"anonymous":false,"inputs":[{"indexed":true,"internalType":"address","name":"member","type":"address"},{"indexed":true,"internalType":"address","name":"referrer","type":"address"},{"indexed":false,"internalType":"uint256","name":"memberId","type":"uint256"},{"indexed":false,"internalType":"uint256","name":"cycleId","type":"uint256"},{"indexed":false,"internalType":"uint256","name":"nodeId","type":"uint256"},{"indexed":false,"internalType":"uint256","name":"cnovaRewarded","type":"uint256"}],"name":"MemberRegistered","type":"event"},{"anonymous":false,"inputs":[{"indexed":true,"internalType":"uint256","name":"cycleId","type":"uint256"}],"name":"NewCycleStarted","type":"event"}];
+const MATRIX_ABI = [{"inputs":[],"name":"CYCLE_TRIGGER","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"ENTRY_FEE","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"REACTIVATION_FEE","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"TOTAL_POSITIONS","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"uint256","name":"","type":"uint256"}],"name":"bfsHead","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"currentCycleId","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"address","name":"member","type":"address"}],"name":"earningsSummary","outputs":[{"internalType":"uint256","name":"withdrawable","type":"uint256"},{"internalType":"uint256","name":"reentryPool","type":"uint256"},{"internalType":"uint256","name":"cnovaBalance","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"getCycleStatus","outputs":[{"internalType":"uint256","name":"cycleId","type":"uint256"},{"internalType":"uint256","name":"filled","type":"uint256"},{"internalType":"uint256","name":"remaining","type":"uint256"},{"internalType":"bool","name":"complete","type":"bool"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"address","name":"member","type":"address"}],"name":"getMember","outputs":[{"components":[{"internalType":"uint256","name":"id","type":"uint256"},{"internalType":"address","name":"referrer","type":"address"},{"internalType":"uint256","name":"cycleId","type":"uint256"},{"internalType":"uint256","name":"matrixNodeId","type":"uint256"},{"internalType":"uint256","name":"earnings","type":"uint256"},{"internalType":"uint256","name":"reentryPool","type":"uint256"},{"internalType":"uint256","name":"lastActivityTime","type":"uint256"},{"internalType":"bool","name":"isRegistered","type":"bool"},{"internalType":"bool","name":"isPaused","type":"bool"}],"internalType":"struct CryptoNovaMatrix.Member","name":"","type":"tuple"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"uint256","name":"nodeId","type":"uint256"}],"name":"getNode","outputs":[{"components":[{"internalType":"address","name":"owner","type":"address"},{"internalType":"uint256","name":"cycleId","type":"uint256"},{"internalType":"uint256","name":"parentNodeId","type":"uint256"},{"internalType":"uint8","name":"depth","type":"uint8"},{"internalType":"uint8","name":"childCount","type":"uint8"},{"internalType":"uint256[2]","name":"children","type":"uint256[2]"},{"internalType":"bool","name":"isPaused","type":"bool"}],"internalType":"struct CryptoNovaMatrix.MatrixNode","name":"","type":"tuple"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"uint256","name":"","type":"uint256"}],"name":"memberById","outputs":[{"internalType":"address","name":"","type":"address"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"nextNodeId","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"address","name":"referrer","type":"address"}],"name":"register","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[],"name":"totalMembers","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"withdraw","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[{"internalType":"address","name":"member","type":"address"}],"name":"withdrawableBalance","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"anonymous":false,"inputs":[{"indexed":true,"internalType":"address","name":"member","type":"address"},{"indexed":false,"internalType":"uint256","name":"amount","type":"uint256"}],"name":"EarningsWithdrawn","type":"event"},{"anonymous":false,"inputs":[{"indexed":true,"internalType":"address","name":"member","type":"address"},{"indexed":true,"internalType":"address","name":"referrer","type":"address"},{"indexed":false,"internalType":"uint256","name":"memberId","type":"uint256"},{"indexed":false,"internalType":"uint256","name":"cycleId","type":"uint256"},{"indexed":false,"internalType":"uint256","name":"nodeId","type":"uint256"},{"indexed":false,"internalType":"uint256","name":"cnovaRewarded","type":"uint256"}],"name":"MemberRegistered","type":"event"},{"anonymous":false,"inputs":[{"indexed":true,"internalType":"uint256","name":"cycleId","type":"uint256"}],"name":"NewCycleStarted","type":"event"},{"anonymous":false,"inputs":[{"indexed":true,"internalType":"address","name":"referrer","type":"address"},{"indexed":true,"internalType":"address","name":"from","type":"address"},{"indexed":false,"internalType":"uint256","name":"amount","type":"uint256"}],"name":"ReferrerBonus","type":"event"},{"anonymous":false,"inputs":[{"indexed":true,"internalType":"address","name":"recipient","type":"address"},{"indexed":false,"internalType":"uint256","name":"level","type":"uint256"},{"indexed":false,"internalType":"uint256","name":"amount","type":"uint256"}],"name":"ChainPayment","type":"event"}];
 
 const TREASURY_ABI = [{"inputs":[],"name":"floorPrice","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"floorPriceFormatted","outputs":[{"internalType":"uint256","name":"dollars6dec","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"isUniverseMode","outputs":[{"internalType":"bool","name":"","type":"bool"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"reserveBalance","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"usdcReserve","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"}];
 
@@ -1464,18 +1464,32 @@ async function loadTxHistory() {
 
   try {
     const rp = readProvider || new ethers.JsonRpcProvider(RPC_URL);
-    const matrix = new ethers.Contract(ADDRESSES.matrix, ABIS.matrix, rp);
-    const userTopic = ethers.zeroPadValue(userAddr.toLowerCase(), 32);
+    const matrix = new ethers.Contract(ADDRESSES.matrix, MATRIX_ABI, rp);
 
-    // Query relevant events in parallel
-    const fromBlock = 0;
-    const toBlock = 'latest';
+    // Base Sepolia public RPC limits getLogs to ~2000 blocks per request.
+    // Get current block then query in chunks of 2000 back up to 3 million blocks (~69 days).
+    const currentBlock = await rp.getBlockNumber();
+    const CHUNK  = 2000;
+    const LOOKBACK = 3_000_000; // covers all testnet history since deployment
+    const startBlock = Math.max(0, currentBlock - LOOKBACK);
+
+    async function chunkedQuery(filter, from, to) {
+      const results = [];
+      for (let b = from; b <= to; b += CHUNK) {
+        const end = Math.min(b + CHUNK - 1, to);
+        try {
+          const logs = await matrix.queryFilter(filter, b, end);
+          results.push(...logs);
+        } catch(e) { /* skip failed chunk */ }
+      }
+      return results;
+    }
 
     const [regLogs, referrerLogs, chainLogs, withdrawLogs] = await Promise.all([
-      matrix.queryFilter(matrix.filters.MemberRegistered(userAddr), fromBlock, toBlock).catch(() => []),
-      matrix.queryFilter(matrix.filters.ReferrerBonus(userAddr), fromBlock, toBlock).catch(() => []),
-      matrix.queryFilter(matrix.filters.ChainPayment(userAddr), fromBlock, toBlock).catch(() => []),
-      matrix.queryFilter(matrix.filters.EarningsWithdrawn(userAddr), fromBlock, toBlock).catch(() => []),
+      chunkedQuery(matrix.filters.MemberRegistered(userAddr), startBlock, currentBlock),
+      chunkedQuery(matrix.filters.ReferrerBonus(userAddr),    startBlock, currentBlock),
+      chunkedQuery(matrix.filters.ChainPayment(userAddr),     startBlock, currentBlock),
+      chunkedQuery(matrix.filters.EarningsWithdrawn(userAddr),startBlock, currentBlock),
     ]);
 
     // Collect all events with type labels
@@ -1595,7 +1609,7 @@ async function loadMatrixTree() {
     }
     await Promise.all(toFetch.map(fetchNode));
 
-    function buildNodeHTML(id, depth) {
+    function buildNodeHTML(id, depth, isRoot) {
       if (depth > 3) return '';
       const n = nodeCache[id];
       const isMe    = id === myNodeId;
@@ -1603,25 +1617,44 @@ async function loadMatrixTree() {
 
       const leftChild  = n && Number(n.children[0]) > 0 ? Number(n.children[0]) : null;
       const rightChild = n && Number(n.children[1]) > 0 ? Number(n.children[1]) : null;
+      const parentId   = n && Number(n.parentNodeId) > 0 ? Number(n.parentNodeId) : null;
 
       const boxClass = isEmpty ? 'node-box empty' : (isMe ? 'node-box you' : 'node-box filled');
-      const label    = isEmpty ? 'Empty' : (isMe ? 'YOU' : 'Node ' + id);
+      const label    = isEmpty ? 'Empty' : (isMe ? '⭐ YOU' : 'Node ' + id);
       const addr     = n && n.owner !== ethers.ZeroAddress ? shortAddr(n.owner) : '';
       const depthTag = n ? 'L' + n.depth : '';
 
+      // Clickable: filled non-root nodes navigate into their subtree on click
+      const clickable = !isEmpty && !isRoot;
+      const clickStyle = clickable ? 'cursor:pointer;' : '';
+      const clickAttr  = clickable ? `onclick="navigateToNode(${id})" title="Click to view subtree"` : '';
+
       let childrenHTML = '';
       if (depth < 3) {
-        const lHTML = leftChild  ? buildNodeHTML(leftChild, depth + 1)  : buildEmptySlot();
-        const rHTML = rightChild ? buildNodeHTML(rightChild, depth + 1) : buildEmptySlot();
+        const lHTML = leftChild  ? buildNodeHTML(leftChild, depth + 1, false) : buildEmptySlot();
+        const rHTML = rightChild ? buildNodeHTML(rightChild, depth + 1, false) : buildEmptySlot();
         childrenHTML = `<div class="tree-children">${lHTML}${rHTML}</div>`;
+      } else if (!isEmpty) {
+        // Leaf level — show "▼ view" hint if node has children
+        const hasChildren = leftChild || rightChild;
+        if (hasChildren) {
+          childrenHTML = `<div style="text-align:center;margin-top:4px"><span onclick="navigateToNode(${id})" style="font-size:10px;color:var(--green);cursor:pointer;padding:2px 6px;border:1px solid var(--green2);border-radius:4px">▼ expand</span></div>`;
+        }
       }
 
+      // Parent navigation button on root node
+      const parentBtn = isRoot && parentId
+        ? `<div style="text-align:center;margin-bottom:8px"><button onclick="navigateToNode(${parentId})" style="background:none;border:1px solid var(--border);color:var(--text2);border-radius:6px;padding:4px 10px;font-size:11px;cursor:pointer">⬆ Up to Node ${parentId}</button></div>`
+        : '';
+
       return `
+        ${parentBtn}
         <div class="tree-node">
-          <div class="${boxClass}">
+          <div class="${boxClass}" style="${clickStyle}" ${clickAttr}>
             <div style="font-weight:700;font-size:12px">${label}</div>
             ${addr     ? `<div class="node-addr">${addr}</div>` : ''}
             ${depthTag ? `<div style="font-size:9px;color:var(--text3);margin-top:2px">${depthTag}</div>` : ''}
+            ${clickable ? `<div style="font-size:9px;color:var(--text3);margin-top:1px">tap to explore ▼</div>` : ''}
           </div>
           ${childrenHTML ? `<div class="tree-line"></div>${childrenHTML}` : ''}
         </div>`;
@@ -1631,13 +1664,20 @@ async function loadMatrixTree() {
       return `<div class="tree-node"><div class="node-box empty"><div style="font-size:11px">Empty</div></div></div>`;
     }
 
-    treeEl.innerHTML = buildNodeHTML(rootNodeId, 1);
+    treeEl.innerHTML = buildNodeHTML(rootNodeId, 1, true);
     treeEl.style.display = 'block';
     loadEl.style.display = 'none';
   } catch(e) {
     loadEl.innerHTML = '❌ Error loading tree: ' + e.message;
     console.error(e);
   }
+}
+
+function navigateToNode(nodeId) {
+  document.getElementById('matrix-input').value = nodeId.toString();
+  loadMatrixTree();
+  // Scroll to tree on mobile
+  document.getElementById('matrix-tree').scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
 // ═══════════════════════════════════════════════════════════════════════
