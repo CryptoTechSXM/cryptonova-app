@@ -880,10 +880,11 @@ const USDC_ABI = [
 // ═══════════════════════════════════════════════════════════════════════
 // STATE
 // ═══════════════════════════════════════════════════════════════════════
-let provider = null;
-let signer   = null;
-let userAddr = null;
+let provider     = null;
+let signer       = null;
+let userAddr     = null;
 let readProvider = null;
+let isConnecting = false;  // guard against re-entrant connectWallet calls
 
 // ═══════════════════════════════════════════════════════════════════════
 // INIT
@@ -903,20 +904,29 @@ window.addEventListener('DOMContentLoaded', async () => {
     try { await connectWallet(true); } catch(e) {}
   }
 
-  // Listen for network switches — auto-show banner if user leaves Base Sepolia
+  // Listen for network / account switches
   if (window.ethereum) {
     window.ethereum.on('chainChanged', (chainId) => {
       const correct = parseInt(chainId, 16) === CHAIN_ID;
-      document.getElementById('network-banner').style.display = correct ? 'none' : 'flex';
-      if (correct) connectWallet(true).catch(() => {});
+      if (correct) {
+        hideNetworkBanner();
+        // Only reconnect if wallet was already connected
+        if (userAddr) connectWallet(true).catch(() => {});
+      } else {
+        showNetworkBanner();
+      }
     });
     window.ethereum.on('accountsChanged', (accounts) => {
       if (accounts.length === 0) {
-        userAddr = null; signer = null;
-        document.getElementById('btn-connect').textContent = 'Connect Wallet';
-        document.getElementById('btn-connect').classList.remove('connected');
-      } else {
-        connectWallet(true).catch(() => {});
+        // Wallet disconnected
+        userAddr = null; signer = null; provider = null;
+        const btn = document.getElementById('btn-connect');
+        btn.textContent = 'Connect Wallet';
+        btn.classList.remove('connected');
+      } else if (accounts[0].toLowerCase() !== (userAddr || '').toLowerCase()) {
+        // Account actually changed — reconnect silently
+        // Use timeout to avoid firing during the original connectWallet flow
+        setTimeout(() => connectWallet(true).catch(() => {}), 300);
       }
     });
   }
@@ -933,9 +943,9 @@ window.addEventListener('DOMContentLoaded', async () => {
 // WALLET
 // ═══════════════════════════════════════════════════════════════════════
 async function connectWallet(silent = false) {
+  if (isConnecting) return;          // prevent re-entrant calls (mobile accountsChanged loop)
   if (!window.ethereum) {
     if (!silent) {
-      // If file:// protocol, the problem is the server — not MetaMask being absent
       if (window.location.protocol === 'file:') {
         document.getElementById('file-protocol-banner').style.display = 'block';
         document.getElementById('file-protocol-banner').scrollIntoView({ behavior: 'smooth' });
@@ -945,6 +955,7 @@ async function connectWallet(silent = false) {
     }
     return;
   }
+  isConnecting = true;
   try {
     provider = new ethers.BrowserProvider(window.ethereum);
     const accounts = await provider.send('eth_requestAccounts', []);
@@ -972,6 +983,8 @@ async function connectWallet(silent = false) {
     await loadMatrixStats();
   } catch(e) {
     if (!silent) toast('Connection failed: ' + (e.message || e), 'error');
+  } finally {
+    isConnecting = false;   // always release the guard
   }
 }
 
@@ -982,7 +995,7 @@ function showNetworkBanner() {
   document.getElementById('network-banner').style.display  = 'flex';
 }
 function hideNetworkBanner() {
-  hideNetworkBanner();
+  document.getElementById('network-banner').style.display = 'none';
 }
 
 async function switchToBaseSepolia() {
