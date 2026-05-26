@@ -385,7 +385,7 @@
       <div class="card-sm"><div class="stat-label">Total Members</div><div class="stat-value" id="stat-members"><span class="spinner" style="color:var(--text3)"></span></div><div class="stat-sub">Active in matrix</div></div>
       <div class="card-sm"><div class="stat-label">CNOVA Floor Price</div><div class="stat-value green" id="stat-floor"><span class="spinner" style="color:var(--green)"></span></div><div class="stat-sub">USDC per CNOVA</div></div>
       <div class="card-sm"><div class="stat-label">Treasury Reserve</div><div class="stat-value" id="stat-reserve"><span class="spinner" style="color:var(--text3)"></span></div><div class="stat-sub">USDC backing floor</div></div>
-      <div class="card-sm"><div class="stat-label">CNOVA Minted</div><div class="stat-value" id="stat-minted"><span class="spinner" style="color:var(--text3)"></span></div><div class="stat-sub">of 100M max supply</div></div>
+      <div class="card-sm" style="border-color:rgba(245,158,11,.4)"><div class="stat-label">⛏️ Mining Epoch</div><div class="stat-value" id="stat-epoch-badge" style="font-size:14px;color:var(--yellow)"><span class="spinner" style="color:var(--yellow)"></span></div><div class="stat-sub" id="stat-epoch-reward-sub">— CNOVA per entry</div></div>
     </div>
 
     <!-- Cycle progress -->
@@ -405,9 +405,10 @@
       </div>
       <div class="card">
         <div class="section-title" style="margin-bottom:12px"><div class="dot"></div> Mining Epoch</div>
-        <div class="info-row"><span class="info-key">Current Epoch</span><span class="info-val" id="stat-epoch">—</span></div>
+        <div class="info-row"><span class="info-key">Current Epoch</span><span class="info-val" id="stat-epoch" style="color:var(--yellow)">—</span></div>
         <div class="info-row"><span class="info-key">Reward Per Entry</span><span class="info-val green" id="stat-reward">—</span></div>
         <div class="info-row"><span class="info-key">Entries Until Next Epoch</span><span class="info-val" id="stat-epoch-rem">—</span></div>
+        <div class="info-row"><span class="info-key">CNOVA Minted</span><span class="info-val" id="stat-minted">—</span></div>
         <div class="info-row"><span class="info-key">Total CNOVA Supply</span><span class="info-val" id="stat-supply">—</span></div>
       </div>
     </div>
@@ -1188,13 +1189,17 @@ async function loadHomeStats() {
     const treasury = new ethers.Contract(ADDRESSES.treasury, TREASURY_ABI, readProvider);
     const token    = new ethers.Contract(ADDRESSES.token,    TOKEN_ABI,    readProvider);
 
-    const [members, floor, reserve, minted, supply, cycleStatus, epoch, reward, epochRem] = await Promise.all([
+    // Split into two smaller batches to avoid rate-limit drops on public RPC
+    const [members, floor, reserve, cycleStatus] = await Promise.all([
       matrix.totalMembers(),
       treasury.floorPriceFormatted(),
       treasury.usdcReserve(),
+      matrix.getCycleStatus(),
+    ]);
+    await new Promise(r => setTimeout(r, 300));
+    const [minted, supply, epoch, reward, epochRem] = await Promise.all([
       token.totalMinted(),
       token.totalSupply(),
-      matrix.getCycleStatus(),
       token.currentEpoch(),
       token.currentRewardPerEntry(),
       token.epochMembersRemaining(),
@@ -1226,14 +1231,22 @@ async function loadHomeStats() {
     }
 
     const EPOCH_NAMES = ['Nebula Genesis','Mercury Rise','Lunar Cluster','Aurora Zenith','Solaris Echo','Cosmic Core','Galaxy Grid','Supernova Spark'];
-    const epochNum = Number(epoch);
+    const epochNum  = Number(epoch);
     const epochName = EPOCH_NAMES[epochNum - 1] || ('Epoch ' + epochNum);
-    document.getElementById('stat-epoch').textContent = epochName + ' (Epoch ' + epochNum + ')';
-    document.getElementById('stat-reward').textContent    =
-      parseFloat(ethers.formatUnits(reward, 18)).toLocaleString(undefined, {maximumFractionDigits: 0}) + ' CNOVA';
+    const rewardFmt = parseFloat(ethers.formatUnits(reward, 18)).toLocaleString(undefined, {maximumFractionDigits: 0});
+    const mintedFmt = parseFloat(ethers.formatUnits(minted, 18)).toLocaleString(undefined, {maximumFractionDigits: 0});
+    const supplyFmt = parseFloat(ethers.formatUnits(supply, 18)).toLocaleString(undefined, {maximumFractionDigits: 0});
+
+    // Top stat badge
+    document.getElementById('stat-epoch-badge').textContent      = epochName;
+    document.getElementById('stat-epoch-reward-sub').textContent = rewardFmt + ' CNOVA per entry';
+
+    // Mining Epoch detail card
+    document.getElementById('stat-epoch').textContent     = epochName + '  (Epoch ' + epochNum + ')';
+    document.getElementById('stat-reward').textContent    = rewardFmt + ' CNOVA';
     document.getElementById('stat-epoch-rem').textContent = epochRem.toString() + ' entries';
-    document.getElementById('stat-supply').textContent    =
-      parseFloat(ethers.formatUnits(supply, 18)).toLocaleString(undefined, {maximumFractionDigits: 0});
+    document.getElementById('stat-minted').textContent    = mintedFmt;
+    document.getElementById('stat-supply').textContent    = supplyFmt;
   } catch(e) {
     console.error('loadHomeStats', e);
   }
