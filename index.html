@@ -905,7 +905,8 @@
 // CONFIG
 // ═══════════════════════════════════════════════════════════════════════
 const CHAIN_ID = 84532; // Base Sepolia
-const RPC_URL  = 'https://sepolia.base.org';
+const RPC_URL     = 'https://sepolia.base.org';
+const DEPLOY_BLOCK = 41480000; // Base Sepolia — CryptoNova v2 deployed 2026-05-26
 
 const ADDRESSES = {
   matrix:   '0x26E95Ce814e388fd5aFDd46A66A8d3Ad8fF6196F',  // v2 — deployed 2026-05-26
@@ -1492,12 +1493,10 @@ async function loadDashboard() {
 
     // Direct referrals — count MemberRegistered events where referrer == userAddr
     try {
-      const latest   = await readProvider.getBlockNumber();
-      const fromBlk  = Math.max(0, latest - 200000);
-      const filter   = matrix.filters.MemberRegistered(null, userAddr);
-      const events   = await matrix.queryFilter(filter, fromBlk, 'latest');
-      // Unique member addresses only (ignore re-entries of same address)
-      const unique = new Set(events.map(e => e.args[0].toLowerCase()));
+      const latest  = await readProvider.getBlockNumber();
+      const filter  = matrix.filters.MemberRegistered(null, userAddr);
+      const events  = await queryFilterChunked(matrix, filter, DEPLOY_BLOCK, latest);
+      const unique  = new Set(events.map(e => e.args[0].toLowerCase()));
       document.getElementById('dash-directs').textContent = unique.size + ' member' + (unique.size !== 1 ? 's' : '');
     } catch(_) {
       document.getElementById('dash-directs').textContent = '—';
@@ -1573,6 +1572,17 @@ async function loadMyTree() {
   } catch(e) { toast('Error: ' + e.message, 'error'); }
 }
 
+// Base Sepolia public RPC caps eth_getLogs at 2000 blocks — query in chunks
+async function queryFilterChunked(contract, filter, fromBlock, toBlock, chunkSize = 1999) {
+  const all = [];
+  for (let from = fromBlock; from <= toBlock; from += chunkSize) {
+    const to    = Math.min(from + chunkSize - 1, toBlock);
+    const chunk = await contract.queryFilter(filter, from, to);
+    all.push(...chunk);
+  }
+  return all;
+}
+
 async function loadMyDirects() {
   if (!userAddr) { toast('Connect wallet first', 'error'); return; }
 
@@ -1591,9 +1601,8 @@ async function loadMyDirects() {
   try {
     const matrix  = new ethers.Contract(ADDRESSES.matrix, MATRIX_ABI, readProvider);
     const latest  = await readProvider.getBlockNumber();
-    const fromBlk = Math.max(0, latest - 200000);
     const filter  = matrix.filters.MemberRegistered(null, userAddr);
-    const events  = await matrix.queryFilter(filter, fromBlk, 'latest');
+    const events  = await queryFilterChunked(matrix, filter, DEPLOY_BLOCK, latest);
 
     // Unique direct addresses (de-dup re-entries)
     const seen    = new Set();
