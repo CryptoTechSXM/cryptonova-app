@@ -592,12 +592,14 @@
 
       <!-- TX History -->
       <div class="card" style="margin-bottom:24px">
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:8px">
-          <div class="section-title" style="margin-bottom:0"><div class="dot"></div> My Transaction History</div>
-          <button onclick="loadTxHistory()" id="btn-reload-tx" style="background:none;border:1px solid var(--border);color:var(--text2);border-radius:6px;padding:5px 12px;font-size:12px;cursor:pointer">🔄 Refresh</button>
-        </div>
-        <div id="tx-history-list">
-          <div style="color:var(--text3);font-size:13px;text-align:center;padding:20px 0">Tap 🔄 Refresh to load your transactions.</div>
+        <div class="section-title" style="margin-bottom:14px"><div class="dot"></div> My Transaction History</div>
+        <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap">
+          <div style="font-size:13px;color:var(--text2);line-height:1.6;flex:1;min-width:200px">
+            View all your registrations, referral bonuses, chain payments and withdrawals on BaseScan — the full on-chain record.
+          </div>
+          <a id="basescan-tx-link" href="https://sepolia.basescan.org/address/" target="_blank" rel="noopener" style="text-decoration:none;flex-shrink:0">
+            <button class="btn btn-green" style="white-space:nowrap">🔍 View on BaseScan ↗</button>
+          </a>
         </div>
       </div>
 
@@ -991,6 +993,10 @@ async function connectWallet(silent = false) {
     } else {
       hideNetworkBanner();
     }
+
+    // Update BaseScan TX link with real address
+    const bsLink = document.getElementById('basescan-tx-link');
+    if (bsLink) bsLink.href = 'https://sepolia.basescan.org/address/' + accounts[0];
 
     // Update header
     const btn = document.getElementById('btn-connect');
@@ -1454,77 +1460,6 @@ async function doWithdraw() {
 }
 
 // ═══════════════════════════════════════════════════════════════════════
-// TX HISTORY
-// ═══════════════════════════════════════════════════════════════════════
-async function loadTxHistory() {
-  const el = document.getElementById('tx-history-list');
-  if (!el || !userAddr) return;
-  el.innerHTML = '<div style="color:var(--text3);font-size:13px;text-align:center;padding:20px 0">⏳ Scanning blockchain…</div>';
-
-  try {
-    const rp = readProvider || new ethers.JsonRpcProvider(RPC_URL);
-    const matrix = new ethers.Contract(ADDRESSES.matrix, MATRIX_ABI, rp);
-
-    // Base Sepolia public RPC allows max 10,000 blocks per eth_getLogs call.
-    // We chunk in 10k windows across the last 2M blocks (~46 days).
-    // 4 query types run in parallel; each type loops ~200 chunks sequentially.
-    const currentBlock = await rp.getBlockNumber();
-    const CHUNK    = 10000;
-    const LOOKBACK = 2000000;
-    const startBlock = Math.max(0, currentBlock - LOOKBACK);
-
-    async function chunkedQuery(filter) {
-      const out = [];
-      for (let b = startBlock; b <= currentBlock; b += CHUNK) {
-        try { out.push(...await matrix.queryFilter(filter, b, Math.min(b + CHUNK - 1, currentBlock))); }
-        catch(e) {}
-      }
-      return out;
-    }
-
-    const [regLogs, referrerLogs, chainLogs, withdrawLogs] = await Promise.all([
-      chunkedQuery(matrix.filters.MemberRegistered(userAddr)),
-      chunkedQuery(matrix.filters.ReferrerBonus(userAddr)),
-      chunkedQuery(matrix.filters.ChainPayment(userAddr)),
-      chunkedQuery(matrix.filters.EarningsWithdrawn(userAddr)),
-    ]);
-
-    // Collect all events with type labels
-    const all = [];
-    for (const e of regLogs)      all.push({ block: e.blockNumber, hash: e.transactionHash, type: 'joined',    label: '🎉 Joined Matrix', amount: null,                       sub: 'Member #' + e.args.memberId });
-    for (const e of referrerLogs) all.push({ block: e.blockNumber, hash: e.transactionHash, type: 'referral',  label: '👥 Referral Bonus', amount: Number(e.args.amount) / 1e6, sub: 'From ' + e.args.from.slice(0,6) + '…' + e.args.from.slice(-4) });
-    for (const e of chainLogs)    all.push({ block: e.blockNumber, hash: e.transactionHash, type: 'chain',     label: '⛓ Chain Pay L' + e.args.level, amount: Number(e.args.amount) / 1e6, sub: 'Level ' + e.args.level + ' upline payment' });
-    for (const e of withdrawLogs) all.push({ block: e.blockNumber, hash: e.transactionHash, type: 'withdraw',  label: '💸 Withdrawal',    amount: Number(e.args.amount) / 1e6, sub: 'USDC sent to wallet' });
-
-    // Sort newest first
-    all.sort((a, b) => b.block - a.block);
-
-    if (all.length === 0) {
-      el.innerHTML = '<div style="color:var(--text3);font-size:13px;text-align:center;padding:16px 0">' +
-        'No transactions found in the last 46 days.<br>' +
-        '<a href="https://sepolia.basescan.org/address/' + userAddr + '" target="_blank" rel="noopener" ' +
-        'style="color:var(--green);font-size:12px;margin-top:6px;display:inline-block">View full history on BaseScan ↗</a>' +
-        '</div>';
-      return;
-    }
-
-    const colorMap = { joined: 'var(--green)', referral: 'var(--blue)', chain: 'var(--yellow)', withdraw: 'var(--green)' };
-
-    el.innerHTML = all.map(tx => `
-      <div style="display:flex;align-items:center;justify-content:space-between;padding:11px 0;border-bottom:1px solid var(--border);gap:8px">
-        <div style="display:flex;align-items:center;gap:10px;min-width:0">
-          <div style="font-size:13px;font-weight:700;color:${colorMap[tx.type]};white-space:nowrap">${tx.label}</div>
-          <div style="font-size:11px;color:var(--text3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${tx.sub}</div>
-        </div>
-        <div style="display:flex;align-items:center;gap:10px;flex-shrink:0">
-          ${tx.amount !== null ? `<div style="font-weight:800;color:var(--green);white-space:nowrap">+$${tx.amount.toFixed(2)}</div>` : ''}
-          <a href="https://sepolia.basescan.org/tx/${tx.hash}" target="_blank" rel="noopener" style="font-size:11px;color:var(--text3);text-decoration:none;background:var(--bg3,var(--bg));border:1px solid var(--border);border-radius:4px;padding:2px 7px" title="View on BaseScan">Tx ↗</a>
-        </div>
-      </div>`).join('');
-  } catch(e) {
-    el.innerHTML = '<div style="color:var(--text3);font-size:13px;text-align:center;padding:16px 0">Could not load transactions. Try refreshing.</div>';
-  }
-}
 
 // ═══════════════════════════════════════════════════════════════════════
 // MATRIX TREE
