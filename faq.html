@@ -210,6 +210,18 @@ function toggleTheme() {
       <div class="definition">The percentage of profit relative to the amount invested. In CryptoNova, ROI comes from matrix cycle payouts and CNOVA token rewards. <strong>ROI is not guaranteed</strong> and depends on network participation.</div>
     </div>
 
+    <div class="glossary-card" data-terms="reentry pool auto re-entry cycle savings compound">
+      <div class="acronym">Re-entry Pool</div>
+      <div class="full-name">Auto Re-entry Pool</div>
+      <div class="definition">A personal savings pool built up from your $1.00 flat starter on registration plus 20% of every chain payment you receive. When the pool reaches $10, the smart contract automatically re-enters you into the matrix — no manual action required. The pool balance is locked for re-entry and cannot be withdrawn.</div>
+    </div>
+
+    <div class="glossary-card" data-terms="original referrer referrer for life locked sponsor permanent">
+      <div class="acronym">Original Referrer</div>
+      <div class="full-name">Referrer For Life</div>
+      <div class="definition">The wallet address that referred you when you first registered. This address is permanently locked on-chain and never changes — not even on auto re-entry. Your original referrer earns the $3.00 referral bonus every single time you cycle, forever.</div>
+    </div>
+
   </div>
   <div class="no-results" id="glossary-empty">No glossary terms match your search.</div>
 
@@ -263,7 +275,8 @@ function toggleTheme() {
       </button>
       <div class="faq-answer">
         <div class="faq-answer-inner">
-          <p>The entry fee is set in USDC (Base) or USDT (BSC) and is defined in the smart contract. You'll also need a small amount of ETH (Base) or BNB (BSC) to cover gas fees for your transactions — typically less than $0.10 on Base.</p>
+          <p>The entry fee is <strong>$10.00 USDC</strong> on Base (or $10.00 USDT on BNB Chain). You'll also need a small amount of ETH (Base) or BNB (BSC) to cover gas fees — typically less than $0.10 on Base.</p>
+          <p>Your $10 is split instantly by the contract: <strong>$3.00</strong> referral bonus → <strong>$4.00</strong> chain payments (7 levels) → <strong>$1.00</strong> into your re-entry pool → <strong>$1.50</strong> treasury reserve → <strong>$0.50</strong> dev &amp; ops.</p>
         </div>
       </div>
     </div>
@@ -349,14 +362,16 @@ function toggleTheme() {
       </div>
     </div>
 
-    <div class="faq-item" data-terms="re-entry automatic cycle complete reentry">
+    <div class="faq-item" data-terms="re-entry automatic cycle complete reentry pool">
       <button class="faq-question" onclick="toggleFaq(this)">
         What is automatic re-entry?
         <svg class="faq-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="m6 9 6 6 6-6"/></svg>
       </button>
       <div class="faq-answer">
         <div class="faq-answer-inner">
-          <p>When a cycle completes, a portion of the payout is set aside in a re-entry pool. Once the pool reaches the entry fee threshold, the smart contract automatically re-enters the participant into the next cycle — no manual action required. This keeps your position active without needing to reinvest manually.</p>
+          <p>Every member has a personal <strong>re-entry pool</strong> that builds up automatically. It starts with a $1.00 flat contribution at registration, and then receives 20% of every chain payment you earn going forward.</p>
+          <p>The moment your pool hits $10.00, the smart contract automatically re-registers you into the matrix in the same transaction — <strong>no clicks, no gas from you</strong>. Your position stays active and your referrer earns their bonus again.</p>
+          <p>You can see your pool balance and a progress bar on your Dashboard. You can also manually top up your pool at any time to accelerate your next re-entry.</p>
         </div>
       </div>
     </div>
@@ -366,30 +381,33 @@ function toggleTheme() {
   <h2 id="earnings-heading">💰 Earning & Withdrawals</h2>
   <div class="faq-list" id="faq-earnings">
 
-    <div class="faq-item" data-terms="how earn income payment matrix payout">
+    <div class="faq-item" data-terms="how earn income payment matrix payout splits">
       <button class="faq-question" onclick="toggleFaq(this)">
         How do I earn with CryptoNova?
         <svg class="faq-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="m6 9 6 6 6-6"/></svg>
       </button>
       <div class="faq-answer">
         <div class="faq-answer-inner">
-          <p>There are two income streams:</p>
+          <p>Every $10 entry generates income across three streams:</p>
           <ul>
-            <li><strong>Matrix payouts (USDC/USDT)</strong> — earned when positions in your downline complete cycles. Payments flow directly to your wallet according to on-chain rules.</li>
-            <li><strong>CNOVA token rewards</strong> — distributed to you every time someone in your downline registers a new entry. The amount per entry decreases each epoch (halving model).</li>
+            <li><strong>Referral bonus — $3.00</strong> — paid instantly to whoever referred the new member. If you referred them, you earn this every time they join or auto-cycle.</li>
+            <li><strong>Chain payments — $4.00 total</strong> — distributed across 7 levels of upline ancestors in the BFS tree (L1: $1.33, L2: $0.80, L3: $0.67, L4: $0.53, L5: $0.35, L6: $0.21, L7: $0.11). 80% lands as withdrawable earnings; 20% flows into your re-entry pool.</li>
+            <li><strong>CNOVA token rewards</strong> — distributed to your wallet on every new entry in your downline. Amount decreases each epoch (halving model).</li>
           </ul>
         </div>
       </div>
     </div>
 
-    <div class="faq-item" data-terms="withdraw how withdrawal wallet usdc">
+    <div class="faq-item" data-terms="withdraw how withdrawal wallet usdc earnings">
       <button class="faq-question" onclick="toggleFaq(this)">
         How do I withdraw my earnings?
         <svg class="faq-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="m6 9 6 6 6-6"/></svg>
       </button>
       <div class="faq-answer">
         <div class="faq-answer-inner">
-          <p>USDC payouts from matrix cycles are sent directly to your wallet by the smart contract — no manual withdrawal step needed for the matrix income. Any CNOVA tokens earned accumulate in your account and can be claimed or transferred via the Wallet tab.</p>
+          <p>Your USDC earnings accumulate in your on-chain balance as chain payments and referral bonuses come in. To move them to your wallet, go to the <strong>Dashboard tab</strong> and click <strong>Withdraw to Wallet</strong>. The smart contract sends your full withdrawable balance directly to your connected wallet in one transaction.</p>
+          <p>Note: your <strong>re-entry pool balance is separate and cannot be withdrawn</strong> — it is reserved exclusively for your next auto re-entry cycle.</p>
+          <p>CNOVA tokens are distributed directly to your wallet on every registration and do not require a separate withdrawal step.</p>
         </div>
       </div>
     </div>
@@ -415,6 +433,73 @@ function toggleTheme() {
       <div class="faq-answer">
         <div class="faq-answer-inner">
           <p><strong>No.</strong> All entry fees are processed directly by the smart contract and distributed instantly to upline wallets and the treasury. Blockchain transactions are irreversible. There are no refunds under any circumstances.</p>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <h2 id="reentry-heading">♻️ Re-entry, Pause & Activity</h2>
+  <div class="faq-list" id="faq-reentry">
+
+    <div class="faq-item" data-terms="referrer for life original referrer locked permanent every cycle">
+      <button class="faq-question" onclick="toggleFaq(this)">
+        What does "referrer for life" mean?
+        <svg class="faq-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="m6 9 6 6 6-6"/></svg>
+      </button>
+      <div class="faq-answer">
+        <div class="faq-answer-inner">
+          <p>When you first register, the wallet that referred you is recorded on-chain as your <strong>original referrer</strong> and is locked permanently — it never changes.</p>
+          <p>Every time you auto-cycle through re-entry, your original referrer earns the full <strong>$3.00 referral bonus</strong> again. Not just on your first join — every single cycle, forever. This is by design: the person who worked to bring you in continues to benefit from your ongoing participation.</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="faq-item" data-terms="re-entry pool top up manual add usdc accelerate">
+      <button class="faq-question" onclick="toggleFaq(this)">
+        Can I top up my re-entry pool manually?
+        <svg class="faq-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="m6 9 6 6 6-6"/></svg>
+      </button>
+      <div class="faq-answer">
+        <div class="faq-answer-inner">
+          <p>Yes. If you want to re-enter the matrix sooner, you can add USDC directly to your re-entry pool at any time from the Dashboard. The moment your pool total hits $10, the contract triggers your re-entry automatically in the same transaction.</p>
+          <p>This is useful if you're close to the $10 threshold and don't want to wait for the next chain payment to push you over.</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="faq-item" data-terms="pause 90 days inactive account paused stopped payments">
+      <button class="faq-question" onclick="toggleFaq(this)">
+        What happens if I'm inactive for 90 days?
+        <svg class="faq-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="m6 9 6 6 6-6"/></svg>
+      </button>
+      <div class="faq-answer">
+        <div class="faq-answer-inner">
+          <p>If your account has had no activity for <strong>90 days</strong>, the smart contract will flag your position as <strong>paused</strong>. Once paused:</p>
+          <ul>
+            <li>The BFS matrix routes new members around your position — you stop receiving chain payments</li>
+            <li>Your re-entry pool will not auto-trigger even if it hits $10</li>
+            <li>Your existing earnings balance is <strong>fully preserved</strong> — pausing never confiscates your funds</li>
+          </ul>
+          <p>This protects the health of the matrix — lost or abandoned wallets don't continue collecting payments indefinitely.</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="faq-item" data-terms="reactivate unpause come back return account fee $1">
+      <button class="faq-question" onclick="toggleFaq(this)">
+        How do I reactivate a paused account?
+        <svg class="faq-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="m6 9 6 6 6-6"/></svg>
+      </button>
+      <div class="faq-answer">
+        <div class="faq-answer-inner">
+          <p>Reactivation is simple and costs just <strong>$1.00 USDC</strong>. Connect your wallet, approve $1 USDC on the Dashboard, and click <strong>Reactivate</strong>. The contract will:</p>
+          <ul>
+            <li>Place you back into the current BFS matrix at the next available slot</li>
+            <li>Reset your 90-day activity clock</li>
+            <li>Resume chain payments to your position</li>
+          </ul>
+          <p>All your previous earnings are still there waiting — reactivation never touches your balance. You're simply re-entering the live matrix at the current position.</p>
         </div>
       </div>
     </div>
@@ -614,7 +699,7 @@ function filterAll() {
   document.getElementById('faq-empty').style.display = faqVisible === 0 ? 'block' : 'none';
 
   // Hide section headings if no visible items in that section
-  ['started','matrix','earnings','cnova','tech'].forEach(id => {
+  ['started','matrix','earnings','reentry','cnova','tech'].forEach(id => {
     const list = document.getElementById('faq-' + id);
     const heading = document.getElementById(id + '-heading');
     if (!list || !heading) return;
