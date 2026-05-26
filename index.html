@@ -1492,7 +1492,7 @@ async function loadDashboard() {
 
     // Direct referrals — scan all members, filter by originalReferrer (no event logs)
     try {
-      const all     = await fetchAllMembers(matrix);
+      const all     = await fetchAllMembers(matrix, null);
       const count   = all.filter(
         ({ data: m }) => m.originalReferrer.toLowerCase() === userAddr.toLowerCase()
       ).length;
@@ -1571,29 +1571,28 @@ async function loadMyTree() {
   } catch(e) { toast('Error: ' + e.message, 'error'); }
 }
 
-// Fetch all members by scanning memberById — avoids eth_getLogs entirely
-async function fetchAllMembers(matrix) {
+// Fetch all members sequentially — conservative to stay within public RPC limits
+async function fetchAllMembers(matrix, onProgress) {
+  const delay = ms => new Promise(r => setTimeout(r, ms));
   const total = Number(await matrix.totalMembers());
   if (total === 0) return [];
-  // Batch in groups of 15 with a small delay between batches to avoid rate limits
-  const BATCH = 15;
-  const delay = ms => new Promise(r => setTimeout(r, ms));
-  const allAddrs = [];
-  for (let i = 1; i <= total; i += BATCH) {
-    const ids   = Array.from({ length: Math.min(BATCH, total - i + 1) }, (_, k) => i + k);
-    const addrs = await Promise.all(ids.map(id => matrix.memberById(id)));
-    allAddrs.push(...addrs);
-    if (i + BATCH <= total) await delay(300);
+
+  const result = [];
+  for (let i = 1; i <= total; i++) {
+    try {
+      if (onProgress) onProgress(i, total);
+      const addr = await matrix.memberById(i);
+      if (!addr || addr === ethers.ZeroAddress) { await delay(120); continue; }
+      await delay(120);
+      const data = await matrix.getMember(addr);
+      result.push({ addr, data });
+      await delay(120);
+    } catch(e) {
+      console.warn(`fetchAllMembers: member ${i} failed, skipping`, e.shortMessage || e.message);
+      await delay(300); // longer pause after a failure
+    }
   }
-  // Now fetch member structs in batches
-  const memberData = [];
-  for (let i = 0; i < allAddrs.length; i += BATCH) {
-    const slice = allAddrs.slice(i, i + BATCH);
-    const chunk = await Promise.all(slice.map(a => matrix.getMember(a)));
-    chunk.forEach((m, k) => memberData.push({ addr: allAddrs[i + k], data: m }));
-    if (i + BATCH < allAddrs.length) await delay(300);
-  }
-  return memberData;
+  return result;
 }
 
 async function loadMyDirects() {
@@ -1613,7 +1612,9 @@ async function loadMyDirects() {
 
   try {
     const matrix  = new ethers.Contract(ADDRESSES.matrix, MATRIX_ABI, readProvider);
-    const all     = await fetchAllMembers(matrix);
+    const all     = await fetchAllMembers(matrix, (i, total) => {
+      loading.textContent = `Scanning members… ${i} / ${total}`;
+    });
 
     // Filter to members whose originalReferrer matches the connected wallet
     const directs = all.filter(
