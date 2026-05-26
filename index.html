@@ -1466,21 +1466,18 @@ async function loadTxHistory() {
     const rp = readProvider || new ethers.JsonRpcProvider(RPC_URL);
     const matrix = new ethers.Contract(ADDRESSES.matrix, MATRIX_ABI, rp);
 
-    // Base Sepolia public RPC limits getLogs to ~2000 blocks per request.
-    // Get current block then query in chunks of 2000 back up to 3 million blocks (~69 days).
+    // Base Sepolia public RPC limits getLogs to ~2000 blocks per call.
+    // Query in chunks to cover all history since deployment (~3M blocks = 69 days).
     const currentBlock = await rp.getBlockNumber();
-    const CHUNK  = 2000;
-    const LOOKBACK = 3_000_000; // covers all testnet history since deployment
+    const CHUNK    = 2000;
+    const LOOKBACK = 3000000;
     const startBlock = Math.max(0, currentBlock - LOOKBACK);
 
     async function chunkedQuery(filter, from, to) {
       const results = [];
       for (let b = from; b <= to; b += CHUNK) {
         const end = Math.min(b + CHUNK - 1, to);
-        try {
-          const logs = await matrix.queryFilter(filter, b, end);
-          results.push(...logs);
-        } catch(e) { /* skip failed chunk */ }
+        try { results.push(...await matrix.queryFilter(filter, b, end)); } catch(e) {}
       }
       return results;
     }
@@ -1619,49 +1616,43 @@ async function loadMatrixTree() {
       const rightChild = n && Number(n.children[1]) > 0 ? Number(n.children[1]) : null;
       const parentId   = n && Number(n.parentNodeId) > 0 ? Number(n.parentNodeId) : null;
 
-      const boxClass = isEmpty ? 'node-box empty' : (isMe ? 'node-box you' : 'node-box filled');
-      const label    = isEmpty ? 'Empty' : (isMe ? '⭐ YOU' : 'Node ' + id);
-      const addr     = n && n.owner !== ethers.ZeroAddress ? shortAddr(n.owner) : '';
-      const depthTag = n ? 'L' + n.depth : '';
-
-      // Clickable: filled non-root nodes navigate into their subtree on click
-      const clickable = !isEmpty && !isRoot;
+      const boxClass   = isEmpty ? 'node-box empty' : (isMe ? 'node-box you' : 'node-box filled');
+      const label      = isEmpty ? 'Empty' : (isMe ? '⭐ YOU' : 'Node ' + id);
+      const addr       = n && n.owner !== ethers.ZeroAddress ? shortAddr(n.owner) : '';
+      const depthTag   = n ? 'L' + n.depth : '';
+      const clickable  = !isEmpty && !isRoot;
       const clickStyle = clickable ? 'cursor:pointer;' : '';
-      const clickAttr  = clickable ? `onclick="navigateToNode(${id})" title="Click to view subtree"` : '';
+      const clickAttr  = clickable ? 'onclick="navigateToNode(' + id + ')" title="Tap to view subtree"' : '';
 
       let childrenHTML = '';
       if (depth < 3) {
-        const lHTML = leftChild  ? buildNodeHTML(leftChild, depth + 1, false) : buildEmptySlot();
+        const lHTML = leftChild  ? buildNodeHTML(leftChild,  depth + 1, false) : buildEmptySlot();
         const rHTML = rightChild ? buildNodeHTML(rightChild, depth + 1, false) : buildEmptySlot();
-        childrenHTML = `<div class="tree-children">${lHTML}${rHTML}</div>`;
-      } else if (!isEmpty) {
-        // Leaf level — show "▼ view" hint if node has children
-        const hasChildren = leftChild || rightChild;
-        if (hasChildren) {
-          childrenHTML = `<div style="text-align:center;margin-top:4px"><span onclick="navigateToNode(${id})" style="font-size:10px;color:var(--green);cursor:pointer;padding:2px 6px;border:1px solid var(--green2);border-radius:4px">▼ expand</span></div>`;
-        }
+        childrenHTML = '<div class="tree-children">' + lHTML + rHTML + '</div>';
+      } else if (!isEmpty && (leftChild || rightChild)) {
+        childrenHTML = '<div style="text-align:center;margin-top:4px"><span onclick="navigateToNode(' + id + ')" style="font-size:10px;color:var(--green);cursor:pointer;padding:2px 6px;border:1px solid var(--green2);border-radius:4px">▼ expand</span></div>';
       }
 
-      // Parent navigation button on root node
       const parentBtn = isRoot && parentId
-        ? `<div style="text-align:center;margin-bottom:8px"><button onclick="navigateToNode(${parentId})" style="background:none;border:1px solid var(--border);color:var(--text2);border-radius:6px;padding:4px 10px;font-size:11px;cursor:pointer">⬆ Up to Node ${parentId}</button></div>`
+        ? '<div style="text-align:center;margin-bottom:8px"><button onclick="navigateToNode(' + parentId + ')" style="background:none;border:1px solid var(--border);color:var(--text2);border-radius:6px;padding:4px 10px;font-size:11px;cursor:pointer">⬆ Up to Node ' + parentId + '</button></div>'
         : '';
 
-      return `
-        ${parentBtn}
-        <div class="tree-node">
-          <div class="${boxClass}" style="${clickStyle}" ${clickAttr}>
-            <div style="font-weight:700;font-size:12px">${label}</div>
-            ${addr     ? `<div class="node-addr">${addr}</div>` : ''}
-            ${depthTag ? `<div style="font-size:9px;color:var(--text3);margin-top:2px">${depthTag}</div>` : ''}
-            ${clickable ? `<div style="font-size:9px;color:var(--text3);margin-top:1px">tap to explore ▼</div>` : ''}
-          </div>
-          ${childrenHTML ? `<div class="tree-line"></div>${childrenHTML}` : ''}
-        </div>`;
+      const hintLine = clickable ? '<div style="font-size:9px;color:var(--text3);margin-top:1px">tap to explore ▼</div>' : '';
+
+      return parentBtn +
+        '<div class="tree-node">' +
+          '<div class="' + boxClass + '" style="' + clickStyle + '" ' + clickAttr + '>' +
+            '<div style="font-weight:700;font-size:12px">' + label + '</div>' +
+            (addr     ? '<div class="node-addr">' + addr + '</div>' : '') +
+            (depthTag ? '<div style="font-size:9px;color:var(--text3);margin-top:2px">' + depthTag + '</div>' : '') +
+            hintLine +
+          '</div>' +
+          (childrenHTML ? '<div class="tree-line"></div>' + childrenHTML : '') +
+        '</div>';
     }
 
     function buildEmptySlot() {
-      return `<div class="tree-node"><div class="node-box empty"><div style="font-size:11px">Empty</div></div></div>`;
+      return '<div class="tree-node"><div class="node-box empty"><div style="font-size:11px">Empty</div></div></div>';
     }
 
     treeEl.innerHTML = buildNodeHTML(rootNodeId, 1, true);
@@ -1676,7 +1667,6 @@ async function loadMatrixTree() {
 function navigateToNode(nodeId) {
   document.getElementById('matrix-input').value = nodeId.toString();
   loadMatrixTree();
-  // Scroll to tree on mobile
   document.getElementById('matrix-tree').scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
