@@ -442,9 +442,12 @@
           </div>
 
           <div class="form-group">
-            <label>Referrer Address <span style="color:var(--text3)">(optional if you're member #1)</span></label>
-            <input type="text" id="input-referrer" placeholder="0x... referrer wallet address" />
-            <div class="form-hint">Enter the wallet address of the person who invited you. Leave blank only if registering first ever member.</div>
+            <label style="color:var(--green);font-weight:700;font-size:14px">🔗 Referrer Address <span style="color:var(--text3);font-weight:400;font-size:12px">(required — ask the person who invited you)</span></label>
+            <input type="text" id="input-referrer" placeholder="0x... paste your referrer's wallet address here"
+              style="border:2px solid var(--green2);background:rgba(0,229,160,0.05);font-size:14px;padding:13px 14px;"
+              onfocus="this.style.borderColor='var(--green)';this.style.boxShadow='0 0 0 3px rgba(0,229,160,0.15)'"
+              onblur="this.style.borderColor='var(--green2)';this.style.boxShadow='none'" />
+            <div class="form-hint" style="color:var(--text2)">⚠️ This is permanent — your referrer is locked on-chain for life. Double-check the address before registering.</div>
           </div>
 
           <div style="margin-bottom:20px">
@@ -518,9 +521,10 @@
 
         <div style="margin-top:20px;padding:14px;background:var(--bg3);border-radius:8px;font-size:13px">
           <div style="color:var(--green);font-weight:700;margin-bottom:6px">💡 Earnings Potential</div>
-          <div style="color:var(--text2);line-height:1.6">Passive (0 referrals): <strong style="color:var(--text)">$43.60</strong> per cycle (4.4× ROI)<br>
-          Active (2 referrals): <strong style="color:var(--text)">$51.60</strong> per cycle (5.2× ROI)<br>
-          Power (5 referrals): <strong style="color:var(--text)">$63.60</strong> per cycle (6.4× ROI)</div>
+          <div style="color:var(--text2);line-height:1.6">Passive (0 referrals): <strong style="color:var(--text)">$46.74</strong> per cycle (4.7× ROI)<br>
+          Active (2 referrals): <strong style="color:var(--text)">$52.74</strong> per cycle (5.3× ROI)<br>
+          Power (5 referrals): <strong style="color:var(--text)">$61.74</strong> per cycle (6.2× ROI)<br>
+          <span style="font-size:11px;color:var(--text3)">Chain pay figures show 80% withdrawable portion. Re-entry pool gets remaining 20% + $1 flat starter.</span></div>
         </div>
       </div>
     </div>
@@ -589,7 +593,9 @@
           <div class="info-row"><span class="info-key">Status</span><span class="info-val" id="dash-status">—</span></div>
           <div class="info-row"><span class="info-key">Current Cycle</span><span class="info-val" id="dash-cycle">—</span></div>
           <div class="info-row"><span class="info-key">Matrix Node</span><span class="info-val" id="dash-node">—</span></div>
-          <div class="info-row"><span class="info-key">Referrer</span><span class="info-val addr" id="dash-referrer">—</span></div>
+          <div class="info-row"><span class="info-key">Original Referrer</span><span class="info-val addr" id="dash-orig-referrer" title="Locked for life — earns $3 every time you cycle">—</span></div>
+          <div class="info-row"><span class="info-key">Direct Referrals</span><span class="info-val" id="dash-directs">—</span></div>
+          <div class="info-row"><span class="info-key">BFS Children</span><span class="info-val" id="dash-children">—</span></div>
         </div>
       </div>
 
@@ -610,15 +616,16 @@
       <div class="card">
         <div class="section-title"><div class="dot"></div> Chain Pay Structure — Your Node Depth</div>
         <div style="font-size:13px;color:var(--text2);margin-bottom:16px">These amounts flow upward from each new member registration through your position.</div>
+        <div style="font-size:12px;color:var(--text3);margin-bottom:10px">80% of each level goes to your withdrawable earnings · 20% flows into your re-entry pool</div>
         <div id="chain-pay-table">
-          <div class="chain-row"><span style="color:var(--text2)">Level 1 (direct under you)</span><span style="font-weight:600;color:var(--green)">$1.00</span></div>
-          <div class="chain-row"><span style="color:var(--text2)">Level 2</span><span style="font-weight:600">$0.60</span></div>
-          <div class="chain-row"><span style="color:var(--text2)">Level 3</span><span style="font-weight:600">$0.50</span></div>
-          <div class="chain-row"><span style="color:var(--text2)">Level 4</span><span style="font-weight:600">$0.40</span></div>
-          <div class="chain-row"><span style="color:var(--text2)">Level 5</span><span style="font-weight:600">$0.26</span></div>
-          <div class="chain-row"><span style="color:var(--text2)">Level 6</span><span style="font-weight:600">$0.16</span></div>
-          <div class="chain-row"><span style="color:var(--text2)">Level 7</span><span style="font-weight:600">$0.08</span></div>
-          <div class="chain-row" style="border-top:1px solid var(--green2)"><span style="font-weight:700">Total chain pay per entry</span><span style="font-weight:700;color:var(--green)">$3.00</span></div>
+          <div class="chain-row"><span style="color:var(--text2)">Level 1 (direct under you)</span><span><span style="font-weight:600;color:var(--green)">$1.33</span> <span style="font-size:11px;color:var(--text3)">→ $1.06 earn / $0.27 pool</span></span></div>
+          <div class="chain-row"><span style="color:var(--text2)">Level 2</span><span><span style="font-weight:600">$0.80</span> <span style="font-size:11px;color:var(--text3)">→ $0.64 earn / $0.16 pool</span></span></div>
+          <div class="chain-row"><span style="color:var(--text2)">Level 3</span><span><span style="font-weight:600">$0.67</span> <span style="font-size:11px;color:var(--text3)">→ $0.54 earn / $0.13 pool</span></span></div>
+          <div class="chain-row"><span style="color:var(--text2)">Level 4</span><span><span style="font-weight:600">$0.53</span> <span style="font-size:11px;color:var(--text3)">→ $0.42 earn / $0.11 pool</span></span></div>
+          <div class="chain-row"><span style="color:var(--text2)">Level 5</span><span><span style="font-weight:600">$0.35</span> <span style="font-size:11px;color:var(--text3)">→ $0.28 earn / $0.07 pool</span></span></div>
+          <div class="chain-row"><span style="color:var(--text2)">Level 6</span><span><span style="font-weight:600">$0.21</span> <span style="font-size:11px;color:var(--text3)">→ $0.17 earn / $0.04 pool</span></span></div>
+          <div class="chain-row"><span style="color:var(--text2)">Level 7</span><span><span style="font-weight:600">$0.11</span> <span style="font-size:11px;color:var(--text3)">→ $0.09 earn / $0.02 pool</span></span></div>
+          <div class="chain-row" style="border-top:1px solid var(--green2)"><span style="font-weight:700">Total chain pay per entry</span><span style="font-weight:700;color:var(--green)">$4.00 <span style="font-size:11px;color:var(--text3);font-weight:400">($3.20 earn / $0.80 pool)</span></span></div>
         </div>
       </div>
     </div>
@@ -1454,7 +1461,7 @@ async function loadDashboard() {
     document.getElementById('dash-id').textContent       = '#' + member.id.toString();
     document.getElementById('dash-cycle').textContent    = 'Cycle ' + member.cycleId.toString();
     document.getElementById('dash-node').textContent     = 'Node #' + member.matrixNodeId.toString();
-    document.getElementById('dash-referrer').textContent = shortAddr(member.referrer);
+    document.getElementById('dash-orig-referrer').textContent = shortAddr(member.originalReferrer);
 
     const statusEl = document.getElementById('dash-status');
     if (member.isPaused) {
@@ -1464,6 +1471,24 @@ async function loadDashboard() {
     }
 
     document.getElementById('matrix-my-node').textContent = member.matrixNodeId.toString();
+
+    // Direct referrals — count MemberRegistered events where referrer == userAddr
+    try {
+      const filter  = matrix.filters.MemberRegistered(null, userAddr);
+      const events  = await matrix.queryFilter(filter, 0, 'latest');
+      document.getElementById('dash-directs').textContent = events.length + ' member' + (events.length !== 1 ? 's' : '');
+    } catch(_) {
+      document.getElementById('dash-directs').textContent = '—';
+    }
+
+    // BFS children — from the member's current node
+    try {
+      const node = await matrix.getNode(member.matrixNodeId);
+      document.getElementById('dash-children').textContent = node.childCount + ' / 2 slots filled';
+    } catch(_) {
+      document.getElementById('dash-children').textContent = '—';
+    }
+
   } catch(e) {
     console.error('loadDashboard', e);
     notReg.style.display = 'none'; content.style.display = 'none';
