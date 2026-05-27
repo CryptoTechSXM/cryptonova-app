@@ -1,0 +1,118 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400" width="400" height="400">
+
+  <!-- Background -->
+  <rect width="400" height="400" rx="32" fill="#071410"/>
+
+  <!-- Star particles -->
+  <circle cx="42"  cy="55"  r="1"   fill="#ffffff" opacity="0.30"/>
+  <circle cx="355" cy="48"  r="0.8" fill="#ffffff" opacity="0.25"/>
+  <circle cx="80"  cy="340" r="1"   fill="#ffffff" opacity="0.25"/>
+  <circle cx="360" cy="330" r="0.8" fill="#ffffff" opacity="0.28"/>
+  <circle cx="320" cy="80"  r="1"   fill="#ffffff" opacity="0.22"/>
+  <circle cx="55"  cy="180" r="0.8" fill="#ffffff" opacity="0.20"/>
+  <circle cx="345" cy="210" r="1"   fill="#ffffff" opacity="0.22"/>
+  <circle cx="130" cy="370" r="0.8" fill="#ffffff" opacity="0.20"/>
+  <circle cx="280" cy="368" r="1"   fill="#ffffff" opacity="0.22"/>
+
+  <!-- All fire, orbit and node centred at (200,155) -->
+  <g transform="translate(200,155)">
+
+    <!-- Outer fire glow halos — reduced 50% -->
+    <circle r="108" fill="#ff5500" opacity="0.013"/>
+    <circle r="90"  fill="#ff7700" opacity="0.018"/>
+    <circle r="74"  fill="#ff9900" opacity="0.028"/>
+    <circle r="58"  fill="#ffbb00" opacity="0.035"/>
+    <circle r="44"  fill="#ffdd44" opacity="0.030"/>
+    <circle r="95"  fill="#00d68f" opacity="0.015"/>
+
+    <!-- FLAMES — outer layer (orange-amber) reduced 50% -->
+    <g transform="rotate(0)">    <path d="M -7,0 Q -13,-53 0,-77 Q 13,-53 7,0"   fill="#ff8800" opacity="0.31"/></g>
+    <g transform="rotate(45)">   <path d="M -6,0 Q -11,-46 0,-66 Q 11,-46 6,0"   fill="#ff8800" opacity="0.29"/></g>
+    <g transform="rotate(90)">   <path d="M -7,0 Q -13,-53 0,-77 Q 13,-53 7,0"   fill="#ff8800" opacity="0.31"/></g>
+    <g transform="rotate(135)">  <path d="M -6,0 Q -11,-46 0,-66 Q 11,-46 6,0"   fill="#ff8800" opacity="0.29"/></g>
+    <g transform="rotate(180)">  <path d="M -7,0 Q -13,-53 0,-77 Q 13,-53 7,0"   fill="#ff8800" opacity="0.31"/></g>
+    <g transform="rotate(225)">  <path d="M -6,0 Q -11,-46 0,-66 Q 11,-46 6,0"   fill="#ff8800" opacity="0.29"/></g>
+    <g transform="rotate(270)">  <path d="M -7,0 Q -13,-53 0,-77 Q 13,-53 7,0"   fill="#ff8800" opacity="0.31"/></g>
+    <g transform="rotate(315)">  <path d="M -6,0 Q -11,-46 0,-66 Q 11,-46 6,0"   fill="#ff8800" opacity="0.29"/></g>
+    <g transform="rotate(22.5)"> <path d="M -4,0 Q -7,-38 0,-54 Q 7,-38 4,0"     fill="#ff6600" opacity="0.24"/></g>
+    <g transform="rotate(67.5)"> <path d="M -4,0 Q -7,-38 0,-54 Q 7,-38 4,0"     fill="#ff6600" opacity="0.24"/></g>
+    <g transform="rotate(112.5)"><path d="M -4,0 Q -7,-38 0,-54 Q 7,-38 4,0"     fill="#ff6600" opacity="0.24"/></g>
+    <g transform="rotate(157.5)"><path d="M -4,0 Q -7,-38 0,-54 Q 7,-38 4,0"     fill="#ff6600" opacity="0.24"/></g>
+    <g transform="rotate(202.5)"><path d="M -4,0 Q -7,-38 0,-54 Q 7,-38 4,0"     fill="#ff6600" opacity="0.24"/></g>
+    <g transform="rotate(247.5)"><path d="M -4,0 Q -7,-38 0,-54 Q 7,-38 4,0"     fill="#ff6600" opacity="0.24"/></g>
+    <g transform="rotate(292.5)"><path d="M -4,0 Q -7,-38 0,-54 Q 7,-38 4,0"     fill="#ff6600" opacity="0.24"/></g>
+    <g transform="rotate(337.5)"><path d="M -4,0 Q -7,-38 0,-54 Q 7,-38 4,0"     fill="#ff6600" opacity="0.24"/></g>
+
+    <!-- FLAMES — inner layer (yellow) reduced 50% -->
+    <g transform="rotate(0)">   <path d="M -5,0 Q -9,-42 0,-60 Q 9,-42 5,0"      fill="#ffcc00" opacity="0.29"/></g>
+    <g transform="rotate(45)">  <path d="M -4,0 Q -7,-35 0,-50 Q 7,-35 4,0"      fill="#ffdd44" opacity="0.26"/></g>
+    <g transform="rotate(90)">  <path d="M -5,0 Q -9,-42 0,-60 Q 9,-42 5,0"      fill="#ffcc00" opacity="0.29"/></g>
+    <g transform="rotate(135)"> <path d="M -4,0 Q -7,-35 0,-50 Q 7,-35 4,0"      fill="#ffdd44" opacity="0.26"/></g>
+    <g transform="rotate(180)"> <path d="M -5,0 Q -9,-42 0,-60 Q 9,-42 5,0"      fill="#ffcc00" opacity="0.29"/></g>
+    <g transform="rotate(225)"> <path d="M -4,0 Q -7,-35 0,-50 Q 7,-35 4,0"      fill="#ffdd44" opacity="0.26"/></g>
+    <g transform="rotate(270)"> <path d="M -5,0 Q -9,-42 0,-60 Q 9,-42 5,0"      fill="#ffcc00" opacity="0.29"/></g>
+    <g transform="rotate(315)"> <path d="M -4,0 Q -7,-35 0,-50 Q 7,-35 4,0"      fill="#ffdd44" opacity="0.26"/></g>
+
+    <!-- CORONA LOOPS reduced 50% -->
+    <path d="M -14,-18 C -52,-74 52,-74 14,-18"  fill="none" stroke="#ff9900" stroke-width="1.5" opacity="0.24"/>
+    <g transform="rotate(72)"> <path d="M -12,-18 C -44,-68 44,-68 12,-18" fill="none" stroke="#ff8800" stroke-width="1.3" opacity="0.20"/></g>
+    <g transform="rotate(144)"><path d="M -12,-18 C -40,-62 40,-62 12,-18" fill="none" stroke="#ff9900" stroke-width="1.2" opacity="0.19"/></g>
+    <g transform="rotate(216)"><path d="M -13,-18 C -46,-70 46,-70 13,-18" fill="none" stroke="#ffaa00" stroke-width="1.3" opacity="0.18"/></g>
+    <g transform="rotate(288)"><path d="M -10,-18 C -36,-58 36,-58 10,-18" fill="none" stroke="#ff9900" stroke-width="1.1" opacity="0.17"/></g>
+
+    <!-- Ember sparks reduced 50% -->
+    <circle cx="64"  cy="-56" r="2"   fill="#ffdd00" opacity="0.30"/>
+    <circle cx="-70" cy="-30" r="1.5" fill="#ff9900" opacity="0.26"/>
+    <circle cx="-52" cy="60"  r="2"   fill="#ffcc00" opacity="0.28"/>
+    <circle cx="72"  cy="36"  r="1.5" fill="#ff8800" opacity="0.24"/>
+    <circle cx="22"  cy="-74" r="1.5" fill="#ffffff"  opacity="0.21"/>
+    <circle cx="-24" cy="-72" r="1.5" fill="#ffffff"  opacity="0.19"/>
+
+    <!-- ORBITAL RINGS — brand green (unchanged) -->
+    <ellipse rx="102" ry="26" fill="none" stroke="#00d68f" stroke-width="1.2" transform="rotate(-28)" opacity="0.58"/>
+    <ellipse rx="124" ry="20" fill="none" stroke="#00d68f" stroke-width="0.9" transform="rotate(42)"  opacity="0.38"/>
+
+    <!-- Planets -->
+    <circle cx="80"  cy="-28" r="5.5" fill="#00d68f" opacity="0.88"/>
+    <circle cx="80"  cy="-28" r="2.2" fill="#ffffff"  opacity="0.80"/>
+    <circle cx="-74" cy="-36" r="4.2" fill="#00d68f" opacity="0.76"/>
+    <circle cx="-74" cy="-36" r="1.8" fill="#ffffff"  opacity="0.68"/>
+
+    <!-- NODE SYMBOL RAYS — unchanged -->
+    <line x1="0" y1="0" x2="0"   y2="-72" stroke="#00d68f" stroke-width="3"   stroke-linecap="round"/>
+    <line x1="0" y1="0" x2="45"  y2="-45" stroke="#00d68f" stroke-width="2.5" stroke-linecap="round"/>
+    <line x1="0" y1="0" x2="70"  y2="0"   stroke="#00d68f" stroke-width="3"   stroke-linecap="round"/>
+    <line x1="0" y1="0" x2="38"  y2="38"  stroke="#00d68f" stroke-width="2.5" stroke-linecap="round"/>
+    <line x1="0" y1="0" x2="0"   y2="70"  stroke="#00d68f" stroke-width="3"   stroke-linecap="round"/>
+    <line x1="0" y1="0" x2="-44" y2="44"  stroke="#00d68f" stroke-width="2.5" stroke-linecap="round"/>
+    <line x1="0" y1="0" x2="-64" y2="0"   stroke="#00d68f" stroke-width="3"   stroke-linecap="round"/>
+    <line x1="0" y1="0" x2="-40" y2="-40" stroke="#00d68f" stroke-width="2.5" stroke-linecap="round"/>
+
+    <!-- Node end dots -->
+    <circle cx="0"   cy="-72" r="8.5" fill="#00d68f"/>
+    <circle cx="47"  cy="-47" r="6"   fill="#00d68f"/>
+    <circle cx="70"  cy="0"   r="8.5" fill="#00d68f"/>
+    <circle cx="40"  cy="40"  r="6"   fill="#00d68f"/>
+    <circle cx="0"   cy="70"  r="8.5" fill="#00d68f"/>
+    <circle cx="-46" cy="46"  r="6"   fill="#00d68f"/>
+    <circle cx="-64" cy="0"   r="7"   fill="#00d68f"/>
+    <circle cx="-42" cy="-42" r="6"   fill="#00d68f"/>
+
+    <!-- Centre node -->
+    <circle cx="0" cy="0" r="17"  fill="#071410" stroke="#00d68f" stroke-width="2.2"/>
+    <circle cx="0" cy="0" r="6"   fill="#00d68f" opacity="0.28"/>
+    <circle cx="0" cy="0" r="3.5" fill="#ffffff"  opacity="0.88"/>
+
+  </g>
+
+  <!-- EST. 2026 -->
+  <text x="98"  y="160" text-anchor="end"   font-family="Arial, sans-serif" font-size="13" font-weight="500" fill="#00d68f" letter-spacing="1">EST.</text>
+  <text x="302" y="160" text-anchor="start" font-family="Arial, sans-serif" font-size="13" font-weight="500" fill="#00d68f" letter-spacing="1">2026</text>
+
+  <!-- CRYPTONOVA wordmark -->
+  <text x="200" y="278" text-anchor="middle" font-family="Arial, sans-serif" font-size="34" font-weight="700" fill="#e8e8e8" letter-spacing="4">CRYPTONOVA</text>
+
+  <!-- Tagline -->
+  <text x="200" y="306" text-anchor="middle" font-family="Arial, sans-serif" font-size="11.5" fill="#00d68f" letter-spacing="0.8">Built on chain. Powered by community</text>
+
+</svg>
