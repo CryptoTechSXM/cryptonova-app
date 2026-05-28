@@ -1806,7 +1806,8 @@ async function loadMatrixTree() {
       const boxClass   = isEmpty ? 'node-box empty' : (isMe ? 'node-box you' : (isDirect ? 'node-box direct' : 'node-box filled'));
       const label      = isEmpty ? 'Empty' : (isMe ? '⭐ YOU' : (isDirect ? '🤝 Node ' + id : 'Node ' + id));
       const addr       = n && n.owner !== ethers.ZeroAddress ? shortAddr(n.owner) : '';
-      const depthTag   = n ? 'L' + n.depth : '';
+      const matrixLevel = n ? (Number(n.depth) + 1) : null;
+      const depthTag    = n ? ('My L' + depth + ' · Matrix L' + matrixLevel) : '';
       const clickable  = !isEmpty && !isRoot;
       const clickStyle = clickable ? 'cursor:pointer;' : '';
       const clickAttr  = clickable ? 'onclick="navigateToNode(' + id + ')" title="Tap to view subtree"' : '';
