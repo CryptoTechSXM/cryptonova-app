@@ -141,6 +141,7 @@
     .btn-green:hover:not(:disabled) { opacity: .85; }
     .btn-ghost { background: var(--bg3); color: var(--text2); border: 1px solid var(--border); }
     .btn-ghost:hover:not(:disabled) { color: var(--text); border-color: var(--text3); }
+    .btn.matrix-active { background: var(--green-dim) !important; color: var(--green) !important; border: 1.5px solid var(--green2) !important; }
     .full-w { width: 100%; }
 
     /* ── Matrix tree ─────────────────────────── */
@@ -151,6 +152,7 @@
     .node-box.you { border-color: var(--green); background: var(--green-dim); }
     .node-box.filled { border-color: var(--text3); }
     .node-box.empty { border-color: var(--border); opacity: .5; border-style: dashed; }
+    .node-box.direct { border-color: var(--yellow); background: rgba(245,158,11,.10); }
     .node-addr { font-size: 10px; color: var(--text3); margin-top: 2px; }
     .tree-line { width: 2px; height: 20px; background: var(--border); margin: 0 auto; }
     .tree-h-line { height: 2px; background: var(--border); }
@@ -536,7 +538,7 @@
     <div class="section-title"><div class="dot"></div> My Dashboard</div>
 
     <div id="dash-no-wallet" class="card" style="text-align:center;padding:40px;display:none">
-      <div style="font-size:32px;margin-bottom:12px">👛</div>
+      <div style="font-size:32px;margin-bottom:12px"><span style="filter:sepia(1) saturate(3) hue-rotate(5deg) brightness(0.85)">👛</span></div>
       <div style="font-size:16px;font-weight:600;margin-bottom:8px">Connect Your Wallet</div>
       <div style="color:var(--text2);font-size:14px;margin-bottom:20px">Connect MetaMask to view your dashboard and earnings.</div>
       <button class="btn btn-green" onclick="window.ethereum ? connectWallet() : showMetaMaskModal()">Connect Wallet</button>
@@ -642,9 +644,9 @@
           <label style="display:block;font-size:13px;color:var(--text2);margin-bottom:6px">View from Node ID (or wallet address)</label>
           <input type="text" id="matrix-input" placeholder="Node ID number or 0x... address" />
         </div>
-        <button class="btn btn-green" style="margin-top:20px" onclick="loadMatrixTree()">Load Tree</button>
-        <button class="btn btn-ghost" style="margin-top:20px" onclick="loadMyTree()">My Position</button>
-        <button class="btn btn-ghost" style="margin-top:20px;border-color:var(--green2);color:var(--green)" onclick="loadMyDirects()">👥 My Directs</button>
+        <button id="btn-load-tree"    class="btn btn-ghost"  style="margin-top:20px" onclick="setActiveMatrixBtn('btn-load-tree');loadMatrixTree()">Load Tree</button>
+        <button id="btn-my-position" class="btn btn-ghost"  style="margin-top:20px" onclick="setActiveMatrixBtn('btn-my-position');loadMyTree()">My Position</button>
+        <button id="btn-my-directs"  class="btn btn-ghost"  style="margin-top:20px" onclick="setActiveMatrixBtn('btn-my-directs');loadMyDirects()">👥 My Directs</button>
       </div>
     </div>
 
@@ -652,7 +654,21 @@
       <div class="card-sm"><div class="stat-label">Total Nodes</div><div class="stat-value" id="matrix-nodes">—</div></div>
       <div class="card-sm"><div class="stat-label">BFS Head</div><div class="stat-value" id="matrix-bfs">—</div></div>
       <div class="card-sm"><div class="stat-label">Cycle Fill</div><div class="stat-value" id="matrix-fill">—</div></div>
-      <div class="card-sm"><div class="stat-label">My Node ID</div><div class="stat-value" id="matrix-my-node">—</div></div>
+      <div class="card-sm" style="border-color:var(--green2)">
+        <div class="stat-label" id="matrix-my-node-label">My Node ID</div>
+        <div class="stat-value green" id="matrix-my-node">—</div>
+        <div class="stat-sub" id="matrix-my-level-sub" style="display:none"></div>
+      </div>
+    </div>
+
+    <!-- My Position info banner — shown only when My Position is active -->
+    <div id="matrix-pos-banner" style="display:none;background:var(--green-dim);border:1px solid var(--green2);border-radius:10px;padding:14px 20px;margin-bottom:16px;display:none">
+      <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap">
+        <span style="font-size:13px;font-weight:700;color:var(--green)">📍 My Position</span>
+        <span id="matrix-pos-level"  style="font-size:13px;color:var(--text2)"></span>
+        <span id="matrix-pos-slots"  style="font-size:13px;color:var(--text2)"></span>
+        <span id="matrix-pos-cycle"  style="font-size:13px;color:var(--text2)"></span>
+      </div>
     </div>
 
     <div class="card">
@@ -663,6 +679,7 @@
     <!-- Legend -->
     <div style="display:flex;gap:16px;margin-top:16px;flex-wrap:wrap;font-size:12px;color:var(--text3)">
       <span><span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:var(--green-dim);border:1px solid var(--green2);margin-right:4px"></span>Your node</span>
+      <span><span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:rgba(245,158,11,.10);border:1px solid var(--yellow);margin-right:4px"></span>Your direct 🤝</span>
       <span><span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:var(--bg3);border:1px solid var(--text3);margin-right:4px"></span>Filled</span>
       <span><span style="display:inline-block;width:10px;height:10px;border-radius:2px;border:1px dashed var(--border);margin-right:4px"></span>Empty slot</span>
     </div>
@@ -961,11 +978,12 @@ const USDC_ABI = [
 // ═══════════════════════════════════════════════════════════════════════
 // STATE
 // ═══════════════════════════════════════════════════════════════════════
-let provider     = null;
-let signer       = null;
-let userAddr     = null;
-let readProvider = null;
-let isConnecting = false;  // guard against re-entrant connectWallet calls
+let provider       = null;
+let signer         = null;
+let userAddr       = null;
+let readProvider   = null;
+let isConnecting   = false;       // guard against re-entrant connectWallet calls
+let myDirectAddrs  = new Set();   // lowercase addresses of user's direct referrals
 
 // ═══════════════════════════════════════════════════════════════════════
 // INIT
@@ -1578,8 +1596,44 @@ async function loadMyTree() {
     const member = await matrix.getMember(userAddr);
     if (!member.isRegistered) { toast('Not registered yet', 'error'); return; }
     document.getElementById('matrix-input').value = member.matrixNodeId.toString();
+
+    // Fetch node to get depth + child slots
+    try {
+      const node = await matrix.getNode(member.matrixNodeId);
+      const personalLevel = Number(node.depth) + 1;
+      const slotsUsed     = Number(node.childCount);
+
+      // Update stat card
+      document.getElementById('matrix-my-node-label').textContent = 'My Level';
+      document.getElementById('matrix-my-node').textContent        = 'Level ' + personalLevel + ' / 7';
+      const subEl = document.getElementById('matrix-my-level-sub');
+      subEl.textContent    = 'Node #' + member.matrixNodeId.toString();
+      subEl.style.display  = 'block';
+
+      // Show My Position banner
+      const banner = document.getElementById('matrix-pos-banner');
+      banner.style.display = 'block';
+      document.getElementById('matrix-pos-level').textContent =
+        '🏅 Matrix level ' + personalLevel + ' of 7';
+      document.getElementById('matrix-pos-slots').textContent =
+        '🔲 BFS slots: ' + slotsUsed + ' / 2 filled';
+      document.getElementById('matrix-pos-cycle').textContent =
+        '🔄 Cycle #' + member.cycleId.toString();
+    } catch(_) {
+      document.getElementById('matrix-my-node').textContent = member.matrixNodeId.toString();
+    }
+
     await loadMatrixTree();
   } catch(e) { toast('Error: ' + e.message, 'error'); }
+}
+
+function hideMyPosBanner() {
+  const banner = document.getElementById('matrix-pos-banner');
+  if (banner) banner.style.display = 'none';
+  const subEl = document.getElementById('matrix-my-level-sub');
+  if (subEl)   subEl.style.display  = 'none';
+  const labelEl = document.getElementById('matrix-my-node-label');
+  if (labelEl) labelEl.textContent  = 'My Node ID';
 }
 
 // Fetch all members sequentially — conservative to stay within public RPC limits
@@ -1632,6 +1686,9 @@ async function loadMyDirects() {
       ({ data: m }) => m.originalReferrer.toLowerCase() === userAddr.toLowerCase()
     );
 
+    // Cache direct addresses globally so buildNodeHTML can highlight them in tree view
+    myDirectAddrs = new Set(directs.map(({ addr }) => addr.toLowerCase()));
+
     loading.style.display = 'none';
 
     if (directs.length === 0) {
@@ -1666,6 +1723,17 @@ async function loadMyDirects() {
     empty.style.display = 'block';
     console.error('loadMyDirects', e);
   }
+}
+
+function setActiveMatrixBtn(id) {
+  ['btn-load-tree', 'btn-my-position', 'btn-my-directs'].forEach(b => {
+    const el = document.getElementById(b);
+    if (el) el.classList.remove('matrix-active');
+  });
+  const active = document.getElementById(id);
+  if (active) active.classList.add('matrix-active');
+  // Hide My Position banner when switching away from it
+  if (id !== 'btn-my-position') hideMyPosBanner();
 }
 
 async function loadMatrixTree() {
@@ -1734,8 +1802,9 @@ async function loadMatrixTree() {
       const rightChild = n && Number(n.children[1]) > 0 ? Number(n.children[1]) : null;
       const parentId   = n && Number(n.parentNodeId) > 0 ? Number(n.parentNodeId) : null;
 
-      const boxClass   = isEmpty ? 'node-box empty' : (isMe ? 'node-box you' : 'node-box filled');
-      const label      = isEmpty ? 'Empty' : (isMe ? '⭐ YOU' : 'Node ' + id);
+      const isDirect   = !isMe && !isEmpty && n && myDirectAddrs.has(n.owner.toLowerCase());
+      const boxClass   = isEmpty ? 'node-box empty' : (isMe ? 'node-box you' : (isDirect ? 'node-box direct' : 'node-box filled'));
+      const label      = isEmpty ? 'Empty' : (isMe ? '⭐ YOU' : (isDirect ? '🤝 Node ' + id : 'Node ' + id));
       const addr       = n && n.owner !== ethers.ZeroAddress ? shortAddr(n.owner) : '';
       const depthTag   = n ? 'L' + n.depth : '';
       const clickable  = !isEmpty && !isRoot;
