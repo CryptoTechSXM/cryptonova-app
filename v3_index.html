@@ -1,0 +1,1491 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>CryptoNova — 7-Tier Matrix System (V3)</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/6.7.1/ethers.umd.min.js"></script>
+  <style>
+    :root {
+      --bg:        #0a0e1a;
+      --bg2:       #111827;
+      --bg3:       #1a2236;
+      --border:    #1f2d47;
+      --green:     #00e5a0;
+      --green2:    #00b37d;
+      --green-dim: rgba(0,229,160,0.12);
+      --blue:      #3b82f6;
+      --yellow:    #f59e0b;
+      --red:       #ef4444;
+      --text:      #e2e8f0;
+      --text2:     #94a3b8;
+      --text3:     #64748b;
+    }
+    body.light {
+      --bg:        #f1f5f9;
+      --bg2:       #ffffff;
+      --bg3:       #e2e8f0;
+      --border:    #cbd5e1;
+      --green:     #00966a;
+      --green2:    #007a56;
+      --green-dim: rgba(0,150,106,0.10);
+      --blue:      #2563eb;
+      --yellow:    #d97706;
+      --red:       #dc2626;
+      --text:      #0f172a;
+      --text2:     #475569;
+      --text3:     #94a3b8;
+    }
+    .theme-toggle { background: var(--bg3); border: 1px solid var(--border); border-radius: 8px; padding: 6px 12px; font-size: 13px; color: var(--text2); cursor: pointer; transition: all .2s; }
+    .theme-toggle:hover { color: var(--text); border-color: var(--green); }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { background: var(--bg); color: var(--text); font-family: 'Segoe UI', system-ui, sans-serif; min-height: 100vh; }
+
+    /* ── Layout ─────────────────────────────── */
+    header { background: var(--bg2); border-bottom: 1px solid var(--border); padding: 14px 24px; display: flex; align-items: center; justify-content: space-between; position: sticky; top: 0; z-index: 100; }
+    .logo { display: flex; align-items: center; gap: 10px; }
+    .logo-icon { width: 34px; height: 34px; background: linear-gradient(135deg, var(--green), var(--blue)); border-radius: 8px; display: flex; align-items: center; justify-content: center; font-weight: 900; font-size: 16px; color: #000; }
+    .logo-text { font-size: 18px; font-weight: 700; letter-spacing: -0.5px; }
+    .logo-text span { color: var(--green); }
+    .logo-badge { font-size: 10px; background: var(--green-dim); color: var(--green); border: 1px solid var(--green2); border-radius: 4px; padding: 2px 6px; margin-left: 8px; }
+    #btn-connect { background: var(--green); color: #000; border: none; border-radius: 8px; padding: 8px 18px; font-weight: 700; font-size: 14px; cursor: pointer; transition: opacity .2s; }
+    #btn-connect:hover { opacity: .85; }
+    #btn-connect.connected { background: var(--bg3); color: var(--green); border: 1px solid var(--green2); }
+    .network-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--green); display: inline-block; margin-right: 6px; animation: pulse 2s infinite; }
+    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.4} }
+
+    /* ── Tabs ───────────────────────────────── */
+    nav { background: var(--bg2); border-bottom: 1px solid var(--border); display: flex; gap: 0; padding: 0 24px; }
+    nav button { background: none; border: none; color: var(--text2); padding: 14px 20px; cursor: pointer; font-size: 14px; font-weight: 500; border-bottom: 2px solid transparent; transition: all .2s; }
+    nav button:hover { color: var(--text); }
+    nav button.active { color: var(--green); border-bottom-color: var(--green); }
+
+    /* ── Main ───────────────────────────────── */
+    main { max-width: 1100px; margin: 0 auto; padding: 32px 24px; }
+    .tab-panel { display: none; }
+    .tab-panel.active { display: block; }
+
+    /* ── Cards ──────────────────────────────── */
+    .card { background: var(--bg2); border: 1px solid var(--border); border-radius: 12px; padding: 24px; }
+    .card-sm { background: var(--bg2); border: 1px solid var(--border); border-radius: 10px; padding: 18px 20px; }
+    .grid-4 { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 16px; margin-bottom: 24px; }
+    .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+    .stat-label { font-size: 12px; color: var(--text3); text-transform: uppercase; letter-spacing: .8px; margin-bottom: 6px; }
+    .stat-value { font-size: 24px; font-weight: 700; color: var(--text); }
+    .stat-value.green { color: var(--green); }
+    .stat-sub { font-size: 12px; color: var(--text3); margin-top: 4px; }
+
+    /* ── Section titles ──────────────────────── */
+    .section-title { font-size: 18px; font-weight: 700; margin-bottom: 16px; display: flex; align-items: center; gap: 8px; }
+    .section-title .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--green); }
+    h1 { font-size: 36px; font-weight: 800; letter-spacing: -1px; }
+    h1 span { color: var(--green); }
+
+    /* ── Hero ────────────────────────────────── */
+    .hero { text-align: center; padding: 60px 20px 48px; }
+    .hero p { font-size: 17px; color: var(--text2); margin: 16px auto 32px; max-width: 500px; line-height: 1.6; }
+    .hero-actions { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
+    .btn-primary { background: var(--green); color: #000; border: none; border-radius: 10px; padding: 12px 28px; font-weight: 700; font-size: 15px; cursor: pointer; transition: opacity .2s, transform .1s; }
+    .btn-primary:hover { opacity: .85; transform: translateY(-1px); }
+    .btn-outline { background: none; color: var(--green); border: 1.5px solid var(--green2); border-radius: 10px; padding: 12px 28px; font-weight: 600; font-size: 15px; cursor: pointer; transition: all .2s; }
+    .btn-outline:hover { background: var(--green-dim); }
+
+    /* ── Register form ───────────────────────── */
+    .form-group { margin-bottom: 20px; }
+    label { display: block; font-size: 13px; color: var(--text2); margin-bottom: 7px; font-weight: 500; }
+    input[type=text] { width: 100%; background: var(--bg3); border: 1px solid var(--border); border-radius: 8px; padding: 11px 14px; color: var(--text); font-size: 14px; outline: none; transition: border-color .2s; }
+    input[type=text]:focus { border-color: var(--green2); }
+    input[type=text]::placeholder { color: var(--text3); }
+    .form-hint { font-size: 12px; color: var(--text3); margin-top: 6px; }
+    .step-list { list-style: none; counter-reset: steps; }
+    .step-list li { counter-increment: steps; display: flex; gap: 14px; align-items: flex-start; margin-bottom: 16px; }
+    .step-list li::before { content: counter(steps); min-width: 26px; height: 26px; border-radius: 50%; background: var(--green-dim); color: var(--green); font-size: 12px; font-weight: 700; display: flex; align-items: center; justify-content: center; margin-top: 2px; border: 1px solid var(--green2); }
+    .step-content strong { display: block; font-size: 14px; color: var(--text); margin-bottom: 3px; }
+    .step-content span { font-size: 13px; color: var(--text2); }
+
+    /* ── Status pills ────────────────────────── */
+    .pill { display: inline-flex; align-items: center; gap: 5px; border-radius: 20px; padding: 3px 10px; font-size: 12px; font-weight: 600; }
+    .pill-green { background: var(--green-dim); color: var(--green); border: 1px solid var(--green2); }
+    .pill-yellow { background: rgba(245,158,11,.12); color: var(--yellow); border: 1px solid rgba(245,158,11,.4); }
+    .pill-red { background: rgba(239,68,68,.12); color: var(--red); border: 1px solid rgba(239,68,68,.4); }
+    .pill-blue { background: rgba(59,130,246,.12); color: var(--blue); border: 1px solid rgba(59,130,246,.4); }
+
+    /* ── Progress bar ────────────────────────── */
+    .progress-wrap { background: var(--bg3); border-radius: 99px; height: 8px; overflow: hidden; margin: 8px 0 4px; }
+    .progress-bar { height: 100%; background: linear-gradient(90deg, var(--green2), var(--green)); border-radius: 99px; transition: width .6s ease; }
+
+    /* ── Splits table ────────────────────────── */
+    .split-row { display: flex; justify-content: space-between; align-items: center; padding: 10px 0; border-bottom: 1px solid var(--border); font-size: 14px; }
+    .split-row:last-child { border-bottom: none; }
+    .split-label { color: var(--text2); }
+    .split-amount { font-weight: 600; color: var(--text); }
+    .split-pct { font-size: 12px; color: var(--text3); }
+
+    /* ── Toast ───────────────────────────────── */
+    #toast { position: fixed; bottom: 24px; right: 24px; background: var(--bg2); border: 1px solid var(--border); border-radius: 10px; padding: 14px 20px; font-size: 14px; max-width: 360px; z-index: 999; opacity: 0; transform: translateY(10px); transition: all .3s; pointer-events: none; }
+    #toast.show { opacity: 1; transform: translateY(0); }
+    #toast.success { border-color: var(--green2); color: var(--green); }
+    #toast.error { border-color: var(--red); color: var(--red); }
+    #toast.info { border-color: var(--blue); color: var(--blue); }
+
+    /* ── Dashboard info rows ──────────────────── */
+    .info-row { display: flex; justify-content: space-between; padding: 9px 0; border-bottom: 1px solid var(--border); font-size: 14px; }
+    .info-row:last-child { border-bottom: none; }
+    .info-key { color: var(--text2); }
+    .info-val { font-weight: 600; }
+
+    /* ── Buttons ─────────────────────────────── */
+    .btn { border-radius: 8px; padding: 11px 22px; font-weight: 700; font-size: 14px; cursor: pointer; transition: all .2s; border: none; }
+    .btn:disabled { opacity: .45; cursor: not-allowed; }
+    .btn-green { background: var(--green); color: #000; }
+    .btn-green:hover:not(:disabled) { opacity: .85; }
+    .btn-ghost { background: var(--bg3); color: var(--text2); border: 1px solid var(--border); }
+    .btn-ghost:hover:not(:disabled) { color: var(--text); border-color: var(--text3); }
+    .btn.matrix-active { background: var(--green-dim) !important; color: var(--green) !important; border: 1.5px solid var(--green2) !important; }
+    .full-w { width: 100%; }
+
+    /* ── Matrix tree ─────────────────────────── */
+    #matrix-tree { overflow-x: auto; padding: 16px 0; }
+    .tree-node { display: inline-flex; flex-direction: column; align-items: center; gap: 0; }
+    .tree-children { display: flex; gap: 24px; }
+    .node-box { background: var(--bg3); border: 1.5px solid var(--border); border-radius: 8px; padding: 8px 12px; font-size: 11px; text-align: center; min-width: 80px; position: relative; }
+    .node-box.you { border-color: var(--green); background: var(--green-dim); }
+    .node-box.filled { border-color: var(--text3); }
+    .node-box.empty { border-color: var(--border); opacity: .5; border-style: dashed; }
+    .node-box.direct { border-color: var(--yellow); background: rgba(245,158,11,.10); }
+    .node-addr { font-size: 10px; color: var(--text3); margin-top: 2px; }
+    .tree-line { width: 2px; height: 20px; background: var(--border); margin: 0 auto; }
+    .tree-h-line { height: 2px; background: var(--border); }
+
+    /* ── Chain pay table ──────────────────────── */
+    .chain-row { display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-bottom: 1px solid var(--border); font-size: 13px; }
+    .chain-row:last-child { border-bottom: none; }
+
+    /* ── Responsive ──────────────────────────── */
+    @media (max-width: 640px) {
+      /* ── Header ── */
+      header { padding: 10px 16px; }
+      .logo-text { font-size: 16px; }
+      .logo-badge { display: none; }
+      #btn-connect { padding: 7px 12px; font-size: 13px; }
+
+      /* ── Nav: horizontal scroll so all tabs stay reachable ── */
+      nav { padding: 0 8px; overflow-x: auto; -webkit-overflow-scrolling: touch; scrollbar-width: none; }
+      nav::-webkit-scrollbar { display: none; }
+      nav button { padding: 12px 14px; font-size: 12px; white-space: nowrap; flex-shrink: 0; }
+
+      /* ── Layout ── */
+      main { padding: 20px 16px; }
+      .grid-2 { grid-template-columns: 1fr; }
+
+      /* ── Hero ── */
+      .hero { padding: 36px 0 28px; }
+      h1 { font-size: 26px; }
+      .hero p { font-size: 15px; }
+      .hero-actions { flex-direction: column; }
+      .btn-primary { width: 100%; text-align: center; justify-content: center; }
+
+      /* ── Cards ── */
+      .card-sm { padding: 14px 16px; }
+
+      /* ── Token cards ── */
+      .token-addr { word-break: break-all; font-size: 10px; }
+      .btn-metamask { width: 100%; justify-content: center; margin-top: 4px; }
+
+      /* ── Register tab ── */
+      .full-w { width: 100%; }
+      .btn { font-size: 14px; }
+
+      /* ── Info / split rows ── */
+      .info-row { font-size: 13px; gap: 8px; }
+      .info-val { text-align: right; word-break: break-all; max-width: 58%; }
+      .split-row { font-size: 13px; }
+
+      /* ── Section title ── */
+      .section-title { font-size: 16px; }
+    }
+
+    /* ── Loading spinner ──────────────────────── */
+    .spinner { display: inline-block; width: 18px; height: 18px; border: 2px solid transparent; border-top-color: currentColor; border-radius: 50%; animation: spin .7s linear infinite; vertical-align: middle; margin-right: 6px; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .loading-text { color: var(--text3); font-size: 14px; padding: 24px 0; text-align: center; }
+
+    /* ── Addr display ────────────────────────── */
+    .addr { font-family: monospace; font-size: 12px; color: var(--text3); }
+
+    /* ── Add-to-MetaMask token card ──────────── */
+    .token-card { background: linear-gradient(135deg, rgba(0,229,160,.08), rgba(59,130,246,.06)); border: 1px solid var(--green2); border-radius: 12px; padding: 20px 24px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 14px; margin-bottom: 24px; }
+    .token-card-left { display: flex; align-items: center; gap: 14px; }
+    .token-icon { width: 42px; height: 42px; background: linear-gradient(135deg, var(--green), var(--blue)); border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 900; font-size: 13px; color: #000; flex-shrink: 0; }
+    .token-name { font-size: 16px; font-weight: 700; }
+    .token-addr { font-family: monospace; font-size: 11px; color: var(--text3); margin-top: 2px; }
+    .btn-metamask { background: #f6851b; color: #fff; border: none; border-radius: 8px; padding: 9px 18px; font-weight: 700; font-size: 13px; cursor: pointer; display: flex; align-items: center; gap: 7px; transition: opacity .2s; }
+    .btn-metamask:hover { opacity: .85; }
+
+    /* ── Roadmap timeline ────────────────────── */
+    .roadmap-timeline { position: relative; padding-left: 0; }
+    .roadmap-phase { display: grid; grid-template-columns: 160px 1fr; gap: 0; margin-bottom: 0; }
+    .phase-left { display: flex; flex-direction: column; align-items: center; padding-right: 24px; }
+    .phase-dot { width: 20px; height: 20px; border-radius: 50%; border: 3px solid var(--border); background: var(--bg); flex-shrink: 0; z-index: 1; margin-top: 6px; }
+    .phase-dot.done { border-color: var(--green); background: var(--green); }
+    .phase-dot.active { border-color: var(--yellow); background: var(--yellow); box-shadow: 0 0 0 4px rgba(245,158,11,.2); }
+    .phase-dot.soon { border-color: var(--blue); background: var(--bg3); }
+    .phase-dot.future { border-color: var(--border); background: var(--bg3); }
+    .phase-line { flex: 1; width: 2px; background: var(--border); margin: 4px 0; }
+    .phase-label { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .8px; color: var(--text3); text-align: right; padding-right: 8px; padding-top: 4px; line-height: 1.3; }
+    .phase-label.done { color: var(--green); }
+    .phase-label.active { color: var(--yellow); }
+    .phase-label.soon { color: var(--blue); }
+    .phase-card { background: var(--bg2); border: 1px solid var(--border); border-radius: 12px; padding: 20px 22px; margin-bottom: 16px; margin-left: 0; }
+    .phase-card.done { border-color: rgba(0,229,160,.25); }
+    .phase-card.active { border-color: rgba(245,158,11,.4); background: rgba(245,158,11,.03); }
+    .phase-card.soon { border-color: rgba(59,130,246,.3); }
+    .phase-title { font-size: 16px; font-weight: 800; margin-bottom: 4px; }
+    .phase-subtitle { font-size: 12px; color: var(--text3); margin-bottom: 14px; }
+    .checklist { list-style: none; display: flex; flex-direction: column; gap: 8px; }
+    .checklist li { display: flex; align-items: flex-start; gap: 10px; font-size: 13px; color: var(--text2); line-height: 1.4; }
+    .check-icon { flex-shrink: 0; margin-top: 1px; font-size: 14px; }
+    .check-done { color: var(--green); }
+    .check-pending { color: var(--yellow); }
+    .check-future { color: var(--text3); }
+    .check-blue { color: var(--blue); }
+
+    /* ── Pre-launch grid ─────────────────────── */
+    .prelaunch-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 16px; margin-top: 24px; }
+    .prelaunch-block { background: var(--bg2); border: 1px solid var(--border); border-radius: 10px; padding: 18px 20px; }
+    .prelaunch-block h3 { font-size: 14px; font-weight: 700; margin-bottom: 12px; display: flex; align-items: center; gap: 7px; }
+    .prelaunch-block ul { list-style: none; display: flex; flex-direction: column; gap: 7px; }
+    .prelaunch-block ul li { font-size: 13px; color: var(--text2); display: flex; align-items: flex-start; gap: 8px; }
+    .prelaunch-block ul li::before { content: "›"; color: var(--green); font-weight: 700; flex-shrink: 0; }
+
+    @media (max-width: 640px) {
+      /* ── Roadmap ── */
+      .roadmap-phase { grid-template-columns: 72px 1fr; }
+      .phase-label { font-size: 9px; letter-spacing: .4px; }
+      .phase-card { padding: 14px 16px; }
+
+      /* ── Token cards stack vertically ── */
+      .token-card { flex-direction: column; align-items: flex-start; }
+
+      /* ── Pre-launch grid single column ── */
+      .prelaunch-grid { grid-template-columns: 1fr; }
+    }
+
+    /* ── Switch network overlay (fixed, centered) ───────────────── */
+    #network-banner { position: fixed; inset: 0; background: rgba(0,0,0,.65); z-index: 600; display: none; align-items: center; justify-content: center; padding: 20px; }
+    #network-banner-card { background: var(--bg2); border: 2px solid rgba(245,158,11,.5); border-radius: 16px; padding: 32px 28px; max-width: 380px; width: 100%; text-align: center; }
+  </style>
+</head>
+<body>
+
+<div id="file-protocol-banner" style="background:rgba(239,68,68,.1);border-bottom:1px solid rgba(239,68,68,.3);padding:10px 24px;text-align:center;font-size:13px;color:#ef4444;display:none">
+  ⚠️ <strong>File opened directly</strong> — MetaMask won't inject into <code style="background:rgba(0,0,0,.3);padding:2px 6px;border-radius:3px">file://</code> pages.
+  Serve via local server: <code style="background:rgba(0,0,0,.3);padding:2px 8px;border-radius:3px;margin:0 4px">cd frontend &amp;&amp; npx serve .</code>
+  then open <strong>http://localhost:3000</strong>
+</div>
+
+<div id="network-banner">
+  <div id="network-banner-card">
+    <div style="font-size:40px;margin-bottom:10px">⚠️</div>
+    <div style="font-size:20px;font-weight:800;color:var(--yellow);margin-bottom:6px">Wrong Network</div>
+    <div style="font-size:14px;color:var(--text2);line-height:1.6;margin-bottom:16px">
+      CryptoNova uses <strong style="color:var(--text)">Base Sepolia Testnet</strong>.
+    </div>
+
+    <!-- Mobile: step-by-step enable testnets first -->
+    <div id="nb-mobile-guide" style="display:none;text-align:left;background:rgba(245,158,11,.08);border:1px solid rgba(245,158,11,.3);border-radius:10px;padding:14px 16px;margin-bottom:16px">
+      <div style="font-size:13px;font-weight:700;color:var(--yellow);margin-bottom:10px">📱 Enable testnets first (one-time setup)</div>
+      <div style="font-size:13px;color:var(--text2);line-height:2">
+        <strong style="color:var(--text)">1.</strong> In MetaMask tap <strong style="color:var(--text)">☰ menu</strong> (top-left)<br>
+        <strong style="color:var(--text)">2.</strong> Go to <strong style="color:var(--text)">Settings → Advanced</strong><br>
+        <strong style="color:var(--text)">3.</strong> Turn ON <strong style="color:var(--text)">"Show test networks"</strong><br>
+        <strong style="color:var(--text)">4.</strong> Come back and tap the button below ↓
+      </div>
+    </div>
+
+    <button onclick="switchToBaseSepolia()" id="nb-switch-btn" style="background:var(--yellow);color:#000;border:none;border-radius:10px;padding:13px 20px;font-weight:700;font-size:15px;cursor:pointer;width:100%;margin-bottom:10px">
+      🔀 Add &amp; Switch to Base Sepolia
+    </button>
+    <div id="nb-hint" style="font-size:12px;color:var(--text3)">
+      This will prompt MetaMask to add and switch to Base Sepolia automatically.
+    </div>
+  </div>
+</div>
+
+<header>
+  <div class="logo">
+    <div class="logo-icon">CN</div>
+    <div class="logo-text">Crypto<span>Nova</span></div>
+    <span class="logo-badge" id="network-badge">Base Sepolia</span>
+  </div>
+  <div style="display:flex;align-items:center;gap:8px">
+    <button class="theme-toggle" id="theme-btn" onclick="toggleTheme()">☀️ Light</button>
+    <button id="btn-switch-network" onclick="switchToBaseSepolia()" style="display:none;background:var(--yellow);color:#000;border:none;border-radius:8px;padding:7px 12px;font-weight:700;font-size:12px;cursor:pointer;transition:opacity .2s">⚠️ Wrong Network</button>
+    <button id="btn-connect" onclick="connectWallet()">Connect Wallet</button>
+  </div>
+</header>
+
+<nav>
+  <button class="active" onclick="showTab('home')">🏠 Home</button>
+  <button onclick="showTab('register')">✅ Register</button>
+  <button onclick="showTab('dashboard')">📊 Dashboard</button>
+  <button onclick="showTab('matrix')">🌐 Matrix</button>
+  <button onclick="showTab('roadmap')">🗺️ Roadmap</button>
+</nav>
+
+<main>
+
+  <!-- ══ HOME TAB ══════════════════════════════════════════════════════ -->
+  <div id="tab-home" class="tab-panel active">
+    <div class="hero">
+      <h1>7-Tier Matrix System<br><span>on Base Chain</span></h1>
+      <p>Join the CryptoNova 7-tier ladder. Start at Nova Seed ($10) and climb to SuperNova Spark ($1,000). Earn referral bonuses, 7-level chain pay, and CNOVA tokens — all backed by treasury USDC.</p>
+      <div class="hero-actions">
+        <button class="btn-primary" onclick="showTab('register')">Join Now — $10 USDC</button>
+        <button class="btn-outline" onclick="showTab('dashboard')">View Dashboard</button>
+      </div>
+      <div style="margin-top:20px">
+        <a href="https://t.me/+21K4teAVfYdlMTdi" target="_blank" rel="noopener" style="text-decoration:none;display:inline-flex;align-items:center;gap:8px;background:rgba(59,130,246,.12);border:1px solid rgba(59,130,246,.35);border-radius:10px;padding:10px 18px;color:var(--blue);font-weight:700;font-size:14px;transition:background .2s" onmouseover="this.style.background='rgba(59,130,246,.22)'" onmouseout="this.style.background='rgba(59,130,246,.12)'">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.373 0 0 5.373 0 12s5.373 12 12 12 12-5.373 12-12S18.627 0 12 0zm5.894 8.221-1.97 9.28c-.145.658-.537.818-1.084.508l-3-2.21-1.447 1.394c-.16.16-.295.295-.605.295l.213-3.053 5.56-5.023c.242-.213-.054-.333-.373-.12L8.32 13.617l-2.96-.924c-.643-.204-.657-.643.136-.953l11.57-4.461c.537-.194 1.006.131.828.942z"/></svg>
+          Join CryptoNova Telegram Community
+        </a>
+      </div>
+    </div>
+
+    <!-- CNOVA Token Card -->
+    <div class="token-card">
+      <div class="token-card-left">
+        <div class="token-icon">CN</div>
+        <div>
+          <div class="token-name">CNOVA Token <span class="pill pill-green" style="font-size:10px;vertical-align:middle">ERC-20 · Base</span></div>
+          <div class="token-addr">0x3aDD4b15748d28819fd9B7C897eB9Dc97B157B3f · 18 decimals</div>
+          <div style="font-size:12px;color:var(--text2);margin-top:4px">Earned automatically on every registration. Floor price backed by treasury USDC.</div>
+        </div>
+      </div>
+      <button class="btn-metamask" onclick="addCNOVAtoMetaMask()">
+        🦊 Add CNOVA to MetaMask
+      </button>
+    </div>
+
+    <div class="token-card" style="background:linear-gradient(135deg,rgba(59,130,246,.08),rgba(99,102,241,.06));border-color:rgba(59,130,246,.35)">
+      <div class="token-card-left">
+        <div class="token-icon" style="background:linear-gradient(135deg,#2775ca,#5b8dee)">$</div>
+        <div>
+          <div class="token-name">USD Coin <span class="pill" style="font-size:10px;vertical-align:middle;background:rgba(59,130,246,.15);color:#5b8dee;border:1px solid rgba(59,130,246,.3)">USDC · Base</span></div>
+          <div class="token-addr">0x2D8B7b5eDec96bE441b6fb0D45D74a2BcE2C639a · 6 decimals</div>
+          <div style="font-size:12px;color:var(--text2);margin-top:4px">Required to join. $10 at Tier 1 up to $1,000 at Tier 7.</div>
+        </div>
+      </div>
+      <button class="btn-metamask" style="background:#2775ca" onclick="addUSDCtoMetaMask()">
+        🦊 Add USDC to MetaMask
+      </button>
+    </div>
+
+    <!-- Live Stats -->
+    <div class="section-title"><div class="dot"></div> Live Stats <span id="stats-refresh" style="font-size:12px;color:var(--text3);font-weight:400;margin-left:8px;cursor:pointer" onclick="loadHomeStats()">↻ Refresh</span></div>
+    <div class="grid-4" id="stats-grid">
+      <div class="card-sm"><div class="stat-label">Total Members</div><div class="stat-value" id="stat-members"><span class="spinner" style="color:var(--text3)"></span></div><div class="stat-sub">Active in matrix</div></div>
+      <div class="card-sm"><div class="stat-label">CNOVA Floor Price</div><div class="stat-value green" id="stat-floor"><span class="spinner" style="color:var(--green)"></span></div><div class="stat-sub">USDC per CNOVA</div></div>
+      <div class="card-sm"><div class="stat-label">Treasury Reserve</div><div class="stat-value" id="stat-reserve"><span class="spinner" style="color:var(--text3)"></span></div><div class="stat-sub">USDC backing floor</div></div>
+      <div class="card-sm" style="border-color:rgba(245,158,11,.4)"><div class="stat-label">⛏️ Mining Epoch</div><div class="stat-value" id="stat-epoch-badge" style="font-size:14px;color:var(--yellow)"><span class="spinner" style="color:var(--yellow)"></span></div><div class="stat-sub" id="stat-epoch-reward-sub">— CNOVA per entry</div></div>
+    </div>
+
+    <!-- Cycle progress -->
+    <div class="grid-2" style="margin-bottom:24px">
+      <div class="card">
+        <div class="section-title" style="margin-bottom:12px"><div class="dot"></div> Current Cycle</div>
+        <div class="info-row"><span class="info-key">Cycle #</span><span class="info-val" id="stat-cycle">—</span></div>
+        <div class="info-row"><span class="info-key">Positions Filled</span><span class="info-val" id="stat-filled">—</span></div>
+        <div class="info-row"><span class="info-key">Cycle Trigger</span><span class="info-val">100 slots (ACTIVE_WINDOW=100)</span></div>
+        <div style="margin-top:12px">
+          <div style="display:flex;justify-content:space-between;font-size:12px;color:var(--text3);margin-bottom:4px">
+            <span>Progress</span><span id="stat-pct">0%</span>
+          </div>
+          <div class="progress-wrap"><div class="progress-bar" id="stat-progress" style="width:0%"></div></div>
+        </div>
+        <div style="margin-top:8px"><span class="pill" id="stat-status">—</span></div>
+      </div>
+      <div class="card">
+        <div class="section-title" style="margin-bottom:12px"><div class="dot"></div> Mining Epoch</div>
+        <div class="info-row"><span class="info-key">Current Epoch</span><span class="info-val" id="stat-epoch" style="color:var(--yellow)">—</span></div>
+        <div class="info-row"><span class="info-key">Reward Per Entry</span><span class="info-val green" id="stat-reward">—</span></div>
+        <div class="info-row"><span class="info-key">Entries Until Next Epoch</span><span class="info-val" id="stat-epoch-rem">—</span></div>
+        <div class="info-row"><span class="info-key">CNOVA Minted</span><span class="info-val" id="stat-minted">—</span></div>
+        <div class="info-row"><span class="info-key">Total CNOVA Supply</span><span class="info-val" id="stat-supply">—</span></div>
+      </div>
+    </div>
+
+    <!-- Entry split -->
+    <div class="card">
+      <div class="section-title"><div class="dot"></div> How Each Entry Fee is Split (all tiers)</div>
+      <div class="split-row"><span class="split-label">🤝 Referrer bonus</span><span><span class="split-amount">30%</span> <span class="split-pct">e.g. $3.00 at Tier 1</span></span></div>
+      <div class="split-row"><span class="split-label">🔗 7-Level chain pay (L1–L7)</span><span><span class="split-amount">40%</span> <span class="split-pct">e.g. $4.00 at Tier 1</span></span></div>
+      <div class="split-row"><span class="split-label">🏘️ Community wallet</span><span><span class="split-amount">10%</span> <span class="split-pct">e.g. $1.00 at Tier 1</span></span></div>
+      <div class="split-row"><span class="split-label">🏦 USDC treasury reserve</span><span><span class="split-amount">15%</span> <span class="split-pct">e.g. $1.50 at Tier 1</span></span></div>
+      <div class="split-row"><span class="split-label">⚙️ Dev + Ops</span><span><span class="split-amount">5%</span> <span class="split-pct">e.g. $0.50 at Tier 1</span></span></div>
+      <div style="margin-top:14px;padding:10px 14px;background:var(--green-dim);border:1px solid var(--green2);border-radius:8px;font-size:13px;color:var(--text2)">
+        💡 <strong style="color:var(--green)">Whale Gate:</strong> When 25 members reach <strong>SuperNova Genesis (Tier 5)</strong>, fast-track unlocks — skip straight to any tier above yours.
+      </div>
+    </div>
+  </div>
+
+  <!-- ══ REGISTER TAB ════════════════════════════════════════════════════ -->
+  <div id="tab-register" class="tab-panel">
+    <div class="section-title"><div class="dot"></div> Join CryptoNova</div>
+
+    <div class="grid-2">
+      <div>
+        <!-- Registration flow -->
+        <div class="card" style="margin-bottom:20px">
+          <div style="font-size:15px;font-weight:700;margin-bottom:16px">Register — $10 USDC</div>
+
+          <div id="register-wallet-warn" style="display:none;background:rgba(245,158,11,.1);border:1px solid rgba(245,158,11,.3);border-radius:8px;padding:14px;font-size:14px;color:var(--yellow);margin-bottom:16px">
+            ⚠️ Connect your wallet first to register.
+          </div>
+
+          <div id="register-already" style="display:none;background:var(--green-dim);border:1px solid var(--green2);border-radius:8px;padding:14px;font-size:14px;color:var(--green);margin-bottom:16px">
+            ✅ You are already registered! Check your <a href="#" onclick="showTab('dashboard')" style="color:var(--green);text-decoration:underline">Dashboard</a>.
+          </div>
+
+          <div class="form-group">
+            <label style="color:var(--green);font-weight:700;font-size:14px">🔗 Referrer Address <span style="color:var(--text3);font-weight:400;font-size:12px">(required — ask the person who invited you)</span></label>
+            <input type="text" id="input-referrer" placeholder="0x... paste your referrer's wallet address here"
+              style="border:2px solid var(--green2);background:rgba(0,229,160,0.05);font-size:14px;padding:13px 14px;"
+              onfocus="this.style.borderColor='var(--green)';this.style.boxShadow='0 0 0 3px rgba(0,229,160,0.15)'"
+              onblur="this.style.borderColor='var(--green2)';this.style.boxShadow='none'" />
+            <div class="form-hint" style="color:var(--text2)">⚠️ This is permanent — your referrer is locked on-chain for life. Double-check the address before registering.</div>
+          </div>
+
+          <div style="margin-bottom:20px">
+            <div style="font-size:13px;font-weight:600;margin-bottom:10px;color:var(--text2)">Your balances</div>
+            <div class="info-row"><span class="info-key">USDC Balance</span><span class="info-val" id="reg-usdc-bal">—</span></div>
+            <div class="info-row"><span class="info-key">USDC Approved</span><span class="info-val" id="reg-allowance">—</span></div>
+            <div id="usdc-low-warn" style="display:none;margin-top:10px;background:rgba(245,158,11,.08);border:1px solid rgba(245,158,11,.3);border-radius:8px;padding:12px;font-size:13px;color:var(--yellow)">
+              ⚠️ Your USDC balance is too low to register. Need test USDC? Contact the dev team on Telegram — we'll get you sorted. 💬
+            </div>
+          </div>
+
+          <!-- Step buttons -->
+          <div style="display:flex;flex-direction:column;gap:10px">
+            <button class="btn btn-ghost full-w" id="btn-approve" onclick="approveUSDC()" disabled title="Approves exactly $10 USDC — the contract cannot take more than this amount">
+              Step 1: Approve $10 USDC 🔒
+            </button>
+            <button class="btn btn-ghost full-w" id="btn-register" onclick="doRegister()" disabled>
+              Step 2: Register ($10 USDC)
+            </button>
+          </div>
+
+          <div id="reg-status" style="margin-top:14px;font-size:13px;color:var(--text2)"></div>
+        </div>
+
+        <!-- URL referral tool -->
+        <div class="card" id="referral-link-card" style="display:none">
+          <div style="font-size:15px;font-weight:700;margin-bottom:12px">🔗 Your Referral Link</div>
+          <div style="display:flex;gap:8px;align-items:stretch;margin-bottom:8px">
+            <input type="text" id="referral-url" readonly style="cursor:pointer;color:var(--green);flex:1" onclick="copyReferralLink()" />
+            <button onclick="copyReferralLink()" id="copy-ref-btn" style="background:var(--green);color:#000;border:none;border-radius:8px;padding:0 16px;font-weight:800;font-size:13px;cursor:pointer;white-space:nowrap;flex-shrink:0">Copy</button>
+          </div>
+          <div class="form-hint">Tap the <strong>Copy</strong> button, then share with your network. When someone opens your link, your address auto-fills as their referrer.</div>
+        </div>
+      </div>
+
+      <!-- How it works -->
+      <div class="card">
+        <div style="font-size:15px;font-weight:700;margin-bottom:16px">How to Register</div>
+        <ul class="step-list">
+          <li>
+            <div class="step-content">
+              <strong>Connect MetaMask</strong>
+              <span>Click "Connect Wallet" in the top-right. Make sure you're on Base Sepolia testnet.</span>
+            </div>
+          </li>
+          <li>
+            <div class="step-content">
+              <strong>Get Test USDC</strong>
+              <span>On testnet, the MockUSDC contract minted $10,000 to the deployer. Ask for a test transfer, or mint directly.</span>
+            </div>
+          </li>
+          <li>
+            <div class="step-content">
+              <strong>Approve USDC</strong>
+              <span>Allow the Matrix contract to spend $10 USDC on your behalf. One MetaMask confirmation.</span>
+            </div>
+          </li>
+          <li>
+            <div class="step-content">
+              <strong>Register</strong>
+              <span>Confirm the register transaction. You'll be placed into the BFS matrix automatically.</span>
+            </div>
+          </li>
+          <li>
+            <div class="step-content">
+              <strong>Earn &amp; Withdraw</strong>
+              <span>As new members register, USDC flows through the chain to you. Withdraw any time from the Dashboard.</span>
+            </div>
+          </li>
+        </ul>
+
+        <div style="margin-top:20px;padding:14px;background:var(--bg3);border-radius:8px;font-size:13px">
+          <div style="color:var(--green);font-weight:700;margin-bottom:6px">💡 Earnings Potential</div>
+          <div style="color:var(--text2);line-height:1.6">Passive (0 referrals): <strong style="color:var(--text)">$46.74</strong> per cycle (4.7× ROI)<br>
+          Active (2 referrals): <strong style="color:var(--text)">$52.74</strong> per cycle (5.3× ROI)<br>
+          Power (5 referrals): <strong style="color:var(--text)">$61.74</strong> per cycle (6.2× ROI)<br>
+          <span style="font-size:11px;color:var(--text3)">Chain pay figures show 80% withdrawable portion. Re-entry pool gets remaining 20% + $1 flat starter.</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══ DASHBOARD TAB ═══════════════════════════════════════════════════ -->
+  <div id="tab-dashboard" class="tab-panel">
+    <div class="section-title"><div class="dot"></div> My Dashboard</div>
+
+    <div id="dash-no-wallet" class="card" style="text-align:center;padding:40px;display:none">
+      <div style="font-size:32px;margin-bottom:12px"><span style="filter:sepia(1) saturate(3) hue-rotate(5deg) brightness(0.85)">👛</span></div>
+      <div style="font-size:16px;font-weight:600;margin-bottom:8px">Connect Your Wallet</div>
+      <div style="color:var(--text2);font-size:14px;margin-bottom:20px">Connect MetaMask to view your dashboard and earnings.</div>
+      <button class="btn btn-green" onclick="window.ethereum ? connectWallet() : showMetaMaskModal()">Connect Wallet</button>
+    </div>
+
+    <div id="dash-not-registered" class="card" style="text-align:center;padding:40px;display:none">
+      <div style="font-size:32px;margin-bottom:12px">🚀</div>
+      <div style="font-size:16px;font-weight:600;margin-bottom:8px">Not Yet Registered</div>
+      <div style="color:var(--text2);font-size:14px;margin-bottom:20px">You haven't joined the matrix yet. Register with $10 USDC to get started.</div>
+      <button class="btn btn-green" onclick="showTab('register')">Register Now</button>
+    </div>
+
+    <div id="dash-content" style="display:none">
+      <!-- Earnings cards -->
+      <div class="grid-4" style="margin-bottom:24px">
+        <div class="card-sm" style="border-color:var(--green2)">
+          <div class="stat-label">Withdrawable</div>
+          <div class="stat-value green" id="dash-withdrawable">—</div>
+          <div class="stat-sub">Ready to claim</div>
+        </div>
+        <div class="card-sm">
+          <div class="stat-label">Re-entry Pool</div>
+          <div class="stat-value" id="dash-reentry">—</div>
+          <div style="margin:6px 0 2px;background:var(--bg3);border-radius:4px;height:6px;overflow:hidden">
+            <div id="reentry-bar" style="height:100%;background:var(--green);border-radius:4px;width:0%;transition:width .4s ease"></div>
+          </div>
+          <div class="stat-sub"><span id="reentry-pct">0%</span> to auto re-entry</div>
+        </div>
+        <div class="card-sm">
+          <div class="stat-label">CNOVA Balance</div>
+          <div class="stat-value green" id="dash-cnova">—</div>
+          <div class="stat-sub">Mined tokens</div>
+        </div>
+        <div class="card-sm">
+          <div class="stat-label">CNOVA Value</div>
+          <div class="stat-value" id="dash-cnova-val">—</div>
+          <div class="stat-sub">At current floor</div>
+        </div>
+      </div>
+
+      <!-- Withdraw + member info -->
+      <div class="grid-2" style="margin-bottom:24px">
+        <div class="card">
+          <div class="section-title" style="margin-bottom:16px"><div class="dot"></div> Withdraw Earnings</div>
+          <div style="font-size:28px;font-weight:800;color:var(--green);margin-bottom:4px" id="dash-withdraw-amount">$0.00</div>
+          <div style="font-size:13px;color:var(--text3);margin-bottom:20px">Available USDC</div>
+          <button class="btn btn-green full-w" id="btn-withdraw" onclick="doWithdraw()" disabled>
+            Withdraw to Wallet
+          </button>
+          <div id="withdraw-status" style="margin-top:12px;font-size:13px;color:var(--text2)"></div>
+        </div>
+        <div class="card">
+          <div class="section-title" style="margin-bottom:12px"><div class="dot"></div> Member Info</div>
+          <div class="info-row"><span class="info-key">Member ID</span><span class="info-val" id="dash-id">—</span></div>
+          <div class="info-row"><span class="info-key">Status</span><span class="info-val" id="dash-status">—</span></div>
+          <div class="info-row"><span class="info-key">Current Cycle</span><span class="info-val" id="dash-cycle">—</span></div>
+          <div class="info-row"><span class="info-key">Matrix Node</span><span class="info-val" id="dash-node">—</span></div>
+          <div class="info-row"><span class="info-key">Original Referrer</span><span class="info-val addr" id="dash-orig-referrer" title="Locked for life — earns $3 every time you cycle">—</span></div>
+          <div class="info-row"><span class="info-key">Direct Referrals</span><span class="info-val" id="dash-directs">—</span></div>
+          <div class="info-row"><span class="info-key">BFS Children</span><span class="info-val" id="dash-children">—</span></div>
+        </div>
+      </div>
+
+      <!-- TX History -->
+      <div class="card" style="margin-bottom:24px">
+        <div class="section-title" style="margin-bottom:14px"><div class="dot"></div> My Transaction History</div>
+        <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap">
+          <div style="font-size:13px;color:var(--text2);line-height:1.6;flex:1;min-width:200px">
+            View all your registrations, referral bonuses, chain payments and withdrawals on BaseScan — the full on-chain record.
+          </div>
+          <a id="basescan-tx-link" href="https://sepolia.basescan.org/address/" target="_blank" rel="noopener" style="text-decoration:none;flex-shrink:0">
+            <button class="btn btn-green" style="white-space:nowrap">🔍 View on BaseScan ↗</button>
+          </a>
+        </div>
+      </div>
+
+      <!-- Chain pay breakdown -->
+      <div class="card">
+        <div class="section-title"><div class="dot"></div> Chain Pay Structure — Your Node Depth</div>
+        <div style="font-size:13px;color:var(--text2);margin-bottom:16px">These amounts flow upward from each new member registration through your position.</div>
+        <div style="font-size:12px;color:var(--text3);margin-bottom:10px">80% of each level goes to your withdrawable earnings · 20% flows into your re-entry pool</div>
+        <div id="chain-pay-table">
+          <div class="chain-row"><span style="color:var(--text2)">Level 1 (direct under you)</span><span><span style="font-weight:600;color:var(--green)">$1.33</span> <span style="font-size:11px;color:var(--text3)">→ $1.06 earn / $0.27 pool</span></span></div>
+          <div class="chain-row"><span style="color:var(--text2)">Level 2</span><span><span style="font-weight:600">$0.80</span> <span style="font-size:11px;color:var(--text3)">→ $0.64 earn / $0.16 pool</span></span></div>
+          <div class="chain-row"><span style="color:var(--text2)">Level 3</span><span><span style="font-weight:600">$0.67</span> <span style="font-size:11px;color:var(--text3)">→ $0.54 earn / $0.13 pool</span></span></div>
+          <div class="chain-row"><span style="color:var(--text2)">Level 4</span><span><span style="font-weight:600">$0.53</span> <span style="font-size:11px;color:var(--text3)">→ $0.42 earn / $0.11 pool</span></span></div>
+          <div class="chain-row"><span style="color:var(--text2)">Level 5</span><span><span style="font-weight:600">$0.35</span> <span style="font-size:11px;color:var(--text3)">→ $0.28 earn / $0.07 pool</span></span></div>
+          <div class="chain-row"><span style="color:var(--text2)">Level 6</span><span><span style="font-weight:600">$0.21</span> <span style="font-size:11px;color:var(--text3)">→ $0.17 earn / $0.04 pool</span></span></div>
+          <div class="chain-row"><span style="color:var(--text2)">Level 7</span><span><span style="font-weight:600">$0.11</span> <span style="font-size:11px;color:var(--text3)">→ $0.09 earn / $0.02 pool</span></span></div>
+          <div class="chain-row" style="border-top:1px solid var(--green2)"><span style="font-weight:700">Total chain pay per entry</span><span style="font-weight:700;color:var(--green)">$4.00 <span style="font-size:11px;color:var(--text3);font-weight:400">($3.20 earn / $0.80 pool)</span></span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══ MATRIX TAB ══════════════════════════════════════════════════════ -->
+  <div id="tab-matrix" class="tab-panel">
+    <div class="section-title"><div class="dot"></div> Matrix Tree View</div>
+
+    <div class="card" style="margin-bottom:20px">
+      <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+        <div style="flex:1;min-width:200px">
+          <label style="display:block;font-size:13px;color:var(--text2);margin-bottom:6px">View from Node ID (or wallet address)</label>
+          <input type="text" id="matrix-input" placeholder="Node ID number or 0x... address" />
+        </div>
+        <button id="btn-load-tree"    class="btn btn-ghost"  style="margin-top:20px" onclick="setActiveMatrixBtn('btn-load-tree');loadMatrixTree()">Load Tree</button>
+        <button id="btn-my-position" class="btn btn-ghost"  style="margin-top:20px" onclick="setActiveMatrixBtn('btn-my-position');loadMyTree()">My Position</button>
+        <button id="btn-my-directs"  class="btn btn-ghost"  style="margin-top:20px" onclick="setActiveMatrixBtn('btn-my-directs');loadMyDirects()">👥 My Directs</button>
+      </div>
+    </div>
+
+    <div class="grid-4" style="margin-bottom:20px">
+      <div class="card-sm"><div class="stat-label">Total Nodes</div><div class="stat-value" id="matrix-nodes">—</div></div>
+      <div class="card-sm"><div class="stat-label">BFS Head</div><div class="stat-value" id="matrix-bfs">—</div></div>
+      <div class="card-sm"><div class="stat-label">Cycle Fill</div><div class="stat-value" id="matrix-fill">—</div></div>
+      <div class="card-sm" style="border-color:var(--green2)">
+        <div class="stat-label" id="matrix-my-node-label">My Node ID</div>
+        <div class="stat-value green" id="matrix-my-node">—</div>
+        <div class="stat-sub" id="matrix-my-level-sub" style="display:none"></div>
+      </div>
+    </div>
+
+    <!-- My Position info banner — shown only when My Position is active -->
+    <div id="matrix-pos-banner" style="display:none;background:var(--green-dim);border:1px solid var(--green2);border-radius:10px;padding:14px 20px;margin-bottom:16px;display:none">
+      <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap">
+        <span style="font-size:13px;font-weight:700;color:var(--green)">📍 My Position</span>
+        <span id="matrix-pos-level"  style="font-size:13px;color:var(--text2)"></span>
+        <span id="matrix-pos-slots"  style="font-size:13px;color:var(--text2)"></span>
+        <span id="matrix-pos-cycle"  style="font-size:13px;color:var(--text2)"></span>
+      </div>
+    </div>
+
+    <div class="card">
+      <div id="matrix-loading" class="loading-text">Load a tree above to see the matrix visualisation.</div>
+      <div id="matrix-tree" style="display:none;text-align:center"></div>
+    </div>
+
+    <!-- Legend -->
+    <div style="display:flex;gap:16px;margin-top:16px;flex-wrap:wrap;font-size:12px;color:var(--text3)">
+      <span><span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:var(--green-dim);border:1px solid var(--green2);margin-right:4px"></span>Your node</span>
+      <span><span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:rgba(245,158,11,.10);border:1px solid var(--yellow);margin-right:4px"></span>Your direct 🤝</span>
+      <span><span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:var(--bg3);border:1px solid var(--text3);margin-right:4px"></span>Filled</span>
+      <span><span style="display:inline-block;width:10px;height:10px;border-radius:2px;border:1px dashed var(--border);margin-right:4px"></span>Empty slot</span>
+    </div>
+
+    <!-- My Directs Panel -->
+    <div class="card" id="my-directs-card" style="margin-top:24px;display:none">
+      <div class="section-title" style="margin-bottom:14px"><div class="dot"></div> My Direct Referrals</div>
+      <div id="my-directs-loading" style="font-size:14px;color:var(--text3);padding:12px 0">
+        <span class="spinner"></span> Loading your direct referrals…
+      </div>
+      <div id="my-directs-empty" style="display:none;font-size:14px;color:var(--text3);padding:12px 0;text-align:center">
+        No direct referrals found yet. Share your referral link to grow your team!
+      </div>
+      <div id="my-directs-list" style="display:none">
+        <div id="my-directs-rows"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══ ROADMAP TAB ═══════════════════════════════════════════════════════ -->
+  <div id="tab-roadmap" class="tab-panel">
+
+    <div class="hero" style="padding:32px 20px 28px">
+      <h1 style="font-size:28px">CryptoNova <span>Roadmap</span></h1>
+      <p style="font-size:15px;margin:10px auto 0;max-width:560px">From testnet to unstoppable. Every phase moves us closer to a fully decentralised, community-owned matrix that runs forever on Base chain.</p>
+    </div>
+
+    <!-- ── Timeline ── -->
+    <div class="roadmap-timeline" style="margin-bottom:32px">
+
+      <!-- Phase 0 -->
+      <div class="roadmap-phase">
+        <div style="display:flex;flex-direction:column;align-items:flex-end;padding-right:20px;padding-top:4px">
+          <div class="phase-label done">Phase 0</div>
+          <div style="font-size:10px;color:var(--green);text-align:right;margin-top:2px">✅ Complete</div>
+        </div>
+        <div>
+          <div class="phase-card done" style="margin-bottom:20px">
+            <div class="phase-title">🏗️ Foundation</div>
+            <div class="phase-subtitle">Smart contracts written, tested & deployed to Base Sepolia testnet</div>
+            <ul class="checklist">
+              <li><span class="check-icon check-done">✅</span> 3 smart contracts written (Matrix, Treasury, Token)</li>
+              <li><span class="check-icon check-done">✅</span> 29/29 unit tests passing</li>
+              <li><span class="check-icon check-done">✅</span> Deployed to Base Sepolia testnet</li>
+              <li><span class="check-icon check-done">✅</span> Full dApp frontend built (this app!)</li>
+              <li><span class="check-icon check-done">✅</span> First member registered live on testnet</li>
+              <li><span class="check-icon check-done">✅</span> CNOVA token name confirmed unique globally</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+
+      <!-- Phase 1 -->
+      <div class="roadmap-phase">
+        <div style="display:flex;flex-direction:column;align-items:flex-end;padding-right:20px;padding-top:4px">
+          <div class="phase-label done">Phase 1</div>
+          <div style="font-size:10px;color:var(--green);text-align:right;margin-top:2px">✅ Done</div>
+        </div>
+        <div>
+          <div class="phase-card done" style="margin-bottom:20px">
+            <div class="phase-title">🔧 Pre-Launch</div>
+            <div class="phase-subtitle">Complete — all critical infrastructure in place ✅</div>
+            <ul class="checklist">
+              <li><span class="check-icon check-done">✅</span> Verify contracts on BaseScan (removes MetaMask "malicious" warning)</li>
+              <li><span class="check-icon check-done">✅</span> Register domain — crypto-nova.app secured</li>
+              <li><span class="check-icon check-done">✅</span> Deploy frontend to secure HTTPS hosting (Vercel)</li>
+              <li><span class="check-icon check-done">✅</span> Add Terms of Service + Risk Disclaimer page</li>
+              <li><span class="check-icon check-done">✅</span> Add FAQ page for common community questions</li>
+              <li><span class="check-icon check-done">✅</span> Internal beta: community wallet testing underway</li>
+              <li><span class="check-icon check-done">✅</span> Set permanent DEV_WALLET &amp; OPS_WALLET addresses (ready for mainnet)</li>
+              <li><span class="check-icon check-done">✅</span> Telegram community group live — <a href="https://t.me/+21K4teAVfYdlMTdi" target="_blank" style="color:var(--green)">Join here</a></li>
+              <li><span class="check-icon check-pending">⏳</span> Write simple one-pager: what is CryptoNova, how does it work</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+
+      <!-- Phase 2 -->
+      <div class="roadmap-phase">
+        <div style="display:flex;flex-direction:column;align-items:flex-end;padding-right:20px;padding-top:4px">
+          <div class="phase-label active">Phase 2</div>
+          <div style="font-size:10px;color:var(--yellow);text-align:right;margin-top:2px">⚡ Now</div>
+        </div>
+        <div>
+          <div class="phase-card active" style="margin-bottom:20px">
+            <div class="phase-title">🤝 Community Beta</div>
+            <div class="phase-subtitle">Soft launch to initial community — testnet testing with real members</div>
+            <ul class="checklist">
+              <li><span class="check-icon check-done">✅</span> Open to initial community (testnet)</li>
+              <li><span class="check-icon check-done">✅</span> Mobile MetaMask experience tested and improved</li>
+              <li><span class="check-icon check-pending">⏳</span> Collect feedback and fix remaining UX issues</li>
+              <li><span class="check-icon check-pending">⏳</span> Record tutorial video / walkthrough for non-crypto members</li>
+              <li><span class="check-icon check-pending">⏳</span> Test full matrix cycle: 254 positions → auto-reset → cycle 2</li>
+              <li><span class="check-icon check-pending">⏳</span> Confirm referral link flow works end-to-end for all members</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+
+      <!-- Phase 3 -->
+      <div class="roadmap-phase">
+        <div style="display:flex;flex-direction:column;align-items:flex-end;padding-right:20px;padding-top:4px">
+          <div class="phase-label future">Phase 3</div>
+          <div style="font-size:10px;color:var(--text3);text-align:right;margin-top:2px">Weeks 6–8</div>
+        </div>
+        <div>
+          <div class="phase-card" style="margin-bottom:20px">
+            <div class="phase-title">🚀 Mainnet Launch</div>
+            <div class="phase-subtitle">Real USDC. Real earnings. Community-ready.</div>
+            <ul class="checklist">
+              <li><span class="check-icon check-future">◦</span> Deploy all 3 contracts to Base mainnet</li>
+              <li><span class="check-icon check-future">◦</span> Update dApp to point to mainnet contracts + real USDC address</li>
+              <li><span class="check-icon check-future">◦</span> Verify mainnet contracts on BaseScan</li>
+              <li><span class="check-icon check-future">◦</span> Final security review before public launch</li>
+              <li><span class="check-icon check-future">◦</span> Consider renouncing contract ownership (fully decentralised)</li>
+              <li><span class="check-icon check-future">◦</span> Public announcement — open registrations</li>
+              <li><span class="check-icon check-future">◦</span> Members begin earning real USDC from day 1</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+
+      <!-- Phase 4 -->
+      <div class="roadmap-phase">
+        <div style="display:flex;flex-direction:column;align-items:flex-end;padding-right:20px;padding-top:4px">
+          <div class="phase-label future">Phase 4</div>
+          <div style="font-size:10px;color:var(--text3);text-align:right;margin-top:2px">Post-Launch</div>
+        </div>
+        <div>
+          <div class="phase-card" style="margin-bottom:20px">
+            <div class="phase-title">🌌 Ecosystem Growth</div>
+            <div class="phase-subtitle">The universe takes over — CNOVA becomes a tradeable asset</div>
+            <ul class="checklist">
+              <li><span class="check-icon check-future">◦</span> CNOVA listed on Aerodrome Finance DEX (Base's largest DEX)</li>
+              <li><span class="check-icon check-future">◦</span> CNOVA/USDC liquidity pool — token becomes tradeable</li>
+              <li><span class="check-icon check-future">◦</span> Leaderboard: top earners, top referrers</li>
+              <li><span class="check-icon check-future">◦</span> Telegram earnings bot — get notified on every payment</li>
+              <li><span class="check-icon check-future">◦</span> Analytics dashboard: real-time matrix stats &amp; treasury health</li>
+              <li><span class="check-icon check-future">◦</span> Community governance / DAO for future decisions</li>
+              <li><span class="check-icon check-future">◦</span> CEX listing exploration (as token grows)</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- ── Pre-Launch Checklist ── -->
+    <div class="section-title"><div class="dot"></div> Pre-Launch Checklist</div>
+    <div class="prelaunch-grid">
+
+      <div class="prelaunch-block">
+        <h3>🔐 Technical</h3>
+        <ul>
+          <li>Verify all 3 contracts on BaseScan (testnet + mainnet)</li>
+          <li>Custom domain with HTTPS — never serve over HTTP in production</li>
+          <li>Test on desktop + mobile MetaMask browser</li>
+          <li>Register 10+ wallets in sequence to stress-test payments</li>
+          <li>Confirm withdraw() flows correct USDC to wallet</li>
+          <li>Set DEV_WALLET and OPS_WALLET to permanent non-deployer addresses</li>
+        </ul>
+      </div>
+
+      <div class="prelaunch-block">
+        <h3>⚖️ Legal &amp; Safety</h3>
+        <ul>
+          <li>Add Terms of Service page to the website</li>
+          <li>Add Risk Disclaimer: crypto is speculative, no guarantees</li>
+          <li>Consider country restrictions if needed (consult if unsure)</li>
+          <li>Secure your deployer/owner wallet with a hardware wallet (Ledger)</li>
+          <li>Never share private keys — consider a multisig for critical wallets</li>
+        </ul>
+      </div>
+
+      <div class="prelaunch-block">
+        <h3>📣 Marketing &amp; Community</h3>
+        <ul>
+          <li>Telegram community group — your main support channel</li>
+          <li>Twitter/X account for announcements</li>
+          <li>Simple one-pager / whitepaper explaining the system clearly</li>
+          <li>Tutorial video: how to connect, approve, register</li>
+          <li>Referral link guide so members can share properly</li>
+          <li>Set expectations: testnet first → mainnet after feedback</li>
+        </ul>
+      </div>
+
+      <div class="prelaunch-block">
+        <h3>🪙 Token</h3>
+        <ul>
+          <li>CNOVA ticker confirmed unique ✅</li>
+          <li>Add CNOVA to MetaMask (button on Home tab)</li>
+          <li>Prepare Aerodrome DEX listing for Phase 4</li>
+          <li>Consider a token logo / icon (32×32 PNG for MetaMask display)</li>
+          <li>CoinGecko listing application (after mainnet &amp; sufficient volume)</li>
+        </ul>
+      </div>
+
+    </div>
+
+    <!-- ── Contract Addresses ── -->
+    <div class="section-title" style="margin-top:32px"><div class="dot"></div> Deployed Contracts (Base Sepolia Testnet)</div>
+    <div class="card">
+      <div style="font-size:13px;color:var(--text2);margin-bottom:14px">These addresses are for testing only. Mainnet addresses will replace these at Phase 3 launch.</div>
+      <div class="info-row"><span class="info-key">CNOVAToken</span><span class="info-val addr">0x3aDD4b15748d28819fd9B7C897eB9Dc97B157B3f</span></div>
+      <div class="info-row"><span class="info-key">CNOVATreasury</span><span class="info-val addr">0x9DA57b7765192d0c3B147C5ee674A9a459268208</span></div>
+      <div class="info-row"><span class="info-key">TierManager</span><span class="info-val addr">0x82c93CAB376C557FB9E32D325D3eC9d5fFaf3624</span></div>
+      <div class="info-row"><span class="info-key">Tier 1 — Nova Seed (W=100)</span><span class="info-val addr">0x001DCe1E58C3F22ec1983504A232b06B46F85e9f</span></div>
+      <div class="info-row"><span class="info-key">Tier 5 — SuperNova Genesis 🐋</span><span class="info-val addr">0xd5261831F594b6342a870266DEb209C500cD59Ec</span></div>
+      <div class="info-row"><span class="info-key">MockUSDC (testnet)</span><span class="info-val addr">0x2D8B7b5eDec96bE441b6fb0D45D74a2BcE2C639a</span></div>
+      <div style="margin-top:14px;font-size:12px;color:var(--text3)">
+        Explorer: <a href="https://sepolia.basescan.org" target="_blank" style="color:var(--blue)">sepolia.basescan.org</a>
+      </div>
+    </div>
+
+  </div>
+
+</main>
+
+<!-- Footer -->
+<footer style="background:var(--bg2);border-top:1px solid var(--border);padding:20px 24px;text-align:center;font-size:13px;color:var(--text3);margin-top:40px">
+  <div style="display:flex;align-items:center;justify-content:center;gap:24px;flex-wrap:wrap">
+    <a href="https://t.me/+21K4teAVfYdlMTdi" target="_blank" rel="noopener" style="color:var(--text2);text-decoration:none;display:flex;align-items:center;gap:6px;transition:color .2s" onmouseover="this.style.color='var(--green)'" onmouseout="this.style.color='var(--text2)'">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.373 0 0 5.373 0 12s5.373 12 12 12 12-5.373 12-12S18.627 0 12 0zm5.894 8.221-1.97 9.28c-.145.658-.537.818-1.084.508l-3-2.21-1.447 1.394c-.16.16-.295.295-.605.295l.213-3.053 5.56-5.023c.242-.213-.054-.333-.373-.12L8.32 13.617l-2.96-.924c-.643-.204-.657-.643.136-.953l11.57-4.461c.537-.194 1.006.131.828.942z"/></svg>
+      Telegram Community
+    </a>
+    <span style="color:var(--border)">|</span>
+    <a href="terms.html" style="color:var(--text2);text-decoration:none;transition:color .2s" onmouseover="this.style.color='var(--green)'" onmouseout="this.style.color='var(--text2)'">Terms &amp; Risk Disclaimer</a>
+    <span style="color:var(--border)">|</span>
+    <a href="faq.html" style="color:var(--text2);text-decoration:none;transition:color .2s" onmouseover="this.style.color='var(--green)'" onmouseout="this.style.color='var(--text2)'">FAQ &amp; Glossary</a>
+    <span style="color:var(--border)">|</span>
+    <span>© 2026 CryptoNova. Smart contracts are immutable and open-source.</span>
+  </div>
+</footer>
+
+<!-- Toast -->
+<div id="toast"></div>
+
+<script>
+// ═══════════════════════════════════════════════════════════════════════
+// CONFIG — V3 7-Tier System (Base Sepolia, ACTIVE_WINDOW=100)
+// ═══════════════════════════════════════════════════════════════════════
+const CHAIN_ID = 84532;
+const RPC_URL  = 'https://sepolia.base.org';
+
+const ADDRESSES = {
+  usdc:           '0x2D8B7b5eDec96bE441b6fb0D45D74a2BcE2C639a',
+  token:          '0x3aDD4b15748d28819fd9B7C897eB9Dc97B157B3f',
+  treasury:       '0x9DA57b7765192d0c3B147C5ee674A9a459268208',
+  communityWallet:'0x52Fd50a54Dde9feDD6bb1a8f6E37692353826dE3',
+  tierManager:    '0x82c93CAB376C557FB9E32D325D3eC9d5fFaf3624',
+  matrices: {
+    1:'0x001DCe1E58C3F22ec1983504A232b06B46F85e9f',
+    2:'0x9be58869C2829C0EFAD246D856bCadaD390363f4',
+    3:'0x215D9bAB3344c24A000d3Bd634c08673370A8f5c',
+    4:'0x98D4CEC738F3cc40d05a35c0F38a821B425A9BDe',
+    5:'0xd5261831F594b6342a870266DEb209C500cD59Ec',
+    6:'0x669308e16715eE6EfCd13B18C081D0e07b5907f5',
+    7:'0x34eB626aBac75372eA4a94f2d7b295580486F0eA',
+  },
+};
+const TIER_NAMES={1:'Nova Seed',2:'Nova Rise',3:'Nova Star',4:'Nova Prime',5:'SuperNova Genesis',6:'SuperNova Elite',7:'SuperNova Spark'};
+const TIER_FEES={1:10,2:25,3:50,4:100,5:250,6:500,7:1000};
+const TIER_FEES_USDC={1:10_000_000n,2:25_000_000n,3:50_000_000n,4:100_000_000n,5:250_000_000n,6:500_000_000n,7:1_000_000_000n};
+const CYCLE_REQ={1:1,2:2,3:2,4:2,5:3,6:3,7:0};
+
+// ── ABIs ─────────────────────────────────────────────────────────────
+const MATRIX_ABI = [
+  {"inputs":[{"internalType":"address","name":"","type":"address"}],"name":"members","outputs":[{"internalType":"uint256","name":"id","type":"uint256"},{"internalType":"address","name":"referrer","type":"address"},{"internalType":"address","name":"originalReferrer","type":"address"},{"internalType":"uint256","name":"joinedAt","type":"uint256"},{"internalType":"uint256","name":"withdrawable","type":"uint256"},{"internalType":"uint256","name":"totalEarned","type":"uint256"},{"internalType":"uint256","name":"reentryCount","type":"uint256"},{"internalType":"bool","name":"isRegistered","type":"bool"}],"stateMutability":"view","type":"function"},
+  {"inputs":[{"internalType":"address","name":"","type":"address"}],"name":"cyclesCompleted","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},
+  {"inputs":[{"internalType":"uint256","name":"","type":"uint256"}],"name":"memberById","outputs":[{"internalType":"address","name":"","type":"address"}],"stateMutability":"view","type":"function"},
+  {"inputs":[],"name":"totalMembers","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},
+  {"inputs":[],"name":"ENTRY_FEE","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},
+  {"inputs":[],"name":"ACTIVE_WINDOW","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},
+  {"inputs":[{"internalType":"address","name":"referrer","type":"address"}],"name":"register","outputs":[],"stateMutability":"nonpayable","type":"function"},
+  {"inputs":[],"name":"withdraw","outputs":[],"stateMutability":"nonpayable","type":"function"},
+  {"anonymous":false,"inputs":[{"indexed":true,"internalType":"address","name":"member","type":"address"},{"indexed":true,"internalType":"address","name":"referrer","type":"address"},{"indexed":false,"internalType":"uint256","name":"memberId","type":"uint256"},{"indexed":false,"internalType":"uint256","name":"position","type":"uint256"},{"indexed":false,"internalType":"uint256","name":"cnovaRewarded","type":"uint256"}],"name":"MemberRegistered","type":"event"},
+  {"anonymous":false,"inputs":[{"indexed":true,"internalType":"address","name":"member","type":"address"},{"indexed":false,"internalType":"uint256","name":"amount","type":"uint256"}],"name":"EarningsWithdrawn","type":"event"},
+];
+const TIER_MANAGER_ABI = [
+  {"inputs":[{"internalType":"address","name":"","type":"address"}],"name":"memberTier","outputs":[{"internalType":"uint8","name":"","type":"uint8"}],"stateMutability":"view","type":"function"},
+  {"inputs":[],"name":"fastTrackEnabled","outputs":[{"internalType":"bool","name":"","type":"bool"}],"stateMutability":"view","type":"function"},
+  {"inputs":[],"name":"primeOrAboveCount","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},
+  {"inputs":[],"name":"WHALE_GATE_THRESHOLD","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},
+  {"inputs":[{"internalType":"uint256","name":"","type":"uint256"}],"name":"tierFee","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},
+  {"inputs":[{"internalType":"uint256","name":"","type":"uint256"}],"name":"cycleReq","outputs":[{"internalType":"uint8","name":"","type":"uint8"}],"stateMutability":"view","type":"function"},
+  {"inputs":[{"internalType":"address","name":"member","type":"address"}],"name":"cyclesInCurrentTier","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},
+  {"inputs":[{"internalType":"address","name":"member","type":"address"}],"name":"cyclesUntilUpgrade","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},
+  {"inputs":[{"internalType":"uint8","name":"targetTier","type":"uint8"},{"internalType":"address","name":"referrer","type":"address"}],"name":"upgradeTier","outputs":[],"stateMutability":"nonpayable","type":"function"},
+];
+const TREASURY_ABI = [
+  {"inputs":[],"name":"floorPrice","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},
+  {"inputs":[],"name":"floorPriceFormatted","outputs":[{"internalType":"uint256","name":"dollars6dec","type":"uint256"}],"stateMutability":"view","type":"function"},
+  {"inputs":[],"name":"usdcReserve","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},
+];
+const TOKEN_ABI = [
+  {"inputs":[{"internalType":"address","name":"account","type":"address"}],"name":"balanceOf","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},
+  {"inputs":[],"name":"currentEpoch","outputs":[{"internalType":"uint8","name":"","type":"uint8"}],"stateMutability":"view","type":"function"},
+  {"inputs":[],"name":"currentRewardPerEntry","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},
+  {"inputs":[],"name":"epochMembersRemaining","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},
+  {"inputs":[],"name":"totalMinted","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},
+  {"inputs":[],"name":"totalSupply","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},
+];
+const USDC_ABI = [
+  {"inputs":[{"name":"spender","type":"address"},{"name":"amount","type":"uint256"}],"name":"approve","outputs":[{"type":"bool"}],"stateMutability":"nonpayable","type":"function"},
+  {"inputs":[{"name":"owner","type":"address"},{"name":"spender","type":"address"}],"name":"allowance","outputs":[{"type":"uint256"}],"stateMutability":"view","type":"function"},
+  {"inputs":[{"name":"account","type":"address"}],"name":"balanceOf","outputs":[{"type":"uint256"}],"stateMutability":"view","type":"function"},
+  {"inputs":[],"name":"decimals","outputs":[{"type":"uint8"}],"stateMutability":"view","type":"function"},
+  {"inputs":[{"name":"to","type":"address"},{"name":"amount","type":"uint256"}],"name":"mint","outputs":[],"stateMutability":"nonpayable","type":"function"},
+];
+
+// ═══════════════════════════════════════════════════════════════════════
+// STATE
+// ═══════════════════════════════════════════════════════════════════════
+let provider=null,signer=null,userAddr=null,readProvider=null,isConnecting=false;
+let myDirectAddrs=new Set();
+let foundingMembers=[],foundingMembersReady=false,fallbackRoundRobin=0;
+
+// ═══════════════════════════════════════════════════════════════════════
+// INIT
+// ═══════════════════════════════════════════════════════════════════════
+window.addEventListener('DOMContentLoaded', async () => {
+  if (window.location.protocol==='file:') document.getElementById('file-protocol-banner').style.display='block';
+  readProvider = new ethers.JsonRpcProvider(RPC_URL);
+  loadHomeStats();
+  loadFoundingMembers();
+  if (window.ethereum && window.ethereum.selectedAddress) {
+    try { await connectWallet(true); } catch(e) {}
+  }
+  if (window.ethereum) {
+    window.ethereum.on('chainChanged',(chainId)=>{
+      const ok=parseInt(chainId,16)===CHAIN_ID;
+      if(ok){hideNetworkBanner();if(userAddr)connectWallet(true).catch(()=>{});}
+      else showNetworkBanner();
+    });
+    window.ethereum.on('accountsChanged',(accounts)=>{
+      if(accounts.length===0){userAddr=null;signer=null;provider=null;const b=document.getElementById('btn-connect');b.textContent='Connect Wallet';b.classList.remove('connected');}
+      else if(accounts[0].toLowerCase()!==(userAddr||'').toLowerCase()){setTimeout(()=>connectWallet(true).catch(()=>{}),300);}
+    });
+  }
+  const params=new URLSearchParams(window.location.search);
+  if(params.get('ref')){document.getElementById('input-referrer').value=params.get('ref');showTab('register');}
+});
+
+// ═══════════════════════════════════════════════════════════════════════
+// WALLET
+// ═══════════════════════════════════════════════════════════════════════
+async function connectWallet(silent=false) {
+  if(isConnecting)return;
+  if(!window.ethereum){if(!silent){if(window.location.protocol==='file:'){document.getElementById('file-protocol-banner').style.display='block';document.getElementById('file-protocol-banner').scrollIntoView({behavior:'smooth'});}else showMetaMaskModal();}return;}
+  isConnecting=true;
+  try {
+    provider=new ethers.BrowserProvider(window.ethereum);
+    const accounts=await provider.send('eth_requestAccounts',[]);
+    signer=await provider.getSigner();userAddr=accounts[0];
+    const cid=parseInt(window.ethereum.chainId||'0x0',16);
+    if(cid!==CHAIN_ID)showNetworkBanner();else hideNetworkBanner();
+    const bsLink=document.getElementById('basescan-tx-link');
+    if(bsLink)bsLink.href='https://sepolia.basescan.org/address/'+accounts[0];
+    const btn=document.getElementById('btn-connect');
+    btn.innerHTML='<span class="network-dot"></span>'+userAddr.slice(0,6)+'…'+userAddr.slice(-4);
+    btn.classList.add('connected');
+    if(!silent)toast('Wallet connected: '+userAddr.slice(0,6)+'…'+userAddr.slice(-4),'success');
+    await loadRegisterTab();await loadDashboard();await loadMatrixStats();
+  } catch(e){if(!silent)toast('Connection failed: '+(e.message||e),'error');}
+  finally{isConnecting=false;}
+}
+
+function showNetworkBanner(){const isMobile=/iPhone|iPad|iPod|Android/i.test(navigator.userAgent);document.getElementById('nb-mobile-guide').style.display=isMobile?'block':'none';document.getElementById('network-banner').style.display='flex';const sw=document.getElementById('btn-switch-network');if(sw)sw.style.display='inline-block';}
+function hideNetworkBanner(){document.getElementById('network-banner').style.display='none';const sw=document.getElementById('btn-switch-network');if(sw)sw.style.display='none';}
+
+async function switchToBaseSepolia(){
+  const isMobile=/iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+  const btn=document.getElementById('nb-switch-btn'),hint=document.getElementById('nb-hint');
+  const p=[{chainId:'0x'+CHAIN_ID.toString(16),chainName:'Base Sepolia',nativeCurrency:{name:'ETH',symbol:'ETH',decimals:18},rpcUrls:['https://sepolia.base.org'],blockExplorerUrls:['https://sepolia.basescan.org']}];
+  if(btn){btn.disabled=true;btn.textContent='Switching…';}
+  try {
+    if(isMobile){await window.ethereum.request({method:'wallet_addEthereumChain',params:p});}
+    else{try{await window.ethereum.request({method:'wallet_switchEthereumChain',params:[{chainId:'0x'+CHAIN_ID.toString(16)}]});}catch(e){if(e.code===4902)await window.ethereum.request({method:'wallet_addEthereumChain',params:p});else if(e.code!==4001)throw e;}}
+  }catch(e){if(e.code!==4001){if(hint)hint.innerHTML='<strong style="color:var(--yellow)">Auto-switch failed.</strong> In MetaMask: Settings → Networks → Add Network manually with chain ID <strong>84532</strong> and RPC <strong>https://sepolia.base.org</strong>';toast('Could not switch automatically.','error');}}
+  finally{if(btn){btn.disabled=false;btn.innerHTML='🔀 Add &amp; Switch to Base Sepolia';}}
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// TABS
+// ═══════════════════════════════════════════════════════════════════════
+function showTab(name){
+  document.querySelectorAll('.tab-panel').forEach(p=>p.classList.remove('active'));
+  document.querySelectorAll('nav button').forEach(b=>b.classList.remove('active'));
+  document.getElementById('tab-'+name).classList.add('active');
+  const idx=['home','register','dashboard','matrix','roadmap'].indexOf(name);
+  document.querySelectorAll('nav button')[idx].classList.add('active');
+  if(name==='dashboard')loadDashboard();
+  if(name==='matrix'){loadMatrixStats();if(userAddr)loadMyDirects();}
+  if(name==='register')loadRegisterTab();
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// HELPERS
+// ═══════════════════════════════════════════════════════════════════════
+function u6(n){const val=Number(BigInt(n))/1e6;if(!isFinite(val)||val>1e15)return '$∞';return '$'+val.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2});}
+function shortAddr(addr){if(!addr||addr===ethers.ZeroAddress)return '—';return addr.slice(0,6)+'…'+addr.slice(-4);}
+function toast(msg,type='info',duration=4000){const el=document.getElementById('toast');el.textContent=msg;el.className='show '+type;clearTimeout(toast._t);toast._t=setTimeout(()=>{el.className='';},duration);}
+function setStatus(id,msg,color){const el=document.getElementById(id);if(el){el.textContent=msg;el.style.color=color||'var(--text2)';}}
+
+// ═══════════════════════════════════════════════════════════════════════
+// FOUNDING MEMBERS & FALLBACK REFERRER
+// ═══════════════════════════════════════════════════════════════════════
+async function loadFoundingMembers(){
+  try{
+    const delay=ms=>new Promise(r=>setTimeout(r,ms));const seen=new Set();
+    const t5=new ethers.Contract(ADDRESSES.matrices[5],MATRIX_ABI,readProvider);
+    const n5=Number(await t5.totalMembers());
+    for(let i=1;i<=Math.min(n5,25);i++){try{const a=await t5.memberById(i);if(a&&a!==ethers.ZeroAddress&&!seen.has(a.toLowerCase())){seen.add(a.toLowerCase());foundingMembers.push(a);}await delay(60);}catch(_){}}
+    if(foundingMembers.length<25){
+      const t1=new ethers.Contract(ADDRESSES.matrices[1],MATRIX_ABI,readProvider);
+      const n1=Number(await t1.totalMembers());
+      for(let i=1;i<=Math.min(n1,25);i++){if(foundingMembers.length>=25)break;try{const a=await t1.memberById(i);if(a&&a!==ethers.ZeroAddress&&!seen.has(a.toLowerCase())){seen.add(a.toLowerCase());foundingMembers.push(a);}await delay(60);}catch(_){}}
+    }
+    foundingMembersReady=true;console.log('foundingMembers:',foundingMembers.length);
+  }catch(e){foundingMembersReady=true;console.warn('loadFoundingMembers:',e.message);}
+}
+async function getFallbackReferrer(){
+  if(!foundingMembersReady){const t0=Date.now();while(!foundingMembersReady&&Date.now()-t0<8000)await new Promise(r=>setTimeout(r,200));}
+  if(foundingMembers.length===0)await loadFoundingMembers();
+  if(foundingMembers.length===0)return ethers.ZeroAddress;
+  const addr=foundingMembers[fallbackRoundRobin%foundingMembers.length];fallbackRoundRobin++;
+  console.log('fallback referrer:',addr);return addr;
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// HOME STATS
+// ═══════════════════════════════════════════════════════════════════════
+async function loadHomeStats(){
+  try{
+    const t1=new ethers.Contract(ADDRESSES.matrices[1],MATRIX_ABI,readProvider);
+    const tr=new ethers.Contract(ADDRESSES.treasury,TREASURY_ABI,readProvider);
+    const tk=new ethers.Contract(ADDRESSES.token,TOKEN_ABI,readProvider);
+    const tm=new ethers.Contract(ADDRESSES.tierManager,TIER_MANAGER_ABI,readProvider);
+    const[mem,floor,reserve,wc,ft]=await Promise.all([t1.totalMembers(),tr.floorPriceFormatted(),tr.usdcReserve(),tm.primeOrAboveCount(),tm.fastTrackEnabled()]);
+    await new Promise(r=>setTimeout(r,300));
+    const[minted,supply,epoch,reward,epochRem]=await Promise.all([tk.totalMinted(),tk.totalSupply(),tk.currentEpoch(),tk.currentRewardPerEntry(),tk.epochMembersRemaining()]);
+    document.getElementById('stat-members').textContent=mem.toString();
+    document.getElementById('stat-floor').textContent=u6(floor);
+    document.getElementById('stat-reserve').textContent=u6(reserve);
+    const wn=Number(wc),wPct=Math.min(100,Math.round((wn/25)*100));
+    document.getElementById('stat-filled').textContent=mem.toString();
+    document.getElementById('stat-pct').textContent=wPct+'%';
+    document.getElementById('stat-progress').style.width=wPct+'%';
+    document.getElementById('stat-cycle').textContent=ft?'🔓 UNLOCKED':(wn+' / 25');
+    const sEl=document.getElementById('stat-status');
+    if(ft)sEl.innerHTML='<span class="pill pill-green">🐋 Fast-Track Active</span>';
+    else if(wPct>=60)sEl.innerHTML='<span class="pill pill-yellow">🔥 '+(25-wn)+' more to unlock</span>';
+    else sEl.innerHTML='<span class="pill pill-blue">Whale Gate: '+wn+' / 25</span>';
+    const EN=['Nebula Genesis','Mercury Rise','Lunar Cluster','Aurora Zenith','Solaris Echo','Cosmic Core','Galaxy Grid','Supernova Spark'];
+    const en=Number(epoch),ename=EN[en]||('Epoch '+(en+1)),edisp=en+1;
+    const rf=parseFloat(ethers.formatUnits(reward,18)).toLocaleString(undefined,{maximumFractionDigits:0});
+    const mf=parseFloat(ethers.formatUnits(minted,18)).toLocaleString(undefined,{maximumFractionDigits:0});
+    const sf=parseFloat(ethers.formatUnits(supply,18)).toLocaleString(undefined,{maximumFractionDigits:0});
+    document.getElementById('stat-epoch-badge').textContent=ename;
+    document.getElementById('stat-epoch-reward-sub').textContent=rf+' CNOVA per entry';
+    document.getElementById('stat-epoch').textContent=ename+'  (Epoch '+edisp+')';
+    document.getElementById('stat-reward').textContent=rf+' CNOVA';
+    document.getElementById('stat-epoch-rem').textContent=epochRem.toString()+' entries';
+    document.getElementById('stat-minted').textContent=mf;
+    document.getElementById('stat-supply').textContent=sf;
+  }catch(e){console.error('loadHomeStats',e);}
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// REGISTER TAB
+// ═══════════════════════════════════════════════════════════════════════
+async function loadRegisterTab(){
+  const approveBtn=document.getElementById('btn-approve'),registerBtn=document.getElementById('btn-register');
+  const allowanceEl=document.getElementById('reg-allowance'),balanceEl=document.getElementById('reg-usdc-bal');
+  const warnEl=document.getElementById('usdc-low-warn'),alreadyEl=document.getElementById('register-already');
+  const walletWarn=document.getElementById('register-wallet-warn'),refCard=document.getElementById('referral-link-card');
+  if(!userAddr){walletWarn.style.display='block';alreadyEl.style.display='none';approveBtn.disabled=true;registerBtn.disabled=true;approveBtn.className=registerBtn.className='btn btn-ghost full-w';return;}
+  walletWarn.style.display='none';
+  try{
+    const usdc=new ethers.Contract(ADDRESSES.usdc,USDC_ABI,readProvider);
+    const t1=new ethers.Contract(ADDRESSES.matrices[1],MATRIX_ABI,readProvider);
+    const[bal,allow,member]=await Promise.all([usdc.balanceOf(userAddr),usdc.allowance(userAddr,ADDRESSES.matrices[1]),t1.members(userAddr)]);
+    balanceEl.textContent=u6(bal);
+    const fee=TIER_FEES_USDC[1];
+    if(allow>=fee)allowanceEl.innerHTML='<span style="color:var(--green)">$10 Approved ✓</span>';
+    else allowanceEl.innerHTML='<span style="color:var(--text3)">Not approved yet</span>';
+    warnEl.style.display=bal<fee?'block':'none';
+    if(member.isRegistered){
+      alreadyEl.style.display='block';approveBtn.disabled=true;registerBtn.disabled=true;
+      approveBtn.className=registerBtn.className='btn btn-ghost full-w';
+      refCard.style.display='block';
+      document.getElementById('referral-url').value=window.location.origin+window.location.pathname+'?ref='+userAddr;
+      return;
+    }
+    alreadyEl.style.display='none';
+    const hb=bal>=fee,ha=allow>=fee;
+    approveBtn.disabled=!( hb&&!ha);registerBtn.disabled=!ha;
+    approveBtn.className='btn full-w '+(hb&&!ha?'btn-green':'btn-ghost');
+    registerBtn.className='btn full-w '+(ha?'btn-green':'btn-ghost');
+    if(ha)setStatus('reg-status','✅ USDC approved! You can now register.','var(--green)');
+    else if(hb)setStatus('reg-status','Step 1: Approve $10 USDC to continue.','var(--text2)');
+    else setStatus('reg-status','⚠️ Insufficient USDC. You need at least $10.','var(--yellow)');
+  }catch(e){console.error('loadRegisterTab',e);}
+}
+
+async function approveUSDC(){
+  if(!signer){toast('Connect wallet first','error');return;}
+  const btn=document.getElementById('btn-approve');
+  try{
+    btn.disabled=true;btn.innerHTML='<span class="spinner"></span>Approving…';
+    setStatus('reg-status','⏳ Waiting for MetaMask…','var(--text2)');
+    const usdc=new ethers.Contract(ADDRESSES.usdc,USDC_ABI,signer);
+    const tx=await usdc.approve(ADDRESSES.matrices[1],TIER_FEES_USDC[1]);
+    setStatus('reg-status','⏳ Confirming…','var(--text2)');await tx.wait();
+    setStatus('reg-status','✅ USDC approved! You can now register.','var(--green)');
+    toast('$10 USDC approved!','success');btn.innerHTML='Step 1: Approve $10 USDC 🔒';
+    await loadRegisterTab();
+  }catch(e){const msg=e.reason||e.message||'Unknown';setStatus('reg-status','❌ '+msg,'var(--red)');btn.disabled=false;btn.className='btn full-w btn-green';btn.innerHTML='Step 1: Approve $10 USDC 🔒';toast('Approval failed','error');}
+}
+
+async function doRegister(){
+  if(!signer){toast('Connect wallet first','error');return;}
+  const btn=document.getElementById('btn-register');
+  let referrer=document.getElementById('input-referrer').value.trim();
+  if(referrer&&!ethers.isAddress(referrer)){toast('Invalid referrer address','error');return;}
+  if(!referrer){
+    const fb=await getFallbackReferrer();
+    if(fb&&fb!==ethers.ZeroAddress){referrer=fb;document.getElementById('input-referrer').value=referrer;setStatus('reg-status','🐋 Auto-assigned: '+shortAddr(referrer)+' (founding member)','var(--blue)');await new Promise(r=>setTimeout(r,1200));}
+  }
+  try{
+    btn.disabled=true;btn.innerHTML='<span class="spinner"></span>Registering…';
+    setStatus('reg-status','⏳ Waiting for MetaMask…','var(--text2)');
+    const t1=new ethers.Contract(ADDRESSES.matrices[1],MATRIX_ABI,signer);
+    const ref=referrer||ethers.ZeroAddress;
+    const tx=await t1.register(ref);
+    setStatus('reg-status','⏳ Confirming…','var(--text2)');const receipt=await tx.wait();
+    setStatus('reg-status','🎉 Registered! Tx: '+receipt.hash.slice(0,10)+'…','var(--green)');
+    toast('Welcome to CryptoNova! 🎉','success',6000);
+    btn.innerHTML='Step 2: Register ($10 USDC)';
+    document.getElementById('referral-link-card').style.display='block';
+    document.getElementById('referral-url').value=window.location.origin+window.location.pathname+'?ref='+userAddr;
+    await loadRegisterTab();await loadHomeStats();
+  }catch(e){const msg=e.reason||e.message||'Unknown';setStatus('reg-status','❌ '+msg,'var(--red)');btn.disabled=false;btn.innerHTML='Step 2: Register ($10 USDC)';toast('Registration failed','error');}
+}
+
+function copyReferralLink(){
+  const val=document.getElementById('referral-url').value;if(!val)return;
+  const btn=document.getElementById('copy-ref-btn');
+  const confirm=()=>{toast('✅ Referral link copied!','success');if(btn){btn.textContent='✓ Copied!';setTimeout(()=>{btn.textContent='Copy';},2500);}};
+  if(navigator.clipboard&&navigator.clipboard.writeText)navigator.clipboard.writeText(val).then(confirm).catch(()=>legacyCopy(val,confirm));
+  else legacyCopy(val,confirm);
+}
+function legacyCopy(text,onSuccess){const el=document.getElementById('referral-url');try{el.focus();el.select();el.setSelectionRange(0,99999);const ok=document.execCommand('copy');if(ok)onSuccess();else toast('Long-press the link box → Select All → Copy.','info');}catch(e){toast('Long-press the link box → Select All → Copy.','info');}}
+
+// ═══════════════════════════════════════════════════════════════════════
+// DASHBOARD
+// ═══════════════════════════════════════════════════════════════════════
+async function loadDashboard(){
+  const noW=document.getElementById('dash-no-wallet'),notR=document.getElementById('dash-not-registered'),con=document.getElementById('dash-content');
+  if(!noW||!notR||!con)return;
+  if(!userAddr){noW.style.display='block';notR.style.display='none';con.style.display='none';return;}
+  noW.style.display='none';
+  try{
+    const t1=new ethers.Contract(ADDRESSES.matrices[1],MATRIX_ABI,readProvider);
+    const tm=new ethers.Contract(ADDRESSES.tierManager,TIER_MANAGER_ABI,readProvider);
+    const tr=new ethers.Contract(ADDRESSES.treasury,TREASURY_ABI,readProvider);
+    const tk=new ethers.Contract(ADDRESSES.token,TOKEN_ABI,readProvider);
+    const[m1,ct,floor]=await Promise.all([t1.members(userAddr),tm.memberTier(userAddr),tr.floorPrice()]);
+    if(!m1.isRegistered){notR.style.display='block';con.style.display='none';return;}
+    notR.style.display='none';con.style.display='block';
+    const tier=Number(ct)||1;
+    const tnEl=document.getElementById('dash-tier-name');if(tnEl)tnEl.textContent=(TIER_NAMES[tier]||'Tier '+tier)+' (Tier '+tier+')';
+    document.getElementById('dash-id').textContent='#'+m1.id.toString();
+    document.getElementById('dash-orig-referrer').textContent=shortAddr(m1.referrer);
+    let totW=0n,totE=0n,rows='';
+    for(let t=1;t<=tier;t++){
+      try{
+        const mx=new ethers.Contract(ADDRESSES.matrices[t],MATRIX_ABI,readProvider);
+        const m=await mx.members(userAddr);const cy=await mx.cyclesCompleted(userAddr);
+        if(m.isRegistered){totW+=BigInt(m.withdrawable);totE+=BigInt(m.totalEarned);
+          const wl=m.withdrawable>0n?'<span style="color:var(--green);font-weight:700">'+u6(m.withdrawable)+'</span>':'<span style="color:var(--text3)">$0.00</span>';
+          rows+=`<div class="info-row"><span class="info-key"><span style="font-size:11px;background:var(--green-dim);color:var(--green);border:1px solid var(--green2);border-radius:4px;padding:1px 6px">T${t}</span> ${TIER_NAMES[t]}</span><span style="display:flex;flex-direction:column;align-items:flex-end;gap:2px">${wl}<span style="font-size:11px;color:var(--text3)">Earned: ${u6(m.totalEarned)} · ${cy} cycles</span></span></div>`;
+        }
+        await new Promise(r=>setTimeout(r,80));
+      }catch(_){}
+    }
+    const teEl=document.getElementById('dash-tier-earnings');if(teEl)teEl.innerHTML=rows||'<div style="color:var(--text3);font-size:13px;padding:8px 0">No earnings yet.</div>';
+    const wEl=document.getElementById('dash-withdrawable');if(wEl)wEl.textContent=u6(totW);
+    const waEl=document.getElementById('dash-withdraw-amount');if(waEl)waEl.textContent=u6(totW);
+    const teaEl=document.getElementById('dash-total-earned');if(teaEl)teaEl.textContent=u6(totE);
+    const bwEl=document.getElementById('btn-withdraw');if(bwEl)bwEl.disabled=totW===0n;
+    const cy1=await t1.cyclesCompleted(userAddr);
+    const cyEl=document.getElementById('dash-cycles');if(cyEl)cyEl.textContent=cy1.toString();
+    const cw=await tk.balanceOf(userAddr);
+    const cv=(BigInt(cw)*BigInt(floor))/BigInt(1e18);
+    document.getElementById('dash-cnova').textContent=parseFloat(ethers.formatUnits(cw,18)).toFixed(2)+' CNOVA';
+    document.getElementById('dash-cnova-val').textContent=u6(cv);
+    try{
+      const all=await fetchAllMembersV3(t1,null);
+      const cnt=all.filter(({data:m})=>m.referrer.toLowerCase()===userAddr.toLowerCase()).length;
+      const dEl=document.getElementById('dash-directs');if(dEl)dEl.textContent=cnt+' member'+(cnt!==1?'s':'');
+    }catch(_){}
+  }catch(e){console.error('loadDashboard',e);}
+}
+
+async function doWithdrawAll(){
+  if(!signer){toast('Connect wallet first','error');return;}
+  const btn=document.getElementById('btn-withdraw');
+  try{
+    btn.disabled=true;btn.innerHTML='<span class="spinner"></span>Withdrawing…';
+    setStatus('withdraw-status','⏳ Checking tiers…','var(--text2)');
+    const tm=new ethers.Contract(ADDRESSES.tierManager,TIER_MANAGER_ABI,readProvider);
+    const ct=Number(await tm.memberTier(userAddr))||1;let w=0;
+    for(let t=1;t<=ct;t++){
+      const mx=new ethers.Contract(ADDRESSES.matrices[t],MATRIX_ABI,readProvider);
+      const m=await mx.members(userAddr);
+      if(m.isRegistered&&BigInt(m.withdrawable)>0n){
+        setStatus('withdraw-status','⏳ Withdrawing Tier '+t+'…','var(--text2)');
+        const mxW=new ethers.Contract(ADDRESSES.matrices[t],MATRIX_ABI,signer);
+        await(await mxW.withdraw()).wait();w++;
+      }
+    }
+    setStatus('withdraw-status',w>0?'✅ Withdrawn from '+w+' tier(s)!':'⚠️ Nothing to withdraw.',w>0?'var(--green)':'var(--yellow)');
+    if(w>0)toast('Withdrawal successful!','success');
+    btn.innerHTML='Withdraw All to Wallet';await loadDashboard();
+  }catch(e){const msg=e.reason||e.message||'Unknown';setStatus('withdraw-status','❌ '+msg,'var(--red)');btn.innerHTML='Withdraw All to Wallet';btn.disabled=false;toast('Withdrawal failed','error');}
+}
+
+async function fetchAllMembersV3(matrix,onProgress){
+  const delay=ms=>new Promise(r=>setTimeout(r,ms));
+  const total=Number(await matrix.totalMembers());if(total===0)return[];
+  const result=[];
+  for(let i=1;i<=total;i++){
+    try{if(onProgress)onProgress(i,total);const addr=await matrix.memberById(i);const data=await matrix.members(addr);result.push({addr,data});await delay(80);}
+    catch(e){await delay(200);}
+  }
+  return result;
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// MATRIX TAB
+// ═══════════════════════════════════════════════════════════════════════
+async function loadMatrixStats(){
+  try{const t1=new ethers.Contract(ADDRESSES.matrices[1],MATRIX_ABI,readProvider);const tot=await t1.totalMembers();document.getElementById('matrix-nodes').textContent=tot.toString();document.getElementById('matrix-bfs').textContent='—';document.getElementById('matrix-fill').textContent=tot.toString()+' members';}catch(e){console.error(e);}
+}
+
+async function loadQueueView(){
+  const tEl=document.getElementById('matrix-tree'),lEl=document.getElementById('matrix-loading');
+  lEl.innerHTML='<span class="spinner"></span> Loading member queue…';lEl.style.display='block';tEl.style.display='none';
+  const t1=new ethers.Contract(ADDRESSES.matrices[1],MATRIX_ABI,readProvider);
+  try{
+    const total=Number(await t1.totalMembers());
+    let myId=-1;if(userAddr){try{const me=await t1.members(userAddr);if(me.isRegistered)myId=Number(me.id);}catch(_){}}
+    if(total===0){lEl.innerHTML='No members registered yet.';return;}
+    let html=`<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:13px"><thead><tr style="border-bottom:2px solid var(--border);color:var(--text3);text-align:left"><th style="padding:8px 12px">#</th><th style="padding:8px 12px">Address</th><th style="padding:8px 12px">Withdrawable</th><th style="padding:8px 12px">Total Earned</th><th style="padding:8px 12px">Re-entries</th><th style="padding:8px 12px">Status</th></tr></thead><tbody>`;
+    const delay=ms=>new Promise(r=>setTimeout(r,ms));
+    for(let i=1;i<=total;i++){
+      let addr,m,cy;try{addr=await t1.memberById(i);[m,cy]=await Promise.all([t1.members(addr),t1.cyclesCompleted(addr)]);await delay(60);}catch(_){continue;}
+      const isMe=Number(m.id)===myId,isActive=Number(m.id)<=100;
+      const rs=isMe?'background:var(--green-dim);border-bottom:1px solid var(--green2)':'border-bottom:1px solid var(--border)';
+      const sb=isMe?'<span class="pill pill-green" style="font-size:11px">⭐ YOU</span>':(isActive?'<span class="pill pill-blue" style="font-size:11px">Active</span>':'<span style="font-size:11px;color:var(--text3)">Queued</span>');
+      html+=`<tr style="${rs}"><td style="padding:10px 12px;font-weight:700;color:${isMe?'var(--green)':'var(--text)'}">#${m.id}</td><td style="padding:10px 12px;font-family:monospace;color:var(--text2)">${addr.slice(0,6)}…${addr.slice(-4)}</td><td style="padding:10px 12px;color:${BigInt(m.withdrawable)>0n?'var(--green)':'var(--text3)'};font-weight:600">${u6(m.withdrawable)}</td><td style="padding:10px 12px">${u6(m.totalEarned)}</td><td style="padding:10px 12px">${m.reentryCount.toString()}</td><td style="padding:10px 12px">${sb}</td></tr>`;
+    }
+    html+='</tbody></table></div><div style="margin-top:12px;font-size:12px;color:var(--text3)">Showing '+total+' member'+(total!==1?'s':'')+' · Active window: positions 1–100</div>';
+    tEl.innerHTML=html;tEl.style.display='block';lEl.style.display='none';
+  }catch(e){lEl.innerHTML='❌ Error: '+(e.shortMessage||e.message);console.error(e);}
+}
+
+async function loadMatrixTree(){await loadQueueView();}
+function navigateToNode(){}
+
+async function loadMyTree(){
+  if(!userAddr){toast('Connect wallet first','error');return;}
+  const t1=new ethers.Contract(ADDRESSES.matrices[1],MATRIX_ABI,readProvider);
+  try{
+    const m=await t1.members(userAddr);if(!m.isRegistered){toast('Not registered in Tier 1 yet','error');return;}
+    const cy=await t1.cyclesCompleted(userAddr);
+    document.getElementById('matrix-my-node-label').textContent='My Member ID';
+    document.getElementById('matrix-my-node').textContent='#'+m.id.toString();
+    const sub=document.getElementById('matrix-my-level-sub');sub.textContent='Cycles: '+cy.toString();sub.style.display='block';
+    const ban=document.getElementById('matrix-pos-banner');ban.style.display='block';
+    document.getElementById('matrix-pos-level').textContent='🏅 Member #'+m.id+' · Tier 1 (Nova Seed)';
+    document.getElementById('matrix-pos-slots').textContent='♻️ Cycles completed: '+cy.toString();
+    document.getElementById('matrix-pos-cycle').textContent='💰 Earned: '+u6(BigInt(m.totalEarned));
+    await loadQueueView();
+  }catch(e){toast('Error: '+e.message,'error');}
+}
+
+function hideMyPosBanner(){const b=document.getElementById('matrix-pos-banner');if(b)b.style.display='none';const s=document.getElementById('matrix-my-level-sub');if(s)s.style.display='none';const l=document.getElementById('matrix-my-node-label');if(l)l.textContent='My Member ID';}
+
+async function loadMyDirects(){
+  if(!userAddr){toast('Connect wallet first','error');return;}
+  const card=document.getElementById('my-directs-card'),loading=document.getElementById('my-directs-loading'),empty=document.getElementById('my-directs-empty'),listWrap=document.getElementById('my-directs-list'),rows=document.getElementById('my-directs-rows');
+  card.style.display='block';loading.style.display='block';empty.style.display='none';listWrap.style.display='none';rows.innerHTML='';
+  try{
+    const t1=new ethers.Contract(ADDRESSES.matrices[1],MATRIX_ABI,readProvider);
+    const all=await fetchAllMembersV3(t1,(i,total)=>{loading.textContent=`Scanning members… ${i} / ${total}`;});
+    const directs=all.filter(({data:m})=>m.referrer.toLowerCase()===userAddr.toLowerCase());
+    myDirectAddrs=new Set(directs.map(({addr})=>addr.toLowerCase()));
+    loading.style.display='none';
+    if(directs.length===0){empty.style.display='block';return;}
+    listWrap.style.display='block';
+    rows.innerHTML=directs.map(({addr,data:m})=>`<div style="padding:12px 14px;border-bottom:1px solid var(--border)"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;gap:8px"><span style="font-size:13px;font-weight:600;color:var(--text);font-family:monospace">${shortAddr(addr)}</span><span class="pill pill-green" style="font-size:11px">✅ Active</span></div><div style="display:flex;gap:16px;flex-wrap:wrap;font-size:12px;color:var(--text3)"><span>Member <strong style="color:var(--text)">#${m.id}</strong></span><span>Earned <strong style="color:var(--green)">${u6(m.totalEarned)}</strong></span></div></div>`).join('');
+    const dEl=document.getElementById('dash-directs');if(dEl)dEl.textContent=directs.length+' member'+(directs.length!==1?'s':'');
+  }catch(e){loading.style.display='none';empty.textContent='Could not load: '+(e.shortMessage||e.message||String(e));empty.style.display='block';console.error(e);}
+}
+
+function setActiveMatrixBtn(id){
+  ['btn-load-tree','btn-my-position','btn-my-directs'].forEach(b=>{const el=document.getElementById(b);if(el)el.classList.remove('matrix-active');});
+  const a=document.getElementById(id);if(a)a.classList.add('matrix-active');
+  if(id!=='btn-my-position')hideMyPosBanner();
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// METAMASK MODALS
+// ═══════════════════════════════════════════════════════════════════════
+function showMetaMaskModal(){
+  const isMobile=/iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+  const ms=document.getElementById('mm-mobile-section'),ib=document.getElementById('mm-install-btn'),fh=document.getElementById('mm-footer-hint'),dl=document.getElementById('mm-deeplink');
+  if(isMobile){const url=window.location.href.replace(/^https?:\/\//,'');dl.href='https://metamask.app.link/dapp/'+url;ms.style.display='block';ib.textContent='📲 Download MetaMask App';fh.innerHTML='Install MetaMask, open the app, then use its built-in browser to visit this page.';}
+  else{ms.style.display='none';ib.textContent='Install MetaMask — Free';fh.innerHTML='After installing, refresh this page and click Connect Wallet.<br>Switch to <strong>Base Sepolia</strong> when prompted.';}
+  document.getElementById('metamask-modal').style.display='flex';
+}
+function closeMetaMaskModal(){document.getElementById('metamask-modal').style.display='none';}
+function showManualTokenModal(address,symbol,decimals){document.getElementById('manual-token-address').textContent=address;document.getElementById('manual-token-symbol').textContent=symbol;document.getElementById('manual-token-decimals').textContent=decimals;document.getElementById('manual-token-modal').style.display='flex';}
+function closeManualTokenModal(){document.getElementById('manual-token-modal').style.display='none';}
+function copyManualTokenAddress(){const addr=document.getElementById('manual-token-address').textContent;const btn=document.getElementById('manual-copy-btn');navigator.clipboard.writeText(addr).then(()=>{btn.textContent='✓ Copied!';setTimeout(()=>{btn.textContent='Copy';},2500);}).catch(()=>{toast('Copy failed — select the address manually.','error');});}
+
+async function addCNOVAtoMetaMask(){
+  if(!window.ethereum){if(window.location.protocol==='file:')document.getElementById('file-protocol-banner').style.display='block';else showMetaMaskModal();return;}
+  if(parseInt(window.ethereum.chainId||'0x0',16)!==CHAIN_ID){showNetworkBanner();toast('Switch to Base Sepolia first.','info');return;}
+  try{const added=await window.ethereum.request({method:'wallet_watchAsset',params:{type:'ERC20',options:{address:ADDRESSES.token,symbol:'CNOVA',decimals:18}}});if(added)toast('✅ CNOVA added to MetaMask!','success');else toast('Token add was cancelled.','info');}
+  catch(e){showManualTokenModal(ADDRESSES.token,'CNOVA',18);}
+}
+async function addUSDCtoMetaMask(){
+  if(!window.ethereum){if(window.location.protocol==='file:')document.getElementById('file-protocol-banner').style.display='block';else showMetaMaskModal();return;}
+  if(parseInt(window.ethereum.chainId||'0x0',16)!==CHAIN_ID){showNetworkBanner();toast('Switch to Base Sepolia first.','info');return;}
+  try{const added=await window.ethereum.request({method:'wallet_watchAsset',params:{type:'ERC20',options:{address:ADDRESSES.usdc,symbol:'USDC',decimals:6}}});if(added)toast('✅ USDC added to MetaMask!','success');else toast('Token add was cancelled.','info');}
+  catch(e){showManualTokenModal(ADDRESSES.usdc,'USDC',6);}
+}
+
+function toggleTheme(){const isLight=document.body.classList.toggle('light');localStorage.setItem('theme',isLight?'light':'dark');document.getElementById('theme-btn').textContent=isLight?'🌙 Dark':'☀️ Light';}
+(function(){const saved=localStorage.getItem('theme');if(saved==='light'){document.body.classList.add('light');document.addEventListener('DOMContentLoaded',()=>{const btn=document.getElementById('theme-btn');if(btn)btn.textContent='🌙 Dark';});}})();
+</script>
+
+<!-- MetaMask Install Modal -->
+<div id="metamask-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:1000;align-items:center;justify-content:center;padding:20px" onclick="if(event.target===this)closeMetaMaskModal()">
+  <div style="background:var(--bg2);border:1px solid var(--border);border-radius:16px;padding:32px 28px;max-width:420px;width:100%;text-align:center">
+    <div style="font-size:48px;margin-bottom:14px">🦊</div>
+    <div style="font-size:20px;font-weight:800;margin-bottom:10px">MetaMask Required</div>
+    <div style="color:var(--text2);font-size:14px;line-height:1.6;margin-bottom:20px">
+      CryptoNova needs MetaMask to connect your wallet, approve USDC, and sign transactions.<br><br>
+      <strong style="color:var(--text)">Live stats work without a wallet</strong> — MetaMask is only needed to register or withdraw.
+    </div>
+
+    <!-- Mobile section (shown on phones/tablets) -->
+    <div id="mm-mobile-section" style="display:none;margin-bottom:16px;background:rgba(59,130,246,.08);border:1px solid rgba(59,130,246,.3);border-radius:10px;padding:14px">
+      <div style="font-size:13px;font-weight:700;color:var(--blue);margin-bottom:8px">📱 On Mobile?</div>
+      <div style="font-size:12px;color:var(--text2);margin-bottom:12px">The easiest way is to open this site directly inside the MetaMask app's built-in browser.</div>
+      <a id="mm-deeplink" href="#" target="_blank" style="text-decoration:none;display:block">
+        <button class="btn full-w" style="background:var(--blue);color:#fff;font-size:14px;margin-bottom:0">Open in MetaMask Browser</button>
+      </a>
+    </div>
+
+    <div style="display:flex;flex-direction:column;gap:10px">
+      <a href="https://metamask.io/download/" target="_blank" style="text-decoration:none">
+        <button class="btn btn-green full-w" style="font-size:15px" id="mm-install-btn">Install MetaMask — Free</button>
+      </a>
+      <button class="btn btn-ghost full-w" onclick="closeMetaMaskModal()">Close</button>
+    </div>
+    <div style="margin-top:16px;font-size:12px;color:var(--text3)" id="mm-footer-hint">
+      After installing, refresh this page and click Connect Wallet.<br>Switch to <strong>Base Sepolia</strong> when prompted.
+    </div>
+  </div>
+</div>
+
+<!-- Manual Token Add Modal (shown when wallet_watchAsset fails on mobile) -->
+<div id="manual-token-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:1000;align-items:center;justify-content:center;padding:20px" onclick="if(event.target===this)closeManualTokenModal()">
+  <div style="background:var(--bg2);border:1px solid var(--border);border-radius:16px;padding:28px 24px;max-width:440px;width:100%;text-align:center">
+    <div style="font-size:36px;margin-bottom:10px">🪙</div>
+    <div style="font-size:18px;font-weight:800;margin-bottom:6px">Add Token Manually</div>
+    <div style="color:var(--text2);font-size:13px;margin-bottom:18px;line-height:1.6">
+      MetaMask couldn't auto-add this token. Copy the details below and import it manually — takes 30 seconds.
+    </div>
+    <div style="background:rgba(0,0,0,.2);border:1px solid var(--border);border-radius:10px;padding:14px;text-align:left;margin-bottom:14px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+        <span style="color:var(--text2);font-size:12px">Symbol</span>
+        <span id="manual-token-symbol" style="font-weight:800;color:var(--green)"></span>
+      </div>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+        <span style="color:var(--text2);font-size:12px">Decimals</span>
+        <span id="manual-token-decimals" style="font-weight:700"></span>
+      </div>
+      <div style="color:var(--text2);font-size:12px;margin-bottom:5px">Contract Address</div>
+      <div style="display:flex;gap:8px;align-items:stretch">
+        <div id="manual-token-address" style="font-family:monospace;font-size:10px;word-break:break-all;background:rgba(0,0,0,.3);border:1px solid var(--border);border-radius:6px;padding:8px;flex:1;line-height:1.5"></div>
+        <button onclick="copyManualTokenAddress()" id="manual-copy-btn" style="background:var(--green);color:#000;border:none;border-radius:6px;padding:0 12px;font-weight:800;font-size:12px;cursor:pointer;white-space:nowrap;align-self:stretch">Copy</button>
+      </div>
+    </div>
+    <div style="background:rgba(0,229,160,.06);border:1px solid rgba(0,229,160,.2);border-radius:10px;padding:12px;text-align:left;margin-bottom:18px">
+      <div style="font-size:12px;font-weight:800;color:var(--green);margin-bottom:8px">📱 How to import in MetaMask</div>
+      <div style="font-size:12px;color:var(--text2);line-height:1.9">
+        1. Open MetaMask &amp; make sure you're on <strong style="color:var(--text)">Base Sepolia</strong><br>
+        2. Tap the <strong style="color:var(--text)">Assets</strong> tab at the bottom<br>
+        3. Scroll down → tap <strong style="color:var(--text)">Import tokens</strong><br>
+        4. Select <strong style="color:var(--text)">Custom To
