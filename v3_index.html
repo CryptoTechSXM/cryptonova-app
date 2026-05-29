@@ -358,7 +358,7 @@
         <div class="token-icon">CN</div>
         <div>
           <div class="token-name">CNOVA Token <span class="pill pill-green" style="font-size:10px;vertical-align:middle">ERC-20 · Base</span></div>
-          <div class="token-addr">0x3aDD4b15748d28819fd9B7C897eB9Dc97B157B3f · 18 decimals</div>
+          <div class="token-addr">0x16aA142C705aC0DCCD6923558071D5FD6E9f4De3 · 18 decimals</div>
           <div style="font-size:12px;color:var(--text2);margin-top:4px">Earned automatically on every registration. Floor price backed by treasury USDC.</div>
         </div>
       </div>
@@ -396,7 +396,7 @@
         <div class="section-title" style="margin-bottom:12px"><div class="dot"></div> Current Cycle</div>
         <div class="info-row"><span class="info-key">Cycle #</span><span class="info-val" id="stat-cycle">—</span></div>
         <div class="info-row"><span class="info-key">Positions Filled</span><span class="info-val" id="stat-filled">—</span></div>
-        <div class="info-row"><span class="info-key">Cycle Trigger</span><span class="info-val">100 slots (ACTIVE_WINDOW=100)</span></div>
+        <div class="info-row"><span class="info-key">Cycle Trigger</span><span class="info-val">100 slots (ACTIVE_WINDOW=64)</span></div>
         <div style="margin-top:12px">
           <div style="display:flex;justify-content:space-between;font-size:12px;color:var(--text3);margin-bottom:4px">
             <span>Progress</span><span id="stat-pct">0%</span>
@@ -908,11 +908,11 @@
     <div class="section-title" style="margin-top:32px"><div class="dot"></div> Deployed Contracts (Base Sepolia Testnet)</div>
     <div class="card">
       <div style="font-size:13px;color:var(--text2);margin-bottom:14px">These addresses are for testing only. Mainnet addresses will replace these at Phase 3 launch.</div>
-      <div class="info-row"><span class="info-key">CNOVAToken</span><span class="info-val addr">0x3aDD4b15748d28819fd9B7C897eB9Dc97B157B3f</span></div>
-      <div class="info-row"><span class="info-key">CNOVATreasury</span><span class="info-val addr">0x9DA57b7765192d0c3B147C5ee674A9a459268208</span></div>
-      <div class="info-row"><span class="info-key">TierManager</span><span class="info-val addr">0x82c93CAB376C557FB9E32D325D3eC9d5fFaf3624</span></div>
-      <div class="info-row"><span class="info-key">Tier 1 — Nova Seed (W=100)</span><span class="info-val addr">0x001DCe1E58C3F22ec1983504A232b06B46F85e9f</span></div>
-      <div class="info-row"><span class="info-key">Tier 5 — SuperNova Genesis 🐋</span><span class="info-val addr">0xd5261831F594b6342a870266DEb209C500cD59Ec</span></div>
+      <div class="info-row"><span class="info-key">CNOVAToken</span><span class="info-val addr">0x16aA142C705aC0DCCD6923558071D5FD6E9f4De3</span></div>
+      <div class="info-row"><span class="info-key">CNOVATreasury</span><span class="info-val addr">0xa55256Ed90E56DF3009c1a738557B65467dD61e3</span></div>
+      <div class="info-row"><span class="info-key">TierManager</span><span class="info-val addr">0x249d6a4502C0b75E7E55d970C031C436855C26d0</span></div>
+      <div class="info-row"><span class="info-key">Tier 1 — Nova Seed (W=100)</span><span class="info-val addr">0x3b2E0f282C46B060485e7277D080732310FF5DeA</span></div>
+      <div class="info-row"><span class="info-key">Tier 5 — SuperNova Genesis 🐋</span><span class="info-val addr">0x9541Dd025494276b7aa3924ab1BE2356261b9Cb7</span></div>
       <div class="info-row"><span class="info-key">MockUSDC (testnet)</span><span class="info-val addr">0x2D8B7b5eDec96bE441b6fb0D45D74a2BcE2C639a</span></div>
       <div style="margin-top:14px;font-size:12px;color:var(--text3)">
         Explorer: <a href="https://sepolia.basescan.org" target="_blank" style="color:var(--blue)">sepolia.basescan.org</a>
@@ -944,25 +944,25 @@
 
 <script>
 // ═══════════════════════════════════════════════════════════════════════
-// CONFIG — V3 7-Tier System (Base Sepolia, ACTIVE_WINDOW=100)
+// CONFIG — V3 7-Tier System (Base Sepolia, ACTIVE_WINDOW=64)
 // ═══════════════════════════════════════════════════════════════════════
 const CHAIN_ID = 84532;
 const RPC_URL  = 'https://sepolia.base.org';
 
 const ADDRESSES = {
   usdc:           '0x2D8B7b5eDec96bE441b6fb0D45D74a2BcE2C639a',
-  token:          '0x3aDD4b15748d28819fd9B7C897eB9Dc97B157B3f',
-  treasury:       '0x9DA57b7765192d0c3B147C5ee674A9a459268208',
-  communityWallet:'0x52Fd50a54Dde9feDD6bb1a8f6E37692353826dE3',
-  tierManager:    '0x82c93CAB376C557FB9E32D325D3eC9d5fFaf3624',
+  token:          '0x16aA142C705aC0DCCD6923558071D5FD6E9f4De3',
+  treasury:       '0xa55256Ed90E56DF3009c1a738557B65467dD61e3',
+  communityWallet:'0x4D9a035323B9A09Dc0DD19E54418C2b44f997346',
+  tierManager:    '0x249d6a4502C0b75E7E55d970C031C436855C26d0',
   matrices: {
-    1:'0x001DCe1E58C3F22ec1983504A232b06B46F85e9f',
-    2:'0x9be58869C2829C0EFAD246D856bCadaD390363f4',
-    3:'0x215D9bAB3344c24A000d3Bd634c08673370A8f5c',
-    4:'0x98D4CEC738F3cc40d05a35c0F38a821B425A9BDe',
-    5:'0xd5261831F594b6342a870266DEb209C500cD59Ec',
-    6:'0x669308e16715eE6EfCd13B18C081D0e07b5907f5',
-    7:'0x34eB626aBac75372eA4a94f2d7b295580486F0eA',
+    1:'0x3b2E0f282C46B060485e7277D080732310FF5DeA',
+    2:'0x320Db0CEd7c7b04B24597195E3a09bc2aDf62caB',
+    3:'0x02F83458ac0fd5050aBBb9babBFa29398b39dC6A',
+    4:'0x25bFdF0d9D41d131e25F9cC4198F9d35ED0816b7',
+    5:'0x9541Dd025494276b7aa3924ab1BE2356261b9Cb7',
+    6:'0xaE1401D22a3Ea5d55F2D5E9c8d30BB6F667776dd',
+    7:'0xEC5E9e4c29B848e0DC07CD36AD1378720D24CcB7',
   },
 };
 const TIER_NAMES={1:'Nova Seed',2:'Nova Rise',3:'Nova Star',4:'Nova Prime',5:'SuperNova Genesis',6:'SuperNova Elite',7:'SuperNova Spark'};
@@ -1369,7 +1369,7 @@ async function loadQueueView(){
       const sb=isMe?'<span class="pill pill-green" style="font-size:11px">⭐ YOU</span>':(isActive?'<span class="pill pill-blue" style="font-size:11px">Active</span>':'<span style="font-size:11px;color:var(--text3)">Queued</span>');
       html+=`<tr style="${rs}"><td style="padding:10px 12px;font-weight:700;color:${isMe?'var(--green)':'var(--text)'}">#${m.id}</td><td style="padding:10px 12px;font-family:monospace;color:var(--text2)">${addr.slice(0,6)}…${addr.slice(-4)}</td><td style="padding:10px 12px;color:${BigInt(m.withdrawable)>0n?'var(--green)':'var(--text3)'};font-weight:600">${u6(m.withdrawable)}</td><td style="padding:10px 12px">${u6(m.totalEarned)}</td><td style="padding:10px 12px">${m.reentryCount.toString()}</td><td style="padding:10px 12px">${sb}</td></tr>`;
     }
-    html+='</tbody></table></div><div style="margin-top:12px;font-size:12px;color:var(--text3)">Showing '+total+' member'+(total!==1?'s':'')+' · Active window: positions 1–100</div>';
+    html+='</tbody></table></div><div style="margin-top:12px;font-size:12px;color:var(--text3)">Showing '+total+' member'+(total!==1?'s':'')+' · Active window: positions 1–64</div>';
     tEl.innerHTML=html;tEl.style.display='block';lEl.style.display='none';
   }catch(e){lEl.innerHTML='❌ Error: '+(e.shortMessage||e.message);console.error(e);}
 }
