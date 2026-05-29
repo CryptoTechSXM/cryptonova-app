@@ -503,8 +503,8 @@
             <div class="form-hint" id="upgrade-tier-hint"></div>
           </div>
           <div class="form-group">
-            <label>Referrer for this tier <span style="color:var(--text3);font-weight:400">(optional)</span></label>
-            <input type="text" id="upgrade-referrer" placeholder="0x… leave blank to use same referrer" />
+            <label>Referrer <span style="color:var(--green);font-weight:600;font-size:11px">🔒 Locked — same as Tier 1</span></label>
+            <input type="text" id="upgrade-referrer" readonly style="background:var(--bg3);opacity:.7;cursor:not-allowed;font-family:monospace;font-size:12px" placeholder="Loading referrer…" />
           </div>
           <div style="display:flex;flex-direction:column;gap:10px">
             <button class="btn btn-ghost full-w" id="btn-upgrade-approve" onclick="approveUSDCForUpgrade()" disabled>Step 1: Approve USDC 🔒</button>
@@ -1570,6 +1570,15 @@ async function showUpgradeCardIfEligible(){
     let cyclesDone=0,cyclesNeeded=CYCLE_REQ[ct]||1;
     try{const cy=await t1.cyclesCompleted(userAddr);cyclesDone=Number(cy);}catch(_){}
     populateUpgradeSelect(ct,fastTrack,Number(whaleCount),cyclesDone,cyclesNeeded);
+    // Auto-fill referrer from Tier 1 registration — locked on-chain
+    try{
+      const t1=new ethers.Contract(ADDRESSES.matrices[1],MATRIX_ABI,readProvider);
+      const m1=await t1.members(userAddr);
+      const refEl=document.getElementById('upgrade-referrer');
+      if(refEl&&m1.referrer&&m1.referrer!==ethers.ZeroAddress){
+        refEl.value=m1.referrer;
+      }
+    }catch(_){}
     const wgEl=document.getElementById('upgrade-whale-gate');
     const wn=Number(whaleCount);
     if(wgEl){wgEl.style.display='block';document.getElementById('upgrade-whale-progress').textContent=wn;const ftb=document.getElementById('upgrade-fasttrack-badge');if(ftb)ftb.innerHTML=fastTrack?'<span class="pill pill-green" style="font-size:11px">🔓 Fast-track ON</span>':'<span class="pill pill-yellow" style="font-size:11px">🔒 '+(25-wn)+' more needed</span>';}
