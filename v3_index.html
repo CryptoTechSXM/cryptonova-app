@@ -664,14 +664,10 @@
     <div class="section-title"><div class="dot"></div> Matrix Tree View</div>
 
     <div class="card" style="margin-bottom:20px">
-      <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
-        <div style="flex:1;min-width:200px">
-          <label style="display:block;font-size:13px;color:var(--text2);margin-bottom:6px">View from Node ID (or wallet address)</label>
-          <input type="text" id="matrix-input" placeholder="Node ID number or 0x... address" />
-        </div>
-        <button id="btn-load-tree"    class="btn btn-ghost"  style="margin-top:20px" onclick="setActiveMatrixBtn('btn-load-tree');loadMatrixTree()">Load Tree</button>
-        <button id="btn-my-position" class="btn btn-ghost"  style="margin-top:20px" onclick="setActiveMatrixBtn('btn-my-position');loadMyTree()">My Position</button>
-        <button id="btn-my-directs"  class="btn btn-ghost"  style="margin-top:20px" onclick="setActiveMatrixBtn('btn-my-directs');loadMyDirects()">👥 My Directs</button>
+      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+        <button id="btn-load-tree"   class="btn btn-ghost" onclick="setActiveMatrixBtn('btn-load-tree');loadQueueView()">🔄 Load Queue</button>
+        <button id="btn-my-position" class="btn btn-ghost" onclick="setActiveMatrixBtn('btn-my-position');loadMyTree()">📍 My Position</button>
+        <button id="btn-my-directs"  class="btn btn-ghost" onclick="setActiveMatrixBtn('btn-my-directs');loadMyDirects()">👥 My Directs</button>
       </div>
     </div>
 
@@ -976,6 +972,8 @@ const MATRIX_ABI = [
   {"inputs":[],"name":"totalMembers","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},
   {"inputs":[],"name":"ENTRY_FEE","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},
   {"inputs":[],"name":"ACTIVE_WINDOW","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},
+  {"inputs":[{"internalType":"address","name":"member","type":"address"}],"name":"positionOf","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},
+  {"inputs":[{"internalType":"address","name":"member","type":"address"}],"name":"isActive","outputs":[{"internalType":"bool","name":"","type":"bool"}],"stateMutability":"view","type":"function"},
   {"inputs":[{"internalType":"address","name":"referrer","type":"address"}],"name":"register","outputs":[],"stateMutability":"nonpayable","type":"function"},
   {"inputs":[],"name":"withdraw","outputs":[],"stateMutability":"nonpayable","type":"function"},
   {"anonymous":false,"inputs":[{"indexed":true,"internalType":"address","name":"member","type":"address"},{"indexed":true,"internalType":"address","name":"referrer","type":"address"},{"indexed":false,"internalType":"uint256","name":"memberId","type":"uint256"},{"indexed":false,"internalType":"uint256","name":"position","type":"uint256"},{"indexed":false,"internalType":"uint256","name":"cnovaRewarded","type":"uint256"}],"name":"MemberRegistered","type":"event"},
@@ -1353,23 +1351,42 @@ async function loadMatrixStats(){
 async function loadQueueView(){
   const tEl=document.getElementById('matrix-tree'),lEl=document.getElementById('matrix-loading');
   lEl.innerHTML='<span class="spinner"></span> Loading member queue…';lEl.style.display='block';tEl.style.display='none';
-  const t1=new ethers.Contract(ADDRESSES.matrices[1],MATRIX_ABI,readProvider);
   try{
+    const t1=new ethers.Contract(ADDRESSES.matrices[1],MATRIX_ABI,readProvider);
     const total=Number(await t1.totalMembers());
-    let myId=-1;if(userAddr){try{const me=await t1.members(userAddr);if(me.isRegistered)myId=Number(me.id);}catch(_){}}
+    let myId=-1;
+    if(userAddr){try{const me=await t1.members(userAddr);if(me.isRegistered)myId=Number(me.id);}catch(_){}}
     if(total===0){lEl.innerHTML='No members registered yet.';return;}
-    let html=`<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:13px"><thead><tr style="border-bottom:2px solid var(--border);color:var(--text3);text-align:left"><th style="padding:8px 12px">#</th><th style="padding:8px 12px">Address</th><th style="padding:8px 12px">Withdrawable</th><th style="padding:8px 12px">Total Earned</th><th style="padding:8px 12px">Re-entries</th><th style="padding:8px 12px">Status</th></tr></thead><tbody>`;
+    let html=`<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:13px"><thead><tr style="border-bottom:2px solid var(--border);color:var(--text3);text-align:left"><th style="padding:8px 12px">Join #</th><th style="padding:8px 12px">Queue Pos</th><th style="padding:8px 12px">Address</th><th style="padding:8px 12px">Withdrawable</th><th style="padding:8px 12px">Total Earned</th><th style="padding:8px 12px">Cycles</th><th style="padding:8px 12px">Status</th></tr></thead><tbody>`;
     const delay=ms=>new Promise(r=>setTimeout(r,ms));
     for(let i=1;i<=total;i++){
-      let addr,m,cy;try{addr=await t1.memberById(i);[m,cy]=await Promise.all([t1.members(addr),t1.cyclesCompleted(addr)]);await delay(60);}catch(_){continue;}
-      const isMe=Number(m.id)===myId,isActive=Number(m.id)<=100;
+      let addr,m,cy,qpos=0n;
+      try{
+        addr=await t1.memberById(i);
+        [m,cy]=await Promise.all([t1.members(addr),t1.cyclesCompleted(addr)]);
+        try{qpos=await t1.positionOf(addr);}catch(_){qpos=0n;}
+        await delay(60);
+      }catch(_){continue;}
+      const isMe=Number(m.id)===myId;
+      const qNum=Number(qpos);
+      const isActivePos=qNum>0&&qNum<=64;
       const rs=isMe?'background:var(--green-dim);border-bottom:1px solid var(--green2)':'border-bottom:1px solid var(--border)';
-      const sb=isMe?'<span class="pill pill-green" style="font-size:11px">⭐ YOU</span>':(isActive?'<span class="pill pill-blue" style="font-size:11px">Active</span>':'<span style="font-size:11px;color:var(--text3)">Queued</span>');
-      html+=`<tr style="${rs}"><td style="padding:10px 12px;font-weight:700;color:${isMe?'var(--green)':'var(--text)'}">#${m.id}</td><td style="padding:10px 12px;font-family:monospace;color:var(--text2)">${addr.slice(0,6)}…${addr.slice(-4)}</td><td style="padding:10px 12px;color:${BigInt(m.withdrawable)>0n?'var(--green)':'var(--text3)'};font-weight:600">${u6(m.withdrawable)}</td><td style="padding:10px 12px">${u6(m.totalEarned)}</td><td style="padding:10px 12px">${m.reentryCount.toString()}</td><td style="padding:10px 12px">${sb}</td></tr>`;
+      const qLabel=qNum>0?'#'+qNum:'re-entry';
+      const qColor=qNum>0&&qNum<=10?'var(--green)':qNum>0?'var(--text)':'var(--text3)';
+      const sb=isMe?'<span class="pill pill-green" style="font-size:11px">⭐ YOU</span>':(isActivePos?'<span class="pill pill-blue" style="font-size:11px">Active</span>':'<span style="font-size:11px;color:var(--text3)">Re-entering</span>');
+      html+=`<tr style="${rs}">
+        <td style="padding:10px 12px;font-weight:700;color:${isMe?'var(--green)':'var(--text)'}">#${m.id}</td>
+        <td style="padding:10px 12px;font-weight:700;color:${qColor}">${qLabel}</td>
+        <td style="padding:10px 12px;font-family:monospace;color:var(--text2)">${addr.slice(0,6)}…${addr.slice(-4)}</td>
+        <td style="padding:10px 12px;color:${BigInt(m.withdrawable)>0n?'var(--green)':'var(--text3)'};font-weight:600">${u6(m.withdrawable)}</td>
+        <td style="padding:10px 12px">${u6(m.totalEarned)}</td>
+        <td style="padding:10px 12px">${cy.toString()}</td>
+        <td style="padding:10px 12px">${sb}</td>
+      </tr>`;
     }
-    html+='</tbody></table></div><div style="margin-top:12px;font-size:12px;color:var(--text3)">Showing '+total+' member'+(total!==1?'s':'')+' · Active window: positions 1–64</div>';
+    html+='</tbody></table></div><div style="margin-top:12px;font-size:12px;color:var(--text3)">Showing '+total+' member'+(total!==1?'s':'')+' · Active window: 64 positions · Top 10 in green</div>';
     tEl.innerHTML=html;tEl.style.display='block';lEl.style.display='none';
-  }catch(e){lEl.innerHTML='❌ Error: '+(e.shortMessage||e.message);console.error(e);}
+  }catch(e){lEl.innerHTML='❌ Error loading queue: '+(e.shortMessage||e.message);console.error('loadQueueView error:',e);}
 }
 
 async function loadMatrixTree(){await loadQueueView();}
@@ -1385,7 +1402,9 @@ async function loadMyTree(){
     document.getElementById('matrix-my-node').textContent='#'+m.id.toString();
     const sub=document.getElementById('matrix-my-level-sub');sub.textContent='Cycles: '+cy.toString();sub.style.display='block';
     const ban=document.getElementById('matrix-pos-banner');ban.style.display='block';
-    document.getElementById('matrix-pos-level').textContent='🏅 Member #'+m.id+' · Tier 1 (Nova Seed)';
+    const queuePos = await t1.positionOf(userAddr).catch(()=>0n);
+      const isActiveNow = Number(queuePos) > 0 && Number(queuePos) <= 64;
+      document.getElementById('matrix-pos-level').textContent='🏅 Member #'+m.id+' · Queue Position: '+(Number(queuePos)||'re-entering')+' of 64';
     document.getElementById('matrix-pos-slots').textContent='♻️ Cycles completed: '+cy.toString();
     document.getElementById('matrix-pos-cycle').textContent='💰 Earned: '+u6(BigInt(m.totalEarned));
     await loadQueueView();
@@ -1541,6 +1560,12 @@ async function showUpgradeCardIfEligible(){
     if(!member.isRegistered){upgradeCard.style.display='none';return;}
     const ct=Number(currentTier)||1;
     if(ct>=7){upgradeCard.innerHTML='<div style="color:var(--green);font-weight:700">👑 Max tier reached — SuperNova Spark!</div>';upgradeCard.style.display='block';return;}
+    // If memberTier=0 (direct Tier1 registration not synced to TierManager)
+    if(Number(currentTier)===0&&member.isRegistered){
+      upgradeCard.style.display='block';
+      upgradeCard.innerHTML='<div style="font-size:15px;font-weight:700;margin-bottom:8px">⬆️ Upgrade Tier</div><div style="background:rgba(245,158,11,.1);border:1px solid rgba(245,158,11,.3);border-radius:8px;padding:12px;font-size:13px;color:var(--yellow);margin-bottom:12px">⚠️ Your Tier 1 registration needs a one-time admin sync before you can upgrade. Please contact the admin with your wallet address: <strong style="color:var(--text);font-family:monospace">'+userAddr+'</strong></div>';
+      return;
+    }
     upgradeCard.style.display='block';
     let cyclesDone=0,cyclesNeeded=CYCLE_REQ[ct]||1;
     try{const cy=await t1.cyclesCompleted(userAddr);cyclesDone=Number(cy);}catch(_){}
