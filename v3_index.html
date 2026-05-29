@@ -1115,11 +1115,11 @@ async function loadFoundingMembers(){
     const delay=ms=>new Promise(r=>setTimeout(r,ms));const seen=new Set();
     const t5=new ethers.Contract(ADDRESSES.matrices[5],MATRIX_ABI,readProvider);
     const n5=Number(await t5.totalMembers());
-    for(let i=1;i<=Math.min(n5,25);i++){try{const a=await t5.memberById(i);if(a&&a!==ethers.ZeroAddress&&!seen.has(a.toLowerCase())){seen.add(a.toLowerCase());foundingMembers.push(a);}await delay(60);}catch(_){}}
+    for(let i=1;i<=Math.min(n5,50);i++){try{const a=await t5.memberById(i);if(a&&a!==ethers.ZeroAddress&&!seen.has(a.toLowerCase())){seen.add(a.toLowerCase());foundingMembers.push(a);}await delay(60);}catch(_){}}
     if(foundingMembers.length<25){
       const t1=new ethers.Contract(ADDRESSES.matrices[1],MATRIX_ABI,readProvider);
       const n1=Number(await t1.totalMembers());
-      for(let i=1;i<=Math.min(n1,25);i++){if(foundingMembers.length>=25)break;try{const a=await t1.memberById(i);if(a&&a!==ethers.ZeroAddress&&!seen.has(a.toLowerCase())){seen.add(a.toLowerCase());foundingMembers.push(a);}await delay(60);}catch(_){}}
+      for(let i=1;i<=Math.min(n1,50);i++){if(foundingMembers.length>=60)break;try{const a=await t1.memberById(i);if(a&&a!==ethers.ZeroAddress&&!seen.has(a.toLowerCase())){seen.add(a.toLowerCase());foundingMembers.push(a);}await delay(60);}catch(_){}}
     }
     foundingMembersReady=true;console.log('foundingMembers:',foundingMembers.length);
   }catch(e){foundingMembersReady=true;console.warn('loadFoundingMembers:',e.message);}
