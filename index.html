@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>CryptoNova — Binary Matrix System</title>
+  <title>CryptoNova — 7-Tier Matrix System (V3)</title>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/6.7.1/ethers.umd.min.js"></script>
   <style>
     :root {
@@ -338,8 +338,8 @@
   <!-- ══ HOME TAB ══════════════════════════════════════════════════════ -->
   <div id="tab-home" class="tab-panel active">
     <div class="hero">
-      <h1>Binary Matrix System<br><span>on Base Chain</span></h1>
-      <p>Join the CryptoNova matrix. Earn $3 USDC per referral + automatic chain payments up to 7 levels deep. Your referrer follows you for life — and so do yours. Every entry auto-compounds through BFS placement.</p>
+      <h1>7-Tier Matrix System<br><span>on Base Chain</span></h1>
+      <p>Join the CryptoNova 7-tier ladder. Start at Nova Seed ($10) and climb to SuperNova Spark ($1,000). Earn referral bonuses, 7-level chain pay, and CNOVA tokens — all backed by treasury USDC.</p>
       <div class="hero-actions">
         <button class="btn-primary" onclick="showTab('register')">Join Now — $10 USDC</button>
         <button class="btn-outline" onclick="showTab('dashboard')">View Dashboard</button>
@@ -358,7 +358,7 @@
         <div class="token-icon">CN</div>
         <div>
           <div class="token-name">CNOVA Token <span class="pill pill-green" style="font-size:10px;vertical-align:middle">ERC-20 · Base</span></div>
-          <div class="token-addr">0xeC749BFF00f94632268d6f46e6DbF126594E7fC5 · 18 decimals</div>
+          <div class="token-addr">0x3aDD4b15748d28819fd9B7C897eB9Dc97B157B3f · 18 decimals</div>
           <div style="font-size:12px;color:var(--text2);margin-top:4px">Earned automatically on every registration. Floor price backed by treasury USDC.</div>
         </div>
       </div>
@@ -372,8 +372,8 @@
         <div class="token-icon" style="background:linear-gradient(135deg,#2775ca,#5b8dee)">$</div>
         <div>
           <div class="token-name">USD Coin <span class="pill" style="font-size:10px;vertical-align:middle;background:rgba(59,130,246,.15);color:#5b8dee;border:1px solid rgba(59,130,246,.3)">USDC · Base</span></div>
-          <div class="token-addr">0xc7D007D60210eAF1C291B4873A0d285De0B97C8F · 6 decimals</div>
-          <div style="font-size:12px;color:var(--text2);margin-top:4px">Required to join the matrix. $10 USDC per registration. Approve once, enter anytime.</div>
+          <div class="token-addr">0x2D8B7b5eDec96bE441b6fb0D45D74a2BcE2C639a · 6 decimals</div>
+          <div style="font-size:12px;color:var(--text2);margin-top:4px">Required to join. $10 at Tier 1 up to $1,000 at Tier 7.</div>
         </div>
       </div>
       <button class="btn-metamask" style="background:#2775ca" onclick="addUSDCtoMetaMask()">
@@ -396,7 +396,7 @@
         <div class="section-title" style="margin-bottom:12px"><div class="dot"></div> Current Cycle</div>
         <div class="info-row"><span class="info-key">Cycle #</span><span class="info-val" id="stat-cycle">—</span></div>
         <div class="info-row"><span class="info-key">Positions Filled</span><span class="info-val" id="stat-filled">—</span></div>
-        <div class="info-row"><span class="info-key">Cycle Trigger</span><span class="info-val">203 / 254 slots</span></div>
+        <div class="info-row"><span class="info-key">Cycle Trigger</span><span class="info-val">100 slots (ACTIVE_WINDOW=100)</span></div>
         <div style="margin-top:12px">
           <div style="display:flex;justify-content:space-between;font-size:12px;color:var(--text3);margin-bottom:4px">
             <span>Progress</span><span id="stat-pct">0%</span>
@@ -417,12 +417,15 @@
 
     <!-- Entry split -->
     <div class="card">
-      <div class="section-title"><div class="dot"></div> How Your $10 Entry is Split</div>
-      <div class="split-row"><span class="split-label">🤝 Referrer bonus</span><span><span class="split-amount">$3.00</span> <span class="split-pct">30%</span></span></div>
-      <div class="split-row"><span class="split-label">🔗 Matrix chain pay (L1–L7)</span><span><span class="split-amount">$4.00</span> <span class="split-pct">40%</span></span></div>
-      <div class="split-row"><span class="split-label">♻️ Re-entry pool (flat $1 + 20% chain pay)</span><span><span class="split-amount">$1.00+</span> <span class="split-pct">10%+</span></span></div>
-      <div class="split-row"><span class="split-label">🏦 USDC treasury reserve</span><span><span class="split-amount">$1.50</span> <span class="split-pct">15%</span></span></div>
-      <div class="split-row"><span class="split-label">⚙️ Dev + Ops</span><span><span class="split-amount">$0.50</span> <span class="split-pct">5%</span></span></div>
+      <div class="section-title"><div class="dot"></div> How Each Entry Fee is Split (all tiers)</div>
+      <div class="split-row"><span class="split-label">🤝 Referrer bonus</span><span><span class="split-amount">30%</span> <span class="split-pct">e.g. $3.00 at Tier 1</span></span></div>
+      <div class="split-row"><span class="split-label">🔗 7-Level chain pay (L1–L7)</span><span><span class="split-amount">40%</span> <span class="split-pct">e.g. $4.00 at Tier 1</span></span></div>
+      <div class="split-row"><span class="split-label">🏘️ Community wallet</span><span><span class="split-amount">10%</span> <span class="split-pct">e.g. $1.00 at Tier 1</span></span></div>
+      <div class="split-row"><span class="split-label">🏦 USDC treasury reserve</span><span><span class="split-amount">15%</span> <span class="split-pct">e.g. $1.50 at Tier 1</span></span></div>
+      <div class="split-row"><span class="split-label">⚙️ Dev + Ops</span><span><span class="split-amount">5%</span> <span class="split-pct">e.g. $0.50 at Tier 1</span></span></div>
+      <div style="margin-top:14px;padding:10px 14px;background:var(--green-dim);border:1px solid var(--green2);border-radius:8px;font-size:13px;color:var(--text2)">
+        💡 <strong style="color:var(--green)">Whale Gate:</strong> When 25 members reach <strong>SuperNova Genesis (Tier 5)</strong>, fast-track unlocks — skip straight to any tier above yours.
+      </div>
     </div>
   </div>
 
@@ -883,10 +886,12 @@
     <div class="section-title" style="margin-top:32px"><div class="dot"></div> Deployed Contracts (Base Sepolia Testnet)</div>
     <div class="card">
       <div style="font-size:13px;color:var(--text2);margin-bottom:14px">These addresses are for testing only. Mainnet addresses will replace these at Phase 3 launch.</div>
-      <div class="info-row"><span class="info-key">CryptoNovaMatrix</span><span class="info-val addr">0x075CB5C3e730e70eA4e559C6e224101B738a4812</span></div>
-      <div class="info-row"><span class="info-key">CNOVATreasury</span><span class="info-val addr">0x23f495D28856d511f15F4B3e33bAa51Ecdc95166</span></div>
-      <div class="info-row"><span class="info-key">CNOVAToken</span><span class="info-val addr">0xe0050e4CD45eE4d3F8Efeb476744222eF7D31F01</span></div>
-      <div class="info-row"><span class="info-key">MockUSDC (testnet)</span><span class="info-val addr">0xc7D007D60210eAF1C291B4873A0d285De0B97C8F</span></div>
+      <div class="info-row"><span class="info-key">CNOVAToken</span><span class="info-val addr">0x3aDD4b15748d28819fd9B7C897eB9Dc97B157B3f</span></div>
+      <div class="info-row"><span class="info-key">CNOVATreasury</span><span class="info-val addr">0x9DA57b7765192d0c3B147C5ee674A9a459268208</span></div>
+      <div class="info-row"><span class="info-key">TierManager</span><span class="info-val addr">0x82c93CAB376C557FB9E32D325D3eC9d5fFaf3624</span></div>
+      <div class="info-row"><span class="info-key">Tier 1 — Nova Seed (W=100)</span><span class="info-val addr">0x001DCe1E58C3F22ec1983504A232b06B46F85e9f</span></div>
+      <div class="info-row"><span class="info-key">Tier 5 — SuperNova Genesis 🐋</span><span class="info-val addr">0xd5261831F594b6342a870266DEb209C500cD59Ec</span></div>
+      <div class="info-row"><span class="info-key">MockUSDC (testnet)</span><span class="info-val addr">0x2D8B7b5eDec96bE441b6fb0D45D74a2BcE2C639a</span></div>
       <div style="margin-top:14px;font-size:12px;color:var(--text3)">
         Explorer: <a href="https://sepolia.basescan.org" target="_blank" style="color:var(--blue)">sepolia.basescan.org</a>
       </div>
@@ -917,1096 +922,510 @@
 
 <script>
 // ═══════════════════════════════════════════════════════════════════════
-// CONFIG
+// CONFIG — V3 7-Tier System (Base Sepolia, ACTIVE_WINDOW=100)
 // ═══════════════════════════════════════════════════════════════════════
-const CHAIN_ID = 84532; // Base Sepolia
-const RPC_URL     = 'https://sepolia.base.org';
+const CHAIN_ID = 84532;
+const RPC_URL  = 'https://sepolia.base.org';
 
 const ADDRESSES = {
-  matrix:   '0x26E95Ce814e388fd5aFDd46A66A8d3Ad8fF6196F',  // v2 — deployed 2026-05-26
-  treasury: '0xF039FA905D0ce7E0451a2A0Cf75fad4b55381B93',
-  token:    '0xeC749BFF00f94632268d6f46e6DbF126594E7fC5',
-  usdc:     '0xc7D007D60210eAF1C291B4873A0d285De0B97C8F',
+  usdc:           '0x2D8B7b5eDec96bE441b6fb0D45D74a2BcE2C639a',
+  token:          '0x3aDD4b15748d28819fd9B7C897eB9Dc97B157B3f',
+  treasury:       '0x9DA57b7765192d0c3B147C5ee674A9a459268208',
+  communityWallet:'0x52Fd50a54Dde9feDD6bb1a8f6E37692353826dE3',
+  tierManager:    '0x82c93CAB376C557FB9E32D325D3eC9d5fFaf3624',
+  matrices: {
+    1:'0x001DCe1E58C3F22ec1983504A232b06B46F85e9f',
+    2:'0x9be58869C2829C0EFAD246D856bCadaD390363f4',
+    3:'0x215D9bAB3344c24A000d3Bd634c08673370A8f5c',
+    4:'0x98D4CEC738F3cc40d05a35c0F38a821B425A9BDe',
+    5:'0xd5261831F594b6342a870266DEb209C500cD59Ec',
+    6:'0x669308e16715eE6EfCd13B18C081D0e07b5907f5',
+    7:'0x34eB626aBac75372eA4a94f2d7b295580486F0eA',
+  },
 };
+const TIER_NAMES={1:'Nova Seed',2:'Nova Rise',3:'Nova Star',4:'Nova Prime',5:'SuperNova Genesis',6:'SuperNova Elite',7:'SuperNova Spark'};
+const TIER_FEES={1:10,2:25,3:50,4:100,5:250,6:500,7:1000};
+const TIER_FEES_USDC={1:10_000_000n,2:25_000_000n,3:50_000_000n,4:100_000_000n,5:250_000_000n,6:500_000_000n,7:1_000_000_000n};
+const CYCLE_REQ={1:1,2:2,3:2,4:2,5:3,6:3,7:0};
 
-// ── ABIs (v2 — auto re-entry, referrer-for-life) ──────────────────────
+// ── ABIs ─────────────────────────────────────────────────────────────
 const MATRIX_ABI = [
-  // ── View functions ──────────────────────────────────────────────────
-  {"inputs":[],"name":"CYCLE_TRIGGER","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},
-  {"inputs":[],"name":"ENTRY_FEE","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},
-  {"inputs":[],"name":"REENTRY_RATE","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},
-  {"inputs":[],"name":"TOTAL_POSITIONS","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},
-  {"inputs":[{"internalType":"uint256","name":"","type":"uint256"}],"name":"bfsHead","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},
-  {"inputs":[],"name":"currentCycleId","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},
-  {"inputs":[],"name":"nextNodeId","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},
-  {"inputs":[],"name":"totalMembers","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},
+  {"inputs":[{"internalType":"address","name":"","type":"address"}],"name":"members","outputs":[{"internalType":"uint256","name":"id","type":"uint256"},{"internalType":"address","name":"referrer","type":"address"},{"internalType":"address","name":"originalReferrer","type":"address"},{"internalType":"uint256","name":"joinedAt","type":"uint256"},{"internalType":"uint256","name":"withdrawable","type":"uint256"},{"internalType":"uint256","name":"totalEarned","type":"uint256"},{"internalType":"uint256","name":"reentryCount","type":"uint256"},{"internalType":"bool","name":"isRegistered","type":"bool"}],"stateMutability":"view","type":"function"},
+  {"inputs":[{"internalType":"address","name":"","type":"address"}],"name":"cyclesCompleted","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},
   {"inputs":[{"internalType":"uint256","name":"","type":"uint256"}],"name":"memberById","outputs":[{"internalType":"address","name":"","type":"address"}],"stateMutability":"view","type":"function"},
-  // earningsSummary — v2 returns 4 values (added reentryProgress 0-100)
-  {"inputs":[{"internalType":"address","name":"member","type":"address"}],"name":"earningsSummary","outputs":[{"internalType":"uint256","name":"withdrawable","type":"uint256"},{"internalType":"uint256","name":"reentryPool","type":"uint256"},{"internalType":"uint256","name":"reentryProgress","type":"uint256"},{"internalType":"uint256","name":"cnovaBalance","type":"uint256"}],"stateMutability":"view","type":"function"},
-  {"inputs":[],"name":"getCycleStatus","outputs":[{"internalType":"uint256","name":"cycleId","type":"uint256"},{"internalType":"uint256","name":"filled","type":"uint256"},{"internalType":"uint256","name":"remaining","type":"uint256"},{"internalType":"bool","name":"complete","type":"bool"}],"stateMutability":"view","type":"function"},
-  // getMember — v2 struct includes originalReferrer
-  {"inputs":[{"internalType":"address","name":"member","type":"address"}],"name":"getMember","outputs":[{"components":[{"internalType":"uint256","name":"id","type":"uint256"},{"internalType":"address","name":"referrer","type":"address"},{"internalType":"address","name":"originalReferrer","type":"address"},{"internalType":"uint256","name":"cycleId","type":"uint256"},{"internalType":"uint256","name":"matrixNodeId","type":"uint256"},{"internalType":"uint256","name":"earnings","type":"uint256"},{"internalType":"uint256","name":"reentryPool","type":"uint256"},{"internalType":"uint256","name":"lastActivityTime","type":"uint256"},{"internalType":"bool","name":"isRegistered","type":"bool"},{"internalType":"bool","name":"isPaused","type":"bool"}],"internalType":"struct CryptoNovaMatrix.Member","name":"","type":"tuple"}],"stateMutability":"view","type":"function"},
-  {"inputs":[{"internalType":"uint256","name":"nodeId","type":"uint256"}],"name":"getNode","outputs":[{"components":[{"internalType":"address","name":"owner","type":"address"},{"internalType":"uint256","name":"cycleId","type":"uint256"},{"internalType":"uint256","name":"parentNodeId","type":"uint256"},{"internalType":"uint8","name":"depth","type":"uint8"},{"internalType":"uint8","name":"childCount","type":"uint8"},{"internalType":"uint256[2]","name":"children","type":"uint256[2]"},{"internalType":"bool","name":"isPaused","type":"bool"}],"internalType":"struct CryptoNovaMatrix.MatrixNode","name":"","type":"tuple"}],"stateMutability":"view","type":"function"},
-  {"inputs":[{"internalType":"address","name":"member","type":"address"}],"name":"withdrawableBalance","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},
-  // ── Write functions ─────────────────────────────────────────────────
+  {"inputs":[],"name":"totalMembers","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},
+  {"inputs":[],"name":"ENTRY_FEE","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},
+  {"inputs":[],"name":"ACTIVE_WINDOW","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},
   {"inputs":[{"internalType":"address","name":"referrer","type":"address"}],"name":"register","outputs":[],"stateMutability":"nonpayable","type":"function"},
   {"inputs":[],"name":"withdraw","outputs":[],"stateMutability":"nonpayable","type":"function"},
-  {"inputs":[{"internalType":"uint256","name":"amount","type":"uint256"}],"name":"topUpReentryPool","outputs":[],"stateMutability":"nonpayable","type":"function"},
-  // ── Events ──────────────────────────────────────────────────────────
-  {"anonymous":false,"inputs":[{"indexed":true,"internalType":"address","name":"member","type":"address"},{"indexed":true,"internalType":"address","name":"referrer","type":"address"},{"indexed":false,"internalType":"uint256","name":"memberId","type":"uint256"},{"indexed":false,"internalType":"uint256","name":"cycleId","type":"uint256"},{"indexed":false,"internalType":"uint256","name":"nodeId","type":"uint256"},{"indexed":false,"internalType":"uint256","name":"cnovaRewarded","type":"uint256"}],"name":"MemberRegistered","type":"event"},
+  {"anonymous":false,"inputs":[{"indexed":true,"internalType":"address","name":"member","type":"address"},{"indexed":true,"internalType":"address","name":"referrer","type":"address"},{"indexed":false,"internalType":"uint256","name":"memberId","type":"uint256"},{"indexed":false,"internalType":"uint256","name":"position","type":"uint256"},{"indexed":false,"internalType":"uint256","name":"cnovaRewarded","type":"uint256"}],"name":"MemberRegistered","type":"event"},
   {"anonymous":false,"inputs":[{"indexed":true,"internalType":"address","name":"member","type":"address"},{"indexed":false,"internalType":"uint256","name":"amount","type":"uint256"}],"name":"EarningsWithdrawn","type":"event"},
-  {"anonymous":false,"inputs":[{"indexed":true,"internalType":"address","name":"recipient","type":"address"},{"indexed":false,"internalType":"uint256","name":"level","type":"uint256"},{"indexed":false,"internalType":"uint256","name":"amount","type":"uint256"}],"name":"ChainPayment","type":"event"},
-  {"anonymous":false,"inputs":[{"indexed":true,"internalType":"address","name":"referrer","type":"address"},{"indexed":true,"internalType":"address","name":"from","type":"address"},{"indexed":false,"internalType":"uint256","name":"amount","type":"uint256"}],"name":"ReferrerBonus","type":"event"},
-  {"anonymous":false,"inputs":[{"indexed":true,"internalType":"uint256","name":"cycleId","type":"uint256"}],"name":"NewCycleStarted","type":"event"},
-  {"anonymous":false,"inputs":[{"indexed":true,"internalType":"address","name":"recipient","type":"address"},{"indexed":false,"internalType":"uint256","name":"level","type":"uint256"},{"indexed":false,"internalType":"uint256","name":"amount","type":"uint256"}],"name":"ReentryPoolContribution","type":"event"},
-  {"anonymous":false,"inputs":[{"indexed":true,"internalType":"address","name":"member","type":"address"},{"indexed":false,"internalType":"uint256","name":"newCycleId","type":"uint256"},{"indexed":false,"internalType":"uint256","name":"newNodeId","type":"uint256"}],"name":"ReentryTriggered","type":"event"},
-  {"anonymous":false,"inputs":[{"indexed":true,"internalType":"address","name":"member","type":"address"},{"indexed":false,"internalType":"uint256","name":"poolBalance","type":"uint256"}],"name":"ReentryDeferred","type":"event"}
 ];
-
-const TREASURY_ABI = [{"inputs":[],"name":"floorPrice","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"floorPriceFormatted","outputs":[{"internalType":"uint256","name":"dollars6dec","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"isUniverseMode","outputs":[{"internalType":"bool","name":"","type":"bool"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"reserveBalance","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"usdcReserve","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"}];
-
-const TOKEN_ABI = [{"inputs":[{"internalType":"address","name":"account","type":"address"}],"name":"balanceOf","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"currentEpoch","outputs":[{"internalType":"uint8","name":"","type":"uint8"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"currentRewardPerEntry","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"epochMembersRemaining","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"totalMinted","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"totalSupply","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"}];
-
+const TIER_MANAGER_ABI = [
+  {"inputs":[{"internalType":"address","name":"","type":"address"}],"name":"memberTier","outputs":[{"internalType":"uint8","name":"","type":"uint8"}],"stateMutability":"view","type":"function"},
+  {"inputs":[],"name":"fastTrackEnabled","outputs":[{"internalType":"bool","name":"","type":"bool"}],"stateMutability":"view","type":"function"},
+  {"inputs":[],"name":"primeOrAboveCount","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},
+  {"inputs":[],"name":"WHALE_GATE_THRESHOLD","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},
+  {"inputs":[{"internalType":"uint256","name":"","type":"uint256"}],"name":"tierFee","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},
+  {"inputs":[{"internalType":"uint256","name":"","type":"uint256"}],"name":"cycleReq","outputs":[{"internalType":"uint8","name":"","type":"uint8"}],"stateMutability":"view","type":"function"},
+  {"inputs":[{"internalType":"address","name":"member","type":"address"}],"name":"cyclesInCurrentTier","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},
+  {"inputs":[{"internalType":"address","name":"member","type":"address"}],"name":"cyclesUntilUpgrade","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},
+  {"inputs":[{"internalType":"uint8","name":"targetTier","type":"uint8"},{"internalType":"address","name":"referrer","type":"address"}],"name":"upgradeTier","outputs":[],"stateMutability":"nonpayable","type":"function"},
+];
+const TREASURY_ABI = [
+  {"inputs":[],"name":"floorPrice","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},
+  {"inputs":[],"name":"floorPriceFormatted","outputs":[{"internalType":"uint256","name":"dollars6dec","type":"uint256"}],"stateMutability":"view","type":"function"},
+  {"inputs":[],"name":"usdcReserve","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},
+];
+const TOKEN_ABI = [
+  {"inputs":[{"internalType":"address","name":"account","type":"address"}],"name":"balanceOf","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},
+  {"inputs":[],"name":"currentEpoch","outputs":[{"internalType":"uint8","name":"","type":"uint8"}],"stateMutability":"view","type":"function"},
+  {"inputs":[],"name":"currentRewardPerEntry","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},
+  {"inputs":[],"name":"epochMembersRemaining","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},
+  {"inputs":[],"name":"totalMinted","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},
+  {"inputs":[],"name":"totalSupply","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},
+];
 const USDC_ABI = [
   {"inputs":[{"name":"spender","type":"address"},{"name":"amount","type":"uint256"}],"name":"approve","outputs":[{"type":"bool"}],"stateMutability":"nonpayable","type":"function"},
   {"inputs":[{"name":"owner","type":"address"},{"name":"spender","type":"address"}],"name":"allowance","outputs":[{"type":"uint256"}],"stateMutability":"view","type":"function"},
   {"inputs":[{"name":"account","type":"address"}],"name":"balanceOf","outputs":[{"type":"uint256"}],"stateMutability":"view","type":"function"},
   {"inputs":[],"name":"decimals","outputs":[{"type":"uint8"}],"stateMutability":"view","type":"function"},
-  {"inputs":[{"name":"to","type":"address"},{"name":"amount","type":"uint256"}],"name":"mint","outputs":[],"stateMutability":"nonpayable","type":"function"}
+  {"inputs":[{"name":"to","type":"address"},{"name":"amount","type":"uint256"}],"name":"mint","outputs":[],"stateMutability":"nonpayable","type":"function"},
 ];
 
 // ═══════════════════════════════════════════════════════════════════════
 // STATE
 // ═══════════════════════════════════════════════════════════════════════
-let provider       = null;
-let signer         = null;
-let userAddr       = null;
-let readProvider   = null;
-let isConnecting   = false;       // guard against re-entrant connectWallet calls
-let myDirectAddrs  = new Set();   // lowercase addresses of user's direct referrals
+let provider=null,signer=null,userAddr=null,readProvider=null,isConnecting=false;
+let myDirectAddrs=new Set();
+let foundingMembers=[],foundingMembersReady=false,fallbackRoundRobin=0;
 
 // ═══════════════════════════════════════════════════════════════════════
 // INIT
 // ═══════════════════════════════════════════════════════════════════════
 window.addEventListener('DOMContentLoaded', async () => {
-  // Warn if opened as file:// — MetaMask won't inject here
-  if (window.location.protocol === 'file:') {
-    document.getElementById('file-protocol-banner').style.display = 'block';
-  }
-
-  // Read-only provider always available — stats load without MetaMask
+  if (window.location.protocol==='file:') document.getElementById('file-protocol-banner').style.display='block';
   readProvider = new ethers.JsonRpcProvider(RPC_URL);
   loadHomeStats();
-
-  // Auto-reconnect if MetaMask already connected
+  loadFoundingMembers();
   if (window.ethereum && window.ethereum.selectedAddress) {
     try { await connectWallet(true); } catch(e) {}
   }
-
-  // Listen for network / account switches
   if (window.ethereum) {
-    window.ethereum.on('chainChanged', (chainId) => {
-      const correct = parseInt(chainId, 16) === CHAIN_ID;
-      if (correct) {
-        hideNetworkBanner();
-        // Only reconnect if wallet was already connected
-        if (userAddr) connectWallet(true).catch(() => {});
-      } else {
-        showNetworkBanner();
-      }
+    window.ethereum.on('chainChanged',(chainId)=>{
+      const ok=parseInt(chainId,16)===CHAIN_ID;
+      if(ok){hideNetworkBanner();if(userAddr)connectWallet(true).catch(()=>{});}
+      else showNetworkBanner();
     });
-    window.ethereum.on('accountsChanged', (accounts) => {
-      if (accounts.length === 0) {
-        // Wallet disconnected
-        userAddr = null; signer = null; provider = null;
-        const btn = document.getElementById('btn-connect');
-        btn.textContent = 'Connect Wallet';
-        btn.classList.remove('connected');
-      } else if (accounts[0].toLowerCase() !== (userAddr || '').toLowerCase()) {
-        // Account actually changed — reconnect silently
-        // Use timeout to avoid firing during the original connectWallet flow
-        setTimeout(() => connectWallet(true).catch(() => {}), 300);
-      }
+    window.ethereum.on('accountsChanged',(accounts)=>{
+      if(accounts.length===0){userAddr=null;signer=null;provider=null;const b=document.getElementById('btn-connect');b.textContent='Connect Wallet';b.classList.remove('connected');}
+      else if(accounts[0].toLowerCase()!==(userAddr||'').toLowerCase()){setTimeout(()=>connectWallet(true).catch(()=>{}),300);}
     });
   }
-
-  // Handle ?ref= in URL
-  const params = new URLSearchParams(window.location.search);
-  if (params.get('ref')) {
-    document.getElementById('input-referrer').value = params.get('ref');
-    showTab('register');
-  }
+  const params=new URLSearchParams(window.location.search);
+  if(params.get('ref')){document.getElementById('input-referrer').value=params.get('ref');showTab('register');}
 });
 
 // ═══════════════════════════════════════════════════════════════════════
 // WALLET
 // ═══════════════════════════════════════════════════════════════════════
-async function connectWallet(silent = false) {
-  if (isConnecting) return;          // prevent re-entrant calls (mobile accountsChanged loop)
-  if (!window.ethereum) {
-    if (!silent) {
-      if (window.location.protocol === 'file:') {
-        document.getElementById('file-protocol-banner').style.display = 'block';
-        document.getElementById('file-protocol-banner').scrollIntoView({ behavior: 'smooth' });
-      } else {
-        showMetaMaskModal();
-      }
-    }
-    return;
-  }
-  isConnecting = true;
+async function connectWallet(silent=false) {
+  if(isConnecting)return;
+  if(!window.ethereum){if(!silent){if(window.location.protocol==='file:'){document.getElementById('file-protocol-banner').style.display='block';document.getElementById('file-protocol-banner').scrollIntoView({behavior:'smooth'});}else showMetaMaskModal();}return;}
+  isConnecting=true;
   try {
-    provider = new ethers.BrowserProvider(window.ethereum);
-    const accounts = await provider.send('eth_requestAccounts', []);
-    signer   = await provider.getSigner();
-    userAddr = accounts[0];
-
-    // Use synchronous chainId — more reliable on mobile than async getNetwork()
-    const currentChainId = parseInt(window.ethereum.chainId || '0x0', 16);
-    if (currentChainId !== CHAIN_ID) {
-      showNetworkBanner();
-    } else {
-      hideNetworkBanner();
-    }
-
-    // Update BaseScan TX link with real address
-    const bsLink = document.getElementById('basescan-tx-link');
-    if (bsLink) bsLink.href = 'https://sepolia.basescan.org/address/' + accounts[0];
-
-    // Update header
-    const btn = document.getElementById('btn-connect');
-    btn.textContent = userAddr.slice(0,6) + '…' + userAddr.slice(-4);
+    provider=new ethers.BrowserProvider(window.ethereum);
+    const accounts=await provider.send('eth_requestAccounts',[]);
+    signer=await provider.getSigner();userAddr=accounts[0];
+    const cid=parseInt(window.ethereum.chainId||'0x0',16);
+    if(cid!==CHAIN_ID)showNetworkBanner();else hideNetworkBanner();
+    const bsLink=document.getElementById('basescan-tx-link');
+    if(bsLink)bsLink.href='https://sepolia.basescan.org/address/'+accounts[0];
+    const btn=document.getElementById('btn-connect');
+    btn.innerHTML='<span class="network-dot"></span>'+userAddr.slice(0,6)+'…'+userAddr.slice(-4);
     btn.classList.add('connected');
-    btn.innerHTML = '<span class="network-dot"></span>' + userAddr.slice(0,6) + '…' + userAddr.slice(-4);
-
-    if (!silent) toast('Wallet connected: ' + userAddr.slice(0,6) + '…' + userAddr.slice(-4), 'success');
-
-    // Load wallet-specific data
-    await loadRegisterTab();
-    await loadDashboard();
-    await loadMatrixStats();
-  } catch(e) {
-    if (!silent) toast('Connection failed: ' + (e.message || e), 'error');
-  } finally {
-    isConnecting = false;   // always release the guard
-  }
+    if(!silent)toast('Wallet connected: '+userAddr.slice(0,6)+'…'+userAddr.slice(-4),'success');
+    await loadRegisterTab();await loadDashboard();await loadMatrixStats();
+  } catch(e){if(!silent)toast('Connection failed: '+(e.message||e),'error');}
+  finally{isConnecting=false;}
 }
 
-// ─── show/hide network banner (updates mobile guide visibility) ───────────
-function showNetworkBanner() {
-  const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
-  document.getElementById('nb-mobile-guide').style.display = isMobile ? 'block' : 'none';
-  document.getElementById('network-banner').style.display  = 'flex';
-  const sw = document.getElementById('btn-switch-network');
-  if (sw) sw.style.display = 'inline-block';
-}
-function hideNetworkBanner() {
-  document.getElementById('network-banner').style.display = 'none';
-  const sw = document.getElementById('btn-switch-network');
-  if (sw) sw.style.display = 'none';
-}
+function showNetworkBanner(){const isMobile=/iPhone|iPad|iPod|Android/i.test(navigator.userAgent);document.getElementById('nb-mobile-guide').style.display=isMobile?'block':'none';document.getElementById('network-banner').style.display='flex';const sw=document.getElementById('btn-switch-network');if(sw)sw.style.display='inline-block';}
+function hideNetworkBanner(){document.getElementById('network-banner').style.display='none';const sw=document.getElementById('btn-switch-network');if(sw)sw.style.display='none';}
 
-async function switchToBaseSepolia() {
-  const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
-  const btn = document.getElementById('nb-switch-btn');
-  const hint = document.getElementById('nb-hint');
-
-  const chainParams = [{
-    chainId:           '0x' + CHAIN_ID.toString(16),
-    chainName:         'Base Sepolia',
-    nativeCurrency:    { name: 'ETH', symbol: 'ETH', decimals: 18 },
-    rpcUrls:           ['https://sepolia.base.org'],
-    blockExplorerUrls: ['https://sepolia.basescan.org']
-  }];
-
-  if (btn) { btn.disabled = true; btn.textContent = 'Switching…'; }
-
+async function switchToBaseSepolia(){
+  const isMobile=/iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+  const btn=document.getElementById('nb-switch-btn'),hint=document.getElementById('nb-hint');
+  const p=[{chainId:'0x'+CHAIN_ID.toString(16),chainName:'Base Sepolia',nativeCurrency:{name:'ETH',symbol:'ETH',decimals:18},rpcUrls:['https://sepolia.base.org'],blockExplorerUrls:['https://sepolia.basescan.org']}];
+  if(btn){btn.disabled=true;btn.textContent='Switching…';}
   try {
-    // On mobile: wallet_addEthereumChain adds the network AND switches to it —
-    // this works even when Base Sepolia is already added (MetaMask just switches).
-    // wallet_switchEthereumChain alone fails silently on mobile when testnets are hidden.
-    if (isMobile) {
-      await window.ethereum.request({ method: 'wallet_addEthereumChain', params: chainParams });
-      // chainChanged listener will hide the banner and reconnect
-    } else {
-      // Desktop: try switch first; add if chain is unknown (4902)
-      try {
-        await window.ethereum.request({
-          method: 'wallet_switchEthereumChain',
-          params: [{ chainId: '0x' + CHAIN_ID.toString(16) }]
-        });
-      } catch(e) {
-        if (e.code === 4902) {
-          await window.ethereum.request({ method: 'wallet_addEthereumChain', params: chainParams });
-        } else if (e.code !== 4001) {
-          throw e;
-        }
-      }
-    }
-  } catch(e) {
-    if (e.code === 4001) {
-      // User rejected — restore button
-    } else {
-      // Show manual fallback hint inside the modal
-      if (hint) hint.innerHTML = '<strong style="color:var(--yellow)">Auto-switch failed.</strong> In MetaMask: Settings → Networks → Add Network manually with chain ID <strong>84532</strong> and RPC <strong>https://sepolia.base.org</strong>';
-      toast('Could not switch automatically — see instructions in the modal.', 'error');
-    }
-  } finally {
-    if (btn) { btn.disabled = false; btn.innerHTML = '🔀 Add &amp; Switch to Base Sepolia'; }
-  }
+    if(isMobile){await window.ethereum.request({method:'wallet_addEthereumChain',params:p});}
+    else{try{await window.ethereum.request({method:'wallet_switchEthereumChain',params:[{chainId:'0x'+CHAIN_ID.toString(16)}]});}catch(e){if(e.code===4902)await window.ethereum.request({method:'wallet_addEthereumChain',params:p});else if(e.code!==4001)throw e;}}
+  }catch(e){if(e.code!==4001){if(hint)hint.innerHTML='<strong style="color:var(--yellow)">Auto-switch failed.</strong> In MetaMask: Settings → Networks → Add Network manually with chain ID <strong>84532</strong> and RPC <strong>https://sepolia.base.org</strong>';toast('Could not switch automatically.','error');}}
+  finally{if(btn){btn.disabled=false;btn.innerHTML='🔀 Add &amp; Switch to Base Sepolia';}}
 }
 
 // ═══════════════════════════════════════════════════════════════════════
 // TABS
 // ═══════════════════════════════════════════════════════════════════════
-function showTab(name) {
-  document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
-  document.querySelectorAll('nav button').forEach(b => b.classList.remove('active'));
-  document.getElementById('tab-' + name).classList.add('active');
-  const idx = ['home','register','dashboard','matrix','roadmap'].indexOf(name);
+function showTab(name){
+  document.querySelectorAll('.tab-panel').forEach(p=>p.classList.remove('active'));
+  document.querySelectorAll('nav button').forEach(b=>b.classList.remove('active'));
+  document.getElementById('tab-'+name).classList.add('active');
+  const idx=['home','register','dashboard','matrix','roadmap'].indexOf(name);
   document.querySelectorAll('nav button')[idx].classList.add('active');
-
-  if (name === 'dashboard') loadDashboard();
-  if (name === 'matrix')  { loadMatrixStats(); if (userAddr) loadMyDirects(); }
-  if (name === 'register')  loadRegisterTab();
+  if(name==='dashboard')loadDashboard();
+  if(name==='matrix'){loadMatrixStats();if(userAddr)loadMyDirects();}
+  if(name==='register')loadRegisterTab();
 }
 
 // ═══════════════════════════════════════════════════════════════════════
 // HELPERS
 // ═══════════════════════════════════════════════════════════════════════
-function u6(n) {
-  const val = Number(BigInt(n)) / 1e6;
-  if (!isFinite(val) || val > 1e15) return '$∞'; // guard against MaxUint256
-  return '$' + val.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-}
+function u6(n){const val=Number(BigInt(n))/1e6;if(!isFinite(val)||val>1e15)return '$∞';return '$'+val.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2});}
+function shortAddr(addr){if(!addr||addr===ethers.ZeroAddress)return '—';return addr.slice(0,6)+'…'+addr.slice(-4);}
+function toast(msg,type='info',duration=4000){const el=document.getElementById('toast');el.textContent=msg;el.className='show '+type;clearTimeout(toast._t);toast._t=setTimeout(()=>{el.className='';},duration);}
+function setStatus(id,msg,color){const el=document.getElementById(id);if(el){el.textContent=msg;el.style.color=color||'var(--text2)';}}
 
-function shortAddr(addr) {
-  if (!addr || addr === ethers.ZeroAddress) return '—';
-  return addr.slice(0,6) + '…' + addr.slice(-4);
+// ═══════════════════════════════════════════════════════════════════════
+// FOUNDING MEMBERS & FALLBACK REFERRER
+// ═══════════════════════════════════════════════════════════════════════
+async function loadFoundingMembers(){
+  try{
+    const delay=ms=>new Promise(r=>setTimeout(r,ms));const seen=new Set();
+    const t5=new ethers.Contract(ADDRESSES.matrices[5],MATRIX_ABI,readProvider);
+    const n5=Number(await t5.totalMembers());
+    for(let i=1;i<=Math.min(n5,25);i++){try{const a=await t5.memberById(i);if(a&&a!==ethers.ZeroAddress&&!seen.has(a.toLowerCase())){seen.add(a.toLowerCase());foundingMembers.push(a);}await delay(60);}catch(_){}}
+    if(foundingMembers.length<25){
+      const t1=new ethers.Contract(ADDRESSES.matrices[1],MATRIX_ABI,readProvider);
+      const n1=Number(await t1.totalMembers());
+      for(let i=1;i<=Math.min(n1,25);i++){if(foundingMembers.length>=25)break;try{const a=await t1.memberById(i);if(a&&a!==ethers.ZeroAddress&&!seen.has(a.toLowerCase())){seen.add(a.toLowerCase());foundingMembers.push(a);}await delay(60);}catch(_){}}
+    }
+    foundingMembersReady=true;console.log('foundingMembers:',foundingMembers.length);
+  }catch(e){foundingMembersReady=true;console.warn('loadFoundingMembers:',e.message);}
 }
-
-function toast(msg, type = 'info', duration = 4000) {
-  const el = document.getElementById('toast');
-  el.textContent = msg;
-  el.className = 'show ' + type;
-  clearTimeout(toast._t);
-  toast._t = setTimeout(() => { el.className = ''; }, duration);
-}
-
-function setStatus(id, msg, color) {
-  const el = document.getElementById(id);
-  if (el) { el.textContent = msg; el.style.color = color || 'var(--text2)'; }
+async function getFallbackReferrer(){
+  if(!foundingMembersReady){const t0=Date.now();while(!foundingMembersReady&&Date.now()-t0<8000)await new Promise(r=>setTimeout(r,200));}
+  if(foundingMembers.length===0)await loadFoundingMembers();
+  if(foundingMembers.length===0)return ethers.ZeroAddress;
+  const addr=foundingMembers[fallbackRoundRobin%foundingMembers.length];fallbackRoundRobin++;
+  console.log('fallback referrer:',addr);return addr;
 }
 
 // ═══════════════════════════════════════════════════════════════════════
 // HOME STATS
 // ═══════════════════════════════════════════════════════════════════════
-async function loadHomeStats() {
-  try {
-    const matrix   = new ethers.Contract(ADDRESSES.matrix,   MATRIX_ABI,   readProvider);
-    const treasury = new ethers.Contract(ADDRESSES.treasury, TREASURY_ABI, readProvider);
-    const token    = new ethers.Contract(ADDRESSES.token,    TOKEN_ABI,    readProvider);
-
-    // Split into two smaller batches to avoid rate-limit drops on public RPC
-    const [members, floor, reserve, cycleStatus] = await Promise.all([
-      matrix.totalMembers(),
-      treasury.floorPriceFormatted(),
-      treasury.usdcReserve(),
-      matrix.getCycleStatus(),
-    ]);
-    await new Promise(r => setTimeout(r, 300));
-    const [minted, supply, epoch, reward, epochRem] = await Promise.all([
-      token.totalMinted(),
-      token.totalSupply(),
-      token.currentEpoch(),
-      token.currentRewardPerEntry(),
-      token.epochMembersRemaining(),
-    ]);
-
-    document.getElementById('stat-members').textContent = members.toString();
-    document.getElementById('stat-floor').textContent   = u6(floor);
-    document.getElementById('stat-reserve').textContent = u6(reserve);
-    document.getElementById('stat-minted').textContent  =
-      parseFloat(ethers.formatUnits(minted, 18)).toLocaleString(undefined, {maximumFractionDigits: 0});
-
-    const filled    = Number(cycleStatus.filled);
-    const total     = 254;
-    const pct       = Math.round((filled / total) * 100);
-    const remaining = total - filled;
-
-    document.getElementById('stat-cycle').textContent    = '#' + cycleStatus.cycleId.toString();
-    document.getElementById('stat-filled').textContent   = filled.toString();
-    document.getElementById('stat-pct').textContent      = pct + '%';
-    document.getElementById('stat-progress').style.width = pct + '%';
-
-    const statusEl = document.getElementById('stat-status');
-    if (cycleStatus.complete) {
-      statusEl.innerHTML = '<span class="pill pill-green">✅ Cycle Complete</span>';
-    } else if (pct >= 80) {
-      statusEl.innerHTML = '<span class="pill pill-yellow">🔥 Almost Full (' + remaining + ' left)</span>';
-    } else {
-      statusEl.innerHTML = '<span class="pill pill-blue">' + remaining + ' slots open</span>';
-    }
-
-    const EPOCH_NAMES = ['Nebula Genesis','Mercury Rise','Lunar Cluster','Aurora Zenith','Solaris Echo','Cosmic Core','Galaxy Grid','Supernova Spark'];
-    const epochNum  = Number(epoch);                                  // 0-indexed from contract
-    const epochName = EPOCH_NAMES[epochNum] || ('Epoch ' + (epochNum + 1));
-    const epochDisp = epochNum + 1;                                   // show 1-based to users
-    const rewardFmt = parseFloat(ethers.formatUnits(reward, 18)).toLocaleString(undefined, {maximumFractionDigits: 0});
-    const mintedFmt = parseFloat(ethers.formatUnits(minted, 18)).toLocaleString(undefined, {maximumFractionDigits: 0});
-    const supplyFmt = parseFloat(ethers.formatUnits(supply, 18)).toLocaleString(undefined, {maximumFractionDigits: 0});
-
-    // Top stat badge
-    document.getElementById('stat-epoch-badge').textContent      = epochName;
-    document.getElementById('stat-epoch-reward-sub').textContent = rewardFmt + ' CNOVA per entry';
-
-    // Mining Epoch detail card
-    document.getElementById('stat-epoch').textContent     = epochName + '  (Epoch ' + epochDisp + ')';
-    document.getElementById('stat-reward').textContent    = rewardFmt + ' CNOVA';
-    document.getElementById('stat-epoch-rem').textContent = epochRem.toString() + ' entries';
-    document.getElementById('stat-minted').textContent    = mintedFmt;
-    document.getElementById('stat-supply').textContent    = supplyFmt;
-  } catch(e) {
-    console.error('loadHomeStats', e);
-  }
+async function loadHomeStats(){
+  try{
+    const t1=new ethers.Contract(ADDRESSES.matrices[1],MATRIX_ABI,readProvider);
+    const tr=new ethers.Contract(ADDRESSES.treasury,TREASURY_ABI,readProvider);
+    const tk=new ethers.Contract(ADDRESSES.token,TOKEN_ABI,readProvider);
+    const tm=new ethers.Contract(ADDRESSES.tierManager,TIER_MANAGER_ABI,readProvider);
+    const[mem,floor,reserve,wc,ft]=await Promise.all([t1.totalMembers(),tr.floorPriceFormatted(),tr.usdcReserve(),tm.primeOrAboveCount(),tm.fastTrackEnabled()]);
+    await new Promise(r=>setTimeout(r,300));
+    const[minted,supply,epoch,reward,epochRem]=await Promise.all([tk.totalMinted(),tk.totalSupply(),tk.currentEpoch(),tk.currentRewardPerEntry(),tk.epochMembersRemaining()]);
+    document.getElementById('stat-members').textContent=mem.toString();
+    document.getElementById('stat-floor').textContent=u6(floor);
+    document.getElementById('stat-reserve').textContent=u6(reserve);
+    const wn=Number(wc),wPct=Math.min(100,Math.round((wn/25)*100));
+    document.getElementById('stat-filled').textContent=mem.toString();
+    document.getElementById('stat-pct').textContent=wPct+'%';
+    document.getElementById('stat-progress').style.width=wPct+'%';
+    document.getElementById('stat-cycle').textContent=ft?'🔓 UNLOCKED':(wn+' / 25');
+    const sEl=document.getElementById('stat-status');
+    if(ft)sEl.innerHTML='<span class="pill pill-green">🐋 Fast-Track Active</span>';
+    else if(wPct>=60)sEl.innerHTML='<span class="pill pill-yellow">🔥 '+(25-wn)+' more to unlock</span>';
+    else sEl.innerHTML='<span class="pill pill-blue">Whale Gate: '+wn+' / 25</span>';
+    const EN=['Nebula Genesis','Mercury Rise','Lunar Cluster','Aurora Zenith','Solaris Echo','Cosmic Core','Galaxy Grid','Supernova Spark'];
+    const en=Number(epoch),ename=EN[en]||('Epoch '+(en+1)),edisp=en+1;
+    const rf=parseFloat(ethers.formatUnits(reward,18)).toLocaleString(undefined,{maximumFractionDigits:0});
+    const mf=parseFloat(ethers.formatUnits(minted,18)).toLocaleString(undefined,{maximumFractionDigits:0});
+    const sf=parseFloat(ethers.formatUnits(supply,18)).toLocaleString(undefined,{maximumFractionDigits:0});
+    document.getElementById('stat-epoch-badge').textContent=ename;
+    document.getElementById('stat-epoch-reward-sub').textContent=rf+' CNOVA per entry';
+    document.getElementById('stat-epoch').textContent=ename+'  (Epoch '+edisp+')';
+    document.getElementById('stat-reward').textContent=rf+' CNOVA';
+    document.getElementById('stat-epoch-rem').textContent=epochRem.toString()+' entries';
+    document.getElementById('stat-minted').textContent=mf;
+    document.getElementById('stat-supply').textContent=sf;
+  }catch(e){console.error('loadHomeStats',e);}
 }
 
 // ═══════════════════════════════════════════════════════════════════════
 // REGISTER TAB
 // ═══════════════════════════════════════════════════════════════════════
-async function loadRegisterTab() {
-  const approveBtn  = document.getElementById('btn-approve');
-  const registerBtn = document.getElementById('btn-register');
-  const allowanceEl = document.getElementById('reg-allowance');
-  const balanceEl   = document.getElementById('reg-usdc-bal');
-  const warnEl      = document.getElementById('usdc-low-warn');
-  const alreadyEl   = document.getElementById('register-already');
-  const walletWarn  = document.getElementById('register-wallet-warn');
-  const refCard     = document.getElementById('referral-link-card');
-
-  if (!userAddr) {
-    walletWarn.style.display  = 'block';
-    alreadyEl.style.display   = 'none';
-    approveBtn.disabled       = true;
-    registerBtn.disabled      = true;
-    approveBtn.className      = 'btn btn-ghost full-w';
-    registerBtn.className     = 'btn btn-ghost full-w';
-    return;
-  }
-  walletWarn.style.display = 'none';
-
-  try {
-    const usdc   = new ethers.Contract(ADDRESSES.usdc,   USDC_ABI,   readProvider);
-    const matrix = new ethers.Contract(ADDRESSES.matrix, MATRIX_ABI, readProvider);
-
-    const [bal, allowance, member] = await Promise.all([
-      usdc.balanceOf(userAddr),
-      usdc.allowance(userAddr, ADDRESSES.matrix),
-      matrix.getMember(userAddr),
-    ]);
-
-    balanceEl.textContent = u6(bal);
-
-    if (allowance >= 10_000_000n) {
-      allowanceEl.innerHTML = '<span style="color:var(--green)">$10 Exact Approval ✓</span>';
-    } else {
-      allowanceEl.innerHTML = '<span style="color:var(--text3)">$0.00 — approval needed</span>';
-    }
-
-    // Low balance warning
-    if (bal < 10_000_000n) {
-      warnEl.style.display = 'block';
-    } else {
-      warnEl.style.display = 'none';
-    }
-
-    if (member.isRegistered) {
-      alreadyEl.style.display  = 'block';
-      approveBtn.disabled      = true;
-      registerBtn.disabled     = true;
-      approveBtn.className     = 'btn btn-ghost full-w';
-      registerBtn.className    = 'btn btn-ghost full-w';
-      // Show referral link
-      refCard.style.display    = 'block';
-      const refUrl = window.location.origin + window.location.pathname + '?ref=' + userAddr;
-      document.getElementById('referral-url').value = refUrl;
+async function loadRegisterTab(){
+  const approveBtn=document.getElementById('btn-approve'),registerBtn=document.getElementById('btn-register');
+  const allowanceEl=document.getElementById('reg-allowance'),balanceEl=document.getElementById('reg-usdc-bal');
+  const warnEl=document.getElementById('usdc-low-warn'),alreadyEl=document.getElementById('register-already');
+  const walletWarn=document.getElementById('register-wallet-warn'),refCard=document.getElementById('referral-link-card');
+  if(!userAddr){walletWarn.style.display='block';alreadyEl.style.display='none';approveBtn.disabled=true;registerBtn.disabled=true;approveBtn.className=registerBtn.className='btn btn-ghost full-w';return;}
+  walletWarn.style.display='none';
+  try{
+    const usdc=new ethers.Contract(ADDRESSES.usdc,USDC_ABI,readProvider);
+    const t1=new ethers.Contract(ADDRESSES.matrices[1],MATRIX_ABI,readProvider);
+    const[bal,allow,member]=await Promise.all([usdc.balanceOf(userAddr),usdc.allowance(userAddr,ADDRESSES.matrices[1]),t1.members(userAddr)]);
+    balanceEl.textContent=u6(bal);
+    const fee=TIER_FEES_USDC[1];
+    if(allow>=fee)allowanceEl.innerHTML='<span style="color:var(--green)">$10 Approved ✓</span>';
+    else allowanceEl.innerHTML='<span style="color:var(--text3)">Not approved yet</span>';
+    warnEl.style.display=bal<fee?'block':'none';
+    if(member.isRegistered){
+      alreadyEl.style.display='block';approveBtn.disabled=true;registerBtn.disabled=true;
+      approveBtn.className=registerBtn.className='btn btn-ghost full-w';
+      refCard.style.display='block';
+      document.getElementById('referral-url').value=window.location.origin+window.location.pathname+'?ref='+userAddr;
       return;
     }
-    alreadyEl.style.display = 'none';
-
-    // Step logic
-    const hasBalance  = bal >= 10_000_000n;
-    const hasApproval = allowance >= 10_000_000n;
-
-    const step1Active = hasBalance && !hasApproval;
-    const step2Active = hasApproval;
-
-    approveBtn.disabled   = !step1Active;
-    registerBtn.disabled  = !step2Active;
-
-    // Green = the step you need to click right now; grey = waiting / done
-    approveBtn.className  = 'btn full-w ' + (step1Active ? 'btn-green' : 'btn-ghost');
-    registerBtn.className = 'btn full-w ' + (step2Active ? 'btn-green' : 'btn-ghost');
-
-    if (hasApproval) {
-      setStatus('reg-status', '✅ USDC approved! You can now register.', 'var(--green)');
-    } else if (hasBalance) {
-      setStatus('reg-status', 'Step 1: Approve $10 USDC to continue.', 'var(--text2)');
-    } else {
-      setStatus('reg-status', '⚠️ Insufficient USDC balance. You need at least $10.', 'var(--yellow)');
-    }
-  } catch(e) {
-    console.error('loadRegisterTab', e);
-  }
+    alreadyEl.style.display='none';
+    const hb=bal>=fee,ha=allow>=fee;
+    approveBtn.disabled=!( hb&&!ha);registerBtn.disabled=!ha;
+    approveBtn.className='btn full-w '+(hb&&!ha?'btn-green':'btn-ghost');
+    registerBtn.className='btn full-w '+(ha?'btn-green':'btn-ghost');
+    if(ha)setStatus('reg-status','✅ USDC approved! You can now register.','var(--green)');
+    else if(hb)setStatus('reg-status','Step 1: Approve $10 USDC to continue.','var(--text2)');
+    else setStatus('reg-status','⚠️ Insufficient USDC. You need at least $10.','var(--yellow)');
+  }catch(e){console.error('loadRegisterTab',e);}
 }
 
-async function approveUSDC() {
-  if (!signer) { toast('Connect wallet first', 'error'); return; }
-  const btn = document.getElementById('btn-approve');
-  try {
-    btn.disabled = true;
-    btn.innerHTML = '<span class="spinner"></span>Approving…';
-    setStatus('reg-status', '⏳ Waiting for MetaMask approval…', 'var(--text2)');
-
-    const usdc = new ethers.Contract(ADDRESSES.usdc, USDC_ABI, signer);
-    const tx   = await usdc.approve(ADDRESSES.matrix, 10_000_000n);
-    setStatus('reg-status', '⏳ Transaction submitted, confirming…', 'var(--text2)');
-    await tx.wait();
-
-    setStatus('reg-status', '✅ USDC approved! You can now register.', 'var(--green)');
-    toast('$10 USDC approved!', 'success');
-    btn.innerHTML = 'Step 1: Approve $10 USDC 🔒';
+async function approveUSDC(){
+  if(!signer){toast('Connect wallet first','error');return;}
+  const btn=document.getElementById('btn-approve');
+  try{
+    btn.disabled=true;btn.innerHTML='<span class="spinner"></span>Approving…';
+    setStatus('reg-status','⏳ Waiting for MetaMask…','var(--text2)');
+    const usdc=new ethers.Contract(ADDRESSES.usdc,USDC_ABI,signer);
+    const tx=await usdc.approve(ADDRESSES.matrices[1],TIER_FEES_USDC[1]);
+    setStatus('reg-status','⏳ Confirming…','var(--text2)');await tx.wait();
+    setStatus('reg-status','✅ USDC approved! You can now register.','var(--green)');
+    toast('$10 USDC approved!','success');btn.innerHTML='Step 1: Approve $10 USDC 🔒';
     await loadRegisterTab();
-  } catch(e) {
-    const msg = e.reason || e.message || 'Unknown error';
-    setStatus('reg-status', '❌ Approval failed: ' + msg, 'var(--red)');
-    btn.disabled = false;
-    btn.className = 'btn full-w btn-green';
-    btn.innerHTML = 'Step 1: Approve $10 USDC 🔒';
-    toast('Approval failed', 'error');
-  }
+  }catch(e){const msg=e.reason||e.message||'Unknown';setStatus('reg-status','❌ '+msg,'var(--red)');btn.disabled=false;btn.className='btn full-w btn-green';btn.innerHTML='Step 1: Approve $10 USDC 🔒';toast('Approval failed','error');}
 }
 
-async function doRegister() {
-  if (!signer) { toast('Connect wallet first', 'error'); return; }
-  const btn      = document.getElementById('btn-register');
-  const referrer = document.getElementById('input-referrer').value.trim();
-
-  if (referrer && !ethers.isAddress(referrer)) {
-    toast('Invalid referrer address', 'error'); return;
+async function doRegister(){
+  if(!signer){toast('Connect wallet first','error');return;}
+  const btn=document.getElementById('btn-register');
+  let referrer=document.getElementById('input-referrer').value.trim();
+  if(referrer&&!ethers.isAddress(referrer)){toast('Invalid referrer address','error');return;}
+  if(!referrer){
+    const fb=await getFallbackReferrer();
+    if(fb&&fb!==ethers.ZeroAddress){referrer=fb;document.getElementById('input-referrer').value=referrer;setStatus('reg-status','🐋 Auto-assigned: '+shortAddr(referrer)+' (founding member)','var(--blue)');await new Promise(r=>setTimeout(r,1200));}
   }
-
-  try {
-    btn.disabled = true;
-    btn.innerHTML = '<span class="spinner"></span>Registering…';
-    setStatus('reg-status', '⏳ Waiting for MetaMask confirmation…', 'var(--text2)');
-
-    const matrix = new ethers.Contract(ADDRESSES.matrix, MATRIX_ABI, signer);
-    const ref    = referrer || ethers.ZeroAddress;
-    const tx     = await matrix.register(ref);
-    setStatus('reg-status', '⏳ Transaction submitted, confirming…', 'var(--text2)');
-    const receipt = await tx.wait();
-
-    setStatus('reg-status', '🎉 Registered! Tx: ' + receipt.hash.slice(0,10) + '…', 'var(--green)');
-    toast('Welcome to CryptoNova! 🎉', 'success', 6000);
-    btn.innerHTML = 'Step 2: Register ($10 USDC)';
-
-    // Show referral link
-    document.getElementById('referral-link-card').style.display = 'block';
-    const refUrl = window.location.origin + window.location.pathname + '?ref=' + userAddr;
-    document.getElementById('referral-url').value = refUrl;
-
-    await loadRegisterTab();
-    await loadHomeStats();
-  } catch(e) {
-    const msg = e.reason || e.message || 'Unknown error';
-    setStatus('reg-status', '❌ Registration failed: ' + msg, 'var(--red)');
-    btn.disabled = false;
-    btn.innerHTML = 'Step 2: Register ($10 USDC)';
-    toast('Registration failed', 'error');
-  }
+  try{
+    btn.disabled=true;btn.innerHTML='<span class="spinner"></span>Registering…';
+    setStatus('reg-status','⏳ Waiting for MetaMask…','var(--text2)');
+    const t1=new ethers.Contract(ADDRESSES.matrices[1],MATRIX_ABI,signer);
+    const ref=referrer||ethers.ZeroAddress;
+    const tx=await t1.register(ref);
+    setStatus('reg-status','⏳ Confirming…','var(--text2)');const receipt=await tx.wait();
+    setStatus('reg-status','🎉 Registered! Tx: '+receipt.hash.slice(0,10)+'…','var(--green)');
+    toast('Welcome to CryptoNova! 🎉','success',6000);
+    btn.innerHTML='Step 2: Register ($10 USDC)';
+    document.getElementById('referral-link-card').style.display='block';
+    document.getElementById('referral-url').value=window.location.origin+window.location.pathname+'?ref='+userAddr;
+    await loadRegisterTab();await loadHomeStats();
+  }catch(e){const msg=e.reason||e.message||'Unknown';setStatus('reg-status','❌ '+msg,'var(--red)');btn.disabled=false;btn.innerHTML='Step 2: Register ($10 USDC)';toast('Registration failed','error');}
 }
 
-function copyReferralLink() {
-  const val = document.getElementById('referral-url').value;
-  if (!val) return;
-  const btn = document.getElementById('copy-ref-btn');
-  const confirm = () => {
-    toast('✅ Referral link copied!', 'success');
-    if (btn) { btn.textContent = '✓ Copied!'; setTimeout(() => { btn.textContent = 'Copy'; }, 2500); }
-  };
-  // Modern clipboard API (requires HTTPS + user gesture — works on most mobile browsers)
-  if (navigator.clipboard && navigator.clipboard.writeText) {
-    navigator.clipboard.writeText(val).then(confirm).catch(() => legacyCopy(val, confirm));
-  } else {
-    legacyCopy(val, confirm);
-  }
+function copyReferralLink(){
+  const val=document.getElementById('referral-url').value;if(!val)return;
+  const btn=document.getElementById('copy-ref-btn');
+  const confirm=()=>{toast('✅ Referral link copied!','success');if(btn){btn.textContent='✓ Copied!';setTimeout(()=>{btn.textContent='Copy';},2500);}};
+  if(navigator.clipboard&&navigator.clipboard.writeText)navigator.clipboard.writeText(val).then(confirm).catch(()=>legacyCopy(val,confirm));
+  else legacyCopy(val,confirm);
 }
-function legacyCopy(text, onSuccess) {
-  // Fallback: select + execCommand (older mobile browsers, WebViews)
-  const el = document.getElementById('referral-url');
-  try {
-    el.focus();
-    el.select();
-    el.setSelectionRange(0, 99999); // iOS requires this
-    const ok = document.execCommand('copy');
-    if (ok) { onSuccess(); }
-    else { toast('Long-press the link box → Select All → Copy.', 'info'); }
-  } catch(e) {
-    toast('Long-press the link box → Select All → Copy.', 'info');
-  }
-}
+function legacyCopy(text,onSuccess){const el=document.getElementById('referral-url');try{el.focus();el.select();el.setSelectionRange(0,99999);const ok=document.execCommand('copy');if(ok)onSuccess();else toast('Long-press the link box → Select All → Copy.','info');}catch(e){toast('Long-press the link box → Select All → Copy.','info');}}
 
 // ═══════════════════════════════════════════════════════════════════════
 // DASHBOARD
 // ═══════════════════════════════════════════════════════════════════════
-async function loadDashboard() {
-  const noWallet = document.getElementById('dash-no-wallet');
-  const notReg   = document.getElementById('dash-not-registered');
-  const content  = document.getElementById('dash-content');
-
-  if (!noWallet || !notReg || !content) return;
-
-  if (!userAddr) {
-    noWallet.style.display = 'block'; notReg.style.display = 'none'; content.style.display = 'none'; return;
-  }
-  noWallet.style.display = 'none';
-
-  try {
-    const matrix   = new ethers.Contract(ADDRESSES.matrix,   MATRIX_ABI,   readProvider);
-    const treasury = new ethers.Contract(ADDRESSES.treasury, TREASURY_ABI, readProvider);
-
-    const [member, summary, floor] = await Promise.all([
-      matrix.getMember(userAddr),
-      matrix.earningsSummary(userAddr),
-      treasury.floorPrice(),
-    ]);
-
-    if (!member.isRegistered) {
-      notReg.style.display = 'block'; content.style.display = 'none'; return;
+async function loadDashboard(){
+  const noW=document.getElementById('dash-no-wallet'),notR=document.getElementById('dash-not-registered'),con=document.getElementById('dash-content');
+  if(!noW||!notR||!con)return;
+  if(!userAddr){noW.style.display='block';notR.style.display='none';con.style.display='none';return;}
+  noW.style.display='none';
+  try{
+    const t1=new ethers.Contract(ADDRESSES.matrices[1],MATRIX_ABI,readProvider);
+    const tm=new ethers.Contract(ADDRESSES.tierManager,TIER_MANAGER_ABI,readProvider);
+    const tr=new ethers.Contract(ADDRESSES.treasury,TREASURY_ABI,readProvider);
+    const tk=new ethers.Contract(ADDRESSES.token,TOKEN_ABI,readProvider);
+    const[m1,ct,floor]=await Promise.all([t1.members(userAddr),tm.memberTier(userAddr),tr.floorPrice()]);
+    if(!m1.isRegistered){notR.style.display='block';con.style.display='none';return;}
+    notR.style.display='none';con.style.display='block';
+    const tier=Number(ct)||1;
+    const tnEl=document.getElementById('dash-tier-name');if(tnEl)tnEl.textContent=(TIER_NAMES[tier]||'Tier '+tier)+' (Tier '+tier+')';
+    document.getElementById('dash-id').textContent='#'+m1.id.toString();
+    document.getElementById('dash-orig-referrer').textContent=shortAddr(m1.referrer);
+    let totW=0n,totE=0n,rows='';
+    for(let t=1;t<=tier;t++){
+      try{
+        const mx=new ethers.Contract(ADDRESSES.matrices[t],MATRIX_ABI,readProvider);
+        const m=await mx.members(userAddr);const cy=await mx.cyclesCompleted(userAddr);
+        if(m.isRegistered){totW+=BigInt(m.withdrawable);totE+=BigInt(m.totalEarned);
+          const wl=m.withdrawable>0n?'<span style="color:var(--green);font-weight:700">'+u6(m.withdrawable)+'</span>':'<span style="color:var(--text3)">$0.00</span>';
+          rows+=`<div class="info-row"><span class="info-key"><span style="font-size:11px;background:var(--green-dim);color:var(--green);border:1px solid var(--green2);border-radius:4px;padding:1px 6px">T${t}</span> ${TIER_NAMES[t]}</span><span style="display:flex;flex-direction:column;align-items:flex-end;gap:2px">${wl}<span style="font-size:11px;color:var(--text3)">Earned: ${u6(m.totalEarned)} · ${cy} cycles</span></span></div>`;
+        }
+        await new Promise(r=>setTimeout(r,80));
+      }catch(_){}
     }
-    notReg.style.display = 'none'; content.style.display = 'block';
-
-    const withdrawable    = summary.withdrawable;
-    const reentry         = summary.reentryPool;
-    const reentryProgress = Number(summary.reentryProgress);  // 0–100
-    const cnovaWei        = summary.cnovaBalance;
-
-    // CNOVA value at floor: cnovaWei (18dec) * floor (18dec) / 1e18 → 6dec USDC
-    const cnovaVal = (BigInt(cnovaWei) * BigInt(floor)) / BigInt(1e18);
-
-    document.getElementById('dash-withdrawable').textContent  = u6(withdrawable);
-    document.getElementById('dash-reentry').textContent       = u6(reentry);
-    document.getElementById('reentry-bar').style.width        = reentryProgress + '%';
-    document.getElementById('reentry-pct').textContent        = reentryProgress + '%';
-    document.getElementById('dash-cnova').textContent         = parseFloat(ethers.formatUnits(cnovaWei, 18)).toFixed(2) + ' CNOVA';
-    document.getElementById('dash-cnova-val').textContent     = u6(cnovaVal);
-
-    document.getElementById('dash-withdraw-amount').textContent = u6(withdrawable);
-    document.getElementById('btn-withdraw').disabled = withdrawable === 0n;
-
-    document.getElementById('dash-id').textContent       = '#' + member.id.toString();
-    document.getElementById('dash-cycle').textContent    = 'Cycle ' + member.cycleId.toString();
-    document.getElementById('dash-node').textContent     = 'Node #' + member.matrixNodeId.toString();
-    document.getElementById('dash-orig-referrer').textContent = shortAddr(member.originalReferrer);
-
-    const statusEl = document.getElementById('dash-status');
-    if (member.isPaused) {
-      statusEl.innerHTML = '<span class="pill pill-yellow">⏸ Paused</span>';
-    } else {
-      statusEl.innerHTML = '<span class="pill pill-green">✅ Active</span>';
-    }
-
-    document.getElementById('matrix-my-node').textContent = member.matrixNodeId.toString();
-
-    // Direct referrals — scan all members, filter by originalReferrer (no event logs)
-    try {
-      const all     = await fetchAllMembers(matrix, null);
-      const count   = all.filter(
-        ({ data: m }) => m.originalReferrer.toLowerCase() === userAddr.toLowerCase()
-      ).length;
-      document.getElementById('dash-directs').textContent = count + ' member' + (count !== 1 ? 's' : '');
-    } catch(_) {
-      document.getElementById('dash-directs').textContent = '—';
-    }
-
-    // BFS children — from the member's current node
-    try {
-      const node = await matrix.getNode(member.matrixNodeId);
-      document.getElementById('dash-children').textContent = node.childCount + ' / 2 slots filled';
-    } catch(_) {
-      document.getElementById('dash-children').textContent = '—';
-    }
-
-  } catch(e) {
-    console.error('loadDashboard', e);
-    notReg.style.display = 'none'; content.style.display = 'none';
-    noWallet.style.display = 'none';
-  }
+    const teEl=document.getElementById('dash-tier-earnings');if(teEl)teEl.innerHTML=rows||'<div style="color:var(--text3);font-size:13px;padding:8px 0">No earnings yet.</div>';
+    const wEl=document.getElementById('dash-withdrawable');if(wEl)wEl.textContent=u6(totW);
+    const waEl=document.getElementById('dash-withdraw-amount');if(waEl)waEl.textContent=u6(totW);
+    const teaEl=document.getElementById('dash-total-earned');if(teaEl)teaEl.textContent=u6(totE);
+    const bwEl=document.getElementById('btn-withdraw');if(bwEl)bwEl.disabled=totW===0n;
+    const cy1=await t1.cyclesCompleted(userAddr);
+    const cyEl=document.getElementById('dash-cycles');if(cyEl)cyEl.textContent=cy1.toString();
+    const cw=await tk.balanceOf(userAddr);
+    const cv=(BigInt(cw)*BigInt(floor))/BigInt(1e18);
+    document.getElementById('dash-cnova').textContent=parseFloat(ethers.formatUnits(cw,18)).toFixed(2)+' CNOVA';
+    document.getElementById('dash-cnova-val').textContent=u6(cv);
+    try{
+      const all=await fetchAllMembersV3(t1,null);
+      const cnt=all.filter(({data:m})=>m.referrer.toLowerCase()===userAddr.toLowerCase()).length;
+      const dEl=document.getElementById('dash-directs');if(dEl)dEl.textContent=cnt+' member'+(cnt!==1?'s':'');
+    }catch(_){}
+  }catch(e){console.error('loadDashboard',e);}
 }
 
-async function doWithdraw() {
-  if (!signer) { toast('Connect wallet first', 'error'); return; }
-  try {
-    document.getElementById('btn-withdraw').disabled = true;
-    document.getElementById('btn-withdraw').innerHTML = '<span class="spinner"></span>Withdrawing…';
-    setStatus('withdraw-status', '⏳ Sending transaction…', 'var(--text2)');
-
-    const matrix = new ethers.Contract(ADDRESSES.matrix, MATRIX_ABI, signer);
-    const tx = await matrix.withdraw();
-    setStatus('withdraw-status', '⏳ Waiting for confirmation…', 'var(--text2)');
-    const receipt = await tx.wait();
-
-    setStatus('withdraw-status', '✅ Withdrawn! Tx: ' + receipt.hash.slice(0,10) + '…', 'var(--green)');
-    document.getElementById('btn-withdraw').innerHTML = 'Withdraw to Wallet';
-    toast('Withdrawal successful!', 'success');
-    await loadDashboard();
-  } catch(e) {
-    const msg = e.reason || e.message || 'Unknown error';
-    setStatus('withdraw-status', '❌ Failed: ' + msg, 'var(--red)');
-    document.getElementById('btn-withdraw').innerHTML = 'Withdraw to Wallet';
-    document.getElementById('btn-withdraw').disabled = false;
-    toast('Withdrawal failed', 'error');
-  }
-}
-
-// ═══════════════════════════════════════════════════════════════════════
-
-// ═══════════════════════════════════════════════════════════════════════
-// MATRIX TREE
-// ═══════════════════════════════════════════════════════════════════════
-async function loadMatrixStats() {
-  try {
-    const matrix = new ethers.Contract(ADDRESSES.matrix, MATRIX_ABI, readProvider);
-    const [nextId, cycleStatus, bfsHead] = await Promise.all([
-      matrix.nextNodeId(),
-      matrix.getCycleStatus(),
-      matrix.bfsHead(1),
-    ]);
-    document.getElementById('matrix-nodes').textContent = (Number(nextId) - 1).toString();
-    document.getElementById('matrix-bfs').textContent   = bfsHead.toString();
-    document.getElementById('matrix-fill').textContent  = cycleStatus.filled.toString() + ' / 254';
-  } catch(e) { console.error(e); }
-}
-
-async function loadMyTree() {
-  if (!userAddr) { toast('Connect wallet first', 'error'); return; }
-  const matrix = new ethers.Contract(ADDRESSES.matrix, MATRIX_ABI, readProvider);
-  try {
-    const member = await matrix.getMember(userAddr);
-    if (!member.isRegistered) { toast('Not registered yet', 'error'); return; }
-    document.getElementById('matrix-input').value = member.matrixNodeId.toString();
-
-    // Fetch node to get depth + child slots
-    try {
-      const node = await matrix.getNode(member.matrixNodeId);
-      const personalLevel = Number(node.depth) + 1;
-      const slotsUsed     = Number(node.childCount);
-
-      // Update stat card
-      document.getElementById('matrix-my-node-label').textContent = 'My Level';
-      document.getElementById('matrix-my-node').textContent        = 'Level ' + personalLevel + ' / 7';
-      const subEl = document.getElementById('matrix-my-level-sub');
-      subEl.textContent    = 'Node #' + member.matrixNodeId.toString();
-      subEl.style.display  = 'block';
-
-      // Show My Position banner
-      const banner = document.getElementById('matrix-pos-banner');
-      banner.style.display = 'block';
-      document.getElementById('matrix-pos-level').textContent =
-        '🏅 Matrix level ' + personalLevel + ' of 7';
-      document.getElementById('matrix-pos-slots').textContent =
-        '🔲 BFS slots: ' + slotsUsed + ' / 2 filled';
-      document.getElementById('matrix-pos-cycle').textContent =
-        '🔄 Cycle #' + member.cycleId.toString();
-    } catch(_) {
-      document.getElementById('matrix-my-node').textContent = member.matrixNodeId.toString();
+async function doWithdrawAll(){
+  if(!signer){toast('Connect wallet first','error');return;}
+  const btn=document.getElementById('btn-withdraw');
+  try{
+    btn.disabled=true;btn.innerHTML='<span class="spinner"></span>Withdrawing…';
+    setStatus('withdraw-status','⏳ Checking tiers…','var(--text2)');
+    const tm=new ethers.Contract(ADDRESSES.tierManager,TIER_MANAGER_ABI,readProvider);
+    const ct=Number(await tm.memberTier(userAddr))||1;let w=0;
+    for(let t=1;t<=ct;t++){
+      const mx=new ethers.Contract(ADDRESSES.matrices[t],MATRIX_ABI,readProvider);
+      const m=await mx.members(userAddr);
+      if(m.isRegistered&&BigInt(m.withdrawable)>0n){
+        setStatus('withdraw-status','⏳ Withdrawing Tier '+t+'…','var(--text2)');
+        const mxW=new ethers.Contract(ADDRESSES.matrices[t],MATRIX_ABI,signer);
+        await(await mxW.withdraw()).wait();w++;
+      }
     }
-
-    await loadMatrixTree();
-  } catch(e) { toast('Error: ' + e.message, 'error'); }
+    setStatus('withdraw-status',w>0?'✅ Withdrawn from '+w+' tier(s)!':'⚠️ Nothing to withdraw.',w>0?'var(--green)':'var(--yellow)');
+    if(w>0)toast('Withdrawal successful!','success');
+    btn.innerHTML='Withdraw All to Wallet';await loadDashboard();
+  }catch(e){const msg=e.reason||e.message||'Unknown';setStatus('withdraw-status','❌ '+msg,'var(--red)');btn.innerHTML='Withdraw All to Wallet';btn.disabled=false;toast('Withdrawal failed','error');}
 }
 
-function hideMyPosBanner() {
-  const banner = document.getElementById('matrix-pos-banner');
-  if (banner) banner.style.display = 'none';
-  const subEl = document.getElementById('matrix-my-level-sub');
-  if (subEl)   subEl.style.display  = 'none';
-  const labelEl = document.getElementById('matrix-my-node-label');
-  if (labelEl) labelEl.textContent  = 'My Node ID';
-}
-
-// Fetch all members sequentially — conservative to stay within public RPC limits
-async function fetchAllMembers(matrix, onProgress) {
-  const delay = ms => new Promise(r => setTimeout(r, ms));
-  const total = Number(await matrix.totalMembers());
-  if (total === 0) return [];
-
-  const result = [];
-  for (let i = 1; i <= total; i++) {
-    try {
-      if (onProgress) onProgress(i, total);
-      const addr = await matrix.memberById(i);
-      if (!addr || addr === ethers.ZeroAddress) { await delay(120); continue; }
-      await delay(120);
-      const data = await matrix.getMember(addr);
-      result.push({ addr, data });
-      await delay(120);
-    } catch(e) {
-      console.warn(`fetchAllMembers: member ${i} failed, skipping`, e.shortMessage || e.message);
-      await delay(300); // longer pause after a failure
-    }
+async function fetchAllMembersV3(matrix,onProgress){
+  const delay=ms=>new Promise(r=>setTimeout(r,ms));
+  const total=Number(await matrix.totalMembers());if(total===0)return[];
+  const result=[];
+  for(let i=1;i<=total;i++){
+    try{if(onProgress)onProgress(i,total);const addr=await matrix.memberById(i);const data=await matrix.members(addr);result.push({addr,data});await delay(80);}
+    catch(e){await delay(200);}
   }
   return result;
 }
 
-async function loadMyDirects() {
-  if (!userAddr) { toast('Connect wallet first', 'error'); return; }
-
-  const card     = document.getElementById('my-directs-card');
-  const loading  = document.getElementById('my-directs-loading');
-  const empty    = document.getElementById('my-directs-empty');
-  const listWrap = document.getElementById('my-directs-list');
-  const rows     = document.getElementById('my-directs-rows');
-
-  card.style.display     = 'block';
-  loading.style.display  = 'block';
-  empty.style.display    = 'none';
-  listWrap.style.display = 'none';
-  rows.innerHTML         = '';
-
-  try {
-    const matrix  = new ethers.Contract(ADDRESSES.matrix, MATRIX_ABI, readProvider);
-    const all     = await fetchAllMembers(matrix, (i, total) => {
-      loading.textContent = `Scanning members… ${i} / ${total}`;
-    });
-
-    // Filter to members whose originalReferrer matches the connected wallet
-    const directs = all.filter(
-      ({ data: m }) => m.originalReferrer.toLowerCase() === userAddr.toLowerCase()
-    );
-
-    // Cache direct addresses globally so buildNodeHTML can highlight them in tree view
-    myDirectAddrs = new Set(directs.map(({ addr }) => addr.toLowerCase()));
-
-    loading.style.display = 'none';
-
-    if (directs.length === 0) {
-      empty.style.display = 'block'; return;
-    }
-
-    listWrap.style.display = 'block';
-    rows.innerHTML = directs.map(({ addr, data: m }) => {
-      const status   = m.isPaused
-        ? '<span class="pill pill-yellow" style="font-size:11px">⏸ Paused</span>'
-        : '<span class="pill pill-green"  style="font-size:11px">✅ Active</span>';
-      return `<div style="padding:12px 14px;border-bottom:1px solid var(--border)">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;gap:8px">
-          <span style="font-size:13px;font-weight:600;color:var(--text);font-family:monospace">${shortAddr(addr)}</span>
-          ${status}
-        </div>
-        <div style="display:flex;gap:16px;flex-wrap:wrap;font-size:12px;color:var(--text3)">
-          <span>Member <strong style="color:var(--text)">#${m.id}</strong></span>
-          <span>Node <strong style="color:var(--green);cursor:pointer" onclick="navigateToNode(${m.matrixNodeId})" title="Click to view in tree">#${m.matrixNodeId} ↗</strong></span>
-          <span>Cycle <strong style="color:var(--text)">C${m.cycleId}</strong></span>
-        </div>
-      </div>`;
-    }).join('');
-
-    // Also update the dashboard direct count if visible
-    const el = document.getElementById('dash-directs');
-    if (el) el.textContent = directs.length + ' member' + (directs.length !== 1 ? 's' : '');
-
-  } catch(e) {
-    loading.style.display = 'none';
-    empty.textContent = 'Could not load directs: ' + (e.shortMessage || e.message || String(e));
-    empty.style.display = 'block';
-    console.error('loadMyDirects', e);
-  }
+// ═══════════════════════════════════════════════════════════════════════
+// MATRIX TAB
+// ═══════════════════════════════════════════════════════════════════════
+async function loadMatrixStats(){
+  try{const t1=new ethers.Contract(ADDRESSES.matrices[1],MATRIX_ABI,readProvider);const tot=await t1.totalMembers();document.getElementById('matrix-nodes').textContent=tot.toString();document.getElementById('matrix-bfs').textContent='—';document.getElementById('matrix-fill').textContent=tot.toString()+' members';}catch(e){console.error(e);}
 }
 
-function setActiveMatrixBtn(id) {
-  ['btn-load-tree', 'btn-my-position', 'btn-my-directs'].forEach(b => {
-    const el = document.getElementById(b);
-    if (el) el.classList.remove('matrix-active');
-  });
-  const active = document.getElementById(id);
-  if (active) active.classList.add('matrix-active');
-  // Hide My Position banner when switching away from it
-  if (id !== 'btn-my-position') hideMyPosBanner();
+async function loadQueueView(){
+  const tEl=document.getElementById('matrix-tree'),lEl=document.getElementById('matrix-loading');
+  lEl.innerHTML='<span class="spinner"></span> Loading member queue…';lEl.style.display='block';tEl.style.display='none';
+  const t1=new ethers.Contract(ADDRESSES.matrices[1],MATRIX_ABI,readProvider);
+  try{
+    const total=Number(await t1.totalMembers());
+    let myId=-1;if(userAddr){try{const me=await t1.members(userAddr);if(me.isRegistered)myId=Number(me.id);}catch(_){}}
+    if(total===0){lEl.innerHTML='No members registered yet.';return;}
+    let html=`<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:13px"><thead><tr style="border-bottom:2px solid var(--border);color:var(--text3);text-align:left"><th style="padding:8px 12px">#</th><th style="padding:8px 12px">Address</th><th style="padding:8px 12px">Withdrawable</th><th style="padding:8px 12px">Total Earned</th><th style="padding:8px 12px">Re-entries</th><th style="padding:8px 12px">Status</th></tr></thead><tbody>`;
+    const delay=ms=>new Promise(r=>setTimeout(r,ms));
+    for(let i=1;i<=total;i++){
+      let addr,m,cy;try{addr=await t1.memberById(i);[m,cy]=await Promise.all([t1.members(addr),t1.cyclesCompleted(addr)]);await delay(60);}catch(_){continue;}
+      const isMe=Number(m.id)===myId,isActive=Number(m.id)<=100;
+      const rs=isMe?'background:var(--green-dim);border-bottom:1px solid var(--green2)':'border-bottom:1px solid var(--border)';
+      const sb=isMe?'<span class="pill pill-green" style="font-size:11px">⭐ YOU</span>':(isActive?'<span class="pill pill-blue" style="font-size:11px">Active</span>':'<span style="font-size:11px;color:var(--text3)">Queued</span>');
+      html+=`<tr style="${rs}"><td style="padding:10px 12px;font-weight:700;color:${isMe?'var(--green)':'var(--text)'}">#${m.id}</td><td style="padding:10px 12px;font-family:monospace;color:var(--text2)">${addr.slice(0,6)}…${addr.slice(-4)}</td><td style="padding:10px 12px;color:${BigInt(m.withdrawable)>0n?'var(--green)':'var(--text3)'};font-weight:600">${u6(m.withdrawable)}</td><td style="padding:10px 12px">${u6(m.totalEarned)}</td><td style="padding:10px 12px">${m.reentryCount.toString()}</td><td style="padding:10px 12px">${sb}</td></tr>`;
+    }
+    html+='</tbody></table></div><div style="margin-top:12px;font-size:12px;color:var(--text3)">Showing '+total+' member'+(total!==1?'s':'')+' · Active window: positions 1–100</div>';
+    tEl.innerHTML=html;tEl.style.display='block';lEl.style.display='none';
+  }catch(e){lEl.innerHTML='❌ Error: '+(e.shortMessage||e.message);console.error(e);}
 }
 
-async function loadMatrixTree() {
-  const input  = document.getElementById('matrix-input').value.trim();
-  const treeEl = document.getElementById('matrix-tree');
-  const loadEl = document.getElementById('matrix-loading');
+async function loadMatrixTree(){await loadQueueView();}
+function navigateToNode(){}
 
-  if (!input) { toast('Enter a node ID or address', 'error'); return; }
-
-  loadEl.innerHTML = '<span class="spinner"></span> Loading tree…';
-  loadEl.style.display = 'block';
-  treeEl.style.display = 'none';
-
-  const matrix = new ethers.Contract(ADDRESSES.matrix, MATRIX_ABI, readProvider);
-
-  try {
-    let rootNodeId;
-    if (ethers.isAddress(input)) {
-      const member = await matrix.getMember(input);
-      if (!member.isRegistered) { loadEl.innerHTML = 'Address not registered.'; return; }
-      rootNodeId = Number(member.matrixNodeId);
-    } else {
-      rootNodeId = parseInt(input);
-    }
-
-    // Get my node for highlighting
-    let myNodeId = -1;
-    if (userAddr) {
-      try {
-        const me = await matrix.getMember(userAddr);
-        if (me.isRegistered) myNodeId = Number(me.matrixNodeId);
-      } catch(e) {}
-    }
-
-    // BFS fetch up to 3 levels
-    const nodeCache = {};
-    async function fetchNode(id) {
-      if (nodeCache[id] !== undefined) return nodeCache[id];
-      try {
-        const n = await matrix.getNode(id);
-        nodeCache[id] = n;
-        return n;
-      } catch(e) { nodeCache[id] = null; return null; }
-    }
-
-    const toFetch = [rootNodeId];
-    for (let d = 0; d < 2; d++) {
-      const level = [...toFetch].slice(toFetch.length - Math.pow(2, d));
-      for (const id of level) {
-        const n = await fetchNode(id);
-        if (n) {
-          if (Number(n.children[0]) > 0) toFetch.push(Number(n.children[0]));
-          if (Number(n.children[1]) > 0) toFetch.push(Number(n.children[1]));
-        }
-      }
-    }
-    await Promise.all(toFetch.map(fetchNode));
-
-    function buildNodeHTML(id, depth, isRoot) {
-      if (depth > 3) return '';
-      const n = nodeCache[id];
-      const isMe    = id === myNodeId;
-      const isEmpty = !n || n.owner === ethers.ZeroAddress;
-
-      const leftChild  = n && Number(n.children[0]) > 0 ? Number(n.children[0]) : null;
-      const rightChild = n && Number(n.children[1]) > 0 ? Number(n.children[1]) : null;
-      const parentId   = n && Number(n.parentNodeId) > 0 ? Number(n.parentNodeId) : null;
-
-      const isDirect   = !isMe && !isEmpty && n && myDirectAddrs.has(n.owner.toLowerCase());
-      const boxClass   = isEmpty ? 'node-box empty' : (isMe ? 'node-box you' : (isDirect ? 'node-box direct' : 'node-box filled'));
-      const label      = isEmpty ? 'Empty' : (isMe ? '⭐ YOU' : (isDirect ? '🤝 Node ' + id : 'Node ' + id));
-      const addr       = n && n.owner !== ethers.ZeroAddress ? shortAddr(n.owner) : '';
-      const matrixLevel = n ? (Number(n.depth) + 1) : null;
-      const depthTag    = n ? ('My L' + depth + ' · Matrix L' + matrixLevel) : '';
-      const clickable  = !isEmpty && !isRoot;
-      const clickStyle = clickable ? 'cursor:pointer;' : '';
-      const clickAttr  = clickable ? 'onclick="navigateToNode(' + id + ')" title="Tap to view subtree"' : '';
-
-      let childrenHTML = '';
-      if (depth < 3) {
-        const lHTML = leftChild  ? buildNodeHTML(leftChild,  depth + 1, false) : buildEmptySlot();
-        const rHTML = rightChild ? buildNodeHTML(rightChild, depth + 1, false) : buildEmptySlot();
-        childrenHTML = '<div class="tree-children">' + lHTML + rHTML + '</div>';
-      } else if (!isEmpty && (leftChild || rightChild)) {
-        childrenHTML = '<div style="text-align:center;margin-top:4px"><span onclick="navigateToNode(' + id + ')" style="font-size:10px;color:var(--green);cursor:pointer;padding:2px 6px;border:1px solid var(--green2);border-radius:4px">▼ expand</span></div>';
-      }
-
-      const parentBtn = isRoot && parentId
-        ? '<div style="text-align:center;margin-bottom:8px"><button onclick="navigateToNode(' + parentId + ')" style="background:none;border:1px solid var(--border);color:var(--text2);border-radius:6px;padding:4px 10px;font-size:11px;cursor:pointer">⬆ Up to Node ' + parentId + '</button></div>'
-        : '';
-
-      const hintLine = clickable ? '<div style="font-size:9px;color:var(--text3);margin-top:1px">tap to explore ▼</div>' : '';
-
-      return parentBtn +
-        '<div class="tree-node">' +
-          '<div class="' + boxClass + '" style="' + clickStyle + '" ' + clickAttr + '>' +
-            '<div style="font-weight:700;font-size:12px">' + label + '</div>' +
-            (addr     ? '<div class="node-addr">' + addr + '</div>' : '') +
-            (depthTag ? '<div style="font-size:9px;color:var(--text3);margin-top:2px">' + depthTag + '</div>' : '') +
-            hintLine +
-          '</div>' +
-          (childrenHTML ? '<div class="tree-line"></div>' + childrenHTML : '') +
-        '</div>';
-    }
-
-    function buildEmptySlot() {
-      return '<div class="tree-node"><div class="node-box empty"><div style="font-size:11px">Empty</div></div></div>';
-    }
-
-    treeEl.innerHTML = buildNodeHTML(rootNodeId, 1, true);
-    treeEl.style.display = 'block';
-    loadEl.style.display = 'none';
-  } catch(e) {
-    loadEl.innerHTML = '❌ Error loading tree: ' + e.message;
-    console.error(e);
-  }
+async function loadMyTree(){
+  if(!userAddr){toast('Connect wallet first','error');return;}
+  const t1=new ethers.Contract(ADDRESSES.matrices[1],MATRIX_ABI,readProvider);
+  try{
+    const m=await t1.members(userAddr);if(!m.isRegistered){toast('Not registered in Tier 1 yet','error');return;}
+    const cy=await t1.cyclesCompleted(userAddr);
+    document.getElementById('matrix-my-node-label').textContent='My Member ID';
+    document.getElementById('matrix-my-node').textContent='#'+m.id.toString();
+    const sub=document.getElementById('matrix-my-level-sub');sub.textContent='Cycles: '+cy.toString();sub.style.display='block';
+    const ban=document.getElementById('matrix-pos-banner');ban.style.display='block';
+    document.getElementById('matrix-pos-level').textContent='🏅 Member #'+m.id+' · Tier 1 (Nova Seed)';
+    document.getElementById('matrix-pos-slots').textContent='♻️ Cycles completed: '+cy.toString();
+    document.getElementById('matrix-pos-cycle').textContent='💰 Earned: '+u6(BigInt(m.totalEarned));
+    await loadQueueView();
+  }catch(e){toast('Error: '+e.message,'error');}
 }
 
-function navigateToNode(nodeId) {
-  document.getElementById('matrix-input').value = nodeId.toString();
-  loadMatrixTree();
-  document.getElementById('matrix-tree').scrollIntoView({ behavior: 'smooth', block: 'start' });
+function hideMyPosBanner(){const b=document.getElementById('matrix-pos-banner');if(b)b.style.display='none';const s=document.getElementById('matrix-my-level-sub');if(s)s.style.display='none';const l=document.getElementById('matrix-my-node-label');if(l)l.textContent='My Member ID';}
+
+async function loadMyDirects(){
+  if(!userAddr){toast('Connect wallet first','error');return;}
+  const card=document.getElementById('my-directs-card'),loading=document.getElementById('my-directs-loading'),empty=document.getElementById('my-directs-empty'),listWrap=document.getElementById('my-directs-list'),rows=document.getElementById('my-directs-rows');
+  card.style.display='block';loading.style.display='block';empty.style.display='none';listWrap.style.display='none';rows.innerHTML='';
+  try{
+    const t1=new ethers.Contract(ADDRESSES.matrices[1],MATRIX_ABI,readProvider);
+    const all=await fetchAllMembersV3(t1,(i,total)=>{loading.textContent=`Scanning members… ${i} / ${total}`;});
+    const directs=all.filter(({data:m})=>m.referrer.toLowerCase()===userAddr.toLowerCase());
+    myDirectAddrs=new Set(directs.map(({addr})=>addr.toLowerCase()));
+    loading.style.display='none';
+    if(directs.length===0){empty.style.display='block';return;}
+    listWrap.style.display='block';
+    rows.innerHTML=directs.map(({addr,data:m})=>`<div style="padding:12px 14px;border-bottom:1px solid var(--border)"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;gap:8px"><span style="font-size:13px;font-weight:600;color:var(--text);font-family:monospace">${shortAddr(addr)}</span><span class="pill pill-green" style="font-size:11px">✅ Active</span></div><div style="display:flex;gap:16px;flex-wrap:wrap;font-size:12px;color:var(--text3)"><span>Member <strong style="color:var(--text)">#${m.id}</strong></span><span>Earned <strong style="color:var(--green)">${u6(m.totalEarned)}</strong></span></div></div>`).join('');
+    const dEl=document.getElementById('dash-directs');if(dEl)dEl.textContent=directs.length+' member'+(directs.length!==1?'s':'');
+  }catch(e){loading.style.display='none';empty.textContent='Could not load: '+(e.shortMessage||e.message||String(e));empty.style.display='block';console.error(e);}
+}
+
+function setActiveMatrixBtn(id){
+  ['btn-load-tree','btn-my-position','btn-my-directs'].forEach(b=>{const el=document.getElementById(b);if(el)el.classList.remove('matrix-active');});
+  const a=document.getElementById(id);if(a)a.classList.add('matrix-active');
+  if(id!=='btn-my-position')hideMyPosBanner();
 }
 
 // ═══════════════════════════════════════════════════════════════════════
-// METAMASK MODAL
+// METAMASK MODALS
 // ═══════════════════════════════════════════════════════════════════════
-function showMetaMaskModal() {
-  const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
-  const mobileSection = document.getElementById('mm-mobile-section');
-  const installBtn    = document.getElementById('mm-install-btn');
-  const footerHint    = document.getElementById('mm-footer-hint');
-  const deeplink      = document.getElementById('mm-deeplink');
+function showMetaMaskModal(){
+  const isMobile=/iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+  const ms=document.getElementById('mm-mobile-section'),ib=document.getElementById('mm-install-btn'),fh=document.getElementById('mm-footer-hint'),dl=document.getElementById('mm-deeplink');
+  if(isMobile){const url=window.location.href.replace(/^https?:\/\//,'');dl.href='https://metamask.app.link/dapp/'+url;ms.style.display='block';ib.textContent='📲 Download MetaMask App';fh.innerHTML='Install MetaMask, open the app, then use its built-in browser to visit this page.';}
+  else{ms.style.display='none';ib.textContent='Install MetaMask — Free';fh.innerHTML='After installing, refresh this page and click Connect Wallet.<br>Switch to <strong>Base Sepolia</strong> when prompted.';}
+  document.getElementById('metamask-modal').style.display='flex';
+}
+function closeMetaMaskModal(){document.getElementById('metamask-modal').style.display='none';}
+function showManualTokenModal(address,symbol,decimals){document.getElementById('manual-token-address').textContent=address;document.getElementById('manual-token-symbol').textContent=symbol;document.getElementById('manual-token-decimals').textContent=decimals;document.getElementById('manual-token-modal').style.display='flex';}
+function closeManualTokenModal(){document.getElementById('manual-token-modal').style.display='none';}
+function copyManualTokenAddress(){const addr=document.getElementById('manual-token-address').textContent;const btn=document.getElementById('manual-copy-btn');navigator.clipboard.writeText(addr).then(()=>{btn.textContent='✓ Copied!';setTimeout(()=>{btn.textContent='Copy';},2500);}).catch(()=>{toast('Copy failed — select the address manually.','error');});}
 
-  if (isMobile) {
-    // Build deeplink — opens this exact page inside MetaMask's in-app browser
-    const url = window.location.href.replace(/^https?:\/\//, '');
-    deeplink.href = 'https://metamask.app.link/dapp/' + url;
-    mobileSection.style.display = 'block';
-    installBtn.textContent = '📲 Download MetaMask App';
-    footerHint.innerHTML = 'Install MetaMask, open the app, then use its built-in browser to visit this page — Web3 will work automatically.';
-  } else {
-    mobileSection.style.display = 'none';
-    installBtn.textContent = 'Install MetaMask — Free';
-    footerHint.innerHTML = 'After installing, refresh this page and click Connect Wallet.<br>Switch to <strong>Base Sepolia</strong> when prompted.';
-  }
-
-  document.getElementById('metamask-modal').style.display = 'flex';
+async function addCNOVAtoMetaMask(){
+  if(!window.ethereum){if(window.location.protocol==='file:')document.getElementById('file-protocol-banner').style.display='block';else showMetaMaskModal();return;}
+  if(parseInt(window.ethereum.chainId||'0x0',16)!==CHAIN_ID){showNetworkBanner();toast('Switch to Base Sepolia first.','info');return;}
+  try{const added=await window.ethereum.request({method:'wallet_watchAsset',params:{type:'ERC20',options:{address:ADDRESSES.token,symbol:'CNOVA',decimals:18}}});if(added)toast('✅ CNOVA added to MetaMask!','success');else toast('Token add was cancelled.','info');}
+  catch(e){showManualTokenModal(ADDRESSES.token,'CNOVA',18);}
 }
-function closeMetaMaskModal() {
-  document.getElementById('metamask-modal').style.display = 'none';
-}
-
-// ─── Manual token add modal (fallback when wallet_watchAsset fails) ───────────
-function showManualTokenModal(address, symbol, decimals) {
-  document.getElementById('manual-token-address').textContent  = address;
-  document.getElementById('manual-token-symbol').textContent   = symbol;
-  document.getElementById('manual-token-decimals').textContent = decimals;
-  document.getElementById('manual-token-modal').style.display  = 'flex';
-}
-function closeManualTokenModal() {
-  document.getElementById('manual-token-modal').style.display = 'none';
-}
-function copyManualTokenAddress() {
-  const addr = document.getElementById('manual-token-address').textContent;
-  const btn  = document.getElementById('manual-copy-btn');
-  navigator.clipboard.writeText(addr).then(() => {
-    btn.textContent = '✓ Copied!';
-    setTimeout(() => { btn.textContent = 'Copy'; }, 2500);
-  }).catch(() => {
-    toast('Copy failed — select the address manually.', 'error');
-  });
+async function addUSDCtoMetaMask(){
+  if(!window.ethereum){if(window.location.protocol==='file:')document.getElementById('file-protocol-banner').style.display='block';else showMetaMaskModal();return;}
+  if(parseInt(window.ethereum.chainId||'0x0',16)!==CHAIN_ID){showNetworkBanner();toast('Switch to Base Sepolia first.','info');return;}
+  try{const added=await window.ethereum.request({method:'wallet_watchAsset',params:{type:'ERC20',options:{address:ADDRESSES.usdc,symbol:'USDC',decimals:6}}});if(added)toast('✅ USDC added to MetaMask!','success');else toast('Token add was cancelled.','info');}
+  catch(e){showManualTokenModal(ADDRESSES.usdc,'USDC',6);}
 }
 
-// ═══════════════════════════════════════════════════════════════════════
-// ADD CNOVA TO METAMASK (wallet_watchAsset)
-// ═══════════════════════════════════════════════════════════════════════
-async function addCNOVAtoMetaMask() {
-  if (!window.ethereum) {
-    if (window.location.protocol === 'file:') {
-      document.getElementById('file-protocol-banner').style.display = 'block';
-    } else {
-      showMetaMaskModal();
-    }
-    return;
-  }
-  // Synchronous chainId check — reliable on mobile (async getNetwork() can be stale)
-  const currentChainId = parseInt(window.ethereum.chainId || '0x0', 16);
-  if (currentChainId !== CHAIN_ID) {
-    showNetworkBanner();
-    toast('Switch to Base Sepolia first, then tap Add Token again.', 'info');
-    return;
-  }
-  try {
-    const added = await window.ethereum.request({
-      method: 'wallet_watchAsset',
-      params: {
-        type: 'ERC20',
-        options: {
-          address:  ADDRESSES.token,
-          symbol:   'CNOVA',
-          decimals: 18,
-        },
-      },
-    });
-    if (added) {
-      toast('✅ CNOVA added to MetaMask!', 'success');
-    } else {
-      toast('Token add was cancelled.', 'info');
-    }
-  } catch(e) {
-    // wallet_watchAsset unreliable on MetaMask mobile for testnet tokens — show manual fallback
-    showManualTokenModal(ADDRESSES.token, 'CNOVA', 18);
-  }
-}
-
-async function addUSDCtoMetaMask() {
-  if (!window.ethereum) {
-    if (window.location.protocol === 'file:') {
-      document.getElementById('file-protocol-banner').style.display = 'block';
-    } else {
-      showMetaMaskModal();
-    }
-    return;
-  }
-  // Synchronous chainId check — reliable on mobile (async getNetwork() can be stale)
-  const currentChainId = parseInt(window.ethereum.chainId || '0x0', 16);
-  if (currentChainId !== CHAIN_ID) {
-    showNetworkBanner();
-    toast('Switch to Base Sepolia first, then tap Add Token again.', 'info');
-    return;
-  }
-  try {
-    const added = await window.ethereum.request({
-      method: 'wallet_watchAsset',
-      params: {
-        type: 'ERC20',
-        options: {
-          address:  ADDRESSES.usdc,
-          symbol:   'USDC',
-          decimals: 6,
-        },
-      },
-    });
-    if (added) {
-      toast('✅ USDC added to MetaMask!', 'success');
-    } else {
-      toast('Token add was cancelled.', 'info');
-    }
-  } catch(e) {
-    // wallet_watchAsset unreliable on MetaMask mobile for testnet tokens — show manual fallback
-    showManualTokenModal(ADDRESSES.usdc, 'USDC', 6);
-  }
-}
-
-// ── Theme toggle ─────────────────────────────────────────────────────────────
-function toggleTheme() {
-  const isLight = document.body.classList.toggle('light');
-  localStorage.setItem('theme', isLight ? 'light' : 'dark');
-  document.getElementById('theme-btn').textContent = isLight ? '🌙 Dark' : '☀️ Light';
-}
-
-// Apply saved theme on load
-(function() {
-  const saved = localStorage.getItem('theme');
-  if (saved === 'light') {
-    document.body.classList.add('light');
-    document.addEventListener('DOMContentLoaded', () => {
-      const btn = document.getElementById('theme-btn');
-      if (btn) btn.textContent = '🌙 Dark';
-    });
-  }
-})();
+function toggleTheme(){const isLight=document.body.classList.toggle('light');localStorage.setItem('theme',isLight?'light':'dark');document.getElementById('theme-btn').textContent=isLight?'🌙 Dark':'☀️ Light';}
+(function(){const saved=localStorage.getItem('theme');if(saved==='light'){document.body.classList.add('light');document.addEventListener('DOMContentLoaded',()=>{const btn=document.getElementById('theme-btn');if(btn)btn.textContent='🌙 Dark';});}})();
 </script>
 
 <!-- MetaMask Install Modal -->
@@ -2069,14 +1488,4 @@ function toggleTheme() {
         1. Open MetaMask &amp; make sure you're on <strong style="color:var(--text)">Base Sepolia</strong><br>
         2. Tap the <strong style="color:var(--text)">Assets</strong> tab at the bottom<br>
         3. Scroll down → tap <strong style="color:var(--text)">Import tokens</strong><br>
-        4. Select <strong style="color:var(--text)">Custom Token</strong> tab<br>
-        5. Paste the contract address — symbol fills automatically<br>
-        6. Tap <strong style="color:var(--text)">Import</strong> to confirm
-      </div>
-    </div>
-    <button class="btn btn-ghost full-w" onclick="closeManualTokenModal()">Close</button>
-  </div>
-</div>
-
-</body>
-</html>
+        4. Select <strong style="color:var(--text)">Custom To

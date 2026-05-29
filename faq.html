@@ -153,7 +153,7 @@ function toggleTheme() {
     <div class="glossary-card" data-terms="bfs binary forced spillover matrix">
       <div class="acronym">BFS</div>
       <div class="full-name">Binary Forced Spillover</div>
-      <div class="definition">When all direct positions under a node in the binary tree are already occupied, new entries automatically "spill over" to the next available open slot further down your downline. This means you can gain team members even without directly referring them.</div>
+      <div class="definition">When all direct positions under a node in the conveyor belt queue are already occupied, new entries automatically "spill over" to the next available open slot further down your downline. This means you can gain team members even without directly referring them.</div>
     </div>
 
     <div class="glossary-card" data-terms="cnova token reward crypto nova">
@@ -210,7 +210,7 @@ function toggleTheme() {
       <div class="definition">The percentage of profit relative to the amount invested. In CryptoNova, ROI comes from matrix cycle payouts and CNOVA token rewards. <strong>ROI is not guaranteed</strong> and depends on network participation.</div>
     </div>
 
-    <div class="glossary-card" data-terms="reentry pool auto re-entry cycle savings compound">
+    <div class="glossary-card" data-terms="reentry pool tier upgrade cycle savings compound">
       <div class="acronym">Re-entry Pool</div>
       <div class="full-name">Auto Re-entry Pool</div>
       <div class="definition">A personal savings pool built up from your $1.00 flat starter on registration plus 20% of every chain payment you receive. When the pool reaches $10, the smart contract automatically re-enters you into the matrix — no manual action required. The pool balance is locked for re-entry and cannot be withdrawn.</div>
@@ -219,7 +219,7 @@ function toggleTheme() {
     <div class="glossary-card" data-terms="original referrer referrer for life locked sponsor permanent">
       <div class="acronym">Original Referrer</div>
       <div class="full-name">Referrer For Life</div>
-      <div class="definition">The wallet address that referred you when you first registered. This address is permanently locked on-chain and never changes — not even on auto re-entry. Your original referrer earns the $3.00 referral bonus every single time you cycle, forever.</div>
+      <div class="definition">The wallet address that referred you when you first registered. This address is permanently locked on-chain and never changes — not even on tier upgrade. Your referrer earns the $3.00 referral bonus on your registration and on any tier upgrades you make.</div>
     </div>
 
   </div>
@@ -276,7 +276,7 @@ function toggleTheme() {
       <div class="faq-answer">
         <div class="faq-answer-inner">
           <p>The entry fee is <strong>$10.00 USDC</strong> on Base (or $10.00 USDT on BNB Chain). You'll also need a small amount of ETH (Base) or BNB (BSC) to cover gas fees — typically less than $0.10 on Base.</p>
-          <p>Your $10 is split instantly by the contract: <strong>$3.00</strong> referral bonus → <strong>$4.00</strong> chain payments (7 levels) → <strong>$1.00</strong> into your re-entry pool → <strong>$1.50</strong> treasury reserve → <strong>$0.50</strong> dev &amp; ops.</p>
+          <p>Your $10 is split instantly by the contract: <strong>$3.00</strong> referral bonus → <strong>$4.00</strong> chain payments (7 levels) → <strong>$1.00</strong> into your community wallet → <strong>$1.50</strong> treasury reserve → <strong>$0.50</strong> dev &amp; ops.</p>
         </div>
       </div>
     </div>
@@ -306,7 +306,7 @@ function toggleTheme() {
       <div class="faq-answer">
         <div class="faq-answer-inner">
           <p>The binary matrix is a tree structure where each participant has exactly two positions directly below them (left and right). When both positions are filled, the next incoming entry spills over to the next open slot deeper in the tree — this is <strong>Binary Forced Spillover (BFS)</strong>.</p>
-          <p>Each "cycle" consists of 254 filled positions in the tree. When a cycle completes, it triggers automatic re-entry for qualifying members and a payout event.</p>
+          <p>Each "cycle" consists of 100 filled positions in the tree. When a cycle completes, it triggers automatic re-entry for qualifying members and a payout event.</p>
         </div>
       </div>
     </div>
@@ -324,14 +324,14 @@ function toggleTheme() {
       </div>
     </div>
 
-    <div class="faq-item" data-terms="cycle what is 254 slots complete trigger">
+    <div class="faq-item" data-terms="cycle what is 100 slots complete trigger">
       <button class="faq-question" onclick="toggleFaq(this)">
         What is a Cycle?
         <svg class="faq-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="m6 9 6 6 6-6"/></svg>
       </button>
       <div class="faq-answer">
         <div class="faq-answer-inner">
-          <p>A cycle is completed when 254 positions in the binary tree are filled (a full 7-level binary tree minus the root). When a cycle completes, it triggers a payout event and automatically re-enters qualifying members into the next cycle. The current cycle number and progress are shown on the Home tab.</p>
+          <p>A cycle is completed when 100 positions in the conveyor belt queue are filled (a full 7-level conveyor belt queue minus the root). When a cycle completes, it triggers a payout event and automatically re-enters qualifying members into the next cycle. The current cycle number and progress are shown on the Home tab.</p>
         </div>
       </div>
     </div>
@@ -356,7 +356,7 @@ function toggleTheme() {
       </button>
       <div class="faq-answer">
         <div class="faq-answer-inner">
-          <p><strong>Upline</strong> — members above you in the binary tree. Your upline referred you or you were spilled into their downline. When your cycle completes, a portion of the payout flows upward.</p>
+          <p><strong>Upline</strong> — members above you in the conveyor belt queue. Your upline referred you or you were spilled into their downline. When your cycle completes, a portion of the payout flows upward.</p>
           <p><strong>Downline</strong> — members below you in the tree. These are people you referred directly, plus anyone who was spilled down into your subtree via BFS from members above you.</p>
         </div>
       </div>
@@ -369,7 +369,7 @@ function toggleTheme() {
       </button>
       <div class="faq-answer">
         <div class="faq-answer-inner">
-          <p>Every member has a personal <strong>re-entry pool</strong> that builds up automatically. It starts with a $1.00 flat contribution at registration, and then receives 20% of every chain payment you earn going forward.</p>
+          <p>Every member has a personal <strong>community wallet</strong> that builds up automatically. It starts with a $1.00 flat contribution at registration, and then receives 20% of every chain payment you earn going forward.</p>
           <p>The moment your pool hits $10.00, the smart contract automatically re-registers you into the matrix in the same transaction — <strong>no clicks, no gas from you</strong>. Your position stays active and your referrer earns their bonus again.</p>
           <p>You can see your pool balance and a progress bar on your Dashboard. You can also manually top up your pool at any time to accelerate your next re-entry.</p>
         </div>
@@ -391,7 +391,7 @@ function toggleTheme() {
           <p>Every $10 entry generates income across three streams:</p>
           <ul>
             <li><strong>Referral bonus — $3.00</strong> — paid instantly to whoever referred the new member. If you referred them, you earn this every time they join or auto-cycle.</li>
-            <li><strong>Chain payments — $4.00 total</strong> — distributed across 7 levels of upline ancestors in the BFS tree (L1: $1.33, L2: $0.80, L3: $0.67, L4: $0.53, L5: $0.35, L6: $0.21, L7: $0.11). 80% lands as withdrawable earnings; 20% flows into your re-entry pool.</li>
+            <li><strong>Chain payments — $4.00 total</strong> — distributed across 7 levels of upline ancestors in the conveyor belt queue (L1: $1.33, L2: $0.80, L3: $0.67, L4: $0.53, L5: $0.35, L6: $0.21, L7: $0.11). 80% lands as withdrawable earnings; 20% flows into your community wallet.</li>
             <li><strong>CNOVA token rewards</strong> — distributed to your wallet on every new entry in your downline. Amount decreases each epoch (halving model).</li>
           </ul>
         </div>
@@ -406,7 +406,7 @@ function toggleTheme() {
       <div class="faq-answer">
         <div class="faq-answer-inner">
           <p>Your USDC earnings accumulate in your on-chain balance as chain payments and referral bonuses come in. To move them to your wallet, go to the <strong>Dashboard tab</strong> and click <strong>Withdraw to Wallet</strong>. The smart contract sends your full withdrawable balance directly to your connected wallet in one transaction.</p>
-          <p>Note: your <strong>re-entry pool balance is separate and cannot be withdrawn</strong> — it is reserved exclusively for your next auto re-entry cycle.</p>
+          <p>Note: your <strong>community wallet balance is separate and cannot be withdrawn</strong> — it is reserved exclusively for your next tier upgrade cycle.</p>
           <p>CNOVA tokens are distributed directly to your wallet on every registration and do not require a separate withdrawal step.</p>
         </div>
       </div>
@@ -419,7 +419,7 @@ function toggleTheme() {
       </button>
       <div class="faq-answer">
         <div class="faq-answer-inner">
-          <p><strong>No.</strong> Earnings depend on continued network participation. If growth slows significantly, cycle completions slow down, re-entry pools may not accumulate fast enough, and income may decrease or stop. Past results from any matrix structure do not guarantee future results.</p>
+          <p><strong>No.</strong> Earnings depend on continued network participation. If growth slows significantly, cycle completions slow down, community wallets may not accumulate fast enough, and income may decrease or stop. Past results from any matrix structure do not guarantee future results.</p>
           <p>This is a high-risk protocol. Only participate with funds you can afford to lose entirely.</p>
         </div>
       </div>
@@ -455,14 +455,14 @@ function toggleTheme() {
       </div>
     </div>
 
-    <div class="faq-item" data-terms="re-entry pool top up manual add usdc accelerate">
+    <div class="faq-item" data-terms="community wallet top up manual add usdc accelerate">
       <button class="faq-question" onclick="toggleFaq(this)">
-        Can I top up my re-entry pool manually?
+        Can I top up my community wallet manually?
         <svg class="faq-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="m6 9 6 6 6-6"/></svg>
       </button>
       <div class="faq-answer">
         <div class="faq-answer-inner">
-          <p>Yes. If you want to re-enter the matrix sooner, you can add USDC directly to your re-entry pool at any time from the Dashboard. The moment your pool total hits $10, the contract triggers your re-entry automatically in the same transaction.</p>
+          <p>Yes. If you want to re-enter the matrix sooner, you can add USDC directly to your community wallet at any time from the Dashboard. The moment your pool total hits $10, the contract triggers your re-entry automatically in the same transaction.</p>
           <p>This is useful if you're close to the $10 threshold and don't want to wait for the next chain payment to push you over.</p>
         </div>
       </div>
@@ -478,7 +478,7 @@ function toggleTheme() {
           <p>If your account has had no activity for <strong>90 days</strong>, the smart contract will flag your position as <strong>paused</strong>. Once paused:</p>
           <ul>
             <li>The BFS matrix routes new members around your position — you stop receiving chain payments</li>
-            <li>Your re-entry pool will not auto-trigger even if it hits $10</li>
+            <li>Your community wallet will not auto-trigger even if it hits $10</li>
             <li>Your existing earnings balance is <strong>fully preserved</strong> — pausing never confiscates your funds</li>
           </ul>
           <p>This protects the health of the matrix — lost or abandoned wallets don't continue collecting payments indefinitely.</p>
@@ -693,22 +693,4 @@ function filterAll() {
   faqItems.forEach(item => {
     const text = (item.dataset.terms + ' ' + item.textContent).toLowerCase();
     const show = !q || text.includes(q);
-    item.style.display = show ? '' : 'none';
-    if (show) faqVisible++;
-  });
-  document.getElementById('faq-empty').style.display = faqVisible === 0 ? 'block' : 'none';
-
-  // Hide section headings if no visible items in that section
-  ['started','matrix','earnings','reentry','cnova','tech'].forEach(id => {
-    const list = document.getElementById('faq-' + id);
-    const heading = document.getElementById(id + '-heading');
-    if (!list || !heading) return;
-    const hasVisible = Array.from(list.querySelectorAll('.faq-item')).some(el => el.style.display !== 'none');
-    heading.style.display = (!q || hasVisible) ? '' : 'none';
-    list.style.display = hasVisible || !q ? '' : 'none';
-  });
-}
-</script>
-
-</body>
-</html>
+    item.style.display = show ? '' : 'no
