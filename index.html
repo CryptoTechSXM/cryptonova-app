@@ -453,7 +453,7 @@
               style="border:2px solid var(--green2);background:rgba(0,229,160,0.05);font-size:14px;padding:13px 14px;"
               onfocus="this.style.borderColor='var(--green)';this.style.boxShadow='0 0 0 3px rgba(0,229,160,0.15)'"
               onblur="this.style.borderColor='var(--green2)';this.style.boxShadow='none'" />
-            <div class="form-hint" style="color:var(--text2)">⚠️ This is permanent — your referrer is locked on-chain for life. Double-check the address before registering.</div>
+            <div class="form-hint" style="color:var(--text2)">⚠️ This is permanent — your referrer is locked on-chain for life. Leave blank to be auto-assigned to a founding member.</div>
           </div>
 
           <div style="margin-bottom:20px">
@@ -514,7 +514,7 @@
           <li>
             <div class="step-content">
               <strong>Register</strong>
-              <span>Confirm the register transaction. You'll be placed into the BFS matrix automatically.</span>
+              <span>Confirm the register transaction. You'll be placed into the conveyor belt queue at the next open position.</span>
             </div>
           </li>
           <li>
@@ -526,11 +526,11 @@
         </ul>
 
         <div style="margin-top:20px;padding:14px;background:var(--bg3);border-radius:8px;font-size:13px">
-          <div style="color:var(--green);font-weight:700;margin-bottom:6px">💡 Earnings Potential</div>
-          <div style="color:var(--text2);line-height:1.6">Passive (0 referrals): <strong style="color:var(--text)">$46.74</strong> per cycle (4.7× ROI)<br>
-          Active (2 referrals): <strong style="color:var(--text)">$52.74</strong> per cycle (5.3× ROI)<br>
-          Power (5 referrals): <strong style="color:var(--text)">$61.74</strong> per cycle (6.2× ROI)<br>
-          <span style="font-size:11px;color:var(--text3)">Chain pay figures show 80% withdrawable portion. Re-entry pool gets remaining 20% + $1 flat starter.</span></div>
+          <div style="color:var(--green);font-weight:700;margin-bottom:6px">💡 Tier 1 Earnings Potential (per 100-member cycle)</div>
+          <div style="color:var(--text2);line-height:1.6">Passive (0 referrals): <strong style="color:var(--text)">$3.20</strong> chain pay per cycle (32% ROI)<br>
+          Active (2 referrals): <strong style="color:var(--text)">$9.20</strong> per cycle (92% ROI)<br>
+          Power (5 referrals): <strong style="color:var(--text)">$18.20</strong> per cycle (182% ROI)<br>
+          <span style="font-size:11px;color:var(--text3)">Upgrade to higher tiers to earn more — same cycle mechanics, bigger fees = bigger chain pay.</span></div>
         </div>
       </div>
     </div>
@@ -563,12 +563,9 @@
           <div class="stat-sub">Ready to claim</div>
         </div>
         <div class="card-sm">
-          <div class="stat-label">Re-entry Pool</div>
-          <div class="stat-value" id="dash-reentry">—</div>
-          <div style="margin:6px 0 2px;background:var(--bg3);border-radius:4px;height:6px;overflow:hidden">
-            <div id="reentry-bar" style="height:100%;background:var(--green);border-radius:4px;width:0%;transition:width .4s ease"></div>
-          </div>
-          <div class="stat-sub"><span id="reentry-pct">0%</span> to auto re-entry</div>
+          <div class="stat-label">Total Earned</div>
+          <div class="stat-value" id="dash-total-earned">—</div>
+<div class="stat-sub">All tiers lifetime</div>
         </div>
         <div class="card-sm">
           <div class="stat-label">CNOVA Balance</div>
@@ -588,20 +585,20 @@
           <div class="section-title" style="margin-bottom:16px"><div class="dot"></div> Withdraw Earnings</div>
           <div style="font-size:28px;font-weight:800;color:var(--green);margin-bottom:4px" id="dash-withdraw-amount">$0.00</div>
           <div style="font-size:13px;color:var(--text3);margin-bottom:20px">Available USDC</div>
-          <button class="btn btn-green full-w" id="btn-withdraw" onclick="doWithdraw()" disabled>
+          <button class="btn btn-green full-w" id="btn-withdraw" onclick="doWithdrawAll()" disabled>
             Withdraw to Wallet
           </button>
           <div id="withdraw-status" style="margin-top:12px;font-size:13px;color:var(--text2)"></div>
         </div>
         <div class="card">
-          <div class="section-title" style="margin-bottom:12px"><div class="dot"></div> Member Info</div>
+          <div class="section-title" style="margin-bottom:12px"><div class="dot"></div> Member Info — <span id="dash-tier-name" style="color:var(--green);font-size:14px">—</span></div>
           <div class="info-row"><span class="info-key">Member ID</span><span class="info-val" id="dash-id">—</span></div>
-          <div class="info-row"><span class="info-key">Status</span><span class="info-val" id="dash-status">—</span></div>
-          <div class="info-row"><span class="info-key">Current Cycle</span><span class="info-val" id="dash-cycle">—</span></div>
-          <div class="info-row"><span class="info-key">Matrix Node</span><span class="info-val" id="dash-node">—</span></div>
-          <div class="info-row"><span class="info-key">Original Referrer</span><span class="info-val addr" id="dash-orig-referrer" title="Locked for life — earns $3 every time you cycle">—</span></div>
+          
+          <div class="info-row"><span class="info-key">Cycles (Tier 1)</span><span class="info-val" id="dash-cycles">—</span></div>
+          
+          <div class="info-row"><span class="info-key">Referrer</span><span class="info-val addr" id="dash-orig-referrer">—</span></div>
           <div class="info-row"><span class="info-key">Direct Referrals</span><span class="info-val" id="dash-directs">—</span></div>
-          <div class="info-row"><span class="info-key">BFS Children</span><span class="info-val" id="dash-children">—</span></div>
+          
         </div>
       </div>
 
@@ -622,16 +619,16 @@
       <div class="card">
         <div class="section-title"><div class="dot"></div> Chain Pay Structure — Your Node Depth</div>
         <div style="font-size:13px;color:var(--text2);margin-bottom:16px">These amounts flow upward from each new member registration through your position.</div>
-        <div style="font-size:12px;color:var(--text3);margin-bottom:10px">80% of each level goes to your withdrawable earnings · 20% flows into your re-entry pool</div>
+        <div style="font-size:12px;color:var(--text3);margin-bottom:10px">80% of each level goes to your withdrawable earnings · 20% goes to treasury reserve</div>
         <div id="chain-pay-table">
-          <div class="chain-row"><span style="color:var(--text2)">Level 1 (direct under you)</span><span><span style="font-weight:600;color:var(--green)">$1.33</span> <span style="font-size:11px;color:var(--text3)">→ $1.06 earn / $0.27 pool</span></span></div>
-          <div class="chain-row"><span style="color:var(--text2)">Level 2</span><span><span style="font-weight:600">$0.80</span> <span style="font-size:11px;color:var(--text3)">→ $0.64 earn / $0.16 pool</span></span></div>
-          <div class="chain-row"><span style="color:var(--text2)">Level 3</span><span><span style="font-weight:600">$0.67</span> <span style="font-size:11px;color:var(--text3)">→ $0.54 earn / $0.13 pool</span></span></div>
-          <div class="chain-row"><span style="color:var(--text2)">Level 4</span><span><span style="font-weight:600">$0.53</span> <span style="font-size:11px;color:var(--text3)">→ $0.42 earn / $0.11 pool</span></span></div>
-          <div class="chain-row"><span style="color:var(--text2)">Level 5</span><span><span style="font-weight:600">$0.35</span> <span style="font-size:11px;color:var(--text3)">→ $0.28 earn / $0.07 pool</span></span></div>
-          <div class="chain-row"><span style="color:var(--text2)">Level 6</span><span><span style="font-weight:600">$0.21</span> <span style="font-size:11px;color:var(--text3)">→ $0.17 earn / $0.04 pool</span></span></div>
-          <div class="chain-row"><span style="color:var(--text2)">Level 7</span><span><span style="font-weight:600">$0.11</span> <span style="font-size:11px;color:var(--text3)">→ $0.09 earn / $0.02 pool</span></span></div>
-          <div class="chain-row" style="border-top:1px solid var(--green2)"><span style="font-weight:700">Total chain pay per entry</span><span style="font-weight:700;color:var(--green)">$4.00 <span style="font-size:11px;color:var(--text3);font-weight:400">($3.20 earn / $0.80 pool)</span></span></div>
+          <div class="chain-row"><span style="color:var(--text2)">Level 1 (15% — position N-1)</span><span><span style="font-weight:600;color:var(--green)">$1.50</span> <span style="font-size:11px;color:var(--text3)">→ $1.20 earn / $0.30 treasury</span></span></div>
+          <div class="chain-row"><span style="color:var(--text2)">Level 2 (10% — position N-2)</span><span><span style="font-weight:600">$1.00</span> <span style="font-size:11px;color:var(--text3)">→ $0.80 earn / $0.20 treasury</span></span></div>
+          <div class="chain-row"><span style="color:var(--text2)">Level 3 (7% — position N-4)</span><span><span style="font-weight:600">$0.70</span> <span style="font-size:11px;color:var(--text3)">→ $0.56 earn / $0.14 treasury</span></span></div>
+          <div class="chain-row"><span style="color:var(--text2)">Level 4 (4% — position N-8)</span><span><span style="font-weight:600">$0.40</span> <span style="font-size:11px;color:var(--text3)">→ $0.32 earn / $0.08 treasury</span></span></div>
+          <div class="chain-row"><span style="color:var(--text2)">Level 5 (2% — position N-16)</span><span><span style="font-weight:600">$0.20</span> <span style="font-size:11px;color:var(--text3)">→ $0.16 earn / $0.04 treasury</span></span></div>
+          <div class="chain-row"><span style="color:var(--text2)">Level 6 (1% — position N-32)</span><span><span style="font-weight:600">$0.10</span> <span style="font-size:11px;color:var(--text3)">→ $0.08 earn / $0.02 treasury</span></span></div>
+          <div class="chain-row"><span style="color:var(--text2)">Level 7 (1% — position N-64)</span><span><span style="font-weight:600">$0.10</span> <span style="font-size:11px;color:var(--text3)">→ $0.08 earn / $0.02 treasury</span></span></div>
+          <div class="chain-row" style="border-top:1px solid var(--green2)"><span style="font-weight:700">Total chain pay per entry</span><span style="font-weight:700;color:var(--green)">$4.00 <span style="font-size:11px;color:var(--text3);font-weight:400">($3.20 earn / $0.80 treasury)</span></span></div>
         </div>
       </div>
     </div>
