@@ -153,7 +153,7 @@ function toggleTheme() {
         <div class="glossary-card" data-terms="fifo queue conveyor belt matrix position">
       <div class="acronym">FIFO Queue</div>
       <div class="full-name">First-In First-Out Conveyor Belt</div>
-      <div class="definition">V3 uses a 100-slot conveyor belt. Members join at the back of the queue and move forward as new members join behind them. When you reach position 1 and the 101st member joins after you, you complete a cycle and re-enter at the back — earning chain pay from every member who joined while you were in the active window.</div>
+      <div class="definition">CryptoNova uses a 64-slot conveyor belt. Members join at the back of the queue and move forward as new members join behind them. When you reach position 1 and the 65th member joins after you, you complete a cycle and re-enter at the back — earning chain pay from every member who joined while you were in the active window.</div>
     </div>
 
     <div class="glossary-card" data-terms="cnova token reward crypto nova">
@@ -301,7 +301,7 @@ function toggleTheme() {
       </button>
       <div class="faq-answer">
         <div class="faq-answer-inner">
-          <p>CryptoNova V3 uses a conveyor belt queue — a linear FIFO (First-In First-Out) structure with 100 active positions. Members join at the back, move forward as new members join behind them, and complete a cycle when they reach position 1 and the next member joins.</p>
+          <p>CryptoNova uses a 64-slot conveyor belt queue — a linear FIFO (First-In First-Out) structure. Members join at the back, move forward as new members join behind them, and complete a cycle when they reach position 1 and the 65th member joins.</p>
           <p>Each "cycle" consists of 100 filled positions in the tree. When a cycle completes, it triggers automatic re-entry for qualifying members and a payout event.</p>
         </div>
       </div>
@@ -657,36 +657,30 @@ function toggleTheme() {
 </footer>
 
 <script>
-// ── Accordion ────────────────────────────────────────────────────────────────
 function toggleFaq(btn) {
   const item = btn.closest('.faq-item');
   const isOpen = item.classList.contains('open');
-  // Close all open items in same list
   const list = item.closest('.faq-list');
-  list.querySelectorAll('.faq-item.open').forEach(el => el.classList.remove('open'));
+  if (list) list.querySelectorAll('.faq-item.open').forEach(el => el.classList.remove('open'));
   if (!isOpen) item.classList.add('open');
 }
 
-// ── Search / Filter ──────────────────────────────────────────────────────────
 function filterAll() {
   const q = document.getElementById('search').value.toLowerCase().trim();
-
-  // Glossary cards
-  const cards = document.querySelectorAll('.glossary-card');
-  let glossaryVisible = 0;
-  cards.forEach(card => {
+  document.querySelectorAll('.glossary-card').forEach(card => {
     const text = (card.dataset.terms + ' ' + card.textContent).toLowerCase();
-    const show = !q || text.includes(q);
-    card.style.display = show ? '' : 'none';
-    if (show) glossaryVisible++;
+    card.style.display = (!q || text.includes(q)) ? '' : 'none';
   });
-  document.getElementById('glossary-empty').style.display = glossaryVisible === 0 ? 'block' : 'none';
-  document.getElementById('glossary-heading').style.display = glossaryVisible === 0 && q ? 'none' : '';
-
-  // FAQ items
-  const faqItems = document.querySelectorAll('.faq-item');
-  let faqVisible = 0;
-  faqItems.forEach(item => {
+  document.querySelectorAll('.faq-item').forEach(item => {
     const text = (item.dataset.terms + ' ' + item.textContent).toLowerCase();
-    const show = !q || text.includes(q);
-    item.style.display = show ? '' : 'no
+    item.style.display = (!q || text.includes(q)) ? '' : 'none';
+  });
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  const s = document.getElementById('search');
+  if (s) s.addEventListener('input', filterAll);
+});
+</script>
+
+</body>
