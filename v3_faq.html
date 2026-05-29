@@ -150,10 +150,10 @@ function toggleTheme() {
 
   <div class="glossary-grid" id="glossary-grid">
 
-    <div class="glossary-card" data-terms="bfs binary forced spillover matrix">
-      <div class="acronym">BFS</div>
-      <div class="full-name">Binary Forced Spillover</div>
-      <div class="definition">When all direct positions under a node in the conveyor belt queue are already occupied, new entries automatically "spill over" to the next available open slot further down your downline. This means you can gain team members even without directly referring them.</div>
+        <div class="glossary-card" data-terms="fifo queue conveyor belt matrix position">
+      <div class="acronym">FIFO Queue</div>
+      <div class="full-name">First-In First-Out Conveyor Belt</div>
+      <div class="definition">V3 uses a 100-slot conveyor belt. Members join at the back of the queue and move forward as new members join behind them. When you reach position 1 and the 101st member joins after you, you complete a cycle and re-enter at the back — earning chain pay from every member who joined while you were in the active window.</div>
     </div>
 
     <div class="glossary-card" data-terms="cnova token reward crypto nova">
@@ -305,7 +305,7 @@ function toggleTheme() {
       </button>
       <div class="faq-answer">
         <div class="faq-answer-inner">
-          <p>The binary matrix is a tree structure where each participant has exactly two positions directly below them (left and right). When both positions are filled, the next incoming entry spills over to the next open slot deeper in the tree — this is <strong>Binary Forced Spillover (BFS)</strong>.</p>
+          <p>The binary matrix is a tree structure where each participant has exactly two positions directly below them (left and right). When both positions are filled, the next incoming entry spills over to the next open slot deeper in the tree — this is <strong>First-In First-Out Queue (BFS)</strong>.</p>
           <p>Each "cycle" consists of 100 filled positions in the tree. When a cycle completes, it triggers automatic re-entry for qualifying members and a payout event.</p>
         </div>
       </div>
@@ -313,12 +313,12 @@ function toggleTheme() {
 
     <div class="faq-item" data-terms="bfs binary forced spillover explain">
       <button class="faq-question" onclick="toggleFaq(this)">
-        What is BFS (Binary Forced Spillover)?
+        What is BFS (First-In First-Out Queue)?
         <svg class="faq-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="m6 9 6 6 6-6"/></svg>
       </button>
       <div class="faq-answer">
         <div class="faq-answer-inner">
-          <p>BFS stands for <strong>Binary Forced Spillover</strong>. In a binary matrix, each node has only two direct slots. When both slots below you are occupied, any new member that would have gone there is "forced" to spill over to the next available open slot further down the tree.</p>
+          <p>BFS stands for <strong>First-In First-Out Queue</strong>. In a binary matrix, each node has only two direct slots. When both slots below you are occupied, any new member that would have gone there is "forced" to spill over to the next available open slot further down the tree.</p>
           <p>This means members above you in the matrix contribute to filling your downline even if they didn't personally refer anyone to you — the spillover effect benefits everyone deeper in the tree.</p>
         </div>
       </div>

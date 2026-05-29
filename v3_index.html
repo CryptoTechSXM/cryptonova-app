@@ -453,7 +453,7 @@
               style="border:2px solid var(--green2);background:rgba(0,229,160,0.05);font-size:14px;padding:13px 14px;"
               onfocus="this.style.borderColor='var(--green)';this.style.boxShadow='0 0 0 3px rgba(0,229,160,0.15)'"
               onblur="this.style.borderColor='var(--green2)';this.style.boxShadow='none'" />
-            <div class="form-hint" style="color:var(--text2)">⚠️ This is permanent — your referrer is locked on-chain for life. Double-check the address before registering.</div>
+            <div class="form-hint" style="color:var(--text2)">⚠️ This is permanent — your referrer is locked on-chain for life. Leave blank to be auto-assigned to a founding member.</div>
           </div>
 
           <div style="margin-bottom:20px">
@@ -487,6 +487,31 @@
           </div>
           <div class="form-hint">Tap the <strong>Copy</strong> button, then share with your network. When someone opens your link, your address auto-fills as their referrer.</div>
         </div>
+
+        <!-- Tier Upgrade Card — shown after Tier 1 registration -->
+        <div class="card" id="upgrade-card" style="display:none;margin-top:20px">
+          <div style="font-size:15px;font-weight:700;margin-bottom:4px">⬆️ Upgrade Tier</div>
+          <div style="font-size:13px;color:var(--text3);margin-bottom:14px">Complete your cycle requirement, then pay the next tier's fee to earn in a bigger pool.</div>
+          <div id="upgrade-whale-gate" style="display:none;margin-bottom:14px;background:rgba(245,158,11,.08);border:1px solid rgba(245,158,11,.3);border-radius:8px;padding:12px;font-size:13px;color:var(--yellow)">
+            🐋 <strong>Whale Gate</strong> — Tiers 5–7 require sequential progression until <span id="upgrade-whale-progress">0</span> / 25 SuperNova Genesis members reached. <span id="upgrade-fasttrack-badge"></span>
+          </div>
+          <div class="form-group">
+            <label>Target Tier</label>
+            <select id="upgrade-tier-select" style="width:100%;background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:11px 14px;color:var(--text);font-size:14px;outline:none" onchange="onUpgradeTierChange()">
+              <option value="">Select a tier…</option>
+            </select>
+            <div class="form-hint" id="upgrade-tier-hint"></div>
+          </div>
+          <div class="form-group">
+            <label>Referrer for this tier <span style="color:var(--text3);font-weight:400">(optional)</span></label>
+            <input type="text" id="upgrade-referrer" placeholder="0x… leave blank to use same referrer" />
+          </div>
+          <div style="display:flex;flex-direction:column;gap:10px">
+            <button class="btn btn-ghost full-w" id="btn-upgrade-approve" onclick="approveUSDCForUpgrade()" disabled>Step 1: Approve USDC 🔒</button>
+            <button class="btn btn-ghost full-w" id="btn-upgrade" onclick="doUpgrade()" disabled>Step 2: Upgrade Tier</button>
+          </div>
+          <div id="upgrade-status" style="margin-top:14px;font-size:13px;color:var(--text2)"></div>
+        </div>
       </div>
 
       <!-- How it works -->
@@ -514,7 +539,7 @@
           <li>
             <div class="step-content">
               <strong>Register</strong>
-              <span>Confirm the register transaction. You'll be placed into the BFS matrix automatically.</span>
+              <span>Confirm the register transaction. You'll be placed into the conveyor belt queue at the next open position.</span>
             </div>
           </li>
           <li>
@@ -526,11 +551,11 @@
         </ul>
 
         <div style="margin-top:20px;padding:14px;background:var(--bg3);border-radius:8px;font-size:13px">
-          <div style="color:var(--green);font-weight:700;margin-bottom:6px">💡 Earnings Potential</div>
-          <div style="color:var(--text2);line-height:1.6">Passive (0 referrals): <strong style="color:var(--text)">$46.74</strong> per cycle (4.7× ROI)<br>
-          Active (2 referrals): <strong style="color:var(--text)">$52.74</strong> per cycle (5.3× ROI)<br>
-          Power (5 referrals): <strong style="color:var(--text)">$61.74</strong> per cycle (6.2× ROI)<br>
-          <span style="font-size:11px;color:var(--text3)">Chain pay figures show 80% withdrawable portion. Re-entry pool gets remaining 20% + $1 flat starter.</span></div>
+          <div style="color:var(--green);font-weight:700;margin-bottom:6px">💡 Tier 1 Earnings Potential (per 100-member cycle)</div>
+          <div style="color:var(--text2);line-height:1.6">Passive (0 referrals): <strong style="color:var(--text)">$3.20</strong> chain pay per cycle (32% ROI)<br>
+          Active (2 referrals): <strong style="color:var(--text)">$9.20</strong> per cycle (92% ROI)<br>
+          Power (5 referrals): <strong style="color:var(--text)">$18.20</strong> per cycle (182% ROI)<br>
+          <span style="font-size:11px;color:var(--text3)">Upgrade to higher tiers to earn more — same cycle mechanics, bigger fees = bigger chain pay.</span></div>
         </div>
       </div>
     </div>
@@ -563,12 +588,9 @@
           <div class="stat-sub">Ready to claim</div>
         </div>
         <div class="card-sm">
-          <div class="stat-label">Re-entry Pool</div>
-          <div class="stat-value" id="dash-reentry">—</div>
-          <div style="margin:6px 0 2px;background:var(--bg3);border-radius:4px;height:6px;overflow:hidden">
-            <div id="reentry-bar" style="height:100%;background:var(--green);border-radius:4px;width:0%;transition:width .4s ease"></div>
-          </div>
-          <div class="stat-sub"><span id="reentry-pct">0%</span> to auto re-entry</div>
+          <div class="stat-label">Total Earned</div>
+          <div class="stat-value" id="dash-total-earned">—</div>
+<div class="stat-sub">All tiers lifetime</div>
         </div>
         <div class="card-sm">
           <div class="stat-label">CNOVA Balance</div>
@@ -588,20 +610,20 @@
           <div class="section-title" style="margin-bottom:16px"><div class="dot"></div> Withdraw Earnings</div>
           <div style="font-size:28px;font-weight:800;color:var(--green);margin-bottom:4px" id="dash-withdraw-amount">$0.00</div>
           <div style="font-size:13px;color:var(--text3);margin-bottom:20px">Available USDC</div>
-          <button class="btn btn-green full-w" id="btn-withdraw" onclick="doWithdraw()" disabled>
+          <button class="btn btn-green full-w" id="btn-withdraw" onclick="doWithdrawAll()" disabled>
             Withdraw to Wallet
           </button>
           <div id="withdraw-status" style="margin-top:12px;font-size:13px;color:var(--text2)"></div>
         </div>
         <div class="card">
-          <div class="section-title" style="margin-bottom:12px"><div class="dot"></div> Member Info</div>
+          <div class="section-title" style="margin-bottom:12px"><div class="dot"></div> Member Info — <span id="dash-tier-name" style="color:var(--green);font-size:14px">—</span></div>
           <div class="info-row"><span class="info-key">Member ID</span><span class="info-val" id="dash-id">—</span></div>
-          <div class="info-row"><span class="info-key">Status</span><span class="info-val" id="dash-status">—</span></div>
-          <div class="info-row"><span class="info-key">Current Cycle</span><span class="info-val" id="dash-cycle">—</span></div>
-          <div class="info-row"><span class="info-key">Matrix Node</span><span class="info-val" id="dash-node">—</span></div>
-          <div class="info-row"><span class="info-key">Original Referrer</span><span class="info-val addr" id="dash-orig-referrer" title="Locked for life — earns $3 every time you cycle">—</span></div>
+          
+          <div class="info-row"><span class="info-key">Cycles (Tier 1)</span><span class="info-val" id="dash-cycles">—</span></div>
+          
+          <div class="info-row"><span class="info-key">Referrer</span><span class="info-val addr" id="dash-orig-referrer">—</span></div>
           <div class="info-row"><span class="info-key">Direct Referrals</span><span class="info-val" id="dash-directs">—</span></div>
-          <div class="info-row"><span class="info-key">BFS Children</span><span class="info-val" id="dash-children">—</span></div>
+          
         </div>
       </div>
 
@@ -622,16 +644,16 @@
       <div class="card">
         <div class="section-title"><div class="dot"></div> Chain Pay Structure — Your Node Depth</div>
         <div style="font-size:13px;color:var(--text2);margin-bottom:16px">These amounts flow upward from each new member registration through your position.</div>
-        <div style="font-size:12px;color:var(--text3);margin-bottom:10px">80% of each level goes to your withdrawable earnings · 20% flows into your re-entry pool</div>
+        <div style="font-size:12px;color:var(--text3);margin-bottom:10px">80% of each level goes to your withdrawable earnings · 20% goes to treasury reserve</div>
         <div id="chain-pay-table">
-          <div class="chain-row"><span style="color:var(--text2)">Level 1 (direct under you)</span><span><span style="font-weight:600;color:var(--green)">$1.33</span> <span style="font-size:11px;color:var(--text3)">→ $1.06 earn / $0.27 pool</span></span></div>
-          <div class="chain-row"><span style="color:var(--text2)">Level 2</span><span><span style="font-weight:600">$0.80</span> <span style="font-size:11px;color:var(--text3)">→ $0.64 earn / $0.16 pool</span></span></div>
-          <div class="chain-row"><span style="color:var(--text2)">Level 3</span><span><span style="font-weight:600">$0.67</span> <span style="font-size:11px;color:var(--text3)">→ $0.54 earn / $0.13 pool</span></span></div>
-          <div class="chain-row"><span style="color:var(--text2)">Level 4</span><span><span style="font-weight:600">$0.53</span> <span style="font-size:11px;color:var(--text3)">→ $0.42 earn / $0.11 pool</span></span></div>
-          <div class="chain-row"><span style="color:var(--text2)">Level 5</span><span><span style="font-weight:600">$0.35</span> <span style="font-size:11px;color:var(--text3)">→ $0.28 earn / $0.07 pool</span></span></div>
-          <div class="chain-row"><span style="color:var(--text2)">Level 6</span><span><span style="font-weight:600">$0.21</span> <span style="font-size:11px;color:var(--text3)">→ $0.17 earn / $0.04 pool</span></span></div>
-          <div class="chain-row"><span style="color:var(--text2)">Level 7</span><span><span style="font-weight:600">$0.11</span> <span style="font-size:11px;color:var(--text3)">→ $0.09 earn / $0.02 pool</span></span></div>
-          <div class="chain-row" style="border-top:1px solid var(--green2)"><span style="font-weight:700">Total chain pay per entry</span><span style="font-weight:700;color:var(--green)">$4.00 <span style="font-size:11px;color:var(--text3);font-weight:400">($3.20 earn / $0.80 pool)</span></span></div>
+          <div class="chain-row"><span style="color:var(--text2)">Level 1 (15% — position N-1)</span><span><span style="font-weight:600;color:var(--green)">$1.50</span> <span style="font-size:11px;color:var(--text3)">→ $1.20 earn / $0.30 treasury</span></span></div>
+          <div class="chain-row"><span style="color:var(--text2)">Level 2 (10% — position N-2)</span><span><span style="font-weight:600">$1.00</span> <span style="font-size:11px;color:var(--text3)">→ $0.80 earn / $0.20 treasury</span></span></div>
+          <div class="chain-row"><span style="color:var(--text2)">Level 3 (7% — position N-4)</span><span><span style="font-weight:600">$0.70</span> <span style="font-size:11px;color:var(--text3)">→ $0.56 earn / $0.14 treasury</span></span></div>
+          <div class="chain-row"><span style="color:var(--text2)">Level 4 (4% — position N-8)</span><span><span style="font-weight:600">$0.40</span> <span style="font-size:11px;color:var(--text3)">→ $0.32 earn / $0.08 treasury</span></span></div>
+          <div class="chain-row"><span style="color:var(--text2)">Level 5 (2% — position N-16)</span><span><span style="font-weight:600">$0.20</span> <span style="font-size:11px;color:var(--text3)">→ $0.16 earn / $0.04 treasury</span></span></div>
+          <div class="chain-row"><span style="color:var(--text2)">Level 6 (1% — position N-32)</span><span><span style="font-weight:600">$0.10</span> <span style="font-size:11px;color:var(--text3)">→ $0.08 earn / $0.02 treasury</span></span></div>
+          <div class="chain-row"><span style="color:var(--text2)">Level 7 (1% — position N-64)</span><span><span style="font-weight:600">$0.10</span> <span style="font-size:11px;color:var(--text3)">→ $0.08 earn / $0.02 treasury</span></span></div>
+          <div class="chain-row" style="border-top:1px solid var(--green2)"><span style="font-weight:700">Total chain pay per entry</span><span style="font-weight:700;color:var(--green)">$4.00 <span style="font-size:11px;color:var(--text3);font-weight:400">($3.20 earn / $0.80 treasury)</span></span></div>
         </div>
       </div>
     </div>
@@ -1175,6 +1197,7 @@ async function loadRegisterTab(){
       approveBtn.className=registerBtn.className='btn btn-ghost full-w';
       refCard.style.display='block';
       document.getElementById('referral-url').value=window.location.origin+window.location.pathname+'?ref='+userAddr;
+      await showUpgradeCardIfEligible();
       return;
     }
     alreadyEl.style.display='none';
@@ -1422,6 +1445,109 @@ async function addUSDCtoMetaMask(){
   if(parseInt(window.ethereum.chainId||'0x0',16)!==CHAIN_ID){showNetworkBanner();toast('Switch to Base Sepolia first.','info');return;}
   try{const added=await window.ethereum.request({method:'wallet_watchAsset',params:{type:'ERC20',options:{address:ADDRESSES.usdc,symbol:'USDC',decimals:6}}});if(added)toast('✅ USDC added to MetaMask!','success');else toast('Token add was cancelled.','info');}
   catch(e){showManualTokenModal(ADDRESSES.usdc,'USDC',6);}
+}
+
+
+// ═══════════════════════════════════════════════════════════════════════
+// TIER UPGRADE
+// ═══════════════════════════════════════════════════════════════════════
+function populateUpgradeSelect(currentTier, fastTrack, whaleCount, cyclesDone, cyclesNeeded) {
+  const sel=document.getElementById('upgrade-tier-select'),hint=document.getElementById('upgrade-tier-hint');
+  if(!sel)return;
+  const cyclesOk=cyclesDone>=cyclesNeeded;
+  if(hint){
+    if(!cyclesOk)hint.innerHTML='<span style="color:var(--yellow)">⏳ Complete <strong>'+cyclesNeeded+' cycle'+(cyclesNeeded>1?'s':'')+'</strong> in Tier '+currentTier+' to unlock upgrade. You have <strong>'+cyclesDone+'</strong> so far.</span>';
+    else hint.innerHTML='<span style="color:var(--green)">✅ Cycle requirement met ('+cyclesDone+'/'+cyclesNeeded+') — select your target tier.</span>';
+  }
+  sel.innerHTML='<option value="">Select a tier…</option>';
+  for(let t=currentTier+1;t<=7;t++){
+    const whaleLocked=!fastTrack&&t>=5&&currentTier<t-1;
+    const cycleLocked=!cyclesOk;
+    const opt=document.createElement('option');
+    opt.value=t;
+    let label='Tier '+t+' — '+TIER_NAMES[t]+'  ($'+TIER_FEES[t].toLocaleString()+')';
+    if(cycleLocked)label+='  🔒 '+cyclesDone+'/'+cyclesNeeded+' cycles';
+    else if(whaleLocked)label+='  🐋 whale gate';
+    opt.textContent=label;
+    if(cycleLocked||whaleLocked)opt.disabled=true;
+    sel.appendChild(opt);
+  }
+}
+
+function onUpgradeTierChange(){
+  const sel=document.getElementById('upgrade-tier-select'),hint=document.getElementById('upgrade-tier-hint');
+  const appBtn=document.getElementById('btn-upgrade-approve'),upgBtn=document.getElementById('btn-upgrade');
+  const t=parseInt(sel.value);
+  if(!t){if(appBtn){appBtn.disabled=true;appBtn.className='btn btn-ghost full-w';appBtn.textContent='Step 1: Approve USDC 🔒';}if(upgBtn){upgBtn.disabled=true;upgBtn.className='btn btn-ghost full-w';}return;}
+  if(hint)hint.textContent='Fee: $'+TIER_FEES[t].toLocaleString()+' USDC → '+TIER_NAMES[t];
+  if(appBtn){appBtn.disabled=false;appBtn.className='btn full-w btn-green';appBtn.textContent='Step 1: Approve $'+TIER_FEES[t].toLocaleString()+' USDC 🔒';}
+  if(upgBtn){upgBtn.disabled=true;upgBtn.className='btn btn-ghost full-w';upgBtn.textContent='Step 2: Upgrade to '+TIER_NAMES[t];}
+  if(userAddr){
+    const usdc=new ethers.Contract(ADDRESSES.usdc,USDC_ABI,readProvider);
+    usdc.allowance(userAddr,ADDRESSES.tierManager).then(a=>{
+      if(a>=TIER_FEES_USDC[t]){if(appBtn){appBtn.disabled=true;appBtn.className='btn btn-ghost full-w';appBtn.textContent='✓ Approved';}if(upgBtn){upgBtn.disabled=false;upgBtn.className='btn full-w btn-green';}}
+    }).catch(()=>{});
+  }
+}
+
+async function approveUSDCForUpgrade(){
+  if(!signer){toast('Connect wallet first','error');return;}
+  const t=parseInt(document.getElementById('upgrade-tier-select').value);
+  if(!t){toast('Select a tier first','error');return;}
+  const btn=document.getElementById('btn-upgrade-approve');
+  try{
+    btn.disabled=true;btn.innerHTML='<span class="spinner"></span>Approving…';
+    setStatus('upgrade-status','⏳ Waiting for MetaMask…','var(--text2)');
+    const usdc=new ethers.Contract(ADDRESSES.usdc,USDC_ABI,signer);
+    const tx=await usdc.approve(ADDRESSES.tierManager,TIER_FEES_USDC[t]);
+    setStatus('upgrade-status','⏳ Confirming…','var(--text2)');await tx.wait();
+    setStatus('upgrade-status','✅ Approved! Now click Step 2.','var(--green)');
+    toast('$'+TIER_FEES[t].toLocaleString()+' USDC approved!','success');
+    btn.disabled=true;btn.textContent='✓ Approved';
+    const upgBtn=document.getElementById('btn-upgrade');if(upgBtn){upgBtn.disabled=false;upgBtn.className='btn full-w btn-green';}
+  }catch(e){const msg=e.reason||e.message||'Unknown';setStatus('upgrade-status','❌ '+msg,'var(--red)');btn.disabled=false;btn.textContent='Step 1: Approve USDC 🔒';toast('Approval failed','error');}
+}
+
+async function doUpgrade(){
+  if(!signer){toast('Connect wallet first','error');return;}
+  const t=parseInt(document.getElementById('upgrade-tier-select').value);
+  const referrer=(document.getElementById('upgrade-referrer').value||'').trim();
+  if(!t){toast('Select a tier first','error');return;}
+  if(referrer&&!ethers.isAddress(referrer)){toast('Invalid referrer address','error');return;}
+  const btn=document.getElementById('btn-upgrade');
+  try{
+    btn.disabled=true;btn.innerHTML='<span class="spinner"></span>Upgrading…';
+    setStatus('upgrade-status','⏳ Waiting for MetaMask…','var(--text2)');
+    const tm=new ethers.Contract(ADDRESSES.tierManager,TIER_MANAGER_ABI,signer);
+    const ref=referrer||ethers.ZeroAddress;
+    const tx=await tm.upgradeTier(t,ref);
+    setStatus('upgrade-status','⏳ Confirming…','var(--text2)');const receipt=await tx.wait();
+    setStatus('upgrade-status','🎉 Upgraded to '+TIER_NAMES[t]+'! Tx: '+receipt.hash.slice(0,10)+'…','var(--green)');
+    toast('🎉 Welcome to '+TIER_NAMES[t]+'!','success',6000);
+    btn.textContent='Step 2: Upgrade Tier';
+    await loadRegisterTab();await loadDashboard();
+  }catch(e){const msg=e.reason||e.message||'Unknown';setStatus('upgrade-status','❌ '+msg,'var(--red)');btn.disabled=false;btn.textContent='Step 2: Upgrade Tier';toast('Upgrade failed','error');}
+}
+
+// Show upgrade card after registration
+async function showUpgradeCardIfEligible(){
+  if(!userAddr)return;
+  const upgradeCard=document.getElementById('upgrade-card');if(!upgradeCard)return;
+  try{
+    const t1=new ethers.Contract(ADDRESSES.matrices[1],MATRIX_ABI,readProvider);
+    const tm=new ethers.Contract(ADDRESSES.tierManager,TIER_MANAGER_ABI,readProvider);
+    const[member,currentTier,fastTrack,whaleCount]=await Promise.all([t1.members(userAddr),tm.memberTier(userAddr),tm.fastTrackEnabled(),tm.primeOrAboveCount()]);
+    if(!member.isRegistered){upgradeCard.style.display='none';return;}
+    const ct=Number(currentTier)||1;
+    if(ct>=7){upgradeCard.innerHTML='<div style="color:var(--green);font-weight:700">👑 Max tier reached — SuperNova Spark!</div>';upgradeCard.style.display='block';return;}
+    upgradeCard.style.display='block';
+    let cyclesDone=0,cyclesNeeded=CYCLE_REQ[ct]||1;
+    try{const cy=await t1.cyclesCompleted(userAddr);cyclesDone=Number(cy);}catch(_){}
+    populateUpgradeSelect(ct,fastTrack,Number(whaleCount),cyclesDone,cyclesNeeded);
+    const wgEl=document.getElementById('upgrade-whale-gate');
+    const wn=Number(whaleCount);
+    if(wgEl){wgEl.style.display='block';document.getElementById('upgrade-whale-progress').textContent=wn;const ftb=document.getElementById('upgrade-fasttrack-badge');if(ftb)ftb.innerHTML=fastTrack?'<span class="pill pill-green" style="font-size:11px">🔓 Fast-track ON</span>':'<span class="pill pill-yellow" style="font-size:11px">🔒 '+(25-wn)+' more needed</span>';}
+  }catch(e){console.error('showUpgradeCard',e);}
 }
 
 function toggleTheme(){const isLight=document.body.classList.toggle('light');localStorage.setItem('theme',isLight?'light':'dark');document.getElementById('theme-btn').textContent=isLight?'🌙 Dark':'☀️ Light';}
