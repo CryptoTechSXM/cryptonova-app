@@ -677,7 +677,7 @@
 
     <div class="grid-4" style="margin-bottom:20px">
       <div class="card-sm"><div class="stat-label">Total Nodes</div><div class="stat-value" id="matrix-nodes">—</div></div>
-      <div class="card-sm"><div class="stat-label">BFS Head</div><div class="stat-value" id="matrix-bfs">—</div></div>
+      <div class="card-sm"><div class="stat-label">Active Window</div><div class="stat-value" id="matrix-bfs">—</div></div>
       <div class="card-sm"><div class="stat-label">Cycle Fill</div><div class="stat-value" id="matrix-fill">—</div></div>
       <div class="card-sm" style="border-color:var(--green2)">
         <div class="stat-label" id="matrix-my-node-label">My Node ID</div>
@@ -797,7 +797,7 @@
               <li><span class="check-icon check-done">✅</span> Mobile MetaMask experience tested and improved</li>
               <li><span class="check-icon check-pending">⏳</span> Collect feedback and fix remaining UX issues</li>
               <li><span class="check-icon check-pending">⏳</span> Record tutorial video / walkthrough for non-crypto members</li>
-              <li><span class="check-icon check-pending">⏳</span> Test full matrix cycle: 254 positions → auto-reset → cycle 2</li>
+              <li><span class="check-icon check-pending">⏳</span> Test full matrix cycle: 100 positions → rotation → cycle 2</li>
               <li><span class="check-icon check-pending">⏳</span> Confirm referral link flow works end-to-end for all members</li>
             </ul>
           </div>
@@ -1466,7 +1466,10 @@ function populateUpgradeSelect(currentTier, fastTrack, whaleCount, cyclesDone, c
     const opt=document.createElement('option');
     opt.value=t;
     let label='Tier '+t+' — '+TIER_NAMES[t]+'  ($'+TIER_FEES[t].toLocaleString()+')';
-    if(cycleLocked)label+='  🔒 '+cyclesDone+'/'+cyclesNeeded+' cycles';
+    const exitCycles=CYCLE_REQ[t]||0;  // cycles needed to EXIT this tier
+    if(t<7&&exitCycles>0)label+='  🔒 0/'+exitCycles+' cycles';
+    if(t===7)label+='  👑 Max tier';
+    if(whaleLocked)label+='  🐋';
     else if(whaleLocked)label+='  🐋 whale gate';
     opt.textContent=label;
     if(cycleLocked||whaleLocked)opt.disabled=true;

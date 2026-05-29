@@ -210,11 +210,7 @@ function toggleTheme() {
       <div class="definition">The percentage of profit relative to the amount invested. In CryptoNova, ROI comes from matrix cycle payouts and CNOVA token rewards. <strong>ROI is not guaranteed</strong> and depends on network participation.</div>
     </div>
 
-    <div class="glossary-card" data-terms="reentry pool tier upgrade cycle savings compound">
-      <div class="acronym">Re-entry Pool</div>
-      <div class="full-name">Auto Re-entry Pool</div>
-      <div class="definition">A personal savings pool built up from your $1.00 flat starter on registration plus 20% of every chain payment you receive. When the pool reaches $10, the smart contract automatically re-enters you into the matrix — no manual action required. The pool balance is locked for re-entry and cannot be withdrawn.</div>
-    </div>
+
 
     <div class="glossary-card" data-terms="original referrer referrer for life locked sponsor permanent">
       <div class="acronym">Original Referrer</div>
@@ -237,7 +233,7 @@ function toggleTheme() {
       </button>
       <div class="faq-answer">
         <div class="faq-answer-inner">
-          <p>CryptoNova is a decentralized, autonomous smart contract protocol deployed on the Base blockchain (and BNB Chain). It runs a binary matrix compensation structure where participants pay an entry fee in USDC/USDT and receive payments from subsequent participants according to predefined on-chain rules.</p>
+          <p>CryptoNova is a decentralized, autonomous smart contract protocol deployed on the Base blockchain (and BNB Chain). It runs a 7-tier conveyor belt compensation structure where participants pay an entry fee in USDC/USDT and receive payments from subsequent participants according to predefined on-chain rules.</p>
           <p>The protocol is fully autonomous — no admin can pause, modify, or redirect funds. All logic is enforced by immutable smart contracts.</p>
         </div>
       </div>
@@ -298,27 +294,27 @@ function toggleTheme() {
   <h2 id="matrix-heading">🌐 How the Matrix Works</h2>
   <div class="faq-list" id="faq-matrix">
 
-    <div class="faq-item" data-terms="binary matrix tree structure how works">
+    <div class="faq-item" data-terms="conveyor belt matrix tree structure how works">
       <button class="faq-question" onclick="toggleFaq(this)">
-        What is the binary matrix?
+        What is the conveyor belt matrix?
         <svg class="faq-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="m6 9 6 6 6-6"/></svg>
       </button>
       <div class="faq-answer">
         <div class="faq-answer-inner">
-          <p>The binary matrix is a tree structure where each participant has exactly two positions directly below them (left and right). When both positions are filled, the next incoming entry spills over to the next open slot deeper in the tree — this is <strong>First-In First-Out Queue (BFS)</strong>.</p>
+          <p>CryptoNova V3 uses a conveyor belt queue — a linear FIFO (First-In First-Out) structure with 100 active positions. Members join at the back, move forward as new members join behind them, and complete a cycle when they reach position 1 and the next member joins.</p>
           <p>Each "cycle" consists of 100 filled positions in the tree. When a cycle completes, it triggers automatic re-entry for qualifying members and a payout event.</p>
         </div>
       </div>
     </div>
 
-    <div class="faq-item" data-terms="bfs binary forced spillover explain">
+    <div class="faq-item" data-terms="conveyor belt fifo queue explain">
       <button class="faq-question" onclick="toggleFaq(this)">
-        What is BFS (First-In First-Out Queue)?
+        How does the conveyor belt work?
         <svg class="faq-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="m6 9 6 6 6-6"/></svg>
       </button>
       <div class="faq-answer">
         <div class="faq-answer-inner">
-          <p>BFS stands for <strong>First-In First-Out Queue</strong>. In a binary matrix, each node has only two direct slots. When both slots below you are occupied, any new member that would have gone there is "forced" to spill over to the next available open slot further down the tree.</p>
+          <p>The conveyor belt queue has 100 active positions. When you join, you take the next available slot. As new members join behind you, you move closer to position 1. When you reach position 1 and one more member joins, your first cycle completes and you re-enter at the back — earning chain pay from every member who joined while you were in the active window.</p>
           <p>This means members above you in the matrix contribute to filling your downline even if they didn't personally refer anyone to you — the spillover effect benefits everyone deeper in the tree.</p>
         </div>
       </div>
@@ -357,7 +353,7 @@ function toggleTheme() {
       <div class="faq-answer">
         <div class="faq-answer-inner">
           <p><strong>Upline</strong> — members above you in the conveyor belt queue. Your upline referred you or you were spilled into their downline. When your cycle completes, a portion of the payout flows upward.</p>
-          <p><strong>Downline</strong> — members below you in the tree. These are people you referred directly, plus anyone who was spilled down into your subtree via BFS from members above you.</p>
+          <p><strong>Downline</strong> — members who joined after you in the conveyor belt queue. They contribute chain pay to you as they pass through the positions behind yours.</p>
         </div>
       </div>
     </div>
@@ -477,7 +473,7 @@ function toggleTheme() {
         <div class="faq-answer-inner">
           <p>If your account has had no activity for <strong>90 days</strong>, the smart contract will flag your position as <strong>paused</strong>. Once paused:</p>
           <ul>
-            <li>The BFS matrix routes new members around your position — you stop receiving chain payments</li>
+            <li>The conveyor belt queue continues moving — you stop receiving chain payments</li>
             <li>Your community wallet will not auto-trigger even if it hits $10</li>
             <li>Your existing earnings balance is <strong>fully preserved</strong> — pausing never confiscates your funds</li>
           </ul>
@@ -495,7 +491,7 @@ function toggleTheme() {
         <div class="faq-answer-inner">
           <p>Reactivation is simple and costs just <strong>$1.00 USDC</strong>. Connect your wallet, approve $1 USDC on the Dashboard, and click <strong>Reactivate</strong>. The contract will:</p>
           <ul>
-            <li>Place you back into the current BFS matrix at the next available slot</li>
+            <li>Place you back into the conveyor belt queue at the next available slot</li>
             <li>Reset your 90-day activity clock</li>
             <li>Resume chain payments to your position</li>
           </ul>
