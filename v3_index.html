@@ -395,7 +395,18 @@
 
       <!-- Conveyor Belt Card -->
       <div class="card">
-        <div class="section-title" style="margin-bottom:12px"><div class="dot"></div> Conveyor Belt — Tier 1</div>
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;flex-wrap:wrap;gap:8px">
+          <div class="section-title" style="margin-bottom:0"><div class="dot"></div> Conveyor Belt — <span id="cb-tier-label">Tier 1</span></div>
+          <select id="cb-tier-select" style="background:var(--bg3);border:1px solid var(--border);border-radius:6px;padding:5px 10px;color:var(--text);font-size:12px;outline:none" onchange="loadConveyorBeltStats()">
+            <option value="1">T1 — Nova Seed</option>
+            <option value="2">T2 — Nova Rise</option>
+            <option value="3">T3 — Nova Star</option>
+            <option value="4">T4 — Nova Prime</option>
+            <option value="5">T5 — Genesis 🐋</option>
+            <option value="6">T6 — Elite</option>
+            <option value="7">T7 — Spark</option>
+          </select>
+        </div>
         <div class="info-row">
           <span class="info-key">Total Members</span>
           <span class="info-val" id="stat-filled">—</span>
@@ -1121,7 +1132,7 @@ async function connectWallet(silent=false) {
     btn.innerHTML='<span class="network-dot"></span>'+userAddr.slice(0,6)+'…'+userAddr.slice(-4);
     btn.classList.add('connected');
     if(!silent)toast('Wallet connected: '+userAddr.slice(0,6)+'…'+userAddr.slice(-4),'success');
-    await loadHomeStats();await loadRegisterTab();await loadDashboard();await loadMatrixStats();
+    await loadHomeStats();await loadConveyorBeltStats();await loadRegisterTab();await loadDashboard();await loadMatrixStats();
   } catch(e){if(!silent)toast('Connection failed: '+(e.message||e),'error');}
   finally{isConnecting=false;}
 }
@@ -1150,6 +1161,7 @@ function showTab(name){
   document.getElementById('tab-'+name).classList.add('active');
   const idx=['home','register','dashboard','matrix','roadmap'].indexOf(name);
   document.querySelectorAll('nav button')[idx].classList.add('active');
+  if(name==='home'){loadHomeStats();loadConveyorBeltStats();}
   if(name==='dashboard')loadDashboard();
   if(name==='matrix'){loadMatrixStats();if(userAddr)loadMyDirects();}
   if(name==='register')loadRegisterTab();
@@ -1166,6 +1178,59 @@ function setStatus(id,msg,color){const el=document.getElementById(id);if(el){el.
 // ═══════════════════════════════════════════════════════════════════════
 // FOUNDING MEMBERS & FALLBACK REFERRER
 // ═══════════════════════════════════════════════════════════════════════
+async function loadConveyorBeltStats(){
+  try{
+    const sel=document.getElementById('cb-tier-select');
+    const tier=sel?parseInt(sel.value)||1:1;
+    const tierN=TIER_NAMES[tier]||('Tier '+tier);
+    const labelEl=document.getElementById('cb-tier-label');
+    if(labelEl)labelEl.textContent=tierN;
+    const mx=new ethers.Contract(ADDRESSES.matrices[tier],MATRIX_ABI,readProvider);
+    const mem=await mx.totalMembers();
+    const cyclesDone=Math.max(0,Number(mem)-64);
+    // First rotation needs 65 members (64 fills window, 65th triggers)
+    // After that every new join = one rotation
+    const nextRot=Number(mem)<65?(65):Number(mem)+1;
+    const membersNeeded=Number(mem)<65?(65-Number(mem)):1;
+    const filledEl=document.getElementById('stat-filled');
+    if(filledEl)filledEl.textContent=mem.toString();
+    const cyclesEl=document.getElementById('stat-cycles-done');
+    if(cyclesEl)cyclesEl.textContent=cyclesDone>0?cyclesDone+' rotation'+(cyclesDone!==1?'s':'')+' so far':'None yet';
+    const nextEl=document.getElementById('stat-next-cycle');
+    if(nextEl){
+      if(Number(mem)<65){
+        nextEl.textContent='Member #'+nextRot+' ('+membersNeeded+' more needed)';
+        nextEl.style.color='var(--text2)';
+      } else {
+        nextEl.textContent='Member #'+nextRot;
+        nextEl.style.color='var(--text)';
+      }
+    }
+    const myNextEl=document.getElementById('stat-my-next-cycle');
+    if(myNextEl){
+      if(!userAddr){
+        myNextEl.textContent='—';
+        myNextEl.style.color='var(--text3)';
+        return;
+      }
+      const qpos=await mx.positionOf(userAddr).catch(()=>0n);
+      const qNum=Number(qpos);
+      const mObj=await mx.members(userAddr).catch(()=>null);
+      if(!mObj||!mObj.isRegistered){
+        myNextEl.textContent='Not in '+tierN;
+        myNextEl.style.color='var(--text3)';
+      } else if(qNum>0){
+        const myNextAt=Number(mem)<65?(64+qNum):(Number(mem)+qNum);
+        myNextEl.textContent='Member #'+myNextAt;
+        myNextEl.style.color='var(--green)';
+      } else {
+        myNextEl.textContent='Re-entering queue…';
+        myNextEl.style.color='var(--text2)';
+      }
+    }
+  }catch(e){console.error('loadConveyorBeltStats',e);}
+}
+
 async function loadFoundingMembers(){
   try{
     const delay=ms=>new Promise(r=>setTimeout(r,ms));const seen=new Set();
@@ -1205,33 +1270,7 @@ async function loadHomeStats(){
     document.getElementById('stat-reserve').textContent=u6(reserve);
     const wn=Number(wc),wPct=Math.min(100,Math.round((wn/25)*100));
     document.getElementById('stat-filled').textContent=mem.toString();
-    // Cycles triggered = total members beyond first 64
-    const cyclesDone=Math.max(0,Number(mem)-64);
-    // Once queue full (64+), every new join = one rotation. Simple: next = totalMembers + 1
-    const nextGlobalRotation=Number(mem)<64?65:Number(mem)+1;
-    const cyclesEl=document.getElementById('stat-cycles-done');
-    if(cyclesEl)cyclesEl.textContent=cyclesDone>0?cyclesDone+' rotation'+(cyclesDone!==1?'s':'')+' so far':'None yet';
-    const nextEl=document.getElementById('stat-next-cycle');
-    if(nextEl)nextEl.textContent='Member #'+nextGlobalRotation+' (next rotation)';
-    // Show user's personal next cycle if connected
-    if(userAddr){
-      try{
-        const t1=new ethers.Contract(ADDRESSES.matrices[1],MATRIX_ABI,readProvider);
-        const qpos=await t1.positionOf(userAddr).catch(()=>0n);
-        const qNum=Number(qpos);
-        const myNextEl=document.getElementById('stat-my-next-cycle');
-        if(myNextEl){
-          if(qNum>0){
-            const myNextAt=Number(mem)+qNum;
-            myNextEl.textContent='Member #'+myNextAt+' (your cycle)';
-            myNextEl.style.color='var(--green)';
-          } else {
-            myNextEl.textContent='Re-entering queue…';
-            myNextEl.style.color='var(--text3)';
-          }
-        }
-      }catch(_){}
-    }
+    await loadConveyorBeltStats();
     document.getElementById('stat-pct').textContent=wPct+'%';
     document.getElementById('stat-progress').style.width=wPct+'%';
     document.getElementById('stat-cycle').textContent=ft?'🔓 UNLOCKED':(wn+' / 25');
