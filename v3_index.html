@@ -425,7 +425,7 @@
         </div>
         <div class="info-row">
           <span class="info-key">Your Next Cycle</span>
-          <span class="info-val" id="stat-my-next-cycle">Connect wallet</span>
+          <span class="info-val" id="stat-my-next-cycle">—</span>
         </div>
         <div style="margin-top:10px;padding:10px 12px;background:var(--bg3);border-radius:8px;font-size:12px;color:var(--text3);line-height:1.6">
           Every 64 members who join behind you = 1 cycle. You rotate to the back and re-enter. Earn chain pay from every member in your window.
@@ -462,7 +462,7 @@
       <div class="grid-4">
         <div><div style="font-size:12px;color:var(--text3);margin-bottom:4px">Current Epoch</div><div style="font-weight:700;color:var(--yellow)" id="stat-epoch">—</div></div>
         <div><div style="font-size:12px;color:var(--text3);margin-bottom:4px">Reward Per Entry</div><div style="font-weight:700;color:var(--green)" id="stat-reward">—</div></div>
-        <div><div style="font-size:12px;color:var(--text3);margin-bottom:4px">Entries Until Halving</div><div style="font-weight:700" id="stat-epoch-rem">—</div></div>
+        <div><div style="font-size:12px;color:var(--text3);margin-bottom:4px">CNOVA Minted</div><div style="font-weight:700" id="stat-minted">—</div></div>
         <div><div style="font-size:12px;color:var(--text3);margin-bottom:4px">Total CNOVA Supply</div><div style="font-weight:700" id="stat-supply">—</div></div>
       </div>
     </div>
@@ -1215,7 +1215,9 @@ async function loadConveyorBeltStats(){
       }
       const qpos=await mx.positionOf(userAddr).catch(()=>0n);
       const qNum=Number(qpos);
-      const mObj=await mx.members(userAddr).catch(()=>null);
+      let mObj=await mx.members(userAddr).catch(()=>null);
+      // Retry once if call failed
+      if(!mObj){ await new Promise(r=>setTimeout(r,500)); mObj=await mx.members(userAddr).catch(()=>null); }
       if(!mObj||!mObj.isRegistered){
         myNextEl.textContent='Not in '+tierN;
         myNextEl.style.color='var(--text3)';
@@ -1276,7 +1278,12 @@ async function loadHomeStats(){
     const tm=new ethers.Contract(ADDRESSES.tierManager,TIER_MANAGER_ABI,readProvider);
     const[mem,floor,reserve,wc,ft]=await Promise.all([t1.totalMembers(),tr.floorPriceFormatted(),tr.usdcReserve(),tm.primeOrAboveCount(),tm.fastTrackEnabled()]);
     await new Promise(r=>setTimeout(r,300));
-    const[minted,supply,epoch,reward,epochRem]=await Promise.all([tk.totalMinted(),tk.totalSupply(),tk.currentEpoch(),tk.currentRewardPerEntry(),tk.epochMembersRemaining()]);
+    // Fetch each separately so one failure doesn't block others
+    const epoch=await tk.currentEpoch().catch(()=>0);
+    const reward=await tk.currentRewardPerEntry().catch(()=>0n);
+    const epochRem=await tk.epochMembersRemaining().catch(()=>0n);
+    const minted=await tk.totalMinted().catch(()=>0n);
+    const supply=await tk.totalSupply().catch(()=>0n);
     document.getElementById('stat-members').textContent=mem.toString();
     document.getElementById('stat-floor').textContent=u6(floor);
     document.getElementById('stat-reserve').textContent=u6(reserve);
@@ -1295,13 +1302,13 @@ async function loadHomeStats(){
     const rf=parseFloat(ethers.formatUnits(reward,18)).toLocaleString(undefined,{maximumFractionDigits:0});
     const mf=parseFloat(ethers.formatUnits(minted,18)).toLocaleString(undefined,{maximumFractionDigits:0});
     const sf=parseFloat(ethers.formatUnits(supply,18)).toLocaleString(undefined,{maximumFractionDigits:0});
-    document.getElementById('stat-epoch-badge').textContent=ename;
-    document.getElementById('stat-epoch-reward-sub').textContent=rf+' CNOVA per entry';
-    document.getElementById('stat-epoch').textContent=ename+'  (Epoch '+edisp+')';
-    document.getElementById('stat-reward').textContent=rf+' CNOVA';
-    document.getElementById('stat-epoch-rem').textContent=epochRem.toString()+' entries';
-    document.getElementById('stat-minted').textContent=mf;
-    document.getElementById('stat-supply').textContent=sf||'—';
+    const seb=document.getElementById('stat-epoch-badge');if(seb)seb.textContent=ename;
+    const sers=document.getElementById('stat-epoch-reward-sub');if(sers)sers.textContent=rf+' CNOVA per entry';
+    const seEl=document.getElementById('stat-epoch');if(seEl)seEl.textContent=ename+'  (Epoch '+edisp+')';
+    const srEl=document.getElementById('stat-reward');if(srEl)srEl.textContent=rf+' CNOVA';
+    const serEl=document.getElementById('stat-epoch-rem');if(serEl)serEl.textContent=epochRem.toString()+' entries';
+    const mintedEl=document.getElementById('stat-minted');if(mintedEl)mintedEl.textContent=mf;
+    const ssEl=document.getElementById('stat-supply');if(ssEl)ssEl.textContent=sf||'0';
     // Fetch totalSupply separately in case batch fails
     try{
       const supplyRaw=await tk.totalSupply();
@@ -1325,7 +1332,10 @@ async function loadRegisterTab(){
   try{
     const usdc=new ethers.Contract(ADDRESSES.usdc,USDC_ABI,readProvider);
     const t1=new ethers.Contract(ADDRESSES.matrices[1],MATRIX_ABI,readProvider);
-    const[bal,allow,member]=await Promise.all([usdc.balanceOf(userAddr),usdc.allowance(userAddr,ADDRESSES.matrices[1]),t1.members(userAddr)]);
+    let bal=0n,allow=0n,member={isRegistered:false};
+    try{bal=await usdc.balanceOf(userAddr);}catch(_){}
+    try{allow=await usdc.allowance(userAddr,ADDRESSES.matrices[1]);}catch(_){}
+    try{member=await t1.members(userAddr);}catch(_){}
     balanceEl.textContent=u6(bal);
     const fee=TIER_FEES_USDC[1];
     if(allow>=fee)allowanceEl.innerHTML='<span style="color:var(--green)">$10 Approved ✓</span>';
@@ -1412,7 +1422,10 @@ async function loadDashboard(){
     const tm=new ethers.Contract(ADDRESSES.tierManager,TIER_MANAGER_ABI,readProvider);
     const tr=new ethers.Contract(ADDRESSES.treasury,TREASURY_ABI,readProvider);
     const tk=new ethers.Contract(ADDRESSES.token,TOKEN_ABI,readProvider);
-    const[m1,ct,floor]=await Promise.all([t1.members(userAddr),tm.memberTier(userAddr),tr.floorPrice()]);
+    // Get floor price separately - Treasury call can fail without blocking dashboard
+    let floor=0n;
+    try{floor=await tr.floorPrice();}catch(_){floor=0n;}
+    const[m1,ct]=await Promise.all([t1.members(userAddr),tm.memberTier(userAddr)]);
     if(!m1.isRegistered){notR.style.display='block';con.style.display='none';return;}
     notR.style.display='none';con.style.display='block';
     const tier=Number(ct)||1;
@@ -1436,12 +1449,19 @@ async function loadDashboard(){
     const waEl=document.getElementById('dash-withdraw-amount');if(waEl)waEl.textContent=u6(totW);
     const teaEl=document.getElementById('dash-total-earned');if(teaEl)teaEl.textContent=u6(totE);
     const bwEl=document.getElementById('btn-withdraw');if(bwEl)bwEl.disabled=totW===0n;
-    const cy1=await t1.cyclesCompleted(userAddr);
-    const cyEl=document.getElementById('dash-cycles');if(cyEl)cyEl.textContent=cy1.toString();
-    const cw=await tk.balanceOf(userAddr);
-    const cv=(BigInt(cw)*BigInt(floor))/BigInt(1e18);
-    document.getElementById('dash-cnova').textContent=parseFloat(ethers.formatUnits(cw,18)).toFixed(2)+' CNOVA';
-    document.getElementById('dash-cnova-val').textContent=u6(cv);
+    try{
+      const cy1=await t1.cyclesCompleted(userAddr);
+      const cyEl=document.getElementById('dash-cycles');if(cyEl)cyEl.textContent=cy1.toString();
+    }catch(e){console.warn('cycles fetch:',e.message);}
+    try{
+      const cw=await tk.balanceOf(userAddr);
+      const cv=(BigInt(cw)*BigInt(floor))/BigInt(1e18);
+      const cnovaEl=document.getElementById('dash-cnova');
+      if(cnovaEl)cnovaEl.textContent=parseFloat(ethers.formatUnits(cw,18)).toFixed(2)+' CNOVA';
+      const cnovaValEl=document.getElementById('dash-cnova-val');
+      if(cnovaValEl)cnovaValEl.textContent=u6(cv);
+      console.log('CNOVA balance:',ethers.formatUnits(cw,18));
+    }catch(e){console.error('CNOVA balance fetch failed:',e.message,e);}
     try{
       const all=await fetchAllMembersV3(t1,null);
       const cnt=all.filter(({data:m})=>m.referrer.toLowerCase()===userAddr.toLowerCase()).length;
