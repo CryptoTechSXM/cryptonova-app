@@ -1709,7 +1709,7 @@ async function showUpgradeCardIfEligible(){
     // If memberTier=0 (direct Tier1 registration not synced to TierManager)
     if(Number(currentTier)===0&&member.isRegistered){
       upgradeCard.style.display='block';
-      upgradeCard.innerHTML='<div style="font-size:15px;font-weight:700;margin-bottom:8px">⬆️ Upgrade Tier</div><div style="background:rgba(245,158,11,.1);border:1px solid rgba(245,158,11,.3);border-radius:8px;padding:12px;font-size:13px;color:var(--yellow);margin-bottom:12px">⚠️ Your Tier 1 registration needs a one-time admin sync before you can upgrade. Please contact the admin with your wallet address: <strong style="color:var(--text);font-family:monospace">'+userAddr+'</strong></div>';
+      upgradeCard.innerHTML='<div style="font-size:15px;font-weight:700;margin-bottom:8px">⬆️ Upgrade Tier</div><div style="background:rgba(59,130,246,.08);border:1px solid rgba(59,130,246,.3);border-radius:8px;padding:14px;font-size:13px;color:var(--text2);margin-bottom:12px"><div style="font-weight:700;color:var(--blue);margin-bottom:6px">⏳ Preparing your upgrade access…</div>Your account is being synced automatically. This usually takes less than 5 minutes after registration.<br><br><strong style="color:var(--text)">Refresh this page in a moment</strong> and the upgrade option will appear.<br><br><span style="font-size:11px;color:var(--text3)">Wallet: '+userAddr.slice(0,10)+'…'+userAddr.slice(-6)+'</span></div><button class="btn btn-ghost full-w" onclick="loadRegisterTab()">↻ Check Again</button>';
       return;
     }
     upgradeCard.style.display='block';
