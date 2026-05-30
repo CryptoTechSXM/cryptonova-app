@@ -1636,9 +1636,10 @@ async function loadMyTree(){
     const queuePos = await t1.positionOf(userAddr).catch(()=>0n);
       const isActiveNow = Number(queuePos) > 0 && Number(queuePos) <= 64;
       const tierN=TIER_NAMES[tier]||('Tier '+tier);
-      const posDisplay = Number(queuePos) > 0 ? 'Queue Position: #' + queuePos + ' of 64' : 'Re-entering queue';
+      const aw4disp=await t1.ACTIVE_WINDOW().catch(()=>5n);
+      const posDisplay = Number(queuePos) > 0 ? 'Queue Position: #' + queuePos + ' of ' + aw4disp : 'Re-entering queue';
       document.getElementById('matrix-pos-level').textContent = '🏅 ' + tierN + ' · ' + posDisplay;
-    document.getElementById('matrix-pos-slots').textContent='♻️ Cycles completed: '+cy.toString();
+    document.getElementById('matrix-pos-slots').textContent='♻️ Cycles: '+cy.toString()+' | Window: '+awNum+' slots';
     document.getElementById('matrix-pos-cycle').textContent='💰 Earned: '+u6(BigInt(m.totalEarned));
     await loadQueueView();
   }catch(e){toast('Error: '+e.message,'error');}
