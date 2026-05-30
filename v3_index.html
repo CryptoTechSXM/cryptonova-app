@@ -990,15 +990,19 @@
     </div>
 
     <!-- ── Contract Addresses ── -->
-    <div class="section-title" style="margin-top:32px"><div class="dot"></div> Deployed Contracts (Base Sepolia Testnet)</div>
-    <div class="card">
-      <div style="font-size:13px;color:var(--text2);margin-bottom:14px">These addresses are for testing only. Mainnet addresses will replace these at Phase 3 launch.</div>
-      <div class="info-row"><span class="info-key">Network</span><span class="info-val">Base Sepolia Testnet</span></div>
-      <div class="info-row"><span class="info-key">Entry Point — Tier 1 (Nova Seed)</span><span class="info-val addr">0x3b2E0f282C46B060485e7277D080732310FF5DeA</span></div>
-      <div class="info-row"><span class="info-key">CNOVA Token</span><span class="info-val addr">0x16aA142C705aC0DCCD6923558071D5FD6E9f4De3</span></div>
-      <div class="info-row"><span class="info-key">MockUSDC (testnet)</span><span class="info-val addr">0x2D8B7b5eDec96bE441b6fb0D45D74a2BcE2C639a</span></div>
-      <div style="margin-top:14px;font-size:12px;color:var(--text3)">
-        Explorer: <a href="https://sepolia.basescan.org" target="_blank" style="color:var(--blue)">sepolia.basescan.org</a>
+    <div class="section-title" style="margin-top:32px"><div class="dot"></div> Deployed Contracts</div>
+    <div class="card" style="text-align:center;padding:32px 24px">
+      <div style="font-size:32px;margin-bottom:12px">🔒</div>
+      <div style="font-size:16px;font-weight:700;margin-bottom:8px">Contract Addresses Hidden During Testnet</div>
+      <div style="font-size:14px;color:var(--text2);max-width:420px;margin:0 auto;line-height:1.7">
+        Smart contract addresses will be published publicly after mainnet launch, 
+        once ownership has been renounced and the community has reached sufficient scale.
+        This protects the protocol from duplication before it is fully established.
+      </div>
+      <div style="margin-top:16px;display:flex;gap:12px;justify-content:center;flex-wrap:wrap">
+        <div style="padding:10px 18px;background:var(--green-dim);border:1px solid var(--green2);border-radius:8px;font-size:13px;color:var(--green)">✅ Smart Contracts Deployed</div>
+        <div style="padding:10px 18px;background:var(--bg3);border:1px solid var(--border);border-radius:8px;font-size:13px;color:var(--text2)">🔗 Network: Base (Ethereum L2)</div>
+        <div style="padding:10px 18px;background:var(--bg3);border:1px solid var(--border);border-radius:8px;font-size:13px;color:var(--text2)">🛡️ Verified &amp; Tested</div>
       </div>
     </div>
 
@@ -1083,6 +1087,7 @@ const TREASURY_ABI = [
   {"inputs":[],"name":"floorPrice","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},
   {"inputs":[],"name":"floorPriceFormatted","outputs":[{"internalType":"uint256","name":"dollars6dec","type":"uint256"}],"stateMutability":"view","type":"function"},
   {"inputs":[],"name":"usdcReserve","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},
+  {"inputs":[{"internalType":"uint256","name":"cnovaAmount","type":"uint256"}],"name":"redeemAtFloor","outputs":[],"stateMutability":"nonpayable","type":"function"},
 ];
 const TOKEN_ABI = [
   {"inputs":[{"internalType":"address","name":"account","type":"address"}],"name":"balanceOf","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},
