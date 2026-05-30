@@ -669,6 +669,26 @@
             Withdraw to Wallet
           </button>
           <div id="withdraw-status" style="margin-top:12px;font-size:13px;color:var(--text2)"></div>
+
+          <!-- Redeem CNOVA for USDC at floor price -->
+          <div style="margin-top:20px;padding-top:16px;border-top:1px solid var(--border)">
+            <div style="font-size:14px;font-weight:700;margin-bottom:4px">🔥 Redeem CNOVA → USDC</div>
+            <div style="font-size:12px;color:var(--text3);margin-bottom:12px">Burn CNOVA at the current floor price to receive USDC from treasury.</div>
+            <div class="info-row"><span class="info-key">Your CNOVA</span><span class="info-val green" id="redeem-cnova-bal">—</span></div>
+            <div class="info-row"><span class="info-key">Floor Price</span><span class="info-val" id="redeem-floor">—</span></div>
+            <div class="info-row"><span class="info-key">You Receive</span><span class="info-val green" id="redeem-out">—</span></div>
+            <div style="display:flex;gap:8px;margin-top:12px">
+              <input type="text" id="redeem-amount" placeholder="CNOVA to redeem"
+                style="flex:1;background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:9px 12px;color:var(--text);font-size:13px;outline:none"
+                oninput="updateRedeemPreview()" />
+              <button class="btn btn-ghost" onclick="setMaxRedeem()" style="padding:9px 14px;font-size:12px">Max</button>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:8px;margin-top:10px">
+              <button class="btn btn-ghost full-w" id="btn-redeem-approve" onclick="approveCNOVAForRedeem()" disabled>Step 1: Approve CNOVA</button>
+              <button class="btn btn-ghost full-w" id="btn-redeem" onclick="doRedeemAtFloor()" disabled>Step 2: Redeem for USDC</button>
+            </div>
+            <div id="redeem-status" style="margin-top:10px;font-size:13px;color:var(--text2)"></div>
+          </div>
         </div>
         <div class="card">
           <div class="section-title" style="margin-bottom:12px"><div class="dot"></div> Member Info — <span id="dash-tier-name" style="color:var(--green);font-size:14px">—</span></div>
@@ -742,7 +762,7 @@
 
     <div class="grid-4" style="margin-bottom:20px">
       <div class="card-sm"><div class="stat-label">Total Nodes</div><div class="stat-value" id="matrix-nodes">—</div></div>
-      <div class="card-sm"><div class="stat-label">Active Window</div><div class="stat-value" id="matrix-bfs">—</div></div>
+      <div class="card-sm"><div class="stat-label">Active Window</div><div class="stat-value" id="matrix-bfs">64 slots</div></div>
       <div class="card-sm"><div class="stat-label">Cycle Fill</div><div class="stat-value" id="matrix-fill">—</div></div>
       <div class="card-sm" style="border-color:var(--green2)">
         <div class="stat-label" id="matrix-my-node-label">My Node ID</div>
@@ -970,15 +990,19 @@
     </div>
 
     <!-- ── Contract Addresses ── -->
-    <div class="section-title" style="margin-top:32px"><div class="dot"></div> Deployed Contracts (Base Sepolia Testnet)</div>
-    <div class="card">
-      <div style="font-size:13px;color:var(--text2);margin-bottom:14px">These addresses are for testing only. Mainnet addresses will replace these at Phase 3 launch.</div>
-      <div class="info-row"><span class="info-key">Network</span><span class="info-val">Base Sepolia Testnet</span></div>
-      <div class="info-row"><span class="info-key">Entry Point — Tier 1 (Nova Seed)</span><span class="info-val addr">0x3b2E0f282C46B060485e7277D080732310FF5DeA</span></div>
-      <div class="info-row"><span class="info-key">CNOVA Token</span><span class="info-val addr">0x16aA142C705aC0DCCD6923558071D5FD6E9f4De3</span></div>
-      <div class="info-row"><span class="info-key">MockUSDC (testnet)</span><span class="info-val addr">0x2D8B7b5eDec96bE441b6fb0D45D74a2BcE2C639a</span></div>
-      <div style="margin-top:14px;font-size:12px;color:var(--text3)">
-        Explorer: <a href="https://sepolia.basescan.org" target="_blank" style="color:var(--blue)">sepolia.basescan.org</a>
+    <div class="section-title" style="margin-top:32px"><div class="dot"></div> Deployed Contracts</div>
+    <div class="card" style="text-align:center;padding:32px 24px">
+      <div style="font-size:32px;margin-bottom:12px">🔒</div>
+      <div style="font-size:16px;font-weight:700;margin-bottom:8px">Contract Addresses Hidden During Testnet</div>
+      <div style="font-size:14px;color:var(--text2);max-width:420px;margin:0 auto;line-height:1.7">
+        Smart contract addresses will be published publicly after mainnet launch, 
+        once ownership has been renounced and the community has reached sufficient scale.
+        This protects the protocol from duplication before it is fully established.
+      </div>
+      <div style="margin-top:16px;display:flex;gap:12px;justify-content:center;flex-wrap:wrap">
+        <div style="padding:10px 18px;background:var(--green-dim);border:1px solid var(--green2);border-radius:8px;font-size:13px;color:var(--green)">✅ Smart Contracts Deployed</div>
+        <div style="padding:10px 18px;background:var(--bg3);border:1px solid var(--border);border-radius:8px;font-size:13px;color:var(--text2)">🔗 Network: Base (Ethereum L2)</div>
+        <div style="padding:10px 18px;background:var(--bg3);border:1px solid var(--border);border-radius:8px;font-size:13px;color:var(--text2)">🛡️ Verified &amp; Tested</div>
       </div>
     </div>
 
@@ -1063,6 +1087,7 @@ const TREASURY_ABI = [
   {"inputs":[],"name":"floorPrice","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},
   {"inputs":[],"name":"floorPriceFormatted","outputs":[{"internalType":"uint256","name":"dollars6dec","type":"uint256"}],"stateMutability":"view","type":"function"},
   {"inputs":[],"name":"usdcReserve","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},
+  {"inputs":[{"internalType":"uint256","name":"cnovaAmount","type":"uint256"}],"name":"redeemAtFloor","outputs":[],"stateMutability":"nonpayable","type":"function"},
 ];
 const TOKEN_ABI = [
   {"inputs":[{"internalType":"address","name":"account","type":"address"}],"name":"balanceOf","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},
@@ -1071,6 +1096,8 @@ const TOKEN_ABI = [
   {"inputs":[],"name":"epochMembersRemaining","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},
   {"inputs":[],"name":"totalMinted","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},
   {"inputs":[],"name":"totalSupply","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},
+  {"inputs":[{"internalType":"address","name":"spender","type":"address"},{"internalType":"uint256","name":"amount","type":"uint256"}],"name":"approve","outputs":[{"internalType":"bool","name":"","type":"bool"}],"stateMutability":"nonpayable","type":"function"},
+  {"inputs":[{"internalType":"address","name":"owner","type":"address"},{"internalType":"address","name":"spender","type":"address"}],"name":"allowance","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},
 ];
 const USDC_ABI = [
   {"inputs":[{"name":"spender","type":"address"},{"name":"amount","type":"uint256"}],"name":"approve","outputs":[{"type":"bool"}],"stateMutability":"nonpayable","type":"function"},
@@ -1302,13 +1329,13 @@ async function loadHomeStats(){
     const rf=parseFloat(ethers.formatUnits(reward,18)).toLocaleString(undefined,{maximumFractionDigits:0});
     const mf=parseFloat(ethers.formatUnits(minted,18)).toLocaleString(undefined,{maximumFractionDigits:0});
     const sf=parseFloat(ethers.formatUnits(supply,18)).toLocaleString(undefined,{maximumFractionDigits:0});
-    document.getElementById('stat-epoch-badge').textContent=ename;
-    document.getElementById('stat-epoch-reward-sub').textContent=rf+' CNOVA per entry';
-    document.getElementById('stat-epoch').textContent=ename+'  (Epoch '+edisp+')';
-    document.getElementById('stat-reward').textContent=rf+' CNOVA';
-    document.getElementById('stat-epoch-rem').textContent=epochRem.toString()+' entries';
+    const seb=document.getElementById('stat-epoch-badge');if(seb)seb.textContent=ename;
+    const sers=document.getElementById('stat-epoch-reward-sub');if(sers)sers.textContent=rf+' CNOVA per entry';
+    const seEl=document.getElementById('stat-epoch');if(seEl)seEl.textContent=ename+'  (Epoch '+edisp+')';
+    const srEl=document.getElementById('stat-reward');if(srEl)srEl.textContent=rf+' CNOVA';
+    const serEl=document.getElementById('stat-epoch-rem');if(serEl)serEl.textContent=epochRem.toString()+' entries';
     const mintedEl=document.getElementById('stat-minted');if(mintedEl)mintedEl.textContent=mf;
-    document.getElementById('stat-supply').textContent=sf||'—';
+    const ssEl=document.getElementById('stat-supply');if(ssEl)ssEl.textContent=sf||'0';
     // Fetch totalSupply separately in case batch fails
     try{
       const supplyRaw=await tk.totalSupply();
@@ -1332,7 +1359,10 @@ async function loadRegisterTab(){
   try{
     const usdc=new ethers.Contract(ADDRESSES.usdc,USDC_ABI,readProvider);
     const t1=new ethers.Contract(ADDRESSES.matrices[1],MATRIX_ABI,readProvider);
-    const[bal,allow,member]=await Promise.all([usdc.balanceOf(userAddr),usdc.allowance(userAddr,ADDRESSES.matrices[1]),t1.members(userAddr)]);
+    let bal=0n,allow=0n,member={isRegistered:false};
+    try{bal=await usdc.balanceOf(userAddr);}catch(_){}
+    try{allow=await usdc.allowance(userAddr,ADDRESSES.matrices[1]);}catch(_){}
+    try{member=await t1.members(userAddr);}catch(_){}
     balanceEl.textContent=u6(bal);
     const fee=TIER_FEES_USDC[1];
     if(allow>=fee)allowanceEl.innerHTML='<span style="color:var(--green)">$10 Approved ✓</span>';
@@ -1419,7 +1449,10 @@ async function loadDashboard(){
     const tm=new ethers.Contract(ADDRESSES.tierManager,TIER_MANAGER_ABI,readProvider);
     const tr=new ethers.Contract(ADDRESSES.treasury,TREASURY_ABI,readProvider);
     const tk=new ethers.Contract(ADDRESSES.token,TOKEN_ABI,readProvider);
-    const[m1,ct,floor]=await Promise.all([t1.members(userAddr),tm.memberTier(userAddr),tr.floorPrice()]);
+    // Get floor price separately - Treasury call can fail without blocking dashboard
+    let floor=0n;
+    try{floor=await tr.floorPrice();}catch(_){floor=0n;}
+    const[m1,ct]=await Promise.all([t1.members(userAddr),tm.memberTier(userAddr)]);
     if(!m1.isRegistered){notR.style.display='block';con.style.display='none';return;}
     notR.style.display='none';con.style.display='block';
     const tier=Number(ct)||1;
@@ -1443,12 +1476,20 @@ async function loadDashboard(){
     const waEl=document.getElementById('dash-withdraw-amount');if(waEl)waEl.textContent=u6(totW);
     const teaEl=document.getElementById('dash-total-earned');if(teaEl)teaEl.textContent=u6(totE);
     const bwEl=document.getElementById('btn-withdraw');if(bwEl)bwEl.disabled=totW===0n;
-    const cy1=await t1.cyclesCompleted(userAddr);
-    const cyEl=document.getElementById('dash-cycles');if(cyEl)cyEl.textContent=cy1.toString();
-    const cw=await tk.balanceOf(userAddr);
-    const cv=(BigInt(cw)*BigInt(floor))/BigInt(1e18);
-    const cnovaEl=document.getElementById('dash-cnova');if(cnovaEl)cnovaEl.textContent=parseFloat(ethers.formatUnits(cw,18)).toFixed(2)+' CNOVA';
-    const cnovaValEl=document.getElementById('dash-cnova-val');if(cnovaValEl)cnovaValEl.textContent=u6(cv);
+    try{
+      const cy1=await t1.cyclesCompleted(userAddr);
+      const cyEl=document.getElementById('dash-cycles');if(cyEl)cyEl.textContent=cy1.toString();
+    }catch(e){console.warn('cycles fetch:',e.message);}
+    try{
+      const cw=await tk.balanceOf(userAddr);
+      const cv=(BigInt(cw)*BigInt(floor))/BigInt(1e18);
+      const cnovaEl=document.getElementById('dash-cnova');
+      if(cnovaEl)cnovaEl.textContent=parseFloat(ethers.formatUnits(cw,18)).toFixed(2)+' CNOVA';
+      const cnovaValEl=document.getElementById('dash-cnova-val');
+      if(cnovaValEl)cnovaValEl.textContent=u6(cv);
+      console.log('CNOVA balance:',ethers.formatUnits(cw,18));
+    }catch(e){console.error('CNOVA balance fetch failed:',e.message,e);}
+    await loadRedeemSection();
     try{
       const all=await fetchAllMembersV3(t1,null);
       const cnt=all.filter(({data:m})=>m.referrer.toLowerCase()===userAddr.toLowerCase()).length;
@@ -1518,7 +1559,13 @@ async function loadQueueView(){
   try{
     const tier=getSelectedMatrixTier();
     const mx=new ethers.Contract(ADDRESSES.matrices[tier],MATRIX_ABI,readProvider);
-    const total=Number(await mx.totalMembers());
+    let total=0;
+    try{total=Number(await mx.totalMembers());}catch(_){
+      await new Promise(r=>setTimeout(r,1000));
+      try{total=Number(await mx.totalMembers());}catch(e2){
+        lEl.innerHTML='❌ RPC error loading queue — please refresh and try again.';return;
+      }
+    }
     let myAddr=userAddr;
     if(total===0){lEl.innerHTML='No members in Tier '+tier+' yet.';return;}
     // Fetch all members and their positions
@@ -1579,7 +1626,8 @@ async function loadMyTree(){
     const queuePos = await t1.positionOf(userAddr).catch(()=>0n);
       const isActiveNow = Number(queuePos) > 0 && Number(queuePos) <= 64;
       const tierN=TIER_NAMES[tier]||('Tier '+tier);
-      document.getElementById('matrix-pos-level').textContent='🏅 '+tierN+' · Queue Position: '+(Number(queuePos)||'re-entering')+' / 64';
+      const posDisplay = Number(queuePos) > 0 ? 'Queue Position: #' + queuePos + ' of 64' : 'Re-entering queue';
+      document.getElementById('matrix-pos-level').textContent = '🏅 ' + tierN + ' · ' + posDisplay;
     document.getElementById('matrix-pos-slots').textContent='♻️ Cycles completed: '+cy.toString();
     document.getElementById('matrix-pos-cycle').textContent='💰 Earned: '+u6(BigInt(m.totalEarned));
     await loadQueueView();
@@ -1837,6 +1885,118 @@ async function showUpgradeCardIfEligible(){
     if(wgEl){wgEl.style.display='block';document.getElementById('upgrade-whale-progress').textContent=wn;const ftb=document.getElementById('upgrade-fasttrack-badge');if(ftb)ftb.innerHTML=fastTrack?'<span class="pill pill-green" style="font-size:11px">🔓 Fast-track ON</span>':'<span class="pill pill-yellow" style="font-size:11px">🔒 '+(25-wn)+' more needed</span>';}
   }catch(e){console.error('showUpgradeCard',e);}
 }
+
+
+// ═══════════════════════════════════════════════════════════════════════
+// CNOVA REDEMPTION — Burn CNOVA at floor price → receive USDC
+// ═══════════════════════════════════════════════════════════════════════
+async function loadRedeemSection(){
+  if(!userAddr)return;
+  try{
+    const tk=new ethers.Contract(ADDRESSES.token,TOKEN_ABI,readProvider);
+    const tr=new ethers.Contract(ADDRESSES.treasury,TREASURY_ABI,readProvider);
+    const[cw,floor]=await Promise.all([tk.balanceOf(userAddr),tr.floorPrice().catch(()=>0n)]);
+    const cwFmt=parseFloat(ethers.formatUnits(cw,18)).toFixed(2);
+    const rbalEl=document.getElementById('redeem-cnova-bal');if(rbalEl)rbalEl.textContent=cwFmt+' CNOVA';
+    const floorFmt=floor>0n?u6((BigInt(cw)*floor)/BigInt(1e18)):'$0.00';
+    const rflEl=document.getElementById('redeem-floor');const floorUsd=Number(floor)/1e6;  // floorPrice() returns 6-dec USDC per 1 CNOVA
+    if(rflEl)rflEl.textContent=floor>0n?('$'+floorUsd.toFixed(4)+' per CNOVA'):'—';
+    // Store floor for preview calculation
+    window._redeemFloorUsd=floorUsd;
+    const approveBtn=document.getElementById('btn-redeem-approve');
+    const redeemBtn=document.getElementById('btn-redeem');
+    if(approveBtn)approveBtn.disabled=BigInt(cw)===0n;
+    if(approveBtn)approveBtn.className='btn full-w '+(BigInt(cw)>0n?'btn-green':'btn-ghost');
+    updateRedeemPreview();
+  }catch(e){console.warn('loadRedeemSection:',e.message);}
+}
+
+function updateRedeemPreview(){
+  const input=document.getElementById('redeem-amount');
+  const outEl=document.getElementById('redeem-out');
+  if(!input||!outEl)return;
+  const amt=parseFloat(input.value)||0;
+  if(amt<=0){outEl.textContent='—';return;}
+  // Use displayed floor from card
+  const flEl=document.getElementById('redeem-floor');
+  const flText=flEl?flEl.textContent:'';
+  const floorPer=window._redeemFloorUsd||0;
+  if(floorPer>0){
+    const usdcOut=amt*floorPer;
+    outEl.textContent='~$'+usdcOut.toFixed(4)+' USDC';
+  } else { outEl.textContent='—'; }
+}
+
+function setMaxRedeem(){
+  const balEl=document.getElementById('redeem-cnova-bal');
+  const input=document.getElementById('redeem-amount');
+  if(!balEl||!input)return;
+  const bal=parseFloat(balEl.textContent)||0;
+  input.value=bal.toFixed(2);
+  updateRedeemPreview();
+  // Check approval
+  checkCNOVAApproval();
+}
+
+async function checkCNOVAApproval(){
+  if(!userAddr)return;
+  const input=document.getElementById('redeem-amount');
+  const amt=parseFloat(input?input.value:0)||0;
+  if(amt<=0)return;
+  const amtWei=BigInt(Math.floor(amt*1e10))*BigInt(1e8); // convert to 18 decimals
+  const tk=new ethers.Contract(ADDRESSES.token,TOKEN_ABI,readProvider);
+  const allow=await tk.allowance(userAddr,ADDRESSES.treasury).catch(()=>0n);
+  const appBtn=document.getElementById('btn-redeem-approve');
+  const redBtn=document.getElementById('btn-redeem');
+  if(BigInt(allow)>=amtWei){
+    if(appBtn){appBtn.disabled=true;appBtn.className='btn btn-ghost full-w';appBtn.textContent='✓ Approved';}
+    if(redBtn){redBtn.disabled=false;redBtn.className='btn full-w btn-green';}
+  }
+}
+
+async function approveCNOVAForRedeem(){
+  if(!signer){toast('Connect wallet first','error');return;}
+  const input=document.getElementById('redeem-amount');
+  const amt=parseFloat(input?input.value:0)||0;
+  if(amt<=0){toast('Enter CNOVA amount first','error');return;}
+  const amtWei=BigInt(Math.floor(amt*1e10))*BigInt(1e8);
+  const btn=document.getElementById('btn-redeem-approve');
+  try{
+    btn.disabled=true;btn.innerHTML='<span class="spinner"></span>Approving…';
+    setStatus('redeem-status','⏳ Approving CNOVA…','var(--text2)');
+    const tk=new ethers.Contract(ADDRESSES.token,TOKEN_ABI,signer);
+    const tx=await tk.approve(ADDRESSES.treasury,amtWei);
+    await tx.wait();
+    btn.disabled=true;btn.textContent='✓ Approved';btn.className='btn btn-ghost full-w';
+    const redBtn=document.getElementById('btn-redeem');
+    if(redBtn){redBtn.disabled=false;redBtn.className='btn full-w btn-green';}
+    setStatus('redeem-status','✅ Approved! Click Step 2 to redeem.','var(--green)');
+    toast('CNOVA approved for redemption','success');
+  }catch(e){const msg=e.reason||e.message||'Unknown';setStatus('redeem-status','❌ '+msg,'var(--red)');btn.disabled=false;btn.textContent='Step 1: Approve CNOVA';toast('Approval failed','error');}
+}
+
+async function doRedeemAtFloor(){
+  if(!signer){toast('Connect wallet first','error');return;}
+  const input=document.getElementById('redeem-amount');
+  const amt=parseFloat(input?input.value:0)||0;
+  if(amt<=0){toast('Enter CNOVA amount first','error');return;}
+  const amtWei=BigInt(Math.floor(amt*1e10))*BigInt(1e8);
+  const btn=document.getElementById('btn-redeem');
+  try{
+    btn.disabled=true;btn.innerHTML='<span class="spinner"></span>Redeeming…';
+    setStatus('redeem-status','⏳ Waiting for MetaMask…','var(--text2)');
+    const tr=new ethers.Contract(ADDRESSES.treasury,TREASURY_ABI,signer);
+    const tx=await tr.redeemAtFloor(amtWei);
+    setStatus('redeem-status','⏳ Confirming…','var(--text2)');
+    const receipt=await tx.wait();
+    setStatus('redeem-status','✅ Redeemed! Tx: '+receipt.hash.slice(0,10)+'…','var(--green)');
+    toast('CNOVA redeemed for USDC! 🎉','success',6000);
+    btn.disabled=true;btn.textContent='Step 2: Redeem for USDC';
+    if(input)input.value='';
+    await loadDashboard();
+  }catch(e){const msg=e.reason||e.message||'Unknown';setStatus('redeem-status','❌ '+msg,'var(--red)');btn.disabled=false;btn.textContent='Step 2: Redeem for USDC';toast('Redemption failed','error');}
+}
+
 
 function toggleTheme(){const isLight=document.body.classList.toggle('light');localStorage.setItem('theme',isLight?'light':'dark');document.getElementById('theme-btn').textContent=isLight?'🌙 Dark':'☀️ Light';}
 (function(){const saved=localStorage.getItem('theme');if(saved==='light'){document.body.classList.add('light');document.addEventListener('DOMContentLoaded',()=>{const btn=document.getElementById('theme-btn');if(btn)btn.textContent='🌙 Dark';});}})();
