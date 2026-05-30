@@ -544,7 +544,10 @@
             <input type="text" id="upgrade-referrer" readonly style="background:var(--bg3);opacity:.7;cursor:not-allowed;font-family:monospace;font-size:12px" placeholder="Loading referrer…" />
           </div>
           <div style="display:flex;flex-direction:column;gap:10px">
-            <button class="btn btn-ghost full-w" id="btn-upgrade-approve" onclick="approveUSDCForUpgrade()" disabled>Step 1: Approve USDC 🔒</button>
+            <div style="display:flex;gap:8px">
+              <button class="btn btn-ghost" style="flex:1" id="btn-upgrade-approve" onclick="approveUSDCForUpgrade()" disabled>Step 1: Approve USDC 🔒</button>
+              <button class="btn btn-ghost" style="padding:0 14px" onclick="checkUpgradeAllowance()" title="Check approval status">↻</button>
+            </div>
             <button class="btn btn-ghost full-w" id="btn-upgrade" onclick="doUpgrade()" disabled>Step 2: Upgrade Tier</button>
           </div>
           <div id="upgrade-status" style="margin-top:14px;font-size:13px;color:var(--text2)"></div>
@@ -1555,20 +1558,26 @@ function populateUpgradeSelect(currentTier, fastTrack, whaleCount, cyclesDone, c
   const sel=document.getElementById('upgrade-tier-select'),hint=document.getElementById('upgrade-tier-hint');
   if(!sel)return;
   const cyclesOk=cyclesDone>=cyclesNeeded;
+  // Without fast-track: only next tier in sequence is available
+  // With fast-track: any tier above current is available (still needs cycles)
   if(hint){
     if(!cyclesOk)hint.innerHTML='<span style="color:var(--yellow)">⏳ Complete <strong>'+cyclesNeeded+' cycle'+(cyclesNeeded>1?'s':'')+'</strong> in Tier '+currentTier+' to unlock upgrade. You have <strong>'+cyclesDone+'</strong> so far.</span>';
     else hint.innerHTML='<span style="color:var(--green)">✅ Cycle requirement met ('+cyclesDone+'/'+cyclesNeeded+') — select your target tier.</span>';
   }
   sel.innerHTML='<option value="">Select a tier…</option>';
   for(let t=currentTier+1;t<=7;t++){
-    const whaleLocked=!fastTrack&&t>=5&&currentTier<t-1;
-    const cycleLocked=!cyclesOk;
+    // Sequential lock: without fast-track, only currentTier+1 is available
+    const sequentialLocked = !fastTrack && t > currentTier + 1;
+    // Whale gate: tiers 5-7 need fast-track OR sequential access
+    const whaleLocked = !fastTrack && t >= 5 && currentTier < t - 1;
+    // Cycles lock: current tier cycles not done
+    const cycleLocked = !cyclesOk;
+    const isLocked = cycleLocked || sequentialLocked || whaleLocked;
     const opt=document.createElement('option');
     opt.value=t;
     let label='Tier '+t+' — '+TIER_NAMES[t]+'  ($'+TIER_FEES[t].toLocaleString()+')';
     const exitCycles=CYCLE_REQ[t]||0;
-    const canEnter=(cyclesDone>=cyclesNeeded)&&!whaleLocked;
-    if(!cyclesDone>=cyclesNeeded){
+    if(isLocked){
       label+='  🔒 Need '+(cyclesNeeded-cyclesDone)+' more cycle(s) in Tier '+currentTier;
     } else if(t<7&&exitCycles>0){
       label+='  ('+exitCycles+' cycle'+(exitCycles!==1?'s':'')+' to exit)';
@@ -1577,7 +1586,8 @@ function populateUpgradeSelect(currentTier, fastTrack, whaleCount, cyclesDone, c
     if(whaleLocked)label+='  🐋 whale gate';
     else if(whaleLocked)label+='  🐋 whale gate';
     opt.textContent=label;
-    if(cycleLocked||whaleLocked)opt.disabled=true;
+    if(!isLocked){opt.style.color='var(--green,#00e5a0)';opt.style.fontWeight='700';}
+    if(isLocked)opt.disabled=true;
     sel.appendChild(opt);
   }
 }
@@ -1589,13 +1599,31 @@ function onUpgradeTierChange(){
   if(!t){if(appBtn){appBtn.disabled=true;appBtn.className='btn btn-ghost full-w';appBtn.textContent='Step 1: Approve USDC 🔒';}if(upgBtn){upgBtn.disabled=true;upgBtn.className='btn btn-ghost full-w';}return;}
   if(hint)hint.textContent='Fee: $'+TIER_FEES[t].toLocaleString()+' USDC → '+TIER_NAMES[t];
   if(appBtn){appBtn.disabled=false;appBtn.className='btn full-w btn-green';appBtn.textContent='Step 1: Approve $'+TIER_FEES[t].toLocaleString()+' USDC 🔒';}
-  if(upgBtn){upgBtn.disabled=true;upgBtn.className='btn btn-ghost full-w';upgBtn.textContent='Step 2: Upgrade to '+TIER_NAMES[t];}
+  if(upgBtn){upgBtn.disabled=false;upgBtn.className='btn full-w btn-green';upgBtn.textContent='Step 2: Upgrade to '+TIER_NAMES[t];}
   if(userAddr){
     const usdc=new ethers.Contract(ADDRESSES.usdc,USDC_ABI,readProvider);
     usdc.allowance(userAddr,ADDRESSES.tierManager).then(a=>{
       if(a>=TIER_FEES_USDC[t]){if(appBtn){appBtn.disabled=true;appBtn.className='btn btn-ghost full-w';appBtn.textContent='✓ Approved';}if(upgBtn){upgBtn.disabled=false;upgBtn.className='btn full-w btn-green';}}
     }).catch(()=>{});
   }
+}
+
+async function checkUpgradeAllowance(){
+  const t=parseInt((document.getElementById('upgrade-tier-select')||{}).value);
+  if(!t||!userAddr)return;
+  const usdc=new ethers.Contract(ADDRESSES.usdc,USDC_ABI,readProvider);
+  try{
+    const a=await usdc.allowance(userAddr,ADDRESSES.tierManager);
+    const appBtn=document.getElementById('btn-upgrade-approve');
+    const upgBtn=document.getElementById('btn-upgrade');
+    if(BigInt(a)>=TIER_FEES_USDC[t]){
+      if(appBtn){appBtn.disabled=true;appBtn.className='btn btn-ghost';appBtn.textContent='✓ Approved';}
+      if(upgBtn){upgBtn.disabled=false;upgBtn.className='btn full-w btn-green';upgBtn.textContent='Step 2: Upgrade to '+TIER_NAMES[t];}
+      setStatus('upgrade-status','✅ Approved! Click Step 2 to upgrade.','var(--green)');
+    } else {
+      setStatus('upgrade-status','⚠️ Approval not detected yet. Try refreshing again.','var(--yellow)');
+    }
+  }catch(_){}
 }
 
 async function approveUSDCForUpgrade(){
@@ -1612,7 +1640,8 @@ async function approveUSDCForUpgrade(){
     setStatus('upgrade-status','✅ Approved! Now click Step 2.','var(--green)');
     toast('$'+TIER_FEES[t].toLocaleString()+' USDC approved!','success');
     btn.disabled=true;btn.textContent='✓ Approved';
-    const upgBtn=document.getElementById('btn-upgrade');if(upgBtn){upgBtn.disabled=false;upgBtn.className='btn full-w btn-green';}
+    // Double-check on-chain allowance to reliably enable Step 2
+    await checkUpgradeAllowance();
   }catch(e){const msg=e.reason||e.message||'Unknown';const isSync = msg.includes('join tier 1');
     const isCycles = msg.includes('cycles not complete');
     if(isSync){
@@ -1627,6 +1656,46 @@ async function approveUSDCForUpgrade(){
 }
 
 // Show upgrade card after registration
+async function doUpgrade(){
+  if(!signer){toast('Connect wallet first','error');return;}
+  const t=parseInt(document.getElementById('upgrade-tier-select').value);
+  const referrer=(document.getElementById('upgrade-referrer').value||'').trim();
+  if(!t){toast('Select a tier first','error');return;}
+  if(referrer&&!ethers.isAddress(referrer)){toast('Invalid referrer address','error');return;}
+  const btn=document.getElementById('btn-upgrade');
+  // Always verify allowance on click
+  try{
+    setStatus('upgrade-status','⏳ Checking approval…','var(--text2)');
+    const usdcR=new ethers.Contract(ADDRESSES.usdc,USDC_ABI,readProvider);
+    const allowance=await usdcR.allowance(userAddr,ADDRESSES.tierManager);
+    if(BigInt(allowance)<TIER_FEES_USDC[t]){
+      setStatus('upgrade-status','⚠️ Please complete Step 1 — approve $'+TIER_FEES[t].toLocaleString()+' USDC first.','var(--yellow)');
+      return;
+    }
+  }catch(_){}
+  try{
+    btn.disabled=true;btn.innerHTML='<span class="spinner"></span>Upgrading…';
+    setStatus('upgrade-status','⏳ Waiting for MetaMask…','var(--text2)');
+    const tm=new ethers.Contract(ADDRESSES.tierManager,TIER_MANAGER_ABI,signer);
+    const ref=referrer||ethers.ZeroAddress;
+    const tx=await tm.upgradeTier(t,ref);
+    setStatus('upgrade-status','⏳ Confirming…','var(--text2)');
+    const receipt=await tx.wait();
+    setStatus('upgrade-status','🎉 Upgraded to '+TIER_NAMES[t]+'! Tx: '+receipt.hash.slice(0,10)+'…','var(--green)');
+    toast('🎉 Welcome to '+TIER_NAMES[t]+'!','success',8000);
+    btn.textContent='✅ Upgraded to '+TIER_NAMES[t];btn.disabled=true;btn.className='btn btn-ghost full-w';
+    await loadRegisterTab();await loadDashboard();
+  }catch(e){
+    const msg=e.reason||e.message||'Unknown';
+    const isSync=msg.includes('join tier 1');
+    const isCycles=msg.includes('cycles not complete');
+    if(isSync) setStatus('upgrade-status','⏳ Registration needs a sync. Try again in a few minutes.','var(--yellow)');
+    else if(isCycles) setStatus('upgrade-status','🔒 Cycle requirement not met. Complete your cycles first.','var(--yellow)');
+    else{ setStatus('upgrade-status','❌ '+msg,'var(--red)'); toast('Upgrade failed','error'); }
+    btn.disabled=false;btn.textContent='Step 2: Upgrade Tier';
+  }
+}
+
 async function showUpgradeCardIfEligible(){
   if(!userAddr)return;
   const upgradeCard=document.getElementById('upgrade-card');if(!upgradeCard)return;
@@ -1645,7 +1714,12 @@ async function showUpgradeCardIfEligible(){
     }
     upgradeCard.style.display='block';
     let cyclesDone=0,cyclesNeeded=CYCLE_REQ[ct]||1;
-    try{const cy=await t1.cyclesCompleted(userAddr);cyclesDone=Number(cy);}catch(_){}
+    try{
+      // Read cycles from the CURRENT tier matrix, not always Tier 1
+      const currentMx=new ethers.Contract(ADDRESSES.matrices[ct],MATRIX_ABI,readProvider);
+      const cy=await currentMx.cyclesCompleted(userAddr);
+      cyclesDone=Number(cy);
+    }catch(_){}
     populateUpgradeSelect(ct,fastTrack,Number(whaleCount),cyclesDone,cyclesNeeded);
     // Show popup if newly eligible to upgrade
     if(cyclesDone>=cyclesNeeded && ct<7){
