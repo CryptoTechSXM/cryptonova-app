@@ -171,7 +171,7 @@ function toggleTheme() {
     <div class="glossary-card" data-terms="usdt tether stablecoin bsc">
       <div class="acronym">USDT</div>
       <div class="full-name">Tether USD</div>
-      <div class="definition">A stablecoin pegged 1:1 to the US Dollar, issued by Tether. Used as the entry fee currency on the BNB Chain (BSC) version of CryptoNova.</div>
+      <div class="definition">A stablecoin pegged 1:1 to the US Dollar, issued by Tether. A stablecoin pegged 1:1 to the US Dollar, issued by Tether. Not used in CryptoNova V3 (Base USDC only).</div>
     </div>
 
     <div class="glossary-card" data-terms="defi decentralized finance">
@@ -183,25 +183,25 @@ function toggleTheme() {
     <div class="glossary-card" data-terms="bsc bnb smart chain binance">
       <div class="acronym">BSC</div>
       <div class="full-name">BNB Smart Chain</div>
-      <div class="definition">The blockchain network operated by Binance. CryptoNova will be deployed on BSC in addition to Base, allowing participants to enter using USDT on the BNB ecosystem.</div>
+      <div class="definition">The blockchain network operated by Binance. BNB Smart Chain is planned for a future deployment. CryptoNova V3 currently runs on Base using USDC.</div>
     </div>
 
     <div class="glossary-card" data-terms="evm ethereum virtual machine">
       <div class="acronym">EVM</div>
       <div class="full-name">Ethereum Virtual Machine</div>
-      <div class="definition">The runtime environment that executes smart contract code. Both Base and BSC are EVM-compatible, meaning the same smart contract code and wallet addresses work across both chains.</div>
+      <div class="definition">The runtime environment that executes smart contract code. Base is EVM-compatible, meaning standard Ethereum wallets (MetaMask, Coinbase Wallet, etc.) work seamlessly.</div>
     </div>
 
     <div class="glossary-card" data-terms="tx transaction hash on-chain">
       <div class="acronym">TX / TXN</div>
       <div class="full-name">Transaction</div>
-      <div class="definition">A blockchain transaction. Every entry, withdrawal, or token distribution is a TX recorded permanently on-chain. You can verify any TX on BaseScan or BscScan using the transaction hash.</div>
+      <div class="definition">A blockchain transaction. Every entry, withdrawal, or token distribution is a TX recorded permanently on-chain. You can verify any TX on BaseScan (sepolia.basescan.org) using the transaction hash.</div>
     </div>
 
     <div class="glossary-card" data-terms="gas fee network blockchain">
       <div class="acronym">Gas</div>
       <div class="full-name">Gas Fee (Network Fee)</div>
-      <div class="definition">A small fee paid in the native blockchain currency (ETH on Base, BNB on BSC) to compensate validators for processing your transaction. Gas fees are separate from the USDC entry fee and are typically very small on Base.</div>
+      <div class="definition">A small fee paid in the native blockchain currency (ETH on Base, BNB on BSC) to compensate validators for processing your transaction. Gas fees are separate from the USDC entry fee and are typically less than $0.01 on Base.</div>
     </div>
 
     <div class="glossary-card" data-terms="roi return on investment earnings">
@@ -233,7 +233,7 @@ function toggleTheme() {
       </button>
       <div class="faq-answer">
         <div class="faq-answer-inner">
-          <p>CryptoNova is a decentralized, autonomous smart contract protocol deployed on the Base blockchain (and BNB Chain). It runs a 7-tier conveyor belt compensation structure where participants pay an entry fee in USDC/USDT and receive payments from subsequent participants according to predefined on-chain rules.</p>
+          <p>CryptoNova is a decentralized, autonomous smart contract protocol deployed on the Base blockchain. It runs a 7-tier conveyor belt compensation structure where participants pay an entry fee in USDC and receive payments from subsequent participants according to predefined on-chain rules.</p>
           <p>The protocol is fully autonomous — no admin can pause, modify, or redirect funds. All logic is enforced by immutable smart contracts.</p>
         </div>
       </div>
@@ -271,7 +271,7 @@ function toggleTheme() {
       </button>
       <div class="faq-answer">
         <div class="faq-answer-inner">
-          <p>The entry fee is <strong>$10.00 USDC</strong> on Base (or $10.00 USDT on BNB Chain). You'll also need a small amount of ETH (Base) or BNB (BSC) to cover gas fees — typically less than $0.10 on Base.</p>
+          <p>The entry fee starts at <strong>$10.00 USDC</strong> (Tier 1 — Nova Seed) and goes up to $1,000 USDC (Tier 7 — SuperNova Spark) depending on which tier you join. You'll also need a small amount of ETH (Base) or BNB (BSC) to cover gas fees — typically less than $0.10 on Base.</p>
           <p>Your $10 is split instantly by the contract: <strong>$3.00</strong> referral bonus → <strong>$4.00</strong> chain payments (7 levels) → <strong>$1.00</strong> into your community wallet → <strong>$1.50</strong> treasury reserve → <strong>$0.50</strong> dev &amp; ops.</p>
         </div>
       </div>
@@ -284,7 +284,7 @@ function toggleTheme() {
       </button>
       <div class="faq-answer">
         <div class="faq-answer-inner">
-          <p>Any EVM-compatible wallet works — MetaMask, Coinbase Wallet, Trust Wallet, and Rabby are all supported. Make sure your wallet is connected to the <strong>Base</strong> network (or BNB Chain for BSC). Never share your seed phrase or private key with anyone.</p>
+          <p>Any EVM-compatible wallet works — MetaMask, Coinbase Wallet, Trust Wallet, and Rabby are all supported. Make sure your wallet is connected to the <strong>Base</strong> network. Never share your seed phrase or private key with anyone.</p>
         </div>
       </div>
     </div>
@@ -314,13 +314,13 @@ function toggleTheme() {
       </button>
       <div class="faq-answer">
         <div class="faq-answer-inner">
-          <p>The conveyor belt queue has 100 active positions. When you join, you take the next available slot. As new members join behind you, you move closer to position 1. When you reach position 1 and one more member joins, your first cycle completes and you re-enter at the back — earning chain pay from every member who joined while you were in the active window.</p>
-          <p>This means members above you in the matrix contribute to filling your downline even if they didn't personally refer anyone to you — the spillover effect benefits everyone deeper in the tree.</p>
+          <p>The conveyor belt queue has 64 active positions. When you join, you take the next available slot. As new members join behind you, you move closer to position 1. When you reach position 1 and one more member joins, your first cycle completes and you re-enter at the back — earning chain pay from every member who joined while you were in the active window.</p>
+          <p>This means members ahead of you in the conveyor belt contribute chain pay earnings to positions behind them as they pass through the active window.</p>
         </div>
       </div>
     </div>
 
-    <div class="faq-item" data-terms="cycle what is 100 slots complete trigger">
+    <div class="faq-item" data-terms="cycle what is 64 slots complete trigger">
       <button class="faq-question" onclick="toggleFaq(this)">
         What is a Cycle?
         <svg class="faq-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="m6 9 6 6 6-6"/></svg>
@@ -446,7 +446,7 @@ function toggleTheme() {
       <div class="faq-answer">
         <div class="faq-answer-inner">
           <p>When you first register, the wallet that referred you is recorded on-chain as your <strong>original referrer</strong> and is locked permanently — it never changes.</p>
-          <p>Every time you auto-cycle through re-entry, your original referrer earns the full <strong>$3.00 referral bonus</strong> again. Not just on your first join — every single cycle, forever. This is by design: the person who worked to bring you in continues to benefit from your ongoing participation.</p>
+          <p>Your referrer earns the <strong>$3.00 referral bonus</strong> when you register and on any tier upgrades you make. This is by design: the person who worked to bring you in continues to benefit from your ongoing participation.</p>
         </div>
       </div>
     </div>
@@ -602,7 +602,7 @@ function toggleTheme() {
       </button>
       <div class="faq-answer">
         <div class="faq-answer-inner">
-          <p>Currently deploying on <strong>Base</strong> (an Ethereum L2 built by Coinbase) using USDC. A parallel deployment on <strong>BNB Smart Chain (BSC)</strong> using USDT is planned. Both chains share the same wallet addresses since they are both EVM-compatible.</p>
+          <p>CryptoNova V3 is deployed on <strong>Base</strong> (an Ethereum L2 built by Coinbase) using USDC. Base offers fast, low-cost transactions (typically under $0.01 per transaction). A BSC deployment may follow in a future version.</p>
         </div>
       </div>
     </div>
