@@ -359,7 +359,7 @@
         <div class="token-icon">CN</div>
         <div>
           <div class="token-name">CNOVA Token <span class="pill pill-green" style="font-size:10px;vertical-align:middle">ERC-20 · Base</span></div>
-          <div class="token-addr">0xc2E1F76c4b587342603d78237ba7c91BaFb163Fe · 18 decimals</div>
+          <div class="token-addr">0x1cCEC550610Ed19b82f41aad82755497DA02D2A3 · 18 decimals</div>
           <div style="font-size:12px;color:var(--text2);margin-top:4px">Earned automatically on every registration. Floor price backed by treasury USDC.</div>
         </div>
       </div>
@@ -1039,18 +1039,18 @@ const RPC_URL  = 'https://sepolia.base.org';
 
 const ADDRESSES = {
   usdc:           '0x2D8B7b5eDec96bE441b6fb0D45D74a2BcE2C639a',
-  token:          '0xc2E1F76c4b587342603d78237ba7c91BaFb163Fe',
-  treasury:       '0xa5108D28Ace44C76dbAe721847419B0BE69273fe',
-  communityWallet:'0x8223FABed17471570f9159F1B627627323A19Ac5',
-  tierManager:    '0xb4257808770721E6e7585d71dd01905B26BCDE0F',
+  token:          '0x1cCEC550610Ed19b82f41aad82755497DA02D2A3',
+  treasury:       '0xe872C64762a00a154b7793E317f3e757ddbc7263',
+  communityWallet:'0x517A974CC9C51cB1c92FFf79A57B721c5ABeA294',
+  tierManager:    '0xb7ABd81C23890e7d835004e6844890144FFb9569',
   matrices: {
-    1:'0xA826DE0c2A70Aca228b5C504106bA4da2F1F337b',
-    2:'0x4Cb5d9ccB88FC6dA5f179d007DA0E89b94E98454',
-    3:'0xfCbcB6dd9F6bC6d05D58Ac93F7F3Af1AA91ccE38',
-    4:'0xd02C2494e71c7ee9183dCd1aB71004Ce364307a8',
-    5:'0x2f6855656C97858006bE8f9878e7E0FAA062025e',
-    6:'0x52a9525EaBbE472F190ff7f7AdF92322e9400A06',
-    7:'0x35208eD124236a2cAd7EfDb335EbefBda83272E0',
+    1:'0x8ceb26E706431BDbaEF3d8a3d9f749ee9685C352',
+    2:'0x9D97dF7A0e08912d19340b8a10d48765F0fc26b1',
+    3:'0x8fd43a0273Ef84860515e02f60e563A24B1117FC',
+    4:'0x21DB16D28540E5f8F09A3649817F974fe1f10Ac0',
+    5:'0xf6A5668A92686015D58C7BC3DA9a3fbb5A1fd630',
+    6:'0x5Bf6f41a0988709e3DC8217aE5e93d428CC13a37',
+    7:'0x82A262Fd0949133B45fe9B9762775F967C1ac3d5',
   },
 };
 const TIER_NAMES={1:'Nova Seed',2:'Nova Rise',3:'Nova Star',4:'Nova Prime',5:'SuperNova Genesis',6:'SuperNova Elite',7:'SuperNova Spark'};
@@ -1293,9 +1293,10 @@ async function getFallbackReferrer(){
     const total=Number(await t1.totalMembers());
     // Use time-based rotation for small pools to avoid always picking #1
     // For large pools use totalMembers for on-chain consistency
-    const useTime=foundingMembers.length<5;
+    // Always use time-based for pools ≤ 20 members to avoid modulo bias
+    const useTime=foundingMembers.length<=20;
     const rotIdx=useTime
-      ? Math.floor(Date.now()/1000)%foundingMembers.length
+      ? Math.floor(Date.now()/30)%foundingMembers.length  // changes every 30ms = different each registration
       : total%foundingMembers.length;
     const addr=foundingMembers[rotIdx];
     console.log('fallback referrer: '+addr+' (idx '+rotIdx+'/'+foundingMembers.length+')');
@@ -1572,7 +1573,9 @@ async function loadQueueView(){
   try{
     const tier=getSelectedMatrixTier();
     const mx=new ethers.Contract(ADDRESSES.matrices[tier],MATRIX_ABI,readProvider);
-    // AW and mem fetched above
+    let AW=5,total=0;
+    try{AW=Number(await mx.ACTIVE_WINDOW());}catch(_){AW=5;}
+    try{total=Number(await mx.totalMembers());}catch(_){total=0;}
     let myAddr=userAddr;
     if(total===0){lEl.innerHTML='No members in Tier '+tier+' yet.';return;}
     // Fetch all members and their positions
@@ -1589,7 +1592,7 @@ async function loadQueueView(){
       rows.push({addr,m,cy,qpos:Number(qpos)});
     }
     // Filter to only active window (positions 1-64) + sort by queue position
-    const active=rows.filter(r=>r.qpos>0&&r.qpos<=64).sort((a,b)=>a.qpos-b.qpos);
+    const active=rows.filter(r=>r.qpos>0&&r.qpos<=AW).sort((a,b)=>a.qpos-b.qpos);
     const reentry=rows.filter(r=>r.qpos===0);
     const tierName=TIER_NAMES[tier]||('Tier '+tier);
     let html=`<div style="margin-bottom:10px;font-size:13px;color:var(--text3)">Showing <strong style="color:var(--text)">${active.length}</strong> active positions in ${tierName} · ${reentry.length} members in re-entry queue</div>`;
