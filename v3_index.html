@@ -409,8 +409,12 @@
           <span class="info-val green" id="stat-cycles-done">—</span>
         </div>
         <div class="info-row">
-          <span class="info-key">Next Cycle At</span>
+          <span class="info-key">Next Global Rotation</span>
           <span class="info-val" id="stat-next-cycle">—</span>
+        </div>
+        <div class="info-row">
+          <span class="info-key">Your Next Cycle</span>
+          <span class="info-val" id="stat-my-next-cycle">Connect wallet</span>
         </div>
         <div style="margin-top:10px;padding:10px 12px;background:var(--bg3);border-radius:8px;font-size:12px;color:var(--text3);line-height:1.6">
           Every 64 members who join behind you = 1 cycle. You rotate to the back and re-enter. Earn chain pay from every member in your window.
@@ -1117,7 +1121,7 @@ async function connectWallet(silent=false) {
     btn.innerHTML='<span class="network-dot"></span>'+userAddr.slice(0,6)+'…'+userAddr.slice(-4);
     btn.classList.add('connected');
     if(!silent)toast('Wallet connected: '+userAddr.slice(0,6)+'…'+userAddr.slice(-4),'success');
-    await loadRegisterTab();await loadDashboard();await loadMatrixStats();
+    await loadHomeStats();await loadRegisterTab();await loadDashboard();await loadMatrixStats();
   } catch(e){if(!silent)toast('Connection failed: '+(e.message||e),'error');}
   finally{isConnecting=false;}
 }
@@ -1203,11 +1207,31 @@ async function loadHomeStats(){
     document.getElementById('stat-filled').textContent=mem.toString();
     // Cycles triggered = total members beyond first 64
     const cyclesDone=Math.max(0,Number(mem)-64);
-    const nextCycleAt=Number(mem)<64?64:(Math.ceil((Number(mem)+1)/64)*64);
+    // Once queue full (64+), every new join = one rotation. Simple: next = totalMembers + 1
+    const nextGlobalRotation=Number(mem)<64?65:Number(mem)+1;
     const cyclesEl=document.getElementById('stat-cycles-done');
-    if(cyclesEl)cyclesEl.textContent=cyclesDone>0?cyclesDone+' rotation'+(cyclesDone!==1?'s':''):'None yet';
+    if(cyclesEl)cyclesEl.textContent=cyclesDone>0?cyclesDone+' rotation'+(cyclesDone!==1?'s':'')+' so far':'None yet';
     const nextEl=document.getElementById('stat-next-cycle');
-    if(nextEl)nextEl.textContent='Member #'+nextCycleAt;
+    if(nextEl)nextEl.textContent='Member #'+nextGlobalRotation+' (next rotation)';
+    // Show user's personal next cycle if connected
+    if(userAddr){
+      try{
+        const t1=new ethers.Contract(ADDRESSES.matrices[1],MATRIX_ABI,readProvider);
+        const qpos=await t1.positionOf(userAddr).catch(()=>0n);
+        const qNum=Number(qpos);
+        const myNextEl=document.getElementById('stat-my-next-cycle');
+        if(myNextEl){
+          if(qNum>0){
+            const myNextAt=Number(mem)+qNum;
+            myNextEl.textContent='Member #'+myNextAt+' (your cycle)';
+            myNextEl.style.color='var(--green)';
+          } else {
+            myNextEl.textContent='Re-entering queue…';
+            myNextEl.style.color='var(--text3)';
+          }
+        }
+      }catch(_){}
+    }
     document.getElementById('stat-pct').textContent=wPct+'%';
     document.getElementById('stat-progress').style.width=wPct+'%';
     document.getElementById('stat-cycle').textContent=ft?'🔓 UNLOCKED':(wn+' / 25');
