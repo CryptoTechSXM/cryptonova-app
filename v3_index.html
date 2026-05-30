@@ -392,26 +392,63 @@
 
     <!-- Cycle progress -->
     <div class="grid-2" style="margin-bottom:24px">
+
+      <!-- Conveyor Belt Card -->
       <div class="card">
-        <div class="section-title" style="margin-bottom:12px"><div class="dot"></div> Current Cycle</div>
-        <div class="info-row"><span class="info-key">Cycle #</span><span class="info-val" id="stat-cycle">—</span></div>
-        <div class="info-row"><span class="info-key">Positions Filled</span><span class="info-val" id="stat-filled">—</span></div>
-        <div class="info-row"><span class="info-key">Cycle Trigger</span><span class="info-val">64 slots (ACTIVE_WINDOW=64)</span></div>
-        <div style="margin-top:12px">
+        <div class="section-title" style="margin-bottom:12px"><div class="dot"></div> Conveyor Belt — Tier 1</div>
+        <div class="info-row">
+          <span class="info-key">Total Members</span>
+          <span class="info-val" id="stat-filled">—</span>
+        </div>
+        <div class="info-row">
+          <span class="info-key">Active Window</span>
+          <span class="info-val">64 slots</span>
+        </div>
+        <div class="info-row">
+          <span class="info-key">Cycles Triggered</span>
+          <span class="info-val green" id="stat-cycles-done">—</span>
+        </div>
+        <div class="info-row">
+          <span class="info-key">Next Cycle At</span>
+          <span class="info-val" id="stat-next-cycle">—</span>
+        </div>
+        <div style="margin-top:10px;padding:10px 12px;background:var(--bg3);border-radius:8px;font-size:12px;color:var(--text3);line-height:1.6">
+          Every 64 members who join behind you = 1 cycle. You rotate to the back and re-enter. Earn chain pay from every member in your window.
+        </div>
+      </div>
+
+      <!-- Whale Gate Card -->
+      <div class="card">
+        <div class="section-title" style="margin-bottom:12px"><div class="dot"></div> 🐋 Whale Gate</div>
+        <div class="info-row">
+          <span class="info-key">SuperNova Genesis Members</span>
+          <span class="info-val" id="stat-cycle">—</span>
+        </div>
+        <div class="info-row">
+          <span class="info-key">Threshold</span>
+          <span class="info-val">25 members</span>
+        </div>
+        <div style="margin-top:10px">
           <div style="display:flex;justify-content:space-between;font-size:12px;color:var(--text3);margin-bottom:4px">
-            <span>Progress</span><span id="stat-pct">0%</span>
+            <span>Progress to Fast-Track</span><span id="stat-pct">0%</span>
           </div>
           <div class="progress-wrap"><div class="progress-bar" id="stat-progress" style="width:0%"></div></div>
         </div>
         <div style="margin-top:8px"><span class="pill" id="stat-status">—</span></div>
+        <div style="margin-top:10px;padding:10px 12px;background:var(--bg3);border-radius:8px;font-size:12px;color:var(--text3);line-height:1.6">
+          When 25 members reach SuperNova Genesis (Tier 5), fast-track unlocks — skip straight to any tier above your current one.
+        </div>
       </div>
-      <div class="card">
-        <div class="section-title" style="margin-bottom:12px"><div class="dot"></div> Mining Epoch</div>
-        <div class="info-row"><span class="info-key">Current Epoch</span><span class="info-val" id="stat-epoch" style="color:var(--yellow)">—</span></div>
-        <div class="info-row"><span class="info-key">Reward Per Entry</span><span class="info-val green" id="stat-reward">—</span></div>
-        <div class="info-row"><span class="info-key">Entries Until Next Epoch</span><span class="info-val" id="stat-epoch-rem">—</span></div>
-        <div class="info-row"><span class="info-key">CNOVA Minted</span><span class="info-val" id="stat-minted">—</span></div>
-        <div class="info-row"><span class="info-key">Total CNOVA Supply</span><span class="info-val" id="stat-supply">—</span></div>
+    </div>
+
+    <!-- Mining Epoch -->
+    <div class="card" style="margin-bottom:24px">
+      <div class="section-title" style="margin-bottom:12px"><div class="dot"></div> ⛏️ CNOVA Mining Epoch</div>
+      <div class="grid-4">
+        <div><div style="font-size:12px;color:var(--text3);margin-bottom:4px">Current Epoch</div><div style="font-weight:700;color:var(--yellow)" id="stat-epoch">—</div></div>
+        <div><div style="font-size:12px;color:var(--text3);margin-bottom:4px">Reward Per Entry</div><div style="font-weight:700;color:var(--green)" id="stat-reward">—</div></div>
+        <div><div style="font-size:12px;color:var(--text3);margin-bottom:4px">Entries Until Halving</div><div style="font-weight:700" id="stat-epoch-rem">—</div></div>
+        <div><div style="font-size:12px;color:var(--text3);margin-bottom:4px">Total CNOVA Supply</div><div style="font-weight:700" id="stat-supply">—</div></div>
       </div>
     </div>
 
@@ -1161,6 +1198,13 @@ async function loadHomeStats(){
     document.getElementById('stat-reserve').textContent=u6(reserve);
     const wn=Number(wc),wPct=Math.min(100,Math.round((wn/25)*100));
     document.getElementById('stat-filled').textContent=mem.toString();
+    // Cycles triggered = total members beyond first 64
+    const cyclesDone=Math.max(0,Number(mem)-64);
+    const nextCycleAt=Number(mem)<64?64:(Math.ceil((Number(mem)+1)/64)*64);
+    const cyclesEl=document.getElementById('stat-cycles-done');
+    if(cyclesEl)cyclesEl.textContent=cyclesDone>0?cyclesDone+' rotation'+(cyclesDone!==1?'s':''):'None yet';
+    const nextEl=document.getElementById('stat-next-cycle');
+    if(nextEl)nextEl.textContent='Member #'+nextCycleAt;
     document.getElementById('stat-pct').textContent=wPct+'%';
     document.getElementById('stat-progress').style.width=wPct+'%';
     document.getElementById('stat-cycle').textContent=ft?'🔓 UNLOCKED':(wn+' / 25');
