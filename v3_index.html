@@ -1257,7 +1257,7 @@ async function loadConveyorBeltStats(){
         myNextEl.textContent='Not in '+tierN;
         myNextEl.style.color='var(--text3)';
       } else if(qNum>0){
-        const myNextAt=Number(mem)<65?(64+qNum):(Number(mem)+qNum);
+        const myNextAt=Number(mem)<(AW+1)?(AW+qNum):(Number(mem)+qNum);
         myNextEl.textContent='Member #'+myNextAt;
         myNextEl.style.color='var(--green)';
       } else {
