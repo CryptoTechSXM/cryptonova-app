@@ -358,7 +358,7 @@
         <div class="token-icon">CN</div>
         <div>
           <div class="token-name">CNOVA Token <span class="pill pill-green" style="font-size:10px;vertical-align:middle">ERC-20 · Base</span></div>
-          <div class="token-addr">0x1B95Fd1A059D9AaDf6eca4530f69C2A7E7F7Fc59 · 18 decimals</div>
+          <div class="token-addr">0x16aA142C705aC0DCCD6923558071D5FD6E9f4De3 · 18 decimals</div>
           <div style="font-size:12px;color:var(--text2);margin-top:4px">Earned automatically on every registration. Floor price backed by treasury USDC.</div>
         </div>
       </div>
@@ -664,6 +664,20 @@
     <div class="section-title"><div class="dot"></div> Matrix Tree View</div>
 
     <div class="card" style="margin-bottom:20px">
+      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:12px">
+        <div style="flex:1;min-width:180px">
+          <label style="display:block;font-size:12px;color:var(--text3);margin-bottom:5px;text-transform:uppercase;letter-spacing:.6px">Viewing Tier</label>
+          <select id="matrix-tier-select" style="width:100%;background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:9px 12px;color:var(--text);font-size:13px;outline:none" onchange="onMatrixTierChange()">
+            <option value="1">Tier 1 — Nova Seed ($10)</option>
+            <option value="2">Tier 2 — Nova Rise ($25)</option>
+            <option value="3">Tier 3 — Nova Star ($50)</option>
+            <option value="4">Tier 4 — Nova Prime ($100)</option>
+            <option value="5">Tier 5 — SuperNova Genesis ($250) 🐋</option>
+            <option value="6">Tier 6 — SuperNova Elite ($500)</option>
+            <option value="7">Tier 7 — SuperNova Spark ($1,000)</option>
+          </select>
+        </div>
+      </div>
       <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
         <button id="btn-load-tree"   class="btn btn-ghost" onclick="setActiveMatrixBtn('btn-load-tree');loadQueueView()">🔄 Load Queue</button>
         <button id="btn-my-position" class="btn btn-ghost" onclick="setActiveMatrixBtn('btn-my-position');loadMyTree()">📍 My Position</button>
@@ -905,8 +919,8 @@
     <div class="card">
       <div style="font-size:13px;color:var(--text2);margin-bottom:14px">These addresses are for testing only. Mainnet addresses will replace these at Phase 3 launch.</div>
       <div class="info-row"><span class="info-key">Network</span><span class="info-val">Base Sepolia Testnet</span></div>
-      <div class="info-row"><span class="info-key">Entry Point — Tier 1 (Nova Seed)</span><span class="info-val addr">0xF4654c779e8AB627EC72aFc516D9e2Fccaa67d89</span></div>
-      <div class="info-row"><span class="info-key">CNOVA Token</span><span class="info-val addr">0x1B95Fd1A059D9AaDf6eca4530f69C2A7E7F7Fc59</span></div>
+      <div class="info-row"><span class="info-key">Entry Point — Tier 1 (Nova Seed)</span><span class="info-val addr">0x3b2E0f282C46B060485e7277D080732310FF5DeA</span></div>
+      <div class="info-row"><span class="info-key">CNOVA Token</span><span class="info-val addr">0x16aA142C705aC0DCCD6923558071D5FD6E9f4De3</span></div>
       <div class="info-row"><span class="info-key">MockUSDC (testnet)</span><span class="info-val addr">0x2D8B7b5eDec96bE441b6fb0D45D74a2BcE2C639a</span></div>
       <div style="margin-top:14px;font-size:12px;color:var(--text3)">
         Explorer: <a href="https://sepolia.basescan.org" target="_blank" style="color:var(--blue)">sepolia.basescan.org</a>
@@ -945,18 +959,18 @@ const RPC_URL  = 'https://sepolia.base.org';
 
 const ADDRESSES = {
   usdc:           '0x2D8B7b5eDec96bE441b6fb0D45D74a2BcE2C639a',
-  token:          '0x1B95Fd1A059D9AaDf6eca4530f69C2A7E7F7Fc59',
-  treasury:       '0x585cE4E573DAd58FE516FA3BDD732fE2eEC41809',
-  communityWallet:'0xf14879CB5bAEcA2eAE7b295dfcF22306fA152E4C',
-  tierManager:    '0x8c9F1FE561eC3c2793bD3273e34711d4E289C815',
+  token:          '0x16aA142C705aC0DCCD6923558071D5FD6E9f4De3',
+  treasury:       '0xa55256Ed90E56DF3009c1a738557B65467dD61e3',
+  communityWallet:'0x4D9a035323B9A09Dc0DD19E54418C2b44f997346',
+  tierManager:    '0x249d6a4502C0b75E7E55d970C031C436855C26d0',
   matrices: {
-    1:'0xF4654c779e8AB627EC72aFc516D9e2Fccaa67d89',
-    2:'0xecD276d0Ce0464dAD554DBd368F8E77F55C36d01',
-    3:'0x88E2A1D87401709C66e30Fa8dA8E402ce7c385Fb',
-    4:'0x68bCF46e7aB9E12EA8bf8C9d1Ac429372afe3100',
-    5:'0xd58a4efFDfD72756C00a8f30ce5E7Bf253056A91',
-    6:'0x05123e30a43385AE7365185c9185faB24a1b5350',
-    7:'0x27b1b3237919344A5158921b83a0dA04953Ad5bD',
+    1:'0x3b2E0f282C46B060485e7277D080732310FF5DeA',
+    2:'0x320Db0CEd7c7b04B24597195E3a09bc2aDf62caB',
+    3:'0x02F83458ac0fd5050aBBb9babBFa29398b39dC6A',
+    4:'0x25bFdF0d9D41d131e25F9cC4198F9d35ED0816b7',
+    5:'0x9541Dd025494276b7aa3924ab1BE2356261b9Cb7',
+    6:'0xaE1401D22a3Ea5d55F2D5E9c8d30BB6F667776dd',
+    7:'0xEC5E9e4c29B848e0DC07CD36AD1378720D24CcB7',
   },
 };
 const TIER_NAMES={1:'Nova Seed',2:'Nova Rise',3:'Nova Star',4:'Nova Prime',5:'SuperNova Genesis',6:'SuperNova Elite',7:'SuperNova Spark'};
@@ -1345,37 +1359,60 @@ async function fetchAllMembersV3(matrix,onProgress){
 // MATRIX TAB
 // ═══════════════════════════════════════════════════════════════════════
 async function loadMatrixStats(){
-  try{const t1=new ethers.Contract(ADDRESSES.matrices[1],MATRIX_ABI,readProvider);const tot=await t1.totalMembers();document.getElementById('matrix-nodes').textContent=tot.toString();document.getElementById('matrix-bfs').textContent='—';document.getElementById('matrix-fill').textContent=tot.toString()+' members';}catch(e){console.error(e);}
+  try{const tier=getSelectedMatrixTier();const t1=new ethers.Contract(ADDRESSES.matrices[tier],MATRIX_ABI,readProvider);const tot=await t1.totalMembers();document.getElementById('matrix-nodes').textContent=tot.toString();document.getElementById('matrix-bfs').textContent='—';document.getElementById('matrix-fill').textContent=tot.toString()+' members';}catch(e){console.error(e);}
+}
+
+function getSelectedMatrixTier(){
+  const sel=document.getElementById('matrix-tier-select');
+  return sel?parseInt(sel.value)||1:1;
+}
+function onMatrixTierChange(){
+  // Reset view when tier changes
+  const tEl=document.getElementById('matrix-tree'),lEl=document.getElementById('matrix-loading');
+  if(tEl)tEl.style.display='none';
+  if(lEl){lEl.innerHTML='Select Load Queue or My Position to view this tier.';lEl.style.display='block';}
+  hideMyPosBanner();
+  // Update stats for selected tier
+  loadMatrixStats();
 }
 
 async function loadQueueView(){
   const tEl=document.getElementById('matrix-tree'),lEl=document.getElementById('matrix-loading');
   lEl.innerHTML='<span class="spinner"></span> Loading member queue…';lEl.style.display='block';tEl.style.display='none';
   try{
-    const t1=new ethers.Contract(ADDRESSES.matrices[1],MATRIX_ABI,readProvider);
-    const total=Number(await t1.totalMembers());
-    let myId=-1;
-    if(userAddr){try{const me=await t1.members(userAddr);if(me.isRegistered)myId=Number(me.id);}catch(_){}}
-    if(total===0){lEl.innerHTML='No members registered yet.';return;}
-    let html=`<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:13px"><thead><tr style="border-bottom:2px solid var(--border);color:var(--text3);text-align:left"><th style="padding:8px 12px">Join #</th><th style="padding:8px 12px">Queue Pos</th><th style="padding:8px 12px">Address</th><th style="padding:8px 12px">Withdrawable</th><th style="padding:8px 12px">Total Earned</th><th style="padding:8px 12px">Cycles</th><th style="padding:8px 12px">Status</th></tr></thead><tbody>`;
+    const tier=getSelectedMatrixTier();
+    const mx=new ethers.Contract(ADDRESSES.matrices[tier],MATRIX_ABI,readProvider);
+    const total=Number(await mx.totalMembers());
+    let myAddr=userAddr;
+    if(total===0){lEl.innerHTML='No members in Tier '+tier+' yet.';return;}
+    // Fetch all members and their positions
     const delay=ms=>new Promise(r=>setTimeout(r,ms));
+    const rows=[];
     for(let i=1;i<=total;i++){
       let addr,m,cy,qpos=0n;
       try{
-        addr=await t1.memberById(i);
-        [m,cy]=await Promise.all([t1.members(addr),t1.cyclesCompleted(addr)]);
-        try{qpos=await t1.positionOf(addr);}catch(_){qpos=0n;}
-        await delay(60);
+        addr=await mx.memberById(i);
+        [m,cy]=await Promise.all([mx.members(addr),mx.cyclesCompleted(addr)]);
+        try{qpos=await mx.positionOf(addr);}catch(_){qpos=0n;}
+        await delay(50);
       }catch(_){continue;}
-      const isMe=Number(m.id)===myId;
-      const qNum=Number(qpos);
-      const isActivePos=qNum>0&&qNum<=64;
+      rows.push({addr,m,cy,qpos:Number(qpos)});
+    }
+    // Filter to only active window (positions 1-64) + sort by queue position
+    const active=rows.filter(r=>r.qpos>0&&r.qpos<=64).sort((a,b)=>a.qpos-b.qpos);
+    const reentry=rows.filter(r=>r.qpos===0);
+    const tierName=TIER_NAMES[tier]||('Tier '+tier);
+    let html=`<div style="margin-bottom:10px;font-size:13px;color:var(--text3)">Showing <strong style="color:var(--text)">${active.length}</strong> active positions in ${tierName} · ${reentry.length} members in re-entry queue</div>`;
+    html+=`<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:13px"><thead><tr style="border-bottom:2px solid var(--border);color:var(--text3);text-align:left"><th style="padding:8px 12px">Position</th><th style="padding:8px 12px">Address</th><th style="padding:8px 12px">Withdrawable</th><th style="padding:8px 12px">Total Earned</th><th style="padding:8px 12px">Cycles</th><th style="padding:8px 12px">Status</th></tr></thead><tbody>`;
+    const allRows=[...active,...reentry];
+    for(const {addr,m,cy,qpos} of allRows){
+      const isMe=myAddr&&addr.toLowerCase()===myAddr.toLowerCase();
+      const isActive=qpos>0;
       const rs=isMe?'background:var(--green-dim);border-bottom:1px solid var(--green2)':'border-bottom:1px solid var(--border)';
-      const qLabel=qNum>0?'#'+qNum:'re-entry';
-      const qColor=qNum>0&&qNum<=10?'var(--green)':qNum>0?'var(--text)':'var(--text3)';
-      const sb=isMe?'<span class="pill pill-green" style="font-size:11px">⭐ YOU</span>':(isActivePos?'<span class="pill pill-blue" style="font-size:11px">Active</span>':'<span style="font-size:11px;color:var(--text3)">Re-entering</span>');
+      const qLabel=qpos>0?'#'+qpos:'↩ Re-entry';
+      const qColor=qpos>0&&qpos<=10?'var(--green)':qpos>0?'var(--text)':'var(--text3)';
+      const sb=isMe?'<span class="pill pill-green" style="font-size:11px">⭐ YOU</span>':(isActive?'<span class="pill pill-blue" style="font-size:11px">Active</span>':'<span style="font-size:11px;color:var(--text3)">Re-entry</span>');
       html+=`<tr style="${rs}">
-        <td style="padding:10px 12px;font-weight:700;color:${isMe?'var(--green)':'var(--text)'}">#${m.id}</td>
         <td style="padding:10px 12px;font-weight:700;color:${qColor}">${qLabel}</td>
         <td style="padding:10px 12px;font-family:monospace;color:var(--text2)">${addr.slice(0,6)}…${addr.slice(-4)}</td>
         <td style="padding:10px 12px;color:${BigInt(m.withdrawable)>0n?'var(--green)':'var(--text3)'};font-weight:600">${u6(m.withdrawable)}</td>
@@ -1384,9 +1421,9 @@ async function loadQueueView(){
         <td style="padding:10px 12px">${sb}</td>
       </tr>`;
     }
-    html+='</tbody></table></div><div style="margin-top:12px;font-size:12px;color:var(--text3)">Showing '+total+' member'+(total!==1?'s':'')+' · Active window: 64 positions · Top 10 in green</div>';
+    html+='</tbody></table></div>';
     tEl.innerHTML=html;tEl.style.display='block';lEl.style.display='none';
-  }catch(e){lEl.innerHTML='❌ Error loading queue: '+(e.shortMessage||e.message);console.error('loadQueueView error:',e);}
+  }catch(e){lEl.innerHTML='❌ Error: '+(e.shortMessage||e.message);console.error('loadQueueView:',e);}
 }
 
 async function loadMatrixTree(){await loadQueueView();}
@@ -1394,7 +1431,8 @@ function navigateToNode(){}
 
 async function loadMyTree(){
   if(!userAddr){toast('Connect wallet first','error');return;}
-  const t1=new ethers.Contract(ADDRESSES.matrices[1],MATRIX_ABI,readProvider);
+  const tier=getSelectedMatrixTier();
+  const t1=new ethers.Contract(ADDRESSES.matrices[tier],MATRIX_ABI,readProvider);
   try{
     const m=await t1.members(userAddr);if(!m.isRegistered){toast('Not registered in Tier 1 yet','error');return;}
     const cy=await t1.cyclesCompleted(userAddr);
@@ -1404,7 +1442,8 @@ async function loadMyTree(){
     const ban=document.getElementById('matrix-pos-banner');ban.style.display='block';
     const queuePos = await t1.positionOf(userAddr).catch(()=>0n);
       const isActiveNow = Number(queuePos) > 0 && Number(queuePos) <= 64;
-      document.getElementById('matrix-pos-level').textContent='🏅 Member #'+m.id+' · Queue Position: '+(Number(queuePos)||'re-entering')+' of 64';
+      const tierN=TIER_NAMES[tier]||('Tier '+tier);
+      document.getElementById('matrix-pos-level').textContent='🏅 '+tierN+' · Queue Position: '+(Number(queuePos)||'re-entering')+' / 64';
     document.getElementById('matrix-pos-slots').textContent='♻️ Cycles completed: '+cy.toString();
     document.getElementById('matrix-pos-cycle').textContent='💰 Earned: '+u6(BigInt(m.totalEarned));
     await loadQueueView();
