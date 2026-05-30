@@ -762,7 +762,7 @@
 
     <div class="grid-4" style="margin-bottom:20px">
       <div class="card-sm"><div class="stat-label">Total Nodes</div><div class="stat-value" id="matrix-nodes">—</div></div>
-      <div class="card-sm"><div class="stat-label">Active Window</div><div class="stat-value" id="matrix-bfs">—</div></div>
+      <div class="card-sm"><div class="stat-label">Active Window</div><div class="stat-value" id="matrix-bfs">64 slots</div></div>
       <div class="card-sm"><div class="stat-label">Cycle Fill</div><div class="stat-value" id="matrix-fill">—</div></div>
       <div class="card-sm" style="border-color:var(--green2)">
         <div class="stat-label" id="matrix-my-node-label">My Node ID</div>
@@ -1559,7 +1559,13 @@ async function loadQueueView(){
   try{
     const tier=getSelectedMatrixTier();
     const mx=new ethers.Contract(ADDRESSES.matrices[tier],MATRIX_ABI,readProvider);
-    const total=Number(await mx.totalMembers());
+    let total=0;
+    try{total=Number(await mx.totalMembers());}catch(_){
+      await new Promise(r=>setTimeout(r,1000));
+      try{total=Number(await mx.totalMembers());}catch(e2){
+        lEl.innerHTML='❌ RPC error loading queue — please refresh and try again.';return;
+      }
+    }
     let myAddr=userAddr;
     if(total===0){lEl.innerHTML='No members in Tier '+tier+' yet.';return;}
     // Fetch all members and their positions
@@ -1620,7 +1626,8 @@ async function loadMyTree(){
     const queuePos = await t1.positionOf(userAddr).catch(()=>0n);
       const isActiveNow = Number(queuePos) > 0 && Number(queuePos) <= 64;
       const tierN=TIER_NAMES[tier]||('Tier '+tier);
-      document.getElementById('matrix-pos-level').textContent='🏅 '+tierN+' · Queue Position: '+(Number(queuePos)||'re-entering')+' / 64';
+      const posDisplay = Number(queuePos) > 0 ? 'Queue Position: #' + queuePos + ' of 64' : 'Re-entering queue';
+      document.getElementById('matrix-pos-level').textContent = '🏅 ' + tierN + ' · ' + posDisplay;
     document.getElementById('matrix-pos-slots').textContent='♻️ Cycles completed: '+cy.toString();
     document.getElementById('matrix-pos-cycle').textContent='💰 Earned: '+u6(BigInt(m.totalEarned));
     await loadQueueView();
