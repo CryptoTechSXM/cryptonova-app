@@ -1249,8 +1249,20 @@ async function getFallbackReferrer(){
   if(!foundingMembersReady){const t0=Date.now();while(!foundingMembersReady&&Date.now()-t0<8000)await new Promise(r=>setTimeout(r,200));}
   if(foundingMembers.length===0)await loadFoundingMembers();
   if(foundingMembers.length===0)return ethers.ZeroAddress;
-  const addr=foundingMembers[fallbackRoundRobin%foundingMembers.length];fallbackRoundRobin++;
-  console.log('fallback referrer:',addr);return addr;
+  // Use on-chain totalMembers as index — consistent across all browsers/devices
+  // Each new registration automatically moves to the next founding member
+  try{
+    const t1=new ethers.Contract(ADDRESSES.matrices[1],MATRIX_ABI,readProvider);
+    const total=Number(await t1.totalMembers());
+    const idx=total%foundingMembers.length;
+    const addr=foundingMembers[idx];
+    console.log('fallback referrer: '+addr+' (pool idx '+idx+'/'+foundingMembers.length+', total members: '+total+')');
+    return addr;
+  }catch(_){
+    // Fallback to session counter if chain read fails
+    const addr=foundingMembers[fallbackRoundRobin%foundingMembers.length];fallbackRoundRobin++;
+    return addr;
+  }
 }
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -1289,7 +1301,14 @@ async function loadHomeStats(){
     document.getElementById('stat-reward').textContent=rf+' CNOVA';
     document.getElementById('stat-epoch-rem').textContent=epochRem.toString()+' entries';
     document.getElementById('stat-minted').textContent=mf;
-    document.getElementById('stat-supply').textContent=sf;
+    document.getElementById('stat-supply').textContent=sf||'—';
+    // Fetch totalSupply separately in case batch fails
+    try{
+      const supplyRaw=await tk.totalSupply();
+      const supplyFmt=parseFloat(ethers.formatUnits(supplyRaw,18)).toLocaleString(undefined,{maximumFractionDigits:0});
+      const supplyEl=document.getElementById('stat-supply');
+      if(supplyEl&&supplyFmt)supplyEl.textContent=supplyFmt+' CNOVA';
+    }catch(e){console.warn('totalSupply fetch failed:',e.message);}
   }catch(e){console.error('loadHomeStats',e);}
 }
 
