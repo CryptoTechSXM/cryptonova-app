@@ -359,7 +359,7 @@
         <div class="token-icon">CN</div>
         <div>
           <div class="token-name">CNOVA Token <span class="pill pill-green" style="font-size:10px;vertical-align:middle">ERC-20 · Base</span></div>
-          <div class="token-addr">0x101F6b91c2b8ae6D4401f51C52E15a9d45aE587C · 18 decimals</div>
+          <div class="token-addr">0x402cA297d6cbab9049883a79920dB67db469ecF9 · 18 decimals</div>
           <div style="font-size:12px;color:var(--text2);margin-top:4px">Earned automatically on every registration. Floor price backed by treasury USDC.</div>
         </div>
       </div>
@@ -1039,18 +1039,18 @@ const RPC_URL  = 'https://sepolia.base.org';
 
 const ADDRESSES = {
   usdc:           '0x2D8B7b5eDec96bE441b6fb0D45D74a2BcE2C639a',
-  token:          '0x101F6b91c2b8ae6D4401f51C52E15a9d45aE587C',
-  treasury:       '0x1d5dC89C8a2004D581Eb60A89D77644338828274',
-  communityWallet:'0xf4cfAda2dBb402886991b840Fc3112C3c9a00f0C',
-  tierManager:    '0x556D1aE584EBAcD92AaEB50B66BF04C959fcAAc7',
+  token:          '0x402cA297d6cbab9049883a79920dB67db469ecF9',
+  treasury:       '0x4895De6216d34087c90AC3F992556812d3592012',
+  communityWallet:'0xE58AD1E942007cfC54d91bF23f93097E16AEf652',
+  tierManager:    '0xdc1D7c47E593E2CB84d4b3D84c249EF0EeA609bc',
   matrices: {
-    1:'0xaCaFa367Ee367aF933FEc35503163081cdfbe6b6',
-    2:'0x6b0586eE2f88b7969660dc27Fce7F95aF24747AD',
-    3:'0xf58d4640e5C7BeFcA6132CDaA17CcB84294f6ea0',
-    4:'0x55790E3f91C2E5C6fE24D481bb626158e848f902',
-    5:'0x66F692e339e260c49928368B321B14d5C564363D',
-    6:'0x29D10385E4913E5ba468220204D740E593b0Bdf4',
-    7:'0xEC74121f71e169f33C9e643424e1357b410dD792',
+    1:'0x082CC1C454aA7504e2B2781579b9Ea8faaeFEF62',
+    2:'0x52F5cd21035217D3486Eb5e3BfeDebFF8a471cfd',
+    3:'0xE88c9c9Ee17207BCBD5c7dDA248058247F297abc',
+    4:'0xBE290f1b2270Eb921B88837fE608c089BA2F0AF3',
+    5:'0xbAe48b2B526AfaC891430Acd2De90392e80cB9A9',
+    6:'0x7FCf5c4fDc15E2a6d4ad2814c678c3dB639c9124',
+    7:'0x9C98A6C6b2b5791d1cA59f8BEBf102bC07FCa75D',
   },
 };
 const TIER_NAMES={1:'Nova Seed',2:'Nova Rise',3:'Nova Star',4:'Nova Prime',5:'SuperNova Genesis',6:'SuperNova Elite',7:'SuperNova Spark'};
@@ -1844,12 +1844,7 @@ async function showUpgradeCardIfEligible(){
     if(!member.isRegistered){upgradeCard.style.display='none';return;}
     const ct=Number(currentTier)||1;
     if(ct>=7){upgradeCard.innerHTML='<div style="color:var(--green);font-weight:700">👑 Max tier reached — SuperNova Spark!</div>';upgradeCard.style.display='block';return;}
-    // If memberTier=0 (direct Tier1 registration not synced to TierManager)
-    if(Number(currentTier)===0&&member.isRegistered){
-      upgradeCard.style.display='block';
-      upgradeCard.innerHTML='<div style="font-size:15px;font-weight:700;margin-bottom:8px">⬆️ Upgrade Tier</div><div style="background:rgba(59,130,246,.08);border:1px solid rgba(59,130,246,.3);border-radius:8px;padding:14px;font-size:13px;color:var(--text2);margin-bottom:12px"><div style="font-weight:700;color:var(--blue);margin-bottom:6px">⏳ Preparing your upgrade access…</div>Your account is being synced automatically. This usually takes less than 5 minutes after registration.<br><br><strong style="color:var(--text)">Refresh this page in a moment</strong> and the upgrade option will appear.<br><br><span style="font-size:11px;color:var(--text3)">Wallet: '+userAddr.slice(0,10)+'…'+userAddr.slice(-6)+'</span></div><button class="btn btn-ghost full-w" onclick="window.location.reload()">↻ Refresh &amp; Check</button>';
-      return;
-    }
+    // V4: auto-sync handled on-chain in upgradeTier() — no message needed
     upgradeCard.style.display='block';
     let cyclesDone=0,cyclesNeeded=CYCLE_REQ[ct]||1;
     try{
