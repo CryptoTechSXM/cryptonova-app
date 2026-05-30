@@ -358,7 +358,7 @@
         <div class="token-icon">CN</div>
         <div>
           <div class="token-name">CNOVA Token <span class="pill pill-green" style="font-size:10px;vertical-align:middle">ERC-20 · Base</span></div>
-          <div class="token-addr">0x3aDD4b15748d28819fd9B7C897eB9Dc97B157B3f · 18 decimals</div>
+          <div class="token-addr">0x16aA142C705aC0DCCD6923558071D5FD6E9f4De3 · 18 decimals</div>
           <div style="font-size:12px;color:var(--text2);margin-top:4px">Earned automatically on every registration. Floor price backed by treasury USDC.</div>
         </div>
       </div>
@@ -392,26 +392,78 @@
 
     <!-- Cycle progress -->
     <div class="grid-2" style="margin-bottom:24px">
+
+      <!-- Conveyor Belt Card -->
       <div class="card">
-        <div class="section-title" style="margin-bottom:12px"><div class="dot"></div> Current Cycle</div>
-        <div class="info-row"><span class="info-key">Cycle #</span><span class="info-val" id="stat-cycle">—</span></div>
-        <div class="info-row"><span class="info-key">Positions Filled</span><span class="info-val" id="stat-filled">—</span></div>
-        <div class="info-row"><span class="info-key">Cycle Trigger</span><span class="info-val">100 slots (ACTIVE_WINDOW=100)</span></div>
-        <div style="margin-top:12px">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;flex-wrap:wrap;gap:8px">
+          <div class="section-title" style="margin-bottom:0"><div class="dot"></div> Conveyor Belt — <span id="cb-tier-label">Tier 1</span></div>
+          <select id="cb-tier-select" style="background:var(--bg3);border:1px solid var(--border);border-radius:6px;padding:5px 10px;color:var(--text);font-size:12px;outline:none" onchange="loadConveyorBeltStats()">
+            <option value="1">T1 — Nova Seed</option>
+            <option value="2">T2 — Nova Rise</option>
+            <option value="3">T3 — Nova Star</option>
+            <option value="4">T4 — Nova Prime</option>
+            <option value="5">T5 — Genesis 🐋</option>
+            <option value="6">T6 — Elite</option>
+            <option value="7">T7 — Spark</option>
+          </select>
+        </div>
+        <div class="info-row">
+          <span class="info-key">Total Members</span>
+          <span class="info-val" id="stat-filled">—</span>
+        </div>
+        <div class="info-row">
+          <span class="info-key">Active Window</span>
+          <span class="info-val">64 slots</span>
+        </div>
+        <div class="info-row">
+          <span class="info-key">Cycles Triggered</span>
+          <span class="info-val green" id="stat-cycles-done">—</span>
+        </div>
+        <div class="info-row">
+          <span class="info-key">Next Global Rotation</span>
+          <span class="info-val" id="stat-next-cycle">—</span>
+        </div>
+        <div class="info-row">
+          <span class="info-key">Your Next Cycle</span>
+          <span class="info-val" id="stat-my-next-cycle">—</span>
+        </div>
+        <div style="margin-top:10px;padding:10px 12px;background:var(--bg3);border-radius:8px;font-size:12px;color:var(--text3);line-height:1.6">
+          Every 64 members who join behind you = 1 cycle. You rotate to the back and re-enter. Earn chain pay from every member in your window.
+        </div>
+      </div>
+
+      <!-- Whale Gate Card -->
+      <div class="card">
+        <div class="section-title" style="margin-bottom:12px"><div class="dot"></div> 🐋 Whale Gate</div>
+        <div class="info-row">
+          <span class="info-key">SuperNova Genesis Members</span>
+          <span class="info-val" id="stat-cycle">—</span>
+        </div>
+        <div class="info-row">
+          <span class="info-key">Threshold</span>
+          <span class="info-val">25 members</span>
+        </div>
+        <div style="margin-top:10px">
           <div style="display:flex;justify-content:space-between;font-size:12px;color:var(--text3);margin-bottom:4px">
-            <span>Progress</span><span id="stat-pct">0%</span>
+            <span>Progress to Fast-Track</span><span id="stat-pct">0%</span>
           </div>
           <div class="progress-wrap"><div class="progress-bar" id="stat-progress" style="width:0%"></div></div>
         </div>
         <div style="margin-top:8px"><span class="pill" id="stat-status">—</span></div>
+        <div style="margin-top:10px;padding:10px 12px;background:var(--bg3);border-radius:8px;font-size:12px;color:var(--text3);line-height:1.6">
+          When 25 members reach SuperNova Genesis (Tier 5), fast-track unlocks — skip straight to any tier above your current one.
+        </div>
       </div>
-      <div class="card">
-        <div class="section-title" style="margin-bottom:12px"><div class="dot"></div> Mining Epoch</div>
-        <div class="info-row"><span class="info-key">Current Epoch</span><span class="info-val" id="stat-epoch" style="color:var(--yellow)">—</span></div>
-        <div class="info-row"><span class="info-key">Reward Per Entry</span><span class="info-val green" id="stat-reward">—</span></div>
-        <div class="info-row"><span class="info-key">Entries Until Next Epoch</span><span class="info-val" id="stat-epoch-rem">—</span></div>
-        <div class="info-row"><span class="info-key">CNOVA Minted</span><span class="info-val" id="stat-minted">—</span></div>
-        <div class="info-row"><span class="info-key">Total CNOVA Supply</span><span class="info-val" id="stat-supply">—</span></div>
+    </div>
+
+    <!-- Mining Epoch -->
+    <div class="card" style="margin-bottom:24px">
+      <div class="section-title" style="margin-bottom:12px"><div class="dot"></div> ⛏️ CNOVA Mining Epoch</div>
+      <div class="grid-4">
+        <div><div style="font-size:12px;color:var(--text3);margin-bottom:4px">Current Epoch</div><div style="font-weight:700;color:var(--yellow)" id="stat-epoch">—</div></div>
+        <div><div style="font-size:12px;color:var(--text3);margin-bottom:4px">Reward Per Entry</div><div style="font-weight:700;color:var(--green)" id="stat-reward">—</div></div>
+        <div><div style="font-size:12px;color:var(--text3);margin-bottom:4px">CNOVA Minted</div><div style="font-weight:700" id="stat-minted">—</div></div>
+        <div><div style="font-size:12px;color:var(--text3);margin-bottom:4px">Total CNOVA Supply</div><div style="font-weight:700" id="stat-supply">—</div></div>
       </div>
     </div>
 
@@ -486,6 +538,34 @@
             <button onclick="copyReferralLink()" id="copy-ref-btn" style="background:var(--green);color:#000;border:none;border-radius:8px;padding:0 16px;font-weight:800;font-size:13px;cursor:pointer;white-space:nowrap;flex-shrink:0">Copy</button>
           </div>
           <div class="form-hint">Tap the <strong>Copy</strong> button, then share with your network. When someone opens your link, your address auto-fills as their referrer.</div>
+        </div>
+
+        <!-- Tier Upgrade Card — shown after Tier 1 registration -->
+        <div class="card" id="upgrade-card" style="display:none;margin-top:20px">
+          <div style="font-size:15px;font-weight:700;margin-bottom:4px">⬆️ Upgrade Tier</div>
+          <div style="font-size:13px;color:var(--text3);margin-bottom:14px">Complete your cycle requirement, then pay the next tier's fee to earn in a bigger pool.</div>
+          <div id="upgrade-whale-gate" style="display:none;margin-bottom:14px;background:rgba(245,158,11,.08);border:1px solid rgba(245,158,11,.3);border-radius:8px;padding:12px;font-size:13px;color:var(--yellow)">
+            🐋 <strong>Whale Gate</strong> — Tiers 5–7 require sequential progression until <span id="upgrade-whale-progress">0</span> / 25 SuperNova Genesis members reached. <span id="upgrade-fasttrack-badge"></span>
+          </div>
+          <div class="form-group">
+            <label>Target Tier</label>
+            <select id="upgrade-tier-select" style="width:100%;background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:11px 14px;color:var(--text);font-size:14px;outline:none" onchange="onUpgradeTierChange()">
+              <option value="">Select a tier…</option>
+            </select>
+            <div class="form-hint" id="upgrade-tier-hint"></div>
+          </div>
+          <div class="form-group">
+            <label>Referrer <span style="color:var(--green);font-weight:600;font-size:11px">🔒 Locked — same as Tier 1</span></label>
+            <input type="text" id="upgrade-referrer" readonly style="background:var(--bg3);opacity:.7;cursor:not-allowed;font-family:monospace;font-size:12px" placeholder="Loading referrer…" />
+          </div>
+          <div style="display:flex;flex-direction:column;gap:10px">
+            <div style="display:flex;gap:8px">
+              <button class="btn btn-ghost" style="flex:1" id="btn-upgrade-approve" onclick="approveUSDCForUpgrade()" disabled>Step 1: Approve USDC 🔒</button>
+              <button class="btn btn-ghost" style="padding:0 14px" onclick="checkUpgradeAllowance()" title="Check approval status">↻</button>
+            </div>
+            <button class="btn btn-ghost full-w" id="btn-upgrade" onclick="doUpgrade()" disabled>Step 2: Upgrade Tier</button>
+          </div>
+          <div id="upgrade-status" style="margin-top:14px;font-size:13px;color:var(--text2)"></div>
         </div>
       </div>
 
@@ -639,20 +719,30 @@
     <div class="section-title"><div class="dot"></div> Matrix Tree View</div>
 
     <div class="card" style="margin-bottom:20px">
-      <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
-        <div style="flex:1;min-width:200px">
-          <label style="display:block;font-size:13px;color:var(--text2);margin-bottom:6px">View from Node ID (or wallet address)</label>
-          <input type="text" id="matrix-input" placeholder="Node ID number or 0x... address" />
+      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:12px">
+        <div style="flex:1;min-width:180px">
+          <label style="display:block;font-size:12px;color:var(--text3);margin-bottom:5px;text-transform:uppercase;letter-spacing:.6px">Viewing Tier</label>
+          <select id="matrix-tier-select" style="width:100%;background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:9px 12px;color:var(--text);font-size:13px;outline:none" onchange="onMatrixTierChange()">
+            <option value="1">Tier 1 — Nova Seed ($10)</option>
+            <option value="2">Tier 2 — Nova Rise ($25)</option>
+            <option value="3">Tier 3 — Nova Star ($50)</option>
+            <option value="4">Tier 4 — Nova Prime ($100)</option>
+            <option value="5">Tier 5 — SuperNova Genesis ($250) 🐋</option>
+            <option value="6">Tier 6 — SuperNova Elite ($500)</option>
+            <option value="7">Tier 7 — SuperNova Spark ($1,000)</option>
+          </select>
         </div>
-        <button id="btn-load-tree"    class="btn btn-ghost"  style="margin-top:20px" onclick="setActiveMatrixBtn('btn-load-tree');loadMatrixTree()">Load Tree</button>
-        <button id="btn-my-position" class="btn btn-ghost"  style="margin-top:20px" onclick="setActiveMatrixBtn('btn-my-position');loadMyTree()">My Position</button>
-        <button id="btn-my-directs"  class="btn btn-ghost"  style="margin-top:20px" onclick="setActiveMatrixBtn('btn-my-directs');loadMyDirects()">👥 My Directs</button>
+      </div>
+      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+        <button id="btn-load-tree"   class="btn btn-ghost" onclick="setActiveMatrixBtn('btn-load-tree');loadQueueView()">🔄 Load Queue</button>
+        <button id="btn-my-position" class="btn btn-ghost" onclick="setActiveMatrixBtn('btn-my-position');loadMyTree()">📍 My Position</button>
+        <button id="btn-my-directs"  class="btn btn-ghost" onclick="setActiveMatrixBtn('btn-my-directs');loadMyDirects()">👥 My Directs</button>
       </div>
     </div>
 
     <div class="grid-4" style="margin-bottom:20px">
       <div class="card-sm"><div class="stat-label">Total Nodes</div><div class="stat-value" id="matrix-nodes">—</div></div>
-      <div class="card-sm"><div class="stat-label">BFS Head</div><div class="stat-value" id="matrix-bfs">—</div></div>
+      <div class="card-sm"><div class="stat-label">Active Window</div><div class="stat-value" id="matrix-bfs">—</div></div>
       <div class="card-sm"><div class="stat-label">Cycle Fill</div><div class="stat-value" id="matrix-fill">—</div></div>
       <div class="card-sm" style="border-color:var(--green2)">
         <div class="stat-label" id="matrix-my-node-label">My Node ID</div>
@@ -772,7 +862,7 @@
               <li><span class="check-icon check-done">✅</span> Mobile MetaMask experience tested and improved</li>
               <li><span class="check-icon check-pending">⏳</span> Collect feedback and fix remaining UX issues</li>
               <li><span class="check-icon check-pending">⏳</span> Record tutorial video / walkthrough for non-crypto members</li>
-              <li><span class="check-icon check-pending">⏳</span> Test full matrix cycle: 254 positions → auto-reset → cycle 2</li>
+              <li><span class="check-icon check-pending">⏳</span> Test full matrix cycle: 100 positions → rotation → cycle 2</li>
               <li><span class="check-icon check-pending">⏳</span> Confirm referral link flow works end-to-end for all members</li>
             </ul>
           </div>
@@ -883,11 +973,9 @@
     <div class="section-title" style="margin-top:32px"><div class="dot"></div> Deployed Contracts (Base Sepolia Testnet)</div>
     <div class="card">
       <div style="font-size:13px;color:var(--text2);margin-bottom:14px">These addresses are for testing only. Mainnet addresses will replace these at Phase 3 launch.</div>
-      <div class="info-row"><span class="info-key">CNOVAToken</span><span class="info-val addr">0x3aDD4b15748d28819fd9B7C897eB9Dc97B157B3f</span></div>
-      <div class="info-row"><span class="info-key">CNOVATreasury</span><span class="info-val addr">0x9DA57b7765192d0c3B147C5ee674A9a459268208</span></div>
-      <div class="info-row"><span class="info-key">TierManager</span><span class="info-val addr">0x82c93CAB376C557FB9E32D325D3eC9d5fFaf3624</span></div>
-      <div class="info-row"><span class="info-key">Tier 1 — Nova Seed (W=100)</span><span class="info-val addr">0x001DCe1E58C3F22ec1983504A232b06B46F85e9f</span></div>
-      <div class="info-row"><span class="info-key">Tier 5 — SuperNova Genesis 🐋</span><span class="info-val addr">0xd5261831F594b6342a870266DEb209C500cD59Ec</span></div>
+      <div class="info-row"><span class="info-key">Network</span><span class="info-val">Base Sepolia Testnet</span></div>
+      <div class="info-row"><span class="info-key">Entry Point — Tier 1 (Nova Seed)</span><span class="info-val addr">0x3b2E0f282C46B060485e7277D080732310FF5DeA</span></div>
+      <div class="info-row"><span class="info-key">CNOVA Token</span><span class="info-val addr">0x16aA142C705aC0DCCD6923558071D5FD6E9f4De3</span></div>
       <div class="info-row"><span class="info-key">MockUSDC (testnet)</span><span class="info-val addr">0x2D8B7b5eDec96bE441b6fb0D45D74a2BcE2C639a</span></div>
       <div style="margin-top:14px;font-size:12px;color:var(--text3)">
         Explorer: <a href="https://sepolia.basescan.org" target="_blank" style="color:var(--blue)">sepolia.basescan.org</a>
@@ -919,25 +1007,25 @@
 
 <script>
 // ═══════════════════════════════════════════════════════════════════════
-// CONFIG — V3 7-Tier System (Base Sepolia, ACTIVE_WINDOW=100)
+// CONFIG — V3 7-Tier System (Base Sepolia, ACTIVE_WINDOW=64)
 // ═══════════════════════════════════════════════════════════════════════
 const CHAIN_ID = 84532;
 const RPC_URL  = 'https://sepolia.base.org';
 
 const ADDRESSES = {
   usdc:           '0x2D8B7b5eDec96bE441b6fb0D45D74a2BcE2C639a',
-  token:          '0x3aDD4b15748d28819fd9B7C897eB9Dc97B157B3f',
-  treasury:       '0x9DA57b7765192d0c3B147C5ee674A9a459268208',
-  communityWallet:'0x52Fd50a54Dde9feDD6bb1a8f6E37692353826dE3',
-  tierManager:    '0x82c93CAB376C557FB9E32D325D3eC9d5fFaf3624',
+  token:          '0x16aA142C705aC0DCCD6923558071D5FD6E9f4De3',
+  treasury:       '0xa55256Ed90E56DF3009c1a738557B65467dD61e3',
+  communityWallet:'0x4D9a035323B9A09Dc0DD19E54418C2b44f997346',
+  tierManager:    '0x249d6a4502C0b75E7E55d970C031C436855C26d0',
   matrices: {
-    1:'0x001DCe1E58C3F22ec1983504A232b06B46F85e9f',
-    2:'0x9be58869C2829C0EFAD246D856bCadaD390363f4',
-    3:'0x215D9bAB3344c24A000d3Bd634c08673370A8f5c',
-    4:'0x98D4CEC738F3cc40d05a35c0F38a821B425A9BDe',
-    5:'0xd5261831F594b6342a870266DEb209C500cD59Ec',
-    6:'0x669308e16715eE6EfCd13B18C081D0e07b5907f5',
-    7:'0x34eB626aBac75372eA4a94f2d7b295580486F0eA',
+    1:'0x3b2E0f282C46B060485e7277D080732310FF5DeA',
+    2:'0x320Db0CEd7c7b04B24597195E3a09bc2aDf62caB',
+    3:'0x02F83458ac0fd5050aBBb9babBFa29398b39dC6A',
+    4:'0x25bFdF0d9D41d131e25F9cC4198F9d35ED0816b7',
+    5:'0x9541Dd025494276b7aa3924ab1BE2356261b9Cb7',
+    6:'0xaE1401D22a3Ea5d55F2D5E9c8d30BB6F667776dd',
+    7:'0xEC5E9e4c29B848e0DC07CD36AD1378720D24CcB7',
   },
 };
 const TIER_NAMES={1:'Nova Seed',2:'Nova Rise',3:'Nova Star',4:'Nova Prime',5:'SuperNova Genesis',6:'SuperNova Elite',7:'SuperNova Spark'};
@@ -953,6 +1041,8 @@ const MATRIX_ABI = [
   {"inputs":[],"name":"totalMembers","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},
   {"inputs":[],"name":"ENTRY_FEE","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},
   {"inputs":[],"name":"ACTIVE_WINDOW","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},
+  {"inputs":[{"internalType":"address","name":"member","type":"address"}],"name":"positionOf","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},
+  {"inputs":[{"internalType":"address","name":"member","type":"address"}],"name":"isActive","outputs":[{"internalType":"bool","name":"","type":"bool"}],"stateMutability":"view","type":"function"},
   {"inputs":[{"internalType":"address","name":"referrer","type":"address"}],"name":"register","outputs":[],"stateMutability":"nonpayable","type":"function"},
   {"inputs":[],"name":"withdraw","outputs":[],"stateMutability":"nonpayable","type":"function"},
   {"anonymous":false,"inputs":[{"indexed":true,"internalType":"address","name":"member","type":"address"},{"indexed":true,"internalType":"address","name":"referrer","type":"address"},{"indexed":false,"internalType":"uint256","name":"memberId","type":"uint256"},{"indexed":false,"internalType":"uint256","name":"position","type":"uint256"},{"indexed":false,"internalType":"uint256","name":"cnovaRewarded","type":"uint256"}],"name":"MemberRegistered","type":"event"},
@@ -1042,7 +1132,7 @@ async function connectWallet(silent=false) {
     btn.innerHTML='<span class="network-dot"></span>'+userAddr.slice(0,6)+'…'+userAddr.slice(-4);
     btn.classList.add('connected');
     if(!silent)toast('Wallet connected: '+userAddr.slice(0,6)+'…'+userAddr.slice(-4),'success');
-    await loadRegisterTab();await loadDashboard();await loadMatrixStats();
+    await loadHomeStats();await loadConveyorBeltStats();await loadRegisterTab();await loadDashboard();await loadMatrixStats();
   } catch(e){if(!silent)toast('Connection failed: '+(e.message||e),'error');}
   finally{isConnecting=false;}
 }
@@ -1071,6 +1161,7 @@ function showTab(name){
   document.getElementById('tab-'+name).classList.add('active');
   const idx=['home','register','dashboard','matrix','roadmap'].indexOf(name);
   document.querySelectorAll('nav button')[idx].classList.add('active');
+  if(name==='home'){loadHomeStats();loadConveyorBeltStats();}
   if(name==='dashboard')loadDashboard();
   if(name==='matrix'){loadMatrixStats();if(userAddr)loadMyDirects();}
   if(name==='register')loadRegisterTab();
@@ -1087,16 +1178,71 @@ function setStatus(id,msg,color){const el=document.getElementById(id);if(el){el.
 // ═══════════════════════════════════════════════════════════════════════
 // FOUNDING MEMBERS & FALLBACK REFERRER
 // ═══════════════════════════════════════════════════════════════════════
+async function loadConveyorBeltStats(){
+  try{
+    const sel=document.getElementById('cb-tier-select');
+    const tier=sel?parseInt(sel.value)||1:1;
+    const tierN=TIER_NAMES[tier]||('Tier '+tier);
+    const labelEl=document.getElementById('cb-tier-label');
+    if(labelEl)labelEl.textContent=tierN;
+    const mx=new ethers.Contract(ADDRESSES.matrices[tier],MATRIX_ABI,readProvider);
+    const mem=await mx.totalMembers();
+    const cyclesDone=Math.max(0,Number(mem)-64);
+    // First rotation needs 65 members (64 fills window, 65th triggers)
+    // After that every new join = one rotation
+    const nextRot=Number(mem)<65?(65):Number(mem)+1;
+    const membersNeeded=Number(mem)<65?(65-Number(mem)):1;
+    const filledEl=document.getElementById('stat-filled');
+    if(filledEl)filledEl.textContent=mem.toString();
+    const cyclesEl=document.getElementById('stat-cycles-done');
+    if(cyclesEl)cyclesEl.textContent=cyclesDone>0?cyclesDone+' rotation'+(cyclesDone!==1?'s':'')+' so far':'None yet';
+    const nextEl=document.getElementById('stat-next-cycle');
+    if(nextEl){
+      if(Number(mem)<65){
+        nextEl.textContent='Member #'+nextRot+' ('+membersNeeded+' more needed)';
+        nextEl.style.color='var(--text2)';
+      } else {
+        nextEl.textContent='Member #'+nextRot;
+        nextEl.style.color='var(--text)';
+      }
+    }
+    const myNextEl=document.getElementById('stat-my-next-cycle');
+    if(myNextEl){
+      if(!userAddr){
+        myNextEl.textContent='—';
+        myNextEl.style.color='var(--text3)';
+        return;
+      }
+      const qpos=await mx.positionOf(userAddr).catch(()=>0n);
+      const qNum=Number(qpos);
+      let mObj=await mx.members(userAddr).catch(()=>null);
+      // Retry once if call failed
+      if(!mObj){ await new Promise(r=>setTimeout(r,500)); mObj=await mx.members(userAddr).catch(()=>null); }
+      if(!mObj||!mObj.isRegistered){
+        myNextEl.textContent='Not in '+tierN;
+        myNextEl.style.color='var(--text3)';
+      } else if(qNum>0){
+        const myNextAt=Number(mem)<65?(64+qNum):(Number(mem)+qNum);
+        myNextEl.textContent='Member #'+myNextAt;
+        myNextEl.style.color='var(--green)';
+      } else {
+        myNextEl.textContent='Re-entering queue…';
+        myNextEl.style.color='var(--text2)';
+      }
+    }
+  }catch(e){console.error('loadConveyorBeltStats',e);}
+}
+
 async function loadFoundingMembers(){
   try{
     const delay=ms=>new Promise(r=>setTimeout(r,ms));const seen=new Set();
     const t5=new ethers.Contract(ADDRESSES.matrices[5],MATRIX_ABI,readProvider);
     const n5=Number(await t5.totalMembers());
-    for(let i=1;i<=Math.min(n5,25);i++){try{const a=await t5.memberById(i);if(a&&a!==ethers.ZeroAddress&&!seen.has(a.toLowerCase())){seen.add(a.toLowerCase());foundingMembers.push(a);}await delay(60);}catch(_){}}
+    for(let i=1;i<=Math.min(n5,50);i++){try{const a=await t5.memberById(i);if(a&&a!==ethers.ZeroAddress&&!seen.has(a.toLowerCase())){seen.add(a.toLowerCase());foundingMembers.push(a);}await delay(60);}catch(_){}}
     if(foundingMembers.length<25){
       const t1=new ethers.Contract(ADDRESSES.matrices[1],MATRIX_ABI,readProvider);
       const n1=Number(await t1.totalMembers());
-      for(let i=1;i<=Math.min(n1,25);i++){if(foundingMembers.length>=25)break;try{const a=await t1.memberById(i);if(a&&a!==ethers.ZeroAddress&&!seen.has(a.toLowerCase())){seen.add(a.toLowerCase());foundingMembers.push(a);}await delay(60);}catch(_){}}
+      for(let i=1;i<=Math.min(n1,50);i++){if(foundingMembers.length>=60)break;try{const a=await t1.memberById(i);if(a&&a!==ethers.ZeroAddress&&!seen.has(a.toLowerCase())){seen.add(a.toLowerCase());foundingMembers.push(a);}await delay(60);}catch(_){}}
     }
     foundingMembersReady=true;console.log('foundingMembers:',foundingMembers.length);
   }catch(e){foundingMembersReady=true;console.warn('loadFoundingMembers:',e.message);}
@@ -1105,8 +1251,20 @@ async function getFallbackReferrer(){
   if(!foundingMembersReady){const t0=Date.now();while(!foundingMembersReady&&Date.now()-t0<8000)await new Promise(r=>setTimeout(r,200));}
   if(foundingMembers.length===0)await loadFoundingMembers();
   if(foundingMembers.length===0)return ethers.ZeroAddress;
-  const addr=foundingMembers[fallbackRoundRobin%foundingMembers.length];fallbackRoundRobin++;
-  console.log('fallback referrer:',addr);return addr;
+  // Use on-chain totalMembers as index — consistent across all browsers/devices
+  // Each new registration automatically moves to the next founding member
+  try{
+    const t1=new ethers.Contract(ADDRESSES.matrices[1],MATRIX_ABI,readProvider);
+    const total=Number(await t1.totalMembers());
+    const idx=total%foundingMembers.length;
+    const addr=foundingMembers[idx];
+    console.log('fallback referrer: '+addr+' (pool idx '+idx+'/'+foundingMembers.length+', total members: '+total+')');
+    return addr;
+  }catch(_){
+    // Fallback to session counter if chain read fails
+    const addr=foundingMembers[fallbackRoundRobin%foundingMembers.length];fallbackRoundRobin++;
+    return addr;
+  }
 }
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -1120,12 +1278,18 @@ async function loadHomeStats(){
     const tm=new ethers.Contract(ADDRESSES.tierManager,TIER_MANAGER_ABI,readProvider);
     const[mem,floor,reserve,wc,ft]=await Promise.all([t1.totalMembers(),tr.floorPriceFormatted(),tr.usdcReserve(),tm.primeOrAboveCount(),tm.fastTrackEnabled()]);
     await new Promise(r=>setTimeout(r,300));
-    const[minted,supply,epoch,reward,epochRem]=await Promise.all([tk.totalMinted(),tk.totalSupply(),tk.currentEpoch(),tk.currentRewardPerEntry(),tk.epochMembersRemaining()]);
+    // Fetch each separately so one failure doesn't block others
+    const epoch=await tk.currentEpoch().catch(()=>0);
+    const reward=await tk.currentRewardPerEntry().catch(()=>0n);
+    const epochRem=await tk.epochMembersRemaining().catch(()=>0n);
+    const minted=await tk.totalMinted().catch(()=>0n);
+    const supply=await tk.totalSupply().catch(()=>0n);
     document.getElementById('stat-members').textContent=mem.toString();
     document.getElementById('stat-floor').textContent=u6(floor);
     document.getElementById('stat-reserve').textContent=u6(reserve);
     const wn=Number(wc),wPct=Math.min(100,Math.round((wn/25)*100));
     document.getElementById('stat-filled').textContent=mem.toString();
+    await loadConveyorBeltStats();
     document.getElementById('stat-pct').textContent=wPct+'%';
     document.getElementById('stat-progress').style.width=wPct+'%';
     document.getElementById('stat-cycle').textContent=ft?'🔓 UNLOCKED':(wn+' / 25');
@@ -1143,8 +1307,15 @@ async function loadHomeStats(){
     document.getElementById('stat-epoch').textContent=ename+'  (Epoch '+edisp+')';
     document.getElementById('stat-reward').textContent=rf+' CNOVA';
     document.getElementById('stat-epoch-rem').textContent=epochRem.toString()+' entries';
-    document.getElementById('stat-minted').textContent=mf;
-    document.getElementById('stat-supply').textContent=sf;
+    const mintedEl=document.getElementById('stat-minted');if(mintedEl)mintedEl.textContent=mf;
+    document.getElementById('stat-supply').textContent=sf||'—';
+    // Fetch totalSupply separately in case batch fails
+    try{
+      const supplyRaw=await tk.totalSupply();
+      const supplyFmt=parseFloat(ethers.formatUnits(supplyRaw,18)).toLocaleString(undefined,{maximumFractionDigits:0});
+      const supplyEl=document.getElementById('stat-supply');
+      if(supplyEl&&supplyFmt)supplyEl.textContent=supplyFmt+' CNOVA';
+    }catch(e){console.warn('totalSupply fetch failed:',e.message);}
   }catch(e){console.error('loadHomeStats',e);}
 }
 
@@ -1172,6 +1343,7 @@ async function loadRegisterTab(){
       approveBtn.className=registerBtn.className='btn btn-ghost full-w';
       refCard.style.display='block';
       document.getElementById('referral-url').value=window.location.origin+window.location.pathname+'?ref='+userAddr;
+      await showUpgradeCardIfEligible();
       return;
     }
     alreadyEl.style.display='none';
@@ -1275,8 +1447,8 @@ async function loadDashboard(){
     const cyEl=document.getElementById('dash-cycles');if(cyEl)cyEl.textContent=cy1.toString();
     const cw=await tk.balanceOf(userAddr);
     const cv=(BigInt(cw)*BigInt(floor))/BigInt(1e18);
-    document.getElementById('dash-cnova').textContent=parseFloat(ethers.formatUnits(cw,18)).toFixed(2)+' CNOVA';
-    document.getElementById('dash-cnova-val').textContent=u6(cv);
+    const cnovaEl=document.getElementById('dash-cnova');if(cnovaEl)cnovaEl.textContent=parseFloat(ethers.formatUnits(cw,18)).toFixed(2)+' CNOVA';
+    const cnovaValEl=document.getElementById('dash-cnova-val');if(cnovaValEl)cnovaValEl.textContent=u6(cv);
     try{
       const all=await fetchAllMembersV3(t1,null);
       const cnt=all.filter(({data:m})=>m.referrer.toLowerCase()===userAddr.toLowerCase()).length;
@@ -1323,29 +1495,71 @@ async function fetchAllMembersV3(matrix,onProgress){
 // MATRIX TAB
 // ═══════════════════════════════════════════════════════════════════════
 async function loadMatrixStats(){
-  try{const t1=new ethers.Contract(ADDRESSES.matrices[1],MATRIX_ABI,readProvider);const tot=await t1.totalMembers();document.getElementById('matrix-nodes').textContent=tot.toString();document.getElementById('matrix-bfs').textContent='—';document.getElementById('matrix-fill').textContent=tot.toString()+' members';}catch(e){console.error(e);}
+  try{const tier=getSelectedMatrixTier();const t1=new ethers.Contract(ADDRESSES.matrices[tier],MATRIX_ABI,readProvider);const tot=await t1.totalMembers();document.getElementById('matrix-nodes').textContent=tot.toString();document.getElementById('matrix-bfs').textContent='—';document.getElementById('matrix-fill').textContent=tot.toString()+' members';}catch(e){console.error(e);}
+}
+
+function getSelectedMatrixTier(){
+  const sel=document.getElementById('matrix-tier-select');
+  return sel?parseInt(sel.value)||1:1;
+}
+function onMatrixTierChange(){
+  // Reset view when tier changes
+  const tEl=document.getElementById('matrix-tree'),lEl=document.getElementById('matrix-loading');
+  if(tEl)tEl.style.display='none';
+  if(lEl){lEl.innerHTML='Select Load Queue or My Position to view this tier.';lEl.style.display='block';}
+  hideMyPosBanner();
+  // Update stats for selected tier
+  loadMatrixStats();
 }
 
 async function loadQueueView(){
   const tEl=document.getElementById('matrix-tree'),lEl=document.getElementById('matrix-loading');
   lEl.innerHTML='<span class="spinner"></span> Loading member queue…';lEl.style.display='block';tEl.style.display='none';
-  const t1=new ethers.Contract(ADDRESSES.matrices[1],MATRIX_ABI,readProvider);
   try{
-    const total=Number(await t1.totalMembers());
-    let myId=-1;if(userAddr){try{const me=await t1.members(userAddr);if(me.isRegistered)myId=Number(me.id);}catch(_){}}
-    if(total===0){lEl.innerHTML='No members registered yet.';return;}
-    let html=`<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:13px"><thead><tr style="border-bottom:2px solid var(--border);color:var(--text3);text-align:left"><th style="padding:8px 12px">#</th><th style="padding:8px 12px">Address</th><th style="padding:8px 12px">Withdrawable</th><th style="padding:8px 12px">Total Earned</th><th style="padding:8px 12px">Re-entries</th><th style="padding:8px 12px">Status</th></tr></thead><tbody>`;
+    const tier=getSelectedMatrixTier();
+    const mx=new ethers.Contract(ADDRESSES.matrices[tier],MATRIX_ABI,readProvider);
+    const total=Number(await mx.totalMembers());
+    let myAddr=userAddr;
+    if(total===0){lEl.innerHTML='No members in Tier '+tier+' yet.';return;}
+    // Fetch all members and their positions
     const delay=ms=>new Promise(r=>setTimeout(r,ms));
+    const rows=[];
     for(let i=1;i<=total;i++){
-      let addr,m,cy;try{addr=await t1.memberById(i);[m,cy]=await Promise.all([t1.members(addr),t1.cyclesCompleted(addr)]);await delay(60);}catch(_){continue;}
-      const isMe=Number(m.id)===myId,isActive=Number(m.id)<=100;
-      const rs=isMe?'background:var(--green-dim);border-bottom:1px solid var(--green2)':'border-bottom:1px solid var(--border)';
-      const sb=isMe?'<span class="pill pill-green" style="font-size:11px">⭐ YOU</span>':(isActive?'<span class="pill pill-blue" style="font-size:11px">Active</span>':'<span style="font-size:11px;color:var(--text3)">Queued</span>');
-      html+=`<tr style="${rs}"><td style="padding:10px 12px;font-weight:700;color:${isMe?'var(--green)':'var(--text)'}">#${m.id}</td><td style="padding:10px 12px;font-family:monospace;color:var(--text2)">${addr.slice(0,6)}…${addr.slice(-4)}</td><td style="padding:10px 12px;color:${BigInt(m.withdrawable)>0n?'var(--green)':'var(--text3)'};font-weight:600">${u6(m.withdrawable)}</td><td style="padding:10px 12px">${u6(m.totalEarned)}</td><td style="padding:10px 12px">${m.reentryCount.toString()}</td><td style="padding:10px 12px">${sb}</td></tr>`;
+      let addr,m,cy,qpos=0n;
+      try{
+        addr=await mx.memberById(i);
+        [m,cy]=await Promise.all([mx.members(addr),mx.cyclesCompleted(addr)]);
+        try{qpos=await mx.positionOf(addr);}catch(_){qpos=0n;}
+        await delay(50);
+      }catch(_){continue;}
+      rows.push({addr,m,cy,qpos:Number(qpos)});
     }
-    html+='</tbody></table></div><div style="margin-top:12px;font-size:12px;color:var(--text3)">Showing '+total+' member'+(total!==1?'s':'')+' · Active window: positions 1–100</div>';
+    // Filter to only active window (positions 1-64) + sort by queue position
+    const active=rows.filter(r=>r.qpos>0&&r.qpos<=64).sort((a,b)=>a.qpos-b.qpos);
+    const reentry=rows.filter(r=>r.qpos===0);
+    const tierName=TIER_NAMES[tier]||('Tier '+tier);
+    let html=`<div style="margin-bottom:10px;font-size:13px;color:var(--text3)">Showing <strong style="color:var(--text)">${active.length}</strong> active positions in ${tierName} · ${reentry.length} members in re-entry queue</div>`;
+    html+=`<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:13px"><thead><tr style="border-bottom:2px solid var(--border);color:var(--text3);text-align:left"><th style="padding:8px 12px">Position</th><th style="padding:8px 12px">Address</th><th style="padding:8px 12px">Withdrawable</th><th style="padding:8px 12px">Total Earned</th><th style="padding:8px 12px">Cycles</th><th style="padding:8px 12px">Status</th></tr></thead><tbody>`;
+    const allRows=[...active,...reentry];
+    for(const {addr,m,cy,qpos} of allRows){
+      const isMe=myAddr&&addr.toLowerCase()===myAddr.toLowerCase();
+      const isActive=qpos>0;
+      const rs=isMe?'background:var(--green-dim);border-bottom:1px solid var(--green2)':'border-bottom:1px solid var(--border)';
+      const qLabel=qpos>0?'#'+qpos:'↩ Re-entry';
+      const qColor=qpos>0&&qpos<=10?'var(--green)':qpos>0?'var(--text)':'var(--text3)';
+      const sb=isMe?'<span class="pill pill-green" style="font-size:11px">⭐ YOU</span>':(isActive?'<span class="pill pill-blue" style="font-size:11px">Active</span>':'<span style="font-size:11px;color:var(--text3)">Re-entry</span>');
+      html+=`<tr style="${rs}">
+        <td style="padding:10px 12px;font-weight:700;color:${qColor}">${qLabel}</td>
+        <td style="padding:10px 12px;font-family:monospace;color:var(--text2)">${addr.slice(0,6)}…${addr.slice(-4)}</td>
+        <td style="padding:10px 12px;color:${BigInt(m.withdrawable)>0n?'var(--green)':'var(--text3)'};font-weight:600">${u6(m.withdrawable)}</td>
+        <td style="padding:10px 12px">${u6(m.totalEarned)}</td>
+        <td style="padding:10px 12px">${cy.toString()}</td>
+        <td style="padding:10px 12px">${sb}</td>
+      </tr>`;
+    }
+    html+='</tbody></table></div>';
     tEl.innerHTML=html;tEl.style.display='block';lEl.style.display='none';
-  }catch(e){lEl.innerHTML='❌ Error: '+(e.shortMessage||e.message);console.error(e);}
+  }catch(e){lEl.innerHTML='❌ Error: '+(e.shortMessage||e.message);console.error('loadQueueView:',e);}
 }
 
 async function loadMatrixTree(){await loadQueueView();}
@@ -1353,7 +1567,8 @@ function navigateToNode(){}
 
 async function loadMyTree(){
   if(!userAddr){toast('Connect wallet first','error');return;}
-  const t1=new ethers.Contract(ADDRESSES.matrices[1],MATRIX_ABI,readProvider);
+  const tier=getSelectedMatrixTier();
+  const t1=new ethers.Contract(ADDRESSES.matrices[tier],MATRIX_ABI,readProvider);
   try{
     const m=await t1.members(userAddr);if(!m.isRegistered){toast('Not registered in Tier 1 yet','error');return;}
     const cy=await t1.cyclesCompleted(userAddr);
@@ -1361,7 +1576,10 @@ async function loadMyTree(){
     document.getElementById('matrix-my-node').textContent='#'+m.id.toString();
     const sub=document.getElementById('matrix-my-level-sub');sub.textContent='Cycles: '+cy.toString();sub.style.display='block';
     const ban=document.getElementById('matrix-pos-banner');ban.style.display='block';
-    document.getElementById('matrix-pos-level').textContent='🏅 Member #'+m.id+' · Tier 1 (Nova Seed)';
+    const queuePos = await t1.positionOf(userAddr).catch(()=>0n);
+      const isActiveNow = Number(queuePos) > 0 && Number(queuePos) <= 64;
+      const tierN=TIER_NAMES[tier]||('Tier '+tier);
+      document.getElementById('matrix-pos-level').textContent='🏅 '+tierN+' · Queue Position: '+(Number(queuePos)||'re-entering')+' / 64';
     document.getElementById('matrix-pos-slots').textContent='♻️ Cycles completed: '+cy.toString();
     document.getElementById('matrix-pos-cycle').textContent='💰 Earned: '+u6(BigInt(m.totalEarned));
     await loadQueueView();
@@ -1419,6 +1637,205 @@ async function addUSDCtoMetaMask(){
   if(parseInt(window.ethereum.chainId||'0x0',16)!==CHAIN_ID){showNetworkBanner();toast('Switch to Base Sepolia first.','info');return;}
   try{const added=await window.ethereum.request({method:'wallet_watchAsset',params:{type:'ERC20',options:{address:ADDRESSES.usdc,symbol:'USDC',decimals:6}}});if(added)toast('✅ USDC added to MetaMask!','success');else toast('Token add was cancelled.','info');}
   catch(e){showManualTokenModal(ADDRESSES.usdc,'USDC',6);}
+}
+
+
+// ═══════════════════════════════════════════════════════════════════════
+// TIER UPGRADE
+// ═══════════════════════════════════════════════════════════════════════
+function populateUpgradeSelect(currentTier, fastTrack, whaleCount, cyclesDone, cyclesNeeded) {
+  const sel=document.getElementById('upgrade-tier-select'),hint=document.getElementById('upgrade-tier-hint');
+  if(!sel)return;
+  const cyclesOk=cyclesDone>=cyclesNeeded;
+  // Without fast-track: only next tier in sequence is available
+  // With fast-track: any tier above current is available (still needs cycles)
+  if(hint){
+    if(!cyclesOk)hint.innerHTML='<span style="color:var(--yellow)">⏳ Complete <strong>'+cyclesNeeded+' cycle'+(cyclesNeeded>1?'s':'')+'</strong> in Tier '+currentTier+' to unlock upgrade. You have <strong>'+cyclesDone+'</strong> so far.</span>';
+    else hint.innerHTML='<span style="color:var(--green)">✅ Cycle requirement met ('+cyclesDone+'/'+cyclesNeeded+') — select your target tier.</span>';
+  }
+  sel.innerHTML='<option value="">Select a tier…</option>';
+  for(let t=currentTier+1;t<=7;t++){
+    // Sequential lock: without fast-track, only currentTier+1 is available
+    const sequentialLocked = !fastTrack && t > currentTier + 1;
+    // Whale gate: tiers 5-7 need fast-track OR sequential access
+    const whaleLocked = !fastTrack && t >= 5 && currentTier < t - 1;
+    // Cycles lock: current tier cycles not done
+    const cycleLocked = !cyclesOk;
+    const isLocked = cycleLocked || sequentialLocked || whaleLocked;
+    const opt=document.createElement('option');
+    opt.value=t;
+    let label='Tier '+t+' — '+TIER_NAMES[t]+'  ($'+TIER_FEES[t].toLocaleString()+')';
+    const exitCycles=CYCLE_REQ[t]||0;
+    if(isLocked){
+      label+='  🔒 Need '+(cyclesNeeded-cyclesDone)+' more cycle(s) in Tier '+currentTier;
+    } else if(t<7&&exitCycles>0){
+      label+='  ('+exitCycles+' cycle'+(exitCycles!==1?'s':'')+' to exit)';
+    }
+    if(t===7)label+='  👑 Max tier';
+    if(whaleLocked)label+='  🐋 whale gate';
+    else if(whaleLocked)label+='  🐋 whale gate';
+    opt.textContent=label;
+    if(!isLocked){opt.style.color='var(--green,#00e5a0)';opt.style.fontWeight='700';}
+    if(isLocked)opt.disabled=true;
+    sel.appendChild(opt);
+  }
+}
+
+function onUpgradeTierChange(){
+  const sel=document.getElementById('upgrade-tier-select'),hint=document.getElementById('upgrade-tier-hint');
+  const appBtn=document.getElementById('btn-upgrade-approve'),upgBtn=document.getElementById('btn-upgrade');
+  const t=parseInt(sel.value);
+  if(!t){if(appBtn){appBtn.disabled=true;appBtn.className='btn btn-ghost full-w';appBtn.textContent='Step 1: Approve USDC 🔒';}if(upgBtn){upgBtn.disabled=true;upgBtn.className='btn btn-ghost full-w';}return;}
+  if(hint)hint.textContent='Fee: $'+TIER_FEES[t].toLocaleString()+' USDC → '+TIER_NAMES[t];
+  if(appBtn){appBtn.disabled=false;appBtn.className='btn full-w btn-green';appBtn.textContent='Step 1: Approve $'+TIER_FEES[t].toLocaleString()+' USDC 🔒';}
+  if(upgBtn){upgBtn.disabled=false;upgBtn.className='btn full-w btn-green';upgBtn.textContent='Step 2: Upgrade to '+TIER_NAMES[t];}
+  if(userAddr){
+    const usdc=new ethers.Contract(ADDRESSES.usdc,USDC_ABI,readProvider);
+    usdc.allowance(userAddr,ADDRESSES.tierManager).then(a=>{
+      if(a>=TIER_FEES_USDC[t]){if(appBtn){appBtn.disabled=true;appBtn.className='btn btn-ghost full-w';appBtn.textContent='✓ Approved';}if(upgBtn){upgBtn.disabled=false;upgBtn.className='btn full-w btn-green';}}
+    }).catch(()=>{});
+  }
+}
+
+async function checkUpgradeAllowance(){
+  const t=parseInt((document.getElementById('upgrade-tier-select')||{}).value);
+  if(!t||!userAddr)return;
+  const usdc=new ethers.Contract(ADDRESSES.usdc,USDC_ABI,readProvider);
+  try{
+    const a=await usdc.allowance(userAddr,ADDRESSES.tierManager);
+    const appBtn=document.getElementById('btn-upgrade-approve');
+    const upgBtn=document.getElementById('btn-upgrade');
+    if(BigInt(a)>=TIER_FEES_USDC[t]){
+      if(appBtn){appBtn.disabled=true;appBtn.className='btn btn-ghost';appBtn.textContent='✓ Approved';}
+      if(upgBtn){upgBtn.disabled=false;upgBtn.className='btn full-w btn-green';upgBtn.textContent='Step 2: Upgrade to '+TIER_NAMES[t];}
+      setStatus('upgrade-status','✅ Approved! Click Step 2 to upgrade.','var(--green)');
+    } else {
+      setStatus('upgrade-status','⚠️ Approval not detected yet. Try refreshing again.','var(--yellow)');
+    }
+  }catch(_){}
+}
+
+async function approveUSDCForUpgrade(){
+  if(!signer){toast('Connect wallet first','error');return;}
+  const t=parseInt(document.getElementById('upgrade-tier-select').value);
+  if(!t){toast('Select a tier first','error');return;}
+  const btn=document.getElementById('btn-upgrade-approve');
+  try{
+    btn.disabled=true;btn.innerHTML='<span class="spinner"></span>Approving…';
+    setStatus('upgrade-status','⏳ Waiting for MetaMask…','var(--text2)');
+    const usdc=new ethers.Contract(ADDRESSES.usdc,USDC_ABI,signer);
+    const tx=await usdc.approve(ADDRESSES.tierManager,TIER_FEES_USDC[t]);
+    setStatus('upgrade-status','⏳ Confirming…','var(--text2)');await tx.wait();
+    setStatus('upgrade-status','✅ Approved! Now click Step 2.','var(--green)');
+    toast('$'+TIER_FEES[t].toLocaleString()+' USDC approved!','success');
+    btn.disabled=true;btn.textContent='✓ Approved';
+    // Double-check on-chain allowance to reliably enable Step 2
+    await checkUpgradeAllowance();
+  }catch(e){const msg=e.reason||e.message||'Unknown';const isSync = msg.includes('join tier 1');
+    const isCycles = msg.includes('cycles not complete');
+    if(isSync){
+      setStatus('upgrade-status','⏳ Your registration needs a quick sync before upgrading. Try again in a few minutes.','var(--yellow)');
+    } else if(isCycles){
+      setStatus('upgrade-status','🔒 Cycle requirement not yet met. Complete your cycles first.','var(--yellow)');
+    } else {
+      setStatus('upgrade-status','❌ '+msg,'var(--red)');
+      toast('Upgrade failed','error');
+    }
+    btn.disabled=false;btn.textContent='Step 2: Upgrade Tier';}
+}
+
+// Show upgrade card after registration
+async function doUpgrade(){
+  if(!signer){toast('Connect wallet first','error');return;}
+  const t=parseInt(document.getElementById('upgrade-tier-select').value);
+  const referrer=(document.getElementById('upgrade-referrer').value||'').trim();
+  if(!t){toast('Select a tier first','error');return;}
+  if(referrer&&!ethers.isAddress(referrer)){toast('Invalid referrer address','error');return;}
+  const btn=document.getElementById('btn-upgrade');
+  // Always verify allowance on click
+  try{
+    setStatus('upgrade-status','⏳ Checking approval…','var(--text2)');
+    const usdcR=new ethers.Contract(ADDRESSES.usdc,USDC_ABI,readProvider);
+    const allowance=await usdcR.allowance(userAddr,ADDRESSES.tierManager);
+    if(BigInt(allowance)<TIER_FEES_USDC[t]){
+      setStatus('upgrade-status','⚠️ Please complete Step 1 — approve $'+TIER_FEES[t].toLocaleString()+' USDC first.','var(--yellow)');
+      return;
+    }
+  }catch(_){}
+  try{
+    btn.disabled=true;btn.innerHTML='<span class="spinner"></span>Upgrading…';
+    setStatus('upgrade-status','⏳ Waiting for MetaMask…','var(--text2)');
+    const tm=new ethers.Contract(ADDRESSES.tierManager,TIER_MANAGER_ABI,signer);
+    const ref=referrer||ethers.ZeroAddress;
+    const tx=await tm.upgradeTier(t,ref);
+    setStatus('upgrade-status','⏳ Confirming…','var(--text2)');
+    const receipt=await tx.wait();
+    setStatus('upgrade-status','🎉 Upgraded to '+TIER_NAMES[t]+'! Tx: '+receipt.hash.slice(0,10)+'…','var(--green)');
+    toast('🎉 Welcome to '+TIER_NAMES[t]+'!','success',8000);
+    btn.textContent='✅ Upgraded to '+TIER_NAMES[t];btn.disabled=true;btn.className='btn btn-ghost full-w';
+    await loadRegisterTab();await loadDashboard();
+  }catch(e){
+    const msg=e.reason||e.message||'Unknown';
+    const isSync=msg.includes('join tier 1');
+    const isCycles=msg.includes('cycles not complete');
+    if(isSync) setStatus('upgrade-status','⏳ Registration needs a sync. Try again in a few minutes.','var(--yellow)');
+    else if(isCycles) setStatus('upgrade-status','🔒 Cycle requirement not met. Complete your cycles first.','var(--yellow)');
+    else{ setStatus('upgrade-status','❌ '+msg,'var(--red)'); toast('Upgrade failed','error'); }
+    btn.disabled=false;btn.textContent='Step 2: Upgrade Tier';
+  }
+}
+
+async function showUpgradeCardIfEligible(){
+  if(!userAddr)return;
+  const upgradeCard=document.getElementById('upgrade-card');if(!upgradeCard)return;
+  try{
+    const t1=new ethers.Contract(ADDRESSES.matrices[1],MATRIX_ABI,readProvider);
+    const tm=new ethers.Contract(ADDRESSES.tierManager,TIER_MANAGER_ABI,readProvider);
+    const[member,currentTier,fastTrack,whaleCount]=await Promise.all([t1.members(userAddr),tm.memberTier(userAddr),tm.fastTrackEnabled(),tm.primeOrAboveCount()]);
+    if(!member.isRegistered){upgradeCard.style.display='none';return;}
+    const ct=Number(currentTier)||1;
+    if(ct>=7){upgradeCard.innerHTML='<div style="color:var(--green);font-weight:700">👑 Max tier reached — SuperNova Spark!</div>';upgradeCard.style.display='block';return;}
+    // If memberTier=0 (direct Tier1 registration not synced to TierManager)
+    if(Number(currentTier)===0&&member.isRegistered){
+      upgradeCard.style.display='block';
+      upgradeCard.innerHTML='<div style="font-size:15px;font-weight:700;margin-bottom:8px">⬆️ Upgrade Tier</div><div style="background:rgba(59,130,246,.08);border:1px solid rgba(59,130,246,.3);border-radius:8px;padding:14px;font-size:13px;color:var(--text2);margin-bottom:12px"><div style="font-weight:700;color:var(--blue);margin-bottom:6px">⏳ Preparing your upgrade access…</div>Your account is being synced automatically. This usually takes less than 5 minutes after registration.<br><br><strong style="color:var(--text)">Refresh this page in a moment</strong> and the upgrade option will appear.<br><br><span style="font-size:11px;color:var(--text3)">Wallet: '+userAddr.slice(0,10)+'…'+userAddr.slice(-6)+'</span></div><button class="btn btn-ghost full-w" onclick="window.location.reload()">↻ Refresh &amp; Check</button>';
+      return;
+    }
+    upgradeCard.style.display='block';
+    let cyclesDone=0,cyclesNeeded=CYCLE_REQ[ct]||1;
+    try{
+      // Read cycles from the CURRENT tier matrix, not always Tier 1
+      const currentMx=new ethers.Contract(ADDRESSES.matrices[ct],MATRIX_ABI,readProvider);
+      const cy=await currentMx.cyclesCompleted(userAddr);
+      cyclesDone=Number(cy);
+    }catch(_){}
+    populateUpgradeSelect(ct,fastTrack,Number(whaleCount),cyclesDone,cyclesNeeded);
+    // Show popup if newly eligible to upgrade
+    if(cyclesDone>=cyclesNeeded && ct<7){
+      const nextTier=ct+1;
+      const tierN=TIER_NAMES[nextTier]||('Tier '+nextTier);
+      const fee=TIER_FEES[nextTier]||0;
+      const popupKey='upgrade_notified_t'+ct+'_to_t'+nextTier+'_'+userAddr.slice(-6);
+      if(!sessionStorage.getItem(popupKey)){
+        sessionStorage.setItem(popupKey,'1');
+        setTimeout(()=>{
+          toast('🎉 You are eligible to upgrade to '+tierN+' ($'+fee.toLocaleString()+')! Select it below.','success',8000);
+        },500);
+      }
+    }
+    // Auto-fill referrer from Tier 1 registration — locked on-chain
+    try{
+      const t1=new ethers.Contract(ADDRESSES.matrices[1],MATRIX_ABI,readProvider);
+      const m1=await t1.members(userAddr);
+      const refEl=document.getElementById('upgrade-referrer');
+      if(refEl&&m1.referrer&&m1.referrer!==ethers.ZeroAddress){
+        refEl.value=m1.referrer;
+      }
+    }catch(_){}
+    const wgEl=document.getElementById('upgrade-whale-gate');
+    const wn=Number(whaleCount);
+    if(wgEl){wgEl.style.display='block';document.getElementById('upgrade-whale-progress').textContent=wn;const ftb=document.getElementById('upgrade-fasttrack-badge');if(ftb)ftb.innerHTML=fastTrack?'<span class="pill pill-green" style="font-size:11px">🔓 Fast-track ON</span>':'<span class="pill pill-yellow" style="font-size:11px">🔒 '+(25-wn)+' more needed</span>';}
+  }catch(e){console.error('showUpgradeCard',e);}
 }
 
 function toggleTheme(){const isLight=document.body.classList.toggle('light');localStorage.setItem('theme',isLight?'light':'dark');document.getElementById('theme-btn').textContent=isLight?'🌙 Dark':'☀️ Light';}

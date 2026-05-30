@@ -150,10 +150,10 @@ function toggleTheme() {
 
   <div class="glossary-grid" id="glossary-grid">
 
-    <div class="glossary-card" data-terms="bfs binary forced spillover matrix">
-      <div class="acronym">BFS</div>
-      <div class="full-name">Binary Forced Spillover</div>
-      <div class="definition">When all direct positions under a node in the conveyor belt queue are already occupied, new entries automatically "spill over" to the next available open slot further down your downline. This means you can gain team members even without directly referring them.</div>
+        <div class="glossary-card" data-terms="fifo queue conveyor belt matrix position">
+      <div class="acronym">FIFO Queue</div>
+      <div class="full-name">First-In First-Out Conveyor Belt</div>
+      <div class="definition">CryptoNova uses a 64-slot conveyor belt. Members join at the back of the queue and move forward as new members join behind them. When you reach position 1 and the 65th member joins after you, you complete a cycle and re-enter at the back — earning chain pay from every member who joined while you were in the active window.</div>
     </div>
 
     <div class="glossary-card" data-terms="cnova token reward crypto nova">
@@ -171,7 +171,7 @@ function toggleTheme() {
     <div class="glossary-card" data-terms="usdt tether stablecoin bsc">
       <div class="acronym">USDT</div>
       <div class="full-name">Tether USD</div>
-      <div class="definition">A stablecoin pegged 1:1 to the US Dollar, issued by Tether. Used as the entry fee currency on the BNB Chain (BSC) version of CryptoNova.</div>
+      <div class="definition">A stablecoin pegged 1:1 to the US Dollar, issued by Tether. A stablecoin pegged 1:1 to the US Dollar, issued by Tether. Not used in CryptoNova V3 (Base USDC only).</div>
     </div>
 
     <div class="glossary-card" data-terms="defi decentralized finance">
@@ -183,25 +183,25 @@ function toggleTheme() {
     <div class="glossary-card" data-terms="bsc bnb smart chain binance">
       <div class="acronym">BSC</div>
       <div class="full-name">BNB Smart Chain</div>
-      <div class="definition">The blockchain network operated by Binance. CryptoNova will be deployed on BSC in addition to Base, allowing participants to enter using USDT on the BNB ecosystem.</div>
+      <div class="definition">The blockchain network operated by Binance. BNB Smart Chain is planned for a future deployment. CryptoNova V3 currently runs on Base using USDC.</div>
     </div>
 
     <div class="glossary-card" data-terms="evm ethereum virtual machine">
       <div class="acronym">EVM</div>
       <div class="full-name">Ethereum Virtual Machine</div>
-      <div class="definition">The runtime environment that executes smart contract code. Both Base and BSC are EVM-compatible, meaning the same smart contract code and wallet addresses work across both chains.</div>
+      <div class="definition">The runtime environment that executes smart contract code. Base is EVM-compatible, meaning standard Ethereum wallets (MetaMask, Coinbase Wallet, etc.) work seamlessly.</div>
     </div>
 
     <div class="glossary-card" data-terms="tx transaction hash on-chain">
       <div class="acronym">TX / TXN</div>
       <div class="full-name">Transaction</div>
-      <div class="definition">A blockchain transaction. Every entry, withdrawal, or token distribution is a TX recorded permanently on-chain. You can verify any TX on BaseScan or BscScan using the transaction hash.</div>
+      <div class="definition">A blockchain transaction. Every entry, withdrawal, or token distribution is a TX recorded permanently on-chain. You can verify any TX on BaseScan (sepolia.basescan.org) using the transaction hash.</div>
     </div>
 
     <div class="glossary-card" data-terms="gas fee network blockchain">
       <div class="acronym">Gas</div>
       <div class="full-name">Gas Fee (Network Fee)</div>
-      <div class="definition">A small fee paid in the native blockchain currency (ETH on Base, BNB on BSC) to compensate validators for processing your transaction. Gas fees are separate from the USDC entry fee and are typically very small on Base.</div>
+      <div class="definition">A small fee paid in the native blockchain currency (ETH on Base, BNB on BSC) to compensate validators for processing your transaction. Gas fees are separate from the USDC entry fee and are typically less than $0.01 on Base.</div>
     </div>
 
     <div class="glossary-card" data-terms="roi return on investment earnings">
@@ -210,11 +210,7 @@ function toggleTheme() {
       <div class="definition">The percentage of profit relative to the amount invested. In CryptoNova, ROI comes from matrix cycle payouts and CNOVA token rewards. <strong>ROI is not guaranteed</strong> and depends on network participation.</div>
     </div>
 
-    <div class="glossary-card" data-terms="reentry pool tier upgrade cycle savings compound">
-      <div class="acronym">Re-entry Pool</div>
-      <div class="full-name">Auto Re-entry Pool</div>
-      <div class="definition">A personal savings pool built up from your $1.00 flat starter on registration plus 20% of every chain payment you receive. When the pool reaches $10, the smart contract automatically re-enters you into the matrix — no manual action required. The pool balance is locked for re-entry and cannot be withdrawn.</div>
-    </div>
+
 
     <div class="glossary-card" data-terms="original referrer referrer for life locked sponsor permanent">
       <div class="acronym">Original Referrer</div>
@@ -237,7 +233,7 @@ function toggleTheme() {
       </button>
       <div class="faq-answer">
         <div class="faq-answer-inner">
-          <p>CryptoNova is a decentralized, autonomous smart contract protocol deployed on the Base blockchain (and BNB Chain). It runs a binary matrix compensation structure where participants pay an entry fee in USDC/USDT and receive payments from subsequent participants according to predefined on-chain rules.</p>
+          <p>CryptoNova is a decentralized, autonomous smart contract protocol deployed on the Base blockchain. It runs a 7-tier conveyor belt compensation structure where participants pay an entry fee in USDC and receive payments from subsequent participants according to predefined on-chain rules.</p>
           <p>The protocol is fully autonomous — no admin can pause, modify, or redirect funds. All logic is enforced by immutable smart contracts.</p>
         </div>
       </div>
@@ -275,7 +271,7 @@ function toggleTheme() {
       </button>
       <div class="faq-answer">
         <div class="faq-answer-inner">
-          <p>The entry fee is <strong>$10.00 USDC</strong> on Base (or $10.00 USDT on BNB Chain). You'll also need a small amount of ETH (Base) or BNB (BSC) to cover gas fees — typically less than $0.10 on Base.</p>
+          <p>The entry fee starts at <strong>$10.00 USDC</strong> (Tier 1 — Nova Seed) and goes up to $1,000 USDC (Tier 7 — SuperNova Spark) depending on which tier you join. You'll also need a small amount of ETH (Base) or BNB (BSC) to cover gas fees — typically less than $0.10 on Base.</p>
           <p>Your $10 is split instantly by the contract: <strong>$3.00</strong> referral bonus → <strong>$4.00</strong> chain payments (7 levels) → <strong>$1.00</strong> into your community wallet → <strong>$1.50</strong> treasury reserve → <strong>$0.50</strong> dev &amp; ops.</p>
         </div>
       </div>
@@ -288,7 +284,7 @@ function toggleTheme() {
       </button>
       <div class="faq-answer">
         <div class="faq-answer-inner">
-          <p>Any EVM-compatible wallet works — MetaMask, Coinbase Wallet, Trust Wallet, and Rabby are all supported. Make sure your wallet is connected to the <strong>Base</strong> network (or BNB Chain for BSC). Never share your seed phrase or private key with anyone.</p>
+          <p>Any EVM-compatible wallet works — MetaMask, Coinbase Wallet, Trust Wallet, and Rabby are all supported. Make sure your wallet is connected to the <strong>Base</strong> network. Never share your seed phrase or private key with anyone.</p>
         </div>
       </div>
     </div>
@@ -298,40 +294,42 @@ function toggleTheme() {
   <h2 id="matrix-heading">🌐 How the Matrix Works</h2>
   <div class="faq-list" id="faq-matrix">
 
-    <div class="faq-item" data-terms="binary matrix tree structure how works">
+    <div class="faq-item" data-terms="conveyor belt matrix tree structure how works">
       <button class="faq-question" onclick="toggleFaq(this)">
-        What is the binary matrix?
+        What is the conveyor belt matrix?
         <svg class="faq-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="m6 9 6 6 6-6"/></svg>
       </button>
       <div class="faq-answer">
         <div class="faq-answer-inner">
-          <p>The binary matrix is a tree structure where each participant has exactly two positions directly below them (left and right). When both positions are filled, the next incoming entry spills over to the next open slot deeper in the tree — this is <strong>Binary Forced Spillover (BFS)</strong>.</p>
-          <p>Each "cycle" consists of 100 filled positions in the tree. When a cycle completes, it triggers automatic re-entry for qualifying members and a payout event.</p>
+          <p>CryptoNova uses a 64-slot conveyor belt queue — a linear FIFO (First-In First-Out) structure. Members join at the back, move forward as new members join behind them, and complete a cycle when they reach position 1 and the 65th member joins.</p>
+          <p>A cycle completes when 64 members have joined behind you. You are then automatically placed back at the end of the queue to earn again.</p>
         </div>
       </div>
     </div>
 
-    <div class="faq-item" data-terms="bfs binary forced spillover explain">
+    <div class="faq-item" data-terms="conveyor belt fifo queue explain">
       <button class="faq-question" onclick="toggleFaq(this)">
-        What is BFS (Binary Forced Spillover)?
+        How does the conveyor belt work?
         <svg class="faq-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="m6 9 6 6 6-6"/></svg>
       </button>
       <div class="faq-answer">
         <div class="faq-answer-inner">
-          <p>BFS stands for <strong>Binary Forced Spillover</strong>. In a binary matrix, each node has only two direct slots. When both slots below you are occupied, any new member that would have gone there is "forced" to spill over to the next available open slot further down the tree.</p>
-          <p>This means members above you in the matrix contribute to filling your downline even if they didn't personally refer anyone to you — the spillover effect benefits everyone deeper in the tree.</p>
+          <p>The conveyor belt queue has 64 active positions. When you join, you take the next available slot. As new members join behind you, you move closer to position 1. When you reach position 1 and one more member joins, your first cycle completes and you re-enter at the back — earning chain pay from every member who joined while you were in the active window.</p>
+          <p>This means members ahead of you in the conveyor belt contribute chain pay earnings to positions behind them as they pass through the active window.</p>
         </div>
       </div>
     </div>
 
-    <div class="faq-item" data-terms="cycle what is 100 slots complete trigger">
+    <div class="faq-item" data-terms="cycle what is 64 slots complete trigger">
       <button class="faq-question" onclick="toggleFaq(this)">
         What is a Cycle?
         <svg class="faq-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="m6 9 6 6 6-6"/></svg>
       </button>
       <div class="faq-answer">
         <div class="faq-answer-inner">
-          <p>A cycle is completed when 100 positions in the conveyor belt queue are filled (a full 7-level conveyor belt queue minus the root). When a cycle completes, it triggers a payout event and automatically re-enters qualifying members into the next cycle. The current cycle number and progress are shown on the Home tab.</p>
+          <p>A cycle is completed when <strong>64 members join behind you</strong> in the conveyor belt queue — pushing you from the back all the way to position #1. When the 65th member joins after you, your cycle completes and you automatically re-enter at the back of the queue.</p>
+              <p>There are no payout events or separate triggers — earnings flow continuously as each new member joins. Completing a cycle simply means you've moved through the full active window and are starting again.</p>
+              <p>The number of cycles you've completed is shown in your Dashboard and Matrix tab.</p>
         </div>
       </div>
     </div>
@@ -357,21 +355,28 @@ function toggleTheme() {
       <div class="faq-answer">
         <div class="faq-answer-inner">
           <p><strong>Upline</strong> — members above you in the conveyor belt queue. Your upline referred you or you were spilled into their downline. When your cycle completes, a portion of the payout flows upward.</p>
-          <p><strong>Downline</strong> — members below you in the tree. These are people you referred directly, plus anyone who was spilled down into your subtree via BFS from members above you.</p>
+          <p><strong>Downline</strong> — members who joined after you in the conveyor belt queue. They contribute chain pay to you as they pass through the positions behind yours.</p>
         </div>
       </div>
     </div>
 
     <div class="faq-item" data-terms="re-entry automatic cycle complete reentry pool">
       <button class="faq-question" onclick="toggleFaq(this)">
-        What is automatic re-entry?
+        How does re-entry work in V3?
         <svg class="faq-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="m6 9 6 6 6-6"/></svg>
       </button>
       <div class="faq-answer">
         <div class="faq-answer-inner">
-          <p>Every member has a personal <strong>community wallet</strong> that builds up automatically. It starts with a $1.00 flat contribution at registration, and then receives 20% of every chain payment you earn going forward.</p>
-          <p>The moment your pool hits $10.00, the smart contract automatically re-registers you into the matrix in the same transaction — <strong>no clicks, no gas from you</strong>. Your position stays active and your referrer earns their bonus again.</p>
-          <p>You can see your pool balance and a progress bar on your Dashboard. You can also manually top up your pool at any time to accelerate your next re-entry.</p>
+          <p>Re-entry in V3 is <strong>automatic and positional</strong> — no fees, no pool, no manual action needed.</p>
+          <p>Here's how it works:</p>
+          <ol style="padding-left:18px;margin-top:8px;line-height:2">
+            <li>You join at the back of the 64-slot active queue</li>
+            <li>As new members join behind you, you move forward</li>
+            <li>When you reach <strong>position #1</strong> and the next member joins — your cycle completes</li>
+            <li>You're automatically placed at the back of the queue again</li>
+            <li>You start earning chain pay from the next wave of members behind you</li>
+          </ol>
+          <p style="margin-top:10px">This repeats indefinitely. Every 64 members who join after you = one cycle. The more members join overall, the faster your cycles complete.</p>
         </div>
       </div>
     </div>
@@ -450,7 +455,7 @@ function toggleTheme() {
       <div class="faq-answer">
         <div class="faq-answer-inner">
           <p>When you first register, the wallet that referred you is recorded on-chain as your <strong>original referrer</strong> and is locked permanently — it never changes.</p>
-          <p>Every time you auto-cycle through re-entry, your original referrer earns the full <strong>$3.00 referral bonus</strong> again. Not just on your first join — every single cycle, forever. This is by design: the person who worked to bring you in continues to benefit from your ongoing participation.</p>
+          <p>Your referrer earns the <strong>$3.00 referral bonus</strong> when you register and on any tier upgrades you make. This is by design: the person who worked to bring you in continues to benefit from your ongoing participation.</p>
         </div>
       </div>
     </div>
@@ -477,7 +482,7 @@ function toggleTheme() {
         <div class="faq-answer-inner">
           <p>If your account has had no activity for <strong>90 days</strong>, the smart contract will flag your position as <strong>paused</strong>. Once paused:</p>
           <ul>
-            <li>The BFS matrix routes new members around your position — you stop receiving chain payments</li>
+            <li>The conveyor belt queue continues moving — you stop receiving chain payments</li>
             <li>Your community wallet will not auto-trigger even if it hits $10</li>
             <li>Your existing earnings balance is <strong>fully preserved</strong> — pausing never confiscates your funds</li>
           </ul>
@@ -495,7 +500,7 @@ function toggleTheme() {
         <div class="faq-answer-inner">
           <p>Reactivation is simple and costs just <strong>$1.00 USDC</strong>. Connect your wallet, approve $1 USDC on the Dashboard, and click <strong>Reactivate</strong>. The contract will:</p>
           <ul>
-            <li>Place you back into the current BFS matrix at the next available slot</li>
+            <li>Place you back into the conveyor belt queue at the next available slot</li>
             <li>Reset your 90-day activity clock</li>
             <li>Resume chain payments to your position</li>
           </ul>
@@ -606,7 +611,7 @@ function toggleTheme() {
       </button>
       <div class="faq-answer">
         <div class="faq-answer-inner">
-          <p>Currently deploying on <strong>Base</strong> (an Ethereum L2 built by Coinbase) using USDC. A parallel deployment on <strong>BNB Smart Chain (BSC)</strong> using USDT is planned. Both chains share the same wallet addresses since they are both EVM-compatible.</p>
+          <p>CryptoNova V3 is deployed on <strong>Base</strong> (an Ethereum L2 built by Coinbase) using USDC. Base offers fast, low-cost transactions (typically under $0.01 per transaction). A BSC deployment may follow in a future version.</p>
         </div>
       </div>
     </div>
@@ -661,36 +666,30 @@ function toggleTheme() {
 </footer>
 
 <script>
-// ── Accordion ────────────────────────────────────────────────────────────────
 function toggleFaq(btn) {
   const item = btn.closest('.faq-item');
   const isOpen = item.classList.contains('open');
-  // Close all open items in same list
   const list = item.closest('.faq-list');
-  list.querySelectorAll('.faq-item.open').forEach(el => el.classList.remove('open'));
+  if (list) list.querySelectorAll('.faq-item.open').forEach(el => el.classList.remove('open'));
   if (!isOpen) item.classList.add('open');
 }
 
-// ── Search / Filter ──────────────────────────────────────────────────────────
 function filterAll() {
   const q = document.getElementById('search').value.toLowerCase().trim();
-
-  // Glossary cards
-  const cards = document.querySelectorAll('.glossary-card');
-  let glossaryVisible = 0;
-  cards.forEach(card => {
+  document.querySelectorAll('.glossary-card').forEach(card => {
     const text = (card.dataset.terms + ' ' + card.textContent).toLowerCase();
-    const show = !q || text.includes(q);
-    card.style.display = show ? '' : 'none';
-    if (show) glossaryVisible++;
+    card.style.display = (!q || text.includes(q)) ? '' : 'none';
   });
-  document.getElementById('glossary-empty').style.display = glossaryVisible === 0 ? 'block' : 'none';
-  document.getElementById('glossary-heading').style.display = glossaryVisible === 0 && q ? 'none' : '';
-
-  // FAQ items
-  const faqItems = document.querySelectorAll('.faq-item');
-  let faqVisible = 0;
-  faqItems.forEach(item => {
+  document.querySelectorAll('.faq-item').forEach(item => {
     const text = (item.dataset.terms + ' ' + item.textContent).toLowerCase();
-    const show = !q || text.includes(q);
-    item.style.display = show ? '' : 'no
+    item.style.display = (!q || text.includes(q)) ? '' : 'none';
+  });
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  const s = document.getElementById('search');
+  if (s) s.addEventListener('input', filterAll);
+});
+</script>
+
+</body>
