@@ -302,7 +302,7 @@ function toggleTheme() {
       <div class="faq-answer">
         <div class="faq-answer-inner">
           <p>CryptoNova uses a 64-slot conveyor belt queue — a linear FIFO (First-In First-Out) structure. Members join at the back, move forward as new members join behind them, and complete a cycle when they reach position 1 and the 65th member joins.</p>
-          <p>Each "cycle" consists of 100 filled positions in the tree. When a cycle completes, it triggers automatic re-entry for qualifying members and a payout event.</p>
+          <p>A cycle completes when 64 members have joined behind you. You are then automatically placed back at the end of the queue to earn again.</p>
         </div>
       </div>
     </div>
@@ -327,7 +327,9 @@ function toggleTheme() {
       </button>
       <div class="faq-answer">
         <div class="faq-answer-inner">
-          <p>A cycle is completed when 100 positions in the conveyor belt queue are filled (a full 7-level conveyor belt queue minus the root). When a cycle completes, it triggers a payout event and automatically re-enters qualifying members into the next cycle. The current cycle number and progress are shown on the Home tab.</p>
+          <p>A cycle is completed when <strong>64 members join behind you</strong> in the conveyor belt queue — pushing you from the back all the way to position #1. When the 65th member joins after you, your cycle completes and you automatically re-enter at the back of the queue.</p>
+              <p>There are no payout events or separate triggers — earnings flow continuously as each new member joins. Completing a cycle simply means you've moved through the full active window and are starting again.</p>
+              <p>The number of cycles you've completed is shown in your Dashboard and Matrix tab.</p>
         </div>
       </div>
     </div>
@@ -360,14 +362,21 @@ function toggleTheme() {
 
     <div class="faq-item" data-terms="re-entry automatic cycle complete reentry pool">
       <button class="faq-question" onclick="toggleFaq(this)">
-        What is automatic re-entry?
+        How does re-entry work in V3?
         <svg class="faq-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="m6 9 6 6 6-6"/></svg>
       </button>
       <div class="faq-answer">
         <div class="faq-answer-inner">
-          <p>Every member has a personal <strong>community wallet</strong> that builds up automatically. It starts with a $1.00 flat contribution at registration, and then receives 20% of every chain payment you earn going forward.</p>
-          <p>The moment your pool hits $10.00, the smart contract automatically re-registers you into the matrix in the same transaction — <strong>no clicks, no gas from you</strong>. Your position stays active and your referrer earns their bonus again.</p>
-          <p>You can see your pool balance and a progress bar on your Dashboard. You can also manually top up your pool at any time to accelerate your next re-entry.</p>
+          <p>Re-entry in V3 is <strong>automatic and positional</strong> — no fees, no pool, no manual action needed.</p>
+          <p>Here's how it works:</p>
+          <ol style="padding-left:18px;margin-top:8px;line-height:2">
+            <li>You join at the back of the 64-slot active queue</li>
+            <li>As new members join behind you, you move forward</li>
+            <li>When you reach <strong>position #1</strong> and the next member joins — your cycle completes</li>
+            <li>You're automatically placed at the back of the queue again</li>
+            <li>You start earning chain pay from the next wave of members behind you</li>
+          </ol>
+          <p style="margin-top:10px">This repeats indefinitely. Every 64 members who join after you = one cycle. The more members join overall, the faster your cycles complete.</p>
         </div>
       </div>
     </div>
