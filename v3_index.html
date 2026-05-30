@@ -317,6 +317,7 @@
     <div class="logo-icon">CN</div>
     <div class="logo-text">Crypto<span>Nova</span></div>
     <span class="logo-badge" id="network-badge">Base Sepolia</span>
+    <span style="background:rgba(245,158,11,.2);color:var(--yellow);border:1px solid rgba(245,158,11,.5);border-radius:4px;padding:2px 8px;font-size:10px;font-weight:700;margin-left:6px">⚡ ENGINE TEST W=5</span>
   </div>
   <div style="display:flex;align-items:center;gap:8px">
     <button class="theme-toggle" id="theme-btn" onclick="toggleTheme()">☀️ Light</button>
@@ -358,7 +359,7 @@
         <div class="token-icon">CN</div>
         <div>
           <div class="token-name">CNOVA Token <span class="pill pill-green" style="font-size:10px;vertical-align:middle">ERC-20 · Base</span></div>
-          <div class="token-addr">0x16aA142C705aC0DCCD6923558071D5FD6E9f4De3 · 18 decimals</div>
+          <div class="token-addr">0x101F6b91c2b8ae6D4401f51C52E15a9d45aE587C · 18 decimals</div>
           <div style="font-size:12px;color:var(--text2);margin-top:4px">Earned automatically on every registration. Floor price backed by treasury USDC.</div>
         </div>
       </div>
@@ -413,7 +414,7 @@
         </div>
         <div class="info-row">
           <span class="info-key">Active Window</span>
-          <span class="info-val">64 slots</span>
+          <span class="info-val">5 slots</span>
         </div>
         <div class="info-row">
           <span class="info-key">Cycles Triggered</span>
@@ -762,7 +763,7 @@
 
     <div class="grid-4" style="margin-bottom:20px">
       <div class="card-sm"><div class="stat-label">Total Nodes</div><div class="stat-value" id="matrix-nodes">—</div></div>
-      <div class="card-sm"><div class="stat-label">Active Window</div><div class="stat-value" id="matrix-bfs">64 slots</div></div>
+      <div class="card-sm"><div class="stat-label">Active Window</div><div class="stat-value" id="matrix-bfs">5 slots</div></div>
       <div class="card-sm"><div class="stat-label">Cycle Fill</div><div class="stat-value" id="matrix-fill">—</div></div>
       <div class="card-sm" style="border-color:var(--green2)">
         <div class="stat-label" id="matrix-my-node-label">My Node ID</div>
@@ -1031,25 +1032,25 @@
 
 <script>
 // ═══════════════════════════════════════════════════════════════════════
-// CONFIG — V3 7-Tier System (Base Sepolia, ACTIVE_WINDOW=64)
+// CONFIG — V3 7-Tier System (Base Sepolia, ACTIVE_WINDOW=5)
 // ═══════════════════════════════════════════════════════════════════════
 const CHAIN_ID = 84532;
 const RPC_URL  = 'https://sepolia.base.org';
 
 const ADDRESSES = {
   usdc:           '0x2D8B7b5eDec96bE441b6fb0D45D74a2BcE2C639a',
-  token:          '0x16aA142C705aC0DCCD6923558071D5FD6E9f4De3',
-  treasury:       '0xa55256Ed90E56DF3009c1a738557B65467dD61e3',
-  communityWallet:'0x4D9a035323B9A09Dc0DD19E54418C2b44f997346',
-  tierManager:    '0x249d6a4502C0b75E7E55d970C031C436855C26d0',
+  token:          '0x101F6b91c2b8ae6D4401f51C52E15a9d45aE587C',
+  treasury:       '0x1d5dC89C8a2004D581Eb60A89D77644338828274',
+  communityWallet:'0xf4cfAda2dBb402886991b840Fc3112C3c9a00f0C',
+  tierManager:    '0x556D1aE584EBAcD92AaEB50B66BF04C959fcAAc7',
   matrices: {
-    1:'0x3b2E0f282C46B060485e7277D080732310FF5DeA',
-    2:'0x320Db0CEd7c7b04B24597195E3a09bc2aDf62caB',
-    3:'0x02F83458ac0fd5050aBBb9babBFa29398b39dC6A',
-    4:'0x25bFdF0d9D41d131e25F9cC4198F9d35ED0816b7',
-    5:'0x9541Dd025494276b7aa3924ab1BE2356261b9Cb7',
-    6:'0xaE1401D22a3Ea5d55F2D5E9c8d30BB6F667776dd',
-    7:'0xEC5E9e4c29B848e0DC07CD36AD1378720D24CcB7',
+    1:'0xaCaFa367Ee367aF933FEc35503163081cdfbe6b6',
+    2:'0x6b0586eE2f88b7969660dc27Fce7F95aF24747AD',
+    3:'0xf58d4640e5C7BeFcA6132CDaA17CcB84294f6ea0',
+    4:'0x55790E3f91C2E5C6fE24D481bb626158e848f902',
+    5:'0x66F692e339e260c49928368B321B14d5C564363D',
+    6:'0x29D10385E4913E5ba468220204D740E593b0Bdf4',
+    7:'0xEC74121f71e169f33C9e643424e1357b410dD792',
   },
 };
 const TIER_NAMES={1:'Nova Seed',2:'Nova Rise',3:'Nova Star',4:'Nova Prime',5:'SuperNova Genesis',6:'SuperNova Elite',7:'SuperNova Spark'};
