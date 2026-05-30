@@ -429,7 +429,7 @@
           <span class="info-val" id="stat-my-next-cycle">—</span>
         </div>
         <div style="margin-top:10px;padding:10px 12px;background:var(--bg3);border-radius:8px;font-size:12px;color:var(--text3);line-height:1.6">
-          Every 64 members who join behind you = 1 cycle. You rotate to the back and re-enter. Earn chain pay from every member in your window.
+          Every <span id='cb-aw-desc'>64</span> members who join behind you = 1 cycle. You rotate to the back and re-enter. Earn chain pay from every member in your window.
         </div>
       </div>
 
@@ -763,7 +763,7 @@
 
     <div class="grid-4" style="margin-bottom:20px">
       <div class="card-sm"><div class="stat-label">Total Nodes</div><div class="stat-value" id="matrix-nodes">—</div></div>
-      <div class="card-sm"><div class="stat-label">Active Window</div><div class="stat-value" id="matrix-bfs">5 slots</div></div>
+      <div class="card-sm"><div class="stat-label">Active Window</div><div class="stat-value" id="matrix-bfs">— slots</div></div>
       <div class="card-sm"><div class="stat-label">Cycle Fill</div><div class="stat-value" id="matrix-fill">—</div></div>
       <div class="card-sm" style="border-color:var(--green2)">
         <div class="stat-label" id="matrix-my-node-label">My Node ID</div>
@@ -1214,19 +1214,26 @@ async function loadConveyorBeltStats(){
     const labelEl=document.getElementById('cb-tier-label');
     if(labelEl)labelEl.textContent=tierN;
     const mx=new ethers.Contract(ADDRESSES.matrices[tier],MATRIX_ABI,readProvider);
-    const mem=await mx.totalMembers();
-    const cyclesDone=Math.max(0,Number(mem)-64);
-    // First rotation needs 65 members (64 fills window, 65th triggers)
-    // After that every new join = one rotation
-    const nextRot=Number(mem)<65?(65):Number(mem)+1;
-    const membersNeeded=Number(mem)<65?(65-Number(mem)):1;
+    // Fetch AW FIRST so all calculations use correct window size
+    let AW=64;
+    try{AW=Number(await mx.ACTIVE_WINDOW());}catch(_){AW=64;}
+    let memRaw=0n;
+    try{memRaw=await mx.totalMembers();}catch(_){
+      await new Promise(r=>setTimeout(r,1000));
+      try{memRaw=await mx.totalMembers();}catch(e2){lEl.innerHTML='❌ RPC error — please refresh.';return;}
+    }
+    const mem=memRaw;
+    const cyclesDone=Math.max(0,Number(mem)-AW);
+    // First rotation needs AW+1 members; after that every join rotates
+    const nextRot=Number(mem)<(AW+1)?(AW+1):Number(mem)+1;
+    const membersNeeded=Number(mem)<(AW+1)?((AW+1)-Number(mem)):1;
     const filledEl=document.getElementById('stat-filled');
     if(filledEl)filledEl.textContent=mem.toString();
     const cyclesEl=document.getElementById('stat-cycles-done');
     if(cyclesEl)cyclesEl.textContent=cyclesDone>0?cyclesDone+' rotation'+(cyclesDone!==1?'s':'')+' so far':'None yet';
     const nextEl=document.getElementById('stat-next-cycle');
     if(nextEl){
-      if(Number(mem)<65){
+      if(Number(mem)<(AW+1)){
         nextEl.textContent='Member #'+nextRot+' ('+membersNeeded+' more needed)';
         nextEl.style.color='var(--text2)';
       } else {
@@ -1284,9 +1291,14 @@ async function getFallbackReferrer(){
   try{
     const t1=new ethers.Contract(ADDRESSES.matrices[1],MATRIX_ABI,readProvider);
     const total=Number(await t1.totalMembers());
-    const idx=total%foundingMembers.length;
-    const addr=foundingMembers[idx];
-    console.log('fallback referrer: '+addr+' (pool idx '+idx+'/'+foundingMembers.length+', total members: '+total+')');
+    // Use time-based rotation for small pools to avoid always picking #1
+    // For large pools use totalMembers for on-chain consistency
+    const useTime=foundingMembers.length<5;
+    const rotIdx=useTime
+      ? Math.floor(Date.now()/1000)%foundingMembers.length
+      : total%foundingMembers.length;
+    const addr=foundingMembers[rotIdx];
+    console.log('fallback referrer: '+addr+' (idx '+rotIdx+'/'+foundingMembers.length+')');
     return addr;
   }catch(_){
     // Fallback to session counter if chain read fails
@@ -1560,13 +1572,7 @@ async function loadQueueView(){
   try{
     const tier=getSelectedMatrixTier();
     const mx=new ethers.Contract(ADDRESSES.matrices[tier],MATRIX_ABI,readProvider);
-    let total=0;
-    try{total=Number(await mx.totalMembers());}catch(_){
-      await new Promise(r=>setTimeout(r,1000));
-      try{total=Number(await mx.totalMembers());}catch(e2){
-        lEl.innerHTML='❌ RPC error loading queue — please refresh and try again.';return;
-      }
-    }
+    // AW and mem fetched above
     let myAddr=userAddr;
     if(total===0){lEl.innerHTML='No members in Tier '+tier+' yet.';return;}
     // Fetch all members and their positions
