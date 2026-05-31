@@ -1575,16 +1575,17 @@ async function loadQueueView(){
     try{total=Number(await mx.totalMembers());}catch(_){total=0;}
     let myAddr=userAddr;
     if(total===0){lEl.innerHTML='No members in Tier '+tier+' yet.';return;}
-    // Fetch all members and their positions
+    // Fetch all members and their positions — throttled to avoid RPC rate limits
     const delay=ms=>new Promise(r=>setTimeout(r,ms));
     const rows=[];
     for(let i=1;i<=total;i++){
       let addr,m,cy,qpos=0n;
       try{
-        addr=await mx.memberById(i);
-        [m,cy]=await Promise.all([mx.members(addr),mx.cyclesCompleted(addr)]);
+        addr=await mx.memberById(i);await delay(120);
+        m=await mx.members(addr);await delay(120);
+        cy=await mx.cyclesCompleted(addr);await delay(120);
         try{qpos=await mx.positionOf(addr);}catch(_){qpos=0n;}
-        await delay(50);
+        await delay(150);
       }catch(_){continue;}
       rows.push({addr,m,cy,qpos:Number(qpos)});
     }
@@ -1625,11 +1626,13 @@ async function loadMyTree(){
   const t1=new ethers.Contract(ADDRESSES.matrices[tier],MATRIX_ABI,readProvider);
   try{
     const m=await t1.members(userAddr);if(!m.isRegistered){toast('Not registered in Tier 1 yet','error');return;}
+    await new Promise(r=>setTimeout(r,150));
     const cy=await t1.cyclesCompleted(userAddr);
     document.getElementById('matrix-my-node-label').textContent='My Member ID';
     document.getElementById('matrix-my-node').textContent='#'+m.id.toString();
     const sub=document.getElementById('matrix-my-level-sub');sub.textContent='Cycles: '+cy.toString();sub.style.display='block';
     const ban=document.getElementById('matrix-pos-banner');ban.style.display='block';
+    await new Promise(r=>setTimeout(r,150));
     const queuePos = await t1.positionOf(userAddr).catch(()=>0n);
       const aw4disp=await t1.ACTIVE_WINDOW().catch(()=>5n);
       const isActiveNow = Number(queuePos) > 0 && Number(queuePos) <= Number(aw4disp);
