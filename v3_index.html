@@ -1039,18 +1039,18 @@ const RPC_URL  = 'https://sepolia.base.org';
 
 const ADDRESSES = {
   usdc:           '0x2D8B7b5eDec96bE441b6fb0D45D74a2BcE2C639a',
-  token:          '0x1cCEC550610Ed19b82f41aad82755497DA02D2A3',
-  treasury:       '0xe872C64762a00a154b7793E317f3e757ddbc7263',
-  communityWallet:'0x517A974CC9C51cB1c92FFf79A57B721c5ABeA294',
-  tierManager:    '0xb7ABd81C23890e7d835004e6844890144FFb9569',
+  token:          '0xb0003d96026848C7737A7ACd2b7f4dc526D23BAc',
+  treasury:       '0xED650854C50096eB2eAb68021E3769494989BA1B',
+  communityWallet:'0x2821Ab24bB4eF4a4c334a3F3337c892372e4FEA9',
+  tierManager:    '0x315E9a37d3B081fee6567Ed30A970F04D8A13fB0',
   matrices: {
-    1:'0x8ceb26E706431BDbaEF3d8a3d9f749ee9685C352',
-    2:'0x9D97dF7A0e08912d19340b8a10d48765F0fc26b1',
-    3:'0x8fd43a0273Ef84860515e02f60e563A24B1117FC',
-    4:'0x21DB16D28540E5f8F09A3649817F974fe1f10Ac0',
-    5:'0xf6A5668A92686015D58C7BC3DA9a3fbb5A1fd630',
-    6:'0x5Bf6f41a0988709e3DC8217aE5e93d428CC13a37',
-    7:'0x82A262Fd0949133B45fe9B9762775F967C1ac3d5',
+    1:'0x3fF96D4555c59E86D02681352f2Cc555Ed122ee5',
+    2:'0xBC0faFe036308d00e438FcC85924314490b9Ee1b',
+    3:'0x58f59289E0de4e95bB7ffa8b1355E45F6f0886F8',
+    4:'0xcb5f2C966a465cD739094Ce3A4E927645643cBcd',
+    5:'0x99Ce8E0aBff90fE3E7C2D1D4dba02F0c4Fa787cB',
+    6:'0x45504356a1fCa020bA7D8e15a7a0e0C6C39B190F',
+    7:'0x74d472E70debdC85173Ac542982F6fAc94bE7DBf',
   },
 };
 const TIER_NAMES={1:'Nova Seed',2:'Nova Rise',3:'Nova Star',4:'Nova Prime',5:'SuperNova Genesis',6:'SuperNova Elite',7:'SuperNova Spark'};
@@ -1286,23 +1286,20 @@ async function getFallbackReferrer(){
   if(!foundingMembersReady){const t0=Date.now();while(!foundingMembersReady&&Date.now()-t0<8000)await new Promise(r=>setTimeout(r,200));}
   if(foundingMembers.length===0)await loadFoundingMembers();
   if(foundingMembers.length===0)return ethers.ZeroAddress;
-  // Use on-chain totalMembers as index — consistent across all browsers/devices
-  // Each new registration automatically moves to the next founding member
+  // Round-robin using a sessionStorage counter so each registration picks the next member.
+  // totalMembers % N breaks when totalMembers is a multiple of N (always lands on index 0).
   try{
+    const KEY='cnova_ref_idx';
+    let idx=parseInt(sessionStorage.getItem(KEY)||'0',10);
+    // Also offset by on-chain total so different browsers land on different members
     const t1=new ethers.Contract(ADDRESSES.matrices[1],MATRIX_ABI,readProvider);
-    const total=Number(await t1.totalMembers());
-    // Use time-based rotation for small pools to avoid always picking #1
-    // For large pools use totalMembers for on-chain consistency
-    // Always use time-based for pools ≤ 20 members to avoid modulo bias
-    const useTime=foundingMembers.length<=20;
-    const rotIdx=useTime
-      ? Math.floor(Date.now()/30)%foundingMembers.length  // changes every 30ms = different each registration
-      : total%foundingMembers.length;
+    const total=Number(await t1.totalMembers().catch(()=>0n));
+    const rotIdx=(idx+total)%foundingMembers.length;
+    sessionStorage.setItem(KEY,String(idx+1));
     const addr=foundingMembers[rotIdx];
-    console.log('fallback referrer: '+addr+' (idx '+rotIdx+'/'+foundingMembers.length+')');
+    console.log('fallback referrer: '+addr+' (idx '+rotIdx+'/'+foundingMembers.length+', total='+total+')');
     return addr;
   }catch(_){
-    // Fallback to session counter if chain read fails
     const addr=foundingMembers[fallbackRoundRobin%foundingMembers.length];fallbackRoundRobin++;
     return addr;
   }
@@ -1634,12 +1631,12 @@ async function loadMyTree(){
     const sub=document.getElementById('matrix-my-level-sub');sub.textContent='Cycles: '+cy.toString();sub.style.display='block';
     const ban=document.getElementById('matrix-pos-banner');ban.style.display='block';
     const queuePos = await t1.positionOf(userAddr).catch(()=>0n);
-      const isActiveNow = Number(queuePos) > 0 && Number(queuePos) <= 64;
-      const tierN=TIER_NAMES[tier]||('Tier '+tier);
       const aw4disp=await t1.ACTIVE_WINDOW().catch(()=>5n);
+      const isActiveNow = Number(queuePos) > 0 && Number(queuePos) <= Number(aw4disp);
+      const tierN=TIER_NAMES[tier]||('Tier '+tier);
       const posDisplay = Number(queuePos) > 0 ? 'Queue Position: #' + queuePos + ' of ' + aw4disp : 'Re-entering queue';
       document.getElementById('matrix-pos-level').textContent = '🏅 ' + tierN + ' · ' + posDisplay;
-    document.getElementById('matrix-pos-slots').textContent='♻️ Cycles: '+cy.toString()+' | Window: '+awNum+' slots';
+    document.getElementById('matrix-pos-slots').textContent='♻️ Cycles: '+cy.toString()+' | Window: '+aw4disp.toString()+' slots';
     document.getElementById('matrix-pos-cycle').textContent='💰 Earned: '+u6(BigInt(m.totalEarned));
     await loadQueueView();
   }catch(e){toast('Error: '+e.message,'error');}
