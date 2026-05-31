@@ -390,6 +390,9 @@
       <div class="card-sm"><div class="stat-label">Treasury Reserve</div><div class="stat-value" id="stat-reserve"><span class="spinner" style="color:var(--text3)"></span></div><div class="stat-sub">USDC backing floor</div></div>
       <div class="card-sm" style="border-color:rgba(245,158,11,.4)"><div class="stat-label">⛏️ Mining Epoch</div><div class="stat-value" id="stat-epoch-badge" style="font-size:14px;color:var(--yellow)"><span class="spinner" style="color:var(--yellow)"></span></div><div class="stat-sub" id="stat-epoch-reward-sub">— CNOVA per entry</div></div>
     </div>
+    <div id="stat-belt-row" style="display:none;margin-top:8px;padding:10px 16px;background:var(--bg3);border:1px solid var(--border);border-radius:10px;font-size:13px;color:var(--text2)">
+      🎢 <strong style="color:var(--text)">Multi-Belt V5</strong> — <span id="stat-belt">Loading…</span>
+    </div>
 
     <!-- Cycle progress -->
     <div class="grid-2" style="margin-bottom:24px">
@@ -1043,6 +1046,7 @@ const ADDRESSES = {
   treasury:       '0x1a2cB8B61A22b9b4B572CE925d485CF25d2696F9',
   communityWallet:'0x2C95F5c115864b155176F6E5fcfe0D2f9649464F',
   tierManager:    '0x30e601c5a8A474974EC097d4a33cb1C0b9228A43',
+  beltManager:    '',   // V5 — filled after deploy
   matrices: {
     1:'0x0088F3ee7226c447E9b174c0FC0126D258aD9471',
     2:'0x16f4EBcd97D98aF24f0b32EaFA9E3402802536f0',
@@ -1106,6 +1110,22 @@ const USDC_ABI = [
   {"inputs":[{"name":"account","type":"address"}],"name":"balanceOf","outputs":[{"type":"uint256"}],"stateMutability":"view","type":"function"},
   {"inputs":[],"name":"decimals","outputs":[{"type":"uint8"}],"stateMutability":"view","type":"function"},
   {"inputs":[{"name":"to","type":"address"},{"name":"amount","type":"uint256"}],"name":"mint","outputs":[],"stateMutability":"nonpayable","type":"function"},
+];
+
+const BELT_MANAGER_ABI = [
+  {"inputs":[{"name":"referrer","type":"address"}],"name":"register","outputs":[],"stateMutability":"nonpayable","type":"function"},
+  {"inputs":[{"name":"member","type":"address"}],"name":"isRegistered","outputs":[{"type":"bool"}],"stateMutability":"view","type":"function"},
+  {"inputs":[{"name":"member","type":"address"}],"name":"hasRegistered","outputs":[{"type":"bool"}],"stateMutability":"view","type":"function"},
+  {"inputs":[{"name":"member","type":"address"}],"name":"beltOf","outputs":[{"type":"address"}],"stateMutability":"view","type":"function"},
+  {"inputs":[{"name":"member","type":"address"}],"name":"memberBeltIndex","outputs":[{"type":"uint256"}],"stateMutability":"view","type":"function"},
+  {"inputs":[],"name":"activeBeltIndex","outputs":[{"type":"uint256"}],"stateMutability":"view","type":"function"},
+  {"inputs":[],"name":"totalBelts","outputs":[{"type":"uint256"}],"stateMutability":"view","type":"function"},
+  {"inputs":[],"name":"totalMembers","outputs":[{"type":"uint256"}],"stateMutability":"view","type":"function"},
+  {"inputs":[],"name":"activeBelt","outputs":[{"type":"address"}],"stateMutability":"view","type":"function"},
+  {"inputs":[],"name":"BELT_MAX","outputs":[{"type":"uint256"}],"stateMutability":"view","type":"function"},
+  {"inputs":[{"name":"beltIndex","type":"uint256"}],"name":"beltStatus","outputs":[{"type":"address","name":"beltAddress"},{"type":"uint256","name":"memberCount"},{"type":"bool","name":"isFull"},{"type":"bool","name":"isActive"}],"stateMutability":"view","type":"function"},
+  {"anonymous":false,"inputs":[{"indexed":true,"name":"beltIndex","type":"uint256"},{"indexed":false,"name":"beltAddress","type":"address"}],"name":"BeltActivated","type":"event"},
+  {"anonymous":false,"inputs":[{"indexed":true,"name":"member","type":"address"},{"indexed":false,"name":"beltIndex","type":"uint256"},{"indexed":false,"name":"beltAddress","type":"address"}],"name":"MemberRouted","type":"event"},
 ];
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -1336,11 +1356,33 @@ async function getFallbackReferrer(){
 // ═══════════════════════════════════════════════════════════════════════
 async function loadHomeStats(){
   try{
+    // V5: use BeltManager for totalMembers if configured, else fall back to matrix[1]
+    const useBeltMgr = ADDRESSES.beltManager && ADDRESSES.beltManager.length > 10;
+    const memberSource = useBeltMgr
+      ? new ethers.Contract(ADDRESSES.beltManager, BELT_MANAGER_ABI, readProvider)
+      : new ethers.Contract(ADDRESSES.matrices[1], MATRIX_ABI, readProvider);
     const t1=new ethers.Contract(ADDRESSES.matrices[1],MATRIX_ABI,readProvider);
     const tr=new ethers.Contract(ADDRESSES.treasury,TREASURY_ABI,readProvider);
     const tk=new ethers.Contract(ADDRESSES.token,TOKEN_ABI,readProvider);
     const tm=new ethers.Contract(ADDRESSES.tierManager,TIER_MANAGER_ABI,readProvider);
-    const[mem,floor,reserve,wc,ft]=await Promise.all([t1.totalMembers(),tr.floorPriceFormatted(),tr.usdcReserve(),tm.primeOrAboveCount(),tm.fastTrackEnabled()]);
+    const[mem,floor,reserve,wc,ft]=await Promise.all([memberSource.totalMembers(),tr.floorPriceFormatted(),tr.usdcReserve(),tm.primeOrAboveCount(),tm.fastTrackEnabled()]);
+
+    // V5: show belt status if BeltManager active
+    const beltRow=document.getElementById('stat-belt-row');
+    if(useBeltMgr){
+      if(beltRow)beltRow.style.display='block';
+      try{
+        const bm=new ethers.Contract(ADDRESSES.beltManager,BELT_MANAGER_ABI,readProvider);
+        const [totalBelts,activeIdx,beltMax]=await Promise.all([bm.totalBelts(),bm.activeBeltIndex(),bm.BELT_MAX()]);
+        const [,activeMems,,]=await bm.beltStatus(activeIdx);
+        const beltLetter=String.fromCharCode(65+Number(activeIdx));
+        const pct=Math.round(Number(activeMems)*100/Number(beltMax));
+        const beltEl=document.getElementById('stat-belt');
+        if(beltEl)beltEl.textContent='Active: Belt '+beltLetter+' — '+activeMems+' / '+beltMax+' members ('+pct+'% full) · '+totalBelts+' belts deployed';
+      }catch(_){}
+    } else {
+      if(beltRow)beltRow.style.display='none';
+    }
     await new Promise(r=>setTimeout(r,300));
     // Fetch each separately so one failure doesn't block others
     const epoch=await tk.currentEpoch().catch(()=>0);
@@ -1451,11 +1493,38 @@ async function doRegister(){
   try{
     btn.disabled=true;btn.innerHTML='<span class="spinner"></span>Registering…';
     setStatus('reg-status','⏳ Waiting for MetaMask…','var(--text2)');
-    const t1=new ethers.Contract(ADDRESSES.matrices[1],MATRIX_ABI,signer);
     const ref=referrer||ethers.ZeroAddress;
-    const tx=await t1.register(ref);
-    setStatus('reg-status','⏳ Confirming…','var(--text2)');const receipt=await tx.wait();
-    setStatus('reg-status','🎉 Registered! Tx: '+receipt.hash.slice(0,10)+'…','var(--green)');
+    const usdc=new ethers.Contract(ADDRESSES.usdc,USDC_ABI,signer);
+
+    // V5: use BeltManager if configured, otherwise fall back to direct matrix
+    const useBeltManager = ADDRESSES.beltManager && ADDRESSES.beltManager.length > 10;
+    const targetAddr = useBeltManager ? ADDRESSES.beltManager : ADDRESSES.matrices[1];
+    const targetABI  = useBeltManager ? BELT_MANAGER_ABI : MATRIX_ABI;
+
+    // Step 1: approve
+    setStatus('reg-status','⏳ Step 1: Approving USDC…','var(--text2)');
+    const approveTx = await usdc.approve(targetAddr, 10_000_000n);
+    await approveTx.wait();
+
+    // Step 2: register
+    setStatus('reg-status','⏳ Step 2: Registering…','var(--text2)');
+    const contract = new ethers.Contract(targetAddr, targetABI, signer);
+    const tx = await contract.register(ref);
+    setStatus('reg-status','⏳ Confirming…','var(--text2)');
+    const receipt=await tx.wait();
+
+    // Show belt info if V5
+    let beltMsg = '';
+    if(useBeltManager){
+      try{
+        const bm=new ethers.Contract(ADDRESSES.beltManager,BELT_MANAGER_ABI,readProvider);
+        const beltIdx=await bm.memberBeltIndex(userAddr);
+        const beltLetter=String.fromCharCode(65+Number(beltIdx));
+        beltMsg=' | Belt '+beltLetter;
+      }catch(_){}
+    }
+
+    setStatus('reg-status','🎉 Registered! Tx: '+receipt.hash.slice(0,10)+'…'+beltMsg,'var(--green)');
     toast('Welcome to CryptoNova! 🎉','success',6000);
     btn.innerHTML='Step 2: Register ($10 USDC)';
     document.getElementById('referral-link-card').style.display='block';
