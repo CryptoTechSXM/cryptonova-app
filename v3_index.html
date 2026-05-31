@@ -719,6 +719,39 @@
         </div>
       </div>
 
+      <!-- Community Wallet -->
+      <div class="card" style="margin-bottom:24px">
+        <div class="section-title" style="margin-bottom:14px"><div class="dot" style="background:var(--purple)"></div> Community Wallet</div>
+        <div id="cw-not-founder" style="display:none;padding:14px;background:var(--bg3);border-radius:10px;font-size:13px;color:var(--text2)">
+          You are not a founding member. The first <strong id="cw-max-founders">2,000</strong> members earn Community Wallet payouts every 25 days.
+        </div>
+        <div id="cw-founder-panel" style="display:none">
+          <div class="grid-2" style="margin-bottom:16px">
+            <div class="card-sm" style="border-color:var(--green2)">
+              <div class="stat-label">Founder Status</div>
+              <div class="stat-value" id="cw-tranche" style="font-size:16px">—</div>
+              <div class="stat-sub" id="cw-founder-id">—</div>
+            </div>
+            <div class="card-sm" style="border-color:rgba(168,85,247,.4)">
+              <div class="stat-label">Total Claimable</div>
+              <div class="stat-value green" id="cw-claimable">—</div>
+              <div class="stat-sub">USDC from open epochs</div>
+            </div>
+          </div>
+          <div class="info-row"><span class="info-key">Pending Pool</span><span class="info-val" id="cw-pending">—</span></div>
+          <div class="info-row"><span class="info-key">Current Epoch</span><span class="info-val" id="cw-epoch">—</span></div>
+          <div class="info-row"><span class="info-key">Tranche A Slots</span><span class="info-val" id="cw-tranche-a">—</span></div>
+          <div class="info-row"><span class="info-key">Tranche B Slots</span><span class="info-val" id="cw-tranche-b">—</span></div>
+          <div style="margin-top:16px">
+            <button class="btn btn-green full-w" id="btn-cw-claim" onclick="doCWClaimAll()" disabled>
+              Claim All Available
+            </button>
+            <div id="cw-claim-status" style="margin-top:10px;font-size:13px;color:var(--text2)"></div>
+          </div>
+        </div>
+        <div id="cw-loading" style="font-size:13px;color:var(--text3)"><span class="spinner"></span> Loading…</div>
+      </div>
+
       <!-- Chain pay breakdown -->
       <div class="card">
         <div class="section-title"><div class="dot"></div> Chain Pay Structure — Your Node Depth</div>
@@ -1110,6 +1143,19 @@ const USDC_ABI = [
   {"inputs":[{"name":"account","type":"address"}],"name":"balanceOf","outputs":[{"type":"uint256"}],"stateMutability":"view","type":"function"},
   {"inputs":[],"name":"decimals","outputs":[{"type":"uint8"}],"stateMutability":"view","type":"function"},
   {"inputs":[{"name":"to","type":"address"},{"name":"amount","type":"uint256"}],"name":"mint","outputs":[],"stateMutability":"nonpayable","type":"function"},
+];
+
+const COMMUNITY_WALLET_ABI = [
+  {"inputs":[{"name":"member","type":"address"}],"name":"founderInfo","outputs":[{"name":"isFounder","type":"bool"},{"name":"tranche","type":"uint8"},{"name":"id","type":"uint256"},{"name":"sharesHeld","type":"uint256"}],"stateMutability":"view","type":"function"},
+  {"inputs":[],"name":"poolStatus","outputs":[{"name":"pending","type":"uint256"},{"name":"aActive","type":"bool"},{"name":"bActive","type":"bool"},{"name":"aSlotsFilled","type":"uint256"},{"name":"bSlotsFilled","type":"uint256"}],"stateMutability":"view","type":"function"},
+  {"inputs":[{"name":"member","type":"address"}],"name":"totalClaimable","outputs":[{"name":"total","type":"uint256"}],"stateMutability":"view","type":"function"},
+  {"inputs":[],"name":"currentEpoch","outputs":[{"name":"","type":"uint256"}],"stateMutability":"view","type":"function"},
+  {"inputs":[{"name":"epochId","type":"uint256"}],"name":"epochs","outputs":[{"name":"startTime","type":"uint256"},{"name":"payoutPot","type":"uint256"},{"name":"rolledFromPool","type":"uint256"},{"name":"poolSnapshot","type":"uint256"},{"name":"aPerShare","type":"uint256"},{"name":"bPerShare","type":"uint256"},{"name":"claimDeadline","type":"uint256"}],"stateMutability":"view","type":"function"},
+  {"inputs":[{"name":"epochId","type":"uint256"}],"name":"claim","outputs":[],"stateMutability":"nonpayable","type":"function"},
+  {"inputs":[{"name":"epochIds","type":"uint256[]"}],"name":"claimMultiple","outputs":[],"stateMutability":"nonpayable","type":"function"},
+  {"inputs":[],"name":"TRANCHE_A_MAX","outputs":[{"name":"","type":"uint256"}],"stateMutability":"view","type":"function"},
+  {"inputs":[],"name":"MAX_FOUNDERS","outputs":[{"name":"","type":"uint256"}],"stateMutability":"view","type":"function"},
+  {"inputs":[],"name":"pendingPool","outputs":[{"name":"","type":"uint256"}],"stateMutability":"view","type":"function"},
 ];
 
 const BELT_MANAGER_ABI = [
@@ -1602,6 +1648,82 @@ async function loadDashboard(){
       const dEl=document.getElementById('dash-directs');if(dEl)dEl.textContent=cnt+' member'+(cnt!==1?'s':'');
     }catch(_){}
   }catch(e){console.error('loadDashboard',e);}
+  // Load CW after main dashboard
+  await loadCommunityWallet();
+}
+
+async function loadCommunityWallet(){
+  const loadEl=document.getElementById('cw-loading');
+  const notF=document.getElementById('cw-not-founder');
+  const panel=document.getElementById('cw-founder-panel');
+  if(!loadEl||!notF||!panel)return;
+  if(!userAddr){loadEl.style.display='none';return;}
+  loadEl.style.display='block';notF.style.display='none';panel.style.display='none';
+  try{
+    const cw=new ethers.Contract(ADDRESSES.communityWallet,COMMUNITY_WALLET_ABI,readProvider);
+    const[info,pool,claimable,epoch,maxF,trancheAMax]=await Promise.all([
+      cw.founderInfo(userAddr),
+      cw.poolStatus(),
+      cw.totalClaimable(userAddr),
+      cw.currentEpoch(),
+      cw.MAX_FOUNDERS(),
+      cw.TRANCHE_A_MAX(),
+    ]);
+    loadEl.style.display='none';
+    const maxFEl=document.getElementById('cw-max-founders');if(maxFEl)maxFEl.textContent=maxF.toString();
+    if(!info.isFounder){
+      notF.style.display='block';panel.style.display='none';return;
+    }
+    panel.style.display='block';
+    const trancheName=info.tranche===1n?'Tranche A — Founding Member':'Tranche B — Early Member';
+    const trancheColor=info.tranche===1n?'var(--green)':'var(--blue)';
+    const tEl=document.getElementById('cw-tranche');if(tEl){tEl.textContent=trancheName;tEl.style.color=trancheColor;}
+    const fidEl=document.getElementById('cw-founder-id');if(fidEl)fidEl.textContent='Founder #'+info.id.toString();
+    const clEl=document.getElementById('cw-claimable');if(clEl)clEl.textContent=u6(claimable);
+    const pEl=document.getElementById('cw-pending');if(pEl)pEl.textContent=u6(pool.pending);
+    const epEl=document.getElementById('cw-epoch');if(epEl)epEl.textContent='Epoch '+epoch.toString()+' active';
+    const taEl=document.getElementById('cw-tranche-a');if(taEl)taEl.textContent=pool.aSlotsFilled+' / '+trancheAMax+(pool.aActive?' ✅ Active':' (filling)');
+    const tbEl=document.getElementById('cw-tranche-b');if(tbEl)tbEl.textContent=pool.bSlotsFilled+' / '+trancheAMax+(pool.bActive?' ✅ Active':' (filling)');
+    const btn=document.getElementById('btn-cw-claim');if(btn)btn.disabled=claimable===0n;
+  }catch(e){
+    if(loadEl)loadEl.innerHTML='<span style="color:var(--text3);font-size:13px">Community Wallet data unavailable</span>';
+    console.error('loadCommunityWallet',e);
+  }
+}
+
+async function doCWClaimAll(){
+  if(!signer){toast('Connect wallet first','error');return;}
+  const btn=document.getElementById('btn-cw-claim');
+  const statusEl=document.getElementById('cw-claim-status');
+  try{
+    btn.disabled=true;btn.innerHTML='<span class="spinner"></span>Claiming…';
+    setStatus('cw-claim-status','⏳ Waiting for MetaMask…','var(--text2)');
+    const cw=new ethers.Contract(ADDRESSES.communityWallet,COMMUNITY_WALLET_ABI,signer);
+    const cwR=new ethers.Contract(ADDRESSES.communityWallet,COMMUNITY_WALLET_ABI,readProvider);
+    const epoch=await cwR.currentEpoch();
+    // Build list of claimable epoch IDs (all epochs up to current)
+    const epochIds=[];
+    for(let e=1n;e<=epoch;e++){
+      try{
+        const amt=await cwR.totalClaimable(userAddr);
+        if(amt>0n){epochIds.push(e);}
+      }catch(_){}
+    }
+    if(epochIds.length===0){toast('Nothing to claim right now','info');btn.disabled=false;btn.innerHTML='Claim All Available';return;}
+    const tx=epochIds.length===1
+      ? await cw.claim(epochIds[0])
+      : await cw.claimMultiple(epochIds);
+    setStatus('cw-claim-status','⏳ Confirming…','var(--text2)');
+    const receipt=await tx.wait();
+    setStatus('cw-claim-status','✅ Claimed! Tx: '+receipt.hash.slice(0,10)+'…','var(--green)');
+    toast('Community Wallet claimed! 🎉','success');
+    btn.innerHTML='Claim All Available';
+    await loadCommunityWallet();
+  }catch(e){
+    const msg=e.reason||e.message||'Unknown';
+    setStatus('cw-claim-status','❌ '+msg,'var(--red)');
+    btn.disabled=false;btn.innerHTML='Claim All Available';
+  }
 }
 
 async function doWithdrawAll(){
