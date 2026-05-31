@@ -1269,17 +1269,43 @@ async function loadConveyorBeltStats(){
 }
 
 async function loadFoundingMembers(){
+  // Pool logic:
+  //   Phase 1 — Whale gate not yet open:
+  //     Rotate through the first 100 T1 members (broad organic pool)
+  //   Phase 2 — 25 SuperNova Genesis members reached:
+  //     Lock in the first 25 T5 members permanently (they earned it)
+  //     T1 rotation retired — Genesis pool takes over forever
   try{
-    const delay=ms=>new Promise(r=>setTimeout(r,ms));const seen=new Set();
+    const delay=ms=>new Promise(r=>setTimeout(r,ms));
+    const seen=new Set();
+    const GENESIS_LOCK = 25; // whale gate threshold
+
     const t5=new ethers.Contract(ADDRESSES.matrices[5],MATRIX_ABI,readProvider);
     const n5=Number(await t5.totalMembers());
-    for(let i=1;i<=Math.min(n5,50);i++){try{const a=await t5.memberById(i);if(a&&a!==ethers.ZeroAddress&&!seen.has(a.toLowerCase())){seen.add(a.toLowerCase());foundingMembers.push(a);}await delay(60);}catch(_){}}
-    if(foundingMembers.length<25){
+
+    // Fetch first 25 T5 members
+    const genesisPool=[];
+    for(let i=1;i<=Math.min(n5,GENESIS_LOCK);i++){
+      try{const a=await t5.memberById(i);if(a&&a!==ethers.ZeroAddress&&!seen.has(a.toLowerCase())){seen.add(a.toLowerCase());genesisPool.push(a);}await delay(80);}catch(_){}
+    }
+
+    if(genesisPool.length>=GENESIS_LOCK){
+      // Phase 2: whale gate open — use locked Genesis pool only
+      foundingMembers=genesisPool;
+      console.log('Referrer pool: GENESIS LOCKED ('+foundingMembers.length+' members)');
+    } else {
+      // Phase 1: whale gate not open — rotate first 100 T1 members
       const t1=new ethers.Contract(ADDRESSES.matrices[1],MATRIX_ABI,readProvider);
       const n1=Number(await t1.totalMembers());
-      for(let i=1;i<=Math.min(n1,50);i++){if(foundingMembers.length>=60)break;try{const a=await t1.memberById(i);if(a&&a!==ethers.ZeroAddress&&!seen.has(a.toLowerCase())){seen.add(a.toLowerCase());foundingMembers.push(a);}await delay(60);}catch(_){}}
+      const t1Pool=[];
+      for(let i=1;i<=Math.min(n1,100);i++){
+        try{const a=await t1.memberById(i);if(a&&a!==ethers.ZeroAddress&&!seen.has(a.toLowerCase())){seen.add(a.toLowerCase());t1Pool.push(a);}await delay(80);}catch(_){}
+      }
+      foundingMembers=t1Pool.length>0?t1Pool:genesisPool;
+      console.log('Referrer pool: T1 ROTATION ('+foundingMembers.length+' members, genesis='+genesisPool.length+'/'+GENESIS_LOCK+')');
     }
-    foundingMembersReady=true;console.log('foundingMembers:',foundingMembers.length);
+
+    foundingMembersReady=true;
   }catch(e){foundingMembersReady=true;console.warn('loadFoundingMembers:',e.message);}
 }
 async function getFallbackReferrer(){
