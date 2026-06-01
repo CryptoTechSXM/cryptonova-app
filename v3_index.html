@@ -417,7 +417,7 @@
         </div>
         <div class="info-row">
           <span class="info-key">Active Window</span>
-          <span class="info-val">5 slots</span>
+          <span class="info-val" id="stat-aw-slots">— slots</span>
         </div>
         <div class="info-row">
           <span class="info-key">Cycles Triggered</span>
@@ -432,7 +432,7 @@
           <span class="info-val" id="stat-my-next-cycle">—</span>
         </div>
         <div style="margin-top:10px;padding:10px 12px;background:var(--bg3);border-radius:8px;font-size:12px;color:var(--text3);line-height:1.6">
-          Every <span id='cb-aw-desc'>64</span> members who join behind you = 1 cycle. You rotate to the back and re-enter. Earn chain pay from every member in your window.
+          Every <span id='cb-aw-desc'>2</span> members who join behind you = 1 cycle. You rotate to the back and re-enter. Earn chain pay from every member in your window.
         </div>
       </div>
 
@@ -445,7 +445,7 @@
         </div>
         <div class="info-row">
           <span class="info-key">Threshold</span>
-          <span class="info-val">25 members</span>
+          <span class="info-val" id="stat-whale-threshold">25 members</span>
         </div>
         <div style="margin-top:10px">
           <div style="display:flex;justify-content:space-between;font-size:12px;color:var(--text3);margin-bottom:4px">
@@ -1129,6 +1129,7 @@ const TIER_MANAGER_ABI = [
   {"inputs":[],"name":"fastTrackEnabled","outputs":[{"internalType":"bool","name":"","type":"bool"}],"stateMutability":"view","type":"function"},
   {"inputs":[],"name":"primeOrAboveCount","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},
   {"inputs":[],"name":"WHALE_GATE_THRESHOLD","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},
+  {"inputs":[],"name":"GENESIS_GATE_THRESHOLD","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},
   {"inputs":[{"internalType":"uint256","name":"","type":"uint256"}],"name":"tierFee","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},
   {"inputs":[{"internalType":"uint256","name":"","type":"uint256"}],"name":"cycleReq","outputs":[{"internalType":"uint8","name":"","type":"uint8"}],"stateMutability":"view","type":"function"},
   {"inputs":[{"internalType":"address","name":"member","type":"address"}],"name":"cyclesInCurrentTier","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},
@@ -1297,7 +1298,16 @@ async function loadConveyorBeltStats(){
     const tierN=TIER_NAMES[tier]||('Tier '+tier);
     const labelEl=document.getElementById('cb-tier-label');
     if(labelEl)labelEl.textContent=tierN;
-    const mx=new ethers.Contract(ADDRESSES.matrices[tier],MATRIX_ABI,readProvider);
+    // V5: for T1, use the BeltManager's ACTIVE belt — not the frozen Belt A
+    let mxAddr = ADDRESSES.matrices[tier];
+    if(tier === 1 && ADDRESSES.beltManager && ADDRESSES.beltManager.length > 10){
+      try{
+        const bm=new ethers.Contract(ADDRESSES.beltManager,BELT_MANAGER_ABI,readProvider);
+        const activeBeltAddr=await bm.activeBelt();
+        if(activeBeltAddr && activeBeltAddr !== ethers.ZeroAddress) mxAddr=activeBeltAddr;
+      }catch(_){}
+    }
+    const mx=new ethers.Contract(mxAddr,MATRIX_ABI,readProvider);
     // Fetch AW FIRST so all calculations use correct window size
     let AW=2;  // lightning default, reads from contract
     try{AW=Number(await mx.ACTIVE_WINDOW());}catch(_){AW=2;}
@@ -1311,6 +1321,11 @@ async function loadConveyorBeltStats(){
     // First rotation needs AW+1 members; after that every join rotates
     const nextRot=Number(mem)<(AW+1)?(AW+1):Number(mem)+1;
     const membersNeeded=Number(mem)<(AW+1)?((AW+1)-Number(mem)):1;
+    // Update AW display
+    const awSlotsEl=document.getElementById('stat-aw-slots');
+    if(awSlotsEl)awSlotsEl.textContent=AW+' slots';
+    const awDescEl=document.getElementById('cb-aw-desc');
+    if(awDescEl)awDescEl.textContent=AW;
     const filledEl=document.getElementById('stat-filled');
     if(filledEl)filledEl.textContent=mem.toString();
     const cyclesEl=document.getElementById('stat-cycles-done');
@@ -1429,7 +1444,7 @@ async function loadHomeStats(){
     const tr=new ethers.Contract(ADDRESSES.treasury,TREASURY_ABI,readProvider);
     const tk=new ethers.Contract(ADDRESSES.token,TOKEN_ABI,readProvider);
     const tm=new ethers.Contract(ADDRESSES.tierManager,TIER_MANAGER_ABI,readProvider);
-    const[mem,floor,reserve,wc,ft]=await Promise.all([memberSource.totalMembers(),tr.floorPriceFormatted(),tr.usdcReserve(),tm.primeOrAboveCount(),tm.fastTrackEnabled()]);
+    const[mem,floor,reserve,wc,ft,whaleThresh]=await Promise.all([memberSource.totalMembers(),tr.floorPriceFormatted(),tr.usdcReserve(),tm.primeOrAboveCount(),tm.fastTrackEnabled(),tm.GENESIS_GATE_THRESHOLD().catch(()=>25n)]);
 
     // V5: show belt status if BeltManager active
     const beltRow=document.getElementById('stat-belt-row');
@@ -1457,16 +1472,18 @@ async function loadHomeStats(){
     document.getElementById('stat-members').textContent=mem.toString();
     document.getElementById('stat-floor').textContent=u6(floor);
     document.getElementById('stat-reserve').textContent=u6(reserve);
-    const wn=Number(wc),wPct=Math.min(100,Math.round((wn/25)*100));
+    const wGate=Number(whaleThresh)||25;
+    const wn=Number(wc),wPct=Math.min(100,Math.round((wn/wGate)*100));
+    const wThEl=document.getElementById('stat-whale-threshold');if(wThEl)wThEl.textContent=wGate+' members';
     document.getElementById('stat-filled').textContent=mem.toString();
     await loadConveyorBeltStats();
     document.getElementById('stat-pct').textContent=wPct+'%';
     document.getElementById('stat-progress').style.width=wPct+'%';
-    document.getElementById('stat-cycle').textContent=ft?'🔓 UNLOCKED':(wn+' / 25');
+    document.getElementById('stat-cycle').textContent=ft?'🔓 UNLOCKED':(wn+' / '+wGate);
     const sEl=document.getElementById('stat-status');
     if(ft)sEl.innerHTML='<span class="pill pill-green">🐋 Fast-Track Active</span>';
     else if(wPct>=60)sEl.innerHTML='<span class="pill pill-yellow">🔥 '+(25-wn)+' more to unlock</span>';
-    else sEl.innerHTML='<span class="pill pill-blue">Whale Gate: '+wn+' / 25</span>';
+    else sEl.innerHTML='<span class="pill pill-blue">Whale Gate: '+wn+' / '+wGate+'</span>';
     const EN=['Nebula Genesis','Mercury Rise','Lunar Cluster','Aurora Zenith','Solaris Echo','Cosmic Core','Galaxy Grid','Supernova Spark'];
     const en=Number(epoch),ename=EN[en]||('Epoch '+(en+1)),edisp=en+1;
     const rf=parseFloat(ethers.formatUnits(reward,18)).toLocaleString(undefined,{maximumFractionDigits:0});
@@ -1529,8 +1546,17 @@ async function loadRegisterTab(){
       try{member=await t1.members(userAddr);}catch(_){}
     }
     balanceEl.textContent=u6(bal);
-    const fee=TIER_FEES_USDC[1];
-    if(allow>=fee)allowanceEl.innerHTML='<span style="color:var(--green)">$'+TIER_FEES[1]+' Approved ✓</span>';
+    // Get exact registration cost (includes reentry pool for older belts)
+    let fee=TIER_FEES_USDC[1];
+    try{
+      const bm=new ethers.Contract(ADDRESSES.beltManager,BELT_MANAGER_ABI,readProvider);
+      const [totalCost,,reentryContrib]=await bm.registrationCost();
+      fee=totalCost;
+    }catch(_){}
+    const feeDisplay=(Number(fee)/1e6).toFixed(2);
+    if(approveBtn)approveBtn.innerHTML='Step 1: Approve $'+feeDisplay+' USDC 🔒';
+    if(registerBtn)registerBtn.innerHTML='Step 2: Register ($'+feeDisplay+' USDC)';
+    if(allow>=fee)allowanceEl.innerHTML='<span style="color:var(--green)">$'+feeDisplay+' Approved ✓</span>';
     else allowanceEl.innerHTML='<span style="color:var(--text3)">Not approved yet</span>';
     warnEl.style.display=bal<fee?'block':'none';
     if(member.isRegistered){
@@ -1561,7 +1587,14 @@ async function approveUSDC(){
     const usdc=new ethers.Contract(ADDRESSES.usdc,USDC_ABI,signer);
     const approveAddr = ADDRESSES.beltManager && ADDRESSES.beltManager.length > 10
       ? ADDRESSES.beltManager : ADDRESSES.matrices[1];
-    const tx=await usdc.approve(approveAddr, TIER_FEES_USDC[1]);
+    // Use registrationCost() for exact amount — includes reentry contribution for older belts
+    let approveAmt = TIER_FEES_USDC[1];
+    try{
+      const bm=new ethers.Contract(ADDRESSES.beltManager,BELT_MANAGER_ABI,readProvider);
+      const [totalCost]=await bm.registrationCost();
+      approveAmt=totalCost;
+    }catch(_){}
+    const tx=await usdc.approve(approveAddr, approveAmt);
     setStatus('reg-status','⏳ Confirming…','var(--text2)');await tx.wait();
     setStatus('reg-status','✅ USDC approved! You can now register.','var(--green)');
     toast('$'+TIER_FEES[1]+' USDC approved!','success');btn.innerHTML='Step 1: Approve $'+TIER_FEES[1]+' USDC 🔒';
@@ -1589,9 +1622,17 @@ async function doRegister(){
     const targetAddr = useBeltManager ? ADDRESSES.beltManager : ADDRESSES.matrices[1];
     const targetABI  = useBeltManager ? BELT_MANAGER_ABI : MATRIX_ABI;
 
-    // Step 1: approve
+    // Step 1: approve — use registrationCost() for exact amount (includes reentry pool contribution)
     setStatus('reg-status','⏳ Step 1: Approving USDC…','var(--text2)');
-    const approveTx = await usdc.approve(targetAddr, TIER_FEES_USDC[1]);
+    let regCost = TIER_FEES_USDC[1];
+    if(useBeltManager){
+      try{
+        const bm=new ethers.Contract(ADDRESSES.beltManager,BELT_MANAGER_ABI,readProvider);
+        const [totalCost]=await bm.registrationCost();
+        regCost=totalCost;
+      }catch(_){}
+    }
+    const approveTx = await usdc.approve(targetAddr, regCost);
     await approveTx.wait();
 
     // Step 2: register

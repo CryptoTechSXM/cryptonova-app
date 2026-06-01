@@ -141,6 +141,7 @@ Self Test (2x) → Lightning Team Test (5x) → Community Test → Mainnet
 - `REENTRY_FEE_BPS()` call in `registrationCost()` → confirmed public constant
 - Belt B joiner overhead 495% at 100 belts → capped at 3 belts ($1.50 max)
 - CNOVA not minted on BeltManager registration → `registerForWithCnova(true)` 
+- Registration fails after Belt A fills → Belt B requires $1.05 ($1 + $0.05 reentry) but approval hardcoded at $1 → fixed: all three approval calls now use `registrationCost()` dynamically
 - ReentrancyGuard double-lock → `registerFor` → `_registerFor` internal split
 
 **Testing Protocol:**
