@@ -1652,13 +1652,18 @@ async function loadDashboard(){
   await loadCommunityWallet();
 }
 
+let _cwLoading=false;
 async function loadCommunityWallet(){
+  if(_cwLoading)return;
+  _cwLoading=true;
   const loadEl=document.getElementById('cw-loading');
   const notF=document.getElementById('cw-not-founder');
   const panel=document.getElementById('cw-founder-panel');
-  if(!loadEl||!notF||!panel)return;
-  if(!userAddr){loadEl.style.display='none';return;}
-  loadEl.style.display='block';notF.style.display='none';panel.style.display='none';
+  if(!loadEl||!notF||!panel){_cwLoading=false;return;}
+  if(!userAddr){loadEl.style.display='none';_cwLoading=false;return;}
+  // Only show spinner if panel is not already visible
+  const alreadyShowing=panel.style.display==='block'||notF.style.display==='block';
+  if(!alreadyShowing)loadEl.style.display='block';
   try{
     const cw=new ethers.Contract(ADDRESSES.communityWallet,COMMUNITY_WALLET_ABI,readProvider);
     const[info,pool,claimable,epoch,maxF,trancheAMax]=await Promise.all([
@@ -1672,9 +1677,9 @@ async function loadCommunityWallet(){
     loadEl.style.display='none';
     const maxFEl=document.getElementById('cw-max-founders');if(maxFEl)maxFEl.textContent=maxF.toString();
     if(!info.isFounder){
-      notF.style.display='block';panel.style.display='none';return;
+      notF.style.display='block';panel.style.display='none';_cwLoading=false;return;
     }
-    panel.style.display='block';
+    panel.style.display='block';notF.style.display='none';
     const trancheName=info.tranche===1n?'Tranche A — Founding Member':'Tranche B — Early Member';
     const trancheColor=info.tranche===1n?'var(--green)':'var(--blue)';
     const tEl=document.getElementById('cw-tranche');if(tEl){tEl.textContent=trancheName;tEl.style.color=trancheColor;}
@@ -1685,9 +1690,11 @@ async function loadCommunityWallet(){
     const taEl=document.getElementById('cw-tranche-a');if(taEl)taEl.textContent=pool.aSlotsFilled+' / '+trancheAMax+(pool.aActive?' ✅ Active':' (filling)');
     const tbEl=document.getElementById('cw-tranche-b');if(tbEl)tbEl.textContent=pool.bSlotsFilled+' / '+trancheAMax+(pool.bActive?' ✅ Active':' (filling)');
     const btn=document.getElementById('btn-cw-claim');if(btn)btn.disabled=claimable===0n;
+    _cwLoading=false;
   }catch(e){
     if(loadEl)loadEl.innerHTML='<span style="color:var(--text3);font-size:13px">Community Wallet data unavailable</span>';
     console.error('loadCommunityWallet',e);
+    _cwLoading=false;
   }
 }
 
