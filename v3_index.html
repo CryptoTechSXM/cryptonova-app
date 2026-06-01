@@ -1089,19 +1089,19 @@ const RPC_URL  = 'https://sepolia.base.org';
 
 const ADDRESSES = {
   usdc:           '0x2D8B7b5eDec96bE441b6fb0D45D74a2BcE2C639a',
-  token:          '0x64FED7C74413Df259d738a9D6Df25FDDb621F852',
-  treasury:       '0x5e8E3d3af40C25ED4E16fF495B6EBA37e8A43c6f',
-  communityWallet:'0x7Dee397Bf31C7C368E69352b86096018f294718f',
-  tierManager:    '0xD4B56B21db682740687c4c98eE96019AD96Ad964',
-  beltManager:    '0xb682bD8229cE903c6DebCcdCe612Cb86C95930b3',
+  token:          '0x05a49143fC367E899ccBf80D0b694eCf88Fa70D9',
+  treasury:       '0x2986273b7562c6eCdcBCD4EE0ffA1Be581e003EA',
+  communityWallet:'0x5A51b6d841eb4374D19A5B2aE3756Db312aECE45',
+  tierManager:    '0x29B4aA13Ca9E94E51D823c47BCbd99F499d48751',
+  beltManager:    '0xdD508D7f9AdE71434264dA2589Be7cF7573C7D82',
   matrices: {
-    1:'0xB34B3DaF5feFf6732E54d77793Cf04b24598e70e',
-    2:'0x0932F113506B52B49e13378fA92e7DF4F631583C',
-    3:'0xBb0E39cC0a16C189099FE8f9966f9BE4D77B470F',
-    4:'0x62a1F1e499B8A0a4D3b433023c9e006376fe96A2',
-    5:'0xAB532AB046b63A563B3640289fF1198Ec5c684e3',
-    6:'0x25D06Bc6be42531BB2cF196fA9C30B24e92d14d6',
-    7:'0x3d98ddE2Ef17Ab1219C5f210A693A17248a76892',
+    1:'0x048D380e118680438fA11eb26Dd7AcD79F230104',
+    2:'0xD6b4b53Eed6Dc8536Ae9C6B1fBc2f5f04DBF7154',
+    3:'0xc26552Ca0A583df65Abc7cdCd8d6F5F9Ed6A4904',
+    4:'0x9AA6D6582a46d1214556372E34FD782b8e32Ec3E',
+    5:'0x6376c7dFbE5618F8128cBc230b5cb8338C1c91D7',
+    6:'0xFa8B749599A21b7dA28786246C4cce358afD6A65',
+    7:'0x5Dd6cE2e1538d44cF259405Dc92C9Da13b0B8493',
   },
 };
 const TIER_NAMES={1:'Nova Seed',2:'Nova Rise',3:'Nova Star',4:'Nova Prime',5:'SuperNova Genesis',6:'SuperNova Elite',7:'SuperNova Spark'};
@@ -1134,6 +1134,9 @@ const TIER_MANAGER_ABI = [
   {"inputs":[{"internalType":"address","name":"member","type":"address"}],"name":"cyclesInCurrentTier","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},
   {"inputs":[{"internalType":"address","name":"member","type":"address"}],"name":"cyclesUntilUpgrade","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},
   {"inputs":[{"internalType":"uint8","name":"targetTier","type":"uint8"},{"internalType":"address","name":"referrer","type":"address"}],"name":"upgradeTier","outputs":[],"stateMutability":"nonpayable","type":"function"},
+  {"inputs":[{"internalType":"bool","name":"enabled","type":"bool"}],"name":"setAutoUpgrade","outputs":[],"stateMutability":"nonpayable","type":"function"},
+  {"inputs":[{"internalType":"address","name":"","type":"address"}],"name":"autoUpgradeEnabled","outputs":[{"type":"bool"}],"stateMutability":"view","type":"function"},
+  {"inputs":[{"internalType":"address","name":"member","type":"address"}],"name":"canUpgrade","outputs":[{"name":"eligible","type":"bool"},{"name":"reason","type":"string"}],"stateMutability":"view","type":"function"},
 ];
 const TREASURY_ABI = [
   {"inputs":[],"name":"floorPrice","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},
@@ -1662,8 +1665,9 @@ async function loadDashboard(){
       const dEl=document.getElementById('dash-directs');if(dEl)dEl.textContent=cnt+' member'+(cnt!==1?'s':'');
     }catch(_){}
   }catch(e){console.error('loadDashboard',e);}
-  // Load CW after main dashboard
+  // Load CW and auto-upgrade status after main dashboard
   await loadCommunityWallet();
+  await loadAutoUpgradeStatus();
 }
 
 let _cwLoading=false;
@@ -1745,6 +1749,41 @@ async function doCWClaimAll(){
     setStatus('cw-claim-status','❌ '+msg,'var(--red)');
     btn.disabled=false;btn.innerHTML='Claim All Available';
   }
+}
+
+async function loadAutoUpgradeStatus(){
+  const toggle=document.getElementById('auto-upgrade-toggle');
+  const statusEl=document.getElementById('auto-upgrade-status');
+  if(!toggle||!statusEl||!userAddr||!readProvider)return;
+  try{
+    const tm=new ethers.Contract(ADDRESSES.tierManager,TIER_MANAGER_ABI,readProvider);
+    const enabled=await tm.autoUpgradeEnabled(userAddr);
+    toggle.checked=enabled;
+    statusEl.textContent=enabled?'On — upgrades automatically on cycle completion':'Off';
+    statusEl.style.color=enabled?'var(--green)':'var(--text2)';
+  }catch(_){}
+}
+
+async function toggleAutoUpgrade(enabled){
+  if(!signer){toast('Connect wallet first','error');return;}
+  const toggle=document.getElementById('auto-upgrade-toggle');
+  const msgEl=document.getElementById('auto-upgrade-msg');
+  const statusEl=document.getElementById('auto-upgrade-status');
+  toggle.disabled=true;
+  try{
+    setStatus('auto-upgrade-msg','⏳ Confirming…','var(--text2)');
+    const tm=new ethers.Contract(ADDRESSES.tierManager,TIER_MANAGER_ABI,signer);
+    const tx=await tm.setAutoUpgrade(enabled);
+    await tx.wait();
+    statusEl.textContent=enabled?'On — upgrades automatically on cycle completion':'Off';
+    statusEl.style.color=enabled?'var(--green)':'var(--text2)';
+    setStatus('auto-upgrade-msg',enabled?'✅ Auto-upgrade enabled':'✅ Auto-upgrade disabled','var(--green)');
+    toast(enabled?'Auto-upgrade enabled!':'Auto-upgrade disabled','success');
+  }catch(e){
+    const msg=e.reason||e.message||'Unknown';
+    setStatus('auto-upgrade-msg','❌ '+msg,'var(--red)');
+    toggle.checked=!enabled; // revert toggle
+  }finally{toggle.disabled=false;}
 }
 
 async function doWithdrawAll(){
