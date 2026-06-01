@@ -1503,11 +1503,22 @@ async function loadRegisterTab(){
     const t1=new ethers.Contract(ADDRESSES.matrices[1],MATRIX_ABI,readProvider);
     let bal=0n,allow=0n,member={isRegistered:false};
     try{bal=await usdc.balanceOf(userAddr);}catch(_){}
-    try{allow=await usdc.allowance(userAddr,ADDRESSES.matrices[1]);}catch(_){}
-    try{member=await t1.members(userAddr);}catch(_){}
+    // V5: approve BeltManager when it's configured, otherwise approve matrix directly
+    const approvalTarget = ADDRESSES.beltManager && ADDRESSES.beltManager.length > 10
+      ? ADDRESSES.beltManager : ADDRESSES.matrices[1];
+    try{allow=await usdc.allowance(userAddr, approvalTarget);}catch(_){}
+    // V5: check BeltManager registration first, fall back to direct matrix check
+    try{
+      if(ADDRESSES.beltManager && ADDRESSES.beltManager.length > 10){
+        const bm=new ethers.Contract(ADDRESSES.beltManager,BELT_MANAGER_ABI,readProvider);
+        const bmReg=await bm.isRegistered(userAddr);
+        if(bmReg) member={isRegistered:true};
+      }
+      if(!member.isRegistered) member=await t1.members(userAddr);
+    }catch(_){}
     balanceEl.textContent=u6(bal);
     const fee=TIER_FEES_USDC[1];
-    if(allow>=fee)allowanceEl.innerHTML='<span style="color:var(--green)">$10 Approved ✓</span>';
+    if(allow>=fee)allowanceEl.innerHTML='<span style="color:var(--green)">$'+TIER_FEES[1]+' Approved ✓</span>';
     else allowanceEl.innerHTML='<span style="color:var(--text3)">Not approved yet</span>';
     warnEl.style.display=bal<fee?'block':'none';
     if(member.isRegistered){
