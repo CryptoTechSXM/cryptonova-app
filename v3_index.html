@@ -455,7 +455,7 @@
         </div>
         <div style="margin-top:8px"><span class="pill" id="stat-status">—</span></div>
         <div style="margin-top:10px;padding:10px 12px;background:var(--bg3);border-radius:8px;font-size:12px;color:var(--text3);line-height:1.6">
-          When 25 members reach SuperNova Genesis (Tier 5), fast-track unlocks — skip straight to any tier above your current one.
+          When <span id="wg-desc-threshold">2</span> members reach SuperNova Genesis (Tier 5), fast-track unlocks — skip straight to any tier above your current one.
         </div>
       </div>
     </div>
@@ -480,7 +480,7 @@
       <div class="split-row"><span class="split-label">🏦 USDC treasury reserve</span><span><span class="split-amount">15%</span> <span class="split-pct">e.g. $1.50 at Tier 1</span></span></div>
       <div class="split-row"><span class="split-label">⚙️ Dev + Ops</span><span><span class="split-amount">5%</span> <span class="split-pct">e.g. $0.50 at Tier 1</span></span></div>
       <div style="margin-top:14px;padding:10px 14px;background:var(--green-dim);border:1px solid var(--green2);border-radius:8px;font-size:13px;color:var(--text2)">
-        💡 <strong style="color:var(--green)">Whale Gate:</strong> When 25 members reach <strong>SuperNova Genesis (Tier 5)</strong>, fast-track unlocks — skip straight to any tier above yours.
+        💡 <strong style="color:var(--green)">Whale Gate:</strong> When <span id="wg-desc-threshold2">2</span> members reach <strong>SuperNova Genesis (Tier 5)</strong>, fast-track unlocks — skip straight to any tier above yours.
       </div>
     </div>
   </div>
@@ -1347,11 +1347,20 @@ async function loadConveyorBeltStats(){
         myNextEl.style.color='var(--text3)';
         return;
       }
-      const qpos=await mx.positionOf(userAddr).catch(()=>0n);
+      // V5: check user's OWN belt — they may be in Belt A while active belt is Belt B
+      let userMxAddr = mxAddr;
+      if(tier === 1 && ADDRESSES.beltManager && ADDRESSES.beltManager.length > 10){
+        try{
+          const bm2=new ethers.Contract(ADDRESSES.beltManager,BELT_MANAGER_ABI,readProvider);
+          const userBelt=await bm2.beltOf(userAddr);
+          if(userBelt && userBelt !== ethers.ZeroAddress) userMxAddr=userBelt;
+        }catch(_){}
+      }
+      const userMx=new ethers.Contract(userMxAddr,MATRIX_ABI,readProvider);
+      const qpos=await userMx.positionOf(userAddr).catch(()=>0n);
       const qNum=Number(qpos);
-      let mObj=await mx.members(userAddr).catch(()=>null);
-      // Retry once if call failed
-      if(!mObj){ await new Promise(r=>setTimeout(r,500)); mObj=await mx.members(userAddr).catch(()=>null); }
+      let mObj=await userMx.members(userAddr).catch(()=>null);
+      if(!mObj){ await new Promise(r=>setTimeout(r,500)); mObj=await userMx.members(userAddr).catch(()=>null); }
       if(!mObj||!mObj.isRegistered){
         myNextEl.textContent='Not in '+tierN;
         myNextEl.style.color='var(--text3)';
@@ -1475,6 +1484,8 @@ async function loadHomeStats(){
     const wGate=Number(whaleThresh)||25;
     const wn=Number(wc),wPct=Math.min(100,Math.round((wn/wGate)*100));
     const wThEl=document.getElementById('stat-whale-threshold');if(wThEl)wThEl.textContent=wGate+' members';
+    const wdEl=document.getElementById('wg-desc-threshold');if(wdEl)wdEl.textContent=wGate;
+    const wdEl2=document.getElementById('wg-desc-threshold2');if(wdEl2)wdEl2.textContent=wGate;
     document.getElementById('stat-filled').textContent=mem.toString();
     await loadConveyorBeltStats();
     document.getElementById('stat-pct').textContent=wPct+'%';
