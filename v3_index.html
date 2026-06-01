@@ -634,7 +634,7 @@
     <div id="dash-not-registered" class="card" style="text-align:center;padding:40px;display:none">
       <div style="font-size:32px;margin-bottom:12px">🚀</div>
       <div style="font-size:16px;font-weight:600;margin-bottom:8px">Not Yet Registered</div>
-      <div style="color:var(--text2);font-size:14px;margin-bottom:20px">You haven't joined the matrix yet. Register with $10 USDC to get started.</div>
+      <div style="color:var(--text2);font-size:14px;margin-bottom:20px">You haven't joined the matrix yet. Register to get started.</div>
       <button class="btn btn-green" onclick="showTab('register')">Register Now</button>
     </div>
 
@@ -1645,8 +1645,23 @@ async function loadDashboard(){
     // Get floor price separately - Treasury call can fail without blocking dashboard
     let floor=0n;
     try{floor=await tr.floorPrice();}catch(_){floor=0n;}
-    const[m1,ct]=await Promise.all([t1.members(userAddr),tm.memberTier(userAddr)]);
-    if(!m1.isRegistered){notR.style.display='block';con.style.display='none';return;}
+    // V5: check BeltManager first, then fall back to direct matrix check
+    let m1=null, ct=0n;
+    const hasBM = ADDRESSES.beltManager && ADDRESSES.beltManager.length > 10;
+    if(hasBM){
+      try{
+        const bm=new ethers.Contract(ADDRESSES.beltManager,BELT_MANAGER_ABI,readProvider);
+        const bmReg=await bm.hasRegistered(userAddr);
+        if(bmReg){
+          [m1,ct]=await Promise.all([t1.members(userAddr),tm.memberTier(userAddr)]);
+          if(!m1.isRegistered) m1={isRegistered:true,id:0n,withdrawable:0n,totalEarned:0n,originalReferrer:ethers.ZeroAddress};
+        }
+      }catch(_){}
+    }
+    if(!m1){
+      [m1,ct]=await Promise.all([t1.members(userAddr),tm.memberTier(userAddr)]);
+    }
+    if(!m1||!m1.isRegistered){notR.style.display='block';con.style.display='none';return;}
     notR.style.display='none';con.style.display='block';
     const tier=Number(ct)||1;
     const tnEl=document.getElementById('dash-tier-name');if(tnEl)tnEl.textContent=(TIER_NAMES[tier]||'Tier '+tier)+' (Tier '+tier+')';
