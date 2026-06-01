@@ -723,7 +723,7 @@
       <div class="card" style="margin-bottom:24px">
         <div class="section-title" style="margin-bottom:14px"><div class="dot" style="background:var(--purple)"></div> Community Wallet</div>
         <div id="cw-not-founder" style="display:none;padding:14px;background:var(--bg3);border-radius:10px;font-size:13px;color:var(--text2)">
-          You are not a founding member. The first <strong id="cw-max-founders">2,000</strong> members earn Community Wallet payouts every 25 days.
+          You are not a founding member. The first <strong id="cw-max-founders">2,000</strong> members earn Community Wallet payouts every 25 days — the first 1,000 as <strong>Nova Originals</strong> (70% share) and the next 1,000 as <strong>Nova Pioneers</strong> (30% share).
         </div>
         <div id="cw-founder-panel" style="display:none">
           <div class="grid-2" style="margin-bottom:16px">
@@ -740,8 +740,8 @@
           </div>
           <div class="info-row"><span class="info-key">Pending Pool</span><span class="info-val" id="cw-pending">—</span></div>
           <div class="info-row"><span class="info-key">Current Epoch</span><span class="info-val" id="cw-epoch">—</span></div>
-          <div class="info-row"><span class="info-key">Tranche A Slots</span><span class="info-val" id="cw-tranche-a">—</span></div>
-          <div class="info-row"><span class="info-key">Tranche B Slots</span><span class="info-val" id="cw-tranche-b">—</span></div>
+          <div class="info-row"><span class="info-key">Nova Original Slots</span><span class="info-val" id="cw-tranche-a">—</span></div>
+          <div class="info-row"><span class="info-key">Nova Pioneer Slots</span><span class="info-val" id="cw-tranche-b">—</span></div>
           <div style="margin-top:16px">
             <button class="btn btn-green full-w" id="btn-cw-claim" onclick="doCWClaimAll()" disabled>
               Claim All Available
@@ -1680,7 +1680,7 @@ async function loadCommunityWallet(){
       notF.style.display='block';panel.style.display='none';_cwLoading=false;return;
     }
     panel.style.display='block';notF.style.display='none';
-    const trancheName=info.tranche===1n?'Tranche A — Founding Member':'Tranche B — Early Member';
+    const trancheName=info.tranche===1n?'Nova Original (70% share)':'Nova Pioneer (30% share)';
     const trancheColor=info.tranche===1n?'var(--green)':'var(--blue)';
     const tEl=document.getElementById('cw-tranche');if(tEl){tEl.textContent=trancheName;tEl.style.color=trancheColor;}
     const fidEl=document.getElementById('cw-founder-id');if(fidEl)fidEl.textContent='Founder #'+info.id.toString();
