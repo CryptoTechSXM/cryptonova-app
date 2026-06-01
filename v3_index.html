@@ -342,7 +342,7 @@
       <h1>7-Tier Matrix System<br><span>on Base Chain</span></h1>
       <p>Join the CryptoNova 7-tier ladder. Start at Nova Seed ($10) and climb to SuperNova Spark ($1,000). Earn referral bonuses, 7-level chain pay, and CNOVA tokens — all backed by treasury USDC.</p>
       <div class="hero-actions">
-        <button class="btn-primary" onclick="showTab('register')">Join Now — $10 USDC</button>
+        <button class="btn-primary" onclick="showTab('register')">Join Now — $1 USDC</button>
         <button class="btn-outline" onclick="showTab('dashboard')">View Dashboard</button>
       </div>
       <div style="margin-top:20px">
@@ -493,7 +493,7 @@
       <div>
         <!-- Registration flow -->
         <div class="card" style="margin-bottom:20px">
-          <div style="font-size:15px;font-weight:700;margin-bottom:16px">Register — $10 USDC</div>
+          <div style="font-size:15px;font-weight:700;margin-bottom:16px">Register — $1 USDC</div>
 
           <div id="register-wallet-warn" style="display:none;background:rgba(245,158,11,.1);border:1px solid rgba(245,158,11,.3);border-radius:8px;padding:14px;font-size:14px;color:var(--yellow);margin-bottom:16px">
             ⚠️ Connect your wallet first to register.
@@ -523,11 +523,11 @@
 
           <!-- Step buttons -->
           <div style="display:flex;flex-direction:column;gap:10px">
-            <button class="btn btn-ghost full-w" id="btn-approve" onclick="approveUSDC()" disabled title="Approves exactly $10 USDC — the contract cannot take more than this amount">
-              Step 1: Approve $10 USDC 🔒
+            <button class="btn btn-ghost full-w" id="btn-approve" onclick="approveUSDC()" disabled title="Approves exactly $1 USDC — the contract cannot take more than this amount">
+              Step 1: Approve $1 USDC 🔒
             </button>
             <button class="btn btn-ghost full-w" id="btn-register" onclick="doRegister()" disabled>
-              Step 2: Register ($10 USDC)
+              Step 2: Register ($1 USDC)
             </button>
           </div>
 
@@ -1187,6 +1187,7 @@ const BELT_MANAGER_ABI = [
   {"inputs":[],"name":"activeBelt","outputs":[{"type":"address"}],"stateMutability":"view","type":"function"},
   {"inputs":[],"name":"BELT_MAX","outputs":[{"type":"uint256"}],"stateMutability":"view","type":"function"},
   {"inputs":[{"name":"beltIndex","type":"uint256"}],"name":"beltStatus","outputs":[{"type":"address","name":"beltAddress"},{"type":"uint256","name":"memberCount"},{"type":"bool","name":"isFull"},{"type":"bool","name":"isActive"}],"stateMutability":"view","type":"function"},
+  {"inputs":[],"name":"registrationCost","outputs":[{"name":"total","type":"uint256"},{"name":"entryFee","type":"uint256"},{"name":"reentryContribution","type":"uint256"}],"stateMutability":"view","type":"function"},
   {"anonymous":false,"inputs":[{"indexed":true,"name":"beltIndex","type":"uint256"},{"indexed":false,"name":"beltAddress","type":"address"}],"name":"BeltActivated","type":"event"},
   {"anonymous":false,"inputs":[{"indexed":true,"name":"member","type":"address"},{"indexed":false,"name":"beltIndex","type":"uint256"},{"indexed":false,"name":"beltAddress","type":"address"}],"name":"MemberRouted","type":"event"},
 ];
@@ -1298,8 +1299,8 @@ async function loadConveyorBeltStats(){
     if(labelEl)labelEl.textContent=tierN;
     const mx=new ethers.Contract(ADDRESSES.matrices[tier],MATRIX_ABI,readProvider);
     // Fetch AW FIRST so all calculations use correct window size
-    let AW=64;
-    try{AW=Number(await mx.ACTIVE_WINDOW());}catch(_){AW=64;}
+    let AW=2;  // lightning default, reads from contract
+    try{AW=Number(await mx.ACTIVE_WINDOW());}catch(_){AW=2;}
     let memRaw=0n;
     try{memRaw=await mx.totalMembers();}catch(_){
       await new Promise(r=>setTimeout(r,1000));
@@ -1499,6 +1500,9 @@ async function loadRegisterTab(){
   // Clear any previous error messages when tab loads
   const statusEl=document.getElementById('reg-status');
   if(statusEl)statusEl.textContent='';
+  // Set button labels dynamically from TIER_FEES[1]
+  if(approveBtn) approveBtn.innerHTML='Step 1: Approve $'+TIER_FEES[1]+' USDC 🔒';
+  if(registerBtn) registerBtn.innerHTML='Step 2: Register ($'+TIER_FEES[1]+' USDC)';
   if(!userAddr){walletWarn.style.display='block';alreadyEl.style.display='none';approveBtn.disabled=true;registerBtn.disabled=true;approveBtn.className=registerBtn.className='btn btn-ghost full-w';return;}
   walletWarn.style.display='none';
   try{
@@ -1543,7 +1547,7 @@ async function loadRegisterTab(){
     approveBtn.className='btn full-w '+(hb&&!ha?'btn-green':'btn-ghost');
     registerBtn.className='btn full-w '+(ha?'btn-green':'btn-ghost');
     if(ha)setStatus('reg-status','✅ USDC approved! You can now register.','var(--green)');
-    else if(hb)setStatus('reg-status','Step 1: Approve $10 USDC to continue.','var(--text2)');
+    else if(hb)setStatus('reg-status','Step 1: Approve $'+TIER_FEES[1]+' USDC to continue.','var(--text2)');
     else setStatus('reg-status','⚠️ Insufficient USDC. You need at least $10.','var(--yellow)');
   }catch(e){console.error('loadRegisterTab',e);}
 }
@@ -1560,9 +1564,9 @@ async function approveUSDC(){
     const tx=await usdc.approve(approveAddr, TIER_FEES_USDC[1]);
     setStatus('reg-status','⏳ Confirming…','var(--text2)');await tx.wait();
     setStatus('reg-status','✅ USDC approved! You can now register.','var(--green)');
-    toast('$10 USDC approved!','success');btn.innerHTML='Step 1: Approve $10 USDC 🔒';
+    toast('$'+TIER_FEES[1]+' USDC approved!','success');btn.innerHTML='Step 1: Approve $'+TIER_FEES[1]+' USDC 🔒';
     await loadRegisterTab();
-  }catch(e){const msg=e.reason||e.message||'Unknown';setStatus('reg-status','❌ '+msg,'var(--red)');btn.disabled=false;btn.className='btn full-w btn-green';btn.innerHTML='Step 1: Approve $10 USDC 🔒';toast('Approval failed','error');}
+  }catch(e){const msg=e.reason||e.message||'Unknown';setStatus('reg-status','❌ '+msg,'var(--red)');btn.disabled=false;btn.className='btn full-w btn-green';btn.innerHTML='Step 1: Approve $'+TIER_FEES[1]+' USDC 🔒';toast('Approval failed','error');}
 }
 
 async function doRegister(){
@@ -1610,14 +1614,14 @@ async function doRegister(){
 
     setStatus('reg-status','🎉 Registered! Tx: '+receipt.hash.slice(0,10)+'…'+beltMsg,'var(--green)');
     toast('Welcome to CryptoNova! 🎉','success',6000);
-    btn.innerHTML='Step 2: Register ($10 USDC)';
+    btn.innerHTML='Step 2: Register ($'+TIER_FEES[1]+' USDC)';
     document.getElementById('referral-link-card').style.display='block';
     document.getElementById('referral-url').value=window.location.origin+window.location.pathname+'?ref='+userAddr;
     await loadHomeStats();
     // Redirect to dashboard — member is now registered
     showTab('dashboard');
     await loadDashboard();
-  }catch(e){const msg=e.reason||e.message||'Unknown';setStatus('reg-status','❌ '+msg,'var(--red)');btn.disabled=false;btn.innerHTML='Step 2: Register ($10 USDC)';toast('Registration failed','error');}
+  }catch(e){const msg=e.reason||e.message||'Unknown';setStatus('reg-status','❌ '+msg,'var(--red)');btn.disabled=false;btn.innerHTML='Step 2: Register ($'+TIER_FEES[1]+' USDC)';toast('Registration failed','error');}
 }
 
 function copyReferralLink(){
@@ -1886,8 +1890,8 @@ async function loadQueueView(){
   try{
     const tier=getSelectedMatrixTier();
     const mx=new ethers.Contract(ADDRESSES.matrices[tier],MATRIX_ABI,readProvider);
-    let AW=5,total=0;
-    try{AW=Number(await mx.ACTIVE_WINDOW());}catch(_){AW=5;}
+    let AW=2,total=0;  // default=2 for lightning, reads from contract
+    try{AW=Number(await mx.ACTIVE_WINDOW());}catch(_){AW=2;}
     try{total=Number(await mx.totalMembers());}catch(_){total=0;}
     let myAddr=userAddr;
     if(total===0){lEl.innerHTML='No members in Tier '+tier+' yet.';return;}
@@ -2384,4 +2388,4 @@ function toggleTheme(){const isLight=document.body.classList.toggle('light');loc
         1. Open MetaMask &amp; make sure you're on <strong style="color:var(--text)">Base Sepolia</strong><br>
         2. Tap the <strong style="color:var(--text)">Assets</strong> tab at the bottom<br>
         3. Scroll down → tap <strong style="color:var(--text)">Import tokens</strong><br>
-        4. Select <strong style="color:var(--text)">Custom To
+        4. Select <strong style="color:var(--t                          
