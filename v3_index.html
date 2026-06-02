@@ -1507,13 +1507,15 @@ async function loadHomeStats(){
           const allBelts=await getAllBeltStatuses();
           grid.innerHTML=allBelts.map(b=>{
             const bpct=Math.round(b.count*100/b.max);
-            const bc=b.active?'var(--green2)':b.full?'var(--text3)':'var(--border)';
-            const label=b.active?'Active':'Full';
-            return `<div style="flex:1;min-width:80px;background:var(--bg2);border:1px solid ${bc};border-radius:8px;padding:8px 10px;font-size:12px">
-              <div style="font-weight:700;color:${b.active?'var(--green)':b.full?'var(--text3)':'var(--text2)'}">Belt ${b.label}</div>
-              <div style="color:var(--text2);margin:2px 0">${b.count}/${b.max}</div>
-              <div style="height:4px;background:var(--bg3);border-radius:99px;margin-top:4px"><div style="height:100%;width:${bpct}%;background:${b.active?'var(--green)':'var(--blue)'};border-radius:99px"></div></div>
-              <div style="color:var(--text3);font-size:10px;margin-top:3px">${b.active?'Active':b.full?'Full':'Waiting'}</div>
+            const bc=b.active?'#00b37d':b.full?'#475569':'#1f2d47';
+            const tc=b.active?'#00e5a0':b.full?'#64748b':'#94a3b8';
+            const barC=b.active?'#00e5a0':b.full?'#475569':'#3b82f6';
+            const status=b.active?'Active':b.full?'Full':'Ready';
+            return `<div style="width:90px;flex-shrink:0;background:#111827;border:1px solid ${bc};border-radius:8px;padding:8px 10px;font-size:12px">
+              <div style="font-weight:700;color:${tc}">Belt ${b.label}</div>
+              <div style="color:#94a3b8;margin:2px 0;font-size:11px">${b.count}/${b.max}</div>
+              <div style="height:3px;background:#1f2d47;border-radius:99px;margin-top:5px"><div style="height:100%;width:${bpct}%;background:${barC};border-radius:99px"></div></div>
+              <div style="color:#64748b;font-size:10px;margin-top:3px">${status}</div>
             </div>`;
           }).join('');
         }
@@ -1553,7 +1555,8 @@ async function loadHomeStats(){
     const mf=parseFloat(ethers.formatUnits(minted,18)).toLocaleString(undefined,{maximumFractionDigits:0});
     const sf=parseFloat(ethers.formatUnits(supply,18)).toLocaleString(undefined,{maximumFractionDigits:0});
     const seb=document.getElementById('stat-epoch-badge');if(seb)seb.textContent=ename;
-    const sers=document.getElementById('stat-epoch-reward-sub');if(sers)sers.textContent=rf+' CNOVA per entry';
+    const sers=document.getElementById('stat-epoch-reward-sub');
+    if(sers)sers.textContent=Number(rf)===0?'All epochs complete — max supply reached':rf+' CNOVA per entry';
     const seEl=document.getElementById('stat-epoch');if(seEl)seEl.textContent=ename+'  (Epoch '+edisp+')';
     const srEl=document.getElementById('stat-reward');if(srEl)srEl.textContent=rf+' CNOVA';
     const serEl=document.getElementById('stat-epoch-rem');if(serEl)serEl.textContent=epochRem.toString()+' entries';
@@ -2096,8 +2099,27 @@ async function loadMyDirects(){
   const card=document.getElementById('my-directs-card'),loading=document.getElementById('my-directs-loading'),empty=document.getElementById('my-directs-empty'),listWrap=document.getElementById('my-directs-list'),rows=document.getElementById('my-directs-rows');
   card.style.display='block';loading.style.display='block';empty.style.display='none';listWrap.style.display='none';rows.innerHTML='';
   try{
-    const t1=new ethers.Contract(ADDRESSES.matrices[1],MATRIX_ABI,readProvider);
-    const all=await fetchAllMembersV3(t1,(i,total)=>{loading.textContent=`Scanning members… ${i} / ${total}`;});
+    // V5: scan ALL belt matrices for direct referrals
+    let allBeltAddrs=[ADDRESSES.matrices[1]];
+    if(ADDRESSES.beltManager && ADDRESSES.beltManager.length > 10){
+      try{
+        const bm=new ethers.Contract(ADDRESSES.beltManager,BELT_MANAGER_ABI,readProvider);
+        const total=Number(await bm.totalBelts());
+        for(let i=0;i<total;i++){
+          try{const [addr]=await bm.beltStatus(i);if(addr && addr!==ethers.ZeroAddress && !allBeltAddrs.includes(addr))allBeltAddrs.push(addr);}catch(_){}
+        }
+      }catch(_){}
+    }
+    let all=[];
+    for(let bi=0;bi<allBeltAddrs.length;bi++){
+      loading.textContent=`Scanning Belt ${String.fromCharCode(65+bi)}…`;
+      try{
+        const mx=new ethers.Contract(allBeltAddrs[bi],MATRIX_ABI,readProvider);
+        const beltMembers=await fetchAllMembersV3(mx,(i,total)=>{loading.textContent=`Belt ${String.fromCharCode(65+bi)}: ${i}/${total}`;});
+        all=all.concat(beltMembers);
+      }catch(_){}
+      await new Promise(r=>setTimeout(r,300));
+    }
     const directs=all.filter(({data:m})=>m.referrer.toLowerCase()===userAddr.toLowerCase());
     myDirectAddrs=new Set(directs.map(({addr})=>addr.toLowerCase()));
     loading.style.display='none';
