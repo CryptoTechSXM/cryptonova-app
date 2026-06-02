@@ -1854,7 +1854,7 @@ async function loadDashboard(){
       try{
         const mx=new ethers.Contract(ADDRESSES.matrices[t],MATRIX_ABI,readProvider);
         const m=await mx.getMember(userAddr);const cy=await mx.getCyclesCompleted(userAddr);
-        if(m.isRegistered){totW+=BigInt(m.withdrawable);totE+=BigInt(m.totalEarned);
+        if(m.hasEverJoined){totW+=BigInt(m.withdrawable);totE+=BigInt(m.totalEarned);
           const wl=m.withdrawable>0n?'<span style="color:var(--green);font-weight:700">'+u6(m.withdrawable)+'</span>':'<span style="color:var(--text3)">$0.00</span>';
           rows+=`<div class="info-row"><span class="info-key"><span style="font-size:11px;background:var(--green-dim);color:var(--green);border:1px solid var(--green2);border-radius:4px;padding:1px 6px">T${t}</span> ${TIER_NAMES[t]}</span><span style="display:flex;flex-direction:column;align-items:flex-end;gap:2px">${wl}<span style="font-size:11px;color:var(--text3)">Earned: ${u6(m.totalEarned)} · ${cy} cycles</span></span></div>`;
         }
