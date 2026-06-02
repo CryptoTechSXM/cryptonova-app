@@ -719,6 +719,21 @@
             </div>
             <div id="auto-upgrade-msg" style="font-size:12px;color:var(--text3);margin-top:6px"></div>
           </div>
+
+          <!-- Double Re-entry toggle -->
+          <div style="margin-top:14px;padding-top:14px;border-top:1px solid var(--border)">
+            <div style="font-size:14px;font-weight:700;margin-bottom:6px">2× Re-entry <span style="font-size:10px;background:rgba(59,130,246,.2);color:var(--blue);border:1px solid rgba(59,130,246,.4);border-radius:4px;padding:2px 6px;margin-left:4px">OPT-IN</span></div>
+            <div style="font-size:12px;color:var(--text3);margin-bottom:12px">When enabled, each time you cycle out your earnings are checked. If you have ≥ 1× entry fee in withdrawable balance, you are queued a <strong>second time</strong> — two positions earning simultaneously. Fee deducted automatically.</div>
+            <div style="display:flex;align-items:center;justify-content:space-between">
+              <span style="font-size:13px;color:var(--text2)" id="double-reentry-status">Off</span>
+              <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
+                <input type="checkbox" id="double-reentry-toggle" onchange="toggleDoubleReentry(this.checked)"
+                  style="width:18px;height:18px;cursor:pointer;accent-color:var(--blue)" />
+                <span style="font-size:13px;color:var(--text2)">Enable</span>
+              </label>
+            </div>
+            <div id="double-reentry-msg" style="font-size:12px;color:var(--text3);margin-top:6px"></div>
+          </div>
         </div>
       </div>
 
@@ -1088,28 +1103,37 @@
 const CHAIN_ID = 84532;
 const RPC_URL  = 'https://sepolia.base.org';
 
-// V6 LIGHTNING — matrix=7, belt_max=10, $10, 21M CNOVA (enterMatrix no try/catch)
+// V6 LIGHTNING — matrix=7, belt_max=10, $10, 21M CNOVA — audit-clean deploy
 const ADDRESSES = {
   usdc:           '0x2D8B7b5eDec96bE441b6fb0D45D74a2BcE2C639a',
-  token:          '0xC16f4BD8Dd2294629650ebb74D075E977aD4552D',
-  treasury:       '0x0daf472d8C5986B5BCE4f1C4431A155b0e5B996A',
-  communityWallet:'0x79a2B158Ec7Eb10d34ebE908A3Fb89eDD5905D67',
-  tierManager:    '0xd07bce16bb7057a06267Dd7DA6C97740e2526C8B',
-  beltManager:    '0x77F0ccf74df364faF81178DFfA20fF7fa8395f36',  // T1 BeltManagerV6
+  token:          '0x6159f28CC4cAEb3674Ba7CA1CfEe85B16e96B770',
+  treasury:       '0xE51eb8494436eB021BeA0C6B6FaA328289E8F2F2',
+  communityWallet:'0x7A880D969992a95e78FF5bE432dd025C1B86c1f8',
+  tierManager:    '0xD6BbCb37C9d7b3A9778B187B421C476b93a5a3fF',
+  beltManager:    '0xcc8f616169660EDFE6589f2c0D0b1c56c12276f0',  // T1 BeltManagerV6
+  beltManagers: {
+    1:'0xcc8f616169660EDFE6589f2c0D0b1c56c12276f0',
+    2:'0xaED8BC9d86D5d620dB491D37Df99a8BCEC955fa8',
+    3:'0xb235747424F95C6c21FFBD4e7B35032Ffabd1387',
+    4:'0x7d0cD21C9559F15Bb93a1bd2f041651F93Eb2226',
+    5:'0x03245F6bBF34C694fB62Ef98785a3CbA5DB6F8c2',
+    6:'0x777036459a9FfAe214752bc099C46fCA4005667F',
+    7:'0xa8cE8212a656B56B01990c1E3b8E6126E4584fb1',
+  },
   matrices: {
-    1:'0x5D868d1B5F7E10C7126FC21C9de331b0F77Ed8cd',  // Belt A T1
-    2:'0x213d72AeD367633c7B2F7Cdffba8b3d9586C1251',  // Belt A T2
-    3:'0xc4C51106DBA8714738272eBCEd23Cd86CA15D82A',  // Belt A T3
-    4:'0x813F3A2a5269afa04072cf857a12a2791B469703',  // Belt A T4
-    5:'0x85D8F007Fa8aCe5886eb4C7312FbB6670189c552',  // Belt A T5
-    6:'0x331deF241691A21D25373445A72b205642285450',  // Belt A T6
-    7:'0xD7759a03615856E9d87299feCFDC40444806c7c4',  // Belt A T7
+    1:'0x64F7b5b39e8114958b784b419FcebE64Deb7753a',  // Belt A T1
+    2:'0xc7d66dE10690b10AfaDE4999D6F32ca716F23152',  // Belt A T2
+    3:'0x8C2D391fb2Cac9AAD5Faeff79A78626864aa9a5b',  // Belt A T3
+    4:'0xC4F4186bcd96A0877Edd88942096A587D038F93E',  // Belt A T4
+    5:'0x007605Fce769D164954aD99C7e7d9FBa5fc96634',  // Belt A T5
+    6:'0xEfD0B42A5A8f02C533b02DA10afe879074DE739c',  // Belt A T6
+    7:'0x2a2FEdb75D802C6a7884Ff756115fB7a29853492',  // Belt A T7
   },
 };
 const TIER_NAMES={1:'Nova Seed',2:'Nova Rise',3:'Nova Star',4:'Nova Prime',5:'SuperNova Genesis',6:'SuperNova Elite',7:'SuperNova Spark'};
-const TIER_FEES={1:10,2:25,3:50,4:100,5:250,6:500,7:1000};  // V6 — $10 across ALL tests
+const TIER_FEES={1:10,2:25,3:50,4:100,5:250,6:500,7:1000};  // $10 across ALL tests
 const TIER_FEES_USDC={1:10_000_000n,2:25_000_000n,3:50_000_000n,4:100_000_000n,5:250_000_000n,6:500_000_000n,7:1_000_000_000n};
-const CYCLE_REQ={1:1,2:2,3:2,4:2,5:3,6:3,7:0};
+const CYCLE_REQ={1:1,2:1,3:1,4:1,5:1,6:1,7:1};  // V6 — 1 cycle all tiers
 
 // ── ABIs ─────────────────────────────────────────────────────────────
 const MATRIX_ABI = [
@@ -1193,8 +1217,12 @@ const BELT_MANAGER_ABI = [
   {"inputs":[],"name":"BELT_MAX","outputs":[{"type":"uint256"}],"stateMutability":"view","type":"function"},
   {"inputs":[{"name":"beltIndex","type":"uint256"}],"name":"beltStatus","outputs":[{"type":"address","name":"beltAddress"},{"type":"uint256","name":"memberCount"},{"type":"bool","name":"isFull"},{"type":"bool","name":"isActive"}],"stateMutability":"view","type":"function"},
   {"inputs":[],"name":"registrationCost","outputs":[{"name":"total","type":"uint256"},{"name":"entryFee","type":"uint256"},{"name":"reentryContribution","type":"uint256"}],"stateMutability":"view","type":"function"},
+  {"inputs":[{"name":"member","type":"address"}],"name":"doubleReentry","outputs":[{"type":"bool"}],"stateMutability":"view","type":"function"},
+  {"inputs":[{"name":"enabled","type":"bool"}],"name":"setDoubleReentry","outputs":[],"stateMutability":"nonpayable","type":"function"},
   {"anonymous":false,"inputs":[{"indexed":true,"name":"beltIndex","type":"uint256"},{"indexed":false,"name":"beltAddress","type":"address"}],"name":"BeltActivated","type":"event"},
   {"anonymous":false,"inputs":[{"indexed":true,"name":"member","type":"address"},{"indexed":false,"name":"beltIndex","type":"uint256"},{"indexed":false,"name":"beltAddress","type":"address"}],"name":"MemberRouted","type":"event"},
+  {"anonymous":false,"inputs":[{"indexed":true,"name":"member","type":"address"},{"indexed":false,"name":"enabled","type":"bool"}],"name":"DoubleReentrySet","type":"event"},
+  {"anonymous":false,"inputs":[{"indexed":true,"name":"member","type":"address"},{"indexed":false,"name":"queuePosition","type":"uint256"}],"name":"SecondSlotQueued","type":"event"},
 ];
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -1854,9 +1882,10 @@ async function loadDashboard(){
       const dEl=document.getElementById('dash-directs');if(dEl)dEl.textContent=cnt+' member'+(cnt!==1?'s':'');
     }catch(_){}
   }catch(e){console.error('loadDashboard',e);}
-  // Load CW and auto-upgrade status after main dashboard
+  // Load CW, auto-upgrade, and double re-entry status after main dashboard
   await loadCommunityWallet();
   await loadAutoUpgradeStatus();
+  await loadDoubleReentryStatus();
 }
 
 let _cwLoading=false;
@@ -1972,6 +2001,41 @@ async function toggleAutoUpgrade(enabled){
     const msg=e.reason||e.message||'Unknown';
     setStatus('auto-upgrade-msg','❌ '+msg,'var(--red)');
     toggle.checked=!enabled; // revert toggle
+  }finally{toggle.disabled=false;}
+}
+
+async function loadDoubleReentryStatus(){
+  const toggle=document.getElementById('double-reentry-toggle');
+  const statusEl=document.getElementById('double-reentry-status');
+  if(!userAddr||!readProvider||!ADDRESSES.beltManager) return;
+  try{
+    const bm=new ethers.Contract(ADDRESSES.beltManager,BELT_MANAGER_ABI,readProvider);
+    const enabled=await bm.doubleReentry(userAddr);
+    toggle.checked=enabled;
+    statusEl.textContent=enabled?'On — re-queued twice on each cycle-out':'Off';
+    statusEl.style.color=enabled?'var(--blue)':'var(--text2)';
+  }catch(e){ /* not registered yet — ignore */ }
+}
+
+async function toggleDoubleReentry(enabled){
+  if(!signer){toast('Connect wallet first','error');return;}
+  const toggle=document.getElementById('double-reentry-toggle');
+  const msgEl=document.getElementById('double-reentry-msg');
+  const statusEl=document.getElementById('double-reentry-status');
+  toggle.disabled=true;
+  try{
+    setStatus('double-reentry-msg','⏳ Confirming…','var(--text2)');
+    const bm=new ethers.Contract(ADDRESSES.beltManager,BELT_MANAGER_ABI,signer);
+    const tx=await bm.setDoubleReentry(enabled);
+    await tx.wait();
+    statusEl.textContent=enabled?'On — re-queued twice on each cycle-out':'Off';
+    statusEl.style.color=enabled?'var(--blue)':'var(--text2)';
+    setStatus('double-reentry-msg',enabled?'✅ Double re-entry enabled':'✅ Double re-entry disabled','var(--green)');
+    toast(enabled?'2× Re-entry enabled!':'2× Re-entry disabled','success');
+  }catch(e){
+    const msg=e.reason||e.message||'Unknown';
+    setStatus('double-reentry-msg','❌ '+msg,'var(--red)');
+    toggle.checked=!enabled;
   }finally{toggle.disabled=false;}
 }
 
