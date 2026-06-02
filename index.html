@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>CryptoNova — 7-Tier Matrix System (V3)</title>
+  <title>CryptoNova â€” 7-Tier Matrix System (V3)</title>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/6.7.1/ethers.umd.min.js"></script>
   <style>
     :root {
@@ -41,7 +41,7 @@
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body { background: var(--bg); color: var(--text); font-family: 'Segoe UI', system-ui, sans-serif; min-height: 100vh; }
 
-    /* ── Layout ─────────────────────────────── */
+    /* â”€â”€ Layout â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
     header { background: var(--bg2); border-bottom: 1px solid var(--border); padding: 14px 24px; display: flex; align-items: center; justify-content: space-between; position: sticky; top: 0; z-index: 100; }
     .logo { display: flex; align-items: center; gap: 10px; }
     .logo-icon { width: 34px; height: 34px; background: linear-gradient(135deg, var(--green), var(--blue)); border-radius: 8px; display: flex; align-items: center; justify-content: center; font-weight: 900; font-size: 16px; color: #000; }
@@ -54,18 +54,18 @@
     .network-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--green); display: inline-block; margin-right: 6px; animation: pulse 2s infinite; }
     @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.4} }
 
-    /* ── Tabs ───────────────────────────────── */
+    /* â”€â”€ Tabs â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
     nav { background: var(--bg2); border-bottom: 1px solid var(--border); display: flex; gap: 0; padding: 0 24px; position: sticky; top: 65px; z-index: 99; }
     nav button { background: none; border: none; color: var(--text2); padding: 14px 20px; cursor: pointer; font-size: 14px; font-weight: 500; border-bottom: 2px solid transparent; transition: all .2s; }
     nav button:hover { color: var(--text); }
     nav button.active { color: var(--green); border-bottom-color: var(--green); }
 
-    /* ── Main ───────────────────────────────── */
+    /* â”€â”€ Main â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
     main { max-width: 1100px; margin: 0 auto; padding: 32px 24px; }
     .tab-panel { display: none; }
     .tab-panel.active { display: block; }
 
-    /* ── Cards ──────────────────────────────── */
+    /* â”€â”€ Cards â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
     .card { background: var(--bg2); border: 1px solid var(--border); border-radius: 12px; padding: 24px; }
     .card-sm { background: var(--bg2); border: 1px solid var(--border); border-radius: 10px; padding: 18px 20px; }
     .grid-4 { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 16px; margin-bottom: 24px; }
@@ -75,13 +75,13 @@
     .stat-value.green { color: var(--green); }
     .stat-sub { font-size: 12px; color: var(--text3); margin-top: 4px; }
 
-    /* ── Section titles ──────────────────────── */
+    /* â”€â”€ Section titles â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
     .section-title { font-size: 18px; font-weight: 700; margin-bottom: 16px; display: flex; align-items: center; gap: 8px; }
     .section-title .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--green); }
     h1 { font-size: 36px; font-weight: 800; letter-spacing: -1px; }
     h1 span { color: var(--green); }
 
-    /* ── Hero ────────────────────────────────── */
+    /* â”€â”€ Hero â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
     .hero { text-align: center; padding: 60px 20px 48px; }
     .hero p { font-size: 17px; color: var(--text2); margin: 16px auto 32px; max-width: 500px; line-height: 1.6; }
     .hero-actions { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
@@ -90,7 +90,7 @@
     .btn-outline { background: none; color: var(--green); border: 1.5px solid var(--green2); border-radius: 10px; padding: 12px 28px; font-weight: 600; font-size: 15px; cursor: pointer; transition: all .2s; }
     .btn-outline:hover { background: var(--green-dim); }
 
-    /* ── Register form ───────────────────────── */
+    /* â”€â”€ Register form â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
     .form-group { margin-bottom: 20px; }
     label { display: block; font-size: 13px; color: var(--text2); margin-bottom: 7px; font-weight: 500; }
     input[type=text] { width: 100%; background: var(--bg3); border: 1px solid var(--border); border-radius: 8px; padding: 11px 14px; color: var(--text); font-size: 14px; outline: none; transition: border-color .2s; }
@@ -103,38 +103,38 @@
     .step-content strong { display: block; font-size: 14px; color: var(--text); margin-bottom: 3px; }
     .step-content span { font-size: 13px; color: var(--text2); }
 
-    /* ── Status pills ────────────────────────── */
+    /* â”€â”€ Status pills â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
     .pill { display: inline-flex; align-items: center; gap: 5px; border-radius: 20px; padding: 3px 10px; font-size: 12px; font-weight: 600; }
     .pill-green { background: var(--green-dim); color: var(--green); border: 1px solid var(--green2); }
     .pill-yellow { background: rgba(245,158,11,.12); color: var(--yellow); border: 1px solid rgba(245,158,11,.4); }
     .pill-red { background: rgba(239,68,68,.12); color: var(--red); border: 1px solid rgba(239,68,68,.4); }
     .pill-blue { background: rgba(59,130,246,.12); color: var(--blue); border: 1px solid rgba(59,130,246,.4); }
 
-    /* ── Progress bar ────────────────────────── */
+    /* â”€â”€ Progress bar â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
     .progress-wrap { background: var(--bg3); border-radius: 99px; height: 8px; overflow: hidden; margin: 8px 0 4px; }
     .progress-bar { height: 100%; background: linear-gradient(90deg, var(--green2), var(--green)); border-radius: 99px; transition: width .6s ease; }
 
-    /* ── Splits table ────────────────────────── */
+    /* â”€â”€ Splits table â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
     .split-row { display: flex; justify-content: space-between; align-items: center; padding: 10px 0; border-bottom: 1px solid var(--border); font-size: 14px; }
     .split-row:last-child { border-bottom: none; }
     .split-label { color: var(--text2); }
     .split-amount { font-weight: 600; color: var(--text); }
     .split-pct { font-size: 12px; color: var(--text3); }
 
-    /* ── Toast ───────────────────────────────── */
+    /* â”€â”€ Toast â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
     #toast { position: fixed; bottom: 24px; right: 24px; background: var(--bg2); border: 1px solid var(--border); border-radius: 10px; padding: 14px 20px; font-size: 14px; max-width: 360px; z-index: 999; opacity: 0; transform: translateY(10px); transition: all .3s; pointer-events: none; }
     #toast.show { opacity: 1; transform: translateY(0); }
     #toast.success { border-color: var(--green2); color: var(--green); }
     #toast.error { border-color: var(--red); color: var(--red); }
     #toast.info { border-color: var(--blue); color: var(--blue); }
 
-    /* ── Dashboard info rows ──────────────────── */
+    /* â”€â”€ Dashboard info rows â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
     .info-row { display: flex; justify-content: space-between; padding: 9px 0; border-bottom: 1px solid var(--border); font-size: 14px; }
     .info-row:last-child { border-bottom: none; }
     .info-key { color: var(--text2); }
     .info-val { font-weight: 600; }
 
-    /* ── Buttons ─────────────────────────────── */
+    /* â”€â”€ Buttons â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
     .btn { border-radius: 8px; padding: 11px 22px; font-weight: 700; font-size: 14px; cursor: pointer; transition: all .2s; border: none; }
     .btn:disabled { opacity: .45; cursor: not-allowed; }
     .btn-green { background: var(--green); color: #000; }
@@ -144,7 +144,7 @@
     .btn.matrix-active { background: var(--green-dim) !important; color: var(--green) !important; border: 1.5px solid var(--green2) !important; }
     .full-w { width: 100%; }
 
-    /* ── Matrix tree ─────────────────────────── */
+    /* â”€â”€ Matrix tree â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
     #matrix-tree { overflow-x: auto; padding: 16px 0; }
     .tree-node { display: inline-flex; flex-direction: column; align-items: center; gap: 0; }
     .tree-children { display: flex; gap: 24px; }
@@ -157,63 +157,63 @@
     .tree-line { width: 2px; height: 20px; background: var(--border); margin: 0 auto; }
     .tree-h-line { height: 2px; background: var(--border); }
 
-    /* ── Chain pay table ──────────────────────── */
+    /* â”€â”€ Chain pay table â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
     .chain-row { display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-bottom: 1px solid var(--border); font-size: 13px; }
     .chain-row:last-child { border-bottom: none; }
 
-    /* ── Responsive ──────────────────────────── */
+    /* â”€â”€ Responsive â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
     @media (max-width: 640px) {
-      /* ── Header ── */
+      /* â”€â”€ Header â”€â”€ */
       header { padding: 10px 16px; }
       .logo-text { font-size: 16px; }
       .logo-badge { display: none; }
       #btn-connect { padding: 7px 12px; font-size: 13px; }
 
-      /* ── Nav: horizontal scroll so all tabs stay reachable ── */
+      /* â”€â”€ Nav: horizontal scroll so all tabs stay reachable â”€â”€ */
       nav { padding: 0 8px; overflow-x: auto; -webkit-overflow-scrolling: touch; scrollbar-width: none; }
       nav::-webkit-scrollbar { display: none; }
       nav button { padding: 12px 14px; font-size: 12px; white-space: nowrap; flex-shrink: 0; }
 
-      /* ── Layout ── */
+      /* â”€â”€ Layout â”€â”€ */
       main { padding: 20px 16px; }
       .grid-2 { grid-template-columns: 1fr; }
 
-      /* ── Hero ── */
+      /* â”€â”€ Hero â”€â”€ */
       .hero { padding: 36px 0 28px; }
       h1 { font-size: 26px; }
       .hero p { font-size: 15px; }
       .hero-actions { flex-direction: column; }
       .btn-primary { width: 100%; text-align: center; justify-content: center; }
 
-      /* ── Cards ── */
+      /* â”€â”€ Cards â”€â”€ */
       .card-sm { padding: 14px 16px; }
 
-      /* ── Token cards ── */
+      /* â”€â”€ Token cards â”€â”€ */
       .token-addr { word-break: break-all; font-size: 10px; }
       .btn-metamask { width: 100%; justify-content: center; margin-top: 4px; }
 
-      /* ── Register tab ── */
+      /* â”€â”€ Register tab â”€â”€ */
       .full-w { width: 100%; }
       .btn { font-size: 14px; }
 
-      /* ── Info / split rows ── */
+      /* â”€â”€ Info / split rows â”€â”€ */
       .info-row { font-size: 13px; gap: 8px; }
       .info-val { text-align: right; word-break: break-all; max-width: 58%; }
       .split-row { font-size: 13px; }
 
-      /* ── Section title ── */
+      /* â”€â”€ Section title â”€â”€ */
       .section-title { font-size: 16px; }
     }
 
-    /* ── Loading spinner ──────────────────────── */
+    /* â”€â”€ Loading spinner â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
     .spinner { display: inline-block; width: 18px; height: 18px; border: 2px solid transparent; border-top-color: currentColor; border-radius: 50%; animation: spin .7s linear infinite; vertical-align: middle; margin-right: 6px; }
     @keyframes spin { to { transform: rotate(360deg); } }
     .loading-text { color: var(--text3); font-size: 14px; padding: 24px 0; text-align: center; }
 
-    /* ── Addr display ────────────────────────── */
+    /* â”€â”€ Addr display â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
     .addr { font-family: monospace; font-size: 12px; color: var(--text3); }
 
-    /* ── Add-to-MetaMask token card ──────────── */
+    /* â”€â”€ Add-to-MetaMask token card â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
     .token-card { background: linear-gradient(135deg, rgba(0,229,160,.08), rgba(59,130,246,.06)); border: 1px solid var(--green2); border-radius: 12px; padding: 20px 24px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 14px; margin-bottom: 24px; }
     .token-card-left { display: flex; align-items: center; gap: 14px; }
     .token-icon { width: 42px; height: 42px; background: linear-gradient(135deg, var(--green), var(--blue)); border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 900; font-size: 13px; color: #000; flex-shrink: 0; }
@@ -222,7 +222,7 @@
     .btn-metamask { background: #f6851b; color: #fff; border: none; border-radius: 8px; padding: 9px 18px; font-weight: 700; font-size: 13px; cursor: pointer; display: flex; align-items: center; gap: 7px; transition: opacity .2s; }
     .btn-metamask:hover { opacity: .85; }
 
-    /* ── Roadmap timeline ────────────────────── */
+    /* â”€â”€ Roadmap timeline â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
     .roadmap-timeline { position: relative; padding-left: 0; }
     .roadmap-phase { display: grid; grid-template-columns: 160px 1fr; gap: 0; margin-bottom: 0; }
     .phase-left { display: flex; flex-direction: column; align-items: center; padding-right: 24px; }
@@ -250,28 +250,28 @@
     .check-future { color: var(--text3); }
     .check-blue { color: var(--blue); }
 
-    /* ── Pre-launch grid ─────────────────────── */
+    /* â”€â”€ Pre-launch grid â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
     .prelaunch-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 16px; margin-top: 24px; }
     .prelaunch-block { background: var(--bg2); border: 1px solid var(--border); border-radius: 10px; padding: 18px 20px; }
     .prelaunch-block h3 { font-size: 14px; font-weight: 700; margin-bottom: 12px; display: flex; align-items: center; gap: 7px; }
     .prelaunch-block ul { list-style: none; display: flex; flex-direction: column; gap: 7px; }
     .prelaunch-block ul li { font-size: 13px; color: var(--text2); display: flex; align-items: flex-start; gap: 8px; }
-    .prelaunch-block ul li::before { content: "›"; color: var(--green); font-weight: 700; flex-shrink: 0; }
+    .prelaunch-block ul li::before { content: "â€º"; color: var(--green); font-weight: 700; flex-shrink: 0; }
 
     @media (max-width: 640px) {
-      /* ── Roadmap ── */
+      /* â”€â”€ Roadmap â”€â”€ */
       .roadmap-phase { grid-template-columns: 72px 1fr; }
       .phase-label { font-size: 9px; letter-spacing: .4px; }
       .phase-card { padding: 14px 16px; }
 
-      /* ── Token cards stack vertically ── */
+      /* â”€â”€ Token cards stack vertically â”€â”€ */
       .token-card { flex-direction: column; align-items: flex-start; }
 
-      /* ── Pre-launch grid single column ── */
+      /* â”€â”€ Pre-launch grid single column â”€â”€ */
       .prelaunch-grid { grid-template-columns: 1fr; }
     }
 
-    /* ── Switch network overlay (fixed, centered) ───────────────── */
+    /* â”€â”€ Switch network overlay (fixed, centered) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
     #network-banner { position: fixed; inset: 0; background: rgba(0,0,0,.65); z-index: 600; display: none; align-items: center; justify-content: center; padding: 20px; }
     #network-banner-card { background: var(--bg2); border: 2px solid rgba(245,158,11,.5); border-radius: 16px; padding: 32px 28px; max-width: 380px; width: 100%; text-align: center; }
   </style>
@@ -279,14 +279,14 @@
 <body>
 
 <div id="file-protocol-banner" style="background:rgba(239,68,68,.1);border-bottom:1px solid rgba(239,68,68,.3);padding:10px 24px;text-align:center;font-size:13px;color:#ef4444;display:none">
-  ⚠️ <strong>File opened directly</strong> — MetaMask won't inject into <code style="background:rgba(0,0,0,.3);padding:2px 6px;border-radius:3px">file://</code> pages.
+  âš ï¸ <strong>File opened directly</strong> â€” MetaMask won't inject into <code style="background:rgba(0,0,0,.3);padding:2px 6px;border-radius:3px">file://</code> pages.
   Serve via local server: <code style="background:rgba(0,0,0,.3);padding:2px 8px;border-radius:3px;margin:0 4px">cd frontend &amp;&amp; npx serve .</code>
   then open <strong>http://localhost:3000</strong>
 </div>
 
 <div id="network-banner">
   <div id="network-banner-card">
-    <div style="font-size:40px;margin-bottom:10px">⚠️</div>
+    <div style="font-size:40px;margin-bottom:10px">âš ï¸</div>
     <div style="font-size:20px;font-weight:800;color:var(--yellow);margin-bottom:6px">Wrong Network</div>
     <div style="font-size:14px;color:var(--text2);line-height:1.6;margin-bottom:16px">
       CryptoNova uses <strong style="color:var(--text)">Base Sepolia Testnet</strong>.
@@ -294,17 +294,17 @@
 
     <!-- Mobile: step-by-step enable testnets first -->
     <div id="nb-mobile-guide" style="display:none;text-align:left;background:rgba(245,158,11,.08);border:1px solid rgba(245,158,11,.3);border-radius:10px;padding:14px 16px;margin-bottom:16px">
-      <div style="font-size:13px;font-weight:700;color:var(--yellow);margin-bottom:10px">📱 Enable testnets first (one-time setup)</div>
+      <div style="font-size:13px;font-weight:700;color:var(--yellow);margin-bottom:10px">ðŸ“± Enable testnets first (one-time setup)</div>
       <div style="font-size:13px;color:var(--text2);line-height:2">
-        <strong style="color:var(--text)">1.</strong> In MetaMask tap <strong style="color:var(--text)">☰ menu</strong> (top-left)<br>
-        <strong style="color:var(--text)">2.</strong> Go to <strong style="color:var(--text)">Settings → Advanced</strong><br>
+        <strong style="color:var(--text)">1.</strong> In MetaMask tap <strong style="color:var(--text)">â˜° menu</strong> (top-left)<br>
+        <strong style="color:var(--text)">2.</strong> Go to <strong style="color:var(--text)">Settings â†’ Advanced</strong><br>
         <strong style="color:var(--text)">3.</strong> Turn ON <strong style="color:var(--text)">"Show test networks"</strong><br>
-        <strong style="color:var(--text)">4.</strong> Come back and tap the button below ↓
+        <strong style="color:var(--text)">4.</strong> Come back and tap the button below â†“
       </div>
     </div>
 
     <button onclick="switchToBaseSepolia()" id="nb-switch-btn" style="background:var(--yellow);color:#000;border:none;border-radius:10px;padding:13px 20px;font-weight:700;font-size:15px;cursor:pointer;width:100%;margin-bottom:10px">
-      🔀 Add &amp; Switch to Base Sepolia
+      ðŸ”€ Add &amp; Switch to Base Sepolia
     </button>
     <div id="nb-hint" style="font-size:12px;color:var(--text3)">
       This will prompt MetaMask to add and switch to Base Sepolia automatically.
@@ -317,32 +317,32 @@
     <div class="logo-icon">CN</div>
     <div class="logo-text">Crypto<span>Nova</span></div>
     <span class="logo-badge" id="network-badge">Base Sepolia</span>
-    <span style="background:rgba(245,158,11,.2);color:var(--yellow);border:1px solid rgba(245,158,11,.5);border-radius:4px;padding:2px 8px;font-size:10px;font-weight:700;margin-left:6px">⚡ V6 LIGHTNING W=2 M=7</span>
+    <span style="background:rgba(245,158,11,.2);color:var(--yellow);border:1px solid rgba(245,158,11,.5);border-radius:4px;padding:2px 8px;font-size:10px;font-weight:700;margin-left:6px">âš¡ V6 LIGHTNING W=2 M=7</span>
   </div>
   <div style="display:flex;align-items:center;gap:8px">
-    <button class="theme-toggle" id="theme-btn" onclick="toggleTheme()">☀️ Light</button>
-    <button id="btn-switch-network" onclick="switchToBaseSepolia()" style="display:none;background:var(--yellow);color:#000;border:none;border-radius:8px;padding:7px 12px;font-weight:700;font-size:12px;cursor:pointer;transition:opacity .2s">⚠️ Wrong Network</button>
+    <button class="theme-toggle" id="theme-btn" onclick="toggleTheme()">â˜€ï¸ Light</button>
+    <button id="btn-switch-network" onclick="switchToBaseSepolia()" style="display:none;background:var(--yellow);color:#000;border:none;border-radius:8px;padding:7px 12px;font-weight:700;font-size:12px;cursor:pointer;transition:opacity .2s">âš ï¸ Wrong Network</button>
     <button id="btn-connect" onclick="connectWallet()">Connect Wallet</button>
   </div>
 </header>
 
 <nav>
-  <button class="active" onclick="showTab('home')">🏠 Home</button>
-  <button onclick="showTab('register')">✅ Register</button>
-  <button onclick="showTab('dashboard')">📊 Dashboard</button>
-  <button onclick="showTab('matrix')">🌐 Matrix</button>
-  <button onclick="showTab('roadmap')">🗺️ Roadmap</button>
+  <button class="active" onclick="showTab('home')">ðŸ  Home</button>
+  <button onclick="showTab('register')">âœ… Register</button>
+  <button onclick="showTab('dashboard')">ðŸ“Š Dashboard</button>
+  <button onclick="showTab('matrix')">ðŸŒ Matrix</button>
+  <button onclick="showTab('roadmap')">ðŸ—ºï¸ Roadmap</button>
 </nav>
 
 <main>
 
-  <!-- ══ HOME TAB ══════════════════════════════════════════════════════ -->
+  <!-- â•â• HOME TAB â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• -->
   <div id="tab-home" class="tab-panel active">
     <div class="hero">
       <h1>7-Tier Matrix System<br><span>on Base Chain</span></h1>
-      <p>Join the CryptoNova 7-tier ladder. Start at Nova Seed ($10) and climb to SuperNova Spark ($1,000). Earn referral bonuses, 7-level chain pay, and CNOVA tokens — all backed by treasury USDC.</p>
+      <p>Join the CryptoNova 7-tier ladder. Start at Nova Seed ($10) and climb to SuperNova Spark ($1,000). Earn referral bonuses, 7-level chain pay, and CNOVA tokens â€” all backed by treasury USDC.</p>
       <div class="hero-actions">
-        <button class="btn-primary" onclick="showTab('register')">Join Now — $10 USDC</button>
+        <button class="btn-primary" onclick="showTab('register')">Join Now â€” $10 USDC</button>
         <button class="btn-outline" onclick="showTab('dashboard')">View Dashboard</button>
       </div>
       <div style="margin-top:20px">
@@ -358,13 +358,13 @@
       <div class="token-card-left">
         <div class="token-icon">CN</div>
         <div>
-          <div class="token-name">CNOVA Token <span class="pill pill-green" style="font-size:10px;vertical-align:middle">ERC-20 · Base</span></div>
-          <div class="token-addr">0x1cCEC550610Ed19b82f41aad82755497DA02D2A3 · 18 decimals</div>
+          <div class="token-name">CNOVA Token <span class="pill pill-green" style="font-size:10px;vertical-align:middle">ERC-20 Â· Base</span></div>
+          <div class="token-addr">0x1cCEC550610Ed19b82f41aad82755497DA02D2A3 Â· 18 decimals</div>
           <div style="font-size:12px;color:var(--text2);margin-top:4px">Earned automatically on every registration. Floor price backed by treasury USDC.</div>
         </div>
       </div>
       <button class="btn-metamask" onclick="addCNOVAtoMetaMask()">
-        🦊 Add CNOVA to MetaMask
+        ðŸ¦Š Add CNOVA to MetaMask
       </button>
     </div>
 
@@ -372,26 +372,26 @@
       <div class="token-card-left">
         <div class="token-icon" style="background:linear-gradient(135deg,#2775ca,#5b8dee)">$</div>
         <div>
-          <div class="token-name">USD Coin <span class="pill" style="font-size:10px;vertical-align:middle;background:rgba(59,130,246,.15);color:#5b8dee;border:1px solid rgba(59,130,246,.3)">USDC · Base</span></div>
-          <div class="token-addr">0x2D8B7b5eDec96bE441b6fb0D45D74a2BcE2C639a · 6 decimals</div>
+          <div class="token-name">USD Coin <span class="pill" style="font-size:10px;vertical-align:middle;background:rgba(59,130,246,.15);color:#5b8dee;border:1px solid rgba(59,130,246,.3)">USDC Â· Base</span></div>
+          <div class="token-addr">0x2D8B7b5eDec96bE441b6fb0D45D74a2BcE2C639a Â· 6 decimals</div>
           <div style="font-size:12px;color:var(--text2);margin-top:4px">Required to join. $10 at Tier 1 up to $1,000 at Tier 7.</div>
         </div>
       </div>
       <button class="btn-metamask" style="background:#2775ca" onclick="addUSDCtoMetaMask()">
-        🦊 Add USDC to MetaMask
+        ðŸ¦Š Add USDC to MetaMask
       </button>
     </div>
 
     <!-- Live Stats -->
-    <div class="section-title"><div class="dot"></div> Live Stats <span id="stats-refresh" style="font-size:12px;color:var(--text3);font-weight:400;margin-left:8px;cursor:pointer" onclick="loadHomeStats()">↻ Refresh</span></div>
+    <div class="section-title"><div class="dot"></div> Live Stats <span id="stats-refresh" style="font-size:12px;color:var(--text3);font-weight:400;margin-left:8px;cursor:pointer" onclick="loadHomeStats()">â†» Refresh</span></div>
     <div class="grid-4" id="stats-grid">
       <div class="card-sm"><div class="stat-label">Total Members</div><div class="stat-value" id="stat-members"><span class="spinner" style="color:var(--text3)"></span></div><div class="stat-sub">Active in matrix</div></div>
       <div class="card-sm"><div class="stat-label">CNOVA Floor Price</div><div class="stat-value green" id="stat-floor"><span class="spinner" style="color:var(--green)"></span></div><div class="stat-sub">USDC per CNOVA</div></div>
       <div class="card-sm"><div class="stat-label">Treasury Reserve</div><div class="stat-value" id="stat-reserve"><span class="spinner" style="color:var(--text3)"></span></div><div class="stat-sub">USDC backing floor</div></div>
-      <div class="card-sm" style="border-color:rgba(245,158,11,.4)"><div class="stat-label">⛏️ Mining Epoch</div><div class="stat-value" id="stat-epoch-badge" style="font-size:14px;color:var(--yellow)"><span class="spinner" style="color:var(--yellow)"></span></div><div class="stat-sub" id="stat-epoch-reward-sub">— CNOVA per entry</div></div>
+      <div class="card-sm" style="border-color:rgba(245,158,11,.4)"><div class="stat-label">â›ï¸ Mining Epoch</div><div class="stat-value" id="stat-epoch-badge" style="font-size:14px;color:var(--yellow)"><span class="spinner" style="color:var(--yellow)"></span></div><div class="stat-sub" id="stat-epoch-reward-sub">â€” CNOVA per entry</div></div>
     </div>
     <div id="stat-belt-row" style="display:none;margin-top:8px;padding:10px 16px;background:var(--bg3);border:1px solid var(--border);border-radius:10px;font-size:13px;color:var(--text2)">
-      🎢 <strong style="color:var(--green)">Multi-Belt V6</strong> — <span id="stat-belt">Loading…</span>
+      ðŸŽ¢ <strong style="color:var(--green)">Multi-Belt V6</strong> â€” <span id="stat-belt">Loadingâ€¦</span>
     </div>
     <!-- Belt overview grid -->
     <div id="belt-overview-grid" style="display:none;margin-top:10px;gap:8px;flex-wrap:wrap"></div>
@@ -402,36 +402,36 @@
       <!-- Conveyor Belt Card -->
       <div class="card">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;flex-wrap:wrap;gap:8px">
-          <div class="section-title" style="margin-bottom:0"><div class="dot"></div> Conveyor Belt — <span id="cb-tier-label">Tier 1</span></div>
+          <div class="section-title" style="margin-bottom:0"><div class="dot"></div> Conveyor Belt â€” <span id="cb-tier-label">Tier 1</span></div>
           <select id="cb-tier-select" style="background:var(--bg3);border:1px solid var(--border);border-radius:6px;padding:5px 10px;color:var(--text);font-size:12px;outline:none" onchange="loadConveyorBeltStats()">
-            <option value="1">T1 — Nova Seed</option>
-            <option value="2">T2 — Nova Rise</option>
-            <option value="3">T3 — Nova Star</option>
-            <option value="4">T4 — Nova Prime</option>
-            <option value="5">T5 — Genesis 🐋</option>
-            <option value="6">T6 — Elite</option>
-            <option value="7">T7 — Spark</option>
+            <option value="1">T1 â€” Nova Seed</option>
+            <option value="2">T2 â€” Nova Rise</option>
+            <option value="3">T3 â€” Nova Star</option>
+            <option value="4">T4 â€” Nova Prime</option>
+            <option value="5">T5 â€” Genesis ðŸ‹</option>
+            <option value="6">T6 â€” Elite</option>
+            <option value="7">T7 â€” Spark</option>
           </select>
         </div>
         <div class="info-row">
           <span class="info-key">Total Members</span>
-          <span class="info-val" id="stat-filled">—</span>
+          <span class="info-val" id="stat-filled">â€”</span>
         </div>
         <div class="info-row">
           <span class="info-key">Active Window</span>
-          <span class="info-val" id="stat-aw-slots">— slots</span>
+          <span class="info-val" id="stat-aw-slots">â€” slots</span>
         </div>
         <div class="info-row">
           <span class="info-key">Cycles Triggered</span>
-          <span class="info-val green" id="stat-cycles-done">—</span>
+          <span class="info-val green" id="stat-cycles-done">â€”</span>
         </div>
         <div class="info-row">
           <span class="info-key">Next Global Rotation</span>
-          <span class="info-val" id="stat-next-cycle">—</span>
+          <span class="info-val" id="stat-next-cycle">â€”</span>
         </div>
         <div class="info-row">
           <span class="info-key">Your Next Cycle</span>
-          <span class="info-val" id="stat-my-next-cycle">—</span>
+          <span class="info-val" id="stat-my-next-cycle">â€”</span>
         </div>
         <div style="margin-top:10px;padding:10px 12px;background:var(--bg3);border-radius:8px;font-size:12px;color:var(--text3);line-height:1.6">
           Every <span id='cb-aw-desc'>2</span> members who join behind you = 1 cycle. You rotate to the back and re-enter. Earn chain pay from every member in your window.
@@ -440,10 +440,10 @@
 
       <!-- Whale Gate Card -->
       <div class="card">
-        <div class="section-title" style="margin-bottom:12px"><div class="dot"></div> 🐋 Whale Gate</div>
+        <div class="section-title" style="margin-bottom:12px"><div class="dot"></div> ðŸ‹ Whale Gate</div>
         <div class="info-row">
           <span class="info-key">SuperNova Genesis Members</span>
-          <span class="info-val" id="stat-cycle">—</span>
+          <span class="info-val" id="stat-cycle">â€”</span>
         </div>
         <div class="info-row">
           <span class="info-key">Threshold</span>
@@ -455,39 +455,39 @@
           </div>
           <div class="progress-wrap"><div class="progress-bar" id="stat-progress" style="width:0%"></div></div>
         </div>
-        <div style="margin-top:8px"><span class="pill" id="stat-status">—</span></div>
+        <div style="margin-top:8px"><span class="pill" id="stat-status">â€”</span></div>
         <div style="margin-top:10px;padding:10px 12px;background:var(--bg3);border-radius:8px;font-size:12px;color:var(--text3);line-height:1.6">
-          When <span id="wg-desc-threshold">2</span> members reach SuperNova Genesis (Tier 5), fast-track unlocks — skip straight to any tier above your current one.
+          When <span id="wg-desc-threshold">2</span> members reach SuperNova Genesis (Tier 5), fast-track unlocks â€” skip straight to any tier above your current one.
         </div>
       </div>
     </div>
 
     <!-- Mining Epoch -->
     <div class="card" style="margin-bottom:24px">
-      <div class="section-title" style="margin-bottom:12px"><div class="dot"></div> ⛏️ CNOVA Mining Epoch</div>
+      <div class="section-title" style="margin-bottom:12px"><div class="dot"></div> â›ï¸ CNOVA Mining Epoch</div>
       <div class="grid-4">
-        <div><div style="font-size:12px;color:var(--text3);margin-bottom:4px">Current Epoch</div><div style="font-weight:700;color:var(--yellow)" id="stat-epoch">—</div></div>
-        <div><div style="font-size:12px;color:var(--text3);margin-bottom:4px">Reward Per Entry</div><div style="font-weight:700;color:var(--green)" id="stat-reward">—</div></div>
-        <div><div style="font-size:12px;color:var(--text3);margin-bottom:4px">CNOVA Minted</div><div style="font-weight:700" id="stat-minted">—</div></div>
-        <div><div style="font-size:12px;color:var(--text3);margin-bottom:4px">Total CNOVA Supply</div><div style="font-weight:700" id="stat-supply">—</div></div>
+        <div><div style="font-size:12px;color:var(--text3);margin-bottom:4px">Current Epoch</div><div style="font-weight:700;color:var(--yellow)" id="stat-epoch">â€”</div></div>
+        <div><div style="font-size:12px;color:var(--text3);margin-bottom:4px">Reward Per Entry</div><div style="font-weight:700;color:var(--green)" id="stat-reward">â€”</div></div>
+        <div><div style="font-size:12px;color:var(--text3);margin-bottom:4px">CNOVA Minted</div><div style="font-weight:700" id="stat-minted">â€”</div></div>
+        <div><div style="font-size:12px;color:var(--text3);margin-bottom:4px">Total CNOVA Supply</div><div style="font-weight:700" id="stat-supply">â€”</div></div>
       </div>
     </div>
 
     <!-- Entry split -->
     <div class="card">
       <div class="section-title"><div class="dot"></div> How Each Entry Fee is Split (all tiers)</div>
-      <div class="split-row"><span class="split-label">🤝 Referrer bonus</span><span><span class="split-amount">30%</span> <span class="split-pct">e.g. $3.00 at Tier 1</span></span></div>
-      <div class="split-row"><span class="split-label">🔗 7-Level chain pay (L1–L7)</span><span><span class="split-amount">40%</span> <span class="split-pct">e.g. $4.00 at Tier 1</span></span></div>
-      <div class="split-row"><span class="split-label">🏘️ Community wallet</span><span><span class="split-amount">10%</span> <span class="split-pct">e.g. $1.00 at Tier 1</span></span></div>
-      <div class="split-row"><span class="split-label">🏦 USDC treasury reserve</span><span><span class="split-amount">15%</span> <span class="split-pct">e.g. $1.50 at Tier 1</span></span></div>
-      <div class="split-row"><span class="split-label">⚙️ Dev + Ops</span><span><span class="split-amount">5%</span> <span class="split-pct">e.g. $0.50 at Tier 1</span></span></div>
+      <div class="split-row"><span class="split-label">ðŸ¤ Referrer bonus</span><span><span class="split-amount">30%</span> <span class="split-pct">e.g. $3.00 at Tier 1</span></span></div>
+      <div class="split-row"><span class="split-label">ðŸ”— 7-Level chain pay (L1â€“L7)</span><span><span class="split-amount">40%</span> <span class="split-pct">e.g. $4.00 at Tier 1</span></span></div>
+      <div class="split-row"><span class="split-label">ðŸ˜ï¸ Community wallet</span><span><span class="split-amount">10%</span> <span class="split-pct">e.g. $1.00 at Tier 1</span></span></div>
+      <div class="split-row"><span class="split-label">ðŸ¦ USDC treasury reserve</span><span><span class="split-amount">15%</span> <span class="split-pct">e.g. $1.50 at Tier 1</span></span></div>
+      <div class="split-row"><span class="split-label">âš™ï¸ Dev + Ops</span><span><span class="split-amount">5%</span> <span class="split-pct">e.g. $0.50 at Tier 1</span></span></div>
       <div style="margin-top:14px;padding:10px 14px;background:var(--green-dim);border:1px solid var(--green2);border-radius:8px;font-size:13px;color:var(--text2)">
-        💡 <strong style="color:var(--green)">Whale Gate:</strong> When <span id="wg-desc-threshold2">2</span> members reach <strong>SuperNova Genesis (Tier 5)</strong>, fast-track unlocks — skip straight to any tier above yours.
+        ðŸ’¡ <strong style="color:var(--green)">Whale Gate:</strong> When <span id="wg-desc-threshold2">2</span> members reach <strong>SuperNova Genesis (Tier 5)</strong>, fast-track unlocks â€” skip straight to any tier above yours.
       </div>
     </div>
   </div>
 
-  <!-- ══ REGISTER TAB ════════════════════════════════════════════════════ -->
+  <!-- â•â• REGISTER TAB â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• -->
   <div id="tab-register" class="tab-panel">
     <div class="section-title"><div class="dot"></div> Join CryptoNova</div>
 
@@ -495,38 +495,38 @@
       <div>
         <!-- Registration flow -->
         <div class="card" style="margin-bottom:20px">
-          <div style="font-size:15px;font-weight:700;margin-bottom:16px">Register — $10 USDC</div>
+          <div style="font-size:15px;font-weight:700;margin-bottom:16px">Register â€” $10 USDC</div>
 
           <div id="register-wallet-warn" style="display:none;background:rgba(245,158,11,.1);border:1px solid rgba(245,158,11,.3);border-radius:8px;padding:14px;font-size:14px;color:var(--yellow);margin-bottom:16px">
-            ⚠️ Connect your wallet first to register.
+            âš ï¸ Connect your wallet first to register.
           </div>
 
           <div id="register-already" style="display:none;background:var(--green-dim);border:1px solid var(--green2);border-radius:8px;padding:14px;font-size:14px;color:var(--green);margin-bottom:16px">
-            ✅ You are already registered! Check your <a href="#" onclick="showTab('dashboard')" style="color:var(--green);text-decoration:underline">Dashboard</a>.
+            âœ… You are already registered! Check your <a href="#" onclick="showTab('dashboard')" style="color:var(--green);text-decoration:underline">Dashboard</a>.
           </div>
 
           <div class="form-group">
-            <label style="color:var(--green);font-weight:700;font-size:14px">🔗 Referrer Address <span style="color:var(--text3);font-weight:400;font-size:12px">(required — ask the person who invited you)</span></label>
+            <label style="color:var(--green);font-weight:700;font-size:14px">ðŸ”— Referrer Address <span style="color:var(--text3);font-weight:400;font-size:12px">(required â€” ask the person who invited you)</span></label>
             <input type="text" id="input-referrer" placeholder="0x... paste your referrer's wallet address here"
               style="border:2px solid var(--green2);background:rgba(0,229,160,0.05);font-size:14px;padding:13px 14px;"
               onfocus="this.style.borderColor='var(--green)';this.style.boxShadow='0 0 0 3px rgba(0,229,160,0.15)'"
               onblur="this.style.borderColor='var(--green2)';this.style.boxShadow='none'" />
-            <div class="form-hint" style="color:var(--text2)">⚠️ This is permanent — your referrer is locked on-chain for life. Leave blank to be auto-assigned to a founding member.</div>
+            <div class="form-hint" style="color:var(--text2)">âš ï¸ This is permanent â€” your referrer is locked on-chain for life. Leave blank to be auto-assigned to a founding member.</div>
           </div>
 
           <div style="margin-bottom:20px">
             <div style="font-size:13px;font-weight:600;margin-bottom:10px;color:var(--text2)">Your balances</div>
-            <div class="info-row"><span class="info-key">USDC Balance</span><span class="info-val" id="reg-usdc-bal">—</span></div>
-            <div class="info-row"><span class="info-key">USDC Approved</span><span class="info-val" id="reg-allowance">—</span></div>
+            <div class="info-row"><span class="info-key">USDC Balance</span><span class="info-val" id="reg-usdc-bal">â€”</span></div>
+            <div class="info-row"><span class="info-key">USDC Approved</span><span class="info-val" id="reg-allowance">â€”</span></div>
             <div id="usdc-low-warn" style="display:none;margin-top:10px;background:rgba(245,158,11,.08);border:1px solid rgba(245,158,11,.3);border-radius:8px;padding:12px;font-size:13px;color:var(--yellow)">
-              ⚠️ Your USDC balance is too low to register. Need test USDC? Contact the dev team on Telegram — we'll get you sorted. 💬
+              âš ï¸ Your USDC balance is too low to register. Need test USDC? Contact the dev team on Telegram â€” we'll get you sorted. ðŸ’¬
             </div>
           </div>
 
           <!-- Step buttons -->
           <div style="display:flex;flex-direction:column;gap:10px">
-            <button class="btn btn-ghost full-w" id="btn-approve" onclick="approveUSDC()" disabled title="Approves exactly $10 USDC — the contract cannot take more than this amount">
-              Step 1: Approve $10 USDC 🔒
+            <button class="btn btn-ghost full-w" id="btn-approve" onclick="approveUSDC()" disabled title="Approves exactly $10 USDC â€” the contract cannot take more than this amount">
+              Step 1: Approve $10 USDC ðŸ”’
             </button>
             <button class="btn btn-ghost full-w" id="btn-register" onclick="doRegister()" disabled>
               Step 2: Register ($10 USDC)
@@ -538,7 +538,7 @@
 
         <!-- URL referral tool -->
         <div class="card" id="referral-link-card" style="display:none">
-          <div style="font-size:15px;font-weight:700;margin-bottom:12px">🔗 Your Referral Link</div>
+          <div style="font-size:15px;font-weight:700;margin-bottom:12px">ðŸ”— Your Referral Link</div>
           <div style="display:flex;gap:8px;align-items:stretch;margin-bottom:8px">
             <input type="text" id="referral-url" readonly style="cursor:pointer;color:var(--green);flex:1" onclick="copyReferralLink()" />
             <button onclick="copyReferralLink()" id="copy-ref-btn" style="background:var(--green);color:#000;border:none;border-radius:8px;padding:0 16px;font-weight:800;font-size:13px;cursor:pointer;white-space:nowrap;flex-shrink:0">Copy</button>
@@ -546,28 +546,28 @@
           <div class="form-hint">Tap the <strong>Copy</strong> button, then share with your network. When someone opens your link, your address auto-fills as their referrer.</div>
         </div>
 
-        <!-- Tier Upgrade Card — shown after Tier 1 registration -->
+        <!-- Tier Upgrade Card â€” shown after Tier 1 registration -->
         <div class="card" id="upgrade-card" style="display:none;margin-top:20px">
-          <div style="font-size:15px;font-weight:700;margin-bottom:4px">⬆️ Upgrade Tier</div>
+          <div style="font-size:15px;font-weight:700;margin-bottom:4px">â¬†ï¸ Upgrade Tier</div>
           <div style="font-size:13px;color:var(--text3);margin-bottom:14px">Complete your cycle requirement, then pay the next tier's fee to earn in a bigger pool.</div>
           <div id="upgrade-whale-gate" style="display:none;margin-bottom:14px;background:rgba(245,158,11,.08);border:1px solid rgba(245,158,11,.3);border-radius:8px;padding:12px;font-size:13px;color:var(--yellow)">
-            🐋 <strong>Whale Gate</strong> — Tiers 5–7 require sequential progression until <span id="upgrade-whale-progress">0</span> / 25 SuperNova Genesis members reached. <span id="upgrade-fasttrack-badge"></span>
+            ðŸ‹ <strong>Whale Gate</strong> â€” Tiers 5â€“7 require sequential progression until <span id="upgrade-whale-progress">0</span> / 25 SuperNova Genesis members reached. <span id="upgrade-fasttrack-badge"></span>
           </div>
           <div class="form-group">
             <label>Target Tier</label>
             <select id="upgrade-tier-select" style="width:100%;background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:11px 14px;color:var(--text);font-size:14px;outline:none" onchange="onUpgradeTierChange()">
-              <option value="">Select a tier…</option>
+              <option value="">Select a tierâ€¦</option>
             </select>
             <div class="form-hint" id="upgrade-tier-hint"></div>
           </div>
           <div class="form-group">
-            <label>Referrer <span style="color:var(--green);font-weight:600;font-size:11px">🔒 Locked — same as Tier 1</span></label>
-            <input type="text" id="upgrade-referrer" readonly style="background:var(--bg3);opacity:.7;cursor:not-allowed;font-family:monospace;font-size:12px" placeholder="Loading referrer…" />
+            <label>Referrer <span style="color:var(--green);font-weight:600;font-size:11px">ðŸ”’ Locked â€” same as Tier 1</span></label>
+            <input type="text" id="upgrade-referrer" readonly style="background:var(--bg3);opacity:.7;cursor:not-allowed;font-family:monospace;font-size:12px" placeholder="Loading referrerâ€¦" />
           </div>
           <div style="display:flex;flex-direction:column;gap:10px">
             <div style="display:flex;gap:8px">
-              <button class="btn btn-ghost" style="flex:1" id="btn-upgrade-approve" onclick="approveUSDCForUpgrade()" disabled>Step 1: Approve USDC 🔒</button>
-              <button class="btn btn-ghost" style="padding:0 14px" onclick="checkUpgradeAllowance()" title="Check approval status">↻</button>
+              <button class="btn btn-ghost" style="flex:1" id="btn-upgrade-approve" onclick="approveUSDCForUpgrade()" disabled>Step 1: Approve USDC ðŸ”’</button>
+              <button class="btn btn-ghost" style="padding:0 14px" onclick="checkUpgradeAllowance()" title="Check approval status">â†»</button>
             </div>
             <button class="btn btn-ghost full-w" id="btn-upgrade" onclick="doUpgrade()" disabled>Step 2: Upgrade Tier</button>
           </div>
@@ -612,29 +612,29 @@
         </ul>
 
         <div style="margin-top:20px;padding:14px;background:var(--bg3);border-radius:8px;font-size:13px">
-          <div style="color:var(--green);font-weight:700;margin-bottom:6px">💡 Tier 1 Earnings Potential (per 100-member cycle)</div>
+          <div style="color:var(--green);font-weight:700;margin-bottom:6px">ðŸ’¡ Tier 1 Earnings Potential (per 100-member cycle)</div>
           <div style="color:var(--text2);line-height:1.6">Passive (0 referrals): <strong style="color:var(--text)">$3.20</strong> chain pay per cycle (32% ROI)<br>
           Active (2 referrals): <strong style="color:var(--text)">$9.20</strong> per cycle (92% ROI)<br>
           Power (5 referrals): <strong style="color:var(--text)">$18.20</strong> per cycle (182% ROI)<br>
-          <span style="font-size:11px;color:var(--text3)">Upgrade to higher tiers to earn more — same cycle mechanics, bigger fees = bigger chain pay.</span></div>
+          <span style="font-size:11px;color:var(--text3)">Upgrade to higher tiers to earn more â€” same cycle mechanics, bigger fees = bigger chain pay.</span></div>
         </div>
       </div>
     </div>
   </div>
 
-  <!-- ══ DASHBOARD TAB ═══════════════════════════════════════════════════ -->
+  <!-- â•â• DASHBOARD TAB â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• -->
   <div id="tab-dashboard" class="tab-panel">
     <div class="section-title"><div class="dot"></div> My Dashboard</div>
 
     <div id="dash-no-wallet" class="card" style="text-align:center;padding:40px;display:none">
-      <div style="font-size:32px;margin-bottom:12px"><span style="filter:sepia(1) saturate(3) hue-rotate(5deg) brightness(0.85)">👛</span></div>
+      <div style="font-size:32px;margin-bottom:12px"><span style="filter:sepia(1) saturate(3) hue-rotate(5deg) brightness(0.85)">ðŸ‘›</span></div>
       <div style="font-size:16px;font-weight:600;margin-bottom:8px">Connect Your Wallet</div>
       <div style="color:var(--text2);font-size:14px;margin-bottom:20px">Connect MetaMask to view your dashboard and earnings.</div>
       <button class="btn btn-green" onclick="window.ethereum ? connectWallet() : showMetaMaskModal()">Connect Wallet</button>
     </div>
 
     <div id="dash-not-registered" class="card" style="text-align:center;padding:40px;display:none">
-      <div style="font-size:32px;margin-bottom:12px">🚀</div>
+      <div style="font-size:32px;margin-bottom:12px">ðŸš€</div>
       <div style="font-size:16px;font-weight:600;margin-bottom:8px">Not Yet Registered</div>
       <div style="color:var(--text2);font-size:14px;margin-bottom:20px">You haven't joined the matrix yet. Register to get started.</div>
       <button class="btn btn-green" onclick="showTab('register')">Register Now</button>
@@ -645,22 +645,22 @@
       <div class="grid-4" style="margin-bottom:24px">
         <div class="card-sm" style="border-color:var(--green2)">
           <div class="stat-label">Withdrawable</div>
-          <div class="stat-value green" id="dash-withdrawable">—</div>
+          <div class="stat-value green" id="dash-withdrawable">â€”</div>
           <div class="stat-sub">Ready to claim</div>
         </div>
         <div class="card-sm">
           <div class="stat-label">Total Earned</div>
-          <div class="stat-value" id="dash-total-earned">—</div>
+          <div class="stat-value" id="dash-total-earned">â€”</div>
 <div class="stat-sub">All tiers lifetime</div>
         </div>
         <div class="card-sm">
           <div class="stat-label">CNOVA Balance</div>
-          <div class="stat-value green" id="dash-cnova">—</div>
+          <div class="stat-value green" id="dash-cnova">â€”</div>
           <div class="stat-sub">Mined tokens</div>
         </div>
         <div class="card-sm">
           <div class="stat-label">CNOVA Value</div>
-          <div class="stat-value" id="dash-cnova-val">—</div>
+          <div class="stat-value" id="dash-cnova-val">â€”</div>
           <div class="stat-sub">At current floor</div>
         </div>
       </div>
@@ -678,11 +678,11 @@
 
           <!-- Redeem CNOVA for USDC at floor price -->
           <div style="margin-top:20px;padding-top:16px;border-top:1px solid var(--border)">
-            <div style="font-size:14px;font-weight:700;margin-bottom:4px">🔥 Redeem CNOVA → USDC</div>
+            <div style="font-size:14px;font-weight:700;margin-bottom:4px">ðŸ”¥ Redeem CNOVA â†’ USDC</div>
             <div style="font-size:12px;color:var(--text3);margin-bottom:12px">Burn CNOVA at the current floor price to receive USDC from treasury.</div>
-            <div class="info-row"><span class="info-key">Your CNOVA</span><span class="info-val green" id="redeem-cnova-bal">—</span></div>
-            <div class="info-row"><span class="info-key">Floor Price</span><span class="info-val" id="redeem-floor">—</span></div>
-            <div class="info-row"><span class="info-key">You Receive</span><span class="info-val green" id="redeem-out">—</span></div>
+            <div class="info-row"><span class="info-key">Your CNOVA</span><span class="info-val green" id="redeem-cnova-bal">â€”</span></div>
+            <div class="info-row"><span class="info-key">Floor Price</span><span class="info-val" id="redeem-floor">â€”</span></div>
+            <div class="info-row"><span class="info-key">You Receive</span><span class="info-val green" id="redeem-out">â€”</span></div>
             <div style="display:flex;gap:8px;margin-top:12px">
               <input type="text" id="redeem-amount" placeholder="CNOVA to redeem"
                 style="flex:1;background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:9px 12px;color:var(--text);font-size:13px;outline:none"
@@ -697,18 +697,18 @@
           </div>
         </div>
         <div class="card">
-          <div class="section-title" style="margin-bottom:12px"><div class="dot"></div> Member Info — <span id="dash-tier-name" style="color:var(--green);font-size:14px">—</span></div>
-          <div class="info-row"><span class="info-key">Member ID</span><span class="info-val" id="dash-id">—</span></div>
+          <div class="section-title" style="margin-bottom:12px"><div class="dot"></div> Member Info â€” <span id="dash-tier-name" style="color:var(--green);font-size:14px">â€”</span></div>
+          <div class="info-row"><span class="info-key">Member ID</span><span class="info-val" id="dash-id">â€”</span></div>
           
-          <div class="info-row"><span class="info-key">Cycles (Tier 1)</span><span class="info-val" id="dash-cycles">—</span></div>
+          <div class="info-row"><span class="info-key">Cycles (Tier 1)</span><span class="info-val" id="dash-cycles">â€”</span></div>
           
-          <div class="info-row"><span class="info-key">Referrer</span><span class="info-val addr" id="dash-orig-referrer">—</span></div>
-          <div class="info-row"><span class="info-key">Direct Referrals</span><span class="info-val" id="dash-directs">—</span></div>
+          <div class="info-row"><span class="info-key">Referrer</span><span class="info-val addr" id="dash-orig-referrer">â€”</span></div>
+          <div class="info-row"><span class="info-key">Direct Referrals</span><span class="info-val" id="dash-directs">â€”</span></div>
 
           <!-- Auto-upgrade toggle -->
           <div style="margin-top:16px;padding-top:14px;border-top:1px solid var(--border)">
-            <div style="font-size:14px;font-weight:700;margin-bottom:6px">⚡ Auto-Upgrade</div>
-            <div style="font-size:12px;color:var(--text3);margin-bottom:12px">When enabled, your upgrade fee is automatically deducted from earnings the moment you complete the required cycles — no action needed.</div>
+            <div style="font-size:14px;font-weight:700;margin-bottom:6px">âš¡ Auto-Upgrade</div>
+            <div style="font-size:12px;color:var(--text3);margin-bottom:12px">When enabled, your upgrade fee is automatically deducted from earnings the moment you complete the required cycles â€” no action needed.</div>
             <div style="display:flex;align-items:center;justify-content:space-between">
               <span style="font-size:13px;color:var(--text2)" id="auto-upgrade-status">Off</span>
               <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
@@ -722,8 +722,8 @@
 
           <!-- Double Re-entry toggle -->
           <div style="margin-top:14px;padding-top:14px;border-top:1px solid var(--border)">
-            <div style="font-size:14px;font-weight:700;margin-bottom:6px">2× Re-entry <span style="font-size:10px;background:rgba(59,130,246,.2);color:var(--blue);border:1px solid rgba(59,130,246,.4);border-radius:4px;padding:2px 6px;margin-left:4px">OPT-IN</span></div>
-            <div style="font-size:12px;color:var(--text3);margin-bottom:12px">When enabled, each time you cycle out your earnings are checked. If you have ≥ 1× entry fee in withdrawable balance, you are queued a <strong>second time</strong> — two positions earning simultaneously. Fee deducted automatically.</div>
+            <div style="font-size:14px;font-weight:700;margin-bottom:6px">2Ã— Re-entry <span style="font-size:10px;background:rgba(59,130,246,.2);color:var(--blue);border:1px solid rgba(59,130,246,.4);border-radius:4px;padding:2px 6px;margin-left:4px">OPT-IN</span></div>
+            <div style="font-size:12px;color:var(--text3);margin-bottom:12px">When enabled, each time you cycle out your earnings are checked. If you have â‰¥ 1Ã— entry fee in withdrawable balance, you are queued a <strong>second time</strong> â€” two positions earning simultaneously. Fee deducted automatically.</div>
             <div style="display:flex;align-items:center;justify-content:space-between">
               <span style="font-size:13px;color:var(--text2)" id="double-reentry-status">Off</span>
               <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
@@ -742,10 +742,10 @@
         <div class="section-title" style="margin-bottom:14px"><div class="dot"></div> My Transaction History</div>
         <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap">
           <div style="font-size:13px;color:var(--text2);line-height:1.6;flex:1;min-width:200px">
-            View all your registrations, referral bonuses, chain payments and withdrawals on BaseScan — the full on-chain record.
+            View all your registrations, referral bonuses, chain payments and withdrawals on BaseScan â€” the full on-chain record.
           </div>
           <a id="basescan-tx-link" href="https://sepolia.basescan.org/address/" target="_blank" rel="noopener" style="text-decoration:none;flex-shrink:0">
-            <button class="btn btn-green" style="white-space:nowrap">🔍 View on BaseScan ↗</button>
+            <button class="btn btn-green" style="white-space:nowrap">ðŸ” View on BaseScan â†—</button>
           </a>
         </div>
       </div>
@@ -754,25 +754,25 @@
       <div class="card" style="margin-bottom:24px">
         <div class="section-title" style="margin-bottom:14px"><div class="dot" style="background:var(--purple)"></div> Community Wallet</div>
         <div id="cw-not-founder" style="display:none;padding:14px;background:var(--bg3);border-radius:10px;font-size:13px;color:var(--text2)">
-          You are not a founding member. The first <strong id="cw-max-founders">2,000</strong> members earn Community Wallet payouts every 25 days — the first 1,000 as <strong>Nova Originals</strong> (70% share) and the next 1,000 as <strong>Nova Pioneers</strong> (30% share).
+          You are not a founding member. The first <strong id="cw-max-founders">2,000</strong> members earn Community Wallet payouts every 25 days â€” the first 1,000 as <strong>Nova Originals</strong> (70% share) and the next 1,000 as <strong>Nova Pioneers</strong> (30% share).
         </div>
         <div id="cw-founder-panel" style="display:none">
           <div class="grid-2" style="margin-bottom:16px">
             <div class="card-sm" style="border-color:var(--green2)">
               <div class="stat-label">Founder Status</div>
-              <div class="stat-value" id="cw-tranche" style="font-size:16px">—</div>
-              <div class="stat-sub" id="cw-founder-id">—</div>
+              <div class="stat-value" id="cw-tranche" style="font-size:16px">â€”</div>
+              <div class="stat-sub" id="cw-founder-id">â€”</div>
             </div>
             <div class="card-sm" style="border-color:rgba(168,85,247,.4)">
               <div class="stat-label">Total Claimable</div>
-              <div class="stat-value green" id="cw-claimable">—</div>
+              <div class="stat-value green" id="cw-claimable">â€”</div>
               <div class="stat-sub">USDC from open epochs</div>
             </div>
           </div>
-          <div class="info-row"><span class="info-key">Pending Pool</span><span class="info-val" id="cw-pending">—</span></div>
-          <div class="info-row"><span class="info-key">Current Epoch</span><span class="info-val" id="cw-epoch">—</span></div>
-          <div class="info-row"><span class="info-key">Nova Original Slots</span><span class="info-val" id="cw-tranche-a">—</span></div>
-          <div class="info-row"><span class="info-key">Nova Pioneer Slots</span><span class="info-val" id="cw-tranche-b">—</span></div>
+          <div class="info-row"><span class="info-key">Pending Pool</span><span class="info-val" id="cw-pending">â€”</span></div>
+          <div class="info-row"><span class="info-key">Current Epoch</span><span class="info-val" id="cw-epoch">â€”</span></div>
+          <div class="info-row"><span class="info-key">Nova Original Slots</span><span class="info-val" id="cw-tranche-a">â€”</span></div>
+          <div class="info-row"><span class="info-key">Nova Pioneer Slots</span><span class="info-val" id="cw-tranche-b">â€”</span></div>
           <div style="margin-top:16px">
             <button class="btn btn-green full-w" id="btn-cw-claim" onclick="doCWClaimAll()" disabled>
               Claim All Available
@@ -780,19 +780,19 @@
             <div id="cw-claim-status" style="margin-top:10px;font-size:13px;color:var(--text2)"></div>
           </div>
         </div>
-        <div id="cw-loading" style="font-size:13px;color:var(--text3)"><span class="spinner"></span> Loading…</div>
+        <div id="cw-loading" style="font-size:13px;color:var(--text3)"><span class="spinner"></span> Loadingâ€¦</div>
       </div>
 
       <!-- Chain pay breakdown -->
       <div class="card">
-        <div class="section-title"><div class="dot"></div> V6 Payment Split — Your BFS Tree Depth</div>
+        <div class="section-title"><div class="dot"></div> V6 Payment Split â€” Your BFS Tree Depth</div>
         <div style="font-size:13px;color:var(--text2);margin-bottom:16px">Every $10 entry or re-entry distributes to referrers, BFS tree ancestors, treasury and community.</div>
         <div id="chain-pay-table">
           <div class="chain-row"><span style="color:var(--text2)">L1 Direct Referrer (25%)</span><span><span style="font-weight:600;color:var(--green)">$2.50</span> <span style="font-size:11px;color:var(--text3)">your sponsor earns this every cycle</span></span></div>
           <div class="chain-row"><span style="color:var(--text2)">L2 Override (3%)</span><span><span style="font-weight:600;color:var(--green)">$0.30</span> <span style="font-size:11px;color:var(--text3)">sponsor's sponsor earns this</span></span></div>
           <div class="chain-row"><span style="color:var(--text2)">L3 Override (2%)</span><span><span style="font-weight:600">$0.20</span> <span style="font-size:11px;color:var(--text3)">L2's sponsor earns this</span></span></div>
           <div class="chain-row"><span style="color:var(--text2)">BFS Tree Chain Pay (40%)</span><span><span style="font-weight:600;color:var(--blue)">$4.00</span> <span style="font-size:11px;color:var(--text3)">flows up 7 ancestor levels in your matrix tree</span></span></div>
-          <div class="chain-row"><span style="color:var(--text2)">Treasury Reserve (15%)</span><span><span style="font-weight:600">$1.50</span> <span style="font-size:11px;color:var(--text3)">backs CNOVA floor price — never leaves treasury</span></span></div>
+          <div class="chain-row"><span style="color:var(--text2)">Treasury Reserve (15%)</span><span><span style="font-weight:600">$1.50</span> <span style="font-size:11px;color:var(--text3)">backs CNOVA floor price â€” never leaves treasury</span></span></div>
           <div class="chain-row"><span style="color:var(--text2)">Community Wallet (10%)</span><span><span style="font-weight:600">$1.00</span> <span style="font-size:11px;color:var(--text3)">Nova Original / Nova Pioneer epoch payouts</span></span></div>
           <div class="chain-row"><span style="color:var(--text2)">Dev / Ops (5%)</span><span><span style="font-weight:600">$0.50</span> <span style="font-size:11px;color:var(--text3)">operations</span></span></div>
           <div class="chain-row" style="border-top:1px solid var(--green2)"><span style="font-weight:700">Total per entry/re-entry</span><span style="font-weight:700;color:var(--green)">$10.00 <span style="font-size:11px;color:var(--text3);font-weight:400">100% accounted for every cycle</span></span></div>
@@ -801,7 +801,7 @@
     </div>
   </div>
 
-  <!-- ══ MATRIX TAB ══════════════════════════════════════════════════════ -->
+  <!-- â•â• MATRIX TAB â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• -->
   <div id="tab-matrix" class="tab-panel">
     <div class="section-title"><div class="dot"></div> Matrix Tree View</div>
 
@@ -810,38 +810,38 @@
         <div style="flex:1;min-width:180px">
           <label style="display:block;font-size:12px;color:var(--text3);margin-bottom:5px;text-transform:uppercase;letter-spacing:.6px">Viewing Tier</label>
           <select id="matrix-tier-select" style="width:100%;background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:9px 12px;color:var(--text);font-size:13px;outline:none" onchange="onMatrixTierChange()">
-            <option value="1">Tier 1 — Nova Seed ($10)</option>
-            <option value="2">Tier 2 — Nova Rise ($25)</option>
-            <option value="3">Tier 3 — Nova Star ($50)</option>
-            <option value="4">Tier 4 — Nova Prime ($100)</option>
-            <option value="5">Tier 5 — SuperNova Genesis ($250) 🐋</option>
-            <option value="6">Tier 6 — SuperNova Elite ($500)</option>
-            <option value="7">Tier 7 — SuperNova Spark ($1,000)</option>
+            <option value="1">Tier 1 â€” Nova Seed ($10)</option>
+            <option value="2">Tier 2 â€” Nova Rise ($25)</option>
+            <option value="3">Tier 3 â€” Nova Star ($50)</option>
+            <option value="4">Tier 4 â€” Nova Prime ($100)</option>
+            <option value="5">Tier 5 â€” SuperNova Genesis ($250) ðŸ‹</option>
+            <option value="6">Tier 6 â€” SuperNova Elite ($500)</option>
+            <option value="7">Tier 7 â€” SuperNova Spark ($1,000)</option>
           </select>
         </div>
       </div>
       <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
-        <button id="btn-load-tree"   class="btn btn-ghost" onclick="setActiveMatrixBtn('btn-load-tree');loadQueueView()">🔄 Load Queue</button>
-        <button id="btn-my-position" class="btn btn-ghost" onclick="setActiveMatrixBtn('btn-my-position');loadMyTree()">📍 My Position</button>
-        <button id="btn-my-directs"  class="btn btn-ghost" onclick="setActiveMatrixBtn('btn-my-directs');loadMyDirects()">👥 My Directs</button>
+        <button id="btn-load-tree"   class="btn btn-ghost" onclick="setActiveMatrixBtn('btn-load-tree');loadQueueView()">ðŸ”„ Load Queue</button>
+        <button id="btn-my-position" class="btn btn-ghost" onclick="setActiveMatrixBtn('btn-my-position');loadMyTree()">ðŸ“ My Position</button>
+        <button id="btn-my-directs"  class="btn btn-ghost" onclick="setActiveMatrixBtn('btn-my-directs');loadMyDirects()">ðŸ‘¥ My Directs</button>
       </div>
     </div>
 
     <div class="grid-4" style="margin-bottom:20px">
-      <div class="card-sm"><div class="stat-label">Total Nodes</div><div class="stat-value" id="matrix-nodes">—</div></div>
-      <div class="card-sm"><div class="stat-label">Active Window</div><div class="stat-value" id="matrix-bfs">— slots</div></div>
-      <div class="card-sm"><div class="stat-label">Cycle Fill</div><div class="stat-value" id="matrix-fill">—</div></div>
+      <div class="card-sm"><div class="stat-label">Total Nodes</div><div class="stat-value" id="matrix-nodes">â€”</div></div>
+      <div class="card-sm"><div class="stat-label">Active Window</div><div class="stat-value" id="matrix-bfs">â€” slots</div></div>
+      <div class="card-sm"><div class="stat-label">Cycle Fill</div><div class="stat-value" id="matrix-fill">â€”</div></div>
       <div class="card-sm" style="border-color:var(--green2)">
         <div class="stat-label" id="matrix-my-node-label">My Node ID</div>
-        <div class="stat-value green" id="matrix-my-node">—</div>
+        <div class="stat-value green" id="matrix-my-node">â€”</div>
         <div class="stat-sub" id="matrix-my-level-sub" style="display:none"></div>
       </div>
     </div>
 
-    <!-- My Position info banner — shown only when My Position is active -->
+    <!-- My Position info banner â€” shown only when My Position is active -->
     <div id="matrix-pos-banner" style="display:none;background:var(--green-dim);border:1px solid var(--green2);border-radius:10px;padding:14px 20px;margin-bottom:16px;display:none">
       <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap">
-        <span style="font-size:13px;font-weight:700;color:var(--green)">📍 My Position</span>
+        <span style="font-size:13px;font-weight:700;color:var(--green)">ðŸ“ My Position</span>
         <span id="matrix-pos-level"  style="font-size:13px;color:var(--text2)"></span>
         <span id="matrix-pos-slots"  style="font-size:13px;color:var(--text2)"></span>
         <span id="matrix-pos-cycle"  style="font-size:13px;color:var(--text2)"></span>
@@ -856,7 +856,7 @@
     <!-- Legend -->
     <div style="display:flex;gap:16px;margin-top:16px;flex-wrap:wrap;font-size:12px;color:var(--text3)">
       <span><span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:var(--green-dim);border:1px solid var(--green2);margin-right:4px"></span>Your node</span>
-      <span><span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:rgba(245,158,11,.10);border:1px solid var(--yellow);margin-right:4px"></span>Your direct 🤝</span>
+      <span><span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:rgba(245,158,11,.10);border:1px solid var(--yellow);margin-right:4px"></span>Your direct ðŸ¤</span>
       <span><span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:var(--bg3);border:1px solid var(--text3);margin-right:4px"></span>Filled</span>
       <span><span style="display:inline-block;width:10px;height:10px;border-radius:2px;border:1px dashed var(--border);margin-right:4px"></span>Empty slot</span>
     </div>
@@ -865,7 +865,7 @@
     <div class="card" id="my-directs-card" style="margin-top:24px;display:none">
       <div class="section-title" style="margin-bottom:14px"><div class="dot"></div> My Direct Referrals</div>
       <div id="my-directs-loading" style="font-size:14px;color:var(--text3);padding:12px 0">
-        <span class="spinner"></span> Loading your direct referrals…
+        <span class="spinner"></span> Loading your direct referralsâ€¦
       </div>
       <div id="my-directs-empty" style="display:none;font-size:14px;color:var(--text3);padding:12px 0;text-align:center">
         No direct referrals found yet. Share your referral link to grow your team!
@@ -876,7 +876,7 @@
     </div>
   </div>
 
-  <!-- ══ ROADMAP TAB ═══════════════════════════════════════════════════════ -->
+  <!-- â•â• ROADMAP TAB â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• -->
   <div id="tab-roadmap" class="tab-panel">
 
     <div class="hero" style="padding:32px 20px 28px">
@@ -884,26 +884,26 @@
       <p style="font-size:15px;margin:10px auto 0;max-width:560px">From testnet to unstoppable. Every phase moves us closer to a fully decentralised, community-owned matrix that runs forever on Base chain.</p>
     </div>
 
-    <!-- ── Timeline ── -->
+    <!-- â”€â”€ Timeline â”€â”€ -->
     <div class="roadmap-timeline" style="margin-bottom:32px">
 
       <!-- Phase 0 -->
       <div class="roadmap-phase">
         <div style="display:flex;flex-direction:column;align-items:flex-end;padding-right:20px;padding-top:4px">
           <div class="phase-label done">Phase 0</div>
-          <div style="font-size:10px;color:var(--green);text-align:right;margin-top:2px">✅ Complete</div>
+          <div style="font-size:10px;color:var(--green);text-align:right;margin-top:2px">âœ… Complete</div>
         </div>
         <div>
           <div class="phase-card done" style="margin-bottom:20px">
-            <div class="phase-title">🏗️ Foundation</div>
+            <div class="phase-title">ðŸ—ï¸ Foundation</div>
             <div class="phase-subtitle">Smart contracts written, tested & deployed to Base Sepolia testnet</div>
             <ul class="checklist">
-              <li><span class="check-icon check-done">✅</span> 3 smart contracts written (Matrix, Treasury, Token)</li>
-              <li><span class="check-icon check-done">✅</span> 29/29 unit tests passing</li>
-              <li><span class="check-icon check-done">✅</span> Deployed to Base Sepolia testnet</li>
-              <li><span class="check-icon check-done">✅</span> Full dApp frontend built (this app!)</li>
-              <li><span class="check-icon check-done">✅</span> First member registered live on testnet</li>
-              <li><span class="check-icon check-done">✅</span> CNOVA token name confirmed unique globally</li>
+              <li><span class="check-icon check-done">âœ…</span> 3 smart contracts written (Matrix, Treasury, Token)</li>
+              <li><span class="check-icon check-done">âœ…</span> 29/29 unit tests passing</li>
+              <li><span class="check-icon check-done">âœ…</span> Deployed to Base Sepolia testnet</li>
+              <li><span class="check-icon check-done">âœ…</span> Full dApp frontend built (this app!)</li>
+              <li><span class="check-icon check-done">âœ…</span> First member registered live on testnet</li>
+              <li><span class="check-icon check-done">âœ…</span> CNOVA token name confirmed unique globally</li>
             </ul>
           </div>
         </div>
@@ -913,22 +913,22 @@
       <div class="roadmap-phase">
         <div style="display:flex;flex-direction:column;align-items:flex-end;padding-right:20px;padding-top:4px">
           <div class="phase-label done">Phase 1</div>
-          <div style="font-size:10px;color:var(--green);text-align:right;margin-top:2px">✅ Done</div>
+          <div style="font-size:10px;color:var(--green);text-align:right;margin-top:2px">âœ… Done</div>
         </div>
         <div>
           <div class="phase-card done" style="margin-bottom:20px">
-            <div class="phase-title">🔧 Pre-Launch</div>
-            <div class="phase-subtitle">Complete — all critical infrastructure in place ✅</div>
+            <div class="phase-title">ðŸ”§ Pre-Launch</div>
+            <div class="phase-subtitle">Complete â€” all critical infrastructure in place âœ…</div>
             <ul class="checklist">
-              <li><span class="check-icon check-done">✅</span> Verify contracts on BaseScan (removes MetaMask "malicious" warning)</li>
-              <li><span class="check-icon check-done">✅</span> Register domain — crypto-nova.app secured</li>
-              <li><span class="check-icon check-done">✅</span> Deploy frontend to secure HTTPS hosting (Vercel)</li>
-              <li><span class="check-icon check-done">✅</span> Add Terms of Service + Risk Disclaimer page</li>
-              <li><span class="check-icon check-done">✅</span> Add FAQ page for common community questions</li>
-              <li><span class="check-icon check-done">✅</span> Internal beta: community wallet testing underway</li>
-              <li><span class="check-icon check-done">✅</span> Set permanent DEV_WALLET &amp; OPS_WALLET addresses (ready for mainnet)</li>
-              <li><span class="check-icon check-done">✅</span> Telegram community group live — <a href="https://t.me/+21K4teAVfYdlMTdi" target="_blank" style="color:var(--green)">Join here</a></li>
-              <li><span class="check-icon check-pending">⏳</span> Write simple one-pager: what is CryptoNova, how does it work</li>
+              <li><span class="check-icon check-done">âœ…</span> Verify contracts on BaseScan (removes MetaMask "malicious" warning)</li>
+              <li><span class="check-icon check-done">âœ…</span> Register domain â€” crypto-nova.app secured</li>
+              <li><span class="check-icon check-done">âœ…</span> Deploy frontend to secure HTTPS hosting (Vercel)</li>
+              <li><span class="check-icon check-done">âœ…</span> Add Terms of Service + Risk Disclaimer page</li>
+              <li><span class="check-icon check-done">âœ…</span> Add FAQ page for common community questions</li>
+              <li><span class="check-icon check-done">âœ…</span> Internal beta: community wallet testing underway</li>
+              <li><span class="check-icon check-done">âœ…</span> Set permanent DEV_WALLET &amp; OPS_WALLET addresses (ready for mainnet)</li>
+              <li><span class="check-icon check-done">âœ…</span> Telegram community group live â€” <a href="https://t.me/+21K4teAVfYdlMTdi" target="_blank" style="color:var(--green)">Join here</a></li>
+              <li><span class="check-icon check-pending">â³</span> Write simple one-pager: what is CryptoNova, how does it work</li>
             </ul>
           </div>
         </div>
@@ -938,19 +938,19 @@
       <div class="roadmap-phase">
         <div style="display:flex;flex-direction:column;align-items:flex-end;padding-right:20px;padding-top:4px">
           <div class="phase-label active">Phase 2</div>
-          <div style="font-size:10px;color:var(--yellow);text-align:right;margin-top:2px">⚡ Now</div>
+          <div style="font-size:10px;color:var(--yellow);text-align:right;margin-top:2px">âš¡ Now</div>
         </div>
         <div>
           <div class="phase-card active" style="margin-bottom:20px">
-            <div class="phase-title">🤝 Community Beta</div>
-            <div class="phase-subtitle">Soft launch to initial community — testnet testing with real members</div>
+            <div class="phase-title">ðŸ¤ Community Beta</div>
+            <div class="phase-subtitle">Soft launch to initial community â€” testnet testing with real members</div>
             <ul class="checklist">
-              <li><span class="check-icon check-done">✅</span> Open to initial community (testnet)</li>
-              <li><span class="check-icon check-done">✅</span> Mobile MetaMask experience tested and improved</li>
-              <li><span class="check-icon check-pending">⏳</span> Collect feedback and fix remaining UX issues</li>
-              <li><span class="check-icon check-pending">⏳</span> Record tutorial video / walkthrough for non-crypto members</li>
-              <li><span class="check-icon check-pending">⏳</span> Test full matrix cycle: 100 positions → rotation → cycle 2</li>
-              <li><span class="check-icon check-pending">⏳</span> Confirm referral link flow works end-to-end for all members</li>
+              <li><span class="check-icon check-done">âœ…</span> Open to initial community (testnet)</li>
+              <li><span class="check-icon check-done">âœ…</span> Mobile MetaMask experience tested and improved</li>
+              <li><span class="check-icon check-pending">â³</span> Collect feedback and fix remaining UX issues</li>
+              <li><span class="check-icon check-pending">â³</span> Record tutorial video / walkthrough for non-crypto members</li>
+              <li><span class="check-icon check-pending">â³</span> Test full matrix cycle: 100 positions â†’ rotation â†’ cycle 2</li>
+              <li><span class="check-icon check-pending">â³</span> Confirm referral link flow works end-to-end for all members</li>
             </ul>
           </div>
         </div>
@@ -960,20 +960,20 @@
       <div class="roadmap-phase">
         <div style="display:flex;flex-direction:column;align-items:flex-end;padding-right:20px;padding-top:4px">
           <div class="phase-label future">Phase 3</div>
-          <div style="font-size:10px;color:var(--text3);text-align:right;margin-top:2px">Weeks 6–8</div>
+          <div style="font-size:10px;color:var(--text3);text-align:right;margin-top:2px">Weeks 6â€“8</div>
         </div>
         <div>
           <div class="phase-card" style="margin-bottom:20px">
-            <div class="phase-title">🚀 Mainnet Launch</div>
+            <div class="phase-title">ðŸš€ Mainnet Launch</div>
             <div class="phase-subtitle">Real USDC. Real earnings. Community-ready.</div>
             <ul class="checklist">
-              <li><span class="check-icon check-future">◦</span> Deploy all 3 contracts to Base mainnet</li>
-              <li><span class="check-icon check-future">◦</span> Update dApp to point to mainnet contracts + real USDC address</li>
-              <li><span class="check-icon check-future">◦</span> Verify mainnet contracts on BaseScan</li>
-              <li><span class="check-icon check-future">◦</span> Final security review before public launch</li>
-              <li><span class="check-icon check-future">◦</span> Consider renouncing contract ownership (fully decentralised)</li>
-              <li><span class="check-icon check-future">◦</span> Public announcement — open registrations</li>
-              <li><span class="check-icon check-future">◦</span> Members begin earning real USDC from day 1</li>
+              <li><span class="check-icon check-future">â—¦</span> Deploy all 3 contracts to Base mainnet</li>
+              <li><span class="check-icon check-future">â—¦</span> Update dApp to point to mainnet contracts + real USDC address</li>
+              <li><span class="check-icon check-future">â—¦</span> Verify mainnet contracts on BaseScan</li>
+              <li><span class="check-icon check-future">â—¦</span> Final security review before public launch</li>
+              <li><span class="check-icon check-future">â—¦</span> Consider renouncing contract ownership (fully decentralised)</li>
+              <li><span class="check-icon check-future">â—¦</span> Public announcement â€” open registrations</li>
+              <li><span class="check-icon check-future">â—¦</span> Members begin earning real USDC from day 1</li>
             </ul>
           </div>
         </div>
@@ -987,16 +987,16 @@
         </div>
         <div>
           <div class="phase-card" style="margin-bottom:20px">
-            <div class="phase-title">🌌 Ecosystem Growth</div>
-            <div class="phase-subtitle">The universe takes over — CNOVA becomes a tradeable asset</div>
+            <div class="phase-title">ðŸŒŒ Ecosystem Growth</div>
+            <div class="phase-subtitle">The universe takes over â€” CNOVA becomes a tradeable asset</div>
             <ul class="checklist">
-              <li><span class="check-icon check-future">◦</span> CNOVA listed on Aerodrome Finance DEX (Base's largest DEX)</li>
-              <li><span class="check-icon check-future">◦</span> CNOVA/USDC liquidity pool — token becomes tradeable</li>
-              <li><span class="check-icon check-future">◦</span> Leaderboard: top earners, top referrers</li>
-              <li><span class="check-icon check-future">◦</span> Telegram earnings bot — get notified on every payment</li>
-              <li><span class="check-icon check-future">◦</span> Analytics dashboard: real-time matrix stats &amp; treasury health</li>
-              <li><span class="check-icon check-future">◦</span> Community governance / DAO for future decisions</li>
-              <li><span class="check-icon check-future">◦</span> CEX listing exploration (as token grows)</li>
+              <li><span class="check-icon check-future">â—¦</span> CNOVA listed on Aerodrome Finance DEX (Base's largest DEX)</li>
+              <li><span class="check-icon check-future">â—¦</span> CNOVA/USDC liquidity pool â€” token becomes tradeable</li>
+              <li><span class="check-icon check-future">â—¦</span> Leaderboard: top earners, top referrers</li>
+              <li><span class="check-icon check-future">â—¦</span> Telegram earnings bot â€” get notified on every payment</li>
+              <li><span class="check-icon check-future">â—¦</span> Analytics dashboard: real-time matrix stats &amp; treasury health</li>
+              <li><span class="check-icon check-future">â—¦</span> Community governance / DAO for future decisions</li>
+              <li><span class="check-icon check-future">â—¦</span> CEX listing exploration (as token grows)</li>
             </ul>
           </div>
         </div>
@@ -1004,15 +1004,15 @@
 
     </div>
 
-    <!-- ── Pre-Launch Checklist ── -->
+    <!-- â”€â”€ Pre-Launch Checklist â”€â”€ -->
     <div class="section-title"><div class="dot"></div> Pre-Launch Checklist</div>
     <div class="prelaunch-grid">
 
       <div class="prelaunch-block">
-        <h3>🔐 Technical</h3>
+        <h3>ðŸ” Technical</h3>
         <ul>
           <li>Verify all 3 contracts on BaseScan (testnet + mainnet)</li>
-          <li>Custom domain with HTTPS — never serve over HTTP in production</li>
+          <li>Custom domain with HTTPS â€” never serve over HTTP in production</li>
           <li>Test on desktop + mobile MetaMask browser</li>
           <li>Register 10+ wallets in sequence to stress-test payments</li>
           <li>Confirm withdraw() flows correct USDC to wallet</li>
@@ -1021,45 +1021,45 @@
       </div>
 
       <div class="prelaunch-block">
-        <h3>⚖️ Legal &amp; Safety</h3>
+        <h3>âš–ï¸ Legal &amp; Safety</h3>
         <ul>
           <li>Add Terms of Service page to the website</li>
           <li>Add Risk Disclaimer: crypto is speculative, no guarantees</li>
           <li>Consider country restrictions if needed (consult if unsure)</li>
           <li>Secure your deployer/owner wallet with a hardware wallet (Ledger)</li>
-          <li>Never share private keys — consider a multisig for critical wallets</li>
+          <li>Never share private keys â€” consider a multisig for critical wallets</li>
         </ul>
       </div>
 
       <div class="prelaunch-block">
-        <h3>📣 Marketing &amp; Community</h3>
+        <h3>ðŸ“£ Marketing &amp; Community</h3>
         <ul>
-          <li>Telegram community group — your main support channel</li>
+          <li>Telegram community group â€” your main support channel</li>
           <li>Twitter/X account for announcements</li>
           <li>Simple one-pager / whitepaper explaining the system clearly</li>
           <li>Tutorial video: how to connect, approve, register</li>
           <li>Referral link guide so members can share properly</li>
-          <li>Set expectations: testnet first → mainnet after feedback</li>
+          <li>Set expectations: testnet first â†’ mainnet after feedback</li>
         </ul>
       </div>
 
       <div class="prelaunch-block">
-        <h3>🪙 Token</h3>
+        <h3>ðŸª™ Token</h3>
         <ul>
-          <li>CNOVA ticker confirmed unique ✅</li>
+          <li>CNOVA ticker confirmed unique âœ…</li>
           <li>Add CNOVA to MetaMask (button on Home tab)</li>
           <li>Prepare Aerodrome DEX listing for Phase 4</li>
-          <li>Consider a token logo / icon (32×32 PNG for MetaMask display)</li>
+          <li>Consider a token logo / icon (32Ã—32 PNG for MetaMask display)</li>
           <li>CoinGecko listing application (after mainnet &amp; sufficient volume)</li>
         </ul>
       </div>
 
     </div>
 
-    <!-- ── Contract Addresses ── -->
+    <!-- â”€â”€ Contract Addresses â”€â”€ -->
     <div class="section-title" style="margin-top:32px"><div class="dot"></div> Deployed Contracts</div>
     <div class="card" style="text-align:center;padding:32px 24px">
-      <div style="font-size:32px;margin-bottom:12px">🔒</div>
+      <div style="font-size:32px;margin-bottom:12px">ðŸ”’</div>
       <div style="font-size:16px;font-weight:700;margin-bottom:8px">Contract Addresses Hidden During Testnet</div>
       <div style="font-size:14px;color:var(--text2);max-width:420px;margin:0 auto;line-height:1.7">
         Smart contract addresses will be published publicly after mainnet launch, 
@@ -1067,9 +1067,9 @@
         This protects the protocol from duplication before it is fully established.
       </div>
       <div style="margin-top:16px;display:flex;gap:12px;justify-content:center;flex-wrap:wrap">
-        <div style="padding:10px 18px;background:var(--green-dim);border:1px solid var(--green2);border-radius:8px;font-size:13px;color:var(--green)">✅ Smart Contracts Deployed</div>
-        <div style="padding:10px 18px;background:var(--bg3);border:1px solid var(--border);border-radius:8px;font-size:13px;color:var(--text2)">🔗 Network: Base (Ethereum L2)</div>
-        <div style="padding:10px 18px;background:var(--bg3);border:1px solid var(--border);border-radius:8px;font-size:13px;color:var(--text2)">🛡️ Verified &amp; Tested</div>
+        <div style="padding:10px 18px;background:var(--green-dim);border:1px solid var(--green2);border-radius:8px;font-size:13px;color:var(--green)">âœ… Smart Contracts Deployed</div>
+        <div style="padding:10px 18px;background:var(--bg3);border:1px solid var(--border);border-radius:8px;font-size:13px;color:var(--text2)">ðŸ”— Network: Base (Ethereum L2)</div>
+        <div style="padding:10px 18px;background:var(--bg3);border:1px solid var(--border);border-radius:8px;font-size:13px;color:var(--text2)">ðŸ›¡ï¸ Verified &amp; Tested</div>
       </div>
     </div>
 
@@ -1089,7 +1089,7 @@
     <span style="color:var(--border)">|</span>
     <a href="faq.html" style="color:var(--text2);text-decoration:none;transition:color .2s" onmouseover="this.style.color='var(--green)'" onmouseout="this.style.color='var(--text2)'">FAQ &amp; Glossary</a>
     <span style="color:var(--border)">|</span>
-    <span>© 2026 CryptoNova. Smart contracts are immutable and open-source.</span>
+    <span>Â© 2026 CryptoNova. Smart contracts are immutable and open-source.</span>
   </div>
 </footer>
 
@@ -1097,13 +1097,13 @@
 <div id="toast"></div>
 
 <script>
-// ═══════════════════════════════════════════════════════════════════════
-// CONFIG — V5 Lightning Test (Base Sepolia, AW=2, BELT_MAX=10, $1 fees)
-// ═══════════════════════════════════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+// CONFIG â€” V5 Lightning Test (Base Sepolia, AW=2, BELT_MAX=10, $1 fees)
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 const CHAIN_ID = 84532;
 const RPC_URL  = 'https://sepolia.base.org';
 
-// V6 LIGHTNING — matrix=7, belt_max=10, $10, 21M CNOVA — audit-clean deploy
+// V6 LIGHTNING â€” matrix=7, belt_max=10, $10, 21M CNOVA â€” audit-clean deploy
 const ADDRESSES = {
   usdc:           '0x2D8B7b5eDec96bE441b6fb0D45D74a2BcE2C639a',
   token:          '0x6159f28CC4cAEb3674Ba7CA1CfEe85B16e96B770',
@@ -1133,9 +1133,9 @@ const ADDRESSES = {
 const TIER_NAMES={1:'Nova Seed',2:'Nova Rise',3:'Nova Star',4:'Nova Prime',5:'SuperNova Genesis',6:'SuperNova Elite',7:'SuperNova Spark'};
 const TIER_FEES={1:10,2:25,3:50,4:100,5:250,6:500,7:1000};  // $10 across ALL tests
 const TIER_FEES_USDC={1:10_000_000n,2:25_000_000n,3:50_000_000n,4:100_000_000n,5:250_000_000n,6:500_000_000n,7:1_000_000_000n};
-const CYCLE_REQ={1:1,2:1,3:1,4:1,5:1,6:1,7:1};  // V6 — 1 cycle all tiers
+const CYCLE_REQ={1:1,2:1,3:1,4:1,5:1,6:1,7:1};  // V6 â€” 1 cycle all tiers
 
-// ── ABIs ─────────────────────────────────────────────────────────────
+// â”€â”€ ABIs â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const MATRIX_ABI = [
   {"inputs":[{"internalType":"address","name":"","type":"address"}],"name":"members","outputs":[{"internalType":"uint256","name":"id","type":"uint256"},{"internalType":"address","name":"referrer","type":"address"},{"internalType":"address","name":"originalReferrer","type":"address"},{"internalType":"uint256","name":"joinedAt","type":"uint256"},{"internalType":"uint256","name":"withdrawable","type":"uint256"},{"internalType":"uint256","name":"totalEarned","type":"uint256"},{"internalType":"uint256","name":"reentryCount","type":"uint256"},{"internalType":"bool","name":"isRegistered","type":"bool"}],"stateMutability":"view","type":"function"},
   {"inputs":[{"internalType":"address","name":"","type":"address"}],"name":"cyclesCompleted","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},
@@ -1146,6 +1146,9 @@ const MATRIX_ABI = [
   {"inputs":[],"name":"ACTIVE_WINDOW","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},
   {"inputs":[{"internalType":"address","name":"member","type":"address"}],"name":"positionOf","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},
   {"inputs":[{"internalType":"address","name":"","type":"address"}],"name":"matrixPos","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},
+  {"inputs":[{"name":"member","type":"address"}],"name":"getMember","outputs":[{"components":[{"name":"id","type":"uint256"},{"name":"referrer","type":"address"},{"name":"l2","type":"address"},{"name":"l3","type":"address"},{"name":"joinedAt","type":"uint256"},{"name":"withdrawable","type":"uint256"},{"name":"totalEarned","type":"uint256"},{"name":"cyclesCompleted","type":"uint256"},{"name":"isInMatrix","type":"bool"},{"name":"hasEverJoined","type":"bool"}],"name":"","type":"tuple"}],"stateMutability":"view","type":"function"},
+  {"inputs":[{"name":"member","type":"address"}],"name":"getCyclesCompleted","outputs":[{"name":"","type":"uint256"}],"stateMutability":"view","type":"function"},
+  {"inputs":[{"name":"member","type":"address"}],"name":"withdrawableOf","outputs":[{"name":"","type":"uint256"}],"stateMutability":"view","type":"function"},
   {"inputs":[{"internalType":"address","name":"member","type":"address"}],"name":"isActive","outputs":[{"internalType":"bool","name":"","type":"bool"}],"stateMutability":"view","type":"function"},
   {"inputs":[{"internalType":"address","name":"referrer","type":"address"}],"name":"register","outputs":[],"stateMutability":"nonpayable","type":"function"},
   {"inputs":[],"name":"withdraw","outputs":[],"stateMutability":"nonpayable","type":"function"},
@@ -1225,14 +1228,14 @@ const BELT_MANAGER_ABI = [
   {"anonymous":false,"inputs":[{"indexed":true,"name":"member","type":"address"},{"indexed":false,"name":"queuePosition","type":"uint256"}],"name":"SecondSlotQueued","type":"event"},
 ];
 
-// ═══════════════════════════════════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 // STATE
-// ═══════════════════════════════════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 let provider=null,signer=null,userAddr=null,readProvider=null,isConnecting=false;
 let myDirectAddrs=new Set();
 let foundingMembers=[],foundingMembersReady=false,fallbackRoundRobin=0;
 
-// ─── V5 Helper: get the correct T1 belt matrix for a given member ──────────
+// â”€â”€â”€ V5 Helper: get the correct T1 belt matrix for a given member â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // With multi-belt, members may be in Belt A, B, C etc. Always use their OWN belt.
 async function getUserT1Matrix(addr){
   if(ADDRESSES.beltManager && ADDRESSES.beltManager.length > 10 && readProvider){
@@ -1263,9 +1266,9 @@ async function getAllBeltStatuses(){
   }catch(_){return [];}
 }
 
-// ═══════════════════════════════════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 // INIT
-// ═══════════════════════════════════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 window.addEventListener('DOMContentLoaded', async () => {
   if (window.location.protocol==='file:') document.getElementById('file-protocol-banner').style.display='block';
   readProvider = new ethers.JsonRpcProvider(RPC_URL);
@@ -1289,9 +1292,9 @@ window.addEventListener('DOMContentLoaded', async () => {
   if(params.get('ref')){document.getElementById('input-referrer').value=params.get('ref');showTab('register');}
 });
 
-// ═══════════════════════════════════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 // WALLET
-// ═══════════════════════════════════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 async function connectWallet(silent=false) {
   if(isConnecting)return;
   if(!window.ethereum){if(!silent){if(window.location.protocol==='file:'){document.getElementById('file-protocol-banner').style.display='block';document.getElementById('file-protocol-banner').scrollIntoView({behavior:'smooth'});}else showMetaMaskModal();}return;}
@@ -1305,9 +1308,9 @@ async function connectWallet(silent=false) {
     const bsLink=document.getElementById('basescan-tx-link');
     if(bsLink)bsLink.href='https://sepolia.basescan.org/address/'+accounts[0];
     const btn=document.getElementById('btn-connect');
-    btn.innerHTML='<span class="network-dot"></span>'+userAddr.slice(0,6)+'…'+userAddr.slice(-4);
+    btn.innerHTML='<span class="network-dot"></span>'+userAddr.slice(0,6)+'â€¦'+userAddr.slice(-4);
     btn.classList.add('connected');
-    if(!silent)toast('Wallet connected: '+userAddr.slice(0,6)+'…'+userAddr.slice(-4),'success');
+    if(!silent)toast('Wallet connected: '+userAddr.slice(0,6)+'â€¦'+userAddr.slice(-4),'success');
     await loadHomeStats();await loadConveyorBeltStats();await loadRegisterTab();await loadDashboard();await loadMatrixStats();
     // Pre-load referrer as soon as wallet connects so it's ready before user clicks anything
     const refInput=document.getElementById('input-referrer');
@@ -1320,7 +1323,7 @@ async function connectWallet(silent=false) {
           if(fb&&fb!==ethers.ZeroAddress&&!refInput.value){
             refInput.value=fb;
             const hint=document.getElementById('reg-status');
-            if(hint&&!hint.textContent)setStatus('reg-status','Referrer auto-assigned: '+fb.slice(0,6)+'…'+fb.slice(-4),'var(--blue)');
+            if(hint&&!hint.textContent)setStatus('reg-status','Referrer auto-assigned: '+fb.slice(0,6)+'â€¦'+fb.slice(-4),'var(--blue)');
           }
         }).catch(()=>{});
       }
@@ -1336,17 +1339,17 @@ async function switchToBaseSepolia(){
   const isMobile=/iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
   const btn=document.getElementById('nb-switch-btn'),hint=document.getElementById('nb-hint');
   const p=[{chainId:'0x'+CHAIN_ID.toString(16),chainName:'Base Sepolia',nativeCurrency:{name:'ETH',symbol:'ETH',decimals:18},rpcUrls:['https://sepolia.base.org'],blockExplorerUrls:['https://sepolia.basescan.org']}];
-  if(btn){btn.disabled=true;btn.textContent='Switching…';}
+  if(btn){btn.disabled=true;btn.textContent='Switchingâ€¦';}
   try {
     if(isMobile){await window.ethereum.request({method:'wallet_addEthereumChain',params:p});}
     else{try{await window.ethereum.request({method:'wallet_switchEthereumChain',params:[{chainId:'0x'+CHAIN_ID.toString(16)}]});}catch(e){if(e.code===4902)await window.ethereum.request({method:'wallet_addEthereumChain',params:p});else if(e.code!==4001)throw e;}}
-  }catch(e){if(e.code!==4001){if(hint)hint.innerHTML='<strong style="color:var(--yellow)">Auto-switch failed.</strong> In MetaMask: Settings → Networks → Add Network manually with chain ID <strong>84532</strong> and RPC <strong>https://sepolia.base.org</strong>';toast('Could not switch automatically.','error');}}
-  finally{if(btn){btn.disabled=false;btn.innerHTML='🔀 Add &amp; Switch to Base Sepolia';}}
+  }catch(e){if(e.code!==4001){if(hint)hint.innerHTML='<strong style="color:var(--yellow)">Auto-switch failed.</strong> In MetaMask: Settings â†’ Networks â†’ Add Network manually with chain ID <strong>84532</strong> and RPC <strong>https://sepolia.base.org</strong>';toast('Could not switch automatically.','error');}}
+  finally{if(btn){btn.disabled=false;btn.innerHTML='ðŸ”€ Add &amp; Switch to Base Sepolia';}}
 }
 
-// ═══════════════════════════════════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 // TABS
-// ═══════════════════════════════════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 function showTab(name){
   document.querySelectorAll('.tab-panel').forEach(p=>p.classList.remove('active'));
   document.querySelectorAll('nav button').forEach(b=>b.classList.remove('active'));
@@ -1359,17 +1362,17 @@ function showTab(name){
   if(name==='register')loadRegisterTab();
 }
 
-// ═══════════════════════════════════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 // HELPERS
-// ═══════════════════════════════════════════════════════════════════════
-function u6(n){const val=Number(BigInt(n))/1e6;if(!isFinite(val)||val>1e15)return '$∞';return '$'+val.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2});}
-function shortAddr(addr){if(!addr||addr===ethers.ZeroAddress)return '—';return addr.slice(0,6)+'…'+addr.slice(-4);}
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+function u6(n){const val=Number(BigInt(n))/1e6;if(!isFinite(val)||val>1e15)return '$âˆž';return '$'+val.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2});}
+function shortAddr(addr){if(!addr||addr===ethers.ZeroAddress)return 'â€”';return addr.slice(0,6)+'â€¦'+addr.slice(-4);}
 function toast(msg,type='info',duration=4000){const el=document.getElementById('toast');el.textContent=msg;el.className='show '+type;clearTimeout(toast._t);toast._t=setTimeout(()=>{el.className='';},duration);}
 function setStatus(id,msg,color){const el=document.getElementById(id);if(el){el.textContent=msg;el.style.color=color||'var(--text2)';}}
 
-// ═══════════════════════════════════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 // FOUNDING MEMBERS & FALLBACK REFERRER
-// ═══════════════════════════════════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 async function loadConveyorBeltStats(){
   try{
     const sel=document.getElementById('cb-tier-select');
@@ -1377,7 +1380,7 @@ async function loadConveyorBeltStats(){
     const tierN=TIER_NAMES[tier]||('Tier '+tier);
     const labelEl=document.getElementById('cb-tier-label');
     if(labelEl)labelEl.textContent=tierN;
-    // V5: for T1, use the BeltManager's ACTIVE belt — not the frozen Belt A
+    // V5: for T1, use the BeltManager's ACTIVE belt â€” not the frozen Belt A
     let mxAddr = ADDRESSES.matrices[tier];
     if(tier === 1 && ADDRESSES.beltManager && ADDRESSES.beltManager.length > 10){
       try{
@@ -1393,7 +1396,7 @@ async function loadConveyorBeltStats(){
     let memRaw=0n;
     try{memRaw=await mx.totalMembers();}catch(_){
       await new Promise(r=>setTimeout(r,1000));
-      try{memRaw=await mx.totalMembers();}catch(e2){lEl.innerHTML='❌ RPC error — please refresh.';return;}
+      try{memRaw=await mx.totalMembers();}catch(e2){lEl.innerHTML='âŒ RPC error â€” please refresh.';return;}
     }
     const mem=memRaw;
     const cyclesDone=Math.max(0,Number(mem)-AW);
@@ -1422,11 +1425,11 @@ async function loadConveyorBeltStats(){
     const myNextEl=document.getElementById('stat-my-next-cycle');
     if(myNextEl){
       if(!userAddr){
-        myNextEl.textContent='—';
+        myNextEl.textContent='â€”';
         myNextEl.style.color='var(--text3)';
         return;
       }
-      // V5: check user's OWN belt — they may be in Belt A while active belt is Belt B
+      // V5: check user's OWN belt â€” they may be in Belt A while active belt is Belt B
       let userMxAddr = mxAddr;
       if(tier === 1 && ADDRESSES.beltManager && ADDRESSES.beltManager.length > 10){
         try{
@@ -1448,7 +1451,7 @@ async function loadConveyorBeltStats(){
         myNextEl.textContent='Member #'+myNextAt;
         myNextEl.style.color='var(--green)';
       } else {
-        myNextEl.textContent='Re-entering queue…';
+        myNextEl.textContent='Re-entering queueâ€¦';
         myNextEl.style.color='var(--text2)';
       }
     }
@@ -1457,11 +1460,11 @@ async function loadConveyorBeltStats(){
 
 async function loadFoundingMembers(){
   // Pool logic:
-  //   Phase 1 — Whale gate not yet open:
+  //   Phase 1 â€” Whale gate not yet open:
   //     Rotate through the first 100 T1 members (broad organic pool)
-  //   Phase 2 — 25 SuperNova Genesis members reached:
+  //   Phase 2 â€” 25 SuperNova Genesis members reached:
   //     Lock in the first 25 T5 members permanently (they earned it)
-  //     T1 rotation retired — Genesis pool takes over forever
+  //     T1 rotation retired â€” Genesis pool takes over forever
   try{
     const delay=ms=>new Promise(r=>setTimeout(r,ms));
     const seen=new Set();
@@ -1472,7 +1475,7 @@ async function loadFoundingMembers(){
     const t5=new ethers.Contract(ADDRESSES.matrices[5],MATRIX_ABI,readProvider);
     const n5=Number(await t5.totalMembers());
 
-    // Fetch first 25 T5 members — V6 uses posToMember, V3/V5 uses memberById
+    // Fetch first 25 T5 members â€” V6 uses posToMember, V3/V5 uses memberById
     const getMemberAt = async (contract, i) => {
       try { const a = await contract.posToMember(i); if(a && a !== ethers.ZeroAddress) return a; } catch(_){}
       try { const a = await contract.memberById(i);  if(a && a !== ethers.ZeroAddress) return a; } catch(_){}
@@ -1484,11 +1487,11 @@ async function loadFoundingMembers(){
     }
 
     if(genesisPool.length>=GENESIS_LOCK){
-      // Phase 2: whale gate open — use locked Genesis pool only
+      // Phase 2: whale gate open â€” use locked Genesis pool only
       foundingMembers=genesisPool;
       console.log('Referrer pool: GENESIS LOCKED ('+foundingMembers.length+' members)');
     } else {
-      // Phase 1: whale gate not open — rotate first 100 T1 members
+      // Phase 1: whale gate not open â€” rotate first 100 T1 members
       const t1=new ethers.Contract(ADDRESSES.matrices[1],MATRIX_ABI,readProvider);
       const n1=Number(await t1.totalMembers());
       const t1Pool=[];
@@ -1527,9 +1530,9 @@ async function getFallbackReferrer(){
   }
 }
 
-// ═══════════════════════════════════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 // HOME STATS
-// ═══════════════════════════════════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 async function loadHomeStats(){
   try{
     // V5: use BeltManager for totalMembers if configured, else fall back to matrix[1]
@@ -1554,7 +1557,7 @@ async function loadHomeStats(){
         const beltLetter=String.fromCharCode(65+Number(activeIdx));
         const pct=Math.round(Number(activeMems)*100/Number(beltMax));
         const beltEl=document.getElementById('stat-belt');
-        if(beltEl)beltEl.textContent='Active: Belt '+beltLetter+' — '+activeMems+' / '+beltMax+' members ('+pct+'% full) · '+totalBelts+' belts deployed';
+        if(beltEl)beltEl.textContent='Active: Belt '+beltLetter+' â€” '+activeMems+' / '+beltMax+' members ('+pct+'% full) Â· '+totalBelts+' belts deployed';
         // Render full belt overview grid
         const grid=document.getElementById('belt-overview-grid');
         if(grid){
@@ -1599,10 +1602,10 @@ async function loadHomeStats(){
     await loadConveyorBeltStats();
     document.getElementById('stat-pct').textContent=wPct+'%';
     document.getElementById('stat-progress').style.width=wPct+'%';
-    document.getElementById('stat-cycle').textContent=ft?'🔓 UNLOCKED':(wn+' / '+wGate);
+    document.getElementById('stat-cycle').textContent=ft?'ðŸ”“ UNLOCKED':(wn+' / '+wGate);
     const sEl=document.getElementById('stat-status');
-    if(ft)sEl.innerHTML='<span class="pill pill-green">🐋 Fast-Track Active</span>';
-    else if(wPct>=60)sEl.innerHTML='<span class="pill pill-yellow">🔥 '+(25-wn)+' more to unlock</span>';
+    if(ft)sEl.innerHTML='<span class="pill pill-green">ðŸ‹ Fast-Track Active</span>';
+    else if(wPct>=60)sEl.innerHTML='<span class="pill pill-yellow">ðŸ”¥ '+(25-wn)+' more to unlock</span>';
     else sEl.innerHTML='<span class="pill pill-blue">Whale Gate: '+wn+' / '+wGate+'</span>';
     const EN=['Nebula Genesis','Mercury Rise','Lunar Cluster','Aurora Zenith','Solaris Echo','Cosmic Core','Galaxy Grid','Supernova Spark','Final Frontier'];
     const en=Number(epoch),ename=EN[en]||('Epoch '+(en+1)),edisp=en+1;
@@ -1611,7 +1614,7 @@ async function loadHomeStats(){
     const sf=parseFloat(ethers.formatUnits(supply,18)).toLocaleString(undefined,{maximumFractionDigits:0});
     const seb=document.getElementById('stat-epoch-badge');if(seb)seb.textContent=ename;
     const sers=document.getElementById('stat-epoch-reward-sub');
-    if(sers)sers.textContent=Number(rf)===0?'All epochs complete — max supply reached':rf+' CNOVA per entry';
+    if(sers)sers.textContent=Number(rf)===0?'All epochs complete â€” max supply reached':rf+' CNOVA per entry';
     const seEl=document.getElementById('stat-epoch');if(seEl)seEl.textContent=ename+'  (Epoch '+edisp+')';
     const srEl=document.getElementById('stat-reward');if(srEl)srEl.textContent=rf+' CNOVA';
     const serEl=document.getElementById('stat-epoch-rem');if(serEl)serEl.textContent=epochRem.toString()+' entries';
@@ -1627,9 +1630,9 @@ async function loadHomeStats(){
   }catch(e){console.error('loadHomeStats',e);}
 }
 
-// ═══════════════════════════════════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 // REGISTER TAB
-// ═══════════════════════════════════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 async function loadRegisterTab(){
   const approveBtn=document.getElementById('btn-approve'),registerBtn=document.getElementById('btn-register');
   const allowanceEl=document.getElementById('reg-allowance'),balanceEl=document.getElementById('reg-usdc-bal');
@@ -1639,7 +1642,7 @@ async function loadRegisterTab(){
   const statusEl=document.getElementById('reg-status');
   if(statusEl)statusEl.textContent='';
   // Set button labels dynamically from TIER_FEES[1]
-  if(approveBtn) approveBtn.innerHTML='Step 1: Approve $'+TIER_FEES[1]+' USDC 🔒';
+  if(approveBtn) approveBtn.innerHTML='Step 1: Approve $'+TIER_FEES[1]+' USDC ðŸ”’';
   if(registerBtn) registerBtn.innerHTML='Step 2: Register ($'+TIER_FEES[1]+' USDC)';
   // Auto-populate referrer field early so users see who their sponsor will be
   const refInput=document.getElementById('input-referrer');
@@ -1666,7 +1669,7 @@ async function loadRegisterTab(){
     const approvalTarget = ADDRESSES.beltManager && ADDRESSES.beltManager.length > 10
       ? ADDRESSES.beltManager : ADDRESSES.matrices[1];
     try{allow=await usdc.allowance(userAddr, approvalTarget);}catch(_){}
-    // V5: check BeltManager first — if set, it's the source of truth for T1 registration
+    // V5: check BeltManager first â€” if set, it's the source of truth for T1 registration
     const hasBM = ADDRESSES.beltManager && ADDRESSES.beltManager.length > 10;
     if(hasBM){
       try{
@@ -1689,9 +1692,9 @@ async function loadRegisterTab(){
       fee=totalCost;
     }catch(_){}
     const feeDisplay=(Number(fee)/1e6).toFixed(2);
-    if(approveBtn)approveBtn.innerHTML='Step 1: Approve $'+feeDisplay+' USDC 🔒';
+    if(approveBtn)approveBtn.innerHTML='Step 1: Approve $'+feeDisplay+' USDC ðŸ”’';
     if(registerBtn)registerBtn.innerHTML='Step 2: Register ($'+feeDisplay+' USDC)';
-    if(allow>=fee)allowanceEl.innerHTML='<span style="color:var(--green)">$'+feeDisplay+' Approved ✓</span>';
+    if(allow>=fee)allowanceEl.innerHTML='<span style="color:var(--green)">$'+feeDisplay+' Approved âœ“</span>';
     else allowanceEl.innerHTML='<span style="color:var(--text3)">Not approved yet</span>';
     warnEl.style.display=bal<fee?'block':'none';
     if(member.isRegistered){
@@ -1707,9 +1710,9 @@ async function loadRegisterTab(){
     approveBtn.disabled=!( hb&&!ha);registerBtn.disabled=!ha;
     approveBtn.className='btn full-w '+(hb&&!ha?'btn-green':'btn-ghost');
     registerBtn.className='btn full-w '+(ha?'btn-green':'btn-ghost');
-    if(ha)setStatus('reg-status','✅ USDC approved! You can now register.','var(--green)');
+    if(ha)setStatus('reg-status','âœ… USDC approved! You can now register.','var(--green)');
     else if(hb)setStatus('reg-status','Step 1: Approve $'+TIER_FEES[1]+' USDC to continue.','var(--text2)');
-    else setStatus('reg-status','⚠️ Insufficient USDC. You need at least $10.','var(--yellow)');
+    else setStatus('reg-status','âš ï¸ Insufficient USDC. You need at least $10.','var(--yellow)');
   }catch(e){console.error('loadRegisterTab',e);}
 }
 
@@ -1717,12 +1720,12 @@ async function approveUSDC(){
   if(!signer){toast('Connect wallet first','error');return;}
   const btn=document.getElementById('btn-approve');
   try{
-    btn.disabled=true;btn.innerHTML='<span class="spinner"></span>Approving…';
-    setStatus('reg-status','⏳ Waiting for MetaMask…','var(--text2)');
+    btn.disabled=true;btn.innerHTML='<span class="spinner"></span>Approvingâ€¦';
+    setStatus('reg-status','â³ Waiting for MetaMaskâ€¦','var(--text2)');
     const usdc=new ethers.Contract(ADDRESSES.usdc,USDC_ABI,signer);
     const approveAddr = ADDRESSES.beltManager && ADDRESSES.beltManager.length > 10
       ? ADDRESSES.beltManager : ADDRESSES.matrices[1];
-    // Use registrationCost() for exact amount — includes reentry contribution for older belts
+    // Use registrationCost() for exact amount â€” includes reentry contribution for older belts
     let approveAmt = TIER_FEES_USDC[1];
     try{
       const bm=new ethers.Contract(ADDRESSES.beltManager,BELT_MANAGER_ABI,readProvider);
@@ -1730,11 +1733,11 @@ async function approveUSDC(){
       approveAmt=totalCost;
     }catch(_){}
     const tx=await usdc.approve(approveAddr, approveAmt);
-    setStatus('reg-status','⏳ Confirming…','var(--text2)');await tx.wait();
-    setStatus('reg-status','✅ USDC approved! You can now register.','var(--green)');
-    toast('$'+TIER_FEES[1]+' USDC approved!','success');btn.innerHTML='Step 1: Approve $'+TIER_FEES[1]+' USDC 🔒';
+    setStatus('reg-status','â³ Confirmingâ€¦','var(--text2)');await tx.wait();
+    setStatus('reg-status','âœ… USDC approved! You can now register.','var(--green)');
+    toast('$'+TIER_FEES[1]+' USDC approved!','success');btn.innerHTML='Step 1: Approve $'+TIER_FEES[1]+' USDC ðŸ”’';
     await loadRegisterTab();
-  }catch(e){const msg=e.reason||e.message||'Unknown';setStatus('reg-status','❌ '+msg,'var(--red)');btn.disabled=false;btn.className='btn full-w btn-green';btn.innerHTML='Step 1: Approve $'+TIER_FEES[1]+' USDC 🔒';toast('Approval failed','error');}
+  }catch(e){const msg=e.reason||e.message||'Unknown';setStatus('reg-status','âŒ '+msg,'var(--red)');btn.disabled=false;btn.className='btn full-w btn-green';btn.innerHTML='Step 1: Approve $'+TIER_FEES[1]+' USDC ðŸ”’';toast('Approval failed','error');}
 }
 
 async function doRegister(){
@@ -1744,11 +1747,11 @@ async function doRegister(){
   if(referrer&&!ethers.isAddress(referrer)){toast('Invalid referrer address','error');return;}
   if(!referrer){
     const fb=await getFallbackReferrer();
-    if(fb&&fb!==ethers.ZeroAddress){referrer=fb;document.getElementById('input-referrer').value=referrer;setStatus('reg-status','🐋 Auto-assigned: '+shortAddr(referrer)+' (founding member)','var(--blue)');await new Promise(r=>setTimeout(r,1200));}
+    if(fb&&fb!==ethers.ZeroAddress){referrer=fb;document.getElementById('input-referrer').value=referrer;setStatus('reg-status','ðŸ‹ Auto-assigned: '+shortAddr(referrer)+' (founding member)','var(--blue)');await new Promise(r=>setTimeout(r,1200));}
   }
   try{
-    btn.disabled=true;btn.innerHTML='<span class="spinner"></span>Registering…';
-    setStatus('reg-status','⏳ Waiting for MetaMask…','var(--text2)');
+    btn.disabled=true;btn.innerHTML='<span class="spinner"></span>Registeringâ€¦';
+    setStatus('reg-status','â³ Waiting for MetaMaskâ€¦','var(--text2)');
     const ref=referrer||ethers.ZeroAddress;
     const usdc=new ethers.Contract(ADDRESSES.usdc,USDC_ABI,signer);
 
@@ -1757,8 +1760,8 @@ async function doRegister(){
     const targetAddr = useBeltManager ? ADDRESSES.beltManager : ADDRESSES.matrices[1];
     const targetABI  = useBeltManager ? BELT_MANAGER_ABI : MATRIX_ABI;
 
-    // Step 1: approve — use registrationCost() for exact amount (includes reentry pool contribution)
-    setStatus('reg-status','⏳ Step 1: Approving USDC…','var(--text2)');
+    // Step 1: approve â€” use registrationCost() for exact amount (includes reentry pool contribution)
+    setStatus('reg-status','â³ Step 1: Approving USDCâ€¦','var(--text2)');
     let regCost = TIER_FEES_USDC[1];
     if(useBeltManager){
       try{
@@ -1771,10 +1774,10 @@ async function doRegister(){
     await approveTx.wait();
 
     // Step 2: register
-    setStatus('reg-status','⏳ Step 2: Registering…','var(--text2)');
+    setStatus('reg-status','â³ Step 2: Registeringâ€¦','var(--text2)');
     const contract = new ethers.Contract(targetAddr, targetABI, signer);
     const tx = await contract.register(ref);
-    setStatus('reg-status','⏳ Confirming…','var(--text2)');
+    setStatus('reg-status','â³ Confirmingâ€¦','var(--text2)');
     const receipt=await tx.wait();
 
     // Show belt info if V5
@@ -1788,30 +1791,30 @@ async function doRegister(){
       }catch(_){}
     }
 
-    setStatus('reg-status','🎉 Registered! Tx: '+receipt.hash.slice(0,10)+'…'+beltMsg,'var(--green)');
-    toast('Welcome to CryptoNova! 🎉','success',6000);
+    setStatus('reg-status','ðŸŽ‰ Registered! Tx: '+receipt.hash.slice(0,10)+'â€¦'+beltMsg,'var(--green)');
+    toast('Welcome to CryptoNova! ðŸŽ‰','success',6000);
     btn.innerHTML='Step 2: Register ($'+TIER_FEES[1]+' USDC)';
     document.getElementById('referral-link-card').style.display='block';
     document.getElementById('referral-url').value=window.location.origin+window.location.pathname+'?ref='+userAddr;
     await loadHomeStats();
-    // Redirect to dashboard — member is now registered
+    // Redirect to dashboard â€” member is now registered
     showTab('dashboard');
     await loadDashboard();
-  }catch(e){const msg=e.reason||e.message||'Unknown';setStatus('reg-status','❌ '+msg,'var(--red)');btn.disabled=false;btn.innerHTML='Step 2: Register ($'+TIER_FEES[1]+' USDC)';toast('Registration failed','error');}
+  }catch(e){const msg=e.reason||e.message||'Unknown';setStatus('reg-status','âŒ '+msg,'var(--red)');btn.disabled=false;btn.innerHTML='Step 2: Register ($'+TIER_FEES[1]+' USDC)';toast('Registration failed','error');}
 }
 
 function copyReferralLink(){
   const val=document.getElementById('referral-url').value;if(!val)return;
   const btn=document.getElementById('copy-ref-btn');
-  const confirm=()=>{toast('✅ Referral link copied!','success');if(btn){btn.textContent='✓ Copied!';setTimeout(()=>{btn.textContent='Copy';},2500);}};
+  const confirm=()=>{toast('âœ… Referral link copied!','success');if(btn){btn.textContent='âœ“ Copied!';setTimeout(()=>{btn.textContent='Copy';},2500);}};
   if(navigator.clipboard&&navigator.clipboard.writeText)navigator.clipboard.writeText(val).then(confirm).catch(()=>legacyCopy(val,confirm));
   else legacyCopy(val,confirm);
 }
-function legacyCopy(text,onSuccess){const el=document.getElementById('referral-url');try{el.focus();el.select();el.setSelectionRange(0,99999);const ok=document.execCommand('copy');if(ok)onSuccess();else toast('Long-press the link box → Select All → Copy.','info');}catch(e){toast('Long-press the link box → Select All → Copy.','info');}}
+function legacyCopy(text,onSuccess){const el=document.getElementById('referral-url');try{el.focus();el.select();el.setSelectionRange(0,99999);const ok=document.execCommand('copy');if(ok)onSuccess();else toast('Long-press the link box â†’ Select All â†’ Copy.','info');}catch(e){toast('Long-press the link box â†’ Select All â†’ Copy.','info');}}
 
-// ═══════════════════════════════════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 // DASHBOARD
-// ═══════════════════════════════════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 async function loadDashboard(){
   const noW=document.getElementById('dash-no-wallet'),notR=document.getElementById('dash-not-registered'),con=document.getElementById('dash-content');
   if(!noW||!notR||!con)return;
@@ -1856,7 +1859,7 @@ async function loadDashboard(){
         const m=await mx.getMember(userAddr);const cy=await mx.getCyclesCompleted(userAddr);
         if(m.isRegistered){totW+=BigInt(m.withdrawable);totE+=BigInt(m.totalEarned);
           const wl=m.withdrawable>0n?'<span style="color:var(--green);font-weight:700">'+u6(m.withdrawable)+'</span>':'<span style="color:var(--text3)">$0.00</span>';
-          rows+=`<div class="info-row"><span class="info-key"><span style="font-size:11px;background:var(--green-dim);color:var(--green);border:1px solid var(--green2);border-radius:4px;padding:1px 6px">T${t}</span> ${TIER_NAMES[t]}</span><span style="display:flex;flex-direction:column;align-items:flex-end;gap:2px">${wl}<span style="font-size:11px;color:var(--text3)">Earned: ${u6(m.totalEarned)} · ${cy} cycles</span></span></div>`;
+          rows+=`<div class="info-row"><span class="info-key"><span style="font-size:11px;background:var(--green-dim);color:var(--green);border:1px solid var(--green2);border-radius:4px;padding:1px 6px">T${t}</span> ${TIER_NAMES[t]}</span><span style="display:flex;flex-direction:column;align-items:flex-end;gap:2px">${wl}<span style="font-size:11px;color:var(--text3)">Earned: ${u6(m.totalEarned)} Â· ${cy} cycles</span></span></div>`;
         }
         await new Promise(r=>setTimeout(r,80));
       }catch(_){}
@@ -1927,8 +1930,8 @@ async function loadCommunityWallet(){
     const clEl=document.getElementById('cw-claimable');if(clEl)clEl.textContent=u6(claimable);
     const pEl=document.getElementById('cw-pending');if(pEl)pEl.textContent=u6(pool.pending);
     const epEl=document.getElementById('cw-epoch');if(epEl)epEl.textContent='Epoch '+epoch.toString()+' active';
-    const taEl=document.getElementById('cw-tranche-a');if(taEl)taEl.textContent=pool.aSlotsFilled+' / '+trancheAMax+(pool.aActive?' ✅ Active':' (filling)');
-    const tbEl=document.getElementById('cw-tranche-b');if(tbEl)tbEl.textContent=pool.bSlotsFilled+' / '+trancheAMax+(pool.bActive?' ✅ Active':' (filling)');
+    const taEl=document.getElementById('cw-tranche-a');if(taEl)taEl.textContent=pool.aSlotsFilled+' / '+trancheAMax+(pool.aActive?' âœ… Active':' (filling)');
+    const tbEl=document.getElementById('cw-tranche-b');if(tbEl)tbEl.textContent=pool.bSlotsFilled+' / '+trancheAMax+(pool.bActive?' âœ… Active':' (filling)');
     const btn=document.getElementById('btn-cw-claim');if(btn)btn.disabled=claimable===0n;
     _cwLoading=false;
   }catch(e){
@@ -1943,8 +1946,8 @@ async function doCWClaimAll(){
   const btn=document.getElementById('btn-cw-claim');
   const statusEl=document.getElementById('cw-claim-status');
   try{
-    btn.disabled=true;btn.innerHTML='<span class="spinner"></span>Claiming…';
-    setStatus('cw-claim-status','⏳ Waiting for MetaMask…','var(--text2)');
+    btn.disabled=true;btn.innerHTML='<span class="spinner"></span>Claimingâ€¦';
+    setStatus('cw-claim-status','â³ Waiting for MetaMaskâ€¦','var(--text2)');
     const cw=new ethers.Contract(ADDRESSES.communityWallet,COMMUNITY_WALLET_ABI,signer);
     const cwR=new ethers.Contract(ADDRESSES.communityWallet,COMMUNITY_WALLET_ABI,readProvider);
     const epoch=await cwR.currentEpoch();
@@ -1960,15 +1963,15 @@ async function doCWClaimAll(){
     const tx=epochIds.length===1
       ? await cw.claim(epochIds[0])
       : await cw.claimMultiple(epochIds);
-    setStatus('cw-claim-status','⏳ Confirming…','var(--text2)');
+    setStatus('cw-claim-status','â³ Confirmingâ€¦','var(--text2)');
     const receipt=await tx.wait();
-    setStatus('cw-claim-status','✅ Claimed! Tx: '+receipt.hash.slice(0,10)+'…','var(--green)');
-    toast('Community Wallet claimed! 🎉','success');
+    setStatus('cw-claim-status','âœ… Claimed! Tx: '+receipt.hash.slice(0,10)+'â€¦','var(--green)');
+    toast('Community Wallet claimed! ðŸŽ‰','success');
     btn.innerHTML='Claim All Available';
     await loadCommunityWallet();
   }catch(e){
     const msg=e.reason||e.message||'Unknown';
-    setStatus('cw-claim-status','❌ '+msg,'var(--red)');
+    setStatus('cw-claim-status','âŒ '+msg,'var(--red)');
     btn.disabled=false;btn.innerHTML='Claim All Available';
   }
 }
@@ -1981,7 +1984,7 @@ async function loadAutoUpgradeStatus(){
     const tm=new ethers.Contract(ADDRESSES.tierManager,TIER_MANAGER_ABI,readProvider);
     const enabled=await tm.autoUpgradeEnabled(userAddr);
     toggle.checked=enabled;
-    statusEl.textContent=enabled?'On — upgrades automatically on cycle completion':'Off';
+    statusEl.textContent=enabled?'On â€” upgrades automatically on cycle completion':'Off';
     statusEl.style.color=enabled?'var(--green)':'var(--text2)';
   }catch(_){}
 }
@@ -1993,17 +1996,17 @@ async function toggleAutoUpgrade(enabled){
   const statusEl=document.getElementById('auto-upgrade-status');
   toggle.disabled=true;
   try{
-    setStatus('auto-upgrade-msg','⏳ Confirming…','var(--text2)');
+    setStatus('auto-upgrade-msg','â³ Confirmingâ€¦','var(--text2)');
     const tm=new ethers.Contract(ADDRESSES.tierManager,TIER_MANAGER_ABI,signer);
     const tx=await tm.setAutoUpgrade(enabled);
     await tx.wait();
-    statusEl.textContent=enabled?'On — upgrades automatically on cycle completion':'Off';
+    statusEl.textContent=enabled?'On â€” upgrades automatically on cycle completion':'Off';
     statusEl.style.color=enabled?'var(--green)':'var(--text2)';
-    setStatus('auto-upgrade-msg',enabled?'✅ Auto-upgrade enabled':'✅ Auto-upgrade disabled','var(--green)');
+    setStatus('auto-upgrade-msg',enabled?'âœ… Auto-upgrade enabled':'âœ… Auto-upgrade disabled','var(--green)');
     toast(enabled?'Auto-upgrade enabled!':'Auto-upgrade disabled','success');
   }catch(e){
     const msg=e.reason||e.message||'Unknown';
-    setStatus('auto-upgrade-msg','❌ '+msg,'var(--red)');
+    setStatus('auto-upgrade-msg','âŒ '+msg,'var(--red)');
     toggle.checked=!enabled; // revert toggle
   }finally{toggle.disabled=false;}
 }
@@ -2016,9 +2019,9 @@ async function loadDoubleReentryStatus(){
     const bm=new ethers.Contract(ADDRESSES.beltManager,BELT_MANAGER_ABI,readProvider);
     const enabled=await bm.doubleReentry(userAddr);
     toggle.checked=enabled;
-    statusEl.textContent=enabled?'On — re-queued twice on each cycle-out':'Off';
+    statusEl.textContent=enabled?'On â€” re-queued twice on each cycle-out':'Off';
     statusEl.style.color=enabled?'var(--blue)':'var(--text2)';
-  }catch(e){ /* not registered yet — ignore */ }
+  }catch(e){ /* not registered yet â€” ignore */ }
 }
 
 async function toggleDoubleReentry(enabled){
@@ -2028,17 +2031,17 @@ async function toggleDoubleReentry(enabled){
   const statusEl=document.getElementById('double-reentry-status');
   toggle.disabled=true;
   try{
-    setStatus('double-reentry-msg','⏳ Confirming…','var(--text2)');
+    setStatus('double-reentry-msg','â³ Confirmingâ€¦','var(--text2)');
     const bm=new ethers.Contract(ADDRESSES.beltManager,BELT_MANAGER_ABI,signer);
     const tx=await bm.setDoubleReentry(enabled);
     await tx.wait();
-    statusEl.textContent=enabled?'On — re-queued twice on each cycle-out':'Off';
+    statusEl.textContent=enabled?'On â€” re-queued twice on each cycle-out':'Off';
     statusEl.style.color=enabled?'var(--blue)':'var(--text2)';
-    setStatus('double-reentry-msg',enabled?'✅ Double re-entry enabled':'✅ Double re-entry disabled','var(--green)');
-    toast(enabled?'2× Re-entry enabled!':'2× Re-entry disabled','success');
+    setStatus('double-reentry-msg',enabled?'âœ… Double re-entry enabled':'âœ… Double re-entry disabled','var(--green)');
+    toast(enabled?'2Ã— Re-entry enabled!':'2Ã— Re-entry disabled','success');
   }catch(e){
     const msg=e.reason||e.message||'Unknown';
-    setStatus('double-reentry-msg','❌ '+msg,'var(--red)');
+    setStatus('double-reentry-msg','âŒ '+msg,'var(--red)');
     toggle.checked=!enabled;
   }finally{toggle.disabled=false;}
 }
@@ -2047,23 +2050,23 @@ async function doWithdrawAll(){
   if(!signer){toast('Connect wallet first','error');return;}
   const btn=document.getElementById('btn-withdraw');
   try{
-    btn.disabled=true;btn.innerHTML='<span class="spinner"></span>Withdrawing…';
-    setStatus('withdraw-status','⏳ Checking tiers…','var(--text2)');
+    btn.disabled=true;btn.innerHTML='<span class="spinner"></span>Withdrawingâ€¦';
+    setStatus('withdraw-status','â³ Checking tiersâ€¦','var(--text2)');
     const tm=new ethers.Contract(ADDRESSES.tierManager,TIER_MANAGER_ABI,readProvider);
     const ct=Number(await tm.memberTier(userAddr))||1;let w=0;
     for(let t=1;t<=ct;t++){
       const mx=new ethers.Contract(ADDRESSES.matrices[t],MATRIX_ABI,readProvider);
       const m=await mx.members(userAddr);
       if(m.isRegistered&&BigInt(m.withdrawable)>0n){
-        setStatus('withdraw-status','⏳ Withdrawing Tier '+t+'…','var(--text2)');
+        setStatus('withdraw-status','â³ Withdrawing Tier '+t+'â€¦','var(--text2)');
         const mxW=new ethers.Contract(ADDRESSES.matrices[t],MATRIX_ABI,signer);
         await(await mxW.withdraw()).wait();w++;
       }
     }
-    setStatus('withdraw-status',w>0?'✅ Withdrawn from '+w+' tier(s)!':'⚠️ Nothing to withdraw.',w>0?'var(--green)':'var(--yellow)');
+    setStatus('withdraw-status',w>0?'âœ… Withdrawn from '+w+' tier(s)!':'âš ï¸ Nothing to withdraw.',w>0?'var(--green)':'var(--yellow)');
     if(w>0)toast('Withdrawal successful!','success');
     btn.innerHTML='Withdraw All to Wallet';await loadDashboard();
-  }catch(e){const msg=e.reason||e.message||'Unknown';setStatus('withdraw-status','❌ '+msg,'var(--red)');btn.innerHTML='Withdraw All to Wallet';btn.disabled=false;toast('Withdrawal failed','error');}
+  }catch(e){const msg=e.reason||e.message||'Unknown';setStatus('withdraw-status','âŒ '+msg,'var(--red)');btn.innerHTML='Withdraw All to Wallet';btn.disabled=false;toast('Withdrawal failed','error');}
 }
 
 async function fetchAllMembersV3(matrix,onProgress){
@@ -2077,9 +2080,9 @@ async function fetchAllMembersV3(matrix,onProgress){
   return result;
 }
 
-// ═══════════════════════════════════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 // MATRIX TAB
-// ═══════════════════════════════════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 async function loadMatrixStats(){
   try{
     const tier=getSelectedMatrixTier();
@@ -2095,7 +2098,7 @@ async function loadMatrixStats(){
     const t1=new ethers.Contract(mxAddr,MATRIX_ABI,readProvider);
     const tot=await t1.totalMembers();
     document.getElementById('matrix-nodes').textContent=tot.toString();
-    document.getElementById('matrix-bfs').textContent='—';
+    document.getElementById('matrix-bfs').textContent='â€”';
     document.getElementById('matrix-fill').textContent=tot.toString()+' members';
   }catch(e){console.error(e);}
 }
@@ -2105,7 +2108,7 @@ function getSelectedMatrixTier(){
   return sel?parseInt(sel.value)||1:1;
 }
 function onMatrixTierChange(){
-  // Reset view when tier changes — non-blocking
+  // Reset view when tier changes â€” non-blocking
   const tEl=document.getElementById('matrix-tree'),lEl=document.getElementById('matrix-loading');
   if(tEl)tEl.style.display='none';
   if(lEl){lEl.innerHTML='Select Load Queue or My Position to view this tier.';lEl.style.display='block';}
@@ -2116,7 +2119,7 @@ function onMatrixTierChange(){
 
 async function loadQueueView(){
   const tEl=document.getElementById('matrix-tree'),lEl=document.getElementById('matrix-loading');
-  lEl.innerHTML='<span class="spinner"></span> Loading member queue…';lEl.style.display='block';tEl.style.display='none';
+  lEl.innerHTML='<span class="spinner"></span> Loading member queueâ€¦';lEl.style.display='block';tEl.style.display='none';
   try{
     const tier=getSelectedMatrixTier();
     const mx=new ethers.Contract(ADDRESSES.matrices[tier],MATRIX_ABI,readProvider);
@@ -2125,7 +2128,7 @@ async function loadQueueView(){
     try{total=Number(await mx.totalMembers());}catch(_){total=0;}
     let myAddr=userAddr;
     if(total===0){lEl.innerHTML='No members in Tier '+tier+' yet.';return;}
-    // Fetch all members and their positions — throttled to avoid RPC rate limits
+    // Fetch all members and their positions â€” throttled to avoid RPC rate limits
     const delay=ms=>new Promise(r=>setTimeout(r,ms));
     const rows=[];
     for(let i=1;i<=total;i++){
@@ -2143,19 +2146,19 @@ async function loadQueueView(){
     const active=rows.filter(r=>r.qpos>0&&r.qpos<=AW).sort((a,b)=>a.qpos-b.qpos);
     const reentry=rows.filter(r=>r.qpos===0);
     const tierName=TIER_NAMES[tier]||('Tier '+tier);
-    let html=`<div style="margin-bottom:10px;font-size:13px;color:var(--text3)">Showing <strong style="color:var(--text)">${active.length}</strong> active positions in ${tierName} · ${reentry.length} members in re-entry queue</div>`;
+    let html=`<div style="margin-bottom:10px;font-size:13px;color:var(--text3)">Showing <strong style="color:var(--text)">${active.length}</strong> active positions in ${tierName} Â· ${reentry.length} members in re-entry queue</div>`;
     html+=`<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:13px"><thead><tr style="border-bottom:2px solid var(--border);color:var(--text3);text-align:left"><th style="padding:8px 12px">Position</th><th style="padding:8px 12px">Address</th><th style="padding:8px 12px">Withdrawable</th><th style="padding:8px 12px">Total Earned</th><th style="padding:8px 12px">Cycles</th><th style="padding:8px 12px">Status</th></tr></thead><tbody>`;
     const allRows=[...active,...reentry];
     for(const {addr,m,cy,qpos} of allRows){
       const isMe=myAddr&&addr.toLowerCase()===myAddr.toLowerCase();
       const isActive=qpos>0;
       const rs=isMe?'background:var(--green-dim);border-bottom:1px solid var(--green2)':'border-bottom:1px solid var(--border)';
-      const qLabel=qpos>0?'#'+qpos:'↩ Re-entry';
+      const qLabel=qpos>0?'#'+qpos:'â†© Re-entry';
       const qColor=qpos>0&&qpos<=10?'var(--green)':qpos>0?'var(--text)':'var(--text3)';
-      const sb=isMe?'<span class="pill pill-green" style="font-size:11px">⭐ YOU</span>':(isActive?'<span class="pill pill-blue" style="font-size:11px">Active</span>':'<span style="font-size:11px;color:var(--text3)">Re-entry</span>');
+      const sb=isMe?'<span class="pill pill-green" style="font-size:11px">â­ YOU</span>':(isActive?'<span class="pill pill-blue" style="font-size:11px">Active</span>':'<span style="font-size:11px;color:var(--text3)">Re-entry</span>');
       html+=`<tr style="${rs}">
         <td style="padding:10px 12px;font-weight:700;color:${qColor}">${qLabel}</td>
-        <td style="padding:10px 12px;font-family:monospace;color:var(--text2)">${addr.slice(0,6)}…${addr.slice(-4)}</td>
+        <td style="padding:10px 12px;font-family:monospace;color:var(--text2)">${addr.slice(0,6)}â€¦${addr.slice(-4)}</td>
         <td style="padding:10px 12px;color:${BigInt(m.withdrawable)>0n?'var(--green)':'var(--text3)'};font-weight:600">${u6(m.withdrawable)}</td>
         <td style="padding:10px 12px">${u6(m.totalEarned)}</td>
         <td style="padding:10px 12px">${cy.toString()}</td>
@@ -2164,7 +2167,7 @@ async function loadQueueView(){
     }
     html+='</tbody></table></div>';
     tEl.innerHTML=html;tEl.style.display='block';lEl.style.display='none';
-  }catch(e){lEl.innerHTML='❌ Error: '+(e.shortMessage||e.message);console.error('loadQueueView:',e);}
+  }catch(e){lEl.innerHTML='âŒ Error: '+(e.shortMessage||e.message);console.error('loadQueueView:',e);}
 }
 
 async function loadMatrixTree(){await loadQueueView();}
@@ -2190,9 +2193,9 @@ async function loadMyTree(){
       const isActiveNow = Number(queuePos) > 0 && Number(queuePos) <= Number(aw4disp);
       const tierN=TIER_NAMES[tier]||('Tier '+tier);
       const posDisplay = Number(queuePos) > 0 ? 'Queue Position: #' + queuePos + ' of ' + aw4disp : 'Re-entering queue';
-      document.getElementById('matrix-pos-level').textContent = '🏅 ' + tierN + ' · ' + posDisplay;
-    document.getElementById('matrix-pos-slots').textContent='♻️ Cycles: '+cy.toString()+' | Window: '+aw4disp.toString()+' slots';
-    document.getElementById('matrix-pos-cycle').textContent='💰 Earned: '+u6(BigInt(m.totalEarned));
+      document.getElementById('matrix-pos-level').textContent = 'ðŸ… ' + tierN + ' Â· ' + posDisplay;
+    document.getElementById('matrix-pos-slots').textContent='â™»ï¸ Cycles: '+cy.toString()+' | Window: '+aw4disp.toString()+' slots';
+    document.getElementById('matrix-pos-cycle').textContent='ðŸ’° Earned: '+u6(BigInt(m.totalEarned));
     await loadQueueView();
   }catch(e){toast('Error: '+e.message,'error');}
 }
@@ -2217,7 +2220,7 @@ async function loadMyDirects(){
     }
     let all=[];
     for(let bi=0;bi<allBeltAddrs.length;bi++){
-      loading.textContent=`Scanning Belt ${String.fromCharCode(65+bi)}…`;
+      loading.textContent=`Scanning Belt ${String.fromCharCode(65+bi)}â€¦`;
       try{
         const mx=new ethers.Contract(allBeltAddrs[bi],MATRIX_ABI,readProvider);
         const beltMembers=await fetchAllMembersV3(mx,(i,total)=>{loading.textContent=`Belt ${String.fromCharCode(65+bi)}: ${i}/${total}`;});
@@ -2230,7 +2233,7 @@ async function loadMyDirects(){
     loading.style.display='none';
     if(directs.length===0){empty.style.display='block';return;}
     listWrap.style.display='block';
-    rows.innerHTML=directs.map(({addr,data:m})=>`<div style="padding:12px 14px;border-bottom:1px solid var(--border)"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;gap:8px"><span style="font-size:13px;font-weight:600;color:var(--text);font-family:monospace">${shortAddr(addr)}</span><span class="pill pill-green" style="font-size:11px">✅ Active</span></div><div style="display:flex;gap:16px;flex-wrap:wrap;font-size:12px;color:var(--text3)"><span>Member <strong style="color:var(--text)">#${m.id}</strong></span><span>Earned <strong style="color:var(--green)">${u6(m.totalEarned)}</strong></span></div></div>`).join('');
+    rows.innerHTML=directs.map(({addr,data:m})=>`<div style="padding:12px 14px;border-bottom:1px solid var(--border)"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;gap:8px"><span style="font-size:13px;font-weight:600;color:var(--text);font-family:monospace">${shortAddr(addr)}</span><span class="pill pill-green" style="font-size:11px">âœ… Active</span></div><div style="display:flex;gap:16px;flex-wrap:wrap;font-size:12px;color:var(--text3)"><span>Member <strong style="color:var(--text)">#${m.id}</strong></span><span>Earned <strong style="color:var(--green)">${u6(m.totalEarned)}</strong></span></div></div>`).join('');
     const dEl=document.getElementById('dash-directs');if(dEl)dEl.textContent=directs.length+' member'+(directs.length!==1?'s':'');
   }catch(e){loading.style.display='none';empty.textContent='Could not load: '+(e.shortMessage||e.message||String(e));empty.style.display='block';console.error(e);}
 }
@@ -2241,38 +2244,38 @@ function setActiveMatrixBtn(id){
   if(id!=='btn-my-position')hideMyPosBanner();
 }
 
-// ═══════════════════════════════════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 // METAMASK MODALS
-// ═══════════════════════════════════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 function showMetaMaskModal(){
   const isMobile=/iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
   const ms=document.getElementById('mm-mobile-section'),ib=document.getElementById('mm-install-btn'),fh=document.getElementById('mm-footer-hint'),dl=document.getElementById('mm-deeplink');
-  if(isMobile){const url=window.location.href.replace(/^https?:\/\//,'');dl.href='https://metamask.app.link/dapp/'+url;ms.style.display='block';ib.textContent='📲 Download MetaMask App';fh.innerHTML='Install MetaMask, open the app, then use its built-in browser to visit this page.';}
-  else{ms.style.display='none';ib.textContent='Install MetaMask — Free';fh.innerHTML='After installing, refresh this page and click Connect Wallet.<br>Switch to <strong>Base Sepolia</strong> when prompted.';}
+  if(isMobile){const url=window.location.href.replace(/^https?:\/\//,'');dl.href='https://metamask.app.link/dapp/'+url;ms.style.display='block';ib.textContent='ðŸ“² Download MetaMask App';fh.innerHTML='Install MetaMask, open the app, then use its built-in browser to visit this page.';}
+  else{ms.style.display='none';ib.textContent='Install MetaMask â€” Free';fh.innerHTML='After installing, refresh this page and click Connect Wallet.<br>Switch to <strong>Base Sepolia</strong> when prompted.';}
   document.getElementById('metamask-modal').style.display='flex';
 }
 function closeMetaMaskModal(){document.getElementById('metamask-modal').style.display='none';}
 function showManualTokenModal(address,symbol,decimals){document.getElementById('manual-token-address').textContent=address;document.getElementById('manual-token-symbol').textContent=symbol;document.getElementById('manual-token-decimals').textContent=decimals;document.getElementById('manual-token-modal').style.display='flex';}
 function closeManualTokenModal(){document.getElementById('manual-token-modal').style.display='none';}
-function copyManualTokenAddress(){const addr=document.getElementById('manual-token-address').textContent;const btn=document.getElementById('manual-copy-btn');navigator.clipboard.writeText(addr).then(()=>{btn.textContent='✓ Copied!';setTimeout(()=>{btn.textContent='Copy';},2500);}).catch(()=>{toast('Copy failed — select the address manually.','error');});}
+function copyManualTokenAddress(){const addr=document.getElementById('manual-token-address').textContent;const btn=document.getElementById('manual-copy-btn');navigator.clipboard.writeText(addr).then(()=>{btn.textContent='âœ“ Copied!';setTimeout(()=>{btn.textContent='Copy';},2500);}).catch(()=>{toast('Copy failed â€” select the address manually.','error');});}
 
 async function addCNOVAtoMetaMask(){
   if(!window.ethereum){if(window.location.protocol==='file:')document.getElementById('file-protocol-banner').style.display='block';else showMetaMaskModal();return;}
   if(parseInt(window.ethereum.chainId||'0x0',16)!==CHAIN_ID){showNetworkBanner();toast('Switch to Base Sepolia first.','info');return;}
-  try{const added=await window.ethereum.request({method:'wallet_watchAsset',params:{type:'ERC20',options:{address:ADDRESSES.token,symbol:'CNOVA',decimals:18}}});if(added)toast('✅ CNOVA added to MetaMask!','success');else toast('Token add was cancelled.','info');}
+  try{const added=await window.ethereum.request({method:'wallet_watchAsset',params:{type:'ERC20',options:{address:ADDRESSES.token,symbol:'CNOVA',decimals:18}}});if(added)toast('âœ… CNOVA added to MetaMask!','success');else toast('Token add was cancelled.','info');}
   catch(e){showManualTokenModal(ADDRESSES.token,'CNOVA',18);}
 }
 async function addUSDCtoMetaMask(){
   if(!window.ethereum){if(window.location.protocol==='file:')document.getElementById('file-protocol-banner').style.display='block';else showMetaMaskModal();return;}
   if(parseInt(window.ethereum.chainId||'0x0',16)!==CHAIN_ID){showNetworkBanner();toast('Switch to Base Sepolia first.','info');return;}
-  try{const added=await window.ethereum.request({method:'wallet_watchAsset',params:{type:'ERC20',options:{address:ADDRESSES.usdc,symbol:'USDC',decimals:6}}});if(added)toast('✅ USDC added to MetaMask!','success');else toast('Token add was cancelled.','info');}
+  try{const added=await window.ethereum.request({method:'wallet_watchAsset',params:{type:'ERC20',options:{address:ADDRESSES.usdc,symbol:'USDC',decimals:6}}});if(added)toast('âœ… USDC added to MetaMask!','success');else toast('Token add was cancelled.','info');}
   catch(e){showManualTokenModal(ADDRESSES.usdc,'USDC',6);}
 }
 
 
-// ═══════════════════════════════════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 // TIER UPGRADE
-// ═══════════════════════════════════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 function populateUpgradeSelect(currentTier, fastTrack, whaleCount, cyclesDone, cyclesNeeded) {
   const sel=document.getElementById('upgrade-tier-select'),hint=document.getElementById('upgrade-tier-hint');
   if(!sel)return;
@@ -2280,10 +2283,10 @@ function populateUpgradeSelect(currentTier, fastTrack, whaleCount, cyclesDone, c
   // Without fast-track: only next tier in sequence is available
   // With fast-track: any tier above current is available (still needs cycles)
   if(hint){
-    if(!cyclesOk)hint.innerHTML='<span style="color:var(--yellow)">⏳ Complete <strong>'+cyclesNeeded+' cycle'+(cyclesNeeded>1?'s':'')+'</strong> in Tier '+currentTier+' to unlock upgrade. You have <strong>'+cyclesDone+'</strong> so far.</span>';
-    else hint.innerHTML='<span style="color:var(--green)">✅ Cycle requirement met ('+cyclesDone+'/'+cyclesNeeded+') — select your target tier.</span>';
+    if(!cyclesOk)hint.innerHTML='<span style="color:var(--yellow)">â³ Complete <strong>'+cyclesNeeded+' cycle'+(cyclesNeeded>1?'s':'')+'</strong> in Tier '+currentTier+' to unlock upgrade. You have <strong>'+cyclesDone+'</strong> so far.</span>';
+    else hint.innerHTML='<span style="color:var(--green)">âœ… Cycle requirement met ('+cyclesDone+'/'+cyclesNeeded+') â€” select your target tier.</span>';
   }
-  sel.innerHTML='<option value="">Select a tier…</option>';
+  sel.innerHTML='<option value="">Select a tierâ€¦</option>';
   for(let t=currentTier+1;t<=7;t++){
     // Sequential lock: without fast-track, only currentTier+1 is available
     const sequentialLocked = !fastTrack && t > currentTier + 1;
@@ -2294,16 +2297,16 @@ function populateUpgradeSelect(currentTier, fastTrack, whaleCount, cyclesDone, c
     const isLocked = cycleLocked || sequentialLocked || whaleLocked;
     const opt=document.createElement('option');
     opt.value=t;
-    let label='Tier '+t+' — '+TIER_NAMES[t]+'  ($'+TIER_FEES[t].toLocaleString()+')';
+    let label='Tier '+t+' â€” '+TIER_NAMES[t]+'  ($'+TIER_FEES[t].toLocaleString()+')';
     const exitCycles=CYCLE_REQ[t]||0;
     if(isLocked){
-      label+='  🔒 Need '+(cyclesNeeded-cyclesDone)+' more cycle(s) in Tier '+currentTier;
+      label+='  ðŸ”’ Need '+(cyclesNeeded-cyclesDone)+' more cycle(s) in Tier '+currentTier;
     } else if(t<7&&exitCycles>0){
       label+='  ('+exitCycles+' cycle'+(exitCycles!==1?'s':'')+' to exit)';
     }
-    if(t===7)label+='  👑 Max tier';
-    if(whaleLocked)label+='  🐋 whale gate';
-    else if(whaleLocked)label+='  🐋 whale gate';
+    if(t===7)label+='  ðŸ‘‘ Max tier';
+    if(whaleLocked)label+='  ðŸ‹ whale gate';
+    else if(whaleLocked)label+='  ðŸ‹ whale gate';
     opt.textContent=label;
     if(!isLocked){opt.style.color='var(--green,#00e5a0)';opt.style.fontWeight='700';}
     if(isLocked)opt.disabled=true;
@@ -2315,9 +2318,9 @@ function onUpgradeTierChange(){
   const sel=document.getElementById('upgrade-tier-select'),hint=document.getElementById('upgrade-tier-hint');
   const appBtn=document.getElementById('btn-upgrade-approve'),upgBtn=document.getElementById('btn-upgrade');
   const t=parseInt(sel.value);
-  if(!t){if(appBtn){appBtn.disabled=true;appBtn.className='btn btn-ghost full-w';appBtn.textContent='Step 1: Approve USDC 🔒';}if(upgBtn){upgBtn.disabled=true;upgBtn.className='btn btn-ghost full-w';}return;}
-  if(hint)hint.textContent='Fee: $'+TIER_FEES[t].toLocaleString()+' USDC → '+TIER_NAMES[t];
-  if(appBtn){appBtn.disabled=false;appBtn.className='btn full-w btn-green';appBtn.textContent='Step 1: Approve $'+TIER_FEES[t].toLocaleString()+' USDC 🔒';}
+  if(!t){if(appBtn){appBtn.disabled=true;appBtn.className='btn btn-ghost full-w';appBtn.textContent='Step 1: Approve USDC ðŸ”’';}if(upgBtn){upgBtn.disabled=true;upgBtn.className='btn btn-ghost full-w';}return;}
+  if(hint)hint.textContent='Fee: $'+TIER_FEES[t].toLocaleString()+' USDC â†’ '+TIER_NAMES[t];
+  if(appBtn){appBtn.disabled=false;appBtn.className='btn full-w btn-green';appBtn.textContent='Step 1: Approve $'+TIER_FEES[t].toLocaleString()+' USDC ðŸ”’';}
   if(upgBtn){upgBtn.disabled=false;upgBtn.className='btn full-w btn-green';upgBtn.textContent='Step 2: Upgrade to '+TIER_NAMES[t];}
   // Non-blocking allowance check with timeout so UI never freezes
   if(userAddr && readProvider){
@@ -2327,7 +2330,7 @@ function onUpgradeTierChange(){
     ]);
     checkWithTimeout.then(a=>{
       if(BigInt(a)>=TIER_FEES_USDC[t]){
-        if(appBtn){appBtn.disabled=true;appBtn.className='btn btn-ghost full-w';appBtn.textContent='✓ Approved';}
+        if(appBtn){appBtn.disabled=true;appBtn.className='btn btn-ghost full-w';appBtn.textContent='âœ“ Approved';}
         if(upgBtn){upgBtn.disabled=false;upgBtn.className='btn full-w btn-green';}
       }
     }).catch(()=>{});  // silently skip on timeout or error
@@ -2343,11 +2346,11 @@ async function checkUpgradeAllowance(){
     const appBtn=document.getElementById('btn-upgrade-approve');
     const upgBtn=document.getElementById('btn-upgrade');
     if(BigInt(a)>=TIER_FEES_USDC[t]){
-      if(appBtn){appBtn.disabled=true;appBtn.className='btn btn-ghost';appBtn.textContent='✓ Approved';}
+      if(appBtn){appBtn.disabled=true;appBtn.className='btn btn-ghost';appBtn.textContent='âœ“ Approved';}
       if(upgBtn){upgBtn.disabled=false;upgBtn.className='btn full-w btn-green';upgBtn.textContent='Step 2: Upgrade to '+TIER_NAMES[t];}
-      setStatus('upgrade-status','✅ Approved! Click Step 2 to upgrade.','var(--green)');
+      setStatus('upgrade-status','âœ… Approved! Click Step 2 to upgrade.','var(--green)');
     } else {
-      setStatus('upgrade-status','⚠️ Approval not detected yet. Try refreshing again.','var(--yellow)');
+      setStatus('upgrade-status','âš ï¸ Approval not detected yet. Try refreshing again.','var(--yellow)');
     }
   }catch(_){}
 }
@@ -2358,24 +2361,24 @@ async function approveUSDCForUpgrade(){
   if(!t){toast('Select a tier first','error');return;}
   const btn=document.getElementById('btn-upgrade-approve');
   try{
-    btn.disabled=true;btn.innerHTML='<span class="spinner"></span>Approving…';
-    setStatus('upgrade-status','⏳ Waiting for MetaMask…','var(--text2)');
+    btn.disabled=true;btn.innerHTML='<span class="spinner"></span>Approvingâ€¦';
+    setStatus('upgrade-status','â³ Waiting for MetaMaskâ€¦','var(--text2)');
     const usdc=new ethers.Contract(ADDRESSES.usdc,USDC_ABI,signer);
     const tx=await usdc.approve(ADDRESSES.tierManager,TIER_FEES_USDC[t]);
-    setStatus('upgrade-status','⏳ Confirming…','var(--text2)');await tx.wait();
-    setStatus('upgrade-status','✅ Approved! Now click Step 2.','var(--green)');
+    setStatus('upgrade-status','â³ Confirmingâ€¦','var(--text2)');await tx.wait();
+    setStatus('upgrade-status','âœ… Approved! Now click Step 2.','var(--green)');
     toast('$'+TIER_FEES[t].toLocaleString()+' USDC approved!','success');
-    btn.disabled=true;btn.textContent='✓ Approved';
+    btn.disabled=true;btn.textContent='âœ“ Approved';
     // Double-check on-chain allowance to reliably enable Step 2
     await checkUpgradeAllowance();
   }catch(e){const msg=e.reason||e.message||'Unknown';const isSync = msg.includes('join tier 1');
     const isCycles = msg.includes('cycles not complete');
     if(isSync){
-      setStatus('upgrade-status','⏳ Your registration needs a quick sync before upgrading. Try again in a few minutes.','var(--yellow)');
+      setStatus('upgrade-status','â³ Your registration needs a quick sync before upgrading. Try again in a few minutes.','var(--yellow)');
     } else if(isCycles){
-      setStatus('upgrade-status','🔒 Cycle requirement not yet met. Complete your cycles first.','var(--yellow)');
+      setStatus('upgrade-status','ðŸ”’ Cycle requirement not yet met. Complete your cycles first.','var(--yellow)');
     } else {
-      setStatus('upgrade-status','❌ '+msg,'var(--red)');
+      setStatus('upgrade-status','âŒ '+msg,'var(--red)');
       toast('Upgrade failed','error');
     }
     btn.disabled=false;btn.textContent='Step 2: Upgrade Tier';}
@@ -2391,33 +2394,33 @@ async function doUpgrade(){
   const btn=document.getElementById('btn-upgrade');
   // Always verify allowance on click
   try{
-    setStatus('upgrade-status','⏳ Checking approval…','var(--text2)');
+    setStatus('upgrade-status','â³ Checking approvalâ€¦','var(--text2)');
     const usdcR=new ethers.Contract(ADDRESSES.usdc,USDC_ABI,readProvider);
     const allowance=await usdcR.allowance(userAddr,ADDRESSES.tierManager);
     if(BigInt(allowance)<TIER_FEES_USDC[t]){
-      setStatus('upgrade-status','⚠️ Please complete Step 1 — approve $'+TIER_FEES[t].toLocaleString()+' USDC first.','var(--yellow)');
+      setStatus('upgrade-status','âš ï¸ Please complete Step 1 â€” approve $'+TIER_FEES[t].toLocaleString()+' USDC first.','var(--yellow)');
       return;
     }
   }catch(_){}
   try{
-    btn.disabled=true;btn.innerHTML='<span class="spinner"></span>Upgrading…';
-    setStatus('upgrade-status','⏳ Waiting for MetaMask…','var(--text2)');
+    btn.disabled=true;btn.innerHTML='<span class="spinner"></span>Upgradingâ€¦';
+    setStatus('upgrade-status','â³ Waiting for MetaMaskâ€¦','var(--text2)');
     const tm=new ethers.Contract(ADDRESSES.tierManager,TIER_MANAGER_ABI,signer);
     const ref=referrer||ethers.ZeroAddress;
     const tx=await tm.upgradeTier(t,ref);
-    setStatus('upgrade-status','⏳ Confirming…','var(--text2)');
+    setStatus('upgrade-status','â³ Confirmingâ€¦','var(--text2)');
     const receipt=await tx.wait();
-    setStatus('upgrade-status','🎉 Upgraded to '+TIER_NAMES[t]+'! Tx: '+receipt.hash.slice(0,10)+'…','var(--green)');
-    toast('🎉 Welcome to '+TIER_NAMES[t]+'!','success',8000);
-    btn.textContent='✅ Upgraded to '+TIER_NAMES[t];btn.disabled=true;btn.className='btn btn-ghost full-w';
+    setStatus('upgrade-status','ðŸŽ‰ Upgraded to '+TIER_NAMES[t]+'! Tx: '+receipt.hash.slice(0,10)+'â€¦','var(--green)');
+    toast('ðŸŽ‰ Welcome to '+TIER_NAMES[t]+'!','success',8000);
+    btn.textContent='âœ… Upgraded to '+TIER_NAMES[t];btn.disabled=true;btn.className='btn btn-ghost full-w';
     await loadRegisterTab();await loadDashboard();
   }catch(e){
     const msg=e.reason||e.message||'Unknown';
     const isSync=msg.includes('join tier 1');
     const isCycles=msg.includes('cycles not complete');
-    if(isSync) setStatus('upgrade-status','⏳ Registration needs a sync. Try again in a few minutes.','var(--yellow)');
-    else if(isCycles) setStatus('upgrade-status','🔒 Cycle requirement not met. Complete your cycles first.','var(--yellow)');
-    else{ setStatus('upgrade-status','❌ '+msg,'var(--red)'); toast('Upgrade failed','error'); }
+    if(isSync) setStatus('upgrade-status','â³ Registration needs a sync. Try again in a few minutes.','var(--yellow)');
+    else if(isCycles) setStatus('upgrade-status','ðŸ”’ Cycle requirement not met. Complete your cycles first.','var(--yellow)');
+    else{ setStatus('upgrade-status','âŒ '+msg,'var(--red)'); toast('Upgrade failed','error'); }
     btn.disabled=false;btn.textContent='Step 2: Upgrade Tier';
   }
 }
@@ -2432,8 +2435,8 @@ async function showUpgradeCardIfEligible(){
     const[member,currentTier,fastTrack,whaleCount]=await Promise.all([t1.members(userAddr),tm.memberTier(userAddr),tm.fastTrackEnabled(),tm.primeOrAboveCount()]);
     if(!member.isRegistered){upgradeCard.style.display='none';return;}
     const ct=Number(currentTier)||1;
-    if(ct>=7){upgradeCard.innerHTML='<div style="color:var(--green);font-weight:700">👑 Max tier reached — SuperNova Spark!</div>';upgradeCard.style.display='block';return;}
-    // V4: auto-sync handled on-chain in upgradeTier() — no message needed
+    if(ct>=7){upgradeCard.innerHTML='<div style="color:var(--green);font-weight:700">ðŸ‘‘ Max tier reached â€” SuperNova Spark!</div>';upgradeCard.style.display='block';return;}
+    // V4: auto-sync handled on-chain in upgradeTier() â€” no message needed
     upgradeCard.style.display='block';
     let cyclesDone=0,cyclesNeeded=CYCLE_REQ[ct]||1;
     try{
@@ -2452,11 +2455,11 @@ async function showUpgradeCardIfEligible(){
       if(!sessionStorage.getItem(popupKey)){
         sessionStorage.setItem(popupKey,'1');
         setTimeout(()=>{
-          toast('🎉 You are eligible to upgrade to '+tierN+' ($'+fee.toLocaleString()+')! Select it below.','success',8000);
+          toast('ðŸŽ‰ You are eligible to upgrade to '+tierN+' ($'+fee.toLocaleString()+')! Select it below.','success',8000);
         },500);
       }
     }
-    // Auto-fill referrer from Tier 1 registration — locked on-chain
+    // Auto-fill referrer from Tier 1 registration â€” locked on-chain
     try{
       const t1=new ethers.Contract(ADDRESSES.matrices[1],MATRIX_ABI,readProvider);
       const m1=await t1.members(userAddr);
@@ -2467,14 +2470,14 @@ async function showUpgradeCardIfEligible(){
     }catch(_){}
     const wgEl=document.getElementById('upgrade-whale-gate');
     const wn=Number(whaleCount);
-    if(wgEl){wgEl.style.display='block';document.getElementById('upgrade-whale-progress').textContent=wn;const ftb=document.getElementById('upgrade-fasttrack-badge');if(ftb)ftb.innerHTML=fastTrack?'<span class="pill pill-green" style="font-size:11px">🔓 Fast-track ON</span>':'<span class="pill pill-yellow" style="font-size:11px">🔒 '+(25-wn)+' more needed</span>';}
+    if(wgEl){wgEl.style.display='block';document.getElementById('upgrade-whale-progress').textContent=wn;const ftb=document.getElementById('upgrade-fasttrack-badge');if(ftb)ftb.innerHTML=fastTrack?'<span class="pill pill-green" style="font-size:11px">ðŸ”“ Fast-track ON</span>':'<span class="pill pill-yellow" style="font-size:11px">ðŸ”’ '+(25-wn)+' more needed</span>';}
   }catch(e){console.error('showUpgradeCard',e);}
 }
 
 
-// ═══════════════════════════════════════════════════════════════════════
-// CNOVA REDEMPTION — Burn CNOVA at floor price → receive USDC
-// ═══════════════════════════════════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+// CNOVA REDEMPTION â€” Burn CNOVA at floor price â†’ receive USDC
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 async function loadRedeemSection(){
   if(!userAddr)return;
   try{
@@ -2485,7 +2488,7 @@ async function loadRedeemSection(){
     const rbalEl=document.getElementById('redeem-cnova-bal');if(rbalEl)rbalEl.textContent=cwFmt+' CNOVA';
     const floorFmt=floor>0n?u6((BigInt(cw)*floor)/BigInt(1e18)):'$0.00';
     const rflEl=document.getElementById('redeem-floor');const floorUsd=Number(floor)/1e6;  // floorPrice() returns 6-dec USDC per 1 CNOVA
-    if(rflEl)rflEl.textContent=floor>0n?('$'+floorUsd.toFixed(4)+' per CNOVA'):'—';
+    if(rflEl)rflEl.textContent=floor>0n?('$'+floorUsd.toFixed(4)+' per CNOVA'):'â€”';
     // Store floor for preview calculation
     window._redeemFloorUsd=floorUsd;
     const approveBtn=document.getElementById('btn-redeem-approve');
@@ -2501,7 +2504,7 @@ function updateRedeemPreview(){
   const outEl=document.getElementById('redeem-out');
   if(!input||!outEl)return;
   const amt=parseFloat(input.value)||0;
-  if(amt<=0){outEl.textContent='—';return;}
+  if(amt<=0){outEl.textContent='â€”';return;}
   // Use displayed floor from card
   const flEl=document.getElementById('redeem-floor');
   const flText=flEl?flEl.textContent:'';
@@ -2509,7 +2512,7 @@ function updateRedeemPreview(){
   if(floorPer>0){
     const usdcOut=amt*floorPer;
     outEl.textContent='~$'+usdcOut.toFixed(4)+' USDC';
-  } else { outEl.textContent='—'; }
+  } else { outEl.textContent='â€”'; }
 }
 
 function setMaxRedeem(){
@@ -2534,7 +2537,7 @@ async function checkCNOVAApproval(){
   const appBtn=document.getElementById('btn-redeem-approve');
   const redBtn=document.getElementById('btn-redeem');
   if(BigInt(allow)>=amtWei){
-    if(appBtn){appBtn.disabled=true;appBtn.className='btn btn-ghost full-w';appBtn.textContent='✓ Approved';}
+    if(appBtn){appBtn.disabled=true;appBtn.className='btn btn-ghost full-w';appBtn.textContent='âœ“ Approved';}
     if(redBtn){redBtn.disabled=false;redBtn.className='btn full-w btn-green';}
   }
 }
@@ -2547,17 +2550,17 @@ async function approveCNOVAForRedeem(){
   const amtWei=BigInt(Math.floor(amt*1e10))*BigInt(1e8);
   const btn=document.getElementById('btn-redeem-approve');
   try{
-    btn.disabled=true;btn.innerHTML='<span class="spinner"></span>Approving…';
-    setStatus('redeem-status','⏳ Approving CNOVA…','var(--text2)');
+    btn.disabled=true;btn.innerHTML='<span class="spinner"></span>Approvingâ€¦';
+    setStatus('redeem-status','â³ Approving CNOVAâ€¦','var(--text2)');
     const tk=new ethers.Contract(ADDRESSES.token,TOKEN_ABI,signer);
     const tx=await tk.approve(ADDRESSES.treasury,amtWei);
     await tx.wait();
-    btn.disabled=true;btn.textContent='✓ Approved';btn.className='btn btn-ghost full-w';
+    btn.disabled=true;btn.textContent='âœ“ Approved';btn.className='btn btn-ghost full-w';
     const redBtn=document.getElementById('btn-redeem');
     if(redBtn){redBtn.disabled=false;redBtn.className='btn full-w btn-green';}
-    setStatus('redeem-status','✅ Approved! Click Step 2 to redeem.','var(--green)');
+    setStatus('redeem-status','âœ… Approved! Click Step 2 to redeem.','var(--green)');
     toast('CNOVA approved for redemption','success');
-  }catch(e){const msg=e.reason||e.message||'Unknown';setStatus('redeem-status','❌ '+msg,'var(--red)');btn.disabled=false;btn.textContent='Step 1: Approve CNOVA';toast('Approval failed','error');}
+  }catch(e){const msg=e.reason||e.message||'Unknown';setStatus('redeem-status','âŒ '+msg,'var(--red)');btn.disabled=false;btn.textContent='Step 1: Approve CNOVA';toast('Approval failed','error');}
 }
 
 async function doRedeemAtFloor(){
@@ -2568,23 +2571,23 @@ async function doRedeemAtFloor(){
   const amtWei=BigInt(Math.floor(amt*1e10))*BigInt(1e8);
   const btn=document.getElementById('btn-redeem');
   try{
-    btn.disabled=true;btn.innerHTML='<span class="spinner"></span>Redeeming…';
-    setStatus('redeem-status','⏳ Waiting for MetaMask…','var(--text2)');
+    btn.disabled=true;btn.innerHTML='<span class="spinner"></span>Redeemingâ€¦';
+    setStatus('redeem-status','â³ Waiting for MetaMaskâ€¦','var(--text2)');
     const tr=new ethers.Contract(ADDRESSES.treasury,TREASURY_ABI,signer);
     const tx=await tr.redeemAtFloor(amtWei);
-    setStatus('redeem-status','⏳ Confirming…','var(--text2)');
+    setStatus('redeem-status','â³ Confirmingâ€¦','var(--text2)');
     const receipt=await tx.wait();
-    setStatus('redeem-status','✅ Redeemed! Tx: '+receipt.hash.slice(0,10)+'…','var(--green)');
-    toast('CNOVA redeemed for USDC! 🎉','success',6000);
+    setStatus('redeem-status','âœ… Redeemed! Tx: '+receipt.hash.slice(0,10)+'â€¦','var(--green)');
+    toast('CNOVA redeemed for USDC! ðŸŽ‰','success',6000);
     btn.disabled=true;btn.textContent='Step 2: Redeem for USDC';
     if(input)input.value='';
     await loadDashboard();
-  }catch(e){const msg=e.reason||e.message||'Unknown';setStatus('redeem-status','❌ '+msg,'var(--red)');btn.disabled=false;btn.textContent='Step 2: Redeem for USDC';toast('Redemption failed','error');}
+  }catch(e){const msg=e.reason||e.message||'Unknown';setStatus('redeem-status','âŒ '+msg,'var(--red)');btn.disabled=false;btn.textContent='Step 2: Redeem for USDC';toast('Redemption failed','error');}
 }
 
 
-function toggleTheme(){const isLight=document.body.classList.toggle('light');localStorage.setItem('theme',isLight?'light':'dark');document.getElementById('theme-btn').textContent=isLight?'🌙 Dark':'☀️ Light';}
-(function(){const saved=localStorage.getItem('theme');if(saved==='light'){document.body.classList.add('light');document.addEventListener('DOMContentLoaded',()=>{const btn=document.getElementById('theme-btn');if(btn)btn.textContent='🌙 Dark';});}})();
+function toggleTheme(){const isLight=document.body.classList.toggle('light');localStorage.setItem('theme',isLight?'light':'dark');document.getElementById('theme-btn').textContent=isLight?'ðŸŒ™ Dark':'â˜€ï¸ Light';}
+(function(){const saved=localStorage.getItem('theme');if(saved==='light'){document.body.classList.add('light');document.addEventListener('DOMContentLoaded',()=>{const btn=document.getElementById('theme-btn');if(btn)btn.textContent='ðŸŒ™ Dark';});}})();
 </script>
 
 <!-- MetaMask Install Modal -->
