@@ -44,7 +44,7 @@
     /* ── Layout ─────────────────────────────── */
     header { background: var(--bg2); border-bottom: 1px solid var(--border); padding: 14px 24px; display: flex; align-items: center; justify-content: space-between; position: sticky; top: 0; z-index: 100; }
     .logo { display: flex; align-items: center; gap: 10px; }
-    .logo-icon { width: 34px; height: 34px; background: linear-gradient(135deg, var(--green), var(--blue)); border-radius: 8px; display: flex; align-items: center; justify-content: center; font-weight: 900; font-size: 16px; color: #000; }
+    .logo-icon { width: 34px; height: 34px; border-radius: 8px; }
     .logo-text { font-size: 18px; font-weight: 700; letter-spacing: -0.5px; }
     .logo-text span { color: var(--green); }
     .logo-badge { font-size: 10px; background: var(--green-dim); color: var(--green); border: 1px solid var(--green2); border-radius: 4px; padding: 2px 6px; margin-left: 8px; }
@@ -314,7 +314,7 @@
 
 <header>
   <div class="logo">
-    <div class="logo-icon">CN</div>
+    <img src="cryptonova-logo.svg" style="width:34px;height:34px;border-radius:8px" alt="CryptoNova" />
     <div class="logo-text">Crypto<span>Nova</span></div>
     <span class="logo-badge" id="network-badge">Base Sepolia</span>
     <span style="background:rgba(245,158,11,.2);color:var(--yellow);border:1px solid rgba(245,158,11,.5);border-radius:4px;padding:2px 8px;font-size:10px;font-weight:700;margin-left:6px">⚡ V6 LIGHTNING W=2 M=7</span>
