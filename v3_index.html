@@ -317,7 +317,7 @@
     <div class="logo-icon">CN</div>
     <div class="logo-text">Crypto<span>Nova</span></div>
     <span class="logo-badge" id="network-badge">Base Sepolia</span>
-    <span style="background:rgba(245,158,11,.2);color:var(--yellow);border:1px solid rgba(245,158,11,.5);border-radius:4px;padding:2px 8px;font-size:10px;font-weight:700;margin-left:6px">⚡ LIGHTNING TEST W=2</span>
+    <span style="background:rgba(245,158,11,.2);color:var(--yellow);border:1px solid rgba(245,158,11,.5);border-radius:4px;padding:2px 8px;font-size:10px;font-weight:700;margin-left:6px">⚡ V6 LIGHTNING W=2 M=7</span>
   </div>
   <div style="display:flex;align-items:center;gap:8px">
     <button class="theme-toggle" id="theme-btn" onclick="toggleTheme()">☀️ Light</button>
@@ -1089,26 +1089,27 @@
 const CHAIN_ID = 84532;
 const RPC_URL  = 'https://sepolia.base.org';
 
+// V6 LIGHTNING — matrix=7, belt_max=10, $10, 21M CNOVA
 const ADDRESSES = {
   usdc:           '0x2D8B7b5eDec96bE441b6fb0D45D74a2BcE2C639a',
-  token:          '0xe27f0824D823300EF33E37d27bE22f7Be6d1385f',
-  treasury:       '0x0838c8aDbe00B747798e5852d82FE720C879Ef33',
-  communityWallet:'0xD788A3A12726b99F32E53562Df11953557a8571c',
-  tierManager:    '0x9a85c508379Ac5766FFd0EA563Ec2c3b92b45170',
-  beltManager:    '0x5b12E5adEA89F8FA09573B91eBbca43AD7C0fC27',
+  token:          '0x8848a4Ca1a06f8966799467e2d660734c76bB43A',
+  treasury:       '0x6D9b6A28aB20197D0202dDbB5B4e4223769629dF',
+  communityWallet:'0xaE4D7E8E8f78AcFC78A7c0F2C01E623e127715F6',
+  tierManager:    '0xa061280A4163b63da9e985244329470983b6fDD0',
+  beltManager:    '0x8E6178f31325ca63C4670704E0F75b159d772475',  // T1 BeltManagerV6
   matrices: {
-    1:'0x02D03794922F9918a7cc09d2c93cE4220D23Ad31',
-    2:'0xb301BEEC45b7d05b15951ae3c993a48aD77a67C1',
-    3:'0x44DEE4dE225368845AEFF7C62126E7095A8a9992',
-    4:'0x2e077dcfc01CBB7D1b1EDA6daef7162285d47004',
-    5:'0x2cB41Fe88E12785c3cEa8d0671c0b4F3e10116Ac',
-    6:'0x753C1CAE50c4D214Ad38F6c3BbD3BDE0bE83210D',
-    7:'0x9d0424e79fbcf262b8C87e8d659409b2E74a137F',
+    1:'0xb26d517D3F67FE100f8AafEe43ba5F5e3bDf8260',  // Belt A T1
+    2:'0x82517a5226082c5F722C68580e5a792B271eAdE7',  // Belt A T2
+    3:'0x3DbFf2b83f49c624Ed3f2BCC198C3a6aC16eeDca',  // Belt A T3
+    4:'0xf99e29e93c29Dea29Ccd19B1F3162dDe9A149a60',  // Belt A T4
+    5:'0xEfA27fFa24B36049dF4F56243153D669C228caFe',  // Belt A T5
+    6:'0xd46175d77dc1E703C46Bd58Ee5738dDA3EcEf2Fe',  // Belt A T6
+    7:'0xBec3dE6dfDc496956E8f06252A1002AC3ec846c2',  // Belt A T7
   },
 };
 const TIER_NAMES={1:'Nova Seed',2:'Nova Rise',3:'Nova Star',4:'Nova Prime',5:'SuperNova Genesis',6:'SuperNova Elite',7:'SuperNova Spark'};
-const TIER_FEES={1:1,2:2.5,3:5,4:10,5:25,6:50,7:100};  // LIGHTNING TEST (10x cheaper)
-const TIER_FEES_USDC={1:1_000_000n,2:2_500_000n,3:5_000_000n,4:10_000_000n,5:25_000_000n,6:50_000_000n,7:100_000_000n}; // LIGHTNING
+const TIER_FEES={1:10,2:25,3:50,4:100,5:250,6:500,7:1000};  // V6 — $10 across ALL tests
+const TIER_FEES_USDC={1:10_000_000n,2:25_000_000n,3:50_000_000n,4:100_000_000n,5:250_000_000n,6:500_000_000n,7:1_000_000_000n};
 const CYCLE_REQ={1:1,2:2,3:2,4:2,5:3,6:3,7:0};
 
 // ── ABIs ─────────────────────────────────────────────────────────────
