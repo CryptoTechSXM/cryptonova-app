@@ -2043,6 +2043,13 @@ async function toggleDoubleReentry(enabled){
   }finally{toggle.disabled=false;}
 }
 
+function toggleRedeemButtons(val){
+  const hasVal = val && parseFloat(val) > 0;
+  const approveBtn = document.getElementById("btn-redeem-approve");
+  const redeemBtn = document.getElementById("btn-redeem");
+  if(approveBtn){ approveBtn.disabled = !hasVal; approveBtn.style.opacity = hasVal ? "1" : "0.4"; }
+  if(redeemBtn){ redeemBtn.disabled = !hasVal; redeemBtn.style.opacity = hasVal ? "1" : "0.4"; }
+}
 async function doWithdrawAll(){
   if(!signer){toast('Connect wallet first','error');return;}
   const btn=document.getElementById('btn-withdraw');
