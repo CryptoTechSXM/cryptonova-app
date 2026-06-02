@@ -220,4 +220,11 @@ CW MAX_FOUNDERS  = 20 → 2,000
 - Premium goes to: re-entry pool + community wallet
 - Incentive: join early = pay less, system more sustainable at scale
 
-*Last updated: V5 self-test round 1 complete — bugs logged, fixes in progress*
+### Additional bugs found:
+- Withdrawal error on first load → RPC rate limit (429), refresh fixes. **Mainnet requires paid RPC (Alchemy/Infura).**
+- Epoch 9 shows no name → added "Final Frontier" to epoch names array
+- Tier dropdown freezes UI → allowance check was blocking, fixed with 3s timeout + async
+- Belt overview only showing Belt A → flex wrap layout fixed, all belts now show as tiles
+- Direct referrals error → only scanned Belt A, now scans all belt matrices
+
+*Last updated: V5 self-test round 1 — all 7 bugs fixed*

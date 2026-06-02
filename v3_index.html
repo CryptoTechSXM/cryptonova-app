@@ -1549,7 +1549,7 @@ async function loadHomeStats(){
     if(ft)sEl.innerHTML='<span class="pill pill-green">🐋 Fast-Track Active</span>';
     else if(wPct>=60)sEl.innerHTML='<span class="pill pill-yellow">🔥 '+(25-wn)+' more to unlock</span>';
     else sEl.innerHTML='<span class="pill pill-blue">Whale Gate: '+wn+' / '+wGate+'</span>';
-    const EN=['Nebula Genesis','Mercury Rise','Lunar Cluster','Aurora Zenith','Solaris Echo','Cosmic Core','Galaxy Grid','Supernova Spark'];
+    const EN=['Nebula Genesis','Mercury Rise','Lunar Cluster','Aurora Zenith','Solaris Echo','Cosmic Core','Galaxy Grid','Supernova Spark','Final Frontier'];
     const en=Number(epoch),ename=EN[en]||('Epoch '+(en+1)),edisp=en+1;
     const rf=parseFloat(ethers.formatUnits(reward,18)).toLocaleString(undefined,{maximumFractionDigits:0});
     const mf=parseFloat(ethers.formatUnits(minted,18)).toLocaleString(undefined,{maximumFractionDigits:0});
@@ -2000,13 +2000,13 @@ function getSelectedMatrixTier(){
   return sel?parseInt(sel.value)||1:1;
 }
 function onMatrixTierChange(){
-  // Reset view when tier changes
+  // Reset view when tier changes — non-blocking
   const tEl=document.getElementById('matrix-tree'),lEl=document.getElementById('matrix-loading');
   if(tEl)tEl.style.display='none';
   if(lEl){lEl.innerHTML='Select Load Queue or My Position to view this tier.';lEl.style.display='block';}
   hideMyPosBanner();
-  // Update stats for selected tier
-  loadMatrixStats();
+  // Update stats async so UI never freezes
+  setTimeout(()=>loadMatrixStats().catch(()=>{}), 50);
 }
 
 async function loadQueueView(){
@@ -2214,11 +2214,18 @@ function onUpgradeTierChange(){
   if(hint)hint.textContent='Fee: $'+TIER_FEES[t].toLocaleString()+' USDC → '+TIER_NAMES[t];
   if(appBtn){appBtn.disabled=false;appBtn.className='btn full-w btn-green';appBtn.textContent='Step 1: Approve $'+TIER_FEES[t].toLocaleString()+' USDC 🔒';}
   if(upgBtn){upgBtn.disabled=false;upgBtn.className='btn full-w btn-green';upgBtn.textContent='Step 2: Upgrade to '+TIER_NAMES[t];}
-  if(userAddr){
-    const usdc=new ethers.Contract(ADDRESSES.usdc,USDC_ABI,readProvider);
-    usdc.allowance(userAddr,ADDRESSES.tierManager).then(a=>{
-      if(a>=TIER_FEES_USDC[t]){if(appBtn){appBtn.disabled=true;appBtn.className='btn btn-ghost full-w';appBtn.textContent='✓ Approved';}if(upgBtn){upgBtn.disabled=false;upgBtn.className='btn full-w btn-green';}}
-    }).catch(()=>{});
+  // Non-blocking allowance check with timeout so UI never freezes
+  if(userAddr && readProvider){
+    const checkWithTimeout = Promise.race([
+      new ethers.Contract(ADDRESSES.usdc,USDC_ABI,readProvider).allowance(userAddr,ADDRESSES.tierManager),
+      new Promise((_,rej)=>setTimeout(()=>rej(new Error('timeout')),3000))
+    ]);
+    checkWithTimeout.then(a=>{
+      if(BigInt(a)>=TIER_FEES_USDC[t]){
+        if(appBtn){appBtn.disabled=true;appBtn.className='btn btn-ghost full-w';appBtn.textContent='✓ Approved';}
+        if(upgBtn){upgBtn.disabled=false;upgBtn.className='btn full-w btn-green';}
+      }
+    }).catch(()=>{});  // silently skip on timeout or error
   }
 }
 
