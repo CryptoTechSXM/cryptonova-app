@@ -1836,14 +1836,14 @@ async function loadDashboard(){
         const bmReg=await bm.hasRegistered(userAddr);
         if(bmReg){
           [m1,ct]=await Promise.all([t1.getMember(userAddr),tm.memberTier(userAddr)]);
-          if(!m1.isRegistered) m1={isRegistered:true,id:0n,withdrawable:0n,totalEarned:0n,originalReferrer:ethers.ZeroAddress};
+          if(!m1.hasEverJoined) m1={hasEverJoined:false,id:0n,withdrawable:0n,totalEarned:0n,referrer:ethers.ZeroAddress};
         }
       }catch(_){}
     }
     if(!m1){
       [m1,ct]=await Promise.all([t1.getMember(userAddr),tm.memberTier(userAddr)]);
     }
-    if(!m1||!m1.isRegistered){notR.style.display='block';con.style.display='none';return;}
+    if(!m1||!m1.hasEverJoined){notR.style.display='block';con.style.display='none';return;}
     notR.style.display='none';con.style.display='block';
     const tier=Number(ct)||1;
     const tnEl=document.getElementById('dash-tier-name');if(tnEl)tnEl.textContent=(TIER_NAMES[tier]||'Tier '+tier)+' (Tier '+tier+')';
