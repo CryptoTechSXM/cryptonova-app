@@ -1835,13 +1835,13 @@ async function loadDashboard(){
         const bm=new ethers.Contract(ADDRESSES.beltManager,BELT_MANAGER_ABI,readProvider);
         const bmReg=await bm.hasRegistered(userAddr);
         if(bmReg){
-          [m1,ct]=await Promise.all([t1.members(userAddr),tm.memberTier(userAddr)]);
+          [m1,ct]=await Promise.all([t1.getMember(userAddr),tm.memberTier(userAddr)]);
           if(!m1.isRegistered) m1={isRegistered:true,id:0n,withdrawable:0n,totalEarned:0n,originalReferrer:ethers.ZeroAddress};
         }
       }catch(_){}
     }
     if(!m1){
-      [m1,ct]=await Promise.all([t1.members(userAddr),tm.memberTier(userAddr)]);
+      [m1,ct]=await Promise.all([t1.getMember(userAddr),tm.memberTier(userAddr)]);
     }
     if(!m1||!m1.isRegistered){notR.style.display='block';con.style.display='none';return;}
     notR.style.display='none';con.style.display='block';
@@ -1853,7 +1853,7 @@ async function loadDashboard(){
     for(let t=1;t<=tier;t++){
       try{
         const mx=new ethers.Contract(ADDRESSES.matrices[t],MATRIX_ABI,readProvider);
-        const m=await mx.members(userAddr);const cy=await mx.cyclesCompleted(userAddr);
+        const m=await mx.getMember(userAddr);const cy=await mx.getCyclesCompleted(userAddr);
         if(m.isRegistered){totW+=BigInt(m.withdrawable);totE+=BigInt(m.totalEarned);
           const wl=m.withdrawable>0n?'<span style="color:var(--green);font-weight:700">'+u6(m.withdrawable)+'</span>':'<span style="color:var(--text3)">$0.00</span>';
           rows+=`<div class="info-row"><span class="info-key"><span style="font-size:11px;background:var(--green-dim);color:var(--green);border:1px solid var(--green2);border-radius:4px;padding:1px 6px">T${t}</span> ${TIER_NAMES[t]}</span><span style="display:flex;flex-direction:column;align-items:flex-end;gap:2px">${wl}<span style="font-size:11px;color:var(--text3)">Earned: ${u6(m.totalEarned)} · ${cy} cycles</span></span></div>`;
@@ -1867,7 +1867,7 @@ async function loadDashboard(){
     const teaEl=document.getElementById('dash-total-earned');if(teaEl)teaEl.textContent=u6(totE);
     const bwEl=document.getElementById('btn-withdraw');if(bwEl)bwEl.disabled=totW===0n;
     try{
-      const cy1=await t1.cyclesCompleted(userAddr);
+      const cy1=await t1.getCyclesCompleted(userAddr);
       const cyEl=document.getElementById('dash-cycles');if(cyEl)cyEl.textContent=cy1.toString();
     }catch(e){console.warn('cycles fetch:',e.message);}
     try{
