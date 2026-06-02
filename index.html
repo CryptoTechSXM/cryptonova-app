@@ -1145,7 +1145,7 @@ const MATRIX_ABI = [
   {"inputs":[],"name":"ENTRY_FEE","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},
   {"inputs":[],"name":"ACTIVE_WINDOW","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},
   {"inputs":[{"internalType":"address","name":"member","type":"address"}],"name":"positionOf","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},
-  {"inputs":[{"internalType":"address","name":"","type":"address"}],"name":"matrixPos","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[{"name":"member","type":"address"}],"name":"getMember","outputs":[{"components":[{"name":"id","type":"uint256"},{"name":"referrer","type":"address"},{"name":"l2","type":"address"},{"name":"l3","type":"address"},{"name":"joinedAt","type":"uint256"},{"name":"withdrawable","type":"uint256"},{"name":"totalEarned","type":"uint256"},{"name":"cyclesCompleted","type":"uint256"},{"name":"isInMatrix","type":"bool"},{"name":"hasEverJoined","type":"bool"}],"name":"","type":"tuple"}],"stateMutability":"view","type":"function"},{"inputs":[{"name":"member","type":"address"}],"name":"getCyclesCompleted","outputs":[{"name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[{"name":"member","type":"address"}],"name":"withdrawableOf","outputs":[{"name":"","type":"uint256"}],"stateMutability":"view","type":"function"},
+  {"inputs":[{"internalType":"address","name":"","type":"address"}],"name":"matrixPos","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[{"name":"member","type":"address"}],"name":"getMember","outputs":[{"components":[{"name":"id","type":"uint256"},{"name":"referrer","type":"address"},{"name":"l2","type":"address"},{"name":"l3","type":"address"},{"name":"joinedAt","type":"uint256"},{"name":"withdrawable","type":"uint256"},{"name":"totalEarned","type":"uint256"},{"name":"cyclesCompleted","type":"uint256"},{"name":"isInMatrix","type":"bool"},{"name":"hasEverJoined","type":"bool"},{"name":"isRegistered","type":"bool"}],"name":"","type":"tuple"}],"stateMutability":"view","type":"function"},{"inputs":[{"name":"member","type":"address"}],"name":"getCyclesCompleted","outputs":[{"name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[{"name":"member","type":"address"}],"name":"withdrawableOf","outputs":[{"name":"","type":"uint256"}],"stateMutability":"view","type":"function"},
   {"inputs":[{"internalType":"address","name":"member","type":"address"}],"name":"isActive","outputs":[{"internalType":"bool","name":"","type":"bool"}],"stateMutability":"view","type":"function"},
   {"inputs":[{"internalType":"address","name":"referrer","type":"address"}],"name":"register","outputs":[],"stateMutability":"nonpayable","type":"function"},
   {"inputs":[],"name":"withdraw","outputs":[],"stateMutability":"nonpayable","type":"function"},
@@ -1440,7 +1440,7 @@ async function loadConveyorBeltStats(){
       const qNum=Number(qpos);
       let mObj=await userMx.getMember(userAddr).catch(()=>null);
       if(!mObj){ await new Promise(r=>setTimeout(r,500)); mObj=await userMx.getMember(userAddr).catch(()=>null); }
-      if(!mObj||!mObj.isRegistered){
+      if(!mObj||(!mObj.isRegistered&&!mObj.hasEverJoined)){
         myNextEl.textContent='Not in '+tierN;
         myNextEl.style.color='var(--text3)';
       } else if(qNum>0){
@@ -1854,7 +1854,7 @@ async function loadDashboard(){
       try{
         const mx=new ethers.Contract(ADDRESSES.matrices[t],MATRIX_ABI,readProvider);
         const m=await mx.getMember(userAddr);const cy=await mx.getCyclesCompleted(userAddr);
-        if(m.isRegistered){totW+=BigInt(m.withdrawable);totE+=BigInt(m.totalEarned);
+        if(m.hasEverJoined||m.isRegistered){totW+=BigInt(m.withdrawable);totE+=BigInt(m.totalEarned);
           const wl=m.withdrawable>0n?'<span style="color:var(--green);font-weight:700">'+u6(m.withdrawable)+'</span>':'<span style="color:var(--text3)">$0.00</span>';
           rows+=`<div class="info-row"><span class="info-key"><span style="font-size:11px;background:var(--green-dim);color:var(--green);border:1px solid var(--green2);border-radius:4px;padding:1px 6px">T${t}</span> ${TIER_NAMES[t]}</span><span style="display:flex;flex-direction:column;align-items:flex-end;gap:2px">${wl}<span style="font-size:11px;color:var(--text3)">Earned: ${u6(m.totalEarned)} · ${cy} cycles</span></span></div>`;
         }
@@ -2177,7 +2177,7 @@ async function loadMyTree(){
   const mxAddr = tier===1 ? await getUserT1Matrix(userAddr) : ADDRESSES.matrices[tier];
   const t1=new ethers.Contract(mxAddr,MATRIX_ABI,readProvider);
   try{
-    const m=await t1.getMember(userAddr);if(!m.isRegistered){toast('Not registered in Tier 1 yet','error');return;}
+    const m=await t1.getMember(userAddr);if(!m.hasEverJoined&&!m.isRegistered){toast('Not registered in Tier 1 yet','error');return;}
     await new Promise(r=>setTimeout(r,150));
     const cy=await t1.getCyclesCompleted(userAddr);
     document.getElementById('matrix-my-node-label').textContent='My Member ID';
