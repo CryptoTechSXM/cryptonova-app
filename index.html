@@ -1438,8 +1438,8 @@ async function loadConveyorBeltStats(){
       const userMx=new ethers.Contract(userMxAddr,MATRIX_ABI,readProvider);
       const qpos=await userMx.positionOf(userAddr).catch(()=>0n);
       const qNum=Number(qpos);
-      let mObj=await userMx.members(userAddr).catch(()=>null);
-      if(!mObj){ await new Promise(r=>setTimeout(r,500)); mObj=await userMx.members(userAddr).catch(()=>null); }
+      let mObj=await userMx.getMember(userAddr).catch(()=>null);
+      if(!mObj){ await new Promise(r=>setTimeout(r,500)); mObj=await userMx.getMember(userAddr).catch(()=>null); }
       if(!mObj||!mObj.isRegistered){
         myNextEl.textContent='Not in '+tierN;
         myNextEl.style.color='var(--text3)';
