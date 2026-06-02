@@ -1281,6 +1281,22 @@ async function connectWallet(silent=false) {
     btn.classList.add('connected');
     if(!silent)toast('Wallet connected: '+userAddr.slice(0,6)+'…'+userAddr.slice(-4),'success');
     await loadHomeStats();await loadConveyorBeltStats();await loadRegisterTab();await loadDashboard();await loadMatrixStats();
+    // Pre-load referrer as soon as wallet connects so it's ready before user clicks anything
+    const refInput=document.getElementById('input-referrer');
+    if(refInput && !refInput.value){
+      const urlRef=new URLSearchParams(window.location.search).get('ref');
+      if(urlRef && ethers.isAddress(urlRef) && urlRef.toLowerCase()!==userAddr.toLowerCase()){
+        refInput.value=urlRef;
+      } else {
+        getFallbackReferrer().then(fb=>{
+          if(fb&&fb!==ethers.ZeroAddress&&!refInput.value){
+            refInput.value=fb;
+            const hint=document.getElementById('reg-status');
+            if(hint&&!hint.textContent)setStatus('reg-status','Referrer auto-assigned: '+fb.slice(0,6)+'…'+fb.slice(-4),'var(--blue)');
+          }
+        }).catch(()=>{});
+      }
+    }
   } catch(e){if(!silent)toast('Connection failed: '+(e.message||e),'error');}
   finally{isConnecting=false;}
 }
