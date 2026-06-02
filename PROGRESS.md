@@ -20,171 +20,207 @@ Self Test (2x) → Lightning Team Test (5x) → Community Test → Mainnet
 
 ### V1 — BFS Binary Tree Matrix
 **Status:** ❌ Deprecated  
-**Architecture:** Binary tree, fixed levels  
-**Errors Found:**
-- Tree structure caused uneven earnings
-- Hard to scale past 63 members cleanly
-- No cycle tracking
-- No tier system
-
-**Decision:** Scrapped. Moved to conveyor belt design.
+**Architecture:** Binary tree, fixed levels, BFS placement  
+**Why it failed:**
+- Permanent position — root earns from ALL members forever
+- Bottom member earns $0 regardless of activity
+- Hard ceiling when rows fill
+- No cycling, no fairness mechanism
 
 ---
 
-### V2 — V2 Auto Re-entry Pool
+### V2 — Auto Re-entry Pool
 **Status:** ❌ Deprecated  
-**Architecture:** Linear queue with auto re-entry pool  
-**Errors Found:**
-- Re-entry pool accumulated but `setMatrixContract` renamed in V4 treasury
+**Architecture:** Linear queue with passive re-entry pool  
+**Why it failed:**
+- Pool accumulated but trigger was dollar threshold, not cycle-based
+- No active window — still a growing queue with no fairness
+- `setMatrixContract` renamed in treasury (wiring broke)
 - Payment splits hardcoded, didn't scale with tiers
 - No multi-tier support
-- No epoch system
-
-**Decision:** Kept as legacy test suite reference. Moved to V3.
 
 ---
 
 ### V3 — 7-Tier Conveyor Belt (Single Queue)
 **Status:** ✅ Complete — deployed on `main` (live site)  
 **Architecture:** Single conveyor belt queue per tier, ACTIVE_WINDOW=100  
-**Key Features:**
-- 7-tier ladder ($10 → $1,000)
-- Chain pay 7 levels
-- CNOVA epoch rewards
-- Community wallet (Tranche A/B)
-- Whale gate at Tier 5
-
-**Errors Found:**
-- Active window filter hardcoded to 64 (fixed → dynamic AW)
-- Referrer rotation stuck on member #1 (fixed → round-robin)
-- `total is not defined` in loadQueueView (fixed → scoped)
-- Community wallet `setMatrixContract` → renamed `setTier1Matrix`
-
-**Improvements carried to V4:**
-- Epoch-aware re-entry CNOVA
-- Re-entry fee (5%) from withdrawable
-- L7 → treasury redirect
-- Staged whale gate (25/15/5)
-- Early exit penalty (45/30/15/5/0%)
+**Key Features:** 7-tier ladder, chain pay 7 levels, CNOVA epoch rewards, community wallet, whale gate  
+**Errors Fixed:** Active window hardcoded, referrer rotation stuck, treasury wiring, `total` scope bug
 
 ---
 
-### V4 — V4 Engine Test (W=5, BELT_MAX=50)
-**Status:** 🟡 ACTIVE — deployed on `main` (live site), team testing  
-**Architecture:** Single belt per tier, ACTIVE_WINDOW=5 (engine test)  
-**Contracts:** Base Sepolia  
-**Key Features added over V3:**
-- Re-entry fee (5%) implemented on-chain
-- CNOVA epoch-aware (re-entry scales with epoch)
-- EPOCH_MEMBER_LIMIT=5 (engine test, mainnet=1000)
+### V4 — Engine Test (W=5, $10 fees)
+**Status:** ✅ Complete — deployed on `main`, team tested  
+**Architecture:** Single belt per tier, V4 features added  
+**Key Features added:**
+- Re-entry fee (5%) on-chain
+- Epoch-aware CNOVA (re-entry scales with epoch)
+- EPOCH_MEMBER_LIMIT=5 (engine test)
 - Staged whale gate (2/1/1 engine test, 25/15/5 mainnet)
-- Early exit penalty in Treasury
-- Community wallet fully wired (deposit + registerFounder)
-- ICommunityWallet interface (deposit, registerFounder)
+- Early exit penalty (45/30/15/5/0%)
+- Community Wallet fully wired (ICommunityWallet interface)
 - `setCommunityWallet` on Treasury
 
-**Errors Found During Testing:**
-- `awNum is not defined` → fixed, AW fetched dynamically
-- Community wallet not receiving funds → ICommunityWallet interface added
-- `pendingPool` never updated → `deposit()` called instead of raw transfer
-- Referrer pool stuck on account #1 → sessionStorage round-robin
-- `setMatrixContract` → `setTier1Matrix` mismatch
-- Re-entry fee needed `recordDirectDeposit` push pattern
-- `ERC20InsufficientAllowance` on Treasury → `setAuthorizedCaller` added
-- `positionOf` CALL_EXCEPTION → defensive try/catch added
-- Rate limiting (HTTP 429) → throttled RPC calls with delays
-- Redeem USDC failing → `setCommunityWallet` not called in deploy (fixed in deploy script)
-- Dashboard not detecting BeltManager registration → BeltManager check added
-- Register tab not detecting already-registered → `hasRegistered` check added
-
-**Testing Protocol:**
-- [ ] Self test by owner (2x) — IN PROGRESS
-- [ ] Team test (5x)
-- [ ] Document all remaining bugs before moving to V5
+**Errors Fixed:** Community wallet not receiving funds, re-entry fee approval issue, positionOf CALL_EXCEPTION, RPC rate limiting, dashboard detection of BeltManager registration
 
 ---
 
 ### V5 — Multi-Belt System (W=2 Lightning / W=5 Engine)
-**Status:** 🔵 SELF-TESTING — Lightning Test (W=2, BELT_MAX=10, $1 fees)  
-**Branch:** `v5` on GitHub → `v5.crypto-nova.app` (Vercel)  
-**Contracts:** Base Sepolia (Lightning)  
+**Status:** 🔵 SELF-TESTING — Lightning Test active on `v5` branch  
+**Branch:** `v5` → `v5.crypto-nova.app`  
+**Architecture:** BeltManager routes T1 across multiple belts, all 7 tiers get BeltManagers  
 
-**Architecture changes over V4:**
-- BeltManager.sol (NEW) — routes T1 registrations across multiple belts
-- Multi-belt per tier (7 BeltManagers, one per tier)
-- Belt A-J deployed at launch (10 belts, 5-belt buffer always maintained)
-- Belt keeper bot (`belt_keeper.js`) — auto-deploys new belts when buffer drops to 5
-- Re-entry pool (Option B) — new joiners pre-fund older belt pools
+**V5 Architecture Summary:**
+- `BeltManager.sol` — routes registrations across belts, maintains 5-belt buffer
+- Multi-belt per tier (7 BeltManagers, one per tier T1-T7)
+- Belt keeper bot (`belt_keeper.js`) — auto-deploys new belts when buffer < 5
+- Re-entry pool Option B — new joiners pre-fund older belt pools
 - `triggerReentry()` — keeps full belts spinning when new members join newer belts
-- `registrationCost()` — returns exact USDC needed including re-entry contributions
-- Auto-upgrade — members opt-in, fires automatically on cycle completion
-- `deductWithdrawable` — pulls upgrade fee from earned balance
-- Dynamic ACTIVE_WINDOW — constructor param (2 lightning, 5 engine, 50 mainnet)
-- Dynamic BELT_MAX — constructor param (10 lightning, 50 engine, 500 mainnet)
-- Re-entry cap = 3 belts — overhead stays at $0.15/$0.50/$1.50 max forever
+- `registrationCost()` — exact USDC needed including reentry contributions (capped at 3 belts, $1.50 max overhead)
+- Auto-upgrade — opt-in, fires automatically on cycle completion
+- Dynamic ACTIVE_WINDOW and BELT_MAX (constructor params)
+- 10 belts at launch, keeper maintains 5-belt buffer forever
+- MAX_BELTS = 1,000 (effectively unlimited)
+- Re-entry cap = 3 belts max overhead regardless of scale
 
 **Lightning Test Parameters:**
 | Parameter | Lightning | Engine Test | Mainnet |
 |---|---|---|---|
 | ACTIVE_WINDOW | 2 | 5 | 50 |
 | BELT_MAX | 10 | 50 | 500 |
-| EPOCH_MEMBER_LIMIT | 5 | 5 | 1,000 |
+| EPOCH_MEMBER_LIMIT | 5 | 5 | 10,000 |
 | Entry fee (T1) | $1 | $10 | $10 |
 | Belts at launch | 10 | 10 | 10 |
-| Re-entry cap | 3 belts | 3 belts | 3 belts |
 
-**Errors Found During V5 Testing:**
-- `registrationCost()` missing from BELT_MANAGER_ABI → added
-- Button labels hardcoded "$10" → dynamic from `TIER_FEES[1]`
-- Belt A stops rotating when full → `triggerReentry()` + pre-funded pool
-- Re-entry pool exhausts at scale → Option B (joiner pre-pays) implemented
-- `REENTRY_FEE_BPS()` call in `registrationCost()` → confirmed public constant
-- Belt B joiner overhead 495% at 100 belts → capped at 3 belts ($1.50 max)
-- CNOVA not minted on BeltManager registration → `registerForWithCnova(true)` 
-- Registration fails after Belt A fills → Belt B requires $1.05 ($1 + $0.05 reentry) but approval hardcoded at $1 → fixed: all three approval calls now use `registrationCost()` dynamically
-- ReentrancyGuard double-lock → `registerFor` → `_registerFor` internal split
+**V5 Self-Test Bugs Found & Fixed:**
+- registrationCost() missing from ABI → added
+- Button labels hardcoded "$10" → dynamic from TIER_FEES[1]
+- Belt A stops rotating when full → triggerReentry() + pre-funded pool
+- Re-entry pool exhausts at scale → Option B (joiner pre-pays, capped at 3 belts)
+- CNOVA not minted on BeltManager registration → registerForWithCnova(true)
+- ReentrancyGuard double-lock → registerFor → _registerFor internal split
+- Registration fails after Belt A fills → registrationCost() returns $1.05 for Belt B
+- Belt overview only showing Belt A → fixed flex wrap, all belts show as tiles
+- Direct referrals error → only scanned Belt A, now scans all belt matrices
+- Dashboard member ID missing for Belt B+ → getUserT1Matrix() helper
+- Upgrade card not showing for Belt B+ → reads from user's own belt
+- Matrix stats showing frozen Belt A → reads from active belt
+- Tier dropdown freezes UI → 3s timeout + async allowance check
+- Epoch 9 shows no name → added "Final Frontier"
+- AW/whale gate hardcoded values → all dynamic from contract
+- 0 CNOVA per entry after epochs → shows "All epochs complete"
+- Withdrawal HTTP 429 → needs paid RPC for mainnet
 
-**Testing Protocol:**
+**V5 Testing Protocol:**
 - [ ] Self test lightning (2x) — IN PROGRESS
 - [ ] Lightning team test (5x)
-- [ ] Engine test (W=5, $10 fees) self (2x)
+- [ ] Engine test (W=5, $10) self (2x)
 - [ ] Engine test team (5x)
-- [ ] Document all remaining bugs before V6 or mainnet
 
 ---
 
-## PENDING — V5 → MAINNET CHECKLIST
+### V6 — Matrix + Belt Hybrid (DESIGN PHASE)
+**Status:** 🟡 DESIGN COMPLETE — ready to build after V5 testing passes  
 
-Before ANY mainnet deploy:
+**Core concept:** Belt feeds Matrix. Matrix cycles to Belt. Full $10 re-entry. CNOVA mints every cycle.
 
-**Contract constants to change:**
+**Architecture:**
 ```
-ACTIVE_WINDOW    = 2 (lightning) → 50 (mainnet)
-BELT_MAX         = 10 (lightning) → 500 (mainnet)  
-EPOCH_MEMBER_LIMIT = 5 → 1,000
-GENESIS_GATE_THRESHOLD = 2 → 25
-ELITE_GATE_THRESHOLD   = 1 → 15
-SPARK_GATE_THRESHOLD   = 1 → 5
-CW TRANCHE_A_MAX = 10 → 1,000
-CW MAX_FOUNDERS  = 20 → 2,000
+External member → BELT (queue, AW=50) → MATRIX (127-member BFS tree)
+                                                    ↓
+                              Chain pay flows UP BFS tree to ancestors
+                                                    ↓
+                              Matrix fills → position 1 cycles out
+                                                    ↓
+                         Back of BELT queue (fair, not priority)
+                                                    ↓
+                              Wait → re-enter MATRIX at next BFS slot
+                                                    ↓ (repeat forever)
+```
+
+**V6 Key Design Decisions:**
+- **Matrix size:** 127 members (7-level binary tree)
+- **Belt active window:** 50 (proportional)
+- **Re-entry cost:** FULL $10 (not 5%) — every cycle is a full economic event
+- **Each re-entry distributes:** $3 referrer + $4 chain pay + $1.50 treasury + $1 community + $0.50 dev/ops
+- **CNOVA mints on every cycle** (new join OR re-entry)
+- **Each tier has its own independent 127-member matrix + belt system**
+- **Re-entry goes to back of queue** (fair, no priority)
+
+**Earnings per cycle (127-member matrix, 1,000 community, 100/day):**
+- Matrix chain pay per stint: $62.69
+- Belt cycling per stint: $47.14
+- Referrer bonus: $3.00
+- Gross per cycle: $112.83
+- Re-entry cost: -$10.00
+- Net per cycle: $102.83 ✅ (self-sustaining at ALL scales)
+
+**CNOVA Epoch System (V6 update):**
+- Both triggers: 1,000 events (joins+re-entries) OR 30 days
+- EPOCH_MEMBER_LIMIT = 10,000 (adjusted from 1,000)
+- All 8 epochs + Final Frontier (epoch 9 = 1 CNOVA/event until 100M cap)
+- Epochs 1-8 distribute: 985,000 CNOVA total (0.98% of 100M)
+- Final Frontier: 99M+ CNOVA available at 1/event (takes 1,356 years at 200/day)
+- Floor price converges toward $1.50 in Final Frontier (treasury/$1.50 per CNOVA)
+
+**Multi-tier treasury injection (why CNOVA appreciates):**
+- T1 ($10): $1.50/event to treasury
+- T2 ($25): $3.75/event
+- T3 ($50): $7.50/event
+- T4 ($100): $15.00/event
+- T5 ($250): $37.50/event
+- T6 ($500): $75.00/event
+- T7 ($1,000): $150.00/event (100x more than T1)
+- All tiers active (1,000 each): $21M/yr treasury → floor $14.50 yr1 → $34.85 yr10
+
+**Sustainability proof:**
+- 100 members: net $55/cycle ✅
+- 1,000 members: net $103/cycle ✅
+- 50,000 members: net $3,367/cycle ✅
+- Self-sustaining at every scale, indefinitely
+
+**Pending design decisions:**
+- [ ] Early bird pricing: $10 (first 500) → $12.50 (501-1,500) → $15 (1,501+)
+- [ ] Community test parameters (1 cycle to upgrade, whale gate 1 per tier, CW epoch 30 min)
+- [ ] Pricing extra funds split (re-entry pool + community wallet)
+
+---
+
+## MAINNET CHECKLIST (applies to final version)
+
+**Contract constants:**
+```
+ACTIVE_WINDOW         = 50 (mainnet, vs 2 lightning / 5 engine)
+BELT_MAX              = 500 (mainnet, vs 10 lightning / 50 engine)
+EPOCH_MEMBER_LIMIT    = 10,000 (adjusted from 1,000)
+GENESIS_GATE_THRESHOLD = 25 (mainnet, vs 2 engine)
+ELITE_GATE_THRESHOLD  = 15 (mainnet, vs 1 engine)
+SPARK_GATE_THRESHOLD  = 5 (mainnet, vs 1 engine)
+CW TRANCHE_A_MAX      = 1,000 (mainnet, vs 10 test)
+CW MAX_FOUNDERS       = 2,000 (mainnet, vs 20 test)
+MATRIX_SIZE           = 127 (V6)
+REENTRY_COST          = FULL entry fee (V6, vs 5% V5)
+EPOCH_LIMIT           = 10,000 events per epoch
 ```
 
 **Infrastructure:**
-- [ ] Belt keeper bot running on production server
-- [ ] Paid RPC (Alchemy or Infura) — no more public endpoint rate limits
-- [ ] Subgraph or indexer for belt/queue data
+- [ ] Paid RPC (Alchemy/Infura) — public endpoint rate limits on testnet
+- [ ] Belt keeper bot running on production server (auto-deploys new belts)
+- [ ] Subgraph or indexer for belt/matrix/queue data at scale
 - [ ] Admin multisig for owner functions
-- [ ] Real USDC address (Base mainnet: `0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913`)
-- [ ] Emergency pause tested on all 7 tier matrices
+- [ ] Security audit of BeltManager, TierManager, Treasury, Matrix
+- [ ] Emergency pause tested on all contracts
 
-**Testing gates:**
-- [ ] V5 self test passed (2x) — lightning
-- [ ] V5 team test passed (5x) — lightning  
-- [ ] V5 self test passed (2x) — engine (W=5, $10)
-- [ ] V5 team test passed (5x) — engine
-- [ ] Community test on final version passed
-- [ ] Security review of BeltManager, TierManager, Treasury
-- [ ] All 106 unit tests passing on mainnet config
+**Testing gates before mainnet:**
+- [ ] V5 self test (2x lightning) complete
+- [ ] V5 team test (5x lightning) complete
+- [ ] V5 self test (2x engine $10) complete
+- [ ] V5 team test (5x engine) complete
+- [ ] V6 self test (2x lightning) complete
+- [ ] V6 team test (5x) complete
+- [ ] V6 community test complete
+- [ ] All unit tests passing on mainnet config
+- [ ] Security review complete
 
 ---
 
@@ -198,33 +234,4 @@ CW MAX_FOUNDERS  = 20 → 2,000
 
 ---
 
----
-
-## V5 SELF-TEST FINDINGS (Lightning Round 1)
-
-### Bugs to fix:
-1. **Home page** — only shows active belt stats, not an overview of all belts
-2. **Dashboard** — members in Belt B+ show no member ID (reads from Belt A only)
-3. **Register page** — upgrade feature not visible for members 11+ (Belt B+)
-4. **Matrix page** — displaying incorrect info for Belt B+ members
-
-### Community test parameter changes needed:
-1. **Cycle requirement** — 1 cycle to upgrade at ALL tiers (expedited)
-2. **Whale gate** — 1 member per tier to unlock (T5/T6/T7 all open at 1)
-3. **Community wallet** — epoch advances after 30 MINUTES (represents 30 days)
-
-### Business idea — Early Bird Pricing:
-- First 500 members (Belt A-B): **$10** — 33% early bird discount
-- Members 501-1,500 (Belt C-G): **$12.50** — 17% early bird discount  
-- Members 1,501+ (Belt H+): **$15** — standard price
-- Premium goes to: re-entry pool + community wallet
-- Incentive: join early = pay less, system more sustainable at scale
-
-### Additional bugs found:
-- Withdrawal error on first load → RPC rate limit (429), refresh fixes. **Mainnet requires paid RPC (Alchemy/Infura).**
-- Epoch 9 shows no name → added "Final Frontier" to epoch names array
-- Tier dropdown freezes UI → allowance check was blocking, fixed with 3s timeout + async
-- Belt overview only showing Belt A → flex wrap layout fixed, all belts now show as tiles
-- Direct referrals error → only scanned Belt A, now scans all belt matrices
-
-*Last updated: V5 self-test round 1 — all 7 bugs fixed*
+*Last updated: V5 self-test in progress | V6 design complete — pending build*
