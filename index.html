@@ -2497,8 +2497,9 @@ async function loadRedeemSection(){
     window._redeemFloorUsd=floorUsd;
     const approveBtn=document.getElementById('btn-redeem-approve');
     const redeemBtn=document.getElementById('btn-redeem');
-    if(approveBtn)approveBtn.disabled=BigInt(cw)===0n;
-    if(approveBtn)approveBtn.className='btn full-w '+(BigInt(cw)>0n?'btn-green':'btn-ghost');
+    if(approveBtn)approveBtn.disabled=true;
+    if(approveBtn)approveBtn.className='btn full-w btn-ghost';
+    if(redeemBtn)redeemBtn.disabled=true;
     updateRedeemPreview();
   }catch(e){console.warn('loadRedeemSection:',e.message);}
 }
