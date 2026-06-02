@@ -1593,6 +1593,20 @@ async function loadRegisterTab(){
   // Set button labels dynamically from TIER_FEES[1]
   if(approveBtn) approveBtn.innerHTML='Step 1: Approve $'+TIER_FEES[1]+' USDC 🔒';
   if(registerBtn) registerBtn.innerHTML='Step 2: Register ($'+TIER_FEES[1]+' USDC)';
+  // Auto-populate referrer field early so users see who their sponsor will be
+  const refInput=document.getElementById('input-referrer');
+  if(refInput && !refInput.value && userAddr){
+    // Check URL param first
+    const urlRef=new URLSearchParams(window.location.search).get('ref');
+    if(urlRef && ethers.isAddress(urlRef) && urlRef.toLowerCase()!==userAddr.toLowerCase()){
+      refInput.value=urlRef;
+    } else {
+      // Auto-assign from founding member pool (non-blocking)
+      getFallbackReferrer().then(fb=>{
+        if(fb&&fb!==ethers.ZeroAddress&&!refInput.value)refInput.value=fb;
+      }).catch(()=>{});
+    }
+  }
   if(!userAddr){walletWarn.style.display='block';alreadyEl.style.display='none';approveBtn.disabled=true;registerBtn.disabled=true;approveBtn.className=registerBtn.className='btn btn-ghost full-w';return;}
   walletWarn.style.display='none';
   try{
