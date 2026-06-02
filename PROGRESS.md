@@ -198,4 +198,26 @@ CW MAX_FOUNDERS  = 20 → 2,000
 
 ---
 
-*Last updated: Testing V5 Lightning — self test in progress*
+---
+
+## V5 SELF-TEST FINDINGS (Lightning Round 1)
+
+### Bugs to fix:
+1. **Home page** — only shows active belt stats, not an overview of all belts
+2. **Dashboard** — members in Belt B+ show no member ID (reads from Belt A only)
+3. **Register page** — upgrade feature not visible for members 11+ (Belt B+)
+4. **Matrix page** — displaying incorrect info for Belt B+ members
+
+### Community test parameter changes needed:
+1. **Cycle requirement** — 1 cycle to upgrade at ALL tiers (expedited)
+2. **Whale gate** — 1 member per tier to unlock (T5/T6/T7 all open at 1)
+3. **Community wallet** — epoch advances after 30 MINUTES (represents 30 days)
+
+### Business idea — Early Bird Pricing:
+- First 500 members (Belt A-B): **$10** — 33% early bird discount
+- Members 501-1,500 (Belt C-G): **$12.50** — 17% early bird discount  
+- Members 1,501+ (Belt H+): **$15** — standard price
+- Premium goes to: re-entry pool + community wallet
+- Incentive: join early = pay less, system more sustainable at scale
+
+*Last updated: V5 self-test round 1 complete — bugs logged, fixes in progress*
