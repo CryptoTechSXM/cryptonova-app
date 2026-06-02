@@ -55,7 +55,7 @@
     @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.4} }
 
     /* ── Tabs ───────────────────────────────── */
-    nav { background: var(--bg2); border-bottom: 1px solid var(--border); display: flex; gap: 0; padding: 0 24px; }
+    nav { background: var(--bg2); border-bottom: 1px solid var(--border); display: flex; gap: 0; padding: 0 24px; position: sticky; top: 65px; z-index: 99; }
     nav button { background: none; border: none; color: var(--text2); padding: 14px 20px; cursor: pointer; font-size: 14px; font-weight: 500; border-bottom: 2px solid transparent; transition: all .2s; }
     nav button:hover { color: var(--text); }
     nav button.active { color: var(--green); border-bottom-color: var(--green); }
@@ -342,7 +342,7 @@
       <h1>7-Tier Matrix System<br><span>on Base Chain</span></h1>
       <p>Join the CryptoNova 7-tier ladder. Start at Nova Seed ($10) and climb to SuperNova Spark ($1,000). Earn referral bonuses, 7-level chain pay, and CNOVA tokens — all backed by treasury USDC.</p>
       <div class="hero-actions">
-        <button class="btn-primary" onclick="showTab('register')">Join Now — $1 USDC</button>
+        <button class="btn-primary" onclick="showTab('register')">Join Now — $10 USDC</button>
         <button class="btn-outline" onclick="showTab('dashboard')">View Dashboard</button>
       </div>
       <div style="margin-top:20px">
@@ -495,7 +495,7 @@
       <div>
         <!-- Registration flow -->
         <div class="card" style="margin-bottom:20px">
-          <div style="font-size:15px;font-weight:700;margin-bottom:16px">Register — $1 USDC</div>
+          <div style="font-size:15px;font-weight:700;margin-bottom:16px">Register — $10 USDC</div>
 
           <div id="register-wallet-warn" style="display:none;background:rgba(245,158,11,.1);border:1px solid rgba(245,158,11,.3);border-radius:8px;padding:14px;font-size:14px;color:var(--yellow);margin-bottom:16px">
             ⚠️ Connect your wallet first to register.
@@ -525,11 +525,11 @@
 
           <!-- Step buttons -->
           <div style="display:flex;flex-direction:column;gap:10px">
-            <button class="btn btn-ghost full-w" id="btn-approve" onclick="approveUSDC()" disabled title="Approves exactly $1 USDC — the contract cannot take more than this amount">
-              Step 1: Approve $1 USDC 🔒
+            <button class="btn btn-ghost full-w" id="btn-approve" onclick="approveUSDC()" disabled title="Approves exactly $10 USDC — the contract cannot take more than this amount">
+              Step 1: Approve $10 USDC 🔒
             </button>
             <button class="btn btn-ghost full-w" id="btn-register" onclick="doRegister()" disabled>
-              Step 2: Register ($1 USDC)
+              Step 2: Register ($10 USDC)
             </button>
           </div>
 
@@ -770,18 +770,17 @@
 
       <!-- Chain pay breakdown -->
       <div class="card">
-        <div class="section-title"><div class="dot"></div> Chain Pay Structure — Your Node Depth</div>
-        <div style="font-size:13px;color:var(--text2);margin-bottom:16px">These amounts flow upward from each new member registration through your position.</div>
-        <div style="font-size:12px;color:var(--text3);margin-bottom:10px">80% of each level goes to your withdrawable earnings · 20% goes to treasury reserve</div>
+        <div class="section-title"><div class="dot"></div> V6 Payment Split — Your BFS Tree Depth</div>
+        <div style="font-size:13px;color:var(--text2);margin-bottom:16px">Every $10 entry or re-entry distributes to referrers, BFS tree ancestors, treasury and community.</div>
         <div id="chain-pay-table">
-          <div class="chain-row"><span style="color:var(--text2)">Level 1 (15% — position N-1)</span><span><span style="font-weight:600;color:var(--green)">$1.50</span> <span style="font-size:11px;color:var(--text3)">→ $1.20 earn / $0.30 treasury</span></span></div>
-          <div class="chain-row"><span style="color:var(--text2)">Level 2 (10% — position N-2)</span><span><span style="font-weight:600">$1.00</span> <span style="font-size:11px;color:var(--text3)">→ $0.80 earn / $0.20 treasury</span></span></div>
-          <div class="chain-row"><span style="color:var(--text2)">Level 3 (7% — position N-4)</span><span><span style="font-weight:600">$0.70</span> <span style="font-size:11px;color:var(--text3)">→ $0.56 earn / $0.14 treasury</span></span></div>
-          <div class="chain-row"><span style="color:var(--text2)">Level 4 (4% — position N-8)</span><span><span style="font-weight:600">$0.40</span> <span style="font-size:11px;color:var(--text3)">→ $0.32 earn / $0.08 treasury</span></span></div>
-          <div class="chain-row"><span style="color:var(--text2)">Level 5 (2% — position N-16)</span><span><span style="font-weight:600">$0.20</span> <span style="font-size:11px;color:var(--text3)">→ $0.16 earn / $0.04 treasury</span></span></div>
-          <div class="chain-row"><span style="color:var(--text2)">Level 6 (1% — position N-32)</span><span><span style="font-weight:600">$0.10</span> <span style="font-size:11px;color:var(--text3)">→ $0.08 earn / $0.02 treasury</span></span></div>
-          <div class="chain-row"><span style="color:var(--text2)">Level 7 (1% — position N-64)</span><span><span style="font-weight:600">$0.10</span> <span style="font-size:11px;color:var(--text3)">→ $0.08 earn / $0.02 treasury</span></span></div>
-          <div class="chain-row" style="border-top:1px solid var(--green2)"><span style="font-weight:700">Total chain pay per entry</span><span style="font-weight:700;color:var(--green)">$4.00 <span style="font-size:11px;color:var(--text3);font-weight:400">($3.20 earn / $0.80 treasury)</span></span></div>
+          <div class="chain-row"><span style="color:var(--text2)">L1 Direct Referrer (25%)</span><span><span style="font-weight:600;color:var(--green)">$2.50</span> <span style="font-size:11px;color:var(--text3)">your sponsor earns this every cycle</span></span></div>
+          <div class="chain-row"><span style="color:var(--text2)">L2 Override (3%)</span><span><span style="font-weight:600;color:var(--green)">$0.30</span> <span style="font-size:11px;color:var(--text3)">sponsor's sponsor earns this</span></span></div>
+          <div class="chain-row"><span style="color:var(--text2)">L3 Override (2%)</span><span><span style="font-weight:600">$0.20</span> <span style="font-size:11px;color:var(--text3)">L2's sponsor earns this</span></span></div>
+          <div class="chain-row"><span style="color:var(--text2)">BFS Tree Chain Pay (40%)</span><span><span style="font-weight:600;color:var(--blue)">$4.00</span> <span style="font-size:11px;color:var(--text3)">flows up 7 ancestor levels in your matrix tree</span></span></div>
+          <div class="chain-row"><span style="color:var(--text2)">Treasury Reserve (15%)</span><span><span style="font-weight:600">$1.50</span> <span style="font-size:11px;color:var(--text3)">backs CNOVA floor price — never leaves treasury</span></span></div>
+          <div class="chain-row"><span style="color:var(--text2)">Community Wallet (10%)</span><span><span style="font-weight:600">$1.00</span> <span style="font-size:11px;color:var(--text3)">Nova Original / Nova Pioneer epoch payouts</span></span></div>
+          <div class="chain-row"><span style="color:var(--text2)">Dev / Ops (5%)</span><span><span style="font-weight:600">$0.50</span> <span style="font-size:11px;color:var(--text3)">operations</span></span></div>
+          <div class="chain-row" style="border-top:1px solid var(--green2)"><span style="font-weight:700">Total per entry/re-entry</span><span style="font-weight:700;color:var(--green)">$10.00 <span style="font-size:11px;color:var(--text3);font-weight:400">100% accounted for every cycle</span></span></div>
         </div>
       </div>
     </div>
@@ -2485,62 +2484,4 @@ function toggleTheme(){const isLight=document.body.classList.toggle('light');loc
 
 <!-- MetaMask Install Modal -->
 <div id="metamask-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:1000;align-items:center;justify-content:center;padding:20px" onclick="if(event.target===this)closeMetaMaskModal()">
-  <div style="background:var(--bg2);border:1px solid var(--border);border-radius:16px;padding:32px 28px;max-width:420px;width:100%;text-align:center">
-    <div style="font-size:48px;margin-bottom:14px">🦊</div>
-    <div style="font-size:20px;font-weight:800;margin-bottom:10px">MetaMask Required</div>
-    <div style="color:var(--text2);font-size:14px;line-height:1.6;margin-bottom:20px">
-      CryptoNova needs MetaMask to connect your wallet, approve USDC, and sign transactions.<br><br>
-      <strong style="color:var(--text)">Live stats work without a wallet</strong> — MetaMask is only needed to register or withdraw.
-    </div>
-
-    <!-- Mobile section (shown on phones/tablets) -->
-    <div id="mm-mobile-section" style="display:none;margin-bottom:16px;background:rgba(59,130,246,.08);border:1px solid rgba(59,130,246,.3);border-radius:10px;padding:14px">
-      <div style="font-size:13px;font-weight:700;color:var(--blue);margin-bottom:8px">📱 On Mobile?</div>
-      <div style="font-size:12px;color:var(--text2);margin-bottom:12px">The easiest way is to open this site directly inside the MetaMask app's built-in browser.</div>
-      <a id="mm-deeplink" href="#" target="_blank" style="text-decoration:none;display:block">
-        <button class="btn full-w" style="background:var(--blue);color:#fff;font-size:14px;margin-bottom:0">Open in MetaMask Browser</button>
-      </a>
-    </div>
-
-    <div style="display:flex;flex-direction:column;gap:10px">
-      <a href="https://metamask.io/download/" target="_blank" style="text-decoration:none">
-        <button class="btn btn-green full-w" style="font-size:15px" id="mm-install-btn">Install MetaMask — Free</button>
-      </a>
-      <button class="btn btn-ghost full-w" onclick="closeMetaMaskModal()">Close</button>
-    </div>
-    <div style="margin-top:16px;font-size:12px;color:var(--text3)" id="mm-footer-hint">
-      After installing, refresh this page and click Connect Wallet.<br>Switch to <strong>Base Sepolia</strong> when prompted.
-    </div>
-  </div>
-</div>
-
-<!-- Manual Token Add Modal (shown when wallet_watchAsset fails on mobile) -->
-<div id="manual-token-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:1000;align-items:center;justify-content:center;padding:20px" onclick="if(event.target===this)closeManualTokenModal()">
-  <div style="background:var(--bg2);border:1px solid var(--border);border-radius:16px;padding:28px 24px;max-width:440px;width:100%;text-align:center">
-    <div style="font-size:36px;margin-bottom:10px">🪙</div>
-    <div style="font-size:18px;font-weight:800;margin-bottom:6px">Add Token Manually</div>
-    <div style="color:var(--text2);font-size:13px;margin-bottom:18px;line-height:1.6">
-      MetaMask couldn't auto-add this token. Copy the details below and import it manually — takes 30 seconds.
-    </div>
-    <div style="background:rgba(0,0,0,.2);border:1px solid var(--border);border-radius:10px;padding:14px;text-align:left;margin-bottom:14px">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
-        <span style="color:var(--text2);font-size:12px">Symbol</span>
-        <span id="manual-token-symbol" style="font-weight:800;color:var(--green)"></span>
-      </div>
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
-        <span style="color:var(--text2);font-size:12px">Decimals</span>
-        <span id="manual-token-decimals" style="font-weight:700"></span>
-      </div>
-      <div style="color:var(--text2);font-size:12px;margin-bottom:5px">Contract Address</div>
-      <div style="display:flex;gap:8px;align-items:stretch">
-        <div id="manual-token-address" style="font-family:monospace;font-size:10px;word-break:break-all;background:rgba(0,0,0,.3);border:1px solid var(--border);border-radius:6px;padding:8px;flex:1;line-height:1.5"></div>
-        <button onclick="copyManualTokenAddress()" id="manual-copy-btn" style="background:var(--green);color:#000;border:none;border-radius:6px;padding:0 12px;font-weight:800;font-size:12px;cursor:pointer;white-space:nowrap;align-self:stretch">Copy</button>
-      </div>
-    </div>
-    <div style="background:rgba(0,229,160,.06);border:1px solid rgba(0,229,160,.2);border-radius:10px;padding:12px;text-align:left;margin-bottom:18px">
-      <div style="font-size:12px;font-weight:800;color:var(--green);margin-bottom:8px">📱 How to import in MetaMask</div>
-      <div style="font-size:12px;color:var(--text2);line-height:1.9">
-        1. Open MetaMask &amp; make sure you're on <strong style="color:var(--text)">Base Sepolia</strong><br>
-        2. Tap the <strong style="color:var(--text)">Assets</strong> tab at the bottom<br>
-        3. Scroll down → tap <strong style="color:var(--text)">Import tokens</strong><br>
-        4. Select <strong style="color:var(--t                          
+  <div style="back
