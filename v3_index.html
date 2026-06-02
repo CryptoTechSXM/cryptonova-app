@@ -1088,22 +1088,22 @@
 const CHAIN_ID = 84532;
 const RPC_URL  = 'https://sepolia.base.org';
 
-// V6 LIGHTNING — matrix=7, belt_max=10, $10, 21M CNOVA
+// V6 LIGHTNING — matrix=7, belt_max=10, $10, 21M CNOVA (enterMatrix no try/catch)
 const ADDRESSES = {
   usdc:           '0x2D8B7b5eDec96bE441b6fb0D45D74a2BcE2C639a',
-  token:          '0x8848a4Ca1a06f8966799467e2d660734c76bB43A',
-  treasury:       '0x6D9b6A28aB20197D0202dDbB5B4e4223769629dF',
-  communityWallet:'0xaE4D7E8E8f78AcFC78A7c0F2C01E623e127715F6',
-  tierManager:    '0xa061280A4163b63da9e985244329470983b6fDD0',
-  beltManager:    '0x8E6178f31325ca63C4670704E0F75b159d772475',  // T1 BeltManagerV6
+  token:          '0xC16f4BD8Dd2294629650ebb74D075E977aD4552D',
+  treasury:       '0x0daf472d8C5986B5BCE4f1C4431A155b0e5B996A',
+  communityWallet:'0x79a2B158Ec7Eb10d34ebE908A3Fb89eDD5905D67',
+  tierManager:    '0xd07bce16bb7057a06267Dd7DA6C97740e2526C8B',
+  beltManager:    '0x77F0ccf74df364faF81178DFfA20fF7fa8395f36',  // T1 BeltManagerV6
   matrices: {
-    1:'0xb26d517D3F67FE100f8AafEe43ba5F5e3bDf8260',  // Belt A T1
-    2:'0x82517a5226082c5F722C68580e5a792B271eAdE7',  // Belt A T2
-    3:'0x3DbFf2b83f49c624Ed3f2BCC198C3a6aC16eeDca',  // Belt A T3
-    4:'0xf99e29e93c29Dea29Ccd19B1F3162dDe9A149a60',  // Belt A T4
-    5:'0xEfA27fFa24B36049dF4F56243153D669C228caFe',  // Belt A T5
-    6:'0xd46175d77dc1E703C46Bd58Ee5738dDA3EcEf2Fe',  // Belt A T6
-    7:'0xBec3dE6dfDc496956E8f06252A1002AC3ec846c2',  // Belt A T7
+    1:'0x5D868d1B5F7E10C7126FC21C9de331b0F77Ed8cd',  // Belt A T1
+    2:'0x213d72AeD367633c7B2F7Cdffba8b3d9586C1251',  // Belt A T2
+    3:'0xc4C51106DBA8714738272eBCEd23Cd86CA15D82A',  // Belt A T3
+    4:'0x813F3A2a5269afa04072cf857a12a2791B469703',  // Belt A T4
+    5:'0x85D8F007Fa8aCe5886eb4C7312FbB6670189c552',  // Belt A T5
+    6:'0x331deF241691A21D25373445A72b205642285450',  // Belt A T6
+    7:'0xD7759a03615856E9d87299feCFDC40444806c7c4',  // Belt A T7
   },
 };
 const TIER_NAMES={1:'Nova Seed',2:'Nova Rise',3:'Nova Star',4:'Nova Prime',5:'SuperNova Genesis',6:'SuperNova Elite',7:'SuperNova Spark'};
@@ -1116,10 +1116,12 @@ const MATRIX_ABI = [
   {"inputs":[{"internalType":"address","name":"","type":"address"}],"name":"members","outputs":[{"internalType":"uint256","name":"id","type":"uint256"},{"internalType":"address","name":"referrer","type":"address"},{"internalType":"address","name":"originalReferrer","type":"address"},{"internalType":"uint256","name":"joinedAt","type":"uint256"},{"internalType":"uint256","name":"withdrawable","type":"uint256"},{"internalType":"uint256","name":"totalEarned","type":"uint256"},{"internalType":"uint256","name":"reentryCount","type":"uint256"},{"internalType":"bool","name":"isRegistered","type":"bool"}],"stateMutability":"view","type":"function"},
   {"inputs":[{"internalType":"address","name":"","type":"address"}],"name":"cyclesCompleted","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},
   {"inputs":[{"internalType":"uint256","name":"","type":"uint256"}],"name":"memberById","outputs":[{"internalType":"address","name":"","type":"address"}],"stateMutability":"view","type":"function"},
+  {"inputs":[{"internalType":"uint256","name":"","type":"uint256"}],"name":"posToMember","outputs":[{"internalType":"address","name":"","type":"address"}],"stateMutability":"view","type":"function"},
   {"inputs":[],"name":"totalMembers","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},
   {"inputs":[],"name":"ENTRY_FEE","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},
   {"inputs":[],"name":"ACTIVE_WINDOW","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},
   {"inputs":[{"internalType":"address","name":"member","type":"address"}],"name":"positionOf","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},
+  {"inputs":[{"internalType":"address","name":"","type":"address"}],"name":"matrixPos","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},
   {"inputs":[{"internalType":"address","name":"member","type":"address"}],"name":"isActive","outputs":[{"internalType":"bool","name":"","type":"bool"}],"stateMutability":"view","type":"function"},
   {"inputs":[{"internalType":"address","name":"referrer","type":"address"}],"name":"register","outputs":[],"stateMutability":"nonpayable","type":"function"},
   {"inputs":[],"name":"withdraw","outputs":[],"stateMutability":"nonpayable","type":"function"},
@@ -1424,10 +1426,15 @@ async function loadFoundingMembers(){
     const t5=new ethers.Contract(ADDRESSES.matrices[5],MATRIX_ABI,readProvider);
     const n5=Number(await t5.totalMembers());
 
-    // Fetch first 25 T5 members
+    // Fetch first 25 T5 members — V6 uses posToMember, V3/V5 uses memberById
+    const getMemberAt = async (contract, i) => {
+      try { const a = await contract.posToMember(i); if(a && a !== ethers.ZeroAddress) return a; } catch(_){}
+      try { const a = await contract.memberById(i);  if(a && a !== ethers.ZeroAddress) return a; } catch(_){}
+      return null;
+    };
     const genesisPool=[];
     for(let i=1;i<=Math.min(n5,GENESIS_LOCK);i++){
-      try{const a=await t5.memberById(i);if(a&&a!==ethers.ZeroAddress&&!seen.has(a.toLowerCase())){seen.add(a.toLowerCase());genesisPool.push(a);}await delay(80);}catch(_){}
+      try{const a=await getMemberAt(t5,i);if(a&&!seen.has(a.toLowerCase())){seen.add(a.toLowerCase());genesisPool.push(a);}await delay(80);}catch(_){}
     }
 
     if(genesisPool.length>=GENESIS_LOCK){
@@ -1440,7 +1447,7 @@ async function loadFoundingMembers(){
       const n1=Number(await t1.totalMembers());
       const t1Pool=[];
       for(let i=1;i<=Math.min(n1,100);i++){
-        try{const a=await t1.memberById(i);if(a&&a!==ethers.ZeroAddress&&!seen.has(a.toLowerCase())){seen.add(a.toLowerCase());t1Pool.push(a);}await delay(80);}catch(_){}
+        try{const a=await getMemberAt(t1,i);if(a&&!seen.has(a.toLowerCase())){seen.add(a.toLowerCase());t1Pool.push(a);}await delay(80);}catch(_){}
       }
       foundingMembers=t1Pool.length>0?t1Pool:genesisPool;
       console.log('Referrer pool: T1 ROTATION ('+foundingMembers.length+' members, genesis='+genesisPool.length+'/'+GENESIS_LOCK+')');
