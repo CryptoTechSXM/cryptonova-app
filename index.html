@@ -2319,7 +2319,6 @@ async function loadBFSTree(focusPos){
     tEl.innerHTML=html;tEl.style.display='block';lEl.style.display='none';
   }catch(e){lEl.innerHTML='Error: '+(e.message||String(e));console.error('loadBFSTree:',e);}
 }
-}
 function setActiveMatrixBtn(id){
   ['btn-load-tree','btn-my-position','btn-my-directs','btn-bfs-tree'].forEach(b=>{const el=document.getElementById(b);if(el)el.classList.remove('matrix-active');});
   const a=document.getElementById(id);if(a)a.classList.add('matrix-active');
