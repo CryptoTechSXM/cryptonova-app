@@ -136,8 +136,8 @@
           <span class="info-key">USDC Approved</span>
           <span class="info-val" id="reg-approved">—</span>
         </div>
-        <button class="btn btn-ghost" id="btn-approve" onclick="approveUSDC()" disabled>Step 1: Approve $10 USDC 🔒</button>
-        <button class="btn btn-green" id="btn-register" onclick="doRegister()" disabled>Step 2: Register ($10 USDC)</button>
+        <button class="btn btn-green" id="btn-approve" onclick="approveUSDC()">Step 1: Approve $10 USDC 🔒</button>
+        <button class="btn btn-ghost" id="btn-register" onclick="doRegister()" disabled>Step 2: Register ($10 USDC)</button>
         <div id="reg-status" style="font-size:12px;color:var(--text3);margin-top:6px"></div>
       </div>
     </div>
@@ -295,6 +295,20 @@ async function loadAll() {
       const btnApprove = document.getElementById('btn-approve');
       const btnReg = document.getElementById('btn-register');
 
+      // Update approve/register button states
+      if (allowance >= ENTRY_FEE) {
+        btnApprove.disabled = true;
+        btnApprove.textContent = '✓ Approved';
+        btnApprove.className = 'btn btn-ghost';
+        btnReg.disabled = false;
+        btnReg.className = 'btn btn-green';
+      } else {
+        btnApprove.disabled = false;
+        btnApprove.className = 'btn btn-green';
+        btnReg.disabled = true;
+        btnReg.className = 'btn btn-ghost';
+      }
+
       if (mA.hasEverJoined || mB.hasEverJoined) {
         document.getElementById('reg-already').style.display = 'block';
         document.getElementById('reg-form').style.display = 'none';
@@ -321,13 +335,6 @@ async function loadAll() {
         // Figure-8 box highlights
         document.getElementById('boxA').className = 'matrix-box' + (inA ? ' you-here' : (occA > 0 ? ' active' : ''));
         document.getElementById('boxB').className = 'matrix-box' + (inB ? ' you-here' : (occB > 0 ? ' active' : ''));
-      } else {
-        btnApprove.disabled = allowance >= ENTRY_FEE;
-        btnReg.disabled = allowance < ENTRY_FEE;
-        if (allowance >= ENTRY_FEE) {
-          btnApprove.textContent = '✓ Approved';
-          btnApprove.className = 'btn btn-ghost';
-        }
       }
 
       // Auto-fill referrer from URL
