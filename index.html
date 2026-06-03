@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>CryptoNova — 7-Tier Matrix System (V3)</title>
+  <title>CryptoNova V6 — 7-Tier BFS Matrix | v6.crypto-nova.app</title>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/6.7.1/ethers.umd.min.js"></script>
   <style>
     :root {
@@ -1439,11 +1439,11 @@ async function loadConveyorBeltStats(){
         }catch(_){}
       }
       const userMx=new ethers.Contract(userMxAddr,MATRIX_ABI,readProvider);
-      const qpos=await userMx.positionOf(userAddr).catch(()=>0n);
+      const qpos=await userMx.matrixPos(userAddr).catch(()=>0n);
       const qNum=Number(qpos);
       let mObj=await userMx.getMember(userAddr).catch(()=>null);
       if(!mObj){ await new Promise(r=>setTimeout(r,500)); mObj=await userMx.getMember(userAddr).catch(()=>null); }
-      if(!mObj||!mObj.isRegistered){
+      if(!mObj||(!mObj.hasEverJoined&&!mObj.isRegistered)){
         myNextEl.textContent='Not in '+tierN;
         myNextEl.style.color='var(--text3)';
       } else if(qNum>0){
@@ -2070,7 +2070,7 @@ async function doWithdrawAll(){
     for(let t=1;t<=ct;t++){
       const mx=new ethers.Contract(ADDRESSES.matrices[t],MATRIX_ABI,readProvider);
       const m=await mx.getMember(userAddr);
-      if(m.isRegistered&&BigInt(m.withdrawable)>0n){
+      if((m.hasEverJoined||m.isRegistered)&&BigInt(m.withdrawable)>0n){
         setStatus('withdraw-status','⏳ Withdrawing Tier '+t+'…','var(--text2)');
         const mxW=new ethers.Contract(ADDRESSES.matrices[t],MATRIX_ABI,signer);
         await(await mxW.withdraw()).wait();w++;
@@ -2099,7 +2099,7 @@ async function fetchAllMembersV3(matrix,onProgress){
   const total=Number(await matrix.totalMembers());if(total===0)return[];
   const result=[];
   for(let i=1;i<=total;i++){
-    try{if(onProgress)onProgress(i,total);const addr=await matrix.memberById(i);const data=await matrix.members(addr);result.push({addr,data});await delay(80);}
+    try{if(onProgress)onProgress(i,total);const addr=await matrix.posToMember(i);if(!addr||addr===ethers.ZeroAddress){await delay(80);continue;}const data=await matrix.getMember(addr);result.push({addr,data});await delay(80);}
     catch(e){await delay(200);}
   }
   return result;
@@ -2515,7 +2515,7 @@ async function showUpgradeCardIfEligible(){
     const t1=new ethers.Contract(userT1Addr,MATRIX_ABI,readProvider);
     const tm=new ethers.Contract(ADDRESSES.tierManager,TIER_MANAGER_ABI,readProvider);
     const[member,currentTier,fastTrack,whaleCount]=await Promise.all([t1.getMember(userAddr),tm.memberTier(userAddr),tm.fastTrackEnabled(),tm.primeOrAboveCount()]);
-    if(!member.isRegistered){upgradeCard.style.display='none';return;}
+    if(!member.hasEverJoined&&!member.isRegistered){upgradeCard.style.display='none';return;}
     const ct=Number(currentTier)||1;
     if(ct>=7){upgradeCard.innerHTML='<div style="color:var(--green);font-weight:700">👑 Max tier reached — SuperNova Spark!</div>';upgradeCard.style.display='block';return;}
     // V4: auto-sync handled on-chain in upgradeTier() — no message needed
