@@ -184,6 +184,7 @@
         <div class="info-row"><span class="info-key">Cycles Completed</span><span class="info-val" id="dash-cycles">—</span></div>
         <div class="info-row"><span class="info-key">Referrer</span><span class="info-val" id="dash-referrer">—</span></div>
         <button class="btn btn-green" id="btn-withdraw" onclick="doWithdraw()" disabled style="margin-top:12px">Withdraw Earnings</button>
+        <button class="btn btn-ghost" id="btn-copy-ref" onclick="copyReferralLink()" style="margin-top:8px">🔗 Copy Referral Link</button>
         <div id="dash-status" style="font-size:12px;color:var(--text3);margin-top:6px"></div>
       </div>
     </div>
@@ -478,14 +479,35 @@ async function doWithdraw() {
   }
 }
 
-// ── REFERRAL LINK ─────────────────────────────────────────────────────
-document.addEventListener('DOMContentLoaded', () => {
+// ── REFERRAL LINK + AUTO-ASSIGN ──────────────────────────────────────
+document.addEventListener('DOMContentLoaded', async () => {
   const params = new URLSearchParams(window.location.search);
-  if (params.get('ref')) {
-    const refInput = document.getElementById('input-referrer');
-    if (refInput) refInput.value = params.get('ref');
+  const refInput = document.getElementById('input-referrer');
+  if (params.get('ref') && refInput) {
+    refInput.value = params.get('ref');
+  } else if (refInput) {
+    // Auto-assign: get first member from Matrix A as default referrer
+    try {
+      const rp = new ethers.JsonRpcProvider('https://sepolia.base.org');
+      const matA = new ethers.Contract(MATRIX_A_ADDR, F8_ABI, rp);
+      const firstMember = await matA.posToMember(1);
+      if (firstMember && firstMember !== ethers.ZeroAddress) {
+        refInput.value = firstMember;
+        refInput.style.color = 'var(--text3)';
+        refInput.title = 'Auto-assigned to founding member';
+      }
+    } catch(_) {}
   }
 });
+
+function copyReferralLink() {
+  if (!userAddr) return;
+  const link = window.location.origin + window.location.pathname + '?ref=' + userAddr;
+  navigator.clipboard.writeText(link).then(() => {
+    const btn = document.getElementById('btn-copy-ref');
+    if (btn) { btn.textContent = '✅ Copied!'; setTimeout(() => btn.textContent = '🔗 Copy Referral Link', 2000); }
+  });
+}
 </script>
 </body>
 </html>
