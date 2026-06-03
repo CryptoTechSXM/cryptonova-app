@@ -2630,6 +2630,7 @@ function setMaxRedeem(){
   const bal=parseFloat(balEl.textContent)||0;
   input.value=bal.toFixed(2);
   updateRedeemPreview();
+  toggleRedeemButtons(input.value);
   // Check approval
   checkCNOVAApproval();
 }
