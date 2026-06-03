@@ -124,6 +124,14 @@
       <div class="stat-label">My CNOVA Balance</div>
       <div class="stat-value" id="stat-cnova-bal" style="color:var(--yellow)">—</div>
     </div>
+    <div class="stat-card">
+      <div class="stat-label">CNOVA Total Supply</div>
+      <div class="stat-value" id="stat-supply">—</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Max Supply</div>
+      <div class="stat-value" style="color:var(--text2)">21,000,000</div>
+    </div>
   </div>
 
   <div class="grid-2">
@@ -286,13 +294,14 @@ async function loadAll() {
 
     const cnova = new ethers.Contract(CNOVA_ADDR, CNOVA_ABI, rp);
 
-    const [occA, occB, rotA, rotB, totalA, totalB, reserve, floor, minted] = await Promise.all([
+    const [occA, occB, rotA, rotB, totalA, totalB, reserve, floor, minted, supply] = await Promise.all([
       matA.occupancy(), matB.occupancy(),
       matA.rotationCount(), matB.rotationCount(),
       matA.totalMembers(), matB.totalMembers(),
       treas.usdcReserve(),
       treas.floorPrice().catch(()=>0n),
       cnova.totalMinted().catch(()=>0n),
+      cnova.totalSupply().catch(()=>0n),
     ]);
 
     // Header stats
@@ -301,6 +310,7 @@ async function loadAll() {
     document.getElementById('stat-treasury').textContent = u6(reserve);
     document.getElementById('stat-floor').textContent = floor > 0n ? '$' + (Number(floor)/1e6).toFixed(4) : '$0.00';
     document.getElementById('stat-minted').textContent = parseFloat(ethers.formatUnits(minted, 18)).toFixed(0) + ' CNOVA';
+    document.getElementById('stat-supply').textContent = parseFloat(ethers.formatUnits(supply, 18)).toLocaleString() + ' CNOVA';
 
     // My CNOVA balance
     if (userAddr) {
