@@ -2264,41 +2264,61 @@ async function loadMyDirects(){
 }
 
 
-async function loadBFSTree(){
+async function loadBFSTree(focusPos){
   const tEl=document.getElementById('matrix-tree'),lEl=document.getElementById('matrix-loading');
-  lEl.innerHTML='<span class="spinner"></span> Building BFS tree...';lEl.style.display='block';tEl.style.display='none';
+  lEl.innerHTML='<span class="spinner"></span> Loading tree...';lEl.style.display='block';tEl.style.display='none';
   try{
     const tier=getSelectedMatrixTier();
     const mxAddr=tier===1?await getUserT1Matrix(userAddr):ADDRESSES.matrices[tier];
     const mx=new ethers.Contract(mxAddr,MATRIX_ABI,readProvider);
-    const nodes=[];
+    const nodes={};
     for(let i=1;i<=7;i++){
-      try{const addr=await mx.posToMember(i);const m=addr&&addr!==ethers.ZeroAddress?await mx.getMember(addr):null;nodes.push({pos:i,addr:addr&&addr!==ethers.ZeroAddress?addr:null,m});}
-      catch(_){nodes.push({pos:i,addr:null,m:null});}
+      try{const addr=await mx.posToMember(i);if(addr&&addr!==ethers.ZeroAddress){const m=await mx.getMember(addr);nodes[i]={addr,m};}else{nodes[i]={addr:null,m:null};}}
+      catch(_){nodes[i]={addr:null,m:null};}
     }
     const isMe=a=>userAddr&&a&&a.toLowerCase()===userAddr.toLowerCase();
     const isDirect=a=>myDirectAddrs&&a&&myDirectAddrs.has(a.toLowerCase());
-    const col=a=>isMe(a)?'#00e5a0':isDirect(a)?'#f59e0b':a?'#3b82f6':'#1f2d47';
-    const lbl=a=>a?a.slice(0,6)+'...'+a.slice(-4):'Empty';
-    const pos={1:[300,44],2:[160,134],3:[440,134],4:[80,224],5:[240,224],6:[360,224],7:[520,224]};
-    const edges=[[1,2],[1,3],[2,4],[2,5],[3,6],[3,7]];
-    let s='<svg viewBox="0 0 600 280" style="width:100%;max-width:640px;margin:0 auto;display:block">';
-    edges.forEach(([p,c])=>{s+='<line x1="'+pos[p][0]+'" y1="'+pos[p][1]+'" x2="'+pos[c][0]+'" y2="'+pos[c][1]+'" stroke="#1f2d47" stroke-width="2"/>';});
-    nodes.forEach(({pos:p,addr,m})=>{
-      const [cx,cy]=pos[p];const c=col(addr);const earned=m&&BigInt(m.withdrawable)>0n?'$'+parseFloat(ethers.formatUnits(m.withdrawable,6)).toFixed(2):'';
-      s+='<circle cx="'+cx+'" cy="'+cy+'" r="28" fill="'+(addr?c:'#111827')+'" stroke="'+c+'" stroke-width="2" opacity="'+(addr?1:0.4)+'"/>';
-      s+='<text x="'+cx+'" y="'+(cy-8)+'" text-anchor="middle" font-size="9" fill="#e2e8f0" font-family="monospace">'+lbl(addr)+'</text>';
-      s+='<text x="'+cx+'" y="'+(cy+6)+'" text-anchor="middle" font-size="8" fill="#00e5a0">'+earned+'</text>';
-      s+='<text x="'+cx+'" y="'+(cy+18)+'" text-anchor="middle" font-size="8" fill="#64748b">P'+p+'</text>';
-    });
-    s+='</svg>';
-    s+='<div style="display:flex;gap:16px;justify-content:center;margin-top:12px;font-size:12px;color:#64748b">';
-    s+='<span><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#00e5a0;margin-right:4px"></span>You</span>';
-    s+='<span><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#f59e0b;margin-right:4px"></span>Your Direct</span>';
-    s+='<span><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#3b82f6;margin-right:4px"></span>Filled</span>';
-    s+='<span><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#1f2d47;margin-right:4px"></span>Empty</span></div>';
-    tEl.innerHTML=s;tEl.style.display='block';lEl.style.display='none';
+    const matLevel=p=>p===1?'Matrix L1':p<=3?'Matrix L2':'Matrix L3';
+    const refLabel=a=>{if(!a)return'';if(isMe(a))return'YOU';if(isDirect(a))return'My L1';return'Member';};
+    const shortA=a=>a?a.slice(0,6)+'...'+a.slice(-4):'Empty';
+    const earned=m=>m&&BigInt(m.withdrawable)>0n?'$'+parseFloat(ethers.formatUnits(m.withdrawable,6)).toFixed(2):'';
+    const buildCard=(pos,isCenter)=>{
+      const n=nodes[pos]||{addr:null,m:null};const a=n.addr;const m=n.m;
+      const me=isMe(a);const direct=isDirect(a);
+      const border=me?'#00e5a0':direct?'#f59e0b':a?'#3b82f6':'#1f2d47';
+      const bg=me?'rgba(0,229,160,0.15)':direct?'rgba(245,158,11,0.15)':a?'rgba(59,130,246,0.10)':'rgba(17,24,39,0.5)';
+      const rl=refLabel(a);const ml=matLevel(pos);const e=earned(m);
+      const hasKids=[pos*2,pos*2+1].some(c=>c<=7);
+      return '<div style="background:'+bg+';border:2px solid '+border+';border-radius:12px;padding:14px 16px;min-width:160px;text-align:center;cursor:pointer" onclick="loadBFSTree('+pos+')">'
+        +(me?'<div style="font-size:18px">&#11088;</div>':'')
+        +'<div style="font-size:13px;font-weight:700;color:#e2e8f0;margin-bottom:4px">'+(a?'Node '+pos:'Empty #'+pos)+'</div>'
+        +'<div style="font-size:11px;font-family:monospace;color:#94a3b8;margin-bottom:4px">'+shortA(a)+'</div>'
+        +(rl?'<div style="font-size:11px;color:'+border+';margin-bottom:2px">'+rl+' &middot; '+ml+'</div>':'')
+        +(e?'<div style="font-size:12px;color:#00e5a0;font-weight:600">'+e+'</div>':'')
+        +(hasKids&&!isCenter?'<div style="font-size:11px;color:#64748b;margin-top:6px">tap to explore &#9660;</div>':'')
+        +'</div>';
+    };
+    const fp=focusPos||1;const parent=Math.floor(fp/2);
+    const children=[fp*2,fp*2+1].filter(c=>c<=7);
+    let html='<div style="padding:16px">';
+    if(fp>1)html+='<div style="text-align:center;margin-bottom:16px"><button class="btn btn-ghost" style="font-size:12px" onclick="loadBFSTree('+parent+')">&#8593; Up to Node '+parent+'</button></div>';
+    html+='<div style="display:flex;justify-content:center;margin-bottom:24px">'+buildCard(fp,true)+'</div>';
+    if(children.length>0){
+      html+='<div style="display:flex;justify-content:center;gap:24px;margin-bottom:24px">';
+      children.forEach(c=>{html+=buildCard(c,false);});
+      html+='</div>';
+      const grand=children.flatMap(c=>[c*2,c*2+1]).filter(g=>g<=7);
+      if(grand.length>0){
+        html+='<div style="display:flex;justify-content:center;gap:16px;margin-bottom:24px">';
+        grand.forEach(g=>{html+='<div style="display:flex;flex-direction:column;align-items:center;gap:8px">'+buildCard(g,false)+'<button class="btn btn-ghost" style="font-size:11px;padding:4px 10px" onclick="loadBFSTree('+g+')">&#9660; expand</button></div>';});
+        html+='</div>';
+      }
+    }
+    html+='<div style="display:flex;gap:16px;justify-content:center;margin-top:8px;font-size:11px;color:#64748b;flex-wrap:wrap"><span style="color:#00e5a0">&#11088; You</span><span style="color:#f59e0b">&#9679; Your Direct</span><span style="color:#3b82f6">&#9679; Filled</span><span style="color:#1f2d47">&#9679; Empty</span></div>';
+    html+='</div>';
+    tEl.innerHTML=html;tEl.style.display='block';lEl.style.display='none';
   }catch(e){lEl.innerHTML='Error: '+(e.message||String(e));console.error('loadBFSTree:',e);}
+}
 }
 function setActiveMatrixBtn(id){
   ['btn-load-tree','btn-my-position','btn-my-directs','btn-bfs-tree'].forEach(b=>{const el=document.getElementById(b);if(el)el.classList.remove('matrix-active');});
