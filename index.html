@@ -1391,7 +1391,7 @@ async function loadConveyorBeltStats(){
     const mx=new ethers.Contract(mxAddr,MATRIX_ABI,readProvider);
     // Fetch AW FIRST so all calculations use correct window size
     let AW=2;  // lightning default, reads from contract
-    try{AW=Number(await mx.ACTIVE_WINDOW());}catch(_){AW=2;}
+    try{const bm2=new ethers.Contract(ADDRESSES.beltManager,BELT_MANAGER_ABI,readProvider);AW=Number(await bm2.BELT_MAX());}catch(_){AW=10;}
     let memRaw=0n;
     try{memRaw=await mx.totalMembers();}catch(_){
       await new Promise(r=>setTimeout(r,1000));
@@ -2081,6 +2081,18 @@ async function doWithdrawAll(){
   }catch(e){const msg=e.reason||e.message||'Unknown';setStatus('withdraw-status','❌ '+msg,'var(--red)');btn.innerHTML='Withdraw All to Wallet';btn.disabled=false;toast('Withdrawal failed','error');}
 }
 
+async function fetchAllMembersV6(matrix,onProgress){
+  const delay=ms=>new Promise(r=>setTimeout(r,ms));
+  const seen=new Set();const result=[];
+  try{
+    const events=await matrix.queryFilter(matrix.filters.MemberEnteredMatrix(),0,'latest');
+    const addrs=[...new Set(events.map(e=>e.args.member).filter(a=>a&&a!==ethers.ZeroAddress))];
+    for(let i=0;i<addrs.length;i++){
+      try{if(onProgress)onProgress(i+1,addrs.length);const addr=addrs[i];if(seen.has(addr.toLowerCase()))continue;seen.add(addr.toLowerCase());const data=await matrix.getMember(addr);result.push({addr,data});await delay(80);}catch(e){await delay(200);}
+    }
+  }catch(_){for(let i=1;i<=7;i++){try{const addr=await matrix.posToMember(i);if(!addr||addr===ethers.ZeroAddress||seen.has(addr.toLowerCase()))continue;seen.add(addr.toLowerCase());const data=await matrix.getMember(addr);result.push({addr,data});await delay(80);}catch(e){await delay(200);}}}
+  return result;
+}
 async function fetchAllMembersV3(matrix,onProgress){
   const delay=ms=>new Promise(r=>setTimeout(r,ms));
   const total=Number(await matrix.totalMembers());if(total===0)return[];
@@ -2136,7 +2148,7 @@ async function loadQueueView(){
     const tier=getSelectedMatrixTier();
     const mx=new ethers.Contract(ADDRESSES.matrices[tier],MATRIX_ABI,readProvider);
     let AW=2,total=0;  // default=2 for lightning, reads from contract
-    try{AW=Number(await mx.ACTIVE_WINDOW());}catch(_){AW=2;}
+    try{const bm2=new ethers.Contract(ADDRESSES.beltManager,BELT_MANAGER_ABI,readProvider);AW=Number(await bm2.BELT_MAX());}catch(_){AW=10;}
     try{total=Number(await mx.totalMembers());}catch(_){total=0;}
     let myAddr=userAddr;
     if(total===0){lEl.innerHTML='No members in Tier '+tier+' yet.';return;}
@@ -2146,17 +2158,17 @@ async function loadQueueView(){
     for(let i=1;i<=total;i++){
       let addr,m,cy,qpos=0n;
       try{
-        addr=await mx.memberById(i);await delay(120);
-        m=await mx.members(addr);await delay(120);
-        cy=await mx.cyclesCompleted(addr);await delay(120);
-        try{qpos=await mx.positionOf(addr);}catch(_){qpos=0n;}
+        addr=await mx.posToMember(i);await delay(120);
+        m=await mx.getMember(addr);await delay(120);
+        cy=await mx.getCyclesCompleted(addr);await delay(120);
+        try{qpos=await mx.matrixPos(addr);}catch(_){qpos=0n;}
         await delay(150);
       }catch(_){continue;}
       rows.push({addr,m,cy,qpos:Number(qpos)});
     }
     // Filter to only active window (positions 1-64) + sort by queue position
-    const active=rows.filter(r=>r.qpos>0&&r.qpos<=AW).sort((a,b)=>a.qpos-b.qpos);
-    const reentry=rows.filter(r=>r.qpos===0);
+    const active=rows.filter(r=>r.qpos>0&&r.qpos<=AW&&r.addr&&r.addr!==ethers.ZeroAddress).sort((a,b)=>a.qpos-b.qpos);
+    const reentry=rows.filter(r=>r.qpos===0&&r.addr&&r.addr!==ethers.ZeroAddress);
     const tierName=TIER_NAMES[tier]||('Tier '+tier);
     let html=`<div style="margin-bottom:10px;font-size:13px;color:var(--text3)">Showing <strong style="color:var(--text)">${active.length}</strong> active positions in ${tierName} · ${reentry.length} members in re-entry queue</div>`;
     html+=`<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:13px"><thead><tr style="border-bottom:2px solid var(--border);color:var(--text3);text-align:left"><th style="padding:8px 12px">Position</th><th style="padding:8px 12px">Address</th><th style="padding:8px 12px">Withdrawable</th><th style="padding:8px 12px">Total Earned</th><th style="padding:8px 12px">Cycles</th><th style="padding:8px 12px">Status</th></tr></thead><tbody>`;
@@ -2192,7 +2204,7 @@ async function loadMyTree(){
   const mxAddr = tier===1 ? await getUserT1Matrix(userAddr) : ADDRESSES.matrices[tier];
   const t1=new ethers.Contract(mxAddr,MATRIX_ABI,readProvider);
   try{
-    const m=await t1.getMember(userAddr);if(!m.isRegistered){toast('Not registered in Tier 1 yet','error');return;}
+    const m=await t1.getMember(userAddr);if(!m.hasEverJoined){toast('Not registered in Tier 1 yet','error');return;}
     await new Promise(r=>setTimeout(r,150));
     const cy=await t1.getCyclesCompleted(userAddr);
     document.getElementById('matrix-my-node-label').textContent='My Member ID';
@@ -2200,8 +2212,8 @@ async function loadMyTree(){
     const sub=document.getElementById('matrix-my-level-sub');sub.textContent='Cycles: '+cy.toString();sub.style.display='block';
     const ban=document.getElementById('matrix-pos-banner');ban.style.display='block';
     await new Promise(r=>setTimeout(r,150));
-    const queuePos = await t1.positionOf(userAddr).catch(()=>0n);
-      const aw4disp=await t1.ACTIVE_WINDOW().catch(()=>5n);
+    const queuePos = await t1.matrixPos(userAddr).catch(()=>0n);
+      const aw4disp=7n;
       const isActiveNow = Number(queuePos) > 0 && Number(queuePos) <= Number(aw4disp);
       const tierN=TIER_NAMES[tier]||('Tier '+tier);
       const posDisplay = Number(queuePos) > 0 ? 'Queue Position: #' + queuePos + ' of ' + aw4disp : 'Re-entering queue';
@@ -2235,12 +2247,12 @@ async function loadMyDirects(){
       loading.textContent=`Scanning Belt ${String.fromCharCode(65+bi)}…`;
       try{
         const mx=new ethers.Contract(allBeltAddrs[bi],MATRIX_ABI,readProvider);
-        const beltMembers=await fetchAllMembersV3(mx,(i,total)=>{loading.textContent=`Belt ${String.fromCharCode(65+bi)}: ${i}/${total}`;});
+        const beltMembers=await fetchAllMembersV6(mx,(i,total)=>{loading.textContent=`Belt ${String.fromCharCode(65+bi)}: ${i}/${total}`;});
         all=all.concat(beltMembers);
       }catch(_){}
       await new Promise(r=>setTimeout(r,300));
     }
-    const directs=all.filter(({data:m})=>m.referrer.toLowerCase()===userAddr.toLowerCase());
+    const directs=all.filter(({data:m})=>m&&m.referrer&&m.referrer!==ethers.ZeroAddress&&m.referrer.toLowerCase()===userAddr.toLowerCase());
     myDirectAddrs=new Set(directs.map(({addr})=>addr.toLowerCase()));
     loading.style.display='none';
     if(directs.length===0){empty.style.display='block';return;}
