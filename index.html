@@ -62,6 +62,7 @@
     @keyframes spin { to { transform: rotate(360deg); } }
     .section-gap { margin-bottom: 24px; }
     .grid-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 20px; }
+    @media(max-width:768px){ .grid-stats { grid-template-columns: repeat(2, 1fr); } }
     .stat-card { background: var(--bg2); border: 1px solid var(--border); border-radius: 10px; padding: 16px; }
   </style>
 </head>
@@ -110,6 +111,18 @@
     <div class="stat-card">
       <div class="stat-label">Treasury Reserve</div>
       <div class="stat-value" id="stat-treasury">—</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">CNOVA Floor Price</div>
+      <div class="stat-value green" id="stat-floor">—</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">CNOVA Minted</div>
+      <div class="stat-value" id="stat-minted">—</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">My CNOVA Balance</div>
+      <div class="stat-value" id="stat-cnova-bal" style="color:var(--yellow)">—</div>
     </div>
   </div>
 
@@ -211,6 +224,13 @@ const F8_ABI = [
 ];
 const TREASURY_ABI = [
   {"inputs":[],"name":"usdcReserve","outputs":[{"name":"","type":"uint256"}],"stateMutability":"view","type":"function"},
+  {"inputs":[],"name":"floorPrice","outputs":[{"name":"","type":"uint256"}],"stateMutability":"view","type":"function"},
+];
+const CNOVA_ADDR = "0xbA58EaA3FA977af833bAD472329df582034D0bA7";
+const CNOVA_ABI = [
+  {"inputs":[{"name":"account","type":"address"}],"name":"balanceOf","outputs":[{"name":"","type":"uint256"}],"stateMutability":"view","type":"function"},
+  {"inputs":[],"name":"totalMinted","outputs":[{"name":"","type":"uint256"}],"stateMutability":"view","type":"function"},
+  {"inputs":[],"name":"totalSupply","outputs":[{"name":"","type":"uint256"}],"stateMutability":"view","type":"function"},
 ];
 const USDC_ABI = [
   {"inputs":[{"name":"owner","type":"address"},{"name":"spender","type":"address"}],"name":"allowance","outputs":[{"name":"","type":"uint256"}],"stateMutability":"view","type":"function"},
@@ -264,17 +284,29 @@ async function loadAll() {
     const treas = new ethers.Contract(TREASURY_ADDR, TREASURY_ABI, rp);
     const usdc  = new ethers.Contract(USDC_ADDR, USDC_ABI, rp);
 
-    const [occA, occB, rotA, rotB, totalA, totalB, reserve] = await Promise.all([
+    const cnova = new ethers.Contract(CNOVA_ADDR, CNOVA_ABI, rp);
+
+    const [occA, occB, rotA, rotB, totalA, totalB, reserve, floor, minted] = await Promise.all([
       matA.occupancy(), matB.occupancy(),
       matA.rotationCount(), matB.rotationCount(),
       matA.totalMembers(), matB.totalMembers(),
       treas.usdcReserve(),
+      treas.floorPrice().catch(()=>0n),
+      cnova.totalMinted().catch(()=>0n),
     ]);
 
     // Header stats
     document.getElementById('stat-total').textContent = (Number(totalA) + Number(totalB)).toString();
     document.getElementById('stat-rotations').textContent = (Number(rotA) + Number(rotB)).toString();
     document.getElementById('stat-treasury').textContent = u6(reserve);
+    document.getElementById('stat-floor').textContent = floor > 0n ? '$' + (Number(floor)/1e6).toFixed(4) : '$0.00';
+    document.getElementById('stat-minted').textContent = parseFloat(ethers.formatUnits(minted, 18)).toFixed(0) + ' CNOVA';
+
+    // My CNOVA balance
+    if (userAddr) {
+      const cnovaBal = await cnova.balanceOf(userAddr).catch(()=>0n);
+      document.getElementById('stat-cnova-bal').textContent = parseFloat(ethers.formatUnits(cnovaBal, 18)).toFixed(2) + ' CNOVA';
+    }
 
     // Figure-8 boxes
     document.getElementById('boxA-occ').textContent = occA.toString();
