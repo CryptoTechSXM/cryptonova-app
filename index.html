@@ -2503,6 +2503,7 @@ async function loadRedeemSection(){
     window._redeemFloorUsd=floorUsd;
     const approveBtn=document.getElementById('btn-redeem-approve');
     const redeemBtn=document.getElementById('btn-redeem');
+    const redeemInput=document.getElementById('redeem-amount');if(redeemInput)redeemInput.value='';
     if(approveBtn)approveBtn.disabled=true;
     if(approveBtn)approveBtn.className='btn full-w btn-ghost';
     if(redeemBtn)redeemBtn.disabled=true;
