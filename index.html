@@ -1397,15 +1397,30 @@ async function loadConveyorBeltStats(){
     // V6: BFS matrix — MATRIX_SIZE slots, rotation fires when matrix is full and new member joins
     let MSIZE=7; // lightning default
     try{MSIZE=Number(await mx.MATRIX_SIZE());}catch(_){MSIZE=7;}
+    // V6: use BeltManager.totalMembers() for total across ALL belts
     let memRaw=0n;
-    try{memRaw=await mx.totalMembers();}catch(_){
-      await new Promise(r=>setTimeout(r,1000));
-      try{memRaw=await mx.totalMembers();}catch(e2){console.error('RPC error');return;}
-    }
+    try{
+      if(tier===1 && ADDRESSES.beltManager && ADDRESSES.beltManager.length>10){
+        const bmTotal=new ethers.Contract(ADDRESSES.beltManager,BELT_MANAGER_ABI,readProvider);
+        memRaw=await bmTotal.totalMembers();
+      } else {
+        memRaw=await mx.totalMembers();
+      }
+    }catch(_){memRaw=await mx.totalMembers().catch(()=>0n);}
     const mem=memRaw;
-    // V6: rotationCount is the real cycle counter on-chain
+    // V6: sum rotationCount across all belts for T1
     let cyclesDone=0;
-    try{cyclesDone=Number(await mx.rotationCount());}catch(_){cyclesDone=Math.max(0,Number(mem)-MSIZE);}
+    try{
+      if(tier===1 && ADDRESSES.beltManager && ADDRESSES.beltManager.length>10){
+        const bmScan=new ethers.Contract(ADDRESSES.beltManager,BELT_MANAGER_ABI,readProvider);
+        const totalBelts=Number(await bmScan.totalBelts());
+        for(let b=0;b<totalBelts;b++){
+          try{const [bAddr]=await bmScan.beltStatus(b);const bMx=new ethers.Contract(bAddr,MATRIX_ABI,readProvider);cyclesDone+=Number(await bMx.rotationCount().catch(()=>0n));}catch(_){}
+        }
+      } else {
+        cyclesDone=Number(await mx.rotationCount().catch(()=>0n));
+      }
+    }catch(_){cyclesDone=Math.max(0,Number(mem)-MSIZE);}
     // Next rotation: fires when the (MSIZE+1)th member joins the current matrix fill
     const occupancy=Number(await mx.occupancy().catch(()=>0n));
     const slotsLeft=MSIZE-occupancy;
@@ -1452,7 +1467,7 @@ async function loadConveyorBeltStats(){
       let mObj=await userMx.getMember(userAddr).catch(()=>null);
       if(!mObj){ await new Promise(r=>setTimeout(r,500)); mObj=await userMx.getMember(userAddr).catch(()=>null); }
       if(!mObj||(!mObj.hasEverJoined&&!mObj.isRegistered)){
-        myNextEl.textContent='Not in '+tierN;
+        myNextEl.textContent='Not yet in '+tierN;
         myNextEl.style.color='var(--text3)';
       } else if(qNum>0){
         // In matrix at position qNum — will cycle out when matrix fills and rotates
