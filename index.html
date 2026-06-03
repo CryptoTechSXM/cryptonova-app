@@ -1357,7 +1357,7 @@ function showTab(name){
   document.querySelectorAll('nav button')[idx].classList.add('active');
   if(name==='home'){loadHomeStats();loadConveyorBeltStats();}
   if(name==='dashboard')loadDashboard();
-  if(name==='matrix'){loadMatrixStats();if(userAddr)loadMyDirects();}
+  if(name==='matrix'){loadMatrixStats();}
   if(name==='register')loadRegisterTab();
 }
 
@@ -2262,8 +2262,9 @@ async function loadMyDirects(){
   }catch(e){loading.style.display='none';empty.textContent='Could not load: '+(e.shortMessage||e.message||String(e));empty.style.display='block';console.error(e);}
 }
 
+
 function setActiveMatrixBtn(id){
-  ['btn-load-tree','btn-my-position','btn-my-directs'].forEach(b=>{const el=document.getElementById(b);if(el)el.classList.remove('matrix-active');});
+  ['btn-load-tree','btn-my-position','btn-my-directs','btn-bfs-tree'].forEach(b=>{const el=document.getElementById(b);if(el)el.classList.remove('matrix-active');});
   const a=document.getElementById(id);if(a)a.classList.add('matrix-active');
   if(id!=='btn-my-position')hideMyPosBanner();
 }
