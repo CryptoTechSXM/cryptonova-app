@@ -192,13 +192,15 @@
       <div style="margin-top:16px;padding-top:16px;border-top:1px solid var(--border)">
         <div style="font-size:11px;color:var(--text3);margin-bottom:8px;text-transform:uppercase;letter-spacing:.8px">V7 Payment Splits — per $10 entry</div>
         <div class="split-bar" id="split-bar"></div>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;font-size:11px;margin-top:4px">
-          <span style="color:var(--green)">■ L1 Referrer 20% $2.00</span>
-          <span style="color:#60a5fa">■ Chain Pay 40% $4.00</span>
-          <span style="color:#f59e0b">■ Treasury 15% $1.50</span>
-          <span style="color:#ef4444">■ Escrow 10% $1.00</span>
-          <span style="color:#8b5cf6">■ Founders 5% $0.50</span>
-          <span style="color:var(--text3)">■ Dev/Ops/Protocol 10%</span>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:3px;font-size:11px;margin-top:6px">
+          <span style="color:var(--green)">■ L1 Referrer 20%  $2.00</span>
+          <span style="color:#60a5fa">■ Chain Pay 40%  $4.00</span>
+          <span style="color:#a3e635">■ L2 Override 3%  $0.30</span>
+          <span style="color:#f59e0b">■ Treasury 15%  $1.50</span>
+          <span style="color:#84cc16">■ L3 Override 2%  $0.20</span>
+          <span style="color:#ef4444">■ Escrow 10%  $1.00</span>
+          <span style="color:#8b5cf6">■ Founders 5%  $0.50</span>
+          <span style="color:var(--text3)">■ Dev+Ops+Protocol 5%  $0.50</span>
         </div>
       </div>
     </div>
@@ -370,39 +372,100 @@ function showMsg(id, msg, type='info') {
 }
 
 // ══════════════════════════════════════════════════════════════════════════
-// WALLET CONNECTION
+// WALLET DETECTION — MetaMask, Rabby, Coinbase, WalletConnect, in-app
 // ══════════════════════════════════════════════════════════════════════════
+function getWalletProvider() {
+  // Rabby injects window.rabby, MetaMask injects window.ethereum.isMetaMask
+  // Coinbase injects window.coinbaseWalletExtension
+  // In-app browsers (MetaMask mobile, Rabby mobile) inject window.ethereum
+  if (window.ethereum) return window.ethereum;
+  return null;
+}
+
+function getWalletName() {
+  if (!window.ethereum) return 'Unknown';
+  if (window.ethereum.isRabby)     return 'Rabby';
+  if (window.ethereum.isCoinbaseWallet) return 'Coinbase';
+  if (window.ethereum.isMetaMask)  return 'MetaMask';
+  return 'Wallet';
+}
+
+function friendlyError(e) {
+  const msg = e.reason || e.shortMessage || e.message || '';
+  if (msg.includes('NONCE_TOO_LOW') || msg.includes('nonce'))
+    return '⚠️ Nonce conflict — MetaMask has stuck transactions. Fix: MetaMask → Settings → Advanced → Clear activity and nonce data. Then try again.';
+  if (msg.includes('user rejected') || msg.includes('User denied'))
+    return 'Transaction rejected.';
+  if (msg.includes('insufficient funds'))
+    return '❌ Insufficient ETH for gas. Get Base Sepolia ETH from a faucet.';
+  if (msg.includes('already in matrix') || msg.includes('already known'))
+    return '❌ This wallet is already registered.';
+  if (msg.includes('partner not set'))
+    return '❌ Contract not fully configured. Contact support.';
+  return '❌ ' + msg.slice(0, 180);
+}
+
 async function connectWallet() {
-  if (!window.ethereum) { alert('Install MetaMask to continue'); return; }
+  const walletProvider = getWalletProvider();
+  if (!walletProvider) {
+    alert('No wallet detected.\n\nDesktop: Install MetaMask or Rabby\nMobile: Use MetaMask or Rabby in-app browser');
+    return;
+  }
   try {
-    provider = new ethers.BrowserProvider(window.ethereum);
+    provider = new ethers.BrowserProvider(walletProvider);
     await provider.send('eth_requestAccounts', []);
     signer   = await provider.getSigner();
     userAddr = await signer.getAddress();
     rp       = new ethers.JsonRpcProvider('https://sepolia.base.org');
 
-    // Switch network if needed
+    // Switch to Base Sepolia if needed
     const chain = Number((await provider.getNetwork()).chainId);
     if (chain !== BASE_SEPOLIA) {
       try {
-        await window.ethereum.request({
+        await walletProvider.request({
           method: 'wallet_switchEthereumChain',
           params: [{ chainId: '0x'+BASE_SEPOLIA.toString(16) }]
         });
-      } catch(e) { alert('Please switch to Base Sepolia testnet'); return; }
+      } catch(switchErr) {
+        // If chain doesn't exist, add it
+        if (switchErr.code === 4902) {
+          await walletProvider.request({
+            method: 'wallet_addEthereumChain',
+            params: [{
+              chainId: '0x'+BASE_SEPOLIA.toString(16),
+              chainName: 'Base Sepolia',
+              nativeCurrency: { name: 'ETH', symbol: 'ETH', decimals: 18 },
+              rpcUrls: ['https://sepolia.base.org'],
+              blockExplorerUrls: ['https://sepolia.basescan.org'],
+            }]
+          });
+        } else {
+          alert('Please switch to Base Sepolia testnet'); return;
+        }
+      }
     }
 
+    const walletName = getWalletName();
     const btn = $('btn-connect');
-    btn.textContent = short(userAddr);
+    btn.textContent = short(userAddr) + ' (' + walletName + ')';
     btn.className = 'connected';
 
     $('dash-empty').style.display = 'none';
     $('dash-content').style.display = 'block';
 
+    // Save connection for auto-reconnect
+    localStorage.setItem('cn_connected', '1');
+
     await loadAll();
     setInterval(loadAll, 15000);
+
+    // Listen for account/chain changes
+    walletProvider.on('accountsChanged', accs => { if (accs.length) location.reload(); });
+    walletProvider.on('chainChanged', () => location.reload());
+
   } catch(e) {
     console.error('connect:', e.message);
+    if (!e.message?.includes('rejected')) alert('Could not connect wallet: ' + e.message);
   }
 }
 
@@ -691,7 +754,7 @@ async function approveUSDC() {
   } catch(e) {
     btn.disabled = false;
     btn.textContent = 'Step 1: Approve $10 USDC 🔒';
-    showMsg('reg-msg', '❌ ' + (e.reason || e.shortMessage || e.message), 'err');
+    showMsg('reg-msg', friendlyError(e), 'err');
   }
 }
 
@@ -717,7 +780,7 @@ async function doRegister() {
   } catch(e) {
     btn.disabled = false;
     btn.textContent = 'Step 2: Join Figure-8 ($10)';
-    showMsg('reg-msg', '❌ ' + (e.reason || e.shortMessage || e.message), 'err');
+    showMsg('reg-msg', friendlyError(e), 'err');
   }
 }
 
@@ -777,13 +840,16 @@ function copyRef() {
 // ══════════════════════════════════════════════════════════════════════════
 (function renderSplits() {
   const segs = [
-    { pct:20, color:'var(--green)',  label:'L1 20%' },
-    { pct:5,  color:'#a3e635',      label:'L2+L3 5%' },
-    { pct:40, color:'#3b82f6',      label:'Chain 40%' },
-    { pct:15, color:'var(--yellow)',label:'Treasury 15%' },
-    { pct:10, color:'var(--red)',   label:'Escrow 10%' },
-    { pct:5,  color:'var(--purple)',label:'Founders 5%' },
-    { pct:5,  color:'var(--text3)', label:'Dev/Ops 5%' },
+    { pct:20, color:'var(--green)',  label:'L1 Referrer 20% $2.00' },
+    { pct:3,  color:'#a3e635',      label:'L2 Override 3% $0.30' },
+    { pct:2,  color:'#84cc16',      label:'L3 Override 2% $0.20' },
+    { pct:40, color:'#3b82f6',      label:'Chain Pay 40% $4.00' },
+    { pct:15, color:'var(--yellow)',label:'Treasury 15% $1.50' },
+    { pct:10, color:'var(--red)',   label:'Follow Me Escrow 10% $1.00' },
+    { pct:5,  color:'var(--purple)',label:'Founder Pool 5% $0.50' },
+    { pct:2,  color:'#64748b',      label:'Dev 2% $0.20' },
+    { pct:2,  color:'#475569',      label:'Ops 2% $0.20' },
+    { pct:1,  color:'#334155',      label:'Protocol 1% $0.10' },
   ];
   const bar = $('split-bar');
   if (!bar) return;
@@ -799,6 +865,17 @@ window.addEventListener('DOMContentLoaded', async () => {
   try {
     rp = new ethers.JsonRpcProvider('https://sepolia.base.org');
     await loadAll();
+
+    // Auto-reconnect if previously connected
+    const wasConnected = localStorage.getItem('cn_connected');
+    if (wasConnected && getWalletProvider()) {
+      try {
+        const accounts = await getWalletProvider().request({ method: 'eth_accounts' });
+        if (accounts.length > 0) {
+          await connectWallet();
+        }
+      } catch(_) {}
+    }
 
     // Auto-fill referrer from URL
     const urlRef = new URLSearchParams(window.location.search).get('ref');
