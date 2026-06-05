@@ -193,12 +193,13 @@
         <div style="font-size:11px;color:var(--text3);margin-bottom:8px;text-transform:uppercase;letter-spacing:.8px">V7 Payment Splits — per $10 entry</div>
         <div class="split-bar" id="split-bar"></div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:3px;font-size:11px;margin-top:6px">
-          <span style="color:var(--green)">■ L1 Referrer 20%  $2.00</span>
+          <span style="color:var(--green)">■ L1 Referrer 15%  $1.50</span>
           <span style="color:#60a5fa">■ Chain Pay 40%  $4.00</span>
           <span style="color:#a3e635">■ L2 Override 3%  $0.30</span>
-          <span style="color:#f59e0b">■ Treasury 15%  $1.50</span>
+          <span style="color:#f59e0b">■ Treasury 10%  $1.00</span>
           <span style="color:#84cc16">■ L3 Override 2%  $0.20</span>
-          <span style="color:#ef4444">■ Escrow 10%  $1.00</span>
+          <span style="color:#ef4444">■ Escrow 15%  $1.50</span>
+          <span style="color:#06b6d4">■ Secondary 5%  $0.50</span>
           <span style="color:#8b5cf6">■ Founders 5%  $0.50</span>
           <span style="color:var(--text3)">■ Dev+Ops+Protocol 5%  $0.50</span>
         </div>
@@ -287,14 +288,14 @@
 // ══════════════════════════════════════════════════════════════════════════
 const ADDRS = {
   USDC:           "0x2D8B7b5eDec96bE441b6fb0D45D74a2BcE2C639a",
-  CNOVAToken:     "0xC37f5b4A1DE5A9eCE64961C77118caFB1D458ac7",
-  CNOVATreasury:  "0x98aB5FEA74540f1d2Ea78BEAA26080884E036a6e",
-  MatrixA:        "0xdf2e5a56972be4497698f6cb6125817f64EFa4F2",
-  MatrixB:        "0x7599cd501343E19B3e0AbF026899174F570a37Ff",
-  MatrixC:        null,  // Pair 2 not deployed yet — deploys automatically at 80%
+  CNOVAToken:     "0x1CAf876CE0110C5A0538e27B6E978A67cA3ff125",
+  CNOVATreasury:  "0x20601F339d2c0f4E40F59b1737AA82F2EC295c4d",
+  MatrixA:        "0x00A85F188BAFdD173d36E8336Da25D9b76dA347e",
+  MatrixB:        "0x82baeb52F9af12503F527C2Ad50375d18b8696bF",
+  MatrixC:        null,  // Pair 2 — deploys automatically at 80% capacity
   MatrixD:        null,
-  PairManager:    "0xa49575662961CD473663cB0155BE87aAAC881fd4",
-  CNOVAGovernance:"0xc3156BD6cDaE0C5EdE915D7CdCE3Adbe78f5a3E0",
+  PairManager:    "0xAfd734f005c0269FEC7F54910C9122BeaBe7AaBf",
+  CNOVAGovernance:"0x34040B8e14d37081DB7334a37E801823Ca955715",
 };
 const ENTRY_FEE   = 10_000_000n;
 const BASE_SEPOLIA = 84532;
@@ -318,7 +319,7 @@ const F8_ABI = [
   "function posToMember(uint256) external view returns (address)",
   "function occupancy() external view returns (uint256)",
   "function rotationCount() external view returns (uint256)",
-  "function totalMembers() external view returns (uint256)",
+  "function totalJoined() external view returns (uint256)",
   "function MATRIX_SIZE() external view returns (uint256)",
   "function ENTRY_FEE() external view returns (uint256)",
   "function escrowOf(address) external view returns (uint256)",
@@ -524,7 +525,7 @@ async function loadAll() {
         for (let i = 0; i < Number(pairCount); i++) {
           const mA2 = new ethers.Contract(status[0][i], F8_ABI, r);
           const mB2 = new ethers.Contract(status[1][i], F8_ABI, r);
-          const [tA, tB] = await Promise.all([mA2.totalMembers(), mB2.totalMembers()]);
+          const [tA, tB] = await Promise.all([mA2.totalJoined(), mB2.totalJoined()]);
           totalM += tA + tB;
         }
         setText('s-total', totalM.toString());
@@ -840,12 +841,13 @@ function copyRef() {
 // ══════════════════════════════════════════════════════════════════════════
 (function renderSplits() {
   const segs = [
-    { pct:20, color:'var(--green)',  label:'L1 Referrer 20% $2.00' },
+    { pct:15, color:'var(--green)',  label:'L1 Referrer 15% $1.50' },
     { pct:3,  color:'#a3e635',      label:'L2 Override 3% $0.30' },
     { pct:2,  color:'#84cc16',      label:'L3 Override 2% $0.20' },
     { pct:40, color:'#3b82f6',      label:'Chain Pay 40% $4.00' },
-    { pct:15, color:'var(--yellow)',label:'Treasury 15% $1.50' },
-    { pct:10, color:'var(--red)',   label:'Follow Me Escrow 10% $1.00' },
+    { pct:10, color:'var(--yellow)',label:'Treasury 10% $1.00' },
+    { pct:15, color:'var(--red)',   label:'Follow Me Escrow 15% $1.50' },
+    { pct:5,  color:'#06b6d4',     label:'Secondary Sponsor 5% $0.50' },
     { pct:5,  color:'var(--purple)',label:'Founder Pool 5% $0.50' },
     { pct:2,  color:'#64748b',      label:'Dev 2% $0.20' },
     { pct:2,  color:'#475569',      label:'Ops 2% $0.20' },

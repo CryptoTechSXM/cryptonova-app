@@ -1,0 +1,602 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CryptoNova V7 — Live Monitor</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/6.7.0/ethers.umd.min.js"></script>
+<style>
+  :root {
+    --bg: #0d0f14;
+    --panel: #151820;
+    --border: #252a35;
+    --accent: #4f9eff;
+    --green: #3ecf8e;
+    --red: #ff5c5c;
+    --yellow: #f5c542;
+    --muted: #5a6070;
+    --text: #cdd6f4;
+    --subtext: #8892a4;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: 'Courier New', monospace; font-size: 13px; min-height: 100vh; }
+
+  header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 14px 20px; border-bottom: 1px solid var(--border);
+    background: var(--panel);
+  }
+  header h1 { font-size: 15px; color: var(--accent); letter-spacing: 1px; }
+  .badge { background: #1a2a4a; color: var(--accent); padding: 3px 8px; border-radius: 4px; font-size: 11px; margin-left: 10px; }
+  .badge.green { background: #0d2a1f; color: var(--green); }
+  .badge.red   { background: #2a0d0d; color: var(--red); }
+
+  .controls { display: flex; align-items: center; gap: 10px; }
+  .countdown { color: var(--muted); font-size: 12px; }
+  button {
+    background: #1e2535; border: 1px solid var(--border); color: var(--text);
+    padding: 5px 12px; border-radius: 5px; cursor: pointer; font-size: 12px;
+    font-family: inherit; transition: background 0.15s;
+  }
+  button:hover { background: #2a3245; }
+  button.primary { background: #1a3560; border-color: var(--accent); color: var(--accent); }
+  button.primary:hover { background: #1f4070; }
+
+  main { padding: 16px 20px; display: grid; gap: 14px; max-width: 1200px; }
+
+  .panel {
+    background: var(--panel); border: 1px solid var(--border); border-radius: 8px; overflow: hidden;
+  }
+  .panel-header {
+    padding: 9px 14px; border-bottom: 1px solid var(--border);
+    font-size: 11px; letter-spacing: 1.5px; color: var(--subtext); text-transform: uppercase;
+  }
+  .panel-body { padding: 12px 14px; }
+
+  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  .grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 14px; }
+
+  /* Matrix bar */
+  .matrix-row { margin-bottom: 10px; }
+  .matrix-row:last-child { margin-bottom: 0; }
+  .matrix-label { display: flex; justify-content: space-between; margin-bottom: 4px; }
+  .matrix-label .name { color: var(--accent); }
+  .matrix-label .stats { color: var(--subtext); font-size: 12px; }
+  .bar-track { height: 8px; background: #1e2535; border-radius: 4px; overflow: hidden; }
+  .bar-fill  { height: 100%; background: var(--accent); border-radius: 4px; transition: width 0.6s ease; }
+
+  /* Stat cards */
+  .stat { padding: 10px 14px; }
+  .stat .label { color: var(--subtext); font-size: 11px; letter-spacing: 1px; text-transform: uppercase; margin-bottom: 4px; }
+  .stat .value { color: var(--text); font-size: 18px; font-weight: bold; }
+  .stat .sub   { color: var(--muted); font-size: 11px; margin-top: 2px; }
+
+  /* Wallet monitor */
+  .add-wallet-row { display: flex; gap: 8px; margin-bottom: 12px; }
+  .add-wallet-row input {
+    flex: 1; background: #1a1e2a; border: 1px solid var(--border); color: var(--text);
+    padding: 6px 10px; border-radius: 5px; font-family: inherit; font-size: 12px;
+    outline: none;
+  }
+  .add-wallet-row input:focus { border-color: var(--accent); }
+
+  table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  th { color: var(--subtext); text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--border); font-weight: normal; letter-spacing: 1px; text-transform: uppercase; font-size: 10px; }
+  td { padding: 7px 8px; border-bottom: 1px solid #1a1e2a; vertical-align: middle; }
+  tr:last-child td { border-bottom: none; }
+  tr:hover td { background: #1a1e2a; }
+
+  .pill {
+    display: inline-block; padding: 2px 7px; border-radius: 10px; font-size: 10px; font-weight: bold;
+  }
+  .pill.A    { background: #1a3560; color: var(--accent); }
+  .pill.B    { background: #1a2a40; color: #7eb8ff; }
+  .pill.none { background: #1e2535; color: var(--muted); }
+  .pill.ok   { background: #0d2a1f; color: var(--green); }
+  .pill.warn { background: #2a1a00; color: var(--yellow); }
+  .pill.err  { background: #2a0d0d; color: var(--red); }
+
+  .remove-btn { color: var(--red); cursor: pointer; opacity: 0.5; padding: 0 4px; }
+  .remove-btn:hover { opacity: 1; }
+
+  /* Event log */
+  .log { max-height: 180px; overflow-y: auto; }
+  .log-entry { padding: 5px 0; border-bottom: 1px solid #1a1e2a; font-size: 11px; color: var(--subtext); }
+  .log-entry:last-child { border-bottom: none; }
+  .log-entry .time { color: var(--muted); margin-right: 8px; }
+  .log-entry .ev   { color: var(--green); margin-right: 6px; }
+  .log-entry .addr { color: var(--accent); }
+
+  .status-dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; margin-right: 5px; }
+  .dot-green { background: var(--green); box-shadow: 0 0 6px var(--green); }
+  .dot-red   { background: var(--red); }
+  .dot-pulse { animation: pulse 1.5s ease-in-out infinite; }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
+
+  .empty-state { text-align: center; padding: 20px; color: var(--muted); }
+  .mono { font-family: 'Courier New', monospace; }
+
+  #status-bar {
+    position: fixed; bottom: 0; left: 0; right: 0;
+    background: var(--panel); border-top: 1px solid var(--border);
+    padding: 5px 20px; font-size: 11px; color: var(--muted);
+    display: flex; justify-content: space-between;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div style="display:flex;align-items:center;gap:8px">
+    <h1>⬡ CRYPTONOVA V7</h1>
+    <span class="badge">Base Sepolia</span>
+    <span class="badge">MATRIX_SIZE: 127</span>
+    <span id="conn-badge" class="badge red">Connecting…</span>
+  </div>
+  <div class="controls">
+    <span class="countdown" id="countdown">Refresh in —</span>
+    <button onclick="refresh()" class="primary">↺ Refresh Now</button>
+  </div>
+</header>
+
+<main>
+  <!-- Matrix status -->
+  <div class="panel">
+    <div class="panel-header">Matrix Status</div>
+    <div class="panel-body" id="matrix-status">
+      <div class="empty-state">Loading…</div>
+    </div>
+  </div>
+
+  <!-- Stats row -->
+  <div class="grid-3">
+    <div class="panel">
+      <div class="panel-header">Treasury &amp; Floor</div>
+      <div class="panel-body" style="display:flex;gap:0">
+        <div class="stat" style="flex:1">
+          <div class="label">USDC Reserve</div>
+          <div class="value" id="stat-treasury">—</div>
+          <div class="sub" id="stat-floor">Floor: —</div>
+        </div>
+        <div class="stat" style="flex:1;border-left:1px solid var(--border)">
+          <div class="label">Escrow Held (A+B)</div>
+          <div class="value" id="stat-escrow">—</div>
+          <div class="sub" id="stat-health">—</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-header">CNOVA Token</div>
+      <div class="panel-body" style="display:flex;gap:0">
+        <div class="stat" style="flex:1">
+          <div class="label">Total Supply</div>
+          <div class="value" id="stat-supply">—</div>
+          <div class="sub" id="stat-epoch">Epoch —/9</div>
+        </div>
+        <div class="stat" style="flex:1;border-left:1px solid var(--border)">
+          <div class="label">Minted Total</div>
+          <div class="value" id="stat-minted">—</div>
+          <div class="sub" id="stat-universe">Universe: —</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-header">Splits (per $10 entry)</div>
+      <div class="panel-body" style="font-size:11px;line-height:1.8;color:var(--subtext)">
+        <span style="color:var(--text)">L1 Ref</span> 15% $1.50 &nbsp;·&nbsp;
+        <span style="color:var(--text)">Chain</span> 40% $4.00<br>
+        <span style="color:var(--text)">Escrow</span> 15% $1.50 &nbsp;·&nbsp;
+        <span style="color:var(--text)">Treasury</span> 10% $1.00<br>
+        <span style="color:var(--text)">Secondary</span> 5% $0.50 &nbsp;·&nbsp;
+        <span style="color:var(--text)">Founders</span> 5% $0.50<br>
+        <span style="color:var(--text)">Dev+Ops</span> 4% $0.40 &nbsp;·&nbsp;
+        <span style="color:var(--text)">Protocol</span> 1% $0.10<br>
+        <span style="color:var(--green)">L2</span> 3% $0.30 &nbsp;·&nbsp;
+        <span style="color:var(--green)">L3</span> 2% $0.20
+      </div>
+    </div>
+  </div>
+
+  <!-- Wallet monitor -->
+  <div class="panel">
+    <div class="panel-header">Wallet Monitor</div>
+    <div class="panel-body">
+      <div class="add-wallet-row">
+        <input id="wallet-input" type="text" placeholder="0x… paste address to monitor" maxlength="42"
+               onkeydown="if(event.key==='Enter') addWallet()" />
+        <button onclick="addWallet()" class="primary">+ Add Wallet</button>
+        <button onclick="addPreset()">+ Add W1</button>
+      </div>
+      <div id="wallet-table-wrap">
+        <div class="empty-state">No wallets added yet. Paste an address above to start monitoring.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Event log -->
+  <div class="panel">
+    <div class="panel-header">Event Log (last 25)</div>
+    <div class="panel-body">
+      <div class="log" id="event-log">
+        <div class="empty-state">Waiting for events…</div>
+      </div>
+    </div>
+  </div>
+</main>
+
+<div id="status-bar">
+  <span id="status-left">Initializing…</span>
+  <span id="status-right">Block: —</span>
+</div>
+
+<script>
+// ── Contract addresses (Base Sepolia — deployed 2026-06-05) ──────────────────
+const ADDRS = {
+  USDC:      "0x2D8B7b5eDec96bE441b6fb0D45D74a2BcE2C639a",
+  CNOVA:     "0x1CAf876CE0110C5A0538e27B6E978A67cA3ff125",
+  TREASURY:  "0x20601F339d2c0f4E40F59b1737AA82F2EC295c4d",
+  MATRIX_A:  "0x00A85F188BAFdD173d36E8336Da25D9b76dA347e",
+  MATRIX_B:  "0x82baeb52F9af12503F527C2Ad50375d18b8696bF",
+  PAIR_MGR:  "0xAfd734f005c0269FEC7F54910C9122BeaBe7AaBf",
+};
+const W1 = "0x6512e9B5FE1690F2570AFEE5E7b904EF106C9435";
+const RPC = "https://sepolia.base.org";
+const REFRESH_SEC = 20;
+
+// ── ABIs (minimal) ────────────────────────────────────────────────────────────
+const F8_ABI = [
+  "function MATRIX_SIZE() view returns (uint256)",
+  "function ENTRY_FEE() view returns (uint256)",
+  "function occupancy() view returns (uint256)",
+  "function totalJoined() view returns (uint256)",
+  "function rotationCount() view returns (uint256)",
+  "function totalEscrowHeld() view returns (uint256)",
+  "function joinCountSinceRotation() view returns (uint256)",
+  "function getMember(address) view returns (uint256 id, address referrer, address l2, address l3, uint256 joinedAt, uint256 withdrawable, uint256 totalEarned, uint256 cyclesCompleted, bool isInMatrix, bool hasEverJoined)",
+  "function escrowOf(address) view returns (uint256)",
+  "function matrixPos(address) view returns (uint256)",
+  "function posToMember(uint256) view returns (address)",
+  "function poolHealthSnapshot() view returns (uint256 escrowRouted, uint256 foundersRouted, uint256 escrowPct, string healthState)",
+  "event MemberEnteredMatrix(address indexed member, uint256 position, uint256 memberId)",
+  "event MemberCycledOut(address indexed member, uint256 cyclesCompleted)",
+  "event EscrowCredited(address indexed to, uint256 amount, uint256 newBalance)",
+  "event CrossingCompleted(address indexed member, address indexed destination)"
+];
+const CNOVA_ABI = [
+  "function totalSupply() view returns (uint256)",
+  "function totalMinted() view returns (uint256)",
+  "function currentEpochNumber() view returns (uint256)"
+];
+const TREASURY_ABI = [
+  "function usdcReserve() view returns (uint256)",
+  "function floorPrice() view returns (uint256)",
+  "function isUniverseMode() view returns (bool)"
+];
+
+// ── State ─────────────────────────────────────────────────────────────────────
+let provider, matA, matB, cnova, treasury;
+let wallets = JSON.parse(localStorage.getItem("monitored_wallets") || "[]");
+let events  = [];
+let countdownVal = REFRESH_SEC;
+let countdownTimer, refreshTimer;
+let connected = false;
+
+// ── Init ──────────────────────────────────────────────────────────────────────
+async function init() {
+  try {
+    provider = new ethers.JsonRpcProvider(RPC);
+    matA     = new ethers.Contract(ADDRS.MATRIX_A, F8_ABI, provider);
+    matB     = new ethers.Contract(ADDRS.MATRIX_B, F8_ABI, provider);
+    cnova    = new ethers.Contract(ADDRS.CNOVA, CNOVA_ABI, provider);
+    treasury = new ethers.Contract(ADDRS.TREASURY, TREASURY_ABI, provider);
+
+    // Subscribe to events
+    subscribeEvents();
+
+    connected = true;
+    document.getElementById("conn-badge").textContent = "Connected";
+    document.getElementById("conn-badge").className = "badge green";
+
+    await refresh();
+    startCountdown();
+  } catch(e) {
+    document.getElementById("conn-badge").textContent = "Error";
+    document.getElementById("status-left").textContent = "Connection failed: " + e.message;
+  }
+}
+
+function subscribeEvents() {
+  const addEvent = (label, addr, args) => {
+    const now = new Date().toLocaleTimeString();
+    const short = addr ? addr.slice(0,6)+"…"+addr.slice(-4) : "";
+    events.unshift({ time: now, label, addr: short, args });
+    if (events.length > 25) events.pop();
+    renderEventLog();
+  };
+
+  matA.on("MemberEnteredMatrix", (member, pos, id) =>
+    addEvent("Entered Matrix A", member, `pos ${pos}  id ${id}`));
+  matA.on("MemberCycledOut", (member, cycles) =>
+    addEvent("Cycled out of A", member, `cycles: ${cycles}`));
+  matA.on("CrossingCompleted", (member, dest) =>
+    addEvent("Crossed A→B", member, dest.slice(0,10)+"…"));
+  matA.on("EscrowCredited", (to, amt) =>
+    addEvent("Escrow +$" + (Number(amt)/1e6).toFixed(2), to, ""));
+
+  matB.on("MemberEnteredMatrix", (member, pos, id) =>
+    addEvent("Entered Matrix B", member, `pos ${pos}`));
+  matB.on("MemberCycledOut", (member, cycles) =>
+    addEvent("Cycled out of B", member, `cycles: ${cycles}`));
+  matB.on("CrossingCompleted", (member, dest) =>
+    addEvent("Crossed B→A", member, ""));
+}
+
+// ── Refresh ───────────────────────────────────────────────────────────────────
+async function refresh() {
+  if (!connected) return;
+  document.getElementById("status-left").textContent = "Refreshing…";
+
+  try {
+    const block = await provider.getBlockNumber();
+    document.getElementById("status-right").textContent = `Block: ${block.toLocaleString()}`;
+
+    await Promise.all([
+      refreshMatrices(),
+      refreshStats(),
+      refreshWallets()
+    ]);
+
+    document.getElementById("status-left").textContent =
+      `Last updated: ${new Date().toLocaleTimeString()}`;
+  } catch(e) {
+    document.getElementById("status-left").textContent = "Refresh error: " + e.message;
+  }
+}
+
+async function refreshMatrices() {
+  const [occA, totA, rotA, escA] = await Promise.all([
+    matA.occupancy(), matA.totalJoined(), matA.rotationCount(), matA.totalEscrowHeld()
+  ]);
+  const [occB, totB, rotB, escB] = await Promise.all([
+    matB.occupancy(), matB.totalJoined(), matB.rotationCount(), matB.totalEscrowHeld()
+  ]);
+  const mSize = 127;
+  const pctA = Math.round(Number(occA) * 100 / mSize);
+  const pctB = Math.round(Number(occB) * 100 / mSize);
+
+  document.getElementById("matrix-status").innerHTML = `
+    <div class="matrix-row">
+      <div class="matrix-label">
+        <span class="name">Matrix A</span>
+        <span class="stats">${occA}/${mSize} occupied &nbsp;·&nbsp; ${totA} total joined &nbsp;·&nbsp; ${rotA} rotations &nbsp;·&nbsp; escrow: $${(Number(escA)/1e6).toFixed(2)}</span>
+      </div>
+      <div class="bar-track"><div class="bar-fill" style="width:${pctA}%"></div></div>
+    </div>
+    <div class="matrix-row">
+      <div class="matrix-label">
+        <span class="name" style="color:#7eb8ff">Matrix B</span>
+        <span class="stats">${occB}/${mSize} occupied &nbsp;·&nbsp; ${totB} total joined &nbsp;·&nbsp; ${rotB} rotations &nbsp;·&nbsp; escrow: $${(Number(escB)/1e6).toFixed(2)}</span>
+      </div>
+      <div class="bar-track"><div class="bar-fill" style="width:${pctB}%;background:#7eb8ff"></div></div>
+    </div>
+    <div style="margin-top:8px;color:var(--subtext);font-size:11px">
+      Combined: ${Number(occA)+Number(occB)}/${mSize*2} &nbsp;·&nbsp;
+      Total across A+B: ${Number(totA)+Number(totB)} joined &nbsp;·&nbsp;
+      Total escrow: $${((Number(escA)+Number(escB))/1e6).toFixed(2)}
+    </div>`;
+
+  // Update escrow stat
+  document.getElementById("stat-escrow").textContent =
+    "$" + ((Number(escA)+Number(escB))/1e6).toFixed(4);
+  try {
+    const h = await matA.poolHealthSnapshot();
+    document.getElementById("stat-health").textContent =
+      `Orphan routing: ${h.healthState}  (escrow ${h.escrowPct}%)`;
+  } catch(_) {}
+}
+
+async function refreshStats() {
+  const [reserve, floor, univMode] = await Promise.all([
+    treasury.usdcReserve(), treasury.floorPrice(), treasury.isUniverseMode()
+  ]);
+  const [supply, minted, epoch] = await Promise.all([
+    cnova.totalSupply(), cnova.totalMinted(), cnova.currentEpochNumber()
+  ]);
+
+  document.getElementById("stat-treasury").textContent =
+    "$" + (Number(reserve)/1e6).toFixed(4);
+  document.getElementById("stat-floor").textContent =
+    "Floor: $" + (Number(floor)/1e6).toFixed(6) + "/CNOVA";
+
+  document.getElementById("stat-supply").textContent =
+    parseFloat(ethers.formatEther(supply)).toFixed(2) + " CNOVA";
+  document.getElementById("stat-minted").textContent =
+    parseFloat(ethers.formatEther(minted)).toFixed(2) + " CNOVA";
+  document.getElementById("stat-epoch").textContent =
+    `Epoch ${epoch}/9${epoch == 9 ? " ← Final Frontier" : ""}`;
+  document.getElementById("stat-universe").textContent =
+    univMode ? "✅ Universe Mode" : "⏳ Locked (need 500)";
+}
+
+async function refreshWallets() {
+  if (wallets.length === 0) return;
+  const rows = await Promise.all(wallets.map(addr => fetchWallet(addr)));
+  renderWalletTable(rows);
+}
+
+async function fetchWallet(addr) {
+  try {
+    const [mA_data, mB_data, escA, escB, posA, posB] = await Promise.all([
+      matA.getMember(addr),
+      matB.getMember(addr),
+      matA.escrowOf(addr),
+      matB.escrowOf(addr),
+      matA.matrixPos(addr),
+      matB.matrixPos(addr),
+    ]);
+
+    const inA = mA_data.isInMatrix;
+    const inB = mB_data.isInMatrix;
+    const matrix = inA ? "A" : inB ? "B" : "—";
+    const pos    = inA ? Number(posA) : inB ? Number(posB) : 0;
+    const data   = inA ? mA_data : mB_data;
+    const esc    = inA ? escA : escB;
+    const entryFee = 10_000_000n;
+    const canCross = (BigInt(esc) + BigInt(data.withdrawable)) >= entryFee;
+
+    return {
+      addr, matrix, pos, ok: true,
+      withdrawable: Number(data.withdrawable) / 1e6,
+      escrow:       Number(esc) / 1e6,
+      totalEarned:  Number(data.totalEarned) / 1e6,
+      cycles:       Number(data.cyclesCompleted),
+      hasEverJoined: data.hasEverJoined,
+      canCross
+    };
+  } catch(e) {
+    return { addr, ok: false, error: e.message };
+  }
+}
+
+// ── Render ────────────────────────────────────────────────────────────────────
+function renderWalletTable(rows) {
+  if (rows.length === 0) return;
+  const wrap = document.getElementById("wallet-table-wrap");
+  wrap.innerHTML = `
+    <table>
+      <thead>
+        <tr>
+          <th>Address</th>
+          <th>Matrix</th>
+          <th>Pos</th>
+          <th>Withdrawable</th>
+          <th>Escrow</th>
+          <th>Total Earned</th>
+          <th>Cycles</th>
+          <th>Self-Cross</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        ${rows.map(r => renderWalletRow(r)).join("")}
+      </tbody>
+    </table>`;
+}
+
+function renderWalletRow(r) {
+  const short = r.addr.slice(0,6) + "…" + r.addr.slice(-4);
+  const isW1  = r.addr.toLowerCase() === W1.toLowerCase();
+  const tag   = isW1 ? ' <span style="color:var(--yellow);font-size:10px">W1</span>' : "";
+
+  if (!r.ok) return `
+    <tr>
+      <td class="mono">${short}${tag}</td>
+      <td colspan="7" style="color:var(--red)">Error: ${r.error}</td>
+      <td><span class="remove-btn" onclick="removeWallet('${r.addr}')">✕</span></td>
+    </tr>`;
+
+  const matPill = r.matrix !== "—"
+    ? `<span class="pill ${r.matrix}">Matrix ${r.matrix}</span>`
+    : (r.hasEverJoined
+        ? `<span class="pill none">Cycled out</span>`
+        : `<span class="pill none">Not joined</span>`);
+
+  const crossPill = r.matrix !== "—"
+    ? (r.canCross
+        ? `<span class="pill ok">✓ Ready</span>`
+        : `<span class="pill warn">Need $${(10 - r.withdrawable - r.escrow).toFixed(2)} more</span>`)
+    : `<span class="pill none">—</span>`;
+
+  return `
+    <tr>
+      <td class="mono">${short}${tag}</td>
+      <td>${matPill}</td>
+      <td style="color:var(--accent)">${r.pos > 0 ? "#" + r.pos : "—"}</td>
+      <td style="color:var(--green)">$${r.withdrawable.toFixed(4)}</td>
+      <td style="color:var(--accent)">$${r.escrow.toFixed(4)}</td>
+      <td style="color:var(--subtext)">$${r.totalEarned.toFixed(4)}</td>
+      <td style="color:var(--subtext)">${r.cycles}</td>
+      <td>${crossPill}</td>
+      <td><span class="remove-btn" onclick="removeWallet('${r.addr}')">✕</span></td>
+    </tr>`;
+}
+
+function renderEventLog() {
+  const el = document.getElementById("event-log");
+  if (events.length === 0) {
+    el.innerHTML = `<div class="empty-state">Waiting for events…</div>`;
+    return;
+  }
+  el.innerHTML = events.map(e => `
+    <div class="log-entry">
+      <span class="time">${e.time}</span>
+      <span class="ev">${e.label}</span>
+      ${e.addr ? `<span class="addr">${e.addr}</span>` : ""}
+      ${e.args ? `<span style="color:var(--muted)">${e.args}</span>` : ""}
+    </div>`).join("");
+}
+
+// ── Wallet management ─────────────────────────────────────────────────────────
+function addWallet() {
+  const input = document.getElementById("wallet-input");
+  const addr  = input.value.trim();
+  if (!ethers.isAddress(addr)) {
+    input.style.borderColor = "var(--red)";
+    setTimeout(() => input.style.borderColor = "", 1000);
+    return;
+  }
+  const norm = ethers.getAddress(addr);
+  if (!wallets.includes(norm)) {
+    wallets.push(norm);
+    saveWallets();
+    refresh();
+  }
+  input.value = "";
+}
+
+function addPreset() {
+  const norm = ethers.getAddress(W1);
+  if (!wallets.includes(norm)) {
+    wallets.push(norm);
+    saveWallets();
+    refresh();
+  }
+}
+
+function removeWallet(addr) {
+  wallets = wallets.filter(w => w.toLowerCase() !== addr.toLowerCase());
+  saveWallets();
+  if (wallets.length === 0) {
+    document.getElementById("wallet-table-wrap").innerHTML =
+      `<div class="empty-state">No wallets added yet. Paste an address above to start monitoring.</div>`;
+  } else {
+    refresh();
+  }
+}
+
+function saveWallets() {
+  localStorage.setItem("monitored_wallets", JSON.stringify(wallets));
+}
+
+// ── Countdown ─────────────────────────────────────────────────────────────────
+function startCountdown() {
+  countdownVal = REFRESH_SEC;
+  clearInterval(countdownTimer);
+  countdownTimer = setInterval(() => {
+    countdownVal--;
+    document.getElementById("countdown").textContent =
+      `Refresh in ${countdownVal}s`;
+    if (countdownVal <= 0) {
+      refresh();
+      countdownVal = REFRESH_SEC;
+    }
+  }, 1000);
+}
+
+// Kick off
+init();
+</script>
+</body>
+</html>
