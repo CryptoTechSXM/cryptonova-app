@@ -7,507 +7,817 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/6.7.1/ethers.umd.min.js"></script>
   <style>
     :root {
-      --bg: #0a0e1a; --bg2: #111827; --bg3: #1a2236;
-      --border: #1f2d47; --green: #00e5a0; --green2: #00b37d;
-      --green-dim: rgba(0,229,160,0.12); --blue: #3b82f6;
-      --yellow: #f59e0b; --red: #ef4444;
-      --text: #e2e8f0; --text2: #94a3b8; --text3: #64748b;
+      --bg:#0a0e1a; --bg2:#111827; --bg3:#1a2236; --bg4:#0f1729;
+      --border:#1f2d47; --green:#00e5a0; --green2:#00b37d;
+      --green-dim:rgba(0,229,160,.12); --blue:#3b82f6; --blue-dim:rgba(59,130,246,.12);
+      --yellow:#f59e0b; --red:#ef4444; --purple:#8b5cf6;
+      --text:#e2e8f0; --text2:#94a3b8; --text3:#64748b;
     }
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-    body { background: var(--bg); color: var(--text); font-family: 'Segoe UI', system-ui, sans-serif; min-height: 100vh; }
-    header { background: var(--bg2); border-bottom: 1px solid var(--border); padding: 14px 24px; display: flex; align-items: center; justify-content: space-between; position: sticky; top: 0; z-index: 100; }
-    .logo { display: flex; align-items: center; gap: 10px; }
-    .logo img { width: 34px; height: 34px; border-radius: 8px; }
-    .logo-text { font-size: 18px; font-weight: 700; }
-    .logo-text span { color: var(--green); }
-    .badge { font-size: 10px; background: rgba(59,130,246,.2); color: var(--blue); border: 1px solid rgba(59,130,246,.4); border-radius: 4px; padding: 2px 8px; margin-left: 8px; }
-    #btn-connect { background: var(--green); color: #000; border: none; border-radius: 8px; padding: 8px 18px; font-weight: 700; font-size: 14px; cursor: pointer; }
-    #btn-connect.connected { background: var(--bg3); color: var(--green); border: 1px solid var(--green2); }
-    main { max-width: 1100px; margin: 0 auto; padding: 32px 24px; }
-    .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
-    @media(max-width:768px){ .grid-2 { grid-template-columns: 1fr; } }
-    .card { background: var(--bg2); border: 1px solid var(--border); border-radius: 12px; padding: 24px; }
-    .card-title { font-size: 16px; font-weight: 700; margin-bottom: 16px; display: flex; align-items: center; gap: 8px; }
-    .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--green); display: inline-block; }
-    .stat-label { font-size: 11px; color: var(--text3); text-transform: uppercase; letter-spacing: .8px; margin-bottom: 4px; }
-    .stat-value { font-size: 22px; font-weight: 700; }
-    .stat-value.green { color: var(--green); }
-    .stat-value.blue { color: var(--blue); }
-    .info-row { display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-bottom: 1px solid var(--border); font-size: 13px; }
-    .info-row:last-child { border-bottom: none; }
-    .info-key { color: var(--text2); }
-    .info-val { font-weight: 600; }
-    .btn { border: none; border-radius: 8px; padding: 10px 20px; font-weight: 700; font-size: 14px; cursor: pointer; width: 100%; margin-top: 8px; transition: opacity .2s; }
-    .btn:hover { opacity: .85; }
-    .btn:disabled { opacity: .4; cursor: not-allowed; }
-    .btn-green { background: var(--green); color: #000; }
-    .btn-ghost { background: var(--bg3); color: var(--text2); border: 1px solid var(--border); }
-    input { width: 100%; background: var(--bg3); border: 1px solid var(--border); border-radius: 8px; padding: 10px 14px; color: var(--text); font-size: 13px; outline: none; margin-bottom: 8px; }
-    input:focus { border-color: var(--green); }
-    .status-msg { font-size: 12px; padding: 8px 12px; border-radius: 6px; margin-top: 8px; }
-    .status-ok { background: rgba(0,229,160,.1); color: var(--green); border: 1px solid rgba(0,229,160,.3); }
-    .status-err { background: rgba(239,68,68,.1); color: var(--red); border: 1px solid rgba(239,68,68,.3); }
-    .status-info { background: rgba(59,130,246,.1); color: var(--blue); border: 1px solid rgba(59,130,246,.3); }
-    .matrix-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; margin-top: 12px; }
-    .matrix-node { background: var(--bg3); border: 1px solid var(--border); border-radius: 6px; padding: 6px 4px; text-align: center; font-size: 10px; }
-    .matrix-node.filled { border-color: var(--blue); background: rgba(59,130,246,.1); }
-    .matrix-node.you { border-color: var(--green); background: rgba(0,229,160,.15); }
-    .matrix-node.root { border-color: var(--yellow); background: rgba(245,158,11,.1); }
-    .figure8 { display: flex; align-items: center; justify-content: center; gap: 20px; padding: 16px; background: var(--bg3); border-radius: 10px; margin-bottom: 20px; border: 1px solid var(--border); }
-    .matrix-box { text-align: center; padding: 12px 20px; border-radius: 8px; border: 2px solid var(--border); min-width: 120px; }
-    .matrix-box.active { border-color: var(--green); background: var(--green-dim); }
-    .matrix-box.you-here { border-color: var(--yellow); background: rgba(245,158,11,.1); }
-    .arrow { font-size: 24px; color: var(--text3); }
-    .spinner { display: inline-block; width: 14px; height: 14px; border: 2px solid currentColor; border-top-color: transparent; border-radius: 50%; animation: spin .7s linear infinite; vertical-align: middle; margin-right: 6px; }
-    @keyframes spin { to { transform: rotate(360deg); } }
-    .section-gap { margin-bottom: 24px; }
-    .grid-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 20px; }
-    @media(max-width:768px){ .grid-stats { grid-template-columns: repeat(2, 1fr); } }
-    .stat-card { background: var(--bg2); border: 1px solid var(--border); border-radius: 10px; padding: 16px; }
+    *{box-sizing:border-box;margin:0;padding:0}
+    body{background:var(--bg);color:var(--text);font-family:'Segoe UI',system-ui,sans-serif;min-height:100vh}
+    a{color:var(--green);text-decoration:none}
+
+    /* ── Header ── */
+    header{background:var(--bg2);border-bottom:1px solid var(--border);padding:14px 24px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:100;gap:12px}
+    .logo{display:flex;align-items:center;gap:10px;flex-shrink:0}
+    .logo img{width:34px;height:34px;border-radius:8px}
+    .logo-text{font-size:18px;font-weight:700}
+    .logo-text span{color:var(--green)}
+    .header-badges{display:flex;gap:6px;align-items:center}
+    .badge{font-size:10px;padding:2px 8px;border-radius:4px;font-weight:600;white-space:nowrap}
+    .badge-v7{background:rgba(0,229,160,.15);color:var(--green);border:1px solid rgba(0,229,160,.3)}
+    .badge-net{background:rgba(59,130,246,.15);color:var(--blue);border:1px solid rgba(59,130,246,.3)}
+    #btn-connect{background:var(--green);color:#000;border:none;border-radius:8px;padding:8px 18px;font-weight:700;font-size:13px;cursor:pointer;white-space:nowrap}
+    #btn-connect.connected{background:var(--bg3);color:var(--green);border:1px solid var(--green2)}
+
+    /* ── Layout ── */
+    main{max-width:1100px;margin:0 auto;padding:28px 20px}
+    .gap{margin-bottom:20px}
+    .grid-2{display:grid;grid-template-columns:1fr 1fr;gap:20px}
+    .grid-3{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
+    .grid-4{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}
+    @media(max-width:900px){.grid-2{grid-template-columns:1fr}.grid-4{grid-template-columns:repeat(2,1fr)}}
+    @media(max-width:600px){.grid-3{grid-template-columns:repeat(2,1fr)}.grid-4{grid-template-columns:1fr}}
+
+    /* ── Cards ── */
+    .card{background:var(--bg2);border:1px solid var(--border);border-radius:12px;padding:22px}
+    .card-title{font-size:15px;font-weight:700;margin-bottom:16px;display:flex;align-items:center;gap:8px}
+    .dot{width:7px;height:7px;border-radius:50%;background:var(--green);flex-shrink:0}
+    .dot-blue{background:var(--blue)}
+    .dot-yellow{background:var(--yellow)}
+    .dot-purple{background:var(--purple)}
+
+    /* ── Stat cards ── */
+    .stat-card{background:var(--bg3);border:1px solid var(--border);border-radius:10px;padding:14px}
+    .stat-label{font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.8px;margin-bottom:4px}
+    .stat-value{font-size:20px;font-weight:700}
+    .green{color:var(--green)} .blue{color:var(--blue)} .yellow{color:var(--yellow)} .red{color:var(--red)} .purple{color:var(--purple)}
+
+    /* ── Info rows ── */
+    .irow{display:flex;justify-content:space-between;align-items:center;padding:7px 0;border-bottom:1px solid var(--border);font-size:13px}
+    .irow:last-child{border-bottom:none}
+    .ik{color:var(--text2)}
+    .iv{font-weight:600}
+
+    /* ── Buttons ── */
+    .btn{border:none;border-radius:8px;padding:10px 18px;font-weight:700;font-size:13px;cursor:pointer;width:100%;margin-top:8px;transition:opacity .2s}
+    .btn:hover{opacity:.85} .btn:disabled{opacity:.35;cursor:not-allowed}
+    .btn-green{background:var(--green);color:#000}
+    .btn-blue{background:var(--blue);color:#fff}
+    .btn-ghost{background:var(--bg3);color:var(--text2);border:1px solid var(--border)}
+    input,select{width:100%;background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:9px 13px;color:var(--text);font-size:13px;outline:none;margin-bottom:8px}
+    input:focus,select:focus{border-color:var(--green)}
+
+    /* ── Status messages ── */
+    .msg{font-size:12px;padding:8px 12px;border-radius:6px;margin-top:8px}
+    .msg-ok{background:rgba(0,229,160,.1);color:var(--green);border:1px solid rgba(0,229,160,.3)}
+    .msg-err{background:rgba(239,68,68,.1);color:var(--red);border:1px solid rgba(239,68,68,.3)}
+    .msg-info{background:rgba(59,130,246,.1);color:var(--blue);border:1px solid rgba(59,130,246,.3)}
+
+    /* ── Figure-8 visual ── */
+    .f8-container{display:flex;align-items:center;justify-content:center;gap:16px;padding:20px;background:var(--bg3);border-radius:12px;border:1px solid var(--border);flex-wrap:wrap}
+    .matrix-box{text-align:center;padding:14px 22px;border-radius:10px;border:2px solid var(--border);min-width:130px;transition:border-color .3s}
+    .matrix-box.active{border-color:var(--green);background:var(--green-dim)}
+    .matrix-box.active-b{border-color:var(--blue);background:var(--blue-dim)}
+    .matrix-box.you-here{border-color:var(--yellow);background:rgba(245,158,11,.1)}
+    .f8-arrow{font-size:22px;color:var(--green)}
+    .pair-badge{font-size:9px;font-weight:700;padding:2px 6px;border-radius:3px;margin-top:4px;display:inline-block}
+    .pair-active{background:rgba(0,229,160,.2);color:var(--green)}
+    .pair-cycling{background:rgba(59,130,246,.2);color:var(--blue)}
+
+    /* ── Progress bar ── */
+    .prog-bar{height:6px;background:var(--bg3);border-radius:3px;overflow:hidden;margin:4px 0 8px}
+    .prog-fill{height:100%;background:var(--green);border-radius:3px;transition:width .5s}
+
+    /* ── Spinner ── */
+    .spin{display:inline-block;width:13px;height:13px;border:2px solid currentColor;border-top-color:transparent;border-radius:50%;animation:spin .7s linear infinite;vertical-align:middle;margin-right:6px}
+    @keyframes spin{to{transform:rotate(360deg)}}
+
+    /* ── Escrow meter ── */
+    .escrow-bar{height:8px;background:var(--bg3);border-radius:4px;overflow:hidden;margin:6px 0}
+    .escrow-fill{height:100%;background:linear-gradient(90deg,var(--yellow),var(--green));border-radius:4px;transition:width .5s}
+
+    /* ── Tabs ── */
+    .tabs{display:flex;gap:4px;margin-bottom:16px;border-bottom:1px solid var(--border);padding-bottom:0}
+    .tab{padding:8px 14px;font-size:13px;font-weight:600;cursor:pointer;border-radius:6px 6px 0 0;color:var(--text3);border:1px solid transparent;border-bottom:none;margin-bottom:-1px}
+    .tab.active{color:var(--green);border-color:var(--border);background:var(--bg2);border-bottom-color:var(--bg2)}
+    .tab-panel{display:none} .tab-panel.active{display:block}
+
+    /* ── Splits visual ── */
+    .split-bar{display:flex;height:24px;border-radius:6px;overflow:hidden;margin:8px 0 4px;gap:2px}
+    .split-seg{display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:700;transition:flex .5s}
+
+    /* ── Pairs grid ── */
+    .pair-row{display:grid;grid-template-columns:auto 1fr 1fr auto;gap:12px;align-items:center;padding:10px 0;border-bottom:1px solid var(--border);font-size:13px}
+    .pair-row:last-child{border-bottom:none}
+
+    /* ── Referral box ── */
+    .ref-box{background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:10px 14px;display:flex;align-items:center;justify-content:space-between;margin-top:8px}
+    .ref-link{font-size:12px;color:var(--text3);word-break:break-all;flex:1;margin-right:10px}
+    .ref-copy{background:transparent;border:1px solid var(--border);border-radius:6px;padding:4px 10px;font-size:12px;color:var(--text2);cursor:pointer;flex-shrink:0}
+    .ref-copy:hover{border-color:var(--green);color:var(--green)}
   </style>
 </head>
 <body>
 
+<!-- ═══ HEADER ═══════════════════════════════════════════════════════════ -->
 <header>
   <div class="logo">
     <img src="cryptonova-logo.svg" alt="CN" onerror="this.style.display='none'" />
     <div class="logo-text">Crypto<span>Nova</span></div>
-    <span class="badge">V7 FIGURE-8</span>
-    <span style="font-size:11px;color:var(--text3);margin-left:8px">v7.crypto-nova.app | Base Sepolia</span>
+  </div>
+  <div class="header-badges">
+    <span class="badge badge-v7">V7 FIGURE-8</span>
+    <span class="badge badge-net">Base Sepolia</span>
   </div>
   <button id="btn-connect" onclick="connectWallet()">Connect Wallet</button>
 </header>
 
+<!-- ═══ MAIN ═══════════════════════════════════════════════════════════════ -->
 <main>
 
-  <!-- Figure-8 visual -->
-  <div class="figure8 section-gap">
-    <div class="matrix-box" id="boxA">
-      <div style="font-size:11px;color:var(--text3);margin-bottom:4px">MATRIX A</div>
-      <div id="boxA-occ" style="font-size:20px;font-weight:700">—</div>
-      <div id="boxA-label" style="font-size:11px;color:var(--text3)">/ 15 members</div>
-    </div>
-    <div style="display:flex;flex-direction:column;align-items:center;gap:4px">
-      <span class="arrow">⇄</span>
-      <span style="font-size:10px;color:var(--green)">figure-8</span>
-    </div>
-    <div class="matrix-box" id="boxB">
-      <div style="font-size:11px;color:var(--text3);margin-bottom:4px">MATRIX B</div>
-      <div id="boxB-occ" style="font-size:20px;font-weight:700">—</div>
-      <div id="boxB-label" style="font-size:11px;color:var(--text3)">/ 15 members</div>
-    </div>
-  </div>
-
-  <!-- Live stats -->
-  <div class="grid-stats section-gap">
+  <!-- Live network stats -->
+  <div class="grid-4 gap">
     <div class="stat-card">
-      <div class="stat-label">Total Members</div>
-      <div class="stat-value green" id="stat-total">—</div>
-    </div>
-    <div class="stat-card">
-      <div class="stat-label">Total Rotations</div>
-      <div class="stat-value blue" id="stat-rotations">—</div>
+      <div class="stat-label">CNOVA Floor Price</div>
+      <div class="stat-value green" id="s-floor">—</div>
     </div>
     <div class="stat-card">
       <div class="stat-label">Treasury Reserve</div>
-      <div class="stat-value" id="stat-treasury">—</div>
+      <div class="stat-value" id="s-treasury">—</div>
     </div>
     <div class="stat-card">
-      <div class="stat-label">CNOVA Floor Price</div>
-      <div class="stat-value green" id="stat-floor">—</div>
+      <div class="stat-label">Total Members</div>
+      <div class="stat-value blue" id="s-total">—</div>
     </div>
     <div class="stat-card">
-      <div class="stat-label">CNOVA Minted</div>
-      <div class="stat-value" id="stat-minted">—</div>
-    </div>
-    <div class="stat-card">
-      <div class="stat-label">My CNOVA Balance</div>
-      <div class="stat-value" id="stat-cnova-bal" style="color:var(--yellow)">—</div>
-    </div>
-    <div class="stat-card">
-      <div class="stat-label">CNOVA Total Supply</div>
-      <div class="stat-value" id="stat-supply">—</div>
-    </div>
-    <div class="stat-card">
-      <div class="stat-label">Max Supply</div>
-      <div class="stat-value" style="color:var(--text2)">21,000,000</div>
+      <div class="stat-label">Epoch</div>
+      <div class="stat-value yellow" id="s-epoch">—</div>
     </div>
   </div>
 
-  <div class="grid-2">
+  <!-- Figure-8 pairs visual -->
+  <div class="card gap" id="pairs-card">
+    <div class="card-title"><div class="dot"></div> Active Matrix Pairs</div>
+    <div id="pairs-visual">
+      <div style="color:var(--text3);font-size:13px">Loading pairs...</div>
+    </div>
+  </div>
+
+  <!-- Main grid: Register + Dashboard -->
+  <div class="grid-2 gap">
 
     <!-- Register -->
-    <div class="card section-gap">
+    <div class="card">
       <div class="card-title"><div class="dot"></div> Join Figure-8</div>
+
       <div id="reg-already" style="display:none;background:rgba(0,229,160,.1);border:1px solid rgba(0,229,160,.3);border-radius:8px;padding:12px;font-size:13px;color:var(--green);margin-bottom:12px">
-        ✅ You are registered! Check your dashboard.
+        ✅ You are registered!
       </div>
+
       <div id="reg-form">
-        <div class="stat-label" style="margin-bottom:6px">Referrer Address (optional)</div>
+        <div style="font-size:11px;color:var(--text3);margin-bottom:6px;text-transform:uppercase;letter-spacing:.8px">Referrer Address (optional)</div>
         <input type="text" id="input-referrer" placeholder="0x... (leave blank for auto-assign)" />
-        <div class="info-row">
-          <span class="info-key">Entry Fee</span>
-          <span class="info-val">$10.00 USDC</span>
-        </div>
-        <div class="info-row">
-          <span class="info-key">Your USDC Balance</span>
-          <span class="info-val" id="reg-usdc-bal">—</span>
-        </div>
-        <div class="info-row">
-          <span class="info-key">USDC Approved</span>
-          <span class="info-val" id="reg-approved">—</span>
-        </div>
+
+        <div class="irow"><span class="ik">Entry Fee</span><span class="iv green">$10.00 USDC</span></div>
+        <div class="irow"><span class="ik">Your USDC Balance</span><span class="iv" id="r-usdc-bal">—</span></div>
+        <div class="irow"><span class="ik">Approved to PairManager</span><span class="iv" id="r-approved">—</span></div>
+
         <button class="btn btn-green" id="btn-approve" onclick="approveUSDC()">Step 1: Approve $10 USDC 🔒</button>
-        <button class="btn btn-ghost" id="btn-register" onclick="doRegister()" disabled>Step 2: Register ($10 USDC)</button>
-        <div id="reg-status" style="font-size:12px;color:var(--text3);margin-top:6px"></div>
+        <button class="btn btn-ghost" id="btn-register" onclick="doRegister()" disabled>Step 2: Join Figure-8 ($10)</button>
+        <div id="reg-msg" style="font-size:12px;color:var(--text3);margin-top:6px"></div>
+      </div>
+
+      <!-- Payment splits info -->
+      <div style="margin-top:16px;padding-top:16px;border-top:1px solid var(--border)">
+        <div style="font-size:11px;color:var(--text3);margin-bottom:8px;text-transform:uppercase;letter-spacing:.8px">V7 Payment Splits — per $10 entry</div>
+        <div class="split-bar" id="split-bar"></div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;font-size:11px;margin-top:4px">
+          <span style="color:var(--green)">■ L1 Referrer 20% $2.00</span>
+          <span style="color:#60a5fa">■ Chain Pay 40% $4.00</span>
+          <span style="color:#f59e0b">■ Treasury 15% $1.50</span>
+          <span style="color:#ef4444">■ Escrow 10% $1.00</span>
+          <span style="color:#8b5cf6">■ Founders 5% $0.50</span>
+          <span style="color:var(--text3)">■ Dev/Ops/Protocol 10%</span>
+        </div>
       </div>
     </div>
 
-    <!-- My Position -->
-    <div class="card section-gap">
-      <div class="card-title"><div class="dot"></div> My Dashboard</div>
-      <div id="dash-no-wallet" style="color:var(--text3);font-size:13px">Connect wallet to view your dashboard.</div>
+    <!-- Dashboard -->
+    <div class="card">
+      <div class="card-title"><div class="dot dot-yellow"></div> My Dashboard</div>
+      <div id="dash-empty" style="color:var(--text3);font-size:13px">Connect wallet to view your dashboard.</div>
       <div id="dash-content" style="display:none">
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px">
+
+        <div class="grid-2" style="gap:12px;margin-bottom:16px">
           <div class="stat-card">
             <div class="stat-label">Withdrawable</div>
-            <div class="stat-value green" id="dash-withdrawable">$0.00</div>
+            <div class="stat-value green" id="d-withdrawable">$0.00</div>
           </div>
           <div class="stat-card">
             <div class="stat-label">Total Earned</div>
-            <div class="stat-value" id="dash-earned">$0.00</div>
+            <div class="stat-value" id="d-earned">$0.00</div>
           </div>
         </div>
-        <div class="info-row"><span class="info-key">Member ID</span><span class="info-val" id="dash-id">—</span></div>
-        <div class="info-row"><span class="info-key">Current Matrix</span><span class="info-val" id="dash-matrix">—</span></div>
-        <div class="info-row"><span class="info-key">BFS Position</span><span class="info-val" id="dash-pos">—</span></div>
-        <div class="info-row"><span class="info-key">Cycles Completed</span><span class="info-val" id="dash-cycles">—</span></div>
-        <div class="info-row"><span class="info-key">Referrer</span><span class="info-val" id="dash-referrer">—</span></div>
+
+        <!-- Escrow meter -->
+        <div style="margin-bottom:14px">
+          <div class="irow" style="border-bottom:none;padding-bottom:2px">
+            <span class="ik" style="font-size:11px">Follow Me Escrow (crossing fund)</span>
+            <span class="iv green" id="d-escrow">$0.00</span>
+          </div>
+          <div class="escrow-bar"><div class="escrow-fill" id="d-escrow-fill" style="width:0%"></div></div>
+          <div style="font-size:10px;color:var(--text3)" id="d-escrow-label">$0 of $126 crossing threshold</div>
+        </div>
+
+        <div class="irow"><span class="ik">Member ID</span><span class="iv" id="d-id">—</span></div>
+        <div class="irow"><span class="ik">Current Position</span><span class="iv" id="d-position">—</span></div>
+        <div class="irow"><span class="ik">BFS Slot</span><span class="iv" id="d-bfs">—</span></div>
+        <div class="irow"><span class="ik">Cycles Completed</span><span class="iv" id="d-cycles">—</span></div>
+        <div class="irow"><span class="ik">Can Self-Cross</span><span class="iv" id="d-can-cross">—</span></div>
+        <div class="irow"><span class="ik">My CNOVA Balance</span><span class="iv yellow" id="d-cnova">—</span></div>
+
         <button class="btn btn-green" id="btn-withdraw" onclick="doWithdraw()" disabled style="margin-top:12px">Withdraw Earnings</button>
-        <button class="btn btn-ghost" id="btn-copy-ref" onclick="copyReferralLink()" style="margin-top:8px">🔗 Copy Referral Link</button>
-        <div id="dash-status" style="font-size:12px;color:var(--text3);margin-top:6px"></div>
+        <div id="dash-msg" style="font-size:12px;color:var(--text3);margin-top:6px"></div>
+
+        <!-- Referral link -->
+        <div style="margin-top:14px;padding-top:14px;border-top:1px solid var(--border)">
+          <div style="font-size:11px;color:var(--text3);margin-bottom:6px">YOUR REFERRAL LINK</div>
+          <div class="ref-box">
+            <div class="ref-link" id="ref-link-text">—</div>
+            <button class="ref-copy" onclick="copyRef()">Copy</button>
+          </div>
+        </div>
       </div>
     </div>
 
   </div>
 
-  <!-- Matrix A visualization -->
-  <div class="card section-gap">
-    <div class="card-title"><div class="dot"></div> Matrix A — BFS Positions</div>
-    <div id="matA-grid" class="matrix-grid">
-      <div style="color:var(--text3);font-size:12px;grid-column:1/-1">Loading...</div>
+  <!-- CNOVA & Protocol Stats -->
+  <div class="grid-2 gap">
+    <div class="card">
+      <div class="card-title"><div class="dot dot-purple"></div> CNOVA Token</div>
+      <div class="irow"><span class="ik">Floor Price</span><span class="iv green" id="c-floor">—</span></div>
+      <div class="irow"><span class="ik">Total Supply</span><span class="iv" id="c-supply">—</span></div>
+      <div class="irow"><span class="ik">Total Minted</span><span class="iv" id="c-minted">—</span></div>
+      <div class="irow"><span class="ik">Max Supply</span><span class="iv" style="color:var(--text3)">21,000,000</span></div>
+      <div class="irow"><span class="ik">Current Epoch</span><span class="iv yellow" id="c-epoch">—</span></div>
+      <div class="irow"><span class="ik">Reward Formula</span><span class="iv" id="c-formula">—</span></div>
+      <div class="irow"><span class="ik">FF Reward Now</span><span class="iv green" id="c-ff-reward">—</span></div>
     </div>
-  </div>
 
-  <!-- Matrix B visualization -->
-  <div class="card section-gap">
-    <div class="card-title" style="color:var(--blue)"><div class="dot" style="background:var(--blue)"></div> Matrix B — BFS Positions</div>
-    <div id="matB-grid" class="matrix-grid">
-      <div style="color:var(--text3);font-size:12px;grid-column:1/-1">Loading...</div>
+    <div class="card">
+      <div class="card-title"><div class="dot dot-blue"></div> Protocol Health</div>
+      <div class="irow"><span class="ik">Treasury Reserve</span><span class="iv green" id="p-treasury">—</span></div>
+      <div class="irow"><span class="ik">Pair 1 Combined</span><span class="iv" id="p-pair1">—</span></div>
+      <div class="irow"><span class="ik">Pair 2 Combined</span><span class="iv blue" id="p-pair2">—</span></div>
+      <div class="irow"><span class="ik">Should Expand</span><span class="iv" id="p-expand">—</span></div>
+      <div class="irow"><span class="ik">Orphan Routing</span><span class="iv" id="p-health">—</span></div>
+      <div class="irow"><span class="ik">Universe Mode</span><span class="iv" id="p-universe">—</span></div>
     </div>
   </div>
 
 </main>
 
 <script>
-// ── ADDRESSES ────────────────────────────────────────────────────────
-const MATRIX_A_ADDR = "0x95590Ea97FBdc3b086EC18a1692bD607F4AB9641";
-const MATRIX_B_ADDR = "0x18A2ecef59CD76f9eC99b96f70a298b9f21b340B";
-const TREASURY_ADDR = "0xC059C052Ec6258eb13e72fe52Ae15323A67b338e";
-const USDC_ADDR     = "0x2D8B7b5eDec96bE441b6fb0D45D74a2BcE2C639a";
-const MATRIX_SIZE   = 15;
-const ENTRY_FEE     = 10_000_000n;
-const BASE_SEPOLIA  = 84532;
+// ══════════════════════════════════════════════════════════════════════════
+// ADDRESSES — V7 Base Sepolia
+// ══════════════════════════════════════════════════════════════════════════
+const ADDRS = {
+  USDC:           "0x2D8B7b5eDec96bE441b6fb0D45D74a2BcE2C639a",
+  CNOVAToken:     "0x9FaEfDc507f1aCea52Dd31c44956c09b97Aa94A9",
+  CNOVATreasury:  "0x43a2B28eE1bB8d39DAbc07BC844bad3A30F829B4",
+  MatrixA:        "0x2d94Cb83d7546efdd78b7b0A349bfCc3549EEee5",
+  MatrixB:        "0x8b74ec8c07000f08045970DafBa5Fc6f5F7D0Afb",
+  MatrixC:        "0x9e3111189A2cbcef05Ec67e1F1ecD81DCAa5dFcA",
+  MatrixD:        "0x5FEC24FD66F263b775cB9a816010578Bd886CC1C",
+  PairManager:    "0x6F7bA48993edcbd3FDC74b672f0dfDe4D96C3362",
+  CNOVAGovernance:"0xEaf9A6d5A8EA5Cfa329d6E16c1aBd4eC2aB83a9d",
+};
+const ENTRY_FEE   = 10_000_000n;
+const BASE_SEPOLIA = 84532;
 
-// ── ABIs ─────────────────────────────────────────────────────────────
+// ══════════════════════════════════════════════════════════════════════════
+// ABIs (minimal — only what the frontend needs)
+// ══════════════════════════════════════════════════════════════════════════
+const PM_ABI = [
+  "function register(address referrer) external",
+  "function pairCount() external view returns (uint256)",
+  "function activePairIndex() external view returns (uint256)",
+  "function shouldExpand() external view returns (bool)",
+  "function allPairsStatus() external view returns (address[],address[],uint256[],uint256[],uint256[],bool[])",
+  "function routingDistribution() external view returns (uint256[],uint256[])",
+  "function totalRegistrations() external view returns (uint256)",
+];
+
 const F8_ABI = [
-  {"inputs":[{"name":"referrer","type":"address"}],"name":"register","outputs":[],"stateMutability":"nonpayable","type":"function"},
-  {"inputs":[],"name":"withdraw","outputs":[],"stateMutability":"nonpayable","type":"function"},
-  {"inputs":[{"name":"member","type":"address"}],"name":"getMember","outputs":[{"components":[{"name":"id","type":"uint256"},{"name":"referrer","type":"address"},{"name":"l2","type":"address"},{"name":"l3","type":"address"},{"name":"joinedAt","type":"uint256"},{"name":"withdrawable","type":"uint256"},{"name":"totalEarned","type":"uint256"},{"name":"cyclesCompleted","type":"uint256"},{"name":"isInMatrix","type":"bool"},{"name":"hasEverJoined","type":"bool"}],"name":"","type":"tuple"}],"stateMutability":"view","type":"function"},
-  {"inputs":[{"name":"pos","type":"uint256"}],"name":"posToMember","outputs":[{"name":"","type":"address"}],"stateMutability":"view","type":"function"},
-  {"inputs":[{"name":"addr","type":"address"}],"name":"matrixPos","outputs":[{"name":"","type":"uint256"}],"stateMutability":"view","type":"function"},
-  {"inputs":[],"name":"occupancy","outputs":[{"name":"","type":"uint256"}],"stateMutability":"view","type":"function"},
-  {"inputs":[],"name":"rotationCount","outputs":[{"name":"","type":"uint256"}],"stateMutability":"view","type":"function"},
-  {"inputs":[],"name":"totalMembers","outputs":[{"name":"","type":"uint256"}],"stateMutability":"view","type":"function"},
-  {"inputs":[],"name":"MATRIX_SIZE","outputs":[{"name":"","type":"uint256"}],"stateMutability":"view","type":"function"},
+  "function getMember(address) external view returns (tuple(uint256 id,address referrer,address l2,address l3,uint256 joinedAt,uint256 withdrawable,uint256 totalEarned,uint256 cyclesCompleted,bool isInMatrix,bool hasEverJoined))",
+  "function matrixPos(address) external view returns (uint256)",
+  "function posToMember(uint256) external view returns (address)",
+  "function occupancy() external view returns (uint256)",
+  "function rotationCount() external view returns (uint256)",
+  "function totalMembers() external view returns (uint256)",
+  "function MATRIX_SIZE() external view returns (uint256)",
+  "function ENTRY_FEE() external view returns (uint256)",
+  "function escrowOf(address) external view returns (uint256)",
+  "function crossingFundsOf(address) external view returns (uint256,uint256,uint256)",
+  "function accountOne() external view returns (address)",
+  "function withdraw() external",
 ];
+
 const TREASURY_ABI = [
-  {"inputs":[],"name":"usdcReserve","outputs":[{"name":"","type":"uint256"}],"stateMutability":"view","type":"function"},
-  {"inputs":[],"name":"floorPrice","outputs":[{"name":"","type":"uint256"}],"stateMutability":"view","type":"function"},
+  "function usdcReserve() external view returns (uint256)",
+  "function floorPrice() external view returns (uint256)",
+  "function isUniverseMode() external view returns (bool)",
 ];
-const CNOVA_ADDR = "0xbA58EaA3FA977af833bAD472329df582034D0bA7";
+
 const CNOVA_ABI = [
-  {"inputs":[{"name":"account","type":"address"}],"name":"balanceOf","outputs":[{"name":"","type":"uint256"}],"stateMutability":"view","type":"function"},
-  {"inputs":[],"name":"totalMinted","outputs":[{"name":"","type":"uint256"}],"stateMutability":"view","type":"function"},
-  {"inputs":[],"name":"totalSupply","outputs":[{"name":"","type":"uint256"}],"stateMutability":"view","type":"function"},
+  "function balanceOf(address) external view returns (uint256)",
+  "function totalMinted() external view returns (uint256)",
+  "function totalSupply() external view returns (uint256)",
+  "function currentEpochNumber() external view returns (uint8)",
+  "function rewardPct() external view returns (uint256)",
+  "function epochMemberLimit() external view returns (uint256)",
+  "function isFinalFrontier() external view returns (bool)",
 ];
+
 const USDC_ABI = [
-  {"inputs":[{"name":"owner","type":"address"},{"name":"spender","type":"address"}],"name":"allowance","outputs":[{"name":"","type":"uint256"}],"stateMutability":"view","type":"function"},
-  {"inputs":[{"name":"account","type":"address"}],"name":"balanceOf","outputs":[{"name":"","type":"uint256"}],"stateMutability":"view","type":"function"},
-  {"inputs":[{"name":"spender","type":"address"},{"name":"amount","type":"uint256"}],"name":"approve","outputs":[{"name":"","type":"bool"}],"stateMutability":"nonpayable","type":"function"},
+  "function balanceOf(address) external view returns (uint256)",
+  "function allowance(address,address) external view returns (uint256)",
+  "function approve(address,uint256) external returns (bool)",
 ];
 
-// ── STATE ─────────────────────────────────────────────────────────────
-let provider, signer, userAddr, readProvider;
+// ══════════════════════════════════════════════════════════════════════════
+// STATE
+// ══════════════════════════════════════════════════════════════════════════
+let provider, signer, userAddr, rp;
 
-function u6(n) { return '$' + (Number(n) / 1e6).toFixed(2); }
-function shortAddr(a) { return a ? a.slice(0,6)+'…'+a.slice(-4) : '—'; }
-function setStatus(id, msg, color) {
-  const el = document.getElementById(id);
-  if (el) { el.textContent = msg; el.style.color = color || 'var(--text2)'; }
+// ══════════════════════════════════════════════════════════════════════════
+// UTILS
+// ══════════════════════════════════════════════════════════════════════════
+const u6   = n => '$' + (Number(n)/1e6).toFixed(2);
+const u6_4 = n => '$' + (Number(n)/1e6).toFixed(4);
+const u18  = n => parseFloat(ethers.formatUnits(n,18)).toFixed(2);
+const short = a => a ? a.slice(0,6)+'…'+a.slice(-4) : '—';
+const $ = id => document.getElementById(id);
+const setText = (id, val) => { const el=$(id); if(el) el.textContent=val; };
+
+function showMsg(id, msg, type='info') {
+  const el=$(id); if(!el) return;
+  el.textContent = msg;
+  el.className = 'msg msg-'+type;
+  el.style.display = 'block';
 }
 
-// ── WALLET ────────────────────────────────────────────────────────────
+// ══════════════════════════════════════════════════════════════════════════
+// WALLET CONNECTION
+// ══════════════════════════════════════════════════════════════════════════
 async function connectWallet() {
-  if (!window.ethereum) { alert('Install MetaMask first'); return; }
-  provider = new ethers.BrowserProvider(window.ethereum);
-  const accounts = await provider.send('eth_requestAccounts', []);
-  signer = await provider.getSigner();
-  userAddr = accounts[0];
-  readProvider = new ethers.JsonRpcProvider('https://sepolia.base.org');
+  if (!window.ethereum) { alert('Install MetaMask to continue'); return; }
+  try {
+    provider = new ethers.BrowserProvider(window.ethereum);
+    await provider.send('eth_requestAccounts', []);
+    signer   = await provider.getSigner();
+    userAddr = await signer.getAddress();
+    rp       = new ethers.JsonRpcProvider('https://sepolia.base.org');
 
-  const chainId = parseInt(window.ethereum.chainId, 16);
-  if (chainId !== BASE_SEPOLIA) {
-    try { await window.ethereum.request({method:'wallet_switchEthereumChain',params:[{chainId:'0x'+BASE_SEPOLIA.toString(16)}]}); }
-    catch(e) { alert('Please switch to Base Sepolia'); return; }
+    // Switch network if needed
+    const chain = Number((await provider.getNetwork()).chainId);
+    if (chain !== BASE_SEPOLIA) {
+      try {
+        await window.ethereum.request({
+          method: 'wallet_switchEthereumChain',
+          params: [{ chainId: '0x'+BASE_SEPOLIA.toString(16) }]
+        });
+      } catch(e) { alert('Please switch to Base Sepolia testnet'); return; }
+    }
+
+    const btn = $('btn-connect');
+    btn.textContent = short(userAddr);
+    btn.className = 'connected';
+
+    $('dash-empty').style.display = 'none';
+    $('dash-content').style.display = 'block';
+
+    await loadAll();
+    setInterval(loadAll, 15000);
+  } catch(e) {
+    console.error('connect:', e.message);
   }
-
-  const btn = document.getElementById('btn-connect');
-  btn.textContent = shortAddr(userAddr);
-  btn.className = 'connected';
-  btn.style.cssText = 'background:var(--bg3);color:var(--green);border:1px solid var(--green2);border-radius:8px;padding:8px 18px;font-weight:700;font-size:14px;cursor:pointer';
-
-  document.getElementById('dash-no-wallet').style.display = 'none';
-  document.getElementById('dash-content').style.display = 'block';
-
-  await loadAll();
-  setInterval(loadAll, 15000);
 }
 
-// ── LOAD ALL ──────────────────────────────────────────────────────────
+// ══════════════════════════════════════════════════════════════════════════
+// LOAD ALL DATA
+// ══════════════════════════════════════════════════════════════════════════
 async function loadAll() {
   try {
-    const rp = readProvider || provider;
-    const matA = new ethers.Contract(MATRIX_A_ADDR, F8_ABI, rp);
-    const matB = new ethers.Contract(MATRIX_B_ADDR, F8_ABI, rp);
-    const treas = new ethers.Contract(TREASURY_ADDR, TREASURY_ABI, rp);
-    const usdc  = new ethers.Contract(USDC_ADDR, USDC_ABI, rp);
+    const r = rp || provider;
+    const pm      = new ethers.Contract(ADDRS.PairManager,   PM_ABI,       r);
+    const matA    = new ethers.Contract(ADDRS.MatrixA,       F8_ABI,       r);
+    const treas   = new ethers.Contract(ADDRS.CNOVATreasury, TREASURY_ABI, r);
+    const cnova   = new ethers.Contract(ADDRS.CNOVAToken,    CNOVA_ABI,    r);
+    const usdc    = new ethers.Contract(ADDRS.USDC,          USDC_ABI,     r);
 
-    const cnova = new ethers.Contract(CNOVA_ADDR, CNOVA_ABI, rp);
-
-    const [occA, occB, rotA, rotB, totalA, totalB, reserve, floor, minted, supply] = await Promise.all([
-      matA.occupancy(), matB.occupancy(),
-      matA.rotationCount(), matB.rotationCount(),
-      matA.totalMembers(), matB.totalMembers(),
+    // ── Global stats ────────────────────────────────────────────────
+    const [reserve, floor, minted, supply, epochNum, rewardPct, isFinalFrontier, universeMode, pairCount] = await Promise.all([
       treas.usdcReserve(),
       treas.floorPrice().catch(()=>0n),
       cnova.totalMinted().catch(()=>0n),
       cnova.totalSupply().catch(()=>0n),
+      cnova.currentEpochNumber().catch(()=>0),
+      cnova.rewardPct().catch(()=>25n),
+      cnova.isFinalFrontier().catch(()=>false),
+      treas.isUniverseMode().catch(()=>false),
+      pm.pairCount().catch(()=>0n),
     ]);
 
-    // Header stats
-    document.getElementById('stat-total').textContent = (Number(totalA) + Number(totalB)).toString();
-    document.getElementById('stat-rotations').textContent = (Number(rotA) + Number(rotB)).toString();
-    document.getElementById('stat-treasury').textContent = u6(reserve);
-    document.getElementById('stat-floor').textContent = floor > 0n ? '$' + (Number(floor)/1e6).toFixed(4) : '$0.00';
-    document.getElementById('stat-minted').textContent = parseFloat(ethers.formatUnits(minted, 18)).toFixed(0) + ' CNOVA';
-    document.getElementById('stat-supply').textContent = parseFloat(ethers.formatUnits(supply, 18)).toLocaleString() + ' CNOVA';
+    const floorNum = Number(floor)/1e6;
+    setText('s-floor',    u6_4(floor));
+    setText('s-treasury', u6(reserve));
+    setText('s-epoch',    `${epochNum}/9${epochNum >= 9 ? ' ★ FF' : ''}`);
+    setText('c-floor',    u6_4(floor));
+    setText('c-supply',   Number(ethers.formatUnits(supply,18)).toLocaleString()+' CNOVA');
+    setText('c-minted',   Number(ethers.formatUnits(minted,18)).toFixed(0)+' CNOVA');
+    setText('c-epoch',    `Epoch ${epochNum}/9${isFinalFrontier?' — Final Frontier':''}`);
+    setText('c-formula',  `min(2.5, ${rewardPct}% × $1.50 / floor)`);
+    const ffReward = floorNum > 0 ? Math.min(2.5, Number(rewardPct) * 1.5 / floorNum) : 2.5;
+    setText('c-ff-reward', ffReward.toFixed(4)+' CNOVA per join');
+    setText('p-treasury', u6(reserve));
+    setText('p-universe', universeMode ? '✅ Active — DEX trading open' : '⏳ Locked (needs 500 members)');
 
-    // My CNOVA balance
-    if (userAddr) {
-      const cnovaBal = await cnova.balanceOf(userAddr).catch(()=>0n);
-      document.getElementById('stat-cnova-bal').textContent = parseFloat(ethers.formatUnits(cnovaBal, 18)).toFixed(2) + ' CNOVA';
+    // ── Pairs status ─────────────────────────────────────────────────
+    const [activeIdx, shouldExpand] = await Promise.all([
+      pm.activePairIndex().catch(()=>0n),
+      pm.shouldExpand().catch(()=>false),
+    ]);
+
+    if (Number(pairCount) > 0) {
+      try {
+        const status = await pm.allPairsStatus();
+        renderPairs(status, Number(activeIdx), Number(pairCount));
+
+        // Total members
+        let totalM = 0n;
+        for (let i = 0; i < Number(pairCount); i++) {
+          const mA2 = new ethers.Contract(status[0][i], F8_ABI, r);
+          const mB2 = new ethers.Contract(status[1][i], F8_ABI, r);
+          const [tA, tB] = await Promise.all([mA2.totalMembers(), mB2.totalMembers()]);
+          totalM += tA + tB;
+        }
+        setText('s-total', totalM.toString());
+
+        // Pair summary for protocol card
+        const oA1 = Number(status[2][0]), oB1 = Number(status[3][0]);
+        const mSize = 127;
+        const pct1 = Math.round((oA1+oB1)*100/(mSize*2));
+        setText('p-pair1', `${oA1+oB1}/254 (${pct1}%)`);
+        if (Number(pairCount) >= 2) {
+          const oA2 = Number(status[2][1]), oB2 = Number(status[3][1]);
+          const pct2 = Math.round((oA2+oB2)*100/(mSize*2));
+          setText('p-pair2', `${oA2+oB2}/254 (${pct2}%)`);
+        } else {
+          setText('p-pair2', 'Not yet deployed');
+        }
+        setText('p-expand', shouldExpand ? '⚡ YES — deploy new pair' : `No (${Math.round((oA1+oB1)*100/(mSize*2))}% of 80% threshold)`);
+      } catch(e) { console.error('pairs:', e.message); }
     }
 
-    // Figure-8 boxes
-    document.getElementById('boxA-occ').textContent = occA.toString();
-    document.getElementById('boxB-occ').textContent = occB.toString();
+    // ── Orphan health monitor ────────────────────────────────────────
+    try {
+      const matAc = new ethers.Contract(ADDRS.MatrixA, ["function poolHealthSnapshot() view returns (uint256,uint256,uint256,string)"], r);
+      const health = await matAc.poolHealthSnapshot();
+      setText('p-health', health[3]);
+    } catch(_) { setText('p-health', '—'); }
 
-    // User data
+    // ── User data ────────────────────────────────────────────────────
     if (userAddr) {
-      const [mA, mB, bal, allowance] = await Promise.all([
-        matA.getMember(userAddr),
-        matB.getMember(userAddr),
-        usdc.balanceOf(userAddr),
-        usdc.allowance(userAddr, MATRIX_A_ADDR),
-      ]);
-
-      document.getElementById('reg-usdc-bal').textContent = u6(bal);
-      document.getElementById('reg-approved').textContent = allowance >= ENTRY_FEE ? '✅ $10.00 Approved' : 'Not approved';
-
-      const btnApprove = document.getElementById('btn-approve');
-      const btnReg = document.getElementById('btn-register');
-
-      // Update approve/register button states
-      if (allowance >= ENTRY_FEE) {
-        btnApprove.disabled = true;
-        btnApprove.textContent = '✓ Approved';
-        btnApprove.className = 'btn btn-ghost';
-        btnReg.disabled = false;
-        btnReg.className = 'btn btn-green';
-      } else {
-        btnApprove.disabled = false;
-        btnApprove.className = 'btn btn-green';
-        btnReg.disabled = true;
-        btnReg.className = 'btn btn-ghost';
-      }
-
-      if (mA.hasEverJoined || mB.hasEverJoined) {
-        document.getElementById('reg-already').style.display = 'block';
-        document.getElementById('reg-form').style.display = 'none';
-
-        // Dashboard
-        const inA = mA.isInMatrix;
-        const inB = mB.isInMatrix;
-        const m = inA ? mA : mB;
-        const matLabel = inA ? 'Matrix A' : (inB ? 'Matrix B' : 'Queue (cycling)');
-        const pos = inA ? await matA.matrixPos(userAddr) : (inB ? await matB.matrixPos(userAddr) : 0);
-
-        document.getElementById('dash-id').textContent = '#' + (mA.id > 0 ? mA.id : mB.id).toString();
-        document.getElementById('dash-matrix').textContent = matLabel;
-        document.getElementById('dash-pos').textContent = pos > 0 ? '#' + pos.toString() : '—';
-        document.getElementById('dash-cycles').textContent = (Number(mA.cyclesCompleted) + Number(mB.cyclesCompleted)).toString();
-        document.getElementById('dash-referrer').textContent = mA.referrer !== ethers.ZeroAddress ? shortAddr(mA.referrer) : '—';
-
-        const totalW = BigInt(mA.withdrawable) + BigInt(mB.withdrawable);
-        const totalE = BigInt(mA.totalEarned) + BigInt(mB.totalEarned);
-        document.getElementById('dash-withdrawable').textContent = u6(totalW);
-        document.getElementById('dash-earned').textContent = u6(totalE);
-        document.getElementById('btn-withdraw').disabled = totalW === 0n;
-
-        // Figure-8 box highlights
-        document.getElementById('boxA').className = 'matrix-box' + (inA ? ' you-here' : (occA > 0 ? ' active' : ''));
-        document.getElementById('boxB').className = 'matrix-box' + (inB ? ' you-here' : (occB > 0 ? ' active' : ''));
-      }
-
-      // Auto-fill referrer from URL
-      const urlRef = new URLSearchParams(window.location.search).get('ref');
-      const refInput = document.getElementById('input-referrer');
-      if (urlRef && ethers.isAddress(urlRef) && !refInput.value) refInput.value = urlRef;
+      await loadUserData(usdc, matA, cnova);
     }
-
-    // Matrix grids
-    await loadMatrixGrid('matA-grid', matA, userAddr);
-    await loadMatrixGrid('matB-grid', matB, userAddr);
 
   } catch(e) { console.error('loadAll:', e.message); }
 }
 
-async function loadMatrixGrid(elId, matContract, myAddr) {
-  try {
-    const el = document.getElementById(elId);
-    let html = '';
-    for (let i = 1; i <= MATRIX_SIZE; i++) {
-      const addr = await matContract.posToMember(i);
-      const isEmpty = addr === ethers.ZeroAddress;
-      const isMe = myAddr && addr.toLowerCase() === myAddr.toLowerCase();
-      const isRoot = i === 1 && !isEmpty;
-      let cls = 'matrix-node';
-      if (!isEmpty) cls += isMe ? ' you' : (isRoot ? ' root' : ' filled');
-      html += `<div class="${cls}">
-        <div style="font-weight:700;color:${isEmpty?'var(--text3)':isMe?'var(--green)':isRoot?'var(--yellow)':'var(--blue)'}">#${i}</div>
-        <div style="font-size:9px;color:var(--text3)">${isEmpty ? 'empty' : isMe ? 'YOU' : addr.slice(0,6)}</div>
-      </div>`;
-    }
-    el.innerHTML = html;
-  } catch(e) { console.error('grid:', e.message); }
+// ══════════════════════════════════════════════════════════════════════════
+// PAIRS VISUALIZATION
+// ══════════════════════════════════════════════════════════════════════════
+function renderPairs(status, activeIdx, pairCount) {
+  const letters = 'ABCDEFGHIJKLMNOP';
+  let html = '';
+
+  for (let i = 0; i < pairCount; i++) {
+    const occA = Number(status[2][i]);
+    const occB = Number(status[3][i]);
+    const totA = Number(status[4][i]); // this is registered count but we use occ for fill
+    const mSize = 127;
+    const pctA = Math.round(occA*100/mSize);
+    const pctB = Math.round(occB*100/mSize);
+    const combined = occA + occB;
+    const combinedPct = Math.round(combined*100/(mSize*2));
+    const isNewest = i === pairCount - 1;
+    const label = isNewest && activeIdx === i
+      ? `<span class="pair-badge pair-active">ACTIVE</span>`
+      : `<span class="pair-badge pair-cycling">CYCLING</span>`;
+
+    if (i > 0) html += '<div style="color:var(--text3);font-size:20px;padding:8px">+</div>';
+
+    html += `<div style="text-align:center">
+      <div style="font-size:11px;color:var(--text3);margin-bottom:6px">PAIR ${i+1} ${label}</div>
+      <div style="display:flex;align-items:center;gap:12px">
+        <div class="matrix-box${occA>0?' active':''}">
+          <div style="font-size:10px;color:var(--text3)">MATRIX ${letters[i*2]}</div>
+          <div style="font-size:24px;font-weight:700">${occA}</div>
+          <div class="prog-bar" style="width:100px;margin:4px auto 0"><div class="prog-fill" style="width:${pctA}%"></div></div>
+          <div style="font-size:9px;color:var(--text3);margin-top:2px">${pctA}% full</div>
+        </div>
+        <div class="f8-arrow">⇄</div>
+        <div class="matrix-box${occB>0?' active-b':''}">
+          <div style="font-size:10px;color:var(--text3)">MATRIX ${letters[i*2+1]}</div>
+          <div style="font-size:24px;font-weight:700;color:var(--blue)">${occB}</div>
+          <div class="prog-bar" style="width:100px;margin:4px auto 0"><div class="prog-fill" style="width:${pctB}%;background:var(--blue)"></div></div>
+          <div style="font-size:9px;color:var(--text3);margin-top:2px">${pctB}% full</div>
+        </div>
+      </div>
+      <div style="font-size:11px;color:var(--text3);margin-top:8px">
+        Combined: ${combined}/254 (${combinedPct}%)
+        ${isNewest ? `<span style="color:var(--green)">← new members here</span>` : ''}
+      </div>
+    </div>`;
+  }
+
+  $('pairs-visual').innerHTML = `<div style="display:flex;align-items:center;justify-content:center;gap:8px;flex-wrap:wrap;padding:8px 0">${html}</div>`;
 }
 
-// ── REGISTER ──────────────────────────────────────────────────────────
+// ══════════════════════════════════════════════════════════════════════════
+// USER DATA
+// ══════════════════════════════════════════════════════════════════════════
+async function loadUserData(usdc, matA, cnova) {
+  try {
+    const r = rp || provider;
+    const [bal, allowance, mA, cnovaBal] = await Promise.all([
+      usdc.balanceOf(userAddr),
+      usdc.allowance(userAddr, ADDRS.PairManager),
+      matA.getMember(userAddr),
+      cnova.balanceOf(userAddr).catch(()=>0n),
+    ]);
+
+    setText('r-usdc-bal', u6(bal));
+    setText('r-approved', allowance >= ENTRY_FEE ? '✅ $10 Approved' : 'Not approved');
+    setText('d-cnova', u18(cnovaBal)+' CNOVA');
+
+    // Button states
+    const btnApprove = $('btn-approve');
+    const btnReg = $('btn-register');
+    if (allowance >= ENTRY_FEE) {
+      btnApprove.disabled = true;
+      btnApprove.textContent = '✓ Approved';
+      btnApprove.className = 'btn btn-ghost';
+      btnReg.disabled = false;
+      btnReg.className = 'btn btn-green';
+    } else {
+      btnApprove.disabled = false;
+      btnApprove.className = 'btn btn-green';
+      btnReg.disabled = true;
+    }
+
+    // Check all pairs for user membership
+    const pairsToCheck = [
+      { matA: ADDRS.MatrixA, matB: ADDRS.MatrixB, label: 'Pair 1' },
+      { matA: ADDRS.MatrixC, matB: ADDRS.MatrixD, label: 'Pair 2' },
+    ].filter(p => p.matA);
+
+    let userMember = null, userMatrix = null, userPair = null;
+    for (const p of pairsToCheck) {
+      const mA2 = new ethers.Contract(p.matA, F8_ABI, r);
+      const mB2 = new ethers.Contract(p.matB, F8_ABI, r);
+      const [ma, mb] = await Promise.all([
+        mA2.getMember(userAddr).catch(()=>null),
+        mB2.getMember(userAddr).catch(()=>null),
+      ]);
+      if (ma?.hasEverJoined || mb?.hasEverJoined) {
+        userMember = ma?.hasEverJoined ? { m: ma, mat: mA2, label: p.label+' Matrix A' } : { m: mb, mat: mB2, label: p.label+' Matrix B' };
+        userPair = p;
+        break;
+      }
+    }
+
+    if (userMember || mA.hasEverJoined) {
+      $('reg-already').style.display = 'block';
+      $('reg-form').style.display = 'none';
+
+      const m = userMember ? userMember.m : mA;
+      const matLabel = userMember ? userMember.label : 'Pair 1 Matrix A';
+
+      // Get position
+      const matContract = userMember ? userMember.mat : matA;
+      const pos = await matContract.matrixPos(userAddr).catch(()=>0n);
+
+      // Total withdrawable across all matrices
+      let totalW = 0n, totalE = 0n;
+      for (const p of pairsToCheck) {
+        const mA2 = new ethers.Contract(p.matA, F8_ABI, r);
+        const mB2 = new ethers.Contract(p.matB, F8_ABI, r);
+        const [ma2, mb2] = await Promise.all([
+          mA2.getMember(userAddr).catch(()=>({withdrawable:0n,totalEarned:0n})),
+          mB2.getMember(userAddr).catch(()=>({withdrawable:0n,totalEarned:0n})),
+        ]);
+        totalW += BigInt(ma2.withdrawable) + BigInt(mb2.withdrawable);
+        totalE += BigInt(ma2.totalEarned) + BigInt(mb2.totalEarned);
+      }
+
+      // Escrow
+      let totalEscrow = 0n;
+      try {
+        const escA = await matA.escrowOf(userAddr);
+        totalEscrow += escA;
+        if (ADDRS.MatrixC) {
+          const mC = new ethers.Contract(ADDRS.MatrixC, F8_ABI, r);
+          const escC = await mC.escrowOf(userAddr);
+          totalEscrow += escC;
+        }
+      } catch(_) {}
+
+      setText('d-withdrawable', u6(totalW));
+      setText('d-earned', u6(totalE));
+      setText('d-id', '#' + (m.id || '—'));
+      setText('d-position', matLabel);
+      setText('d-bfs', pos > 0n ? '#'+pos.toString() : '—');
+      setText('d-cycles', m.cyclesCompleted?.toString() || '0');
+
+      // Escrow meter
+      const escNum = Number(totalEscrow)/1e6;
+      const escPct = Math.min(100, Math.round(escNum/116*100));
+      setText('d-escrow', u6(totalEscrow));
+      $('d-escrow-fill').style.width = escPct+'%';
+      setText('d-escrow-label', `$${escNum.toFixed(2)} of $116 crossing threshold`);
+
+      // Can self-cross
+      const canCross = totalW + totalEscrow >= ENTRY_FEE;
+      setText('d-can-cross', canCross ? '✅ YES' : `❌ NO ($${(Number(totalW+totalEscrow)/1e6).toFixed(2)}/$10.00)`);
+
+      $('btn-withdraw').disabled = totalW === 0n;
+
+      // Referral link
+      const link = window.location.origin + window.location.pathname + '?ref=' + userAddr;
+      setText('ref-link-text', link);
+    }
+
+    // Auto-fill referrer
+    const urlRef = new URLSearchParams(window.location.search).get('ref');
+    const refInput = $('input-referrer');
+    if (urlRef && ethers.isAddress(urlRef) && refInput && !refInput.value) {
+      refInput.value = urlRef;
+    }
+
+  } catch(e) { console.error('userData:', e.message); }
+}
+
+// ══════════════════════════════════════════════════════════════════════════
+// APPROVE USDC → PAIRMANAGER
+// ══════════════════════════════════════════════════════════════════════════
 async function approveUSDC() {
   if (!signer) { alert('Connect wallet first'); return; }
-  const btn = document.getElementById('btn-approve');
-  btn.disabled = true; btn.innerHTML = '<span class="spinner"></span>Approving…';
+  const btn = $('btn-approve');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spin"></span>Approving…';
   try {
-    const usdc = new ethers.Contract(USDC_ADDR, USDC_ABI, signer);
-    const tx = await usdc.approve(MATRIX_A_ADDR, ENTRY_FEE);
+    const usdcW = new ethers.Contract(ADDRS.USDC, USDC_ABI, signer);
+    const tx = await usdcW.approve(ADDRS.PairManager, ENTRY_FEE);
+    showMsg('reg-msg', '⏳ Approving USDC to PairManager...', 'info');
     await tx.wait();
+    showMsg('reg-msg', '✅ USDC approved! Now click Step 2.', 'ok');
     btn.textContent = '✓ Approved';
-    document.getElementById('btn-register').disabled = false;
-    setStatus('reg-status', '✅ USDC approved!', 'var(--green)');
+    $('btn-register').disabled = false;
+    $('btn-register').className = 'btn btn-green';
   } catch(e) {
-    btn.disabled = false; btn.textContent = 'Step 1: Approve $10 USDC 🔒';
-    setStatus('reg-status', '❌ ' + (e.reason || e.message), 'var(--red)');
+    btn.disabled = false;
+    btn.textContent = 'Step 1: Approve $10 USDC 🔒';
+    showMsg('reg-msg', '❌ ' + (e.reason || e.shortMessage || e.message), 'err');
   }
 }
 
+// ══════════════════════════════════════════════════════════════════════════
+// REGISTER VIA PAIRMANAGER
+// ══════════════════════════════════════════════════════════════════════════
 async function doRegister() {
   if (!signer) { alert('Connect wallet first'); return; }
-  const btn = document.getElementById('btn-register');
-  btn.disabled = true; btn.innerHTML = '<span class="spinner"></span>Registering…';
+  const btn = $('btn-register');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spin"></span>Joining Figure-8…';
   try {
-    const referrerInput = document.getElementById('input-referrer').value.trim();
-    const referrer = referrerInput && ethers.isAddress(referrerInput) ? referrerInput : ethers.ZeroAddress;
-    const matA = new ethers.Contract(MATRIX_A_ADDR, F8_ABI, signer);
-    const tx = await matA.register(referrer);
-    setStatus('reg-status', '⏳ Confirming…', 'var(--text2)');
+    const referrerInput = $('input-referrer').value.trim();
+    const referrer = referrerInput && ethers.isAddress(referrerInput)
+      ? referrerInput : ethers.ZeroAddress;
+    const pm = new ethers.Contract(ADDRS.PairManager, PM_ABI, signer);
+    const tx = await pm.register(referrer);
+    showMsg('reg-msg', '⏳ Confirming transaction...', 'info');
     await tx.wait();
-    setStatus('reg-status', '🎉 Welcome to the Figure-8!', 'var(--green)');
-    btn.textContent = 'Registered!';
-    await loadAll();
+    showMsg('reg-msg', '🎉 Welcome to the Figure-8! Your journey begins.', 'ok');
+    btn.textContent = '✅ Joined!';
+    setTimeout(loadAll, 2000);
   } catch(e) {
-    btn.disabled = false; btn.textContent = 'Step 2: Register ($10 USDC)';
-    setStatus('reg-status', '❌ ' + (e.reason || e.message), 'var(--red)');
+    btn.disabled = false;
+    btn.textContent = 'Step 2: Join Figure-8 ($10)';
+    showMsg('reg-msg', '❌ ' + (e.reason || e.shortMessage || e.message), 'err');
   }
 }
 
-// ── WITHDRAW ──────────────────────────────────────────────────────────
+// ══════════════════════════════════════════════════════════════════════════
+// WITHDRAW
+// ══════════════════════════════════════════════════════════════════════════
 async function doWithdraw() {
   if (!signer) return;
-  const btn = document.getElementById('btn-withdraw');
-  btn.disabled = true; btn.innerHTML = '<span class="spinner"></span>Withdrawing…';
+  const btn = $('btn-withdraw');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spin"></span>Withdrawing…';
   try {
-    // Withdraw from whichever matrix has earnings
-    const rp = readProvider || provider;
-    const matA = new ethers.Contract(MATRIX_A_ADDR, F8_ABI, rp);
-    const matB = new ethers.Contract(MATRIX_B_ADDR, F8_ABI, rp);
-    const mA = await matA.getMember(userAddr);
-    const mB = await matB.getMember(userAddr);
+    const r = rp || provider;
+    const matrices = [
+      { addr: ADDRS.MatrixA, label: 'Matrix A' },
+      { addr: ADDRS.MatrixB, label: 'Matrix B' },
+      ADDRS.MatrixC ? { addr: ADDRS.MatrixC, label: 'Matrix C' } : null,
+      ADDRS.MatrixD ? { addr: ADDRS.MatrixD, label: 'Matrix D' } : null,
+    ].filter(Boolean);
 
-    const matAW = new ethers.Contract(MATRIX_A_ADDR, F8_ABI, signer);
-    const matBW = new ethers.Contract(MATRIX_B_ADDR, F8_ABI, signer);
-
-    if (BigInt(mA.withdrawable) > 0n) { const tx = await matAW.withdraw(); await tx.wait(); }
-    if (BigInt(mB.withdrawable) > 0n) { const tx = await matBW.withdraw(); await tx.wait(); }
-
-    setStatus('dash-status', '✅ Withdrawn!', 'var(--green)');
+    let withdrawn = false;
+    for (const mat of matrices) {
+      const mc = new ethers.Contract(mat.addr, F8_ABI, r);
+      const m  = await mc.getMember(userAddr).catch(()=>null);
+      if (m && BigInt(m.withdrawable) > 0n) {
+        const mcW = new ethers.Contract(mat.addr, F8_ABI, signer);
+        const tx = await mcW.withdraw();
+        await tx.wait();
+        withdrawn = true;
+      }
+    }
+    showMsg('dash-msg', withdrawn ? '✅ Earnings withdrawn to your wallet!' : 'Nothing to withdraw.', 'ok');
     await loadAll();
   } catch(e) {
-    setStatus('dash-status', '❌ ' + (e.reason || e.message), 'var(--red)');
+    showMsg('dash-msg', '❌ ' + (e.reason || e.shortMessage || e.message), 'err');
   } finally {
-    btn.disabled = false; btn.textContent = 'Withdraw Earnings';
+    btn.disabled = false;
+    btn.textContent = 'Withdraw Earnings';
   }
 }
 
-// ── REFERRAL LINK + AUTO-ASSIGN ──────────────────────────────────────
-document.addEventListener('DOMContentLoaded', async () => {
-  const params = new URLSearchParams(window.location.search);
-  const refInput = document.getElementById('input-referrer');
-  if (params.get('ref') && refInput) {
-    refInput.value = params.get('ref');
-  } else if (refInput) {
-    // Auto-assign: get first member from Matrix A as default referrer
-    try {
-      const rp = new ethers.JsonRpcProvider('https://sepolia.base.org');
-      const matA = new ethers.Contract(MATRIX_A_ADDR, F8_ABI, rp);
-      const firstMember = await matA.posToMember(1);
-      if (firstMember && firstMember !== ethers.ZeroAddress) {
-        refInput.value = firstMember;
-        refInput.style.color = 'var(--text3)';
-        refInput.title = 'Auto-assigned to founding member';
-      }
-    } catch(_) {}
-  }
-});
-
-function copyReferralLink() {
-  if (!userAddr) return;
-  const link = window.location.origin + window.location.pathname + '?ref=' + userAddr;
+// ══════════════════════════════════════════════════════════════════════════
+// COPY REFERRAL LINK
+// ══════════════════════════════════════════════════════════════════════════
+function copyRef() {
+  const link = window.location.origin + window.location.pathname + '?ref=' + (userAddr || '');
   navigator.clipboard.writeText(link).then(() => {
-    const btn = document.getElementById('btn-copy-ref');
-    if (btn) { btn.textContent = '✅ Copied!'; setTimeout(() => btn.textContent = '🔗 Copy Referral Link', 2000); }
+    const btn = event.target;
+    btn.textContent = '✅ Copied!';
+    btn.style.color = 'var(--green)';
+    setTimeout(() => { btn.textContent = 'Copy'; btn.style.color = ''; }, 2000);
   });
 }
+
+// ══════════════════════════════════════════════════════════════════════════
+// PAYMENT SPLITS VISUAL
+// ══════════════════════════════════════════════════════════════════════════
+(function renderSplits() {
+  const segs = [
+    { pct:20, color:'var(--green)',  label:'L1 20%' },
+    { pct:5,  color:'#a3e635',      label:'L2+L3 5%' },
+    { pct:40, color:'#3b82f6',      label:'Chain 40%' },
+    { pct:15, color:'var(--yellow)',label:'Treasury 15%' },
+    { pct:10, color:'var(--red)',   label:'Escrow 10%' },
+    { pct:5,  color:'var(--purple)',label:'Founders 5%' },
+    { pct:5,  color:'var(--text3)', label:'Dev/Ops 5%' },
+  ];
+  const bar = $('split-bar');
+  if (!bar) return;
+  bar.innerHTML = segs.map(s =>
+    `<div class="split-seg" style="flex:${s.pct};background:${s.color}" title="${s.label}"></div>`
+  ).join('');
+})();
+
+// ══════════════════════════════════════════════════════════════════════════
+// AUTO-LOAD ON PAGE START (read-only stats)
+// ══════════════════════════════════════════════════════════════════════════
+window.addEventListener('DOMContentLoaded', async () => {
+  try {
+    rp = new ethers.JsonRpcProvider('https://sepolia.base.org');
+    await loadAll();
+
+    // Auto-fill referrer from URL
+    const urlRef = new URLSearchParams(window.location.search).get('ref');
+    if (urlRef && ethers.isAddress(urlRef)) {
+      const ri = $('input-referrer');
+      if (ri) { ri.value = urlRef; ri.style.color = 'var(--text3)'; }
+    } else {
+      // Default referrer: current root of Matrix A (pos 1)
+      try {
+        const matA = new ethers.Contract(ADDRS.MatrixA, F8_ABI, rp);
+        const root = await matA.posToMember(1);
+        const ri = $('input-referrer');
+        if (ri && root !== ethers.ZeroAddress) {
+          ri.placeholder = 'Auto: '+short(root)+' (current root)';
+        }
+      } catch(_) {}
+    }
+  } catch(e) { console.error('init:', e.message); }
+});
 </script>
 </body>
 </html>
