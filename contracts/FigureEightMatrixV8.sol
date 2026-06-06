@@ -467,7 +467,7 @@ contract FigureEightMatrixV8 is Ownable2Step {
 
         _distributePayments(member);
 
-        try cnova.mintReward(member) {} catch {}
+        try cnova.mintReward(member, tierIndex) {} catch {}  // V8.1: pass tier for multiplier
 
         emit MemberEntered(member, matrixPos[member], members[member].id, address(this));
     }
