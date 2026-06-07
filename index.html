@@ -1085,7 +1085,7 @@ const TIER_ROUTER_ABI = [
 ];
 
 const MATRIX_ABI = [
-  'function getMember(address) external view returns (tuple(uint256 id, address referrer, address l2Sponsor, address l3Sponsor, uint256 joinedAt, uint256 withdrawable, uint256 totalEarned, uint256 cyclesCompleted, bool isInMatrix, bool hasEverJoined, uint256 bfsPosition, uint256 lastActivityTime))',
+  'function getMember(address) external view returns (tuple(uint256 id, address referrer, address l2, address l3, uint256 joinedAt, uint256 withdrawable, uint256 totalEarned, uint256 cyclesCompleted, bool isInMatrix, bool hasEverJoined))',
   'function occupancy() external view returns (uint256)',
   'function MATRIX_SIZE() external view returns (uint256)',
   'function ENTRY_FEE() external view returns (uint256)',
@@ -1540,7 +1540,7 @@ async function loadDashboardData() {
         if (!memberId) { memberId = Number(member.id); memberReferrer = member.referrer; }
         if (member.isInMatrix) {
           activeMat = member; activeLabel = m.label;
-          activeBFS = BigInt(member.bfsPosition);
+          activeBFS = await mc.matrixPos(userAddr).catch(()=>0n); // BFS pos is separate mapping
           activeCycles = BigInt(member.cyclesCompleted);
         }
         if (m.label.startsWith('T2')) highestTier = Math.max(highestTier, 2);
