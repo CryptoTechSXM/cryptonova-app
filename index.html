@@ -1176,9 +1176,13 @@ window.addEventListener('DOMContentLoaded', async () => {
   readProvider = new ethers.JsonRpcProvider(RPC_URL);
   loadHomeStats();
 
-  // Auto-reconnect if wallet was previously connected
-  if (window.ethereum && window.ethereum.selectedAddress) {
-    try { await connectWallet(true); } catch(e) {}
+  // Auto-reconnect if wallet was previously connected (silent — no popup)
+  if (window.ethereum && localStorage.getItem('cnova_connected')) {
+    try {
+      const accounts = await window.ethereum.request({ method: 'eth_accounts' });
+      if (accounts && accounts.length > 0) await connectWallet(true);
+      else localStorage.removeItem('cnova_connected'); // wallet was locked/disconnected
+    } catch(e) {}
   }
   if (window.ethereum) {
     window.ethereum.on('chainChanged', (chainId) => {
@@ -1189,6 +1193,7 @@ window.addEventListener('DOMContentLoaded', async () => {
     window.ethereum.on('accountsChanged', (accounts) => {
       if (accounts.length === 0) {
         userAddr = null; signer = null; provider = null;
+        localStorage.removeItem('cnova_connected'); // clear so refresh doesn't try to reconnect
         const b = document.getElementById('btn-connect');
         b.textContent = 'Connect Wallet'; b.classList.remove('connected');
       } else if (accounts[0].toLowerCase() !== (userAddr||'').toLowerCase()) {
@@ -1219,7 +1224,13 @@ async function connectWallet(silent=false) {
   try {
     const walletName = detectWalletName();
     provider = new ethers.BrowserProvider(window.ethereum);
-    await provider.send('eth_requestAccounts', []);
+    // Silent reconnect uses eth_accounts (no popup); explicit connect uses eth_requestAccounts
+    if (silent) {
+      const accs = await window.ethereum.request({ method: 'eth_accounts' });
+      if (!accs || accs.length === 0) { isConnecting = false; return; }
+    } else {
+      await provider.send('eth_requestAccounts', []);
+    }
     const network = await provider.getNetwork();
     const chainId = Number(network.chainId);
     if (chainId !== CHAIN_ID) {
@@ -1243,6 +1254,7 @@ async function connectWallet(silent=false) {
     btn.textContent = short(userAddr) + ` (${walletName})`;
     btn.classList.add('connected');
     btn.disabled = false;
+    localStorage.setItem('cnova_connected', '1'); // remember for auto-reconnect on refresh
     if (!silent) toast(`Connected: ${short(userAddr)}`, 'success');
     loadUserData();
   } catch(e) {
