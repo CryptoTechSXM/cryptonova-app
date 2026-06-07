@@ -364,7 +364,7 @@
         </div>
       </div>
       <button class="btn-metamask" onclick="addCNOVAtoMetaMask()">
-        🦊 Add CNOVA to MetaMask
+        + Add CNOVA to Wallet
       </button>
     </div>
 
@@ -378,7 +378,7 @@
         </div>
       </div>
       <button class="btn-metamask" style="background:#2775ca" onclick="addUSDCtoMetaMask()">
-        🦊 Add USDC to MetaMask
+        + Add USDC to Wallet
       </button>
     </div>
 
@@ -497,7 +497,7 @@
           <div style="margin-bottom:20px">
             <div style="font-size:13px;font-weight:600;margin-bottom:10px;color:var(--text2)">Your balances</div>
             <div class="info-row"><span class="info-key">USDC Balance</span><span class="info-val" id="reg-usdc-bal">—</span></div>
-            <div class="info-row"><span class="info-key">USDC Approved</span><span class="info-val" id="reg-allowance">—</span></div>
+            <div class="info-row"><span class="info-key">USDC Approved</span><span class="info-val" id="reg-approved">—</span></div>
             <div id="usdc-low-warn" style="display:none;margin-top:10px;background:rgba(245,158,11,.08);border:1px solid rgba(245,158,11,.3);border-radius:8px;padding:12px;font-size:13px;color:var(--yellow)">
               ⚠️ Your USDC balance is too low to register. Need test USDC? Contact the dev team on Telegram — we'll get you sorted. 💬
             </div>
@@ -561,8 +561,8 @@
         <ul class="step-list">
           <li>
             <div class="step-content">
-              <strong>Connect MetaMask</strong>
-              <span>Click "Connect Wallet" in the top-right. Make sure you're on Base Sepolia testnet.</span>
+              <strong>Connect Your Wallet</strong>
+              <span>Click "Connect Wallet" in the top-right. MetaMask and Rabby are both supported. Make sure you're on Base Sepolia testnet.</span>
             </div>
           </li>
           <li>
@@ -580,7 +580,7 @@
           <li>
             <div class="step-content">
               <strong>Register</strong>
-              <span>Confirm the register transaction. You'll be placed into the conveyor belt queue at the next open position.</span>
+              <span>Confirm the register transaction. You'll be placed into the Figure-8 matrix at the next available seat.</span>
             </div>
           </li>
           <li>
@@ -850,10 +850,10 @@
             <div class="phase-title">🏗️ Foundation</div>
             <div class="phase-subtitle">Smart contracts written, tested & deployed to Base Sepolia testnet</div>
             <ul class="checklist">
-              <li><span class="check-icon check-done">✅</span> 3 smart contracts written (Matrix, Treasury, Token)</li>
-              <li><span class="check-icon check-done">✅</span> 29/29 unit tests passing</li>
+              <li><span class="check-icon check-done">✅</span> 10 smart contracts written &amp; deployed (TierRouter, 4× FigureEightMatrix, CNOVAToken, Treasury, StabilityFund, MatrixFactory, MatrixKeeper)</li>
+              <li><span class="check-icon check-done">✅</span> 26/26 V8.1 unit tests passing</li>
               <li><span class="check-icon check-done">✅</span> Deployed to Base Sepolia testnet</li>
-              <li><span class="check-icon check-done">✅</span> Full dApp frontend built (this app!)</li>
+              <li><span class="check-icon check-done">✅</span> Full V8 Figure-8 dApp frontend built (this app!)</li>
               <li><span class="check-icon check-done">✅</span> First member registered live on testnet</li>
               <li><span class="check-icon check-done">✅</span> CNOVA token name confirmed unique globally</li>
             </ul>
@@ -898,10 +898,10 @@
             <div class="phase-subtitle">Soft launch to initial community — testnet testing with real members</div>
             <ul class="checklist">
               <li><span class="check-icon check-done">✅</span> Open to initial community (testnet)</li>
-              <li><span class="check-icon check-done">✅</span> Mobile MetaMask experience tested and improved</li>
+              <li><span class="check-icon check-done">✅</span> Multi-wallet support: MetaMask + Rabby tested</li>
               <li><span class="check-icon check-pending">⏳</span> Collect feedback and fix remaining UX issues</li>
               <li><span class="check-icon check-pending">⏳</span> Record tutorial video / walkthrough for non-crypto members</li>
-              <li><span class="check-icon check-pending">⏳</span> Test full matrix cycle: 100 positions → rotation → cycle 2</li>
+              <li><span class="check-icon check-done">✅</span> Figure-8 cycle confirmed: T1 MatA 64 → MatB 64 → W1 auto-upgraded to T2 ✅</li>
               <li><span class="check-icon check-pending">⏳</span> Confirm referral link flow works end-to-end for all members</li>
             </ul>
           </div>
@@ -919,7 +919,7 @@
             <div class="phase-title">🚀 Mainnet Launch</div>
             <div class="phase-subtitle">Real USDC. Real earnings. Community-ready.</div>
             <ul class="checklist">
-              <li><span class="check-icon check-future">◦</span> Deploy all 3 contracts to Base mainnet</li>
+              <li><span class="check-icon check-future">◦</span> Deploy all 10 V8.1 contracts to Base mainnet</li>
               <li><span class="check-icon check-future">◦</span> Update dApp to point to mainnet contracts + real USDC address</li>
               <li><span class="check-icon check-future">◦</span> Verify mainnet contracts on BaseScan</li>
               <li><span class="check-icon check-future">◦</span> Final security review before public launch</li>
@@ -942,6 +942,8 @@
             <div class="phase-title">🌌 Ecosystem Growth</div>
             <div class="phase-subtitle">The universe takes over — CNOVA becomes a tradeable asset</div>
             <ul class="checklist">
+              <li><span class="check-icon check-future">◦</span> T3–T7 tier activation as community grows</li>
+              <li><span class="check-icon check-future">◦</span> Chainlink Keeper live on mainnet (automated matrix cycling)</li>
               <li><span class="check-icon check-future">◦</span> CNOVA listed on Aerodrome Finance DEX (Base's largest DEX)</li>
               <li><span class="check-icon check-future">◦</span> CNOVA/USDC liquidity pool — token becomes tradeable</li>
               <li><span class="check-icon check-future">◦</span> Leaderboard: top earners, top referrers</li>
@@ -963,10 +965,10 @@
       <div class="prelaunch-block">
         <h3>🔐 Technical</h3>
         <ul>
-          <li>Verify all 3 contracts on BaseScan (testnet + mainnet)</li>
+          <li>Verify all 10 V8.1 contracts on BaseScan (testnet + mainnet)</li>
           <li>Custom domain with HTTPS — never serve over HTTP in production</li>
           <li>Test on desktop + mobile MetaMask browser</li>
-          <li>Register 10+ wallets in sequence to stress-test payments</li>
+          <li>Complete 200-wallet stress test — Figure-8 cycles, T2+ progression</li>
           <li>Confirm withdraw() flows correct USDC to wallet</li>
           <li>Set DEV_WALLET and OPS_WALLET to permanent non-deployer addresses</li>
         </ul>
@@ -999,7 +1001,7 @@
         <h3>🪙 Token</h3>
         <ul>
           <li>CNOVA ticker confirmed unique ✅</li>
-          <li>Add CNOVA to MetaMask (button on Home tab)</li>
+          <li>Add CNOVA to wallet — MetaMask &amp; Rabby button on Home tab</li>
           <li>Prepare Aerodrome DEX listing for Phase 4</li>
           <li>Consider a token logo / icon (32×32 PNG for MetaMask display)</li>
           <li>CoinGecko listing application (after mainnet &amp; sufficient volume)</li>
@@ -1012,11 +1014,9 @@
     <div class="section-title" style="margin-top:32px"><div class="dot"></div> Deployed Contracts</div>
     <div class="card" style="text-align:center;padding:32px 24px">
       <div style="font-size:32px;margin-bottom:12px">🔒</div>
-      <div style="font-size:16px;font-weight:700;margin-bottom:8px">Contract Addresses Hidden During Testnet</div>
+      <div style="font-size:16px;font-weight:700;margin-bottom:8px">V8.1 Contracts — Base Sepolia Testnet</div>
       <div style="font-size:14px;color:var(--text2);max-width:420px;margin:0 auto;line-height:1.7">
-        Smart contract addresses will be published publicly after mainnet launch, 
-        once ownership has been renounced and the community has reached sufficient scale.
-        This protects the protocol from duplication before it is fully established.
+        10 V8.1 smart contracts deployed and verified on Base Sepolia. Mainnet addresses will be published at launch after community testing is complete.
       </div>
       <div style="margin-top:16px;display:flex;gap:12px;justify-content:center;flex-wrap:wrap">
         <div style="padding:10px 18px;background:var(--green-dim);border:1px solid var(--green2);border-radius:8px;font-size:13px;color:var(--green)">✅ Smart Contracts Deployed</div>
