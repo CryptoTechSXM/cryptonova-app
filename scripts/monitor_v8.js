@@ -2,7 +2,7 @@
 // CryptoNova V8 — Daily Chain Health Monitor
 //
 // Usage:
-//   npx hardhat run scripts/monitor_v8.js --network baseSepolia
+//   node scripts/monitor_v8.js
 //
 // ENV vars (.env):
 //   TELEGRAM_BOT_TOKEN=<from @BotFather>
@@ -13,8 +13,11 @@
 // ═══════════════════════════════════════════════════════════════════════
 
 require('dotenv').config();
-const { ethers } = require('hardhat');
+const { ethers } = require('ethers');
 const https = require('https');
+
+// ── Network ─────────────────────────────────────────────────────────
+const RPC_URL = 'https://sepolia.base.org';
 
 // ── Contract addresses ───────────────────────────────────────────────
 const ADDRS = {
@@ -125,7 +128,7 @@ const CNOVA_ABI = [
 const SF_ABI   = ['function totalBalance() external view returns (uint256)'];
 const USDC_ABI = ['function balanceOf(address) external view returns (uint256)'];
 const TR_ABI   = [
-  'function paused() external view returns (bool)',
+  'function systemPaused() external view returns (bool)',
   'function totalSystemCycles() external view returns (uint256)',
 ];
 
@@ -136,12 +139,11 @@ async function main() {
   const alerts = [];
   const today = new Date().toUTCString();
 
-  const [deployer] = await ethers.getSigners();
-  const rp = deployer.provider;
+  const rp = new ethers.JsonRpcProvider(RPC_URL);
 
   console.log('CryptoNova V8 — Daily Monitor');
   console.log('Time:', today);
-  console.log('RPC: ', rp._getConnection?.().url || 'connected');
+  console.log('RPC: ', RPC_URL);
 
   // ── Read contracts ─────────────────────────────────────────────────
   const t1A  = new ethers.Contract(ADDRS.T1.matA, MATRIX_ABI, rp);
@@ -164,12 +166,12 @@ async function main() {
     t1A.occupancy(), t1A.rotationCount(), t1A.poolAccumulator(), t1A.totalJoined(),
     t1B.occupancy(), t1B.rotationCount(), t1B.poolAccumulator(),
     t2A.occupancy(), t2A.rotationCount(), t2A.poolAccumulator(), t2A.totalJoined(),
-    t2B.occupancy(), t2B.rotationCount(),
+    t2B.occupancy(), t2B.rotationCount().catch(() => 0n),
     cnova.totalSupply(), cnova.currentEpoch(),
     cnova.epochRewards(0).catch(() => ethers.parseEther('50')),
     sf.totalBalance(),
     usdc.balanceOf(ADDRS.treasury),
-    tr.paused(),
+    tr.systemPaused(),
     tr.totalSystemCycles(),
   ]);
 
@@ -248,7 +250,7 @@ async function main() {
     ``,
     `<b>── T2 MATRIX ───────────────────────</b>`,
     `  MatA:  ${now.t2AOcc}/64  cycles: ${now.t2ACycles}${delta(now.t2ACycles, prev.t2ACycles ?? 0)}`,
-    `  MatB:  ${now.t2BOcc}/64  cycles: ${now.t2BCycles}${delta(now.t2BCycles, prev.t2BCycles ?? 0)}`,
+    `  MatB:  ${now.t2BOcc}/64  cycles: ${now.t2BCycles ?? 0}${delta(now.t2BCycles ?? 0, prev.t2BCycles ?? 0)}`,
     `  MatA pool: ${fmt6(t2APool)}`,
     ``,
     `<b>── TREASURY & RESERVES ─────────────</b>`,

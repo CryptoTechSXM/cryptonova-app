@@ -31,7 +31,9 @@ pragma solidity ^0.8.24;
  *       Fallback to devOpsWallet if StabilityFund not yet set.
  *
  *  3. Activity tracking
- *       lastActivityTime[member] updated on every _credit() and matrix entry.
+ *       lastActivityTime[member] updated on matrix entry (join) and explicit
+ *       member actions (withdraw, earlyEscrowRelease) — NOT on passive credits.
+ *       This avoids O(N) cold SSTOREs in _distributePool() at cycle-out.
  *       MatrixKeeper reads getIdleSeconds() to detect idle slots.
  *
  *  4. reclaimIdleSlot() — keeper-only
@@ -785,12 +787,15 @@ contract FigureEightMatrixV8 is Ownable2Step {
         }
     }
 
-    /// @dev Credit withdrawable earnings and update activity timestamp.
+    /// @dev Credit withdrawable earnings. Does NOT touch lastActivityTime
+    ///      (passive income != activity; see withdraw/earlyEscrowRelease).
     function _credit(address recipient, uint256 amount) internal {
         if (recipient == address(0) || amount == 0) return;
         members[recipient].withdrawable += amount;
         members[recipient].totalEarned  += amount;
-        lastActivityTime[recipient]      = block.timestamp;
+        // NOTE: lastActivityTime NOT updated here — passive credit != activity.
+        // Updated only on explicit actions: _placeInMatrix, withdraw,
+        // earlyEscrowRelease.  Avoids 63x cold SSTOREs during _distributePool.
     }
 
     // ─── Withdraw ─────────────────────────────────────────────────────────────
@@ -808,6 +813,7 @@ contract FigureEightMatrixV8 is Ownable2Step {
         uint256 amount = members[msg.sender].withdrawable;
         require(amount > 0, "F8V8: nothing to withdraw");
         members[msg.sender].withdrawable = 0;
+        lastActivityTime[msg.sender] = block.timestamp;  // explicit action = activity
 
         // ── V8.1: Withdrawal health fee → StabilityFund L3 ───────────────────
         uint256 fee    = amount * withdrawalFeeBps / BPS_DENOM;
@@ -840,6 +846,7 @@ contract FigureEightMatrixV8 is Ownable2Step {
         uint256 escrow = escrowBalance[msg.sender];
         require(escrow > 0, "F8V8: no escrow to release");
 
+        lastActivityTime[msg.sender] = block.timestamp;  // explicit action = activity
         uint256 penalty = escrow * earlyExitPenaltyBps / BPS_DENOM;
         uint256 payout  = escrow - penalty;
 

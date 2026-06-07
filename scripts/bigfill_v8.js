@@ -22,19 +22,29 @@
  * Run: npx hardhat run scripts/bigfill_v8.js --network baseSepolia
  * ─────────────────────────────────────────────────────────────────────────────
  */
-const { ethers } = require("hardhat");
-const fs         = require("fs");
-const path       = require("path");
+const { ethers }       = require("hardhat");
+const { NonceManager } = require("ethers");
+const fs               = require("fs");
+const path             = require("path");
 require("dotenv").config();
 
 // ── Config ────────────────────────────────────────────────────────────────────
-const ADDRESSES_FILE = path.join(__dirname, "deployed_addresses_v8_1.json");
+// ADDRESSES_FILE: point to whichever deployment you want to stress-test.
+//   v8_1 = size-15 testnet (retired)
+//   v8_2 = size-64 pre-mainnet  ← default
+const ADDRESSES_FILE = path.join(
+  __dirname,
+  process.env.ADDRESSES_FILE || "deployed_addresses_v8_2.json"
+);
 
-const COUNT       = Number(process.env.COUNT       || 50);
+// COUNT: for 64-seat matrices, 70 fills MatA (W1 seeds pos-1, 63 fill wallets
+// complete the matrix) with 6 extra as a failure buffer.  Use COUNT=130 to
+// also trigger a second MatA cycle and confirm W1 auto-upgrades to T2.
+const COUNT       = Number(process.env.COUNT       || 70);
 const BATCH_SIZE  = Number(process.env.BATCH_SIZE  || 5);
 const BATCH_DELAY = Number(process.env.BATCH_DELAY || 8);
 const HDR_OFFSET  = Number(process.env.HDR_OFFSET  || 500); // BIP-44 index offset (change to avoid globalJoined collisions)
-const ETH_PER     = ethers.parseEther("0.01");   // gas budget per wallet (approve + register on Base Sepolia)
+const ETH_PER     = ethers.parseEther("0.02");   // gas budget per wallet — 0.02 ETH covers approve + register even at 10+ gwei on Base Sepolia
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 const sleep  = s  => new Promise(r => setTimeout(r, s * 1000));
@@ -75,10 +85,26 @@ async function snapshot(label, { tierRouter, pm1, matA1, matB1, matA2, matB2,
   console.log(`  T1 total registered: ${totalReg}`);
   console.log(`  T1 MatA occupancy:   ${occ1A} / ${mSize}`);
   console.log(`  T1 MatB occupancy:   ${occ1B} / ${mSize}`);
-  console.log(`  W1 highest tier:     T${w1Tier}`);
+  console.log(`  W1 highest tier:     T${w1Tier}  ${w1Tier === 0n ? "(not yet registered as matrix member)" : ""}`);
   console.log(`  W1 T1 cycles:        ${w1Cycles}`);
   console.log(`  Total system cycles: ${totalCyc}`);
   console.log(`  System paused:       ${paused}`);
+
+  // T2 state — always shown so we can detect auto-upgrades even when W1 isn't the
+  // member that upgraded (W1 = accountOne fee-recipient; it's only tracked if it
+  // was explicitly registered as position-1 seed before the fill started)
+  if (matA2) {
+    try {
+      const occ2A = await matA2.occupancy();
+      const fee2  = await matA2.ENTRY_FEE();
+      console.log(`  T2 MatA occupancy:   ${occ2A} / ${mSize}`);
+      if (matB2) {
+        const occ2B = await matB2.occupancy();
+        console.log(`  T2 MatB occupancy:   ${occ2B} / ${mSize}`);
+      }
+      console.log(`  T2 entry fee:        ${fmt6(fee2)}`);
+    } catch {}
+  }
 
   // V8.1: equalization pool accumulators
   try {
@@ -122,10 +148,16 @@ async function snapshot(label, { tierRouter, pm1, matA1, matB1, matA2, matB2,
     } catch {}
   }
 
-  const treasuryBal = await cnova.balanceOf(await treasury.getAddress());
-  const totalSupply = await cnova.totalSupply();
+  const treasuryBal  = await cnova.balanceOf(await treasury.getAddress());
+  const totalSupply  = await cnova.totalSupply();
+  try {
+    const usdcAddr = await matA1.usdc();
+    const usdcR    = await ethers.getContractAt("MockUSDC", usdcAddr);
+    const tUsdc    = await usdcR.balanceOf(await treasury.getAddress());
+    console.log(`  Treasury USDC:       ${fmt6(tUsdc)}`);
+  } catch {}
   console.log(`  CNOVA minted:        ${ethers.formatEther(totalSupply)}`);
-  console.log(`  Treasury CNOVA:      ${ethers.formatEther(treasuryBal)}`);
+  console.log(`  Treasury CNOVA:      ${ethers.formatEther(treasuryBal)} (via buybacks only — 0 is normal)`);
 }
 
 // ── Main ──────────────────────────────────────────────────────────────────────
@@ -136,7 +168,9 @@ async function main() {
   }
 
   const addrs = JSON.parse(fs.readFileSync(ADDRESSES_FILE, "utf8"));
-  const [deployer] = await ethers.getSigners();
+  const [rawSigner]  = await ethers.getSigners();
+  const deployer     = new NonceManager(rawSigner); // avoids nonce collisions in parallel batch sends
+  const deployerAddr = rawSigner.address;           // NonceManager doesn't expose .address
 
   // ── Load contracts ──────────────────────────────────────────────────────────
   // V8.1 address file uses lowercase keys and tiers nested object
@@ -148,7 +182,7 @@ async function main() {
   const T1          = addrs.tiers?.T1   || { matA: addrs.T1?.MatrixA,  matB: addrs.T1?.MatrixB,  pm: addrs.T1?.PairManager };
   const T2          = addrs.tiers?.T2   || { matA: addrs.T2?.MatrixA,  matB: addrs.T2?.MatrixB,  pm: addrs.T2?.PairManager };
 
-  const usdc         = await ethers.getContractAt("MockUSDC",            USDC_ADDR);
+  const usdc         = await ethers.getContractAt("MockUSDC",            USDC_ADDR, deployer);
   const cnova        = await ethers.getContractAt("CNOVAToken",          CNOVA_ADDR);
   const treasury     = await ethers.getContractAt("CNOVATreasury",       TREAS_ADDR);
   const tierRouter   = await ethers.getContractAt("TierRouter",          TR_ADDR);
@@ -164,26 +198,78 @@ async function main() {
   const W1_ADDR = process.env.REFERRER || addrs.accountOne || addrs.AccountOne;
 
   sep(`bigfill_v8.js — ${COUNT} wallets · batch ${BATCH_SIZE} · delay ${BATCH_DELAY}s · offset ${HDR_OFFSET}`);
-  console.log(`  Deployer:   ${deployer.address}`);
+  console.log(`  Deployer:   ${deployerAddr}`);
   console.log(`  Referrer:   ${W1_ADDR}  (W1 / Account #1)`);
   console.log(`  T1 fee:     ${fmt6(T1_FEE)}`);
   console.log(`  Matrix sz:  ${mSize}  (testnet)`);
-  console.log(`  TierRouter: ${addrs.TierRouter}`);
+  console.log(`  TierRouter: ${addrs.tierRouter || addrs.TierRouter}`);
   sep();
 
-  // ── Guard: W1 must be registered ───────────────────────────────────────────
-  const w1Check = await tierRouter.memberHighestTier(W1_ADDR);
-  if (w1Check === 0n) {
-    console.error("  ❌  W1 not registered. Run deploy_v8.js first (step 7/7).");
-    process.exit(1);
+  // ── W1 status (informational — referrer need not be registered) ───────────
+  {
+    const w1Tier = await tierRouter.memberHighestTier(W1_ADDR);
+    if (w1Tier === 0n) {
+      console.log(`  ℹ  W1 not yet registered — referrer resolves to address(0), OK`);
+    } else {
+      console.log(`  ✓ W1 confirmed registered (tier ${w1Tier})`);
+    }
   }
-  console.log(`  ✓ W1 confirmed registered (tier ${w1Check})`);
 
   // ── Guard: system must not be paused ───────────────────────────────────────
   if (await tierRouter.systemPaused()) {
     console.error("  ❌  TierRouter.systemPaused = true. Cannot register.");
     process.exit(1);
   }
+
+  // ── Seed W1 as position-1 root (idempotent) ───────────────────────────────
+  // W1_ADDR is accountOne — a passive fee-recipient in the deploy JSON.  For the
+  // T1→T2 upgrade to be VISIBLE in this script we need W1 to actually be in the
+  // matrix at position-1 (root) so its escrow accumulates with each new entrant.
+  // Skip silently if W1 is already globalJoined (idempotent re-runs).
+  sep("Seeding W1 as T1 MatA root");
+  {
+    const w1Joined = await tierRouter.globalJoined(W1_ADDR);
+    if (w1Joined) {
+      const t = await tierRouter.memberHighestTier(W1_ADDR);
+      console.log(`  ✓ W1 already registered (tier ${t}) — skip seed`);
+    } else {
+      // W1 needs a private key to sign transactions. If SEED_W1_KEY is set use
+      // that signer; otherwise fund + register via deployer using enterFor-style
+      // call.  Most straightforward: deployer calls register on W1's behalf
+      // through a seedForMember helper — but TierRouter.register requires
+      // msg.sender to be the member.  Instead we fund W1 and it signs itself.
+      const w1Key = process.env.SEED_W1_KEY;
+      if (!w1Key) {
+        console.log(`  ⚠  SEED_W1_KEY not set — W1 cannot self-register.`);
+        console.log(`     Set SEED_W1_KEY=<private-key-of-${W1_ADDR.slice(0,10)}> to enable.`);
+        console.log(`     W1 upgrade tracking will not work this run.`);
+      } else {
+        const w1Wallet = new ethers.Wallet(w1Key, ethers.provider);
+        // Fund W1 with ETH if needed
+        const w1Eth = await ethers.provider.getBalance(W1_ADDR);
+        if (w1Eth < ETH_PER / 2n) {
+          console.log(`  Sending ETH to W1…`);
+          await (await deployer.sendTransaction({ to: W1_ADDR, value: ETH_PER })).wait();
+        }
+        // Fund W1 with USDC if needed
+        const w1Usdc = await usdc.balanceOf(W1_ADDR);
+        if (w1Usdc < T1_FEE) {
+          console.log(`  Minting USDC for W1…`);
+          await (await usdc.mint(W1_ADDR, T1_FEE)).wait();
+        }
+        // Approve + register
+        const allowance = await usdc.allowance(W1_ADDR, T1.pm);
+        if (allowance < T1_FEE) {
+          console.log(`  W1 approving T1 PM…`);
+          await (await usdc.connect(w1Wallet).approve(T1.pm, T1_FEE)).wait();
+        }
+        console.log(`  W1 registering…`);
+        await (await tierRouter.connect(w1Wallet).register(ethers.ZeroAddress, { gasLimit: 6_000_000 })).wait();
+        console.log(`  ✓ W1 registered as T1 MatA seed (position-1 root)`);
+      }
+    }
+  }
+  sep();
 
   // ── Generate wallets ───────────────────────────────────────────────────────
   const wallets = makeWallets(COUNT);
@@ -210,7 +296,7 @@ async function main() {
   console.log(`  Wallets needing funding: ${walletsToFund.length} / ${wallets.length} (${wallets.length - walletsToFund.length} already funded)`);
 
   // Pre-flight: verify deployer has enough ETH to fund unfunded wallets
-  const deployerBal = await ethers.provider.getBalance(deployer.address);
+  const deployerBal = await ethers.provider.getBalance(deployerAddr);
   const ethNeeded   = ETH_PER * BigInt(walletsToFund.length);
   console.log(`  Deployer ETH:   ${ethers.formatEther(deployerBal)}`);
   console.log(`  ETH needed:     ${ethers.formatEther(ethNeeded)}  (${walletsToFund.length} × ${ethers.formatEther(ETH_PER)})`);
@@ -221,47 +307,66 @@ async function main() {
   }
   console.log(`  ✓ Deployer has enough ETH`);
 
+  const fundingFailed = []; // addresses where ETH send failed (e.g. contract addresses)
   for (let i = 0; i < walletsToFund.length; i += SLICE) {
     const slice = walletsToFund.slice(i, i + SLICE);
 
-    // Re-fetch nonce fresh each slice — avoids stale nonce on first wallet
-    // "pending" counts in-flight txs so it's always accurate even mid-run
-    let nonce = await deployer.provider.getTransactionCount(deployer.address, "pending");
-
-    // ETH — explicit nonce per tx to prevent replacement-underpriced errors
-    const ethTxs = await Promise.all(
-      slice.map((w, j) =>
-        deployer.sendTransaction({ to: w.address, value: ETH_PER, nonce: nonce + j })
-      )
-    );
-    nonce += slice.length;
-    await Promise.all(ethTxs.map(tx => tx.wait()));
-
-    // USDC mint — explicit nonce continues from ETH sends
-    const usdcTxs = await Promise.all(
-      slice.map((w, j) =>
-        usdc.mint(w.address, T1_FEE, { nonce: nonce + j })
-      )
-    );
-    await Promise.all(usdcTxs.map(tx => tx.wait()));
-
-    ok += slice.length;
-
-    // Sanity-check: warn any wallet that has far less ETH than expected after funding
+    // ETH + USDC — fully sequential, all through NonceManager (deployer).
+    // NEVER mix rawSigner and NonceManager for the same deployer address:
+    // rawSigner re-fetches pending nonce independently and corrupts NonceManager's
+    // cached delta, causing "nonce too low" on the very next NonceManager call.
     for (const w of slice) {
-      const bal = await ethers.provider.getBalance(w.address);
-      if (bal < ETH_PER / 2n) {
-        console.warn(`  ⚠  Wallet ${w.address.slice(0,10)} only has ${ethers.formatEther(bal)} ETH after funding (expected ~${ethers.formatEther(ETH_PER)})`);
+      // ETH send
+      try {
+        const tx = await deployer.sendTransaction({ to: w.address, value: ETH_PER });
+        await tx.wait();
+      } catch (e) {
+        console.warn(`  ⚠  ETH send to ${w.address.slice(0,10)} failed: ${e.shortMessage || e.message.slice(0,80)}`);
+        fundingFailed.push(w.address);
+      }
+      // USDC mint (sequential — same NonceManager keeps delta correct)
+      try {
+        const tx = await usdc.mint(w.address, T1_FEE);
+        await tx.wait();
+      } catch (e) {
+        console.warn(`  ⚠  USDC mint to ${w.address.slice(0,10)} failed: ${e.shortMessage || e.message.slice(0,80)}`);
       }
     }
+
+    ok += slice.length;
 
     console.log(`  ✓ Funded ${ok} / ${walletsToFund.length} (${wallets.length} total)`);
   }
 
-  // Give the Base Sepolia RPC time to reflect the funded balances
-  // (same eventual-consistency lag that affects view calls on freshly deployed contracts)
-  console.log(`  ⏳ Waiting 6s for RPC to catch up with funded balances…`);
-  await sleep(6);
+  // Give the Base Sepolia RPC time to reflect the funded balances.
+  // publicnode sometimes lags 10-15s on balance queries even after confirmation.
+  console.log(`  ⏳ Waiting 30s for RPC to catch up with funded balances…`);
+  await sleep(30);
+
+  // Post-sleep verification: check all funded wallets actually have ETH
+  let fundingOk = 0, fundingFail = 0;
+  for (const w of walletsToFund) {
+    const bal = await ethers.provider.getBalance(w.address);
+    if (bal < ETH_PER / 2n) {
+      console.warn(`  ⚠  ${w.address.slice(0,10)} only has ${ethers.formatEther(bal)} ETH after funding — retrying`);
+      // One retry: sequential send
+      try {
+        const tx = await deployer.sendTransaction({ to: w.address, value: ETH_PER });
+        await tx.wait();
+        await sleep(8);
+        fundingOk++;
+      } catch(e) {
+        console.warn(`     retry failed: ${e.message.slice(0,80)}`);
+        fundingFail++;
+      }
+    } else {
+      fundingOk++;
+    }
+  }
+  console.log(`  Post-sleep check: ${fundingOk} funded OK, ${fundingFail} still failed`);
+  if (fundingFailed.length > 0) {
+    console.log(`  Unfundable addresses (contract collision): ${fundingFailed.map(a => a.slice(0,10)).join(", ")}`);
+  }
   sep();
 
   // ── Register wallets in batches ────────────────────────────────────────────
@@ -292,26 +397,35 @@ async function main() {
           throw new Error(`wallet ${wallet.address.slice(0,10)} already registered — skip`);
         }
 
-        // Skip wallets with insufficient ETH for gas
-        const bal = await ethers.provider.getBalance(wallet.address);
+        // Skip wallets with insufficient ETH for gas.
+        // Base Sepolia RPC (publicnode) is load-balanced; a lagging node may return
+        // 0 for a wallet whose funding tx confirmed seconds ago.  Retry once with a
+        // short sleep before giving up so parallel batches don't discard funded wallets.
+        let bal = await ethers.provider.getBalance(wallet.address);
+        if (bal < 200_000_000_000n) {
+          await new Promise(r => setTimeout(r, 10_000)); // 10s retry for RPC lag
+          bal = await ethers.provider.getBalance(wallet.address);
+        }
         if (bal < 200_000_000_000n) { // < 0.0002 ETH — not enough for register
           throw new Error(`wallet ${wallet.address.slice(0,10)} has ${ethers.formatEther(bal)} ETH — skipped (need ≥0.0002)`);
         }
 
         // Approve T1 PairManager to spend USDC — skip if allowance already sufficient
         // (previous runs may have already set the allowance, re-approving wastes gas)
-        const allowance = await usdc.allowance(wallet.address, addrs.T1.PairManager);
+        const allowance = await usdc.allowance(wallet.address, T1.pm);
         if (allowance < T1_FEE) {
-          const approveTx = await usdc.connect(connected).approve(addrs.T1.PairManager, T1_FEE);
+          const approveTx = await usdc.connect(connected).approve(T1.pm, T1_FEE);
           await approveTx.wait();
         }
 
         // Register via TierRouter (routes to active T1 pair).
-        // gasLimit is explicit: cycle-out path uses ~1.26M gas but parallel
-        // batching means the RPC estimate may be stale (sees occ < MATRIX_SIZE)
-        // and return a ~150K estimate.  A cycle-out at the wrong moment would
-        // then OOG silently.  3M covers the full cross + distribute path.
-        const regTx = await tierRouter.connect(connected).register(W1_ADDR, { gasLimit: 3_000_000 });
+        // gasLimit is explicit: at MATRIX_SIZE=64 the cycle-out path distributes
+        // pool shares to 63 members.  32 of those (BFS leaf level, positions 33-64)
+        // have zero-valued withdrawable/totalEarned/lastActivityTime slots, each
+        // costing 20k gas (zero→nonzero SSTORE).  32×3×20k ≈ 1.92M gas for
+        // _distributePool alone, plus ~0.9M for the position-shift loop.
+        // 3M was too tight (OOG mid-loop, reason:null).  6M gives ample headroom.
+        const regTx = await tierRouter.connect(connected).register(W1_ADDR, { gasLimit: 6_000_000 });
         const receipt = await regTx.wait();
         return receipt;
       })
@@ -368,6 +482,16 @@ async function main() {
   // and execute the crossing.  We do it here to complete the full figure-8 test.
   sep("ForceCross — filling MatB");
   {
+    // Guard: only run forceCross after at least one MatA rotation has completed.
+    // Use matA1.rotationCount() — this increments on every _cycleOutRoot().
+    // NOTE: tierRouter.totalSystemCycles() counts T1→T2 upgrades (0 until MatB cycles),
+    //       NOT MatA rotations — using it as the guard skips forceCross incorrectly.
+    const _fcRotCount = await matA1.rotationCount();
+    const _fcMatBOcc  = await matB1.occupancy();
+    const _fcMatAOcc  = await matA1.occupancy();
+    if (_fcRotCount === 0n && _fcMatAOcc > 0n) {
+      console.log(`  MatA at ${_fcMatAOcc}/${mSize}, rotationCount=0 — no cycle yet, skipping forceCross`);
+    } else {
     const matBOcc = await matB1.occupancy();
     const matBSize = await matB1.MATRIX_SIZE();
     console.log(`  MatB before forceCross: ${matBOcc} / ${matBSize}`);
@@ -378,12 +502,17 @@ async function main() {
     // in the current `wallets` array unless we explicitly scan the old range too.
     const MNEMO_SCAN = "test test test test test test test test test test test junk";
     const scanSet = new Map(); // address → wallet (dedup)
-    // Always scan the default offset-500 range (historical batches)
-    for (let i = 0; i < 70; i++) {
-      const w = ethers.HDNodeWallet.fromPhrase(MNEMO_SCAN, undefined, `m/44'/60'/0'/0/${500 + i}`);
-      scanSet.set(w.address, w);
+    // Scan all historically used offset ranges so parked wallets from prior runs
+    // are picked up even if their HDR_OFFSET differs from the current batch.
+    // Add new offsets here as runs accumulate (e.g. 2500, 3000 after more fills).
+    const SCAN_OFFSETS = [500, 1000, 1500, 2000, 2500];
+    for (const base of SCAN_OFFSETS) {
+      for (let i = 0; i < 70; i++) {
+        const w = ethers.HDNodeWallet.fromPhrase(MNEMO_SCAN, undefined, `m/44'/60'/0'/0/${base + i}`);
+        scanSet.set(w.address, w);
+      }
     }
-    // Also scan the current batch (may be a different offset)
+    // Also scan the current batch in case HDR_OFFSET isn't in the static list above
     for (const w of wallets) scanSet.set(w.address, w);
 
     // Collect wallets that cycled out of MatA but haven't entered MatB yet
@@ -416,96 +545,72 @@ async function main() {
     } else {
       // Mint USDC to deployer for each forceCross if needed
       const usdcNeeded   = T1_FEE * BigInt(toCross.length);
-      const deployerUsdc = await usdc.balanceOf(deployer.address);
+      const deployerUsdc = await usdc.balanceOf(deployerAddr);
       if (deployerUsdc < usdcNeeded) {
         const toMint = usdcNeeded - deployerUsdc;
         console.log(`  Minting ${fmt6(toMint)} USDC to deployer for forceCross…`);
-        await (await usdc.mint(deployer.address, toMint)).wait();
+        await (await usdc.mint(deployerAddr, toMint)).wait();
       }
+
+      // Single bulk approve — avoids per-iteration approve+forceCross double-tx nonce collision
+      await (await usdc.approve(await matA1.getAddress(), usdcNeeded)).wait();
 
       let crossed = 0;
       for (const addr of toCross) {
         const occNow = await matB1.occupancy();
         console.log(`  forceCross ${addr.slice(0,10)}… (MatB ${occNow}/${matBSize})`);
         try {
-          await (await usdc.approve(await matA1.getAddress(), T1_FEE)).wait();
-          const tx = await matA1.forceCross(addr, { gasLimit: 3_000_000 });
-          const rc  = await tx.wait();
+          await (await matA1.forceCross(addr, { gasLimit: 6_000_000 })).wait();
           crossed++;
-          console.log(`    ✓ crossed  gasUsed: ${rc.gasUsed}`);
-
-          // Check upgrade mid-loop
-          const curTierFC = await tierRouter.memberHighestTier(W1_ADDR);
-          if (curTierFC >= 2n && upgradedAt.length === 0) {
-            upgradedAt.push(`forceCross #${crossed}`);
-            console.log(`\n  🎉  W1 UPGRADED TO T2 during forceCross!`);
-          }
         } catch (e) {
-          console.warn(`    ⚠ failed: ${e.reason || e.message?.slice(0,120)}`);
+          console.warn(`    ⚠ forceCross failed for ${addr.slice(0,10)}: ${e.message.slice(0,100)}`);
         }
-        await sleep(2);
       }
-      console.log(`  Done: ${crossed}/${toCross.length} crossed`);
-    }
 
-    const finalOccB = await matB1.occupancy();
-    console.log(`  MatB after forceCross: ${finalOccB} / ${matBSize}`);
-  }
-  sep();
+      const matBAfter = await matB1.occupancy();
+      console.log(`  MatB after forceCross: ${matBAfter} / ${matBSize}`);
+      console.log(`  Crossed: ${crossed} / ${toCross.length}`);
+    } // end if toCross.length > 0
+
+    } // end else (forceCross — cycles have happened)
+  } // end outer forceCross block
 
   // ── Post-fill snapshot ────────────────────────────────────────────────────
+  sep();
   await snapshot("POST-FILL SNAPSHOT", { tierRouter, pm1, matA1, matB1, matA2, matB2, cnova, treasury, stabilityFund, w1Addr: W1_ADDR });
 
-  // ── Summary ────────────────────────────────────────────────────────────────
+  // ── Summary ───────────────────────────────────────────────────────────────
   sep("SUMMARY");
   console.log(`  Wallets funded:   ${wallets.length}`);
   console.log(`  Registered:       ${registered}`);
   console.log(`  Failures:         ${failures.length}`);
-  if (failures.length > 0) {
-    failures.slice(0, 5).forEach((e, i) => console.log(`    [${i}] ${e}`));
-    if (failures.length > 5) console.log(`    ... and ${failures.length - 5} more`);
-  }
+  const showN = Math.min(failures.length, 5);
+  for (let i = 0; i < showN; i++) console.log(`    [${i}] ${failures[i]}`);
+  if (failures.length > showN) console.log(`    ... and ${failures.length - showN} more`);
 
-  const finalTier  = await tierRouter.memberHighestTier(W1_ADDR);
-  const finalCyc   = await tierRouter.totalSystemCycles();
-
+  const finalTier = await tierRouter.memberHighestTier(W1_ADDR);
   if (finalTier >= 2n) {
-    console.log(`\n  ✅  UPGRADE CONFIRMED — W1 is at T${finalTier}`);
-    console.log(`  Total system cycles: ${finalCyc}`);
-    const w1mBfinal = await matB1.getMember(W1_ADDR);
-    if (w1mBfinal.hasEverJoined) {
-      console.log(`  W1 MatB cycles:      ${w1mBfinal.cyclesCompleted}`);
-    }
-    if (upgradedAt.length > 0) {
-      console.log(`  Upgraded at reg:     ${upgradedAt[0]}`);
-    }
+    console.log(`\n  ✅  W1 (${W1_ADDR.slice(0,10)}) upgraded to T${finalTier}!`);
   } else {
-    console.log(`
-  ⚠   W1 still at T${finalTier} — more forceCrosses or registrations needed`);
-    // Show W1's MatB state to help diagnose
-    const w1mbS = await matB1.getMember(W1_ADDR);
-    if (w1mbS.hasEverJoined) {
-      console.log(`      W1 in MatB: isInMatrix=${w1mbS.isInMatrix}, escrow=$${Number(await matB1.escrowOf(W1_ADDR))/1e6}`);
-    }
-    const t2fee = await matB1.ENTRY_FEE ? await matB1.ENTRY_FEE() : 25_000_000n;
-    console.log(`      T2 fee needed: $${Number(t2fee)/1e6}`);
-    console.log(`  Total system cycles: ${finalCyc}`);
+    console.log(`\n  ⚠   W1 (${W1_ADDR.slice(0,10)}) still at T${finalTier}`);
+    console.log(`      W1 = accountOne fee-recipient — it only upgrades if it was`);
+    console.log(`      pre-registered as position-1 seed before the fill started.`);
+    const matA2occ = await matA2.occupancy();
+    const t2fee    = await matA2.ENTRY_FEE();
+    console.log(`      Check T2 MatA occupancy above to see if OTHER roots upgraded.`);
+    console.log(`      T2 entry fee: $${Number(t2fee)/1e6}  |  T2 MatA occ: ${matA2occ}/64`);
   }
 
+  console.log("");
   sep();
   console.log("  NEXT STEPS:");
-  if (finalTier >= 2n) {
-    console.log("    ✅  W1 upgraded to T2 — stress test complete!");
-    console.log("    Run with COUNT=200 for full stress test across multiple T1 cycles");
+  console.log("    1. Re-run — forceCross logic will pick up remaining parked wallets");
+  console.log("    2. If W1 not upgrading, check W1 MatB escrow vs T2 fee above");
+  if (registered === 0 && failures.length === wallets.length) {
+    console.log(`    3. All ${wallets.length} wallets already registered at offset ${HDR_OFFSET}`);
+    console.log(`       Try: HDR_OFFSET=${HDR_OFFSET + 500} COUNT=6 npx hardhat run scripts/bigfill_v8.js --network baseSepolia`);
   } else {
-    console.log("    1. Re-run — forceCross logic will pick up remaining parked wallets");
-    console.log("    2. If W1 not upgrading, check W1 MatB escrow vs T2 fee above");
-    if (registered === 0 && failures.length === wallets.length) {
-      console.log(`    3. All ${wallets.length} wallets already registered at offset ${HDR_OFFSET}`);
-      console.log(`       Try: HDR_OFFSET=${HDR_OFFSET + 500} COUNT=6 npx hardhat run scripts/bigfill_v8.js --network baseSepolia`);
-    } else {
-      console.log("    3. bigfill_v8.js again with COUNT=200 for full stress test");
-    }
+    console.log("    3. bigfill_v8.js again with COUNT=200 for full stress test");
   }
   sep();
 }
