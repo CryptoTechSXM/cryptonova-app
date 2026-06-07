@@ -277,7 +277,7 @@ async function main() {
   }
 
   report.push('');
-  report.push(`<i>Run: npx hardhat run scripts/monitor_v8.js --network baseSepolia</i>`);
+  report.push(`<i>Run: node scripts/monitor_v8.js</i>`);
 
   const message = report.join('\n');
 
