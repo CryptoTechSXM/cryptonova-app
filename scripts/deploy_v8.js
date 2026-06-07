@@ -297,6 +297,26 @@ async function main() {
   // (TierRouter setters check owner() OR tierRouter, V8Governance calls setters directly)
   console.log("  ↳  V8Governance deployed (testnet: owner retains control)");
 
+  // ── 9b. Wire CNOVA roles ─────────────────────────────────────────────────
+  // CRITICAL: Without MINTER_ROLE, every matrix cycle-out reverts on mintReward().
+  // Without GOVERNOR_ROLE, V8Governance cannot tune epoch/vesting params after deploy.
+  sep("CNOVA Role Grants");
+
+  const MINTER_ROLE   = await cnova.MINTER_ROLE();
+  const GOVERNOR_ROLE = await cnova.GOVERNOR_ROLE();
+
+  // Grant MINTER_ROLE to every deployed matrix (MatA + MatB for each tier)
+  for (const tierNum of DEPLOY_TIERS) {
+    const { matA, matB } = deployed[tierNum];
+    await (await cnova.grantRole(MINTER_ROLE, matA)).wait();
+    await (await cnova.grantRole(MINTER_ROLE, matB)).wait();
+    console.log(`  ↳  MINTER_ROLE granted to T${tierNum} MatA + MatB`);
+  }
+
+  // Grant GOVERNOR_ROLE to V8Governance (allows DAO to tune epoch/vesting params)
+  await (await cnova.grantRole(GOVERNOR_ROLE, govAddr)).wait();
+  console.log(`  ↳  GOVERNOR_ROLE granted to V8Governance (${govAddr})`);
+
   // ── 10. Register W1 (Account #1) as first member in T1 ───────────────────
   sep("W1 Registration");
   const T1_FEE = TIER_FEES[0];
