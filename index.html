@@ -1127,6 +1127,48 @@ const TREASURY_ABI = [
 let provider=null, signer=null, userAddr=null, readProvider=null, isConnecting=false;
 
 // ═══════════════════════════════════════════════════════════════════════
+// ERROR REPORTING — sends to /api/log-error → Telegram admin channel
+// ═══════════════════════════════════════════════════════════════════════
+function getDevice() {
+  return /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent) ? 'mobile' : 'desktop';
+}
+
+function detectWalletName() {
+  if (!window.ethereum) return 'no-wallet';
+  if (window.ethereum.isRabby)          return 'Rabby';
+  if (window.ethereum.isCoinbaseWallet) return 'Coinbase Wallet';
+  if (window.ethereum.isBraveWallet)    return 'Brave Wallet';
+  if (window.ethereum.isTrust)          return 'Trust Wallet';
+  if (window.ethereum.isOKExWallet || window.okxwallet) return 'OKX Wallet';
+  if (window.ethereum.isPhantom)        return 'Phantom';
+  if (window.ethereum.isMetaMask)       return 'MetaMask';
+  return 'Unknown Wallet';
+}
+
+async function reportEvent(type, details = {}) {
+  try {
+    const payload = {
+      type,
+      wallet:  details.wallet  || detectWalletName(),
+      error:   details.error   || '',
+      action:  details.action  || '',
+      device:  details.device  || getDevice(),
+      network: details.network || '',
+      url:     window.location.pathname + window.location.search,
+      addr:    details.addr || (userAddr ? userAddr.slice(0,6)+'…'+userAddr.slice(-4) : ''),
+    };
+    // Fire and forget — don't await, never block the UI
+    fetch('/api/log-error', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    }).catch(() => {}); // silently swallow network errors
+  } catch(e) { /* never throw from reporter */ }
+}
+
+
+
+// ═══════════════════════════════════════════════════════════════════════
 // INIT
 // ═══════════════════════════════════════════════════════════════════════
 window.addEventListener('DOMContentLoaded', async () => {
@@ -1168,20 +1210,36 @@ async function connectWallet(silent=false) {
   if (isConnecting) return;
   if (!window.ethereum) {
     if (!silent) toast('No wallet detected. Install MetaMask or Rabby.', 'error');
+    reportEvent('NO_WALLET', { action: 'connect', error: 'No injected provider' });
     return;
   }
   isConnecting = true;
   const btn = document.getElementById('btn-connect');
   if (!silent) { btn.disabled = true; btn.innerHTML = '<span class="spinner"></span>Connecting…'; }
   try {
-    // Detect Rabby vs MetaMask
-    const walletName = window.ethereum.isRabby ? 'Rabby' : window.ethereum.isMetaMask ? 'MetaMask' : 'Wallet';
+    const walletName = detectWalletName();
     provider = new ethers.BrowserProvider(window.ethereum);
     await provider.send('eth_requestAccounts', []);
     const network = await provider.getNetwork();
-    if (Number(network.chainId) !== CHAIN_ID) { showNetworkBanner(); return; }
+    const chainId = Number(network.chainId);
+    if (chainId !== CHAIN_ID) {
+      showNetworkBanner();
+      reportEvent('WRONG_NETWORK', {
+        wallet: walletName, action: 'connect',
+        network: String(chainId),
+        error: `Expected chainId ${CHAIN_ID}, got ${chainId}`,
+      });
+      return;
+    }
     signer = await provider.getSigner();
     userAddr = await signer.getAddress();
+    // Report unsupported/unrecognised wallet names for tracking
+    if (!['MetaMask','Rabby'].includes(walletName)) {
+      reportEvent('WALLET_OTHER', {
+        wallet: walletName, action: 'connect',
+        error: `${walletName} connected — not yet in supported list`,
+      });
+    }
     btn.textContent = short(userAddr) + ` (${walletName})`;
     btn.classList.add('connected');
     btn.disabled = false;
@@ -1190,6 +1248,12 @@ async function connectWallet(silent=false) {
   } catch(e) {
     if (!silent) toast('Connection cancelled.', 'error');
     btn.disabled = false; btn.textContent = 'Connect Wallet'; btn.classList.remove('connected');
+    if (!silent && e.code !== 4001) { // 4001 = user rejected — not an error
+      reportEvent('WALLET_ERROR', {
+        wallet: detectWalletName(), action: 'connect',
+        error: e.message || String(e),
+      });
+    }
   } finally { isConnecting = false; }
 }
 
@@ -1388,6 +1452,9 @@ async function approveUSDC() {
   } catch(e) {
     btn.disabled = false; btn.textContent = 'Step 1: Approve $10 USDC 🔒';
     setStatus('reg-status', '❌ ' + friendlyError(e), 'err');
+    if (e.code !== 4001) reportEvent('TX_FAILED', {
+      action: 'approve-usdc', error: e.message || String(e),
+    });
   }
 }
 
@@ -1410,6 +1477,9 @@ async function doRegister() {
   } catch(e) {
     btn.disabled = false; btn.textContent = 'Step 2: Join Figure-8 ($10)';
     setStatus('reg-status', '❌ ' + friendlyError(e), 'err');
+    if (e.code !== 4001) reportEvent('TX_FAILED', {
+      action: 'register', error: e.message || String(e),
+    });
   }
 }
 
