@@ -1,57 +1,17 @@
-# ============================================================
-#  CryptoNite MT5 Bots — .gitignore
-#  NEVER commit credentials or generated files
-# ============================================================
-
-# --- Credentials (NEVER commit these) ---
+# Environment — NEVER commit this
 .env
-*.env
 
-# --- Telethon session files (contain auth tokens) ---
-*.session
-*.session-journal
+# Hardhat
+node_modules
+cache
+artifacts
+typechain-types
 
-# --- Office lock files ---
-.~lock.*
+# Coverage
+coverage
+coverage.json
 
-# --- Bot logs & notes ---
-trade_log.txt
-journal.txt
-*.txt
-
-# --- Python cache ---
-__pycache__/
-*.py[cod]
-*.pyo
-*.pyd
-.Python
-
-# --- Logs ---
-*.log
-mt5_csv_updater.log
-
-# --- Trade & signal data (generated at runtime) ---
-*.csv
-!.env.example
-
-# --- Excel reports (generated) ---
-*.xlsx
-*.xls
-
-# --- MT5 data files ---
-h1.csv
-m1.csv
-m5.csv
-
-# --- Setup script (contains PAT, deletes itself after run) ---
-git_setup.bat
-
-# --- OS files ---
+# Misc
 .DS_Store
-Thumbs.db
-desktop.ini
-
-# --- IDE ---
-.vscode/
-.idea/
-*.swp
+*.log
+monitor_state.json
