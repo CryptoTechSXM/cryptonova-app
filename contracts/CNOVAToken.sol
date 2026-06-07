@@ -53,6 +53,19 @@ import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/extensions/ERC20Burnable.sol";
 import "@openzeppelin/contracts/access/AccessControl.sol";
 
+// ─────────────────────────────────────────────────────────────────────────────
+// BSC / MULTI-CHAIN BRIDGE NOTE (future V8.2):
+// To share the 21M hard cap across a second network (e.g. BNB Chain), replace
+// the ERC20 base contract with LayerZero OFT:
+//   import { OFT } from "@layerzerolabs/oft-evm/contracts/OFT.sol";
+//   contract CNOVAToken is OFT, ERC20Burnable, AccessControl { ... }
+// Add lzEndpoint address to constructor. Preserve the _update() vesting
+// override -- it must remain in place alongside the OFT send/receive hooks.
+// The 21M HARD_CAP and totalMinted accounting are unchanged; OFT burn-on-send
+// / mint-on-receive keeps cross-chain supply sum <= 21M at all times.
+// Estimated effort: ~200 lines, half a day. Do NOT implement until Base
+// mainnet has proven the model. Ref: https://docs.layerzero.network/contracts/oft
+// ─────────────────────────────────────────────────────────────────────────────
 contract CNOVAToken is ERC20, ERC20Burnable, AccessControl {
 
     // =========================================================================
@@ -144,6 +157,25 @@ contract CNOVAToken is ERC20, ERC20Burnable, AccessControl {
     uint256 public vestDuration   = 180 days;   // governable
     uint256 public constant MAX_VEST_BATCHES = 200;
 
+    // ── Early exit penalty ──────────────────────────────────────────────────
+    // Members may unlock vested tokens before their cliff date by paying a
+    // sliding penalty. Penalty decreases linearly from maxPenaltyBps at the
+    // moment of minting down to 0 bps at the unlockAt timestamp.
+    //
+    //   penaltyBps = maxPenaltyBps * timeRemaining / vestDuration
+    //   penaltyAmt = batchAmount  * penaltyBps    / 10_000
+    //   released   = batchAmount  - penaltyAmt
+    //
+    // Penalty tokens are burned (penaltyDestination == address(0)) or sent to
+    // a designated address (e.g. buyback fund) -- both options strengthen floor.
+    // DAO-adjustable via GOVERNOR_ROLE.
+
+    /// @notice Max early-exit penalty BPS at day 0 (default 5000 = 50%).
+    uint256 public maxPenaltyBps    = 5_000;
+
+    /// @notice Penalty recipient. address(0) = burn (deflationary).
+    address public penaltyDestination;
+
     // =========================================================================
     // Staking boost lookup (DAO-adjustable via GOVERNOR_ROLE)
     // =========================================================================
@@ -180,6 +212,14 @@ contract CNOVAToken is ERC20, ERC20Burnable, AccessControl {
     event EpochTimeLimitUpdated(uint256 newLimit);
     event VestDurationUpdated(uint256 oldDuration, uint256 newDuration);
     event BoostTableUpdated(uint256[] thresholds, uint256[] rates);
+    event EarlyUnlock(
+        address indexed member,
+        uint256 batchIndex,
+        uint256 released,
+        uint256 penaltyAmount
+    );
+    event MaxPenaltyBpsUpdated(uint256 oldBps, uint256 newBps);
+    event PenaltyDestinationUpdated(address oldDest, address newDest);
 
     // =========================================================================
     // Constructor
@@ -296,6 +336,32 @@ contract CNOVAToken is ERC20, ERC20Burnable, AccessControl {
     }
 
     /**
+     * @notice Set the maximum early-exit penalty (applied at day 0 of vesting).
+     *         Penalty slides linearly to 0 as the cliff expiry approaches.
+     *         Range: 0 (no penalty, essentially free early exit) to 5000 (50%).
+     *         Default: 5000 (50%). Capped at 5000 -- never punitive beyond half.
+     */
+    function setMaxPenaltyBps(uint256 bps) external onlyRole(GOVERNOR_ROLE) {
+        require(bps <= 5_000, "CNOVA: penalty exceeds 50%");
+        uint256 old = maxPenaltyBps;
+        maxPenaltyBps = bps;
+        emit MaxPenaltyBpsUpdated(old, bps);
+    }
+
+    /**
+     * @notice Set the penalty destination address.
+     *         address(0) = burn (deflationary, strongest floor impact).
+     *         Any other address (e.g. buyback fund) receives the penalty tokens.
+     *         Both options strengthen floor price -- burn reduces supply,
+     *         buyback fund uses penalty CNOVA to buy back USDC for treasury.
+     */
+    function setPenaltyDestination(address dest) external onlyRole(GOVERNOR_ROLE) {
+        address old = penaltyDestination;
+        penaltyDestination = dest;
+        emit PenaltyDestinationUpdated(old, dest);
+    }
+
+    /**
      * @notice Replace the staking boost lookup table.
      *         thresholds must be strictly ascending. Pass empty arrays to disable.
      */
@@ -345,9 +411,9 @@ contract CNOVAToken is ERC20, ERC20Burnable, AccessControl {
 
         // Compute base reward
         uint256 base;
-        bool isFinalFrontier = (currentEpoch == TOTAL_EPOCHS - 1);
+        bool isFF = (currentEpoch == TOTAL_EPOCHS - 1);
 
-        if (isFinalFrontier && address(treasuryRef) != address(0)) {
+        if (isFF && address(treasuryRef) != address(0)) {
             uint256 floor = treasuryRef.floorPrice();
             if (floor == 0) {
                 base = epochRewards[currentEpoch];
@@ -473,6 +539,118 @@ contract CNOVAToken is ERC20, ERC20Burnable, AccessControl {
                 batches.pop();
             } else {
                 i++;
+            }
+        }
+    }
+
+    /**
+     * @notice Early-exit a single vest batch. Caller pays a sliding penalty
+     *         on the locked portion; remainder is immediately transferable.
+     *
+     *         penaltyBps = maxPenaltyBps * timeRemaining / vestDuration
+     *
+     *         If the batch is already past its unlockAt the call succeeds with
+     *         zero penalty (equivalent to pruning an expired batch).
+     *
+     * @param  batchIndex  Index into vestBatchesOf(msg.sender).
+     * @return released    CNOVA now freely transferable (after penalty deducted).
+     * @return penaltyAmt  CNOVA burned or sent to penaltyDestination.
+     */
+    function earlyUnlock(uint256 batchIndex)
+        external
+        returns (uint256 released, uint256 penaltyAmt)
+    {
+        VestBatch[] storage batches = _vestBatches[msg.sender];
+        require(batchIndex < batches.length, "CNOVA: invalid batch index");
+
+        VestBatch memory batch = batches[batchIndex];
+        uint256 amount    = uint256(batch.amount);
+        uint256 unlockAt  = uint256(batch.unlockAt);
+
+        // ── Compute penalty ──────────────────────────────────────────────────
+        if (block.timestamp >= unlockAt || maxPenaltyBps == 0) {
+            penaltyAmt = 0;
+        } else {
+            uint256 timeRemaining = unlockAt - block.timestamp;
+            // Guard: timeRemaining should never exceed vestDuration, but cap it.
+            if (timeRemaining > vestDuration) timeRemaining = vestDuration;
+            penaltyAmt = (amount * maxPenaltyBps * timeRemaining)
+                         / (10_000 * vestDuration);
+        }
+        released = amount - penaltyAmt;
+
+        // ── Remove the vest batch (swap-and-pop) ─────────────────────────────
+        batches[batchIndex] = batches[batches.length - 1];
+        batches.pop();
+
+        // ── Apply penalty ────────────────────────────────────────────────────
+        // Batch is gone, so msg.sender's locked balance no longer includes it.
+        // _burn and _transfer will now succeed for the penalty amount.
+        if (penaltyAmt > 0) {
+            address dest = penaltyDestination;
+            if (dest == address(0)) {
+                // Burn -- most deflationary option, strongest floor support.
+                _burn(msg.sender, penaltyAmt);
+            } else {
+                // Send to designated buyback / penalty fund.
+                // No vesting lock on this transfer: the batch was already removed.
+                _transfer(msg.sender, dest, penaltyAmt);
+            }
+        }
+
+        emit EarlyUnlock(msg.sender, batchIndex, released, penaltyAmt);
+        return (released, penaltyAmt);
+    }
+
+    /**
+     * @notice Early-exit ALL vest batches in one transaction.
+     *         Each batch is penalised independently (different time-remaining).
+     *         Convenient for members who want full liquidity immediately.
+     *
+     * @return totalReleased  Sum of all released amounts.
+     * @return totalPenalty   Sum of all penalty amounts (burned / sent to dest).
+     */
+    function earlyUnlockAll()
+        external
+        returns (uint256 totalReleased, uint256 totalPenalty)
+    {
+        VestBatch[] storage batches = _vestBatches[msg.sender];
+        uint256 len = batches.length;
+        if (len == 0) return (0, 0);
+
+        address dest = penaltyDestination;
+
+        // Iterate in reverse so swap-and-pop does not skip entries.
+        for (uint256 i = len; i > 0; i--) {
+            VestBatch memory batch = batches[i - 1];
+            uint256 amount   = uint256(batch.amount);
+            uint256 unlockAt = uint256(batch.unlockAt);
+            uint256 penalty  = 0;
+
+            if (block.timestamp < unlockAt && maxPenaltyBps > 0) {
+                uint256 timeRemaining = unlockAt - block.timestamp;
+                if (timeRemaining > vestDuration) timeRemaining = vestDuration;
+                penalty = (amount * maxPenaltyBps * timeRemaining)
+                          / (10_000 * vestDuration);
+            }
+
+            uint256 rel = amount - penalty;
+            totalReleased += rel;
+            totalPenalty  += penalty;
+
+            // Remove batch
+            batches[i - 1] = batches[batches.length - 1];
+            batches.pop();
+
+            emit EarlyUnlock(msg.sender, i - 1, rel, penalty);
+        }
+
+        // Apply all penalties in one go after batches are cleared.
+        if (totalPenalty > 0) {
+            if (dest == address(0)) {
+                _burn(msg.sender, totalPenalty);
+            } else {
+                _transfer(msg.sender, dest, totalPenalty);
             }
         }
     }
