@@ -1513,6 +1513,7 @@ async function loadDashboardData() {
     let totalW = 0n, totalE = 0n, totalEscrow = 0n;
     let activeMat = null, activeLabel = '', activeBFS = 0n, activeCycles = 0n;
     let highestTier = 0;
+    let memberId = 0, memberReferrer = ethers.ZeroAddress;
 
     for (const m of matrices) {
       const mc = new ethers.Contract(m.addr, MATRIX_ABI, rp);
@@ -1524,6 +1525,7 @@ async function loadDashboardData() {
         totalW += BigInt(member.withdrawable);
         totalE += BigInt(member.totalEarned);
         totalEscrow += BigInt(escrow);
+        if (!memberId) { memberId = Number(member.id); memberReferrer = member.referrer; }
         if (member.isInMatrix) {
           activeMat = member; activeLabel = m.label;
           activeBFS = BigInt(member.bfsPosition);
@@ -1534,19 +1536,34 @@ async function loadDashboardData() {
       }
     }
 
-    // CNOVA balance
+    // CNOVA balance + floor price (sfBal / cnovaSupply)
     const cnova = new ethers.Contract(ADDRS.cnova, CNOVA_ABI, rp);
-    const cnovabal = await cnova.balanceOf(userAddr).catch(()=>0n);
+    const sf    = new ethers.Contract(ADDRS.stabilityFund, SF_ABI, rp);
+    const [cnovabal, sfBal, cnovaSupply] = await Promise.all([
+      cnova.balanceOf(userAddr).catch(()=>0n),
+      sf.totalBalance().catch(()=>0n),
+      cnova.totalSupply().catch(()=>0n),
+    ]);
+    // cnovabal=18dec, sfBal=6dec, cnovaSupply=18dec → result is 6dec USDC
+    const cnovaValRaw = cnovaSupply > 0n ? (cnovabal * sfBal) / cnovaSupply : 0n;
+
+    const TIER_NAMES = ['—','Nova Seed','Nova Rise','Nova Star','Nova Prime','SuperNova Genesis','SuperNova Elite','SuperNova Spark'];
 
     // Render
-    setText('dash-withdrawable', fmt6(totalW));
-    setText('dash-earned', fmt6(totalE));
-    setText('dash-escrow', fmt6(totalEscrow));
-    setText('dash-cnova', Number(ethers.formatEther(cnovabal)).toFixed(2));
-    setText('dash-tier', highestTier > 0 ? `T${highestTier}` : 'T1');
-    setText('dash-matrix', activeMat ? activeLabel : '—');
-    setText('dash-bfs', activeBFS > 0n ? '#'+activeBFS.toString() : '—');
-    setText('dash-cycles', activeCycles.toString());
+    setText('dash-withdrawable',   fmt6(totalW));
+    setText('dash-withdraw-amount',fmt6(totalW));
+    setText('dash-total-earned',   fmt6(totalE));
+    setText('dash-escrow',         fmt6(totalEscrow));
+    setText('dash-cnova',          Number(ethers.formatEther(cnovabal)).toFixed(2));
+    setText('dash-cnova-val',      fmt6(cnovaValRaw));
+    setText('dash-tier',           highestTier > 0 ? `T${highestTier}` : 'T1');
+    setText('dash-tier-name',      TIER_NAMES[highestTier] || '—');
+    setText('dash-matrix',         activeMat ? activeLabel : '—');
+    setText('dash-bfs',            activeBFS > 0n ? '#'+activeBFS.toString() : '—');
+    setText('dash-cycles',         activeCycles.toString());
+    setText('dash-id',             memberId > 0 ? '#' + memberId : '—');
+    setText('dash-orig-referrer',  memberReferrer && memberReferrer !== ethers.ZeroAddress
+      ? memberReferrer.slice(0,6)+'…'+memberReferrer.slice(-4) : 'Direct');
 
     // Withdraw button
     const btnW = document.getElementById('btn-withdraw');
