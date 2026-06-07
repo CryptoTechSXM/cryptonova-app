@@ -731,7 +731,12 @@
             <div id="cw-claim-status" style="margin-top:10px;font-size:13px;color:var(--text2)"></div>
           </div>
         </div>
-        <div id="cw-loading" style="font-size:13px;color:var(--text3)"><span class="spinner"></span> Loading…</div>
+        <div id="cw-loading" style="padding:16px;background:var(--bg3);border-radius:10px;font-size:13px;color:var(--text2);line-height:1.6">
+          <strong style="color:var(--green)">🏛️ Community Wallet — Phase 2</strong><br>
+          The Community Wallet pays out to the first 2,000 members every 25 days.
+          Nova Originals (#1–1,000) receive 70% of the pool; Nova Pioneers (#1,001–2,000) receive 30%.<br><br>
+          This feature activates with the Phase 2 contract deployment. Your founder status is already being tracked on-chain.
+        </div>
       </div>
 
       <!-- Chain pay breakdown -->
@@ -1580,6 +1585,10 @@ async function loadDashboardData() {
     // Withdraw button
     const btnW = document.getElementById('btn-withdraw');
     if (btnW) btnW.disabled = totalW === 0n;
+
+    // BaseScan link
+    const bsLink = document.getElementById('basescan-tx-link');
+    if (bsLink) bsLink.href = 'https://sepolia.basescan.org/address/' + userAddr;
 
     // Referral link
     const link = window.location.origin + window.location.pathname + '?ref=' + userAddr;
