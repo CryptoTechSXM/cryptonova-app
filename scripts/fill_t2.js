@@ -319,6 +319,46 @@ async function main() {
   if (repairedCount > 0) console.log(`  Repaired ${repairedCount} parked wallets — T2A now ${await matA2.occupancy()}/${mSize}`);
   else                   console.log(`  No parked wallets found.`);
 
+  // ── Repair parked T2A→T2B wallets ─────────────────────────────────────────
+  // T2A roots that _crossToPartner() silently parks when their
+  // escrow + withdrawable < T2_FEE.  Deployer forceCross pays the fee.
+  sep("Repairing parked T2A→T2B wallets");
+  const t2aParkedAlumni = await getParked(matA2, matB2, scanSet, W1_ADDR);
+  if (t2aParkedAlumni.length > 0) {
+    console.log(`  Found ${t2aParkedAlumni.length} parked T2A alumni — pushing to T2B…`);
+    // Ensure deployer USDC + approval for T2A forceCross
+    const t2aNeeded = T2_FEE * BigInt(t2aParkedAlumni.length + 5);
+    const depBal2 = await usdc.balanceOf(deployerAddr);
+    if (depBal2 < t2aNeeded) {
+      await (await usdc.mint(deployerAddr, t2aNeeded - depBal2)).wait();
+    }
+    deployer.reset();
+    await sleep(1);
+    const allow2 = await usdc.allowance(deployerAddr, T2.matA);
+    if (allow2 < T2_FEE * BigInt(t2aParkedAlumni.length)) {
+      await (await usdc.approve(T2.matA, T2_FEE * BigInt(t2aParkedAlumni.length + 5))).wait();
+    }
+    deployer.reset();
+    await sleep(1);
+    for (const t2aAddr of t2aParkedAlumni) {
+      const t2bBefore = await matB2.occupancy();
+      process.stdout.write(`  T2A→T2B ${t2aAddr.slice(0,10)}  T2B ${t2bBefore}/${mSize}… `);
+      try {
+        await (await matA2.forceCross(t2aAddr, { gasLimit: GAS_LIMIT })).wait();
+        const t2bAfter = await matB2.occupancy();
+        console.log(`✓  T2B ${t2bAfter}/${mSize}`);
+      } catch (e) {
+        console.log(`✗  ${e.message.slice(0, 80)}`);
+        if (e.message.includes("nonce too low") || e.message.includes("nonce has already been used")) {
+          deployer.reset();
+          await sleep(3);
+        }
+      }
+    }
+  } else {
+    console.log(`  No parked T2A→T2B wallets found.`);
+  }
+
   // If repair loop already completed the T2 cycle, skip main loop entirely
   const w1T2cycAfterRepair = await tierRouter.tierCycles(W1_ADDR, 1);
   if (w1T2cycAfterRepair >= 1n) {
