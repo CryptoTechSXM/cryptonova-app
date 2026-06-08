@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>CryptoNova V8 — Figure-8 Matrix | v8.crypto-nova.app</title>
+  <title>CryptoNova V8 — The Matrix | v8.crypto-nova.app</title>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/6.7.1/ethers.umd.min.js"></script>
   <style>
     :root {
@@ -317,7 +317,7 @@
     <div class="logo-icon">CN</div>
     <div class="logo-text">Crypto<span>Nova</span></div>
     <span class="logo-badge" id="network-badge">Base Sepolia</span>
-    <span style="background:rgba(0,229,160,.15);color:var(--green);border:1px solid var(--green2);border-radius:4px;padding:2px 8px;font-size:10px;font-weight:700;margin-left:6px">🔷 V8 FIGURE-8</span>
+    <span style="background:rgba(0,229,160,.15);color:var(--green);border:1px solid var(--green2);border-radius:4px;padding:2px 8px;font-size:10px;font-weight:700;margin-left:6px">V8</span>
   </div>
   <div style="display:flex;align-items:center;gap:8px">
     <button class="theme-toggle" id="theme-btn" onclick="toggleTheme()">☀️ Light</button>
@@ -339,14 +339,14 @@
   <!-- ══ HOME TAB ══════════════════════════════════════════════════════ -->
   <div id="tab-home" class="tab-panel active">
     <div class="hero">
-      <h1>Figure-8 Matrix System<br><span>on Base Chain</span></h1>
-      <p>Join the CryptoNova Figure-8 Matrix. Start at T1 ($10 USDC) and auto-upgrade through 7 tiers. Earn referral bonuses, chain pay, and CNOVA tokens — all on Base Chain.</p>
+      <h1>CryptoNova Matrix<br><span>on Base Chain</span></h1>
+      <p>Join the CryptoNova Matrix. Start at T1 ($10 USDC) and auto-upgrade through 7 tiers. Earn referral bonuses, chain pay, and CNOVA tokens — all on Base Chain.</p>
       <div class="hero-actions">
         <button class="btn-primary" onclick="showTab('register')">Join Now — $10 USDC</button>
         <button class="btn-outline" onclick="showTab('dashboard')">View Dashboard</button>
       </div>
       <div style="margin-top:20px">
-        <a href="https://t.me/+21K4teAVfYdlMTdi" target="_blank" rel="noopener" style="text-decoration:none;display:inline-flex;align-items:center;gap:8px;background:rgba(59,130,246,.12);border:1px solid rgba(59,130,246,.35);border-radius:10px;padding:10px 18px;color:var(--blue);font-weight:700;font-size:14px;transition:background .2s" onmouseover="this.style.background='rgba(59,130,246,.22)'" onmouseout="this.style.background='rgba(59,130,246,.12)'">
+        <a href="https://t.me/CryptoNovaMatrix" target="_blank" rel="noopener" style="text-decoration:none;display:inline-flex;align-items:center;gap:8px;background:rgba(59,130,246,.12);border:1px solid rgba(59,130,246,.35);border-radius:10px;padding:10px 18px;color:var(--blue);font-weight:700;font-size:14px;transition:background .2s" onmouseover="this.style.background='rgba(59,130,246,.22)'" onmouseout="this.style.background='rgba(59,130,246,.12)'">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.373 0 0 5.373 0 12s5.373 12 12 12 12-5.373 12-12S18.627 0 12 0zm5.894 8.221-1.97 9.28c-.145.658-.537.818-1.084.508l-3-2.21-1.447 1.394c-.16.16-.295.295-.605.295l.213-3.053 5.56-5.023c.242-.213-.054-.333-.373-.12L8.32 13.617l-2.96-.924c-.643-.204-.657-.643.136-.953l11.57-4.461c.537-.194 1.006.131.828.942z"/></svg>
           Join CryptoNova Telegram Community
         </a>
@@ -387,11 +387,11 @@
     <div class="grid-4" id="stats-grid">
       <div class="card-sm"><div class="stat-label">Total Registered</div><div class="stat-value" id="stat-members"><span class="spinner" style="color:var(--text3)"></span></div><div class="stat-sub">all-time joins</div></div>
       <div class="card-sm"><div class="stat-label">CNOVA Minted</div><div class="stat-value green" id="stat-minted"><span class="spinner" style="color:var(--green)"></span></div><div class="stat-sub">50 per T1 join</div></div>
-      <div class="card-sm"><div class="stat-label">StabilityFund</div><div class="stat-value" id="stat-reserve"><span class="spinner" style="color:var(--text3)"></span></div><div class="stat-sub">USDC reserves</div></div>
+      <div class="card-sm" title="The Stability Fund receives 15% of every entry fee. It backs the CNOVA floor price — floor = fund balance ÷ total CNOVA supply. It never pays out to individuals."><div class="stat-label">Stability Fund 🌊</div><div class="stat-value" id="stat-reserve"><span class="spinner" style="color:var(--text3)"></span></div><div class="stat-sub">CNOVA floor backing</div></div>
       <div class="card-sm" style="border-color:rgba(245,158,11,.4)"><div class="stat-label">System Cycles</div><div class="stat-value" id="stat-cycles" style="color:var(--yellow)"><span class="spinner" style="color:var(--yellow)"></span></div><div class="stat-sub">total matrix cycles</div></div>
     </div>
 
-    <!-- Figure-8 Matrix Progress -->
+    <!-- CryptoNova Matrix Progress -->
     <div class="grid-2" style="margin-bottom:24px">
 
       <!-- T1 Matrix A Card -->
@@ -434,7 +434,51 @@
           <div class="progress-wrap"><div class="progress-bar" id="t1b-bar" style="width:0%"></div></div>
         </div>
         <div style="margin-top:10px;padding:10px 12px;background:var(--bg3);border-radius:8px;font-size:12px;color:var(--text3);line-height:1.6">
-          MatA alumni cross here. When B fills to 64, the root auto-upgrades to T2. The Figure-8 loop then restarts at T1.
+          MatA alumni cross here. When B fills to 64, the root auto-upgrades to T2. The loop restarts at T1 for the next cycle.
+        </div>
+      </div>
+
+      <!-- T2 Matrix A Card -->
+      <div class="card">
+        <div class="section-title" style="margin-bottom:12px"><div class="dot"></div> T2 Matrix A — Nova Rise ($25)</div>
+        <div class="info-row">
+          <span class="info-key">Seats Filled</span>
+          <span class="info-val"><span id="t2a-occ">—</span> / 64</span>
+        </div>
+        <div class="info-row">
+          <span class="info-key">Matrix Cycles</span>
+          <span class="info-val green" id="t2a-cycles">—</span>
+        </div>
+        <div style="margin-top:10px">
+          <div style="display:flex;justify-content:space-between;font-size:12px;color:var(--text3);margin-bottom:4px">
+            <span>Fill progress</span><span id="t2a-pct">0%</span>
+          </div>
+          <div class="progress-wrap"><div class="progress-bar" id="t2a-bar" style="width:0%"></div></div>
+        </div>
+        <div style="margin-top:10px;padding:10px 12px;background:var(--bg3);border-radius:8px;font-size:12px;color:var(--text3);line-height:1.6">
+          Members who complete T1 auto-upgrade here. $25 entry, same matrix mechanics.
+        </div>
+      </div>
+
+      <!-- T2 Matrix B Card -->
+      <div class="card">
+        <div class="section-title" style="margin-bottom:12px"><div class="dot"></div> T2 Matrix B — Crossing Pool</div>
+        <div class="info-row">
+          <span class="info-key">Seats Filled</span>
+          <span class="info-val"><span id="t2b-occ">—</span> / 64</span>
+        </div>
+        <div class="info-row">
+          <span class="info-key">Pool Accumulator</span>
+          <span class="info-val green" id="t2b-pool">—</span>
+        </div>
+        <div style="margin-top:10px">
+          <div style="display:flex;justify-content:space-between;font-size:12px;color:var(--text3);margin-bottom:4px">
+            <span>Fill progress</span><span id="t2b-pct">0%</span>
+          </div>
+          <div class="progress-wrap"><div class="progress-bar" id="t2b-bar" style="width:0%"></div></div>
+        </div>
+        <div style="margin-top:10px;padding:10px 12px;background:var(--bg3);border-radius:8px;font-size:12px;color:var(--text3);line-height:1.6">
+          T2 MatA alumni cross here. When full, root auto-upgrades to T3. Tiers 3–7 activate with Phase 2.
         </div>
       </div>
     </div>
@@ -453,16 +497,16 @@
     <!-- Entry split -->
     <div class="card">
       <div class="section-title"><div class="dot"></div> V8 Entry Fee Split — per $10 at T1</div>
-      <div class="split-row"><span class="split-label">🤝 L1 Direct Referrer</span><span><span class="split-amount">25%</span> <span class="split-pct">$2.50</span></span></div>
+      <div class="split-row"><span class="split-label">🤝 L1 Direct Referrer</span><span><span class="split-amount">20%</span> <span class="split-pct">$2.00</span></span></div>
       <div class="split-row"><span class="split-label">🔗 L2 Override</span><span><span class="split-amount">3%</span> <span class="split-pct">$0.30</span></span></div>
       <div class="split-row"><span class="split-label">🔗 L3 Override</span><span><span class="split-amount">2%</span> <span class="split-pct">$0.20</span></span></div>
       <div class="split-row"><span class="split-label">⛓️ Chain Pay (6 upline levels)</span><span><span class="split-amount">20%</span> <span class="split-pct">$2.00</span></span></div>
-      <div class="split-row"><span class="split-label">🔷 Figure-8 Pool (equalization)</span><span><span class="split-amount">38%</span> <span class="split-pct">$3.80</span></span></div>
-      <div class="split-row"><span class="split-label">🏦 Treasury Reserve</span><span><span class="split-amount">5%</span> <span class="split-pct">$0.50</span></span></div>
-      <div class="split-row"><span class="split-label">🌊 Stability Fund</span><span><span class="split-amount">2%</span> <span class="split-pct">$0.20</span></span></div>
+      <div class="split-row"><span class="split-label">🌀 Equalization Pool</span><span><span class="split-amount">33%</span> <span class="split-pct">$3.30</span></span></div>
+      <div class="split-row"><span class="split-label">🌊 Stability Fund <span style="font-size:10px;color:var(--text3)">(CNOVA floor backing)</span></span><span><span class="split-amount">15%</span> <span class="split-pct">$1.50</span></span></div>
       <div class="split-row"><span class="split-label">⚙️ Dev + Ops</span><span><span class="split-amount">5%</span> <span class="split-pct">$0.50</span></span></div>
+      <div class="split-row"><span class="split-label">🏦 DAO Treasury Reserve</span><span><span class="split-amount">2%</span> <span class="split-pct">$0.20</span></span></div>
       <div style="margin-top:14px;padding:10px 14px;background:var(--green-dim);border:1px solid var(--green2);border-radius:8px;font-size:13px;color:var(--text2)">
-        💡 <strong style="color:var(--green)">Figure-8 mechanic:</strong> Fill Matrix A → root crosses to Matrix B → fill B → root auto-upgrades to T2. The loop repeats for each tier.
+        💡 <strong style="color:var(--green)">CryptoNova Matrix mechanic:</strong> Fill Matrix A → root crosses to Matrix B → fill B → root auto-upgrades to T2. The loop repeats for each tier.
       </div>
     </div>
   </div>
@@ -580,7 +624,7 @@
           <li>
             <div class="step-content">
               <strong>Register</strong>
-              <span>Confirm the register transaction. You'll be placed into the Figure-8 matrix at the next available seat.</span>
+              <span>Confirm the register transaction. You'll be placed into the CryptoNova Matrix at the next available seat.</span>
             </div>
           </li>
           <li>
@@ -743,16 +787,18 @@
       <div class="card">
         <div class="section-title"><div class="dot"></div> Chain Pay Structure — Your Node Depth</div>
         <div style="font-size:13px;color:var(--text2);margin-bottom:16px">These amounts flow upward from each new member registration through your position.</div>
-        <div style="font-size:12px;color:var(--text3);margin-bottom:10px">80% of each level goes to your withdrawable earnings · 20% goes to treasury reserve</div>
+        <div style="font-size:12px;color:var(--text3);margin-bottom:10px">20% of each entry fee flows up to 6 upline levels in your matrix chain</div>
         <div id="chain-pay-table">
-          <div class="chain-row"><span style="color:var(--text2)">Level 1 (15% — position N-1)</span><span><span style="font-weight:600;color:var(--green)">$1.50</span> <span style="font-size:11px;color:var(--text3)">→ $1.20 earn / $0.30 treasury</span></span></div>
-          <div class="chain-row"><span style="color:var(--text2)">Level 2 (10% — position N-2)</span><span><span style="font-weight:600">$1.00</span> <span style="font-size:11px;color:var(--text3)">→ $0.80 earn / $0.20 treasury</span></span></div>
-          <div class="chain-row"><span style="color:var(--text2)">Level 3 (7% — position N-4)</span><span><span style="font-weight:600">$0.70</span> <span style="font-size:11px;color:var(--text3)">→ $0.56 earn / $0.14 treasury</span></span></div>
-          <div class="chain-row"><span style="color:var(--text2)">Level 4 (4% — position N-8)</span><span><span style="font-weight:600">$0.40</span> <span style="font-size:11px;color:var(--text3)">→ $0.32 earn / $0.08 treasury</span></span></div>
-          <div class="chain-row"><span style="color:var(--text2)">Level 5 (2% — position N-16)</span><span><span style="font-weight:600">$0.20</span> <span style="font-size:11px;color:var(--text3)">→ $0.16 earn / $0.04 treasury</span></span></div>
-          <div class="chain-row"><span style="color:var(--text2)">Level 6 (1% — position N-32)</span><span><span style="font-weight:600">$0.10</span> <span style="font-size:11px;color:var(--text3)">→ $0.08 earn / $0.02 treasury</span></span></div>
-          <div class="chain-row"><span style="color:var(--text2)">Level 7 (1% — position N-64)</span><span><span style="font-weight:600">$0.10</span> <span style="font-size:11px;color:var(--text3)">→ $0.08 earn / $0.02 treasury</span></span></div>
-          <div class="chain-row" style="border-top:1px solid var(--green2)"><span style="font-weight:700">Total chain pay per entry</span><span style="font-weight:700;color:var(--green)">$4.00 <span style="font-size:11px;color:var(--text3);font-weight:400">($3.20 earn / $0.80 treasury)</span></span></div>
+          <div class="chain-row"><span style="color:var(--text2)">Level 1 (50% of chain pay — direct upline)</span><span><span style="font-weight:600;color:var(--green)">$1.00</span> <span style="font-size:11px;color:var(--text3)">per entry below you</span></span></div>
+          <div class="chain-row"><span style="color:var(--text2)">Level 2 (20% of chain pay)</span><span><span style="font-weight:600">$0.40</span></span></div>
+          <div class="chain-row"><span style="color:var(--text2)">Level 3 (15% of chain pay)</span><span><span style="font-weight:600">$0.30</span></span></div>
+          <div class="chain-row"><span style="color:var(--text2)">Level 4 (7.5% of chain pay)</span><span><span style="font-weight:600">$0.15</span></span></div>
+          <div class="chain-row"><span style="color:var(--text2)">Level 5 (3.75% of chain pay)</span><span><span style="font-weight:600">$0.08</span></span></div>
+          <div class="chain-row"><span style="color:var(--text2)">Level 6 (3.75% of chain pay)</span><span><span style="font-weight:600">$0.08</span></span></div>
+          <div class="chain-row" style="border-top:1px solid var(--green2)"><span style="font-weight:700">Total chain pay per T1 entry</span><span style="font-weight:700;color:var(--green)">$2.00 <span style="font-size:11px;color:var(--text3);font-weight:400">(20% of $10)</span></span></div>
+        </div>
+        <div style="margin-top:10px;font-size:12px;color:var(--text3);padding:8px 12px;background:var(--bg3);border-radius:8px">
+          💡 You also earn <strong style="color:var(--green)">$2.00 L1 referral</strong> for every direct you personally bring in, plus $0.30 L2 and $0.20 L3 from your network.
         </div>
       </div>
     </div>
@@ -884,7 +930,7 @@
               <li><span class="check-icon check-done">✅</span> Add FAQ page for common community questions</li>
               <li><span class="check-icon check-done">✅</span> Internal beta: community wallet testing underway</li>
               <li><span class="check-icon check-done">✅</span> Set permanent DEV_WALLET &amp; OPS_WALLET addresses (ready for mainnet)</li>
-              <li><span class="check-icon check-done">✅</span> Telegram community group live — <a href="https://t.me/+21K4teAVfYdlMTdi" target="_blank" style="color:var(--green)">Join here</a></li>
+              <li><span class="check-icon check-done">✅</span> Telegram community group live — <a href="https://t.me/CryptoNovaMatrix" target="_blank" style="color:var(--green)">Join here</a></li>
               <li><span class="check-icon check-pending">⏳</span> Write simple one-pager: what is CryptoNova, how does it work</li>
             </ul>
           </div>
@@ -1037,7 +1083,7 @@
 <!-- Footer -->
 <footer style="background:var(--bg2);border-top:1px solid var(--border);padding:20px 24px;text-align:center;font-size:13px;color:var(--text3);margin-top:40px">
   <div style="display:flex;align-items:center;justify-content:center;gap:24px;flex-wrap:wrap">
-    <a href="https://t.me/+21K4teAVfYdlMTdi" target="_blank" rel="noopener" style="color:var(--text2);text-decoration:none;display:flex;align-items:center;gap:6px;transition:color .2s" onmouseover="this.style.color='var(--green)'" onmouseout="this.style.color='var(--text2)'">
+    <a href="https://t.me/CryptoNovaMatrix" target="_blank" rel="noopener" style="color:var(--text2);text-decoration:none;display:flex;align-items:center;gap:6px;transition:color .2s" onmouseover="this.style.color='var(--green)'" onmouseout="this.style.color='var(--text2)'">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.373 0 0 5.373 0 12s5.373 12 12 12 12-5.373 12-12S18.627 0 12 0zm5.894 8.221-1.97 9.28c-.145.658-.537.818-1.084.508l-3-2.21-1.447 1.394c-.16.16-.295.295-.605.295l.213-3.053 5.56-5.023c.242-.213-.054-.333-.373-.12L8.32 13.617l-2.96-.924c-.643-.204-.657-.643.136-.953l11.57-4.461c.537-.194 1.006.131.828.942z"/></svg>
       Telegram Community
     </a>
@@ -1310,17 +1356,27 @@ async function loadHomeStats() {
   try {
     const matA1 = new ethers.Contract(ADDRS.T1.matA, MATRIX_ABI, rp);
     const matB1 = new ethers.Contract(ADDRS.T1.matB, MATRIX_ABI, rp);
+    const matA2 = new ethers.Contract(ADDRS.T2.matA, MATRIX_ABI, rp);
+    const matB2 = new ethers.Contract(ADDRS.T2.matB, MATRIX_ABI, rp);
     const cnova  = new ethers.Contract(ADDRS.cnova,  CNOVA_ABI,  rp);
     const sf     = new ethers.Contract(ADDRS.stabilityFund, SF_ABI, rp);
     const tr     = new ethers.Contract(ADDRS.tierRouter, TIER_ROUTER_ABI, rp);
     const treas  = new ethers.Contract(ADDRS.treasury, TREASURY_ABI, rp);
 
-    const [occA, cyclesA, occB, poolB, totalJoined, sysCycles, supply, epoch, sfBal, treasUsdc] = await Promise.all([
+    const [
+      occA, cyclesA, occB, poolB, totalJoined,
+      occA2, cyclesA2, occB2, poolB2,
+      sysCycles, supply, epoch, sfBal, treasUsdc
+    ] = await Promise.all([
       matA1.occupancy().catch(()=>0n),
       matA1.rotationCount().catch(()=>0n),
       matB1.occupancy().catch(()=>0n),
       matB1.poolAccumulator().catch(()=>0n),
       matA1.totalJoined().catch(()=>0n),
+      matA2.occupancy().catch(()=>0n),
+      matA2.rotationCount().catch(()=>0n),
+      matB2.occupancy().catch(()=>0n),
+      matB2.poolAccumulator().catch(()=>0n),
       tr.totalSystemCycles().catch(()=>0n),
       cnova.totalSupply().catch(()=>0n),
       cnova.currentEpoch().catch(()=>0n),
@@ -1350,8 +1406,26 @@ async function loadHomeStats() {
     const barB = document.getElementById('t1b-bar');
     if (barB) barB.style.width = pctB+'%';
 
+    // T2A progress
+    const occA2n = Number(occA2), pctA2 = Math.round(occA2n/64*100);
+    setText('t2a-occ', occA2n.toString());
+    setText('t2a-cycles', cyclesA2.toString());
+    setText('t2a-pct', pctA2+'%');
+    const barA2 = document.getElementById('t2a-bar');
+    if (barA2) barA2.style.width = pctA2+'%';
+
+    // T2B progress
+    const occB2n = Number(occB2), pctB2 = Math.round(occB2n/64*100);
+    setText('t2b-occ', occB2n.toString());
+    setText('t2b-pool', fmt6(poolB2));
+    setText('t2b-pct', pctB2+'%');
+    const barB2 = document.getElementById('t2b-bar');
+    if (barB2) barB2.style.width = pctB2+'%';
+
     // Epoch
-    setText('stat-epoch', `Epoch ${Number(epoch)+1}`);
+    const EPOCH_NAMES = ['Genesis','Pioneer','Expansion','Momentum','Apex','Legacy'];
+    const epochNum = Number(epoch);
+    setText('stat-epoch', `Epoch ${epochNum+1} — ${EPOCH_NAMES[epochNum] || 'Era '+(epochNum+1)}`);
     setText('stat-supply', Number(ethers.formatEther(supply)).toLocaleString(undefined,{maximumFractionDigits:0})+' CNOVA');
     setText('stat-treasury-usdc', fmt6(treasUsdc));
 
@@ -1420,29 +1494,60 @@ async function loadRegisterTab() {
   const rp = readProvider || new ethers.JsonRpcProvider(RPC_URL);
 
   try {
+    const tr   = new ethers.Contract(ADDRS.tierRouter, TIER_ROUTER_ABI, rp);
     const usdc = new ethers.Contract(ADDRS.usdc, USDC_ABI, rp);
-    const [bal, allowance] = await Promise.all([
+    const [joined, bal, allowance] = await Promise.all([
+      tr.globalJoined(userAddr).catch(()=>false),
       usdc.balanceOf(userAddr),
       usdc.allowance(userAddr, ADDRS.T1.pm),
     ]);
 
+    const btnApprove = document.getElementById('btn-approve');
+    const btnReg     = document.getElementById('btn-register');
+
+    if (joined) {
+      // Already registered — show both steps as green/done, non-clickable
+      if (btnApprove) {
+        btnApprove.textContent = '✅ Step 1: Approved';
+        btnApprove.disabled = true;
+        btnApprove.className = 'btn btn-ghost full-w';
+        btnApprove.style.borderColor = 'var(--green)';
+        btnApprove.style.color = 'var(--green)';
+        btnApprove.style.cursor = 'default';
+      }
+      if (btnReg) {
+        btnReg.textContent = '✅ Step 2: Registered — You\'re In!';
+        btnReg.disabled = true;
+        btnReg.className = 'btn btn-green full-w';
+        btnReg.style.cursor = 'default';
+      }
+      const warnEl = document.getElementById('usdc-low-warn');
+      if (warnEl) warnEl.style.display = 'none';
+      return;
+    }
+
+    // Not yet registered — normal flow
     const balEl = document.getElementById('reg-usdc-bal');
     if (balEl) balEl.textContent = fmt6(bal);
 
     const approvedEl = document.getElementById('reg-approved');
     if (approvedEl) approvedEl.textContent = allowance >= T1_FEE ? '✅ $10 Approved' : 'Not approved';
 
-    const btnApprove = document.getElementById('btn-approve');
-    const btnReg = document.getElementById('btn-register');
     if (btnApprove && btnReg) {
       if (allowance >= T1_FEE) {
-        btnApprove.textContent = '✓ Approved';
+        btnApprove.textContent = '✅ Step 1: Approved';
         btnApprove.disabled = true;
+        btnApprove.style.borderColor = 'var(--green)';
+        btnApprove.style.color = 'var(--green)';
         btnReg.disabled = false;
         btnReg.className = 'btn btn-green full-w';
       } else {
         btnApprove.disabled = false;
+        btnApprove.textContent = 'Step 1: Approve $10 USDC 🔒';
+        btnApprove.style.borderColor = '';
+        btnApprove.style.color = '';
         btnReg.disabled = true;
+        btnReg.className = 'btn btn-ghost full-w';
       }
     }
 
@@ -1478,7 +1583,7 @@ async function approveUSDC() {
 async function doRegister() {
   if (!signer) { toast('Connect wallet first', 'error'); return; }
   const btn = document.getElementById('btn-register');
-  btn.disabled = true; btn.innerHTML = '<span class="spinner"></span>Joining Figure-8…';
+  btn.disabled = true; btn.innerHTML = '<span class="spinner"></span>Joining CryptoNova…';
   try {
     const refInput = document.getElementById('input-referrer');
     const referrer = refInput && ethers.isAddress(refInput.value.trim())
@@ -1487,12 +1592,12 @@ async function doRegister() {
     const tx = await tr.register(referrer);
     setStatus('reg-status', '⏳ Confirming transaction…', 'info');
     await tx.wait();
-    setStatus('reg-status', '🎉 Welcome to the Figure-8! Your journey begins.', 'ok');
+    setStatus('reg-status', '🎉 Welcome to CryptoNova! Your journey begins.', 'ok');
     btn.textContent = '✅ Joined!';
     toast('Welcome to CryptoNova V8!', 'success');
     setTimeout(() => { loadHomeStats(); loadUserData(); }, 2000);
   } catch(e) {
-    btn.disabled = false; btn.textContent = 'Step 2: Join Figure-8 ($10)';
+    btn.disabled = false; btn.textContent = 'Step 2: Join CryptoNova ($10)';
     setStatus('reg-status', '❌ ' + friendlyError(e), 'err');
     if (e.code !== 4001) reportEvent('TX_FAILED', {
       action: 'register', error: e.message || String(e),
@@ -1628,60 +1733,267 @@ async function doWithdraw() {
 // ═══════════════════════════════════════════════════════════════════════
 // MATRIX TAB
 // ═══════════════════════════════════════════════════════════════════════
-async function loadMatrixTab() {
+function setActiveMatrixBtn(id) {
+  ['btn-load-tree','btn-my-position','btn-my-directs'].forEach(bid => {
+    const b = document.getElementById(bid);
+    if (b) b.classList.toggle('active', bid === id);
+  });
+}
+
+function onMatrixTierChange() { loadQueueView(); setActiveMatrixBtn('btn-load-tree'); }
+
+async function getMatrixForTier() {
+  const tierSelect = document.getElementById('matrix-tier-select');
+  const tierNum = tierSelect ? parseInt(tierSelect.value) || 1 : 1;
+  return tierNum === 2 ? ADDRS.T2.matA : ADDRS.T1.matA;
+}
+
+async function loadQueueView() {
   const rp = readProvider || new ethers.JsonRpcProvider(RPC_URL);
-  const matrixAddr = document.getElementById('matrix-addr-input')?.value?.trim();
-  const addrToLoad = (matrixAddr && ethers.isAddress(matrixAddr)) ? matrixAddr : ADDRS.T1.matA;
-
+  const addrToLoad = await getMatrixForTier();
   const loadingEl = document.getElementById('matrix-loading');
-  const treeEl = document.getElementById('matrix-tree');
-  if (loadingEl) loadingEl.style.display = 'block';
-  if (treeEl) treeEl.style.display = 'none';
-
+  const treeEl    = document.getElementById('matrix-tree');
+  if (loadingEl) { loadingEl.style.display='block'; loadingEl.textContent='Loading queue…'; }
+  if (treeEl)    treeEl.style.display='none';
+  document.getElementById('matrix-pos-banner').style.display='none';
+  document.getElementById('my-directs-card').style.display='none';
   try {
     const mc = new ethers.Contract(addrToLoad, MATRIX_ABI, rp);
-    const [occ, mSize] = await Promise.all([mc.occupancy(), mc.MATRIX_SIZE()]);
+    const [occ, mSize, cycles] = await Promise.all([mc.occupancy(), mc.MATRIX_SIZE(), mc.rotationCount().catch(()=>0n)]);
     const n = Number(occ);
-    const maxShow = Math.min(n, 15); // show up to 15 nodes
-
     const nodes = await Promise.all(
-      Array.from({length: maxShow}, (_, i) => mc.posToMember(i+1).catch(()=>ethers.ZeroAddress))
+      Array.from({length:n}, (_,i) => mc.posToMember(i+1).catch(()=>ethers.ZeroAddress))
     );
-
-    if (loadingEl) loadingEl.style.display = 'none';
-    if (treeEl) {
-      treeEl.style.display = 'block';
-      treeEl.innerHTML = renderF8Tree(nodes, userAddr, occ, mSize);
-    }
+    setText('matrix-nodes', n.toString());
+    setText('matrix-fill',  n + ' / ' + Number(mSize));
+    setText('matrix-bfs',   Number(mSize) + ' seats');
+    const myBfs = userAddr ? await mc.matrixPos(userAddr).catch(()=>0n) : 0n;
+    setText('matrix-my-node', myBfs > 0n ? '#'+myBfs.toString() : '—');
+    if (loadingEl) loadingEl.style.display='none';
+    if (treeEl) { treeEl.style.display='block'; treeEl.innerHTML = renderF8Tree(nodes, userAddr, occ, mSize); }
   } catch(e) {
-    if (loadingEl) loadingEl.textContent = 'Error loading matrix: ' + e.message.slice(0,100);
+    if (loadingEl) loadingEl.textContent = 'Error: ' + e.message.slice(0,120);
+  }
+}
+
+async function loadMyTree() {
+  if (!userAddr) { toast('Connect wallet first','error'); return; }
+  const rp = readProvider || new ethers.JsonRpcProvider(RPC_URL);
+  const loadingEl = document.getElementById('matrix-loading');
+  const treeEl    = document.getElementById('matrix-tree');
+  if (loadingEl) { loadingEl.style.display='block'; loadingEl.textContent='Finding your position…'; }
+  if (treeEl) treeEl.style.display='none';
+  document.getElementById('my-directs-card').style.display='none';
+  try {
+    // Find which matrix the user is currently active in
+    const allMats = [
+      {addr: ADDRS.T1.matA, label:'T1 Matrix A'}, {addr: ADDRS.T1.matB, label:'T1 Matrix B'},
+      {addr: ADDRS.T2.matA, label:'T2 Matrix A'}, {addr: ADDRS.T2.matB, label:'T2 Matrix B'},
+    ];
+    let activeMat = null, activeBFS = 0n, activeLabel = '', activeMSize = 64n;
+    for (const m of allMats) {
+      const mc = new ethers.Contract(m.addr, MATRIX_ABI, rp);
+      const member = await mc.getMember(userAddr).catch(()=>null);
+      if (member && member.isInMatrix) {
+        activeMat = m.addr;
+        activeLabel = m.label;
+        activeBFS = await mc.matrixPos(userAddr).catch(()=>0n);
+        activeMSize = await mc.MATRIX_SIZE().catch(()=>64n);
+        break;
+      }
+    }
+    if (!activeMat) {
+      if (loadingEl) { loadingEl.style.display='block'; loadingEl.textContent='You are not currently active in any matrix. Check back after registration.'; }
+      return;
+    }
+    const mc   = new ethers.Contract(activeMat, MATRIX_ABI, rp);
+    const [occ, cycles] = await Promise.all([mc.occupancy(), mc.rotationCount().catch(()=>0n)]);
+    const n = Number(occ);
+    const nodes = await Promise.all(
+      Array.from({length:n}, (_,i) => mc.posToMember(i+1).catch(()=>ethers.ZeroAddress))
+    );
+    setText('matrix-nodes', n.toString());
+    setText('matrix-fill',  n + ' / ' + Number(activeMSize));
+    setText('matrix-bfs',   Number(activeMSize) + ' seats');
+    setText('matrix-my-node', activeBFS > 0n ? '#'+activeBFS.toString() : '—');
+    const banner = document.getElementById('matrix-pos-banner');
+    if (banner) {
+      banner.style.display='block';
+      setText('matrix-pos-level', activeLabel);
+      setText('matrix-pos-slots', 'Position #' + activeBFS.toString());
+      setText('matrix-pos-cycle', 'Cycle ' + cycles.toString());
+    }
+    if (loadingEl) loadingEl.style.display='none';
+    if (treeEl) { treeEl.style.display='block'; treeEl.innerHTML = renderF8Tree(nodes, userAddr, occ, activeMSize); }
+  } catch(e) {
+    if (loadingEl) loadingEl.textContent = 'Error: ' + e.message.slice(0,120);
+  }
+}
+
+async function loadMyDirects() {
+  if (!userAddr) { toast('Connect wallet first','error'); return; }
+  const rp = readProvider || new ethers.JsonRpcProvider(RPC_URL);
+  document.getElementById('my-directs-card').style.display='block';
+  document.getElementById('my-directs-loading').style.display='block';
+  document.getElementById('my-directs-empty').style.display='none';
+  document.getElementById('my-directs-list').style.display='none';
+  document.getElementById('matrix-pos-banner').style.display='none';
+  const loadingEl = document.getElementById('matrix-loading');
+  const treeEl    = document.getElementById('matrix-tree');
+  if (loadingEl) loadingEl.style.display='none';
+  if (treeEl) treeEl.style.display='none';
+  try {
+    const tr = new ethers.Contract(ADDRS.tierRouter, TIER_ROUTER_ABI, rp);
+    // Query registered event logs for members whose referrer = userAddr (last 500k blocks)
+    const filter = tr.filters.MemberRegistered ? tr.filters.MemberRegistered() : null;
+    let directs = [];
+    if (filter) {
+      const logs = await tr.queryFilter(filter, -500000).catch(()=>[]);
+      directs = logs
+        .filter(l => l.args && l.args.referrer && l.args.referrer.toLowerCase() === userAddr.toLowerCase())
+        .map(l => l.args.member);
+    }
+    document.getElementById('my-directs-loading').style.display='none';
+    if (directs.length === 0) {
+      document.getElementById('my-directs-empty').style.display='block';
+      return;
+    }
+    const rowsEl = document.getElementById('my-directs-rows');
+    rowsEl.innerHTML = directs.map(addr =>
+      `<div class="info-row">
+        <span class="info-key" style="font-family:monospace;font-size:12px">${addr.slice(0,6)}…${addr.slice(-4)}</span>
+        <span class="info-val"><a href="https://sepolia.basescan.org/address/${addr}" target="_blank" style="color:var(--green);font-size:12px">View ↗</a></span>
+      </div>`
+    ).join('');
+    setText('matrix-my-node', directs.length.toString());
+    document.getElementById('matrix-my-node-label').textContent = 'My Directs';
+    document.getElementById('my-directs-list').style.display='block';
+  } catch(e) {
+    document.getElementById('my-directs-loading').textContent = 'Error loading directs: ' + e.message.slice(0,100);
   }
 }
 
 function renderF8Tree(nodes, myAddr, occ, mSize) {
   const n = Math.min(Number(occ), nodes.length);
   const total = Number(mSize);
-  let html = `<div style="margin-bottom:16px;font-size:13px;color:var(--text2)">
-    Showing ${n} / ${total} seats filled &nbsp;·&nbsp;
-    <span style="color:var(--green)">■</span> = you &nbsp;
-    <span style="color:var(--yellow)">■</span> = filled &nbsp;
-    <span style="color:var(--text3)">□</span> = empty
+  let html = `<div style="margin-bottom:14px;font-size:13px;color:var(--text2)">
+    <strong style="color:var(--text)">${n}</strong> / ${total} seats filled
+    &nbsp;·&nbsp; <span style="color:var(--green)">■</span> You
+    &nbsp; <span style="color:var(--text2)">■</span> Filled
+    &nbsp; <span style="color:var(--text3)">□</span> Empty
   </div>`;
-  html += '<div style="display:flex;flex-wrap:wrap;gap:6px;justify-content:flex-start">';
+  html += '<div style="display:flex;flex-wrap:wrap;gap:5px">';
   for (let i = 0; i < total; i++) {
     const addr = i < nodes.length ? nodes[i] : null;
-    const isYou = addr && addr.toLowerCase() === (myAddr||'').toLowerCase();
+    const isYou    = addr && myAddr && addr.toLowerCase() === myAddr.toLowerCase();
     const isFilled = addr && addr !== ethers.ZeroAddress;
-    const style = isYou
-      ? 'background:var(--green-dim);border:1.5px solid var(--green);color:var(--green)'
-      : isFilled
-        ? 'background:var(--bg3);border:1px solid var(--text3);color:var(--text2)'
-        : 'background:var(--bg3);border:1px dashed var(--border);color:var(--text3);opacity:.5';
-    const label = isYou ? '🟢 You' : isFilled ? short(addr) : `#${i+1}`;
-    html += `<div style="border-radius:6px;padding:6px 10px;font-size:11px;font-family:monospace;min-width:80px;text-align:center;${style}">${label}</div>`;
+    let bg, border, color;
+    if (isYou)         { bg='var(--green-dim)'; border='1.5px solid var(--green)'; color='var(--green)'; }
+    else if (isFilled) { bg='var(--bg3)';       border='1px solid var(--text3)';   color='var(--text2)'; }
+    else               { bg='var(--bg3)';       border='1px dashed var(--border)'; color='var(--text3)'; }
+    const label = isYou ? '🟢 You' : isFilled ? (addr.slice(0,4)+'…'+addr.slice(-3)) : '#'+(i+1);
+    html += `<div title="${isFilled?addr:''}" style="border-radius:6px;padding:5px 8px;font-size:11px;font-family:monospace;min-width:72px;text-align:center;background:${bg};border:${border};color:${color}">${label}</div>`;
   }
   html += '</div>';
   return html;
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// CNOVA REDEEM
+// ═══════════════════════════════════════════════════════════════════════
+let _redeemFloor = 0n, _redeemSupply = 0n, _redeemBal = 0n;
+
+async function loadRedeemData() {
+  if (!userAddr) return;
+  const rp = readProvider || new ethers.JsonRpcProvider(RPC_URL);
+  try {
+    const cnova = new ethers.Contract(ADDRS.cnova, CNOVA_ABI, rp);
+    const sf    = new ethers.Contract(ADDRS.stabilityFund, SF_ABI, rp);
+    const [bal, sfBal, supply] = await Promise.all([
+      cnova.balanceOf(userAddr).catch(()=>0n),
+      sf.totalBalance().catch(()=>0n),
+      cnova.totalSupply().catch(()=>0n),
+    ]);
+    _redeemBal    = bal;
+    _redeemSupply = supply;
+    _redeemFloor  = supply > 0n ? sfBal * BigInt(1e12) / supply : 0n; // floor in 6-dec units × 1e12
+    const floorDisplay = supply > 0n ? '$' + (Number(sfBal) / Number(supply) * 1e12).toFixed(4) : '$0.0000';
+    setText('redeem-cnova-bal', Number(ethers.formatEther(bal)).toFixed(2) + ' CNOVA');
+    setText('redeem-floor', floorDisplay + ' / CNOVA');
+    const approveBtn = document.getElementById('btn-redeem-approve');
+    const redeemBtn  = document.getElementById('btn-redeem');
+    if (approveBtn) approveBtn.disabled = bal === 0n;
+    if (redeemBtn)  redeemBtn.disabled  = true;
+    updateRedeemPreview();
+  } catch(e) { console.error('loadRedeemData:', e.message); }
+}
+
+function updateRedeemPreview() {
+  const input   = document.getElementById('redeem-amount');
+  const outEl   = document.getElementById('redeem-out');
+  if (!input || !outEl) return;
+  const raw = parseFloat(input.value);
+  if (!raw || raw <= 0 || _redeemSupply === 0n) { outEl.textContent = '$0.00'; return; }
+  const cnovaWei = BigInt(Math.floor(raw * 1e18));
+  // usdcOut = cnovaWei * sfBal / totalSupply  (both 18-dec and 6-dec)
+  const sfBal6 = _redeemFloor * _redeemSupply / BigInt(1e12); // recover sfBal
+  const usdcOut = _redeemSupply > 0n ? cnovaWei * sfBal6 / _redeemSupply : 0n;
+  outEl.textContent = fmt6(usdcOut);
+}
+
+function setMaxRedeem() {
+  const input = document.getElementById('redeem-amount');
+  if (input && _redeemBal > 0n) {
+    input.value = Number(ethers.formatEther(_redeemBal)).toFixed(4);
+    updateRedeemPreview();
+  }
+}
+
+async function approveCNOVAForRedeem() {
+  if (!signer) { toast('Connect wallet first','error'); return; }
+  const btn = document.getElementById('btn-redeem-approve');
+  const input = document.getElementById('redeem-amount');
+  const amt = input ? parseFloat(input.value) : 0;
+  if (!amt || amt <= 0) { toast('Enter CNOVA amount first','error'); return; }
+  btn.disabled = true; btn.innerHTML = '<span class="spinner"></span>Approving…';
+  try {
+    const sfAddr = ADDRS.stabilityFund;
+    const cnovaW = new ethers.Contract(ADDRS.cnova, CNOVA_ABI, signer);
+    const amtWei = BigInt(Math.floor(amt * 1e18));
+    const tx = await cnovaW.approve(sfAddr, amtWei);
+    setStatus('redeem-status','⏳ Approving CNOVA…','info');
+    await tx.wait();
+    setStatus('redeem-status','✅ Approved! Click Redeem.','ok');
+    btn.textContent = '✅ Approved';
+    const redeemBtn = document.getElementById('btn-redeem');
+    if (redeemBtn) redeemBtn.disabled = false;
+  } catch(e) {
+    btn.disabled = false; btn.textContent = 'Step 1: Approve CNOVA';
+    setStatus('redeem-status','❌ ' + friendlyError(e),'err');
+  }
+}
+
+async function doRedeemAtFloor() {
+  if (!signer) { toast('Connect wallet first','error'); return; }
+  const btn   = document.getElementById('btn-redeem');
+  const input = document.getElementById('redeem-amount');
+  const amt   = input ? parseFloat(input.value) : 0;
+  if (!amt || amt <= 0) { toast('Enter CNOVA amount','error'); return; }
+  btn.disabled = true; btn.innerHTML = '<span class="spinner"></span>Redeeming…';
+  try {
+    const sf  = new ethers.Contract(ADDRS.stabilityFund, SF_ABI, signer);
+    const amtWei = BigInt(Math.floor(amt * 1e18));
+    const tx = await sf.redeemCNOVA(amtWei);
+    setStatus('redeem-status','⏳ Confirming redemption…','info');
+    await tx.wait();
+    setStatus('redeem-status','✅ Redeemed! USDC sent to your wallet.','ok');
+    toast('CNOVA redeemed successfully!','success');
+    await loadRedeemData();
+    await loadDashboardData();
+  } catch(e) {
+    btn.disabled = false; btn.textContent = 'Step 2: Redeem for USDC';
+    setStatus('redeem-status','❌ ' + friendlyError(e),'err');
+  }
 }
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -1695,10 +2007,10 @@ function showTab(name) {
   const idx = ['home','register','dashboard','matrix','roadmap'].indexOf(name);
   const navBtns = document.querySelectorAll('nav button');
   if (navBtns[idx]) navBtns[idx].classList.add('active');
-
-  if (name === 'register' && userAddr) loadRegisterTab();
-  if (name === 'dashboard') loadDashboardData();
-  if (name === 'matrix') loadMatrixTab();
+  if (name === 'register') { if (userAddr) loadRegisterTab(); }
+  if (name === 'dashboard') { loadDashboardData(); loadRedeemData(); }
+  if (name === 'matrix') { loadQueueView(); setActiveMatrixBtn('btn-load-tree'); }
+  if (name === 'home') loadHomeStats();
 }
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -1716,76 +2028,102 @@ function setText(id, val) {
   const el = document.getElementById(id);
   if (el) el.textContent = val;
 }
-function showEl(id) { const el=document.getElementById(id); if(el) el.style.display='block'; }
-function hideEl(id) { const el=document.getElementById(id); if(el) el.style.display='none'; }
-function setStatus(id, msg, type) {
-  const el = document.getElementById(id);
-  if (!el) return;
-  el.textContent = msg;
-  el.style.color = type==='ok' ? 'var(--green)' : type==='err' ? 'var(--red)' : 'var(--text2)';
-}
+function showEl(id) { const el = document.getElementById(id); if (el) el.style.display = 'block'; }
+function hideEl(id) { const el = document.getElementById(id); if (el) el.style.display = 'none'; }
 
-let toastTimer;
+let _toastTimer;
 function toast(msg, type='info') {
   const el = document.getElementById('toast');
   if (!el) return;
   el.textContent = msg;
-  el.className = 'show ' + type;
-  clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => el.className = '', 3500);
+  el.className = type;
+  el.style.opacity = '1';
+  el.style.transform = 'translateY(0)';
+  clearTimeout(_toastTimer);
+  _toastTimer = setTimeout(() => {
+    el.style.opacity = '0';
+    el.style.transform = 'translateY(8px)';
+  }, 3500);
+}
+
+function setStatus(id, msg, type) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.textContent = msg;
+  el.style.color = type === 'ok' ? 'var(--green)' : type === 'err' ? 'var(--red)' : 'var(--text2)';
 }
 
 function friendlyError(e) {
-  const m = e.reason || e.shortMessage || e.message || '';
-  if (m.includes('already joined') || m.includes('globalJoined')) return 'This wallet is already registered.';
-  if (m.includes('user rejected') || m.includes('User denied')) return 'Transaction cancelled.';
-  if (m.includes('insufficient funds')) return 'Insufficient ETH for gas.';
-  if (m.includes('ERC20: transfer amount exceeds balance')) return 'Insufficient USDC balance.';
-  if (m.includes('allowance')) return 'USDC not approved — complete Step 1 first.';
-  return m.slice(0, 150) || 'Transaction failed.';
-}
-
-function toggleTheme() {
-  const isLight = document.body.classList.toggle('light');
-  document.getElementById('theme-btn').textContent = isLight ? '🌙 Dark' : '☀️ Light';
-  localStorage.setItem('theme', isLight ? 'light' : 'dark');
-}
-
-// Restore saved theme
-(function() {
-  if (localStorage.getItem('theme') === 'light') {
-    document.body.classList.add('light');
-    const btn = document.getElementById('theme-btn');
-    if (btn) btn.textContent = '🌙 Dark';
-  }
-})();
-
-function copyRef() {
-  const link = window.location.origin + window.location.pathname + '?ref=' + (userAddr || '');
-  navigator.clipboard.writeText(link).then(() => {
-    const btn = event.target;
-    btn.textContent = '✅ Copied!'; btn.style.color = 'var(--green)';
-    setTimeout(() => { btn.textContent = 'Copy'; btn.style.color = ''; }, 2000);
-  });
-}
-
-async function addCNOVAtoMetaMask() {
-  if (!window.ethereum) return;
-  try {
-    await window.ethereum.request({ method:'wallet_watchAsset', params:{ type:'ERC20', options:{
-      address: ADDRS.cnova, symbol:'CNOVA', decimals:18
-    }}});
-  } catch(e) {}
+  if (!e) return 'Unknown error';
+  const msg = e.reason || e.data?.message || e.message || String(e);
+  if (msg.includes('user rejected') || e.code === 4001) return 'Transaction cancelled.';
+  if (msg.includes('insufficient funds')) return 'Insufficient ETH for gas.';
+  if (msg.includes('already registered') || msg.includes('AlreadyJoined')) return 'This wallet is already registered.';
+  if (msg.includes('USDC') && msg.includes('allowance')) return 'USDC not approved — complete Step 1 first.';
+  if (msg.includes('execution reverted')) return 'Transaction reverted: ' + (msg.split('execution reverted:')[1]||'').trim().slice(0,80);
+  return msg.slice(0, 120);
 }
 
 async function addUSDCtoMetaMask() {
   if (!window.ethereum) return;
   try {
-    await window.ethereum.request({ method:'wallet_watchAsset', params:{ type:'ERC20', options:{
-      address: ADDRS.usdc, symbol:'USDC', decimals:6
-    }}});
-  } catch(e) {}
+    await window.ethereum.request({
+      method: 'wallet_watchAsset',
+      params: { type: 'ERC20', options: { address: ADDRS.usdc, symbol: 'USDC', decimals: 6 }},
+    });
+  } catch(e) { console.error(e); }
 }
+
+function copyReferralLink() {
+  const inp = document.getElementById('referral-url');
+  if (!inp) return;
+  navigator.clipboard.writeText(inp.value).then(() => {
+    const btn = document.getElementById('copy-ref-btn');
+    if (btn) { btn.textContent = 'Copied!'; setTimeout(()=>{ btn.textContent='Copy'; }, 2000); }
+  }).catch(() => {
+    inp.select(); document.execCommand('copy');
+  });
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// BOOT
+// ═══════════════════════════════════════════════════════════════════════
+document.addEventListener('DOMContentLoaded', async () => {
+  loadHomeStats();
+
+  // Auto-reconnect on page load (silent — no popup)
+  if (window.ethereum && localStorage.getItem('cnova_connected')) {
+    try {
+      const accounts = await window.ethereum.request({ method: 'eth_accounts' });
+      if (accounts && accounts.length > 0) await connectWallet(true);
+      else localStorage.removeItem('cnova_connected');
+    } catch(e) {}
+  }
+
+  // Auto-fill referrer from URL ?ref=0x...
+  const urlRef = new URLSearchParams(window.location.search).get('ref');
+  if (urlRef && ethers.isAddress(urlRef)) {
+    const inp = document.getElementById('input-referrer');
+    if (inp) inp.value = urlRef;
+  }
+
+  // Wallet event listeners
+  if (window.ethereum) {
+    window.ethereum.on('accountsChanged', async (accounts) => {
+      if (accounts.length === 0) {
+        userAddr = null; signer = null;
+        localStorage.removeItem('cnova_connected');
+        const btn = document.getElementById('connect-btn');
+        if (btn) { btn.textContent = 'Connect Wallet'; btn.classList.remove('connected'); }
+        document.getElementById('referral-link-card').style.display = 'none';
+        document.getElementById('upgrade-card').style.display = 'none';
+      } else {
+        await connectWallet(true);
+      }
+    });
+    window.ethereum.on('chainChanged', () => window.location.reload());
+  }
+});
 </script>
 </body>
 </html>
