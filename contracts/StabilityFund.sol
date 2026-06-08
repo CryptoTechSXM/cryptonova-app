@@ -71,11 +71,20 @@ interface IFigureEightMatrixV8Ghost {
     function ENTRY_FEE() external view returns (uint256);
 }
 
+/// @dev Minimal CNOVA interface used by redeemCNOVA().
+///      burnFrom() uses ERC20 allowance when caller lacks BURNER_ROLE --
+///      user must approve this contract before calling redeemCNOVA().
+interface ICNOVABurnable {
+    function totalSupply() external view returns (uint256);
+    function burnFrom(address from, uint256 amount) external;
+}
+
 contract StabilityFund is Ownable2Step {
     using SafeERC20 for IERC20;
 
-    // ── Token ────────────────────────────────────────────────────────────────
-    IERC20 public immutable usdc;
+    // ── Tokens ───────────────────────────────────────────────────────────────
+    IERC20          public immutable usdc;
+    ICNOVABurnable  public immutable cnova;
 
     // ── Authorized callers ───────────────────────────────────────────────────
     /// @notice MatrixKeeper (Chainlink Automation) -- the ONLY address allowed
@@ -124,12 +133,15 @@ contract StabilityFund is Ownable2Step {
     event MatrixAuthorized(address indexed matrix, bool authorized);
     event TierFeeSet(uint8 indexed tier, uint256 fee);
     event StabilityFloorSet(uint256 floor);
+    event CNOVARedeemed(address indexed redeemer, uint256 cnovaAmount, uint256 usdcPaid);
 
     // ── Constructor ──────────────────────────────────────────────────────────
 
-    constructor(address _usdc, address _admin) Ownable(_admin) {
-        require(_usdc != address(0), "SF: zero usdc");
-        usdc = IERC20(_usdc);
+    constructor(address _usdc, address _cnova, address _admin) Ownable(_admin) {
+        require(_usdc  != address(0), "SF: zero usdc");
+        require(_cnova != address(0), "SF: zero cnova");
+        usdc  = IERC20(_usdc);
+        cnova = ICNOVABurnable(_cnova);
     }
 
     // ── Admin setup ──────────────────────────────────────────────────────────
@@ -292,6 +304,47 @@ contract StabilityFund is Ownable2Step {
         emit DiscountPaid(member, discount, totalBalance);
     }
 
+    // ── CNOVA floor-price redemption ─────────────────────────────────────────
+
+    /**
+     * @notice Burn CNOVA at the current floor price and receive USDC from this fund.
+     *
+     *         floor price  = totalBalance (6-dec) / cnova.totalSupply() (18-dec)
+     *         usdcOut      = cnovaAmount  * totalBalance / totalSupply
+     *
+     *         Caller MUST approve this contract to spend `cnovaAmount` CNOVA
+     *         before calling (ERC20 allowance path -- no BURNER_ROLE required).
+     *
+     *         Reverts if the redemption would push totalBalance below stabilityFloor,
+     *         ensuring the ghost-entry reserve is never drained by user redemptions.
+     *
+     * @param cnovaAmount  CNOVA to burn (18-dec, wei units)
+     */
+    function redeemCNOVA(uint256 cnovaAmount) external {
+        require(cnovaAmount > 0, "SF: zero amount");
+
+        uint256 supply = cnova.totalSupply();
+        require(supply > 0, "SF: no CNOVA supply");
+
+        // usdcOut(6-dec) = cnovaAmount(18-dec) * totalBalance(6-dec) / totalSupply(18-dec)
+        // 1e18 cancels: result is naturally 6-dec USDC units.
+        uint256 usdcOut = (cnovaAmount * totalBalance) / supply;
+        require(usdcOut > 0, "SF: zero payout");
+        require(
+            totalBalance >= usdcOut + stabilityFloor,
+            "SF: would breach floor"
+        );
+
+        // Burn CNOVA from sender (uses ERC20 allowance -- no special role needed)
+        cnova.burnFrom(msg.sender, cnovaAmount);
+
+        // Pay out USDC to sender
+        totalBalance -= usdcOut;
+        usdc.safeTransfer(msg.sender, usdcOut);
+
+        emit CNOVARedeemed(msg.sender, cnovaAmount, usdcOut);
+    }
+
     // ── Governance: emergency withdrawal ─────────────────────────────────────
 
     /**
@@ -323,6 +376,21 @@ contract StabilityFund is Ownable2Step {
     }
 
     // ── Views ────────────────────────────────────────────────────────────────
+
+    /**
+     * @notice Current floor price per CNOVA scaled by 1e18 for precision.
+     *         floor = totalBalance(6-dec) / totalSupply(18-dec)
+     *         Return value is in 6-dec units scaled x1e18.
+     *         Example: $0.03/CNOVA returns 30_000_000_000_000 (3e13).
+     *         Divide by 1e12 in JS to get a human-readable dollar amount.
+     *         Returns 0 if no CNOVA has been minted yet.
+     */
+    function floorPrice() external view returns (uint256) {
+        uint256 supply = cnova.totalSupply();
+        if (supply == 0 || totalBalance == 0) return 0;
+        // result: (6-dec * 1e18) / 18-dec => dimensionless ratio in 6-dec units x1e18
+        return (totalBalance * 1e18) / supply;
+    }
 
     /// @notice Current spendable balance (total minus floor).
     function spendableBalance() external view returns (uint256) {

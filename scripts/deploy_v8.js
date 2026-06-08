@@ -37,7 +37,7 @@
  *   USDC_ADDRESS           Reuse existing USDC; omit to deploy MockUSDC
  *   MATRIX_SIZE            64 (default — mainnet launch size) | 15 (quick dev cycle)
  *   DEPLOY_TIERS           Comma-separated list e.g. "1,2" (default: "1,2")
- *   ADDRESSES_FILE         Output filename (default: deployed_addresses_v8_4.json)
+ *   ADDRESSES_FILE         Output filename (default: deployed_addresses_v8_5.json)
  *
  * Run: npx hardhat run scripts/deploy_v8.js --network baseSepolia
  */
@@ -52,7 +52,7 @@ require("dotenv").config();
 // v8_1 = size-15 testnet (retired).  v8_2 = size-64 pre-mainnet stress test.
 const ADDRESSES_FILE = path.join(
   __dirname,
-  process.env.ADDRESSES_FILE || "deployed_addresses_v8_4.json"
+  process.env.ADDRESSES_FILE || "deployed_addresses_v8_5.json"
 );
 
 // ── Config ────────────────────────────────────────────────────────────────────
@@ -173,7 +173,7 @@ async function main() {
   const StabilityFund = await ethers.getContractFactory("StabilityFund", deployer);
   const stabilityFund = await deploy(
     StabilityFund,
-    [usdcAddr, admin],
+    [usdcAddr, cnovaAddr, admin],
     "StabilityFund"
   );
   const sfAddr = await stabilityFund.getAddress();

@@ -157,6 +157,15 @@ contract TierRouter is Ownable2Step {
     uint256 public totalSystemCycles;
     uint256 public cyclesAtLastRegistration;
 
+    // ─── Deflation state (set by MatrixKeeper) ────────────────────────────────
+    /// @notice 0=NORMAL 1=SLOW 2=RECOVERY — maintained by MatrixKeeper via Chainlink
+    uint8 public deflationState;
+
+    // ─── Entry tracking for keeper velocity queries (capped circular log) ─────
+    uint256 public constant MAX_ENTRY_LOG = 200;
+    uint256[] private _sysEntryTimes;
+    mapping(uint8 => uint256[]) private _tierEntryTimes;
+
     // ─── Events ───────────────────────────────────────────────────────────────
     event MemberRegistered(address indexed member, uint8 tier, address referrer);
     event MemberUpgraded(address indexed member, uint8 fromTier, uint8 toTier, uint256 fee);
@@ -173,6 +182,7 @@ contract TierRouter is Ownable2Step {
     event InactivityConfigUpdated(uint256 daysThreshold, uint256 cyclesThreshold, bool enabled);
     // V8.1 events
     event MemberOptionsSet(address indexed member, bool upgradeDisabled, bool reentryEnabled, bool doubleEnabled);
+    event DeflationStateChanged(uint8 prevState, uint8 newState);
     event MemberParked(address indexed member, uint8 tier, string reason);
     event VelocityGateSet(uint8 indexed tier, bool green);
     event AutoUpgradeThresholdSet(uint256 threshold);
@@ -375,6 +385,7 @@ contract TierRouter is Ownable2Step {
         IPairManagerV8(tierPairManagers[0]).registerDirectFor(msg.sender, resolved);
 
         _checkT5FirstEntry(msg.sender, 1);
+        _recordEntry(0);
         emit MemberRegistered(msg.sender, 1, resolved);
     }
 
@@ -468,6 +479,7 @@ contract TierRouter is Ownable2Step {
         lastActivityTimestamp    = block.timestamp;
         cyclesAtLastRegistration = totalSystemCycles;
         _checkT5FirstEntry(msg.sender, targetTierNum);
+        _recordEntry(targetTierIndex);
 
         emit ManualUpgrade(msg.sender, prevIndex + 1, targetTierNum, fee);
     }
@@ -645,6 +657,7 @@ contract TierRouter is Ownable2Step {
         IPairManagerV8(tierPairManagers[destTierIndex]).registerFor(member, referrer);
 
         // Bookkeeping + events
+        _recordEntry(destTierIndex);
         if (isUpgrade) {
             uint8 destTierNum = destTierIndex + 1;
             if (destTierNum > memberHighestTier[member]) memberHighestTier[member] = destTierNum;
@@ -728,6 +741,78 @@ contract TierRouter is Ownable2Step {
                 }
             }
         }
+    }
+
+    // ─── Entry tracking helper ───────────────────────────────────────────────
+
+    /// @dev Append current timestamp to per-tier and system entry logs.
+    ///      Uses a simple append-only array capped at MAX_ENTRY_LOG.
+    ///      Oldest entries remain visible for velocity window queries.
+    ///      When full, we overwrite from the start (ring buffer).
+    function _recordEntry(uint8 tierIdx) internal {
+        if (_sysEntryTimes.length < MAX_ENTRY_LOG) {
+            _sysEntryTimes.push(block.timestamp);
+        } else {
+            // Ring: overwrite oldest slot (index 0 = oldest, shift up)
+            for (uint256 i = 0; i < _sysEntryTimes.length - 1; i++) {
+                _sysEntryTimes[i] = _sysEntryTimes[i + 1];
+            }
+            _sysEntryTimes[_sysEntryTimes.length - 1] = block.timestamp;
+        }
+        uint256[] storage ta = _tierEntryTimes[tierIdx];
+        if (ta.length < MAX_ENTRY_LOG) {
+            ta.push(block.timestamp);
+        } else {
+            for (uint256 i = 0; i < ta.length - 1; i++) {
+                ta[i] = ta[i + 1];
+            }
+            ta[ta.length - 1] = block.timestamp;
+        }
+    }
+
+    // ─── Keeper interface (ITierRouterKeeper) ─────────────────────────────────
+
+    /**
+     * @notice MatrixKeeper sets deflation state after velocity checks.
+     *         state: 0=NORMAL 1=SLOW 2=RECOVERY
+     *         Also callable by owner for manual override.
+     */
+    function setDeflationState(uint8 state) external {
+        require(
+            msg.sender == matrixKeeper || msg.sender == owner(),
+            "TR: not keeper"
+        );
+        require(state <= 2, "TR: invalid deflation state");
+        uint8 prev = deflationState;
+        deflationState = state;
+        if (state != prev) emit DeflationStateChanged(prev, state);
+    }
+
+    /**
+     * @notice Count system-wide entries since fromTimestamp.
+     *         Called by MatrixKeeper velocity check. O(MAX_ENTRY_LOG).
+     */
+    function getSystemEntryCount(uint256 fromTimestamp) external view returns (uint256) {
+        uint256 cnt = 0;
+        uint256 len = _sysEntryTimes.length;
+        for (uint256 i = 0; i < len; i++) {
+            if (_sysEntryTimes[i] >= fromTimestamp) cnt++;
+        }
+        return cnt;
+    }
+
+    /**
+     * @notice Count per-tier entries since fromTimestamp.
+     *         Called by MatrixKeeper velocity check. O(MAX_ENTRY_LOG).
+     */
+    function getTierEntryCount(uint8 tier, uint256 fromTimestamp) external view returns (uint256) {
+        uint256 cnt = 0;
+        uint256[] storage ta = _tierEntryTimes[tier];
+        uint256 len = ta.length;
+        for (uint256 i = 0; i < len; i++) {
+            if (ta[i] >= fromTimestamp) cnt++;
+        }
+        return cnt;
     }
 
     // ─── Views ────────────────────────────────────────────────────────────────

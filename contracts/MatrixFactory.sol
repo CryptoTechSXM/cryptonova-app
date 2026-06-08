@@ -5,39 +5,22 @@ import "./FigureEightMatrixV8.sol";
 
 /**
  * @title  MatrixFactory
- * @notice Registry and wiring hub for FigureEightMatrixV8 pairs.
+ * @notice Pure registry for FigureEightMatrixV8 pairs.
  *
  *         ARCHITECTURE NOTE
  *         -----------------
- *         MatrixFactory does NOT deploy FigureEightMatrixV8 contracts directly.
- *         Embedding the ~18 KB F8V8 creation code would push this contract over
- *         the EIP-170 24,576-byte deployed-bytecode limit.
+ *         MatrixFactory does NOT deploy or wire FigureEightMatrixV8 contracts.
+ *         All wiring (setPartner, setTierRouter, setPairManager, setStabilityFund,
+ *         setMatrixKeeper, TierRouter.registerMatrix, PairManager.addPair) is
+ *         performed by the deploy script (admin) BEFORE calling registerPair.
  *
- *         Instead:
- *         1. The deploy script (or anyone) deploys F8V8 matA + matB instances
- *            with the correct constructor args, owned by `admin`.
- *         2. Caller invokes registerPair(tierIndex, matA, matB).
- *         3. The factory validates ownership + tierIndex, then wires and
- *            registers the pair with TierRouter and PairManager.
- *
- *         PERMISSIONLESS EXPANSION
- *         ------------------------
- *         registerPair() is callable by anyone. It enforces:
- *           - Both matrices are Ownable-owned by `admin`
- *           - Both matrices report the correct tierIndex
- *           - The tier is already configured in this factory
- *
- *         TODO (pre-mainnet): migrate to EIP-1167 clone pattern so pair
- *         deployment is also permissionless without admin pre-deployment.
+ *         registerPair() validates that:
+ *           - caller is admin
+ *           - both matrices are Ownable-owned by admin
+ *           - both matrices report the correct tierIndex
+ *           - the tier is already configured in this factory
+ *         and then records the pair in the registry.
  */
-
-interface ITierRouterRegistry {
-    function registerMatrix(address matrix, uint8 tierIndex) external;
-}
-
-interface IPairManagerRegistry {
-    function registerPair(address matA, address matB) external;
-}
 
 contract MatrixFactory {
 
@@ -101,7 +84,7 @@ contract MatrixFactory {
     // -- Tier configuration ---------------------------------------------------
 
     /**
-     * @notice Register a tier so registerPair() can wire new matrices into it.
+     * @notice Register a tier so registerPair() can record new matrix pairs.
      *         Must be called by admin once per tier before the first pair.
      */
     function configureTier(
@@ -125,11 +108,11 @@ contract MatrixFactory {
     // -- Pair registration ----------------------------------------------------
 
     /**
-     * @notice Wire and register a pre-deployed matA + matB pair.
-     *         Permissionless: anyone may register a valid pair.
+     * @notice Record a pre-deployed and pre-wired matA + matB pair.
+     *         Caller must be admin. All wiring must be done before this call.
      *
      *         Validity checks:
-     *           (1) Both matrices owned by `admin` (proves legitimacy)
+     *           (1) Both matrices owned by admin
      *           (2) Both report the supplied tierIndex
      *           (3) The tier is already configured in this factory
      */
@@ -138,27 +121,18 @@ contract MatrixFactory {
         address matA,
         address matB
     ) external {
-        if (tierIndex >= MAX_TIERS)       revert MF_InvalidTier();
-        if (!tierConfigured[tierIndex])   revert MF_NotConfigured();
+        if (msg.sender != admin)              revert MF_NotAdmin();
+        if (tierIndex >= MAX_TIERS)           revert MF_InvalidTier();
+        if (!tierConfigured[tierIndex])       revert MF_NotConfigured();
         if (matA == address(0) || matB == address(0)) revert MF_ZeroAddress();
 
         FigureEightMatrixV8 mA = FigureEightMatrixV8(matA);
         FigureEightMatrixV8 mB = FigureEightMatrixV8(matB);
 
-        if (mA.owner()      != admin)     revert MF_WrongOwner();
-        if (mB.owner()      != admin)     revert MF_WrongOwner();
-        if (mA.tierIndex()  != tierIndex) revert MF_TierMismatch();
-        if (mB.tierIndex()  != tierIndex) revert MF_TierMismatch();
-
-        address pm = pairManagerPerTier[tierIndex];
-
-        mA.setPartner(matB);
-        mB.setPartner(matA);
-        _wireMatrix(mA, pm);
-        _wireMatrix(mB, pm);
-
-        ITierRouterRegistry(tierRouter).registerMatrix(matB, tierIndex);
-        IPairManagerRegistry(pm).registerPair(matA, matB);
+        if (mA.owner()      != admin)         revert MF_WrongOwner();
+        if (mB.owner()      != admin)         revert MF_WrongOwner();
+        if (mA.tierIndex()  != tierIndex)     revert MF_TierMismatch();
+        if (mB.tierIndex()  != tierIndex)     revert MF_TierMismatch();
 
         pairCountPerTier[tierIndex] += 1;
         allMatA.push(matA);
@@ -166,15 +140,6 @@ contract MatrixFactory {
         deployedTierIndex.push(tierIndex);
 
         emit PairRegistered(tierIndex, matA, matB, pairCountPerTier[tierIndex]);
-    }
-
-    // -- Internal helpers -----------------------------------------------------
-
-    function _wireMatrix(FigureEightMatrixV8 m, address pm) internal {
-        m.setTierRouter(tierRouter);
-        m.setPairManager(pm);
-        if (stabilityFund != address(0)) m.setStabilityFund(stabilityFund);
-        if (matrixKeeper  != address(0)) m.setMatrixKeeper(matrixKeeper);
     }
 
     // -- Views ----------------------------------------------------------------
