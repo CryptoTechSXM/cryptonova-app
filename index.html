@@ -55,7 +55,7 @@
     @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.4} }
 
     /* ── Tabs ───────────────────────────────── */
-    nav { background: var(--bg2); border-bottom: 1px solid var(--border); display: flex; gap: 0; padding: 0 24px; }
+    nav { background: var(--bg2); border-bottom: 1px solid var(--border); display: flex; gap: 0; padding: 0 24px; position: sticky; top: 57px; z-index: 99; }
     nav button { background: none; border: none; color: var(--text2); padding: 14px 20px; cursor: pointer; font-size: 14px; font-weight: 500; border-bottom: 2px solid transparent; transition: all .2s; }
     nav button:hover { color: var(--text); }
     nav button.active { color: var(--green); border-bottom-color: var(--green); }
@@ -314,7 +314,18 @@
 
 <header>
   <div class="logo">
-    <div class="logo-icon"><img src="logo.svg" width="38" height="38" alt="CryptoNova" style="display:block"/></div>
+    <div class="logo-icon">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 40" width="38" height="38">
+      <defs>
+        <linearGradient id="lg1" x1="0%" y1="0%" x2="100%" y2="100%">
+          <stop offset="0%" stop-color="#00e5a0"/>
+          <stop offset="100%" stop-color="#0095ff"/>
+        </linearGradient>
+      </defs>
+      <polygon points="20,2 36,11 36,29 20,38 4,29 4,11" fill="url(#lg1)" opacity="0.2" stroke="url(#lg1)" stroke-width="1.5"/>
+      <polygon points="20,8 28,20 23,20 23,32 17,32 17,20 12,20" fill="url(#lg1)"/>
+    </svg>
+  </div>
     <div class="logo-text">Crypto<span>Nova</span></div>
     <span class="logo-badge" id="network-badge">Base Sepolia</span>
     <span style="background:rgba(0,229,160,.15);color:var(--green);border:1px solid var(--green2);border-radius:4px;padding:2px 8px;font-size:10px;font-weight:700;margin-left:6px">V8</span>
@@ -335,6 +346,29 @@
 </nav>
 
 <main>
+<!-- CNOVA token logo symbol — referenced inline throughout page -->
+<svg xmlns="http://www.w3.org/2000/svg" style="display:none" width="0" height="0">
+  <defs>
+    <linearGradient id="cng1" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#00e5a0"/>
+      <stop offset="60%" stop-color="#00b8d4"/>
+      <stop offset="100%" stop-color="#0095ff"/>
+    </linearGradient>
+    <linearGradient id="cng2" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0a1628"/>
+      <stop offset="100%" stop-color="#0d2040"/>
+    </linearGradient>
+  </defs>
+  <symbol id="cnova-icon" viewBox="0 0 200 200">
+    <circle cx="100" cy="100" r="96" fill="url(#cng1)"/>
+    <circle cx="100" cy="100" r="80" fill="url(#cng2)"/>
+    <text x="100" y="95" font-family="Arial Black,sans-serif" font-weight="900"
+      font-size="52" fill="url(#cng1)" text-anchor="middle" dominant-baseline="middle">CN</text>
+    <text x="100" y="138" font-family="Arial,sans-serif" font-weight="700"
+      font-size="20" fill="#00e5a0" text-anchor="middle" letter-spacing="5">NOVA</text>
+  </symbol>
+</svg>
+
 
   <!-- ══ HOME TAB ══════════════════════════════════════════════════════ -->
   <div id="tab-home" class="tab-panel active">
@@ -358,7 +392,7 @@
       <div class="token-card-left">
         <div class="token-icon">CN</div>
         <div>
-          <div class="token-name" style="display:flex;align-items:center;gap:8px"><img src="cnova-token.svg" width="28" height="28" alt="CNOVA" style="border-radius:50%;flex-shrink:0"/>CNOVA Token <span class="pill pill-green" style="font-size:10px;vertical-align:middle">ERC-20 · Base</span></div>
+          <div class="token-name" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><svg width="28" height="28" style="border-radius:50%;flex-shrink:0"><use href="#cnova-icon"/></svg>CNOVA Token <span class="pill pill-green" style="font-size:10px;vertical-align:middle">ERC-20 · Base</span></div>
           <div class="token-addr">0x8572cf8DB1b1f2badB5132Cb739553A7C8EF692F · 18 decimals</div>
           <div style="font-size:12px;color:var(--text2);margin-top:4px">Earned on every registration. 50 CNOVA minted per T1 join — vested over time.</div>
         </div>
@@ -485,7 +519,7 @@
 
     <!-- CNOVA Mining -->
     <div class="card" style="margin-bottom:24px">
-      <div class="section-title" style="margin-bottom:12px"><div class="dot"></div> <img src="cnova-token.svg" width="18" height="18" alt="" style="vertical-align:middle;border-radius:50%;margin-right:4px"/> CNOVA Mining</div>
+      <div class="section-title" style="margin-bottom:12px"><div class="dot"></div> <svg width="18" height="18" style="vertical-align:middle;border-radius:50%;margin-right:4px"><use href="#cnova-icon"/></svg> CNOVA Mining</div>
       <div class="grid-4">
         <div><div style="font-size:12px;color:var(--text3);margin-bottom:4px">Current Epoch</div><div style="font-weight:700;color:var(--yellow)" id="stat-epoch">—</div></div>
         <div><div style="font-size:12px;color:var(--text3);margin-bottom:4px">Reward Per Entry</div><div style="font-weight:700;color:var(--green)" id="stat-reward">—</div></div>
@@ -686,7 +720,7 @@
 <div class="stat-sub">All tiers lifetime</div>
         </div>
         <div class="card-sm">
-          <div class="stat-label"><img src="cnova-token.svg" width="14" height="14" alt="" style="vertical-align:middle;border-radius:50%;margin-right:3px"/>CNOVA Balance</div>
+          <div class="stat-label"><svg width="14" height="14" style="vertical-align:middle;border-radius:50%;margin-right:3px"><use href="#cnova-icon"/></svg>CNOVA Balance</div>
           <div class="stat-value green" id="dash-cnova">—</div>
           <div class="stat-sub">Mined tokens</div>
         </div>
