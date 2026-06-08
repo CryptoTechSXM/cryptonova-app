@@ -379,7 +379,7 @@ async function main() {
   // If T1A queue is empty AND repair found nothing, we need more bigfill
   if (t1aParkedInit.length === 0 && repairedCount === 0) {
     console.error(`  ERR  No parked T1A wallets and no parked T1B wallets to repair.`);
-    console.error(`       Run bigfill_v8.js (HDR_OFFSET=2200 COUNT=100) to register more members.`);
+    console.error(`       Run bigfill_v8.js (HDR_OFFSET=2200 COUNT=200) to register more members.`);
     process.exit(1);
   }
 
@@ -418,7 +418,7 @@ async function main() {
       parkedT1A = await getParked(matA1, matB1, scanSet, null);
       if (parkedT1A.length === 0) {
         console.log(`\n  STOP  No parked T1A wallets remaining.`);
-        console.log(`        Run bigfill_v8.js (HDR_OFFSET=2200 COUNT=100) to register more members.`);
+        console.log(`        Run bigfill_v8.js (HDR_OFFSET=2000+ COUNT=200) to register more members.`);
         break;
       }
       console.log(`  Refreshed parked T1A queue: ${parkedT1A.length} wallets`);
@@ -560,5 +560,13 @@ async function main() {
     console.log(`\n  W1 has NOT yet completed T2 cycle. T2B: ${finalT2bOcc}/${mSize}`);
     console.log(`  Re-run fill_t2.js to continue. T2B needs ${Number(mSize) - Number(finalT2bOcc)} more members.`);
     console.log(`\n  If parked T1A wallets are exhausted, run first:`);
-    console.log(`    $env:COUNT="100"; $env:HDR_OFFSET="2200"`);
-    console.log(`    npx hardhat run scripts/bigfi
+    console.log(`    $env:COUNT="200"; $env:HDR_OFFSET="2000"`);
+    console.log(`    npx hardhat run scripts/bigfill_v8.js --network baseSepolia`);
+  }
+  sep();
+}
+
+main().catch(err => {
+  console.error(err);
+  process.exitCode = 1;
+});
