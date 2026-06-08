@@ -745,7 +745,8 @@
           <!-- Redeem CNOVA for USDC at floor price -->
           <div style="margin-top:20px;padding-top:16px;border-top:1px solid var(--border)">
             <div style="font-size:14px;font-weight:700;margin-bottom:4px">🔥 Redeem CNOVA → USDC</div>
-            <div style="font-size:12px;color:var(--text3);margin-bottom:12px">Burn CNOVA at the current floor price to receive USDC from treasury.</div>
+            <div style="font-size:12px;color:var(--text3);margin-bottom:8px">Burn CNOVA at the current floor price to receive USDC from the Stability Fund.</div>
+            <div id="redeem-penalty-info" style="display:none;background:rgba(245,158,11,.08);border:1px solid rgba(245,158,11,.25);border-radius:8px;padding:10px 12px;font-size:12px;color:var(--text2);line-height:1.6;margin-bottom:12px"></div>
             <div class="info-row"><span class="info-key">Your CNOVA</span><span class="info-val green" id="redeem-cnova-bal">—</span></div>
             <div class="info-row"><span class="info-key">Floor Price</span><span class="info-val" id="redeem-floor">—</span></div>
             <div class="info-row"><span class="info-key">You Receive</span><span class="info-val green" id="redeem-out">—</span></div>
@@ -1218,6 +1219,8 @@ const CNOVA_ABI = [
   'function TOTAL_EPOCHS() external view returns (uint8)',
   'function approve(address,uint256) external returns (bool)',
   'function transfer(address,uint256) external returns (bool)',
+  'function vestDuration() external view returns (uint256)',
+  'function maxPenaltyBps() external view returns (uint256)',
 ];
 
 const SF_ABI = [
@@ -2058,7 +2061,7 @@ function renderF8Tree(nodes, myAddr, occ, mSize) {
 // ═══════════════════════════════════════════════════════════════════════
 // CNOVA REDEEM
 // ═══════════════════════════════════════════════════════════════════════
-let _redeemFloor = 0n, _redeemSupply = 0n, _redeemBal = 0n;
+let _redeemFloor = 0n, _redeemBal = 0n;
 
 async function loadRedeemData() {
   if (!userAddr) return;
@@ -2066,17 +2069,39 @@ async function loadRedeemData() {
   try {
     const cnova = new ethers.Contract(ADDRS.cnova, CNOVA_ABI, rp);
     const sf    = new ethers.Contract(ADDRS.stabilityFund, SF_ABI, rp);
-    const [bal, sfBal, supply] = await Promise.all([
+    const [bal, floorRaw, vestDur, penaltyBps] = await Promise.all([
       cnova.balanceOf(userAddr).catch(()=>0n),
-      sf.totalBalance().catch(()=>0n),
-      cnova.totalSupply().catch(()=>0n),
+      sf.floorPrice().catch(()=>0n),         // returns sfBal*1e18/supply — 6-dec result
+      cnova.vestDuration().catch(()=>BigInt(180*86400)),
+      cnova.maxPenaltyBps().catch(()=>5000n),
     ]);
-    _redeemBal    = bal;
-    _redeemSupply = supply;
-    _redeemFloor  = supply > 0n ? sfBal * BigInt(1e12) / supply : 0n; // floor in 6-dec units × 1e12
-    const floorDisplay = supply > 0n ? '$' + (Number(sfBal) / Number(supply) * 1e12).toFixed(4) : '$0.0000';
+    _redeemBal   = bal;
+    _redeemFloor = floorRaw;  // usdcOut = cnovaWei * floorRaw / 1e18
+
+    // Floor display: floorRaw is already in 6-dec USDC units (e.g. 30000 = $0.03)
+    const floorUsd = Number(floorRaw) / 1e6;
     setText('redeem-cnova-bal', Number(ethers.formatEther(bal)).toFixed(2) + ' CNOVA');
-    setText('redeem-floor', floorDisplay + ' / CNOVA');
+    setText('redeem-floor', '$' + floorUsd.toFixed(4) + ' / CNOVA');
+
+    // Early redemption penalty warning
+    const penaltyPct  = Number(penaltyBps) / 100;
+    const vestDays    = Math.round(Number(vestDur) / 86400);
+    const penaltyEl   = document.getElementById('redeem-penalty-info');
+    if (penaltyEl) {
+      if (penaltyBps > 0n) {
+        penaltyEl.innerHTML =
+          '<strong style="color:var(--yellow)">⚠️ Early Redemption Penalty</strong><br>' +
+          'Your CNOVA is cliff-vested for <strong>' + vestDays + ' days</strong> from mint. ' +
+          'If you unlock early, you forfeit up to <strong style="color:var(--yellow)">' + penaltyPct + '%</strong> of your tokens — ' +
+          'penalty decreases linearly to <strong>0%</strong> at the unlock date.<br>' +
+          '<span style="color:var(--text3);font-size:11px">Penalty tokens are burned, which raises the floor price for everyone.</span>';
+        penaltyEl.style.display = 'block';
+      } else {
+        penaltyEl.innerHTML = '<span style="color:var(--green)">✅ No early redemption penalty — tokens are fully unlocked.</span>';
+        penaltyEl.style.display = 'block';
+      }
+    }
+
     const approveBtn = document.getElementById('btn-redeem-approve');
     const redeemBtn  = document.getElementById('btn-redeem');
     if (approveBtn) approveBtn.disabled = bal === 0n;
@@ -2086,15 +2111,15 @@ async function loadRedeemData() {
 }
 
 function updateRedeemPreview() {
-  const input   = document.getElementById('redeem-amount');
-  const outEl   = document.getElementById('redeem-out');
+  const input = document.getElementById('redeem-amount');
+  const outEl = document.getElementById('redeem-out');
   if (!input || !outEl) return;
   const raw = parseFloat(input.value);
-  if (!raw || raw <= 0 || _redeemSupply === 0n) { outEl.textContent = '$0.00'; return; }
+  if (!raw || raw <= 0 || _redeemFloor === 0n) { outEl.textContent = '$0.00'; return; }
   const cnovaWei = BigInt(Math.floor(raw * 1e18));
-  // usdcOut = cnovaWei * sfBal / totalSupply  (both 18-dec and 6-dec)
-  const sfBal6 = _redeemFloor * _redeemSupply / BigInt(1e12); // recover sfBal
-  const usdcOut = _redeemSupply > 0n ? cnovaWei * sfBal6 / _redeemSupply : 0n;
+  // floorPrice() = sfBal_6dec * 1e18 / totalSupply_18dec
+  // usdcOut_6dec = cnovaWei_18dec * floorPrice / 1e18
+  const usdcOut = cnovaWei * _redeemFloor / BigInt(1e18);
   outEl.textContent = fmt6(usdcOut);
 }
 
