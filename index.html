@@ -736,7 +736,20 @@
         <div class="card">
           <div class="section-title" style="margin-bottom:16px"><div class="dot"></div> Withdraw Earnings</div>
           <div style="font-size:28px;font-weight:800;color:var(--green);margin-bottom:4px" id="dash-withdraw-amount">$0.00</div>
-          <div style="font-size:13px;color:var(--text3);margin-bottom:20px">Available USDC</div>
+          <div style="font-size:13px;color:var(--text3);margin-bottom:10px">Available USDC</div>
+
+          <!-- Withdrawal fee breakdown -->
+          <div id="withdraw-fee-breakdown" style="background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:10px 12px;font-size:12px;margin-bottom:14px;display:none">
+            <div class="info-row" style="margin-bottom:4px"><span class="info-key">Gross Amount</span><span class="info-val" id="wfee-gross">—</span></div>
+            <div class="info-row" style="margin-bottom:6px"><span class="info-key" style="color:var(--yellow)">Health Fee (<span id="wfee-pct">1.5</span>%)</span><span class="info-val" style="color:var(--yellow)" id="wfee-fee">—</span></div>
+            <div class="info-row" style="border-top:1px solid var(--border);padding-top:6px;margin:0"><span class="info-key" style="font-weight:700">You Receive</span><span class="info-val green" style="font-weight:800;font-size:13px" id="wfee-net">—</span></div>
+          </div>
+
+          <!-- Destination wallet note -->
+          <div style="font-size:11px;color:var(--text3);margin-bottom:12px;line-height:1.5">
+            Sends to connected wallet — <span id="withdraw-dest-addr" style="font-family:monospace;color:var(--text2)">—</span>
+          </div>
+
           <button class="btn btn-green full-w" id="btn-withdraw" onclick="doWithdraw()" disabled>
             Withdraw to Wallet
           </button>
@@ -1211,6 +1224,7 @@ const MATRIX_ABI = [
   'function totalJoined() external view returns (uint256)',
   'function escrowOf(address) external view returns (uint256)',
   'function withdraw() external',
+  'function withdrawalFeeBps() external view returns (uint256)',
 ];
 
 const CNOVA_ABI = [
@@ -1818,6 +1832,31 @@ async function loadDashboardData() {
     // Render
     setText('dash-withdrawable',   fmt6(totalW));
     setText('dash-withdraw-amount',fmt6(totalW));
+
+    // Withdrawal fee breakdown — read withdrawalFeeBps from T1A (same on all matrices)
+    try {
+      const matFee = new ethers.Contract(ADDRS.T1.matA, MATRIX_ABI, rp);
+      const feeBps = await matFee.withdrawalFeeBps().catch(() => 150n);
+      const feeAmt = totalW * feeBps / 10000n;
+      const netAmt = totalW - feeAmt;
+      const feePct = (Number(feeBps) / 100).toFixed(1);
+      const breakdown = document.getElementById('withdraw-fee-breakdown');
+      if (totalW > 0n) {
+        document.getElementById('wfee-pct').textContent  = feePct;
+        document.getElementById('wfee-gross').textContent = fmt6(totalW);
+        document.getElementById('wfee-fee').textContent   = '−' + fmt6(feeAmt);
+        document.getElementById('wfee-net').textContent   = fmt6(netAmt);
+        if (breakdown) breakdown.style.display = 'block';
+      } else {
+        if (breakdown) breakdown.style.display = 'none';
+      }
+    } catch(_) {}
+
+    // Destination wallet address display
+    if (userAddr) {
+      const dest = document.getElementById('withdraw-dest-addr');
+      if (dest) dest.textContent = userAddr.slice(0,6) + '…' + userAddr.slice(-4);
+    }
     setText('dash-total-earned',   fmt6(totalE));
     setText('dash-escrow',         fmt6(totalEscrow));
     setText('dash-cnova',          Number(ethers.formatEther(cnovabal)).toFixed(2));
