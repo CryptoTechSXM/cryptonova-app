@@ -4,9 +4,12 @@
  * Strategy: repeatedly forceCross parked T1A wallets → triggers T1B to cycle.
  * Once T1B has filled once, occupancy stays at 64 permanently: every _enterMatrix
  * call on a full T1B triggers _cycleOutRoot() inline before placing the new member.
- * Each forceCross therefore always generates one new T2 MatA member automatically.
- * T1B root auto-upgrades to T2 MatA → T2 MatA fills → W1 auto-crosses
- * to T2 MatB → T2 MatB fills → W1 cycles out of T2.
+ * Each forceCross generates one T1B cycle-out. The cycled-out root is routed to T2 by
+ * TierRouter.handleCycleOut() IF escrowBalance + withdrawable >= T2_FEE ($25).
+ * In rapid test scenarios, test wallets haven't accumulated enough escrow, so
+ * auto-upgrade falls to guard "e" (funds insufficient) and parks the member.
+ * This script detects parked roots and drives them via manualUpgrade(1) instead,
+ * which pulls T2_FEE from the wallet's own USDC balance (we mint it as needed).
  *
  * Unlike bigfill_v8.js, this script:
  *   - Does NOT register new wallets (no ETH/USDC wallet funding)
@@ -139,6 +142,56 @@ async function snapshot(label, ctx) {
   }
 }
 
+
+/**
+ * Fund a wallet with T2_FEE USDC + ETH for gas, then call manualUpgrade(1).
+ * Used for T1B roots that get parked because their matrix escrow < T2_FEE.
+ * manualUpgrade() pulls from the wallet's own USDC balance, bypassing escrow.
+ */
+async function fundAndManualUpgrade(targetAddr, scanSet, usdc, tierRouter, addrs, T2_FEE, deployer, provider) {
+  const wallet = scanSet.get(targetAddr);
+  if (!wallet) {
+    console.log(`    ⚠  ${targetAddr.slice(0,10)} not in scan set — skip manualUpgrade`);
+    return false;
+  }
+  try {
+    const connectedWallet = wallet.connect(provider);
+
+    // Top up ETH for gas if needed (approve + manualUpgrade = ~2 txs)
+    const ethBal = await provider.getBalance(targetAddr);
+    const minEth = ethers.parseEther("0.001");
+    if (ethBal < minEth) {
+      await (await deployer.sendTransaction({ to: targetAddr, value: minEth - ethBal })).wait();
+    }
+
+    // Mint T2_FEE to wallet (deployer is MockUSDC minter)
+    deployer.reset();
+    await sleep(1);
+    const usdcBal = await usdc.balanceOf(targetAddr);
+    if (usdcBal < T2_FEE) {
+      await (await usdc.mint(targetAddr, T2_FEE - usdcBal)).wait();
+    }
+
+    // Wallet approves TierRouter for T2_FEE
+    deployer.reset();
+    await sleep(1);
+    const usdcFromWallet = usdc.connect(connectedWallet);
+    const allow = await usdc.allowance(targetAddr, addrs.tierRouter);
+    if (allow < T2_FEE) {
+      await (await usdcFromWallet.approve(addrs.tierRouter, T2_FEE, { gasLimit: 100_000 })).wait();
+    }
+
+    // Wallet calls manualUpgrade(1) = upgrade from T1 → T2
+    const trFromWallet = tierRouter.connect(connectedWallet);
+    await (await trFromWallet.manualUpgrade(1, { gasLimit: 6_000_000 })).wait();
+
+    return true;
+  } catch (e) {
+    console.log(`    ✗  manualUpgrade failed: ${e.message.slice(0, 100)}`);
+    return false;
+  }
+}
+
 // ── Main ───────────────────────────────────────────────────────────────────────
 async function main() {
   if (!fs.existsSync(ADDRESSES_FILE)) {
@@ -149,6 +202,7 @@ async function main() {
   const addrs = JSON.parse(fs.readFileSync(ADDRESSES_FILE, "utf8"));
   const [rawSigner]  = await ethers.getSigners();
   const deployer     = new ethers.NonceManager(rawSigner);
+  const provider     = ethers.provider;
   const deployerAddr = rawSigner.address;
 
   const T1       = addrs.tiers?.T1  || {};
@@ -236,6 +290,35 @@ async function main() {
     console.log(`  Approved T2 MatA for ${fmt6(T2_FEE * 100n)}`);
   }
 
+
+  // ── Repair previously parked wallets ────────────────────────────────────────
+  // Wallets that cycled out of T1B with insufficient escrow are "parked" in
+  // TierRouter (tierCycles[addr][0] = 1, not in T2A or T2B, not in T1B).
+  // Drive them via manualUpgrade(1) so T2A occupancy catches up.
+  sep("Repairing parked T1B→T2A wallets");
+  let repairedCount = 0;
+  for (const [addr] of scanSet) {
+    if (addr.toLowerCase() === W1_ADDR.toLowerCase()) continue;
+    const cycles = await tierRouter.tierCycles(addr, 0);
+    if (cycles < 1n) continue;                                    // never completed T1
+    const inT1B = await matB1.getMember(addr);
+    if (inT1B.isInMatrix) continue;                               // still in T1B
+    const inT2A = await matA2.getMember(addr);
+    const inT2B = await matB2.getMember(addr);
+    if (inT2A.isInMatrix || inT2A.hasEverJoined) continue;        // already T2A
+    if (inT2B.isInMatrix || inT2B.hasEverJoined) continue;        // already T2B
+    // Found a parked wallet
+    process.stdout.write(`  Repairing ${addr.slice(0,10)}… `);
+    const ok = await fundAndManualUpgrade(addr, scanSet, usdc, tierRouter, addrs, T2_FEE, deployer, provider);
+    if (ok) {
+      repairedCount++;
+      const t2aNow = await matA2.occupancy();
+      console.log(`✓  T2A ${t2aNow}/${mSize}`);
+    }
+  }
+  if (repairedCount > 0) console.log(`  Repaired ${repairedCount} parked wallets — T2A now ${await matA2.occupancy()}/${mSize}`);
+  else                   console.log(`  No parked wallets found.`);
+
   // ── Main loop ───────────────────────────────────────────────────────────────
   // Drive T1B cycles to auto-generate T2 MatA members.
   // After T2 MatA fills (W1 auto-crosses to T2 MatB), continue driving until
@@ -280,6 +363,9 @@ async function main() {
     const t1aTarget = parkedT1A.shift();
 
     // ── T1B forceCross ───────────────────────────────────────────────────────
+    // Peek at who's root of T1B right now — that's who will cycle out
+    const nextT1BRoot = await matB1.posToMember(1n);
+
     const t2aOccBefore = await matA2.occupancy();
     const t2bOccBefore = await matB2.occupancy();
 
@@ -295,7 +381,7 @@ async function main() {
       t1bCrossed++;
 
       const t1bNow = await matB1.occupancy();
-      const t2aNow = await matA2.occupancy();
+      let t2aNow   = await matA2.occupancy();
       const t2bNow = await matB2.occupancy();
       const w1TierNow = await tierRouter.memberHighestTier(W1_ADDR);
 
@@ -307,6 +393,19 @@ async function main() {
       if (t2aGained > 0) note += `  (+${t2aGained} T2A)`;
       if (t2bGained > 0) note += `  (+${t2bGained} T2B !)`;
       console.log(note);
+
+      // Auto-upgrade guard e failed (escrow < T2_FEE) → drive via manualUpgrade
+      // The T1B root that just cycled out is the wallet we peeked at above.
+      if (t2aGained === 0 && nextT1BRoot !== ethers.ZeroAddress) {
+        process.stdout.write(`  ↳ T2A unchanged, manualUpgrade ${nextT1BRoot.slice(0,10)}… `);
+        const upgraded = await fundAndManualUpgrade(
+          nextT1BRoot, scanSet, usdc, tierRouter, addrs, T2_FEE, deployer, provider
+        );
+        if (upgraded) {
+          t2aNow = await matA2.occupancy();
+          console.log(`✓  T2A ${t2aNow}/${mSize}`);
+        }
+      }
 
       // Check if T2 MatA rotation count increased (T2 MatA cycled, root crossed/parked)
       const t2aRotNow = await matA2.rotationCount();
