@@ -314,7 +314,7 @@
 
 <header>
   <div class="logo">
-    <div class="logo-icon">CN</div>
+    <div class="logo-icon" style="background:none;padding:0"><img src="logo.svg" width="34" height="34" alt="CryptoNova" style="display:block"/></div>
     <div class="logo-text">Crypto<span>Nova</span></div>
     <span class="logo-badge" id="network-badge">Base Sepolia</span>
     <span style="background:rgba(0,229,160,.15);color:var(--green);border:1px solid var(--green2);border-radius:4px;padding:2px 8px;font-size:10px;font-weight:700;margin-left:6px">V8</span>
@@ -358,7 +358,7 @@
       <div class="token-card-left">
         <div class="token-icon">CN</div>
         <div>
-          <div class="token-name">CNOVA Token <span class="pill pill-green" style="font-size:10px;vertical-align:middle">ERC-20 · Base</span></div>
+          <div class="token-name" style="display:flex;align-items:center;gap:8px"><img src="cnova-token.svg" width="28" height="28" alt="CNOVA" style="border-radius:50%;flex-shrink:0"/>CNOVA Token <span class="pill pill-green" style="font-size:10px;vertical-align:middle">ERC-20 · Base</span></div>
           <div class="token-addr">0x8572cf8DB1b1f2badB5132Cb739553A7C8EF692F · 18 decimals</div>
           <div style="font-size:12px;color:var(--text2);margin-top:4px">Earned on every registration. 50 CNOVA minted per T1 join — vested over time.</div>
         </div>
@@ -485,7 +485,7 @@
 
     <!-- CNOVA Mining -->
     <div class="card" style="margin-bottom:24px">
-      <div class="section-title" style="margin-bottom:12px"><div class="dot"></div> ⛏️ CNOVA Mining</div>
+      <div class="section-title" style="margin-bottom:12px"><div class="dot"></div> <img src="cnova-token.svg" width="18" height="18" alt="" style="vertical-align:middle;border-radius:50%;margin-right:4px"/> CNOVA Mining</div>
       <div class="grid-4">
         <div><div style="font-size:12px;color:var(--text3);margin-bottom:4px">Current Epoch</div><div style="font-weight:700;color:var(--yellow)" id="stat-epoch">—</div></div>
         <div><div style="font-size:12px;color:var(--text3);margin-bottom:4px">Reward Per Entry</div><div style="font-weight:700;color:var(--green)" id="stat-reward">—</div></div>
@@ -686,7 +686,7 @@
 <div class="stat-sub">All tiers lifetime</div>
         </div>
         <div class="card-sm">
-          <div class="stat-label">CNOVA Balance</div>
+          <div class="stat-label"><img src="cnova-token.svg" width="14" height="14" alt="" style="vertical-align:middle;border-radius:50%;margin-right:3px"/>CNOVA Balance</div>
           <div class="stat-value green" id="dash-cnova">—</div>
           <div class="stat-sub">Mined tokens</div>
         </div>
@@ -1547,13 +1547,60 @@ async function loadRegisterTab() {
         btnApprove.style.cursor = 'default';
       }
       if (btnReg) {
-        btnReg.textContent = '✅ Step 2: Registered — You\'re In!';
+        btnReg.textContent = "✅ Step 2: Registered — You're In!";
         btnReg.disabled = true;
         btnReg.className = 'btn btn-green full-w';
         btnReg.style.cursor = 'default';
       }
       const warnEl = document.getElementById('usdc-low-warn');
       if (warnEl) warnEl.style.display = 'none';
+
+      // ── Show referral link card ─────────────────────────────────────────
+      const refLinkCard = document.getElementById('referral-link-card');
+      const refUrlInp   = document.getElementById('referral-url');
+      if (refLinkCard && refUrlInp && userAddr) {
+        const link = window.location.origin + window.location.pathname + '?ref=' + userAddr;
+        refUrlInp.value = link;
+        refLinkCard.style.display = 'block';
+      }
+
+      // ── Show upgrade card ────────────────────────────────────────────────
+      const upgradeCard = document.getElementById('upgrade-card');
+      if (upgradeCard) {
+        upgradeCard.style.display = 'block';
+        // Pre-populate tier select with T2 if empty
+        const sel = document.getElementById('upgrade-tier-select');
+        if (sel && sel.options.length <= 1) {
+          const opt = document.createElement('option');
+          opt.value = '1'; opt.textContent = 'T2 — Nova Rise ($25)';
+          sel.appendChild(opt);
+          sel.value = '1';
+          onUpgradeTierChange();
+        }
+        // Fetch cycles to determine locked vs active
+        const cycles = Number(await tr.tierCycles(userAddr, 0).catch(() => 0n));
+        const hint   = document.getElementById('upgrade-tier-hint');
+        const btnApp = document.getElementById('btn-upgrade-approve');
+        const btnUp  = document.getElementById('btn-upgrade');
+        if (cycles >= 1) {
+          if (hint) hint.innerHTML = '<span style="color:var(--green)">✅ ' + cycles + ' cycle' + (cycles !== 1 ? 's' : '') + ' complete — you qualify for T2 upgrade!</span>';
+          if (btnApp) { btnApp.disabled = false; btnApp.textContent = 'Step 1: Approve USDC'; btnApp.className = 'btn btn-green'; btnApp.style.flex = '1'; }
+        } else {
+          if (hint) hint.textContent = 'Requires 1 completed cycle. Your matrix fills when 63 more members join after you — then you can manually upgrade here.';
+          if (btnApp) { btnApp.disabled = true; btnApp.textContent = 'Step 1: Approve USDC (locked until cycle complete)'; }
+          if (btnUp)  { btnUp.disabled = true; }
+        }
+        // Load referrer address from contract
+        try {
+          const matA1  = new ethers.Contract(ADDRS.T1.matA, MATRIX_ABI, rp);
+          const member = await matA1.getMember(userAddr).catch(() => null);
+          const rInp   = document.getElementById('upgrade-referrer');
+          if (rInp && member && member.referrer && member.referrer !== ethers.ZeroAddress) {
+            rInp.value = member.referrer;
+          }
+        } catch(_) {}
+      }
+
       return;
     }
 
@@ -2223,22 +2270,26 @@ document.addEventListener('DOMContentLoaded', async () => {
 });
 
 async function approveUSDCForUpgrade() {
-  if (!signer) { alert('Connect your wallet first.'); return; }
+  if (!signer) { toast('Connect your wallet first.', 'error'); return; }
   const btn    = document.getElementById('btn-upgrade-approve');
   const status = document.getElementById('upgrade-status');
-  const fee    = window._dashUpgradeFee || 25_000_000n;
+  const fee    = window._upgradeCardFee || window._dashUpgradeFee || 25_000_000n;
   try {
-    btn.disabled = true;
-    status.textContent = 'Approving USDC...';
+    if (btn) btn.disabled = true;
+    if (status) status.textContent = 'Approving USDC...';
     const usdc = new ethers.Contract(ADDRS.usdc, USDC_ABI, signer);
     const tx   = await usdc.approve(ADDRS.tierRouter, fee);
-    status.textContent = 'Waiting for confirmation...';
+    if (status) status.textContent = 'Waiting for confirmation...';
     await tx.wait();
-    status.textContent = '✅ USDC approved. Now click Step 2 to upgrade.';
-    document.getElementById('btn-manual-upgrade').disabled = false;
+    if (status) status.textContent = '✅ USDC approved. Now click Step 2 to upgrade.';
+    // Enable both button variants (dashboard and register page)
+    const btnManual = document.getElementById('btn-manual-upgrade');
+    const btnUp     = document.getElementById('btn-upgrade');
+    if (btnManual) btnManual.disabled = false;
+    if (btnUp)     btnUp.disabled     = false;
   } catch(e) {
-    status.textContent = '❌ ' + (e.reason || e.message);
-    btn.disabled = false;
+    if (status) status.textContent = '❌ ' + (e.reason || e.message);
+    if (btn)    btn.disabled = false;
   }
 }
 
@@ -2259,6 +2310,48 @@ async function doManualUpgrade() {
   } catch(e) {
     status.textContent = '❌ ' + (e.reason || e.message);
     btn.disabled = false;
+  }
+}
+function onUpgradeTierChange() {
+  const sel  = document.getElementById('upgrade-tier-select');
+  const hint = document.getElementById('upgrade-tier-hint');
+  if (!sel || !sel.value) { if (hint) hint.textContent = ''; return; }
+  const fees = { '1': 25_000_000n, '2': 50_000_000n, '3': 100_000_000n };
+  const fee  = fees[sel.value] || 25_000_000n;
+  window._upgradeCardFee     = fee;
+  window._upgradeCardTierIdx = Number(sel.value);
+  if (hint) hint.textContent = 'Entry fee: $' + (Number(fee) / 1_000_000) + ' USDC from your wallet';
+}
+
+async function checkUpgradeAllowance() {
+  if (!userAddr) { toast('Connect wallet first', 'error'); return; }
+  const rp   = readProvider || new ethers.JsonRpcProvider(RPC_URL);
+  const usdc = new ethers.Contract(ADDRS.usdc, USDC_ABI, rp);
+  const fee  = window._upgradeCardFee || 25_000_000n;
+  const al   = await usdc.allowance(userAddr, ADDRS.tierRouter).catch(() => 0n);
+  const btn  = document.getElementById('btn-upgrade');
+  if (btn) btn.disabled = al < fee;
+  toast(al >= fee ? '✅ Allowance confirmed — ready to upgrade' : '⏳ Not yet approved', al >= fee ? 'success' : 'info');
+}
+
+async function doUpgrade() {
+  if (!signer) { toast('Connect wallet first', 'error'); return; }
+  const btn    = document.getElementById('btn-upgrade');
+  const status = document.getElementById('upgrade-status');
+  const idx    = window._upgradeCardTierIdx ?? 1;
+  try {
+    if (btn) btn.disabled = true;
+    if (status) status.textContent = 'Submitting upgrade transaction...';
+    const tr = new ethers.Contract(ADDRS.tierRouter, TIER_ROUTER_ABI, signer);
+    const tx = await tr.manualUpgrade(idx, { gasLimit: 3_000_000 });
+    if (status) status.textContent = 'Waiting for confirmation...';
+    await tx.wait();
+    if (status) status.innerHTML = '<span style="color:var(--green)">🎉 Upgraded to T' + (idx + 1) + '! Check your Dashboard.</span>';
+    toast('Tier upgraded successfully!', 'success');
+    setTimeout(() => loadDashboardData(), 2000);
+  } catch(e) {
+    if (status) status.textContent = '❌ ' + (e.reason || e.message);
+    if (btn) btn.disabled = false;
   }
 }
 
