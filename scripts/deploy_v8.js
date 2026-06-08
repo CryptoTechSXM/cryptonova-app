@@ -20,11 +20,14 @@
  * Instead: deploy script deploys each MatA/MatB directly, then calls
  * MatrixFactory.registerPair() which validates ownership, wires, and records them.
  *
- * BPS SPLITS (V8.1 Option B)
- * --------------------------
- * T1-T3: l1=2500 l2=300 l3=200 chain=2000 pool=3800 treasury=500  devOps=500  stability=200
- * T4-T5: l1=2500 l2=300 l3=200 chain=2000 pool=3300 treasury=800  devOps=700  stability=200
- * T6-T7: l1=2500 l2=300 l3=200 chain=1750 pool=3050 treasury=1200 devOps=800  stability=200
+ * BPS SPLITS (V8.1 Option B — revised Jun 7 2026, corrected Jun 8 2026)
+ * -----------------------------------------------------------------------
+ * StabilityFund backs CNOVA floor price directly — must be 15% to hit $0.03 start price.
+ * (50 CNOVA per T1 entry, $10 fee: floor = sfBal/supply = $1.50/50 = $0.03)
+ * Treasury = DAO reserve only (2% — small, grows via buyback profits).
+ * T1-T3: l1=2000 l2=300 l3=200 chain=2000 pool=3300 treasury=200  devOps=500  stability=1500
+ * T4-T5: l1=2000 l2=300 l3=200 chain=2000 pool=2800 treasury=200  devOps=700  stability=1800
+ * T6-T7: l1=2000 l2=300 l3=200 chain=1750 pool=2550 treasury=200  devOps=800  stability=2200
  *
  * Env vars:
  *   DEPLOYER_PRIVATE_KEY   Gas-paying deployer
@@ -32,41 +35,51 @@
  *   DEV_WALLET_ADDRESS     DevOps wallet (default: deployer)
  *   ADMIN_WALLET_ADDRESS   Admin/owner   (default: deployer)
  *   USDC_ADDRESS           Reuse existing USDC; omit to deploy MockUSDC
- *   MATRIX_SIZE            15 (testnet) | 63 (mainnet launch)
+ *   MATRIX_SIZE            64 (default — mainnet launch size) | 15 (quick dev cycle)
  *   DEPLOY_TIERS           Comma-separated list e.g. "1,2" (default: "1,2")
+ *   ADDRESSES_FILE         Output filename (default: deployed_addresses_v8_4.json)
  *
  * Run: npx hardhat run scripts/deploy_v8.js --network baseSepolia
  */
 
-const { ethers } = require("hardhat");
-const fs         = require("fs");
-const path       = require("path");
+const { ethers }      = require("hardhat");
+const { NonceManager } = require("ethers"); // v6 local nonce tracking
+const fs              = require("fs");
+const path            = require("path");
 require("dotenv").config();
 
 // ── Addresses output file ─────────────────────────────────────────────────────
-const ADDRESSES_FILE = path.join(__dirname, "deployed_addresses_v8_1.json");
+// v8_1 = size-15 testnet (retired).  v8_2 = size-64 pre-mainnet stress test.
+const ADDRESSES_FILE = path.join(
+  __dirname,
+  process.env.ADDRESSES_FILE || "deployed_addresses_v8_4.json"
+);
 
 // ── Config ────────────────────────────────────────────────────────────────────
-const MATRIX_SIZE    = BigInt(process.env.MATRIX_SIZE || "15");
+// MATRIX_SIZE: 64 for final pre-mainnet test and mainnet launch.
+//              Pass MATRIX_SIZE=15 env var to reuse the small-matrix dev config.
+const MATRIX_SIZE    = BigInt(process.env.MATRIX_SIZE || "64");
 const DEPLOY_TIERS   = (process.env.DEPLOY_TIERS || "1,2").split(",").map(Number);
 
 // ── Tier entry fees (USDC 6-decimal) ─────────────────────────────────────────
+// T2 restored to $25 — with 64-seat matrices the MatB root accumulates ~$63
+// in orphan escrow before cycling out, well above the $25 T2 gate.
 const TIER_FEES = [
-  10_000_000n,   // T1 $10
-  25_000_000n,   // T2 $25
-  50_000_000n,   // T3 $50
-  100_000_000n,  // T4 $100
-  250_000_000n,  // T5 $250
-  500_000_000n,  // T6 $500
-  1_000_000_000n // T7 $1000
+  10_000_000n,   // T1  $10
+  25_000_000n,   // T2  $25  (mainnet fee — affordable at 64-seat scale)
+  50_000_000n,   // T3  $50
+  100_000_000n,  // T4  $100
+  250_000_000n,  // T5  $250
+  500_000_000n,  // T6  $500
+  1_000_000_000n // T7  $1000
 ];
 
 // ── V8.1 BPS SplitConfigs ─────────────────────────────────────────────────────
 // Field order MUST match Solidity SplitConfig struct:
 //   l1Bps, l2Bps, l3Bps, chainBps, poolBps, treasuryBps, devOpsBps, stabilityBps
-const SPLITS_T1_T3 = [2500, 300, 200, 2000, 3800, 500, 500, 200]; // sum=10000
-const SPLITS_T4_T5 = [2500, 300, 200, 2000, 3300, 800, 700, 200]; // sum=10000
-const SPLITS_T6_T7 = [2500, 300, 200, 1750, 3050, 1200, 800, 200];// sum=10000
+const SPLITS_T1_T3 = [2000, 300, 200, 2000, 3300,  200, 500, 1500]; // sum=10000  stability=15% treasury=2%
+const SPLITS_T4_T5 = [2000, 300, 200, 2000, 2800,  200, 700, 1800]; // sum=10000  stability=18% treasury=2%
+const SPLITS_T6_T7 = [2000, 300, 200, 1750, 2550,  200, 800, 2200]; // sum=10000  stability=22% treasury=2%
 
 // ── Chain pay BPS per level (6 levels, must sum to chainBps) ─────────────────
 // T1-T5: chain=2000  →  1000/400/300/150/75/75   = 2000
@@ -102,7 +115,11 @@ async function deploy(factory, args = [], label = "") {
 // ── Main ──────────────────────────────────────────────────────────────────────
 
 async function main() {
-  const [deployer] = await ethers.getSigners();
+  const [rawSigner] = await ethers.getSigners();
+  // NonceManager tracks nonces locally — prevents "nonce too low" on slow public RPCs
+  // that return stale eth_getTransactionCount after a tx is mined.
+  const deployer    = new NonceManager(rawSigner);
+  const deployerAddr = rawSigner.address;
 
   if (!process.env.W1_PRIVATE_KEY) {
     console.error("  ✗  W1_PRIVATE_KEY missing from .env");
@@ -111,12 +128,12 @@ async function main() {
 
   const w1          = new ethers.Wallet(process.env.W1_PRIVATE_KEY);
   const accountOne  = w1.address;
-  const devOps      = process.env.DEV_WALLET_ADDRESS   || deployer.address;
-  const admin       = process.env.ADMIN_WALLET_ADDRESS || deployer.address;
+  const devOps      = process.env.DEV_WALLET_ADDRESS   || deployerAddr;
+  const admin       = process.env.ADMIN_WALLET_ADDRESS || deployerAddr;
 
   console.log("\n  V8.1 Elevator Deploy");
   sep();
-  console.log(`  Deployer   : ${deployer.address}`);
+  console.log(`  Deployer   : ${deployerAddr}`);
   console.log(`  AccountOne : ${accountOne}`);
   console.log(`  Admin      : ${admin}`);
   console.log(`  DevOps     : ${devOps}`);
@@ -128,32 +145,32 @@ async function main() {
   sep("USDC");
   let usdc;
   if (process.env.USDC_ADDRESS) {
-    usdc = await ethers.getContractAt("IERC20", process.env.USDC_ADDRESS);
+    usdc = await ethers.getContractAt("MockUSDC", process.env.USDC_ADDRESS, deployer);
     console.log(`  ↳  Existing USDC       ${process.env.USDC_ADDRESS}`);
   } else {
-    const MockUSDC = await ethers.getContractFactory("MockUSDC");
+    const MockUSDC = await ethers.getContractFactory("MockUSDC", deployer);
     usdc = await deploy(MockUSDC, [], "MockUSDC");
     // Mint 10M to deployer for testnet
-    await (await usdc.mint(deployer.address, 10_000_000_000_000n)).wait();
+    await (await usdc.mint(deployerAddr, 10_000_000_000_000n)).wait();
     console.log("  ↳  Minted 10M USDC to deployer");
   }
   const usdcAddr = await usdc.getAddress();
 
   // ── 2. CNOVA Token ────────────────────────────────────────────────────────
   sep("CNOVA Token");
-  const CNOVAToken = await ethers.getContractFactory("CNOVAToken");
-  const cnova      = await deploy(CNOVAToken, [deployer.address], "CNOVAToken");
+  const CNOVAToken = await ethers.getContractFactory("CNOVAToken", deployer);
+  const cnova      = await deploy(CNOVAToken, [deployerAddr], "CNOVAToken");
   const cnovaAddr  = await cnova.getAddress();
 
   // ── 3. Treasury ───────────────────────────────────────────────────────────
   sep("Treasury");
-  const CNOVATreasury = await ethers.getContractFactory("CNOVATreasury");
-  const treasury      = await deploy(CNOVATreasury, [usdcAddr, cnovaAddr, admin], "CNOVATreasury");
+  const CNOVATreasury = await ethers.getContractFactory("CNOVATreasury", deployer);
+  const treasury      = await deploy(CNOVATreasury, [cnovaAddr, usdcAddr, admin], "CNOVATreasury");
   const treasuryAddr  = await treasury.getAddress();
 
   // ── 4. StabilityFund ──────────────────────────────────────────────────────
   sep("StabilityFund");
-  const StabilityFund = await ethers.getContractFactory("StabilityFund");
+  const StabilityFund = await ethers.getContractFactory("StabilityFund", deployer);
   const stabilityFund = await deploy(
     StabilityFund,
     [usdcAddr, admin],
@@ -161,25 +178,29 @@ async function main() {
   );
   const sfAddr = await stabilityFund.getAddress();
 
-  // Seed SF with per-tier entry fees
+  // Seed SF with per-tier entry fees (TierRouter wired after TierRouter deploy)
   for (const t of DEPLOY_TIERS) {
-    await (await stabilityFund.setTierEntryFee(t - 1, TIER_FEES[t - 1])).wait();
+    await (await stabilityFund.setTierFee(t - 1, TIER_FEES[t - 1])).wait();
   }
   console.log("  ↳  Tier entry fees set in StabilityFund");
 
   // ── 5. TierRouter ────────────────────────────────────────────────────────
   sep("TierRouter");
-  const TierRouter = await ethers.getContractFactory("TierRouter");
+  const TierRouter = await ethers.getContractFactory("TierRouter", deployer);
   const tierRouter  = await deploy(
     TierRouter,
-    [usdcAddr, cnovaAddr, treasuryAddr, devOps, accountOne, admin, sfAddr],
+    [usdcAddr, admin],
     "TierRouter"
   );
   const trAddr = await tierRouter.getAddress();
 
+  // Wire TierRouter into StabilityFund (needed for L2 routing)
+  await (await stabilityFund.setTierRouter(trAddr)).wait();
+  console.log("  ↳  StabilityFund.setTierRouter OK");
+
   // ── 6. MatrixFactory ─────────────────────────────────────────────────────
   sep("MatrixFactory");
-  const MatrixFactory = await ethers.getContractFactory("MatrixFactory");
+  const MatrixFactory = await ethers.getContractFactory("MatrixFactory", deployer);
   const matFactory    = await deploy(
     MatrixFactory,
     [admin, trAddr, sfAddr, ethers.ZeroAddress], // matrixKeeper set later
@@ -190,8 +211,8 @@ async function main() {
   // ── 7. PairManagers + Matrix pairs ───────────────────────────────────────
   sep("Tier Pairs");
 
-  const F8V8  = await ethers.getContractFactory("FigureEightMatrixV8");
-  const PMV8  = await ethers.getContractFactory("PairManagerV8");
+  const F8V8  = await ethers.getContractFactory("FigureEightMatrixV8", deployer);
+  const PMV8  = await ethers.getContractFactory("PairManagerV8", deployer);
 
   const deployed = {};  // t => { pm, matA, matB }
 
@@ -203,9 +224,11 @@ async function main() {
 
     console.log(`\n  T${tierNum} (fee=$${Number(fee) / 1e6})`);
 
-    // PairManager
-    const pm   = await deploy(PMV8, [usdcAddr, cnovaAddr, trAddr, admin, fee], `PairManagerV8 T${tierNum}`);
+    // PairManager — constructor(usdc, entryFee, admin); tierRouter wired post-deploy
+    const pm   = await deploy(PMV8, [usdcAddr, fee, admin], `PairManagerV8 T${tierNum}`);
     const pmAddr = await pm.getAddress();
+    await (await pm.setTierRouter(trAddr)).wait();
+    console.log(`       PairManagerV8.setTierRouter T${tierNum} OK`);
 
     // Configure tier in MatrixFactory
     await (await matFactory.configureTier(tIdx, pmAddr, MATRIX_SIZE)).wait();
@@ -245,27 +268,56 @@ async function main() {
     await (await matFactory.registerPair(tIdx, matAAddr, matBAddr)).wait();
     console.log(`       MatrixFactory.registerPair T${tierNum} OK`);
 
+    // ── Wire matrices (factory can't do this — it doesn't own them) ──────────
+    // Partner link
+    await (await matA.setPartner(matBAddr)).wait();
+    await (await matB.setPartner(matAAddr)).wait();
+    // TierRouter
+    await (await matA.setTierRouter(trAddr)).wait();
+    await (await matB.setTierRouter(trAddr)).wait();
+    // PairManager
+    await (await matA.setPairManager(pmAddr)).wait();
+    await (await matB.setPairManager(pmAddr)).wait();
+    // StabilityFund
+    await (await matA.setStabilityFund(sfAddr)).wait();
+    await (await matB.setStabilityFund(sfAddr)).wait();
     // Circular chain: matA.chainNext = matB, matB.chainNext = matA (single pair loop)
     await (await matA.setChainNext(matBAddr)).wait();
     await (await matB.setChainNext(matAAddr)).wait();
-    console.log(`       Chain wired T${tierNum}: A→B→A`);
+    console.log(`       Matrix wiring complete T${tierNum}`);
 
-    // Register tier in TierRouter
-    await (await tierRouter.registerTier(tIdx, pmAddr)).wait();
-    console.log(`       TierRouter.registerTier T${tierNum} OK`);
+    // Register tier in TierRouter (tierIndex, pairManager, entryFee)
+    await (await tierRouter.registerTier(tIdx, pmAddr, fee)).wait();
+    // Authorize matrices with TierRouter (required for handleCycleOut)
+    await (await tierRouter.registerMatrix(matAAddr, tIdx)).wait();
+    await (await tierRouter.registerMatrix(matBAddr, tIdx)).wait();
+    console.log(`       TierRouter.registerTier + registerMatrix T${tierNum} OK`);
+
+    // Register matrix pair with PairManager
+    await (await pm.addPair(matAAddr, matBAddr)).wait();
+    console.log(`       PairManager.addPair T${tierNum} OK`);
 
     // Authorize StabilityFund to receive from these matrices
-    await (await stabilityFund.authorizeMatrix(matAAddr)).wait();
-    await (await stabilityFund.authorizeMatrix(matBAddr)).wait();
+    await (await stabilityFund.setMatrixAuthorized(matAAddr, true)).wait();
+    await (await stabilityFund.setMatrixAuthorized(matBAddr, true)).wait();
+
+    // Authorize matrices as callers on CNOVATreasury (required by onlyMatrix guard)
+    await (await treasury.setAuthorizedCaller(matAAddr, true)).wait();
+    await (await treasury.setAuthorizedCaller(matBAddr, true)).wait();
+    console.log(`       Treasury.setAuthorizedCaller T${tierNum} OK`);
 
     deployed[tierNum] = { pm: pmAddr, matA: matAAddr, matB: matBAddr };
   }
 
   // ── 8. MatrixKeeper ──────────────────────────────────────────────────────
   sep("MatrixKeeper");
-  const MatrixKeeper = await ethers.getContractFactory("MatrixKeeper");
+  const MatrixKeeper = await ethers.getContractFactory("MatrixKeeper", deployer);
   const keeper       = await deploy(MatrixKeeper, [trAddr, sfAddr], "MatrixKeeper");
   const keeperAddr   = await keeper.getAddress();
+
+  // Wire keeper into StabilityFund (needed for ghost entry authorization)
+  await (await stabilityFund.setMatrixKeeper(keeperAddr)).wait();
+  console.log("  ↳  StabilityFund.setMatrixKeeper OK");
 
   // Register tier PairManagers with keeper
   for (const tierNum of DEPLOY_TIERS) {
@@ -275,8 +327,8 @@ async function main() {
 
   // Point matrices at keeper
   for (const tierNum of DEPLOY_TIERS) {
-    const mA = await ethers.getContractAt("FigureEightMatrixV8", deployed[tierNum].matA);
-    const mB = await ethers.getContractAt("FigureEightMatrixV8", deployed[tierNum].matB);
+    const mA = await ethers.getContractAt("FigureEightMatrixV8", deployed[tierNum].matA, deployer);
+    const mB = await ethers.getContractAt("FigureEightMatrixV8", deployed[tierNum].matB, deployer);
     await (await mA.setMatrixKeeper(keeperAddr)).wait();
     await (await mB.setMatrixKeeper(keeperAddr)).wait();
   }
@@ -288,7 +340,7 @@ async function main() {
 
   // ── 9. V8Governance ──────────────────────────────────────────────────────
   sep("V8Governance");
-  const V8Gov    = await ethers.getContractFactory("V8Governance");
+  const V8Gov    = await ethers.getContractFactory("V8Governance", deployer);
   const gov      = await deploy(V8Gov, [cnovaAddr, trAddr, keeperAddr], "V8Governance");
   const govAddr  = await gov.getAddress();
 
@@ -317,22 +369,67 @@ async function main() {
   await (await cnova.grantRole(GOVERNOR_ROLE, govAddr)).wait();
   console.log(`  ↳  GOVERNOR_ROLE granted to V8Governance (${govAddr})`);
 
-  // ── 10. Register W1 (Account #1) as first member in T1 ───────────────────
+  // ── 10a. Save addresses BEFORE W1 seed (so a seed failure doesn't lose addresses) ──
+  {
+    sep("Save Addresses");
+    const tierAddresses = {};
+    for (const t of DEPLOY_TIERS) tierAddresses[`T${t}`] = deployed[t];
+    const out = {
+      network: (await ethers.provider.getNetwork()).name,
+      deployedAt: new Date().toISOString(),
+      matrixSize: Number(MATRIX_SIZE),
+      deployer: deployerAddr, admin, accountOne, devOps,
+      usdc: usdcAddr, cnova: cnovaAddr, treasury: treasuryAddr,
+      stabilityFund: sfAddr, tierRouter: trAddr,
+      matrixFactory: mfAddr, matrixKeeper: keeperAddr,
+      v8Governance: govAddr, tiers: tierAddresses,
+    };
+    fs.writeFileSync(ADDRESSES_FILE, JSON.stringify(out, null, 2));
+    console.log(`  ✓  Addresses saved → ${path.basename(ADDRESSES_FILE)}`);
+  }
+
+  // ── 10b. Register W1 (Account #1) as position-1 root of T1 MatA ─────────
+  // W1 must be registered FIRST so it sits at position-1 (root) and accumulates
+  // orphan fees from every subsequent member. Requires SEED_W1_KEY env var.
+  // If the key is absent the step is skipped — run scripts/seed_w1.js separately.
   sep("W1 Registration");
-  const T1_FEE = TIER_FEES[0];
-  const usdcDecimals = 6;
+  const T1_FEE     = TIER_FEES[0];
+  const T1_PM_ADDR = deployed[1].pm; // already an address string from deploy loop
+  const w1Key      = process.env.SEED_W1_KEY || process.env.W1_PRIVATE_KEY;
 
-  // Deployer approves USDC for W1 registration (testnet: deployer holds USDC)
-  await (await usdc.approve(trAddr, T1_FEE)).wait();
-  console.log(`  ↳  Approved ${T1_FEE / BigInt(10 ** usdcDecimals)} USDC for W1`);
+  if (!w1Key) {
+    console.log(`  ⚠  SEED_W1_KEY / W1_PRIVATE_KEY not set — skipping W1 seed.`);
+    console.log(`     Run: $env:SEED_W1_KEY="0x<key>"; npx hardhat run scripts/seed_w1.js --network baseSepolia`);
+  } else {
+    try {
+      const w1Wallet = new ethers.Wallet(w1Key, ethers.provider);
+      const W1_ADDR  = w1Wallet.address;
 
-  // W1 joins via TierRouter.join(referrer=0, tier=1)
-  // Note: TierRouter.join() requires the caller to hold USDC; on testnet deployer joins as W1
-  try {
-    await (await tierRouter.join(ethers.ZeroAddress, 0)).wait(); // tier 0-based
-    console.log(`  ✓  W1 (${accountOne}) registered in T1`);
-  } catch (e) {
-    console.log(`  ⚠  W1 registration skipped (${e.message.slice(0,60)})`);
+      // Already registered? (idempotent)
+      const alreadyJoined = await tierRouter.globalJoined(W1_ADDR);
+      if (alreadyJoined) {
+        console.log(`  ✓  W1 (${W1_ADDR}) already registered — skip`);
+      } else {
+        // Ensure W1 has ETH for gas
+        const w1Eth = await ethers.provider.getBalance(W1_ADDR);
+        if (w1Eth < ethers.parseEther("0.01")) {
+          await (await deployer.sendTransaction({ to: W1_ADDR, value: ethers.parseEther("0.02") })).wait();
+          console.log(`  ↳  Funded W1 with 0.02 ETH for gas`);
+        }
+        // Mint USDC to W1
+        await (await usdc.mint(W1_ADDR, T1_FEE)).wait();
+        console.log(`  ↳  Minted $${Number(T1_FEE) / 1e6} USDC to W1`);
+        // W1 approves T1 PairManager (NOT TierRouter — PM pulls the USDC)
+        await (await usdc.connect(w1Wallet).approve(T1_PM_ADDR, T1_FEE)).wait();
+        console.log(`  ↳  W1 approved T1 PM (${T1_PM_ADDR.slice(0,10)})`);
+        // W1 registers
+        await (await tierRouter.connect(w1Wallet).register(ethers.ZeroAddress, { gasLimit: 3_000_000 })).wait();
+        console.log(`  ✓  W1 (${W1_ADDR}) registered as T1 MatA root (position-1)`);
+      }
+    } catch (e) {
+      console.log(`  ⚠  W1 registration failed: ${e.reason || e.message?.slice(0, 80)}`);
+      console.log(`     Run scripts/seed_w1.js manually after deploy.`);
+    }
   }
 
   // ── 11. Save addresses ────────────────────────────────────────────────────
@@ -347,7 +444,7 @@ async function main() {
     network:        (await ethers.provider.getNetwork()).name,
     deployedAt:     new Date().toISOString(),
     matrixSize:     Number(MATRIX_SIZE),
-    deployer:       deployer.address,
+    deployer:       deployerAddr,
     admin:          admin,
     accountOne:     accountOne,
     devOps:         devOps,
