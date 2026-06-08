@@ -1118,7 +1118,7 @@ const ADDRS = {
   usdc:          '0x2D8B7b5eDec96bE441b6fb0D45D74a2BcE2C639a',
   cnova:         '0x2ECB1b19f9B9c41F0F4A83844A176729Abc41a43',
   treasury:      '0xc4ae7Bdd9730b5D2636fEb488DbdE2Cf963fEf73',
-  stabilityFund: '0x0a75cB6EDaB85aa911cCe8Fcb76E0Fb812F6f3bB',
+  stabilityFund: '0x2a994AE149B6CE208909B5Fea5caa35F94e0D2ce',
   tierRouter:    '0x394FB648840E2d07324458Af64EA9480D54598a8',
   T1: {
     pm:   '0x7e6693b747F5d66e6c7859B8c452C91aA0B7D459',
@@ -1172,6 +1172,8 @@ const CNOVA_ABI = [
 
 const SF_ABI = [
   'function totalBalance() external view returns (uint256)',
+  'function floorPrice() external view returns (uint256)',
+  'function redeemCNOVA(uint256 cnovaAmount) external',
 ];
 
 const USDC_ABI = [
