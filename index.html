@@ -781,10 +781,10 @@
             <div class="info-row"><span class="info-key">Entry Fee</span><span class="info-val" id="upgrade-fee">—</span></div>
             <div class="info-row"><span class="info-key">Your USDC</span><span class="info-val" id="upgrade-usdc-bal">—</span></div>
             <div style="display:flex;flex-direction:column;gap:8px;margin-top:12px">
-              <button class="btn btn-ghost full-w" id="btn-upgrade-approve" onclick="approveUSDCForUpgrade()" disabled>Step 1: Approve USDC</button>
+              <button class="btn btn-ghost full-w" id="btn-dash-approve" onclick="approveUSDCForUpgrade()" disabled>Step 1: Approve USDC</button>
               <button class="btn btn-ghost full-w" id="btn-manual-upgrade" onclick="doManualUpgrade()" disabled>Step 2: Upgrade Tier</button>
             </div>
-            <div id="upgrade-status" style="margin-top:10px;font-size:13px;color:var(--text2)"></div>
+            <div id="upgrade-status-dash" style="margin-top:10px;font-size:13px;color:var(--text2)"></div>
           </div>
         </div>
       </div>
@@ -1850,8 +1850,8 @@ async function loadDashboardData() {
         setText('upgrade-usdc-bal',    fmt6(uBal));
         const c = Number(t1CyclesTR);
         setText('upgrade-desc', `You have completed ${c} T${highestTier} cycle${c !== 1 ? 's' : ''} and qualify for a manual tier upgrade. Pay ${fmt6(t2FeeRaw)} USDC from your wallet to enter the next tier.`);
-        const approveBtn = document.getElementById('btn-upgrade-approve');
-        if (approveBtn) approveBtn.disabled = uBal < t2FeeRaw;
+        const approveBtn = document.getElementById('btn-dash-approve');
+        if (approveBtn) { approveBtn.disabled = false; approveBtn.classList.remove('btn-ghost'); approveBtn.classList.add('btn-green'); }
       }
     }
 
@@ -2347,32 +2347,40 @@ document.addEventListener('DOMContentLoaded', async () => {
 
 async function approveUSDCForUpgrade() {
   if (!signer) { toast('Connect your wallet first.', 'error'); return; }
-  const btn    = document.getElementById('btn-upgrade-approve');
-  const status = document.getElementById('upgrade-status');
-  const fee    = window._upgradeCardFee || window._dashUpgradeFee || 25_000_000n;
+  // Support both register-tab (btn-upgrade-approve) and dashboard (btn-dash-approve) contexts
+  const btnReg  = document.getElementById('btn-upgrade-approve');
+  const btnDash = document.getElementById('btn-dash-approve');
+  const stReg   = document.getElementById('upgrade-status');
+  const stDash  = document.getElementById('upgrade-status-dash');
+  const setStatus = function(msg) {
+    if (stReg)  stReg.textContent  = msg;
+    if (stDash) stDash.textContent = msg;
+  };
+  const fee = window._upgradeCardFee || window._dashUpgradeFee || 25_000_000n;
   try {
-    if (btn) btn.disabled = true;
-    if (status) status.textContent = 'Approving USDC...';
+    if (btnReg)  btnReg.disabled  = true;
+    if (btnDash) btnDash.disabled = true;
+    setStatus('Approving USDC...');
     const usdc = new ethers.Contract(ADDRS.usdc, USDC_ABI, signer);
     const tx   = await usdc.approve(ADDRS.tierRouter, fee);
-    if (status) status.textContent = 'Waiting for confirmation...';
+    setStatus('Waiting for confirmation...');
     await tx.wait();
-    if (status) status.textContent = '✅ USDC approved. Now click Step 2 to upgrade.';
-    // Enable both button variants (dashboard and register page)
+    setStatus('✅ USDC approved. Now click Step 2 to upgrade.');
     const btnManual = document.getElementById('btn-manual-upgrade');
     const btnUp     = document.getElementById('btn-upgrade');
-    if (btnManual) btnManual.disabled = false;
-    if (btnUp)     btnUp.disabled     = false;
+    if (btnManual) { btnManual.disabled = false; btnManual.classList.remove('btn-ghost'); btnManual.classList.add('btn-green'); }
+    if (btnUp)     { btnUp.disabled     = false; btnUp.classList.remove('btn-ghost'); btnUp.classList.add('btn-green'); }
   } catch(e) {
-    if (status) status.textContent = '❌ ' + (e.reason || e.message);
-    if (btn)    btn.disabled = false;
+    setStatus('❌ ' + (e.reason || e.message));
+    if (btnReg)  btnReg.disabled  = false;
+    if (btnDash) btnDash.disabled = false;
   }
 }
 
 async function doManualUpgrade() {
   if (!signer) { alert('Connect your wallet first.'); return; }
   const btn    = document.getElementById('btn-manual-upgrade');
-  const status = document.getElementById('upgrade-status');
+  const status = document.getElementById('upgrade-status-dash');
   const idx    = window._dashUpgradeTierIndex ?? 1;
   try {
     btn.disabled = true;
