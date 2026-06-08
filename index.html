@@ -1625,7 +1625,7 @@ async function loadRegisterTab() {
           if (hint) hint.innerHTML = '<span style="color:var(--green)">✅ ' + cycles + ' cycle' + (cycles !== 1 ? 's' : '') + ' complete — you qualify for T2 upgrade!</span>';
           if (btnApp) { btnApp.disabled = false; btnApp.textContent = 'Step 1: Approve USDC'; btnApp.className = 'btn btn-green'; btnApp.style.flex = '1'; }
         } else {
-          if (hint) hint.textContent = 'Requires 1 completed cycle. Your matrix fills when 63 more members join after you — then you can manually upgrade here.';
+          if (hint) hint.textContent = 'Locked until your first T1 cycle completes. A full cycle runs in two stages: MatA fills (64 members), then MatB fills (64 members). Once both stages complete for your position, this unlocks automatically.';
           if (btnApp) { btnApp.disabled = true; btnApp.textContent = 'Step 1: Approve USDC (locked until cycle complete)'; }
           if (btnUp)  { btnUp.disabled = true; }
         }
@@ -1634,10 +1634,17 @@ async function loadRegisterTab() {
           const matA1  = new ethers.Contract(ADDRS.T1.matA, MATRIX_ABI, rp);
           const member = await matA1.getMember(userAddr).catch(() => null);
           const rInp   = document.getElementById('upgrade-referrer');
-          if (rInp && member && member.referrer && member.referrer !== ethers.ZeroAddress) {
-            rInp.value = member.referrer;
+          if (rInp) {
+            if (member && member.referrer && member.referrer !== ethers.ZeroAddress) {
+              rInp.value = member.referrer;
+            } else {
+              rInp.placeholder = 'Same as your T1 referrer (locked on-chain)';
+            }
           }
-        } catch(_) {}
+        } catch(_) {
+          const rInp2 = document.getElementById('upgrade-referrer');
+          if (rInp2) rInp2.placeholder = 'Same as your T1 referrer (locked on-chain)';
+        }
       }
 
       return;
