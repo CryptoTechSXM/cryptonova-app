@@ -261,10 +261,10 @@ async function main() {
   // Pre-scan T1A parked count
   const t1aParkedInit = await getParked(matA1, matB1, scanSet, null);
   console.log(`  T1A parked (pre-run): ${t1aParkedInit.length}`);
-  if (t1aParkedInit.length === 0) {
-    console.error(`  ERR  No parked T1A wallets found. Run bigfill_v8.js to register more T1 members first.`);
-    process.exit(1);
-  }
+  // NOTE: do NOT exit here if T1A queue is empty — the repair loop below may
+  // have enough parked T1B→T2A wallets to complete the T2 cycle on its own.
+  // The main loop exits cleanly with a STOP message if T1A is still empty
+  // after the repair pass.
 
   // Pre-mint USDC buffer for deployer (enough for 200 T1 crosses + 100 T2 crosses)
   const mintBuffer = T1_FEE * 200n + T2_FEE * 100n;
@@ -318,6 +318,29 @@ async function main() {
   }
   if (repairedCount > 0) console.log(`  Repaired ${repairedCount} parked wallets — T2A now ${await matA2.occupancy()}/${mSize}`);
   else                   console.log(`  No parked wallets found.`);
+
+  // If repair loop already completed the T2 cycle, skip main loop entirely
+  const w1T2cycAfterRepair = await tierRouter.tierCycles(W1_ADDR, 1);
+  if (w1T2cycAfterRepair >= 1n) {
+    sep("T2 CYCLE COMPLETE (via repair)");
+    console.log(`  W1 has completed T2 cycle! tierCycles(W1, 1) = ${w1T2cycAfterRepair}`);
+    await snapshot("FINAL STATE", { tierRouter, matA1, matB1, matA2, matB2, stabilityFund, w1Addr: W1_ADDR });
+    console.log(`
+  SUCCESS  W1 completed full T2 cycle!`);
+    console.log(`  Next steps:`);
+    console.log(`    1. v8_5 redeploy — fix PairManagerV8 (activePairCount/getPairAt) + TierRouter keeper fns`);
+    console.log(`    2. Re-register Chainlink upkeep with new MatrixKeeper address`);
+    console.log(`    3. Community testing — invite 3-5 real wallets to v8.crypto-nova.app`);
+    sep();
+    return;
+  }
+
+  // If T1A queue is empty AND repair found nothing, we need more bigfill
+  if (t1aParkedInit.length === 0 && repairedCount === 0) {
+    console.error(`  ERR  No parked T1A wallets and no parked T1B wallets to repair.`);
+    console.error(`       Run bigfill_v8.js (HDR_OFFSET=2200 COUNT=200) to register more members.`);
+    process.exit(1);
+  }
 
   // ── Main loop ───────────────────────────────────────────────────────────────
   // Drive T1B cycles to auto-generate T2 MatA members.
