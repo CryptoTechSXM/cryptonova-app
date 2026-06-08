@@ -34,7 +34,7 @@ require("dotenv").config();
 //   v8_2 = size-64 pre-mainnet  ← default
 const ADDRESSES_FILE = path.join(
   __dirname,
-  process.env.ADDRESSES_FILE || "deployed_addresses_v8_2.json"
+  process.env.ADDRESSES_FILE || "deployed_addresses_v8_4.json"
 );
 
 // COUNT: for 64-seat matrices, 70 fills MatA (W1 seeds pos-1, 63 fill wallets
@@ -339,9 +339,10 @@ async function main() {
   }
 
   // Give the Base Sepolia RPC time to reflect the funded balances.
-  // publicnode sometimes lags 10-15s on balance queries even after confirmation.
-  console.log(`  ⏳ Waiting 30s for RPC to catch up with funded balances…`);
-  await sleep(30);
+  // publicnode sometimes lags 30-60s on balance queries even after confirmation.
+  // 113/300 wallets showed 0 ETH at 30s on June 8 run — increased to 90s.
+  console.log(`  ⏳ Waiting 90s for RPC to catch up with funded balances…`);
+  await sleep(90);
 
   // Post-sleep verification: check all funded wallets actually have ETH
   let fundingOk = 0, fundingFail = 0;
@@ -505,7 +506,7 @@ async function main() {
     // Scan all historically used offset ranges so parked wallets from prior runs
     // are picked up even if their HDR_OFFSET differs from the current batch.
     // Add new offsets here as runs accumulate (e.g. 2500, 3000 after more fills).
-    const SCAN_OFFSETS = [500, 1000, 1500, 2000, 2500];
+    const SCAN_OFFSETS = [500, 1000, 1500, 1700, 1800, 2000, 2500]; // 1800 added June 8 (v8_4 run 2)
     for (const base of SCAN_OFFSETS) {
       for (let i = 0; i < 70; i++) {
         const w = ethers.HDNodeWallet.fromPhrase(MNEMO_SCAN, undefined, `m/44'/60'/0'/0/${base + i}`);
@@ -552,6 +553,12 @@ async function main() {
         await (await usdc.mint(deployerAddr, toMint)).wait();
       }
 
+      // Reset NonceManager before approve — after 40+ registration batches the cached
+      // nonce delta can lag behind the chain state, causing "nonce too low" on the approve.
+      // reset() forces a fresh eth_getTransactionCount on the next send.
+      deployer.reset();
+      await sleep(2);
+
       // Single bulk approve — avoids per-iteration approve+forceCross double-tx nonce collision
       await (await usdc.approve(await matA1.getAddress(), usdcNeeded)).wait();
 
@@ -560,10 +567,16 @@ async function main() {
         const occNow = await matB1.occupancy();
         console.log(`  forceCross ${addr.slice(0,10)}… (MatB ${occNow}/${matBSize})`);
         try {
-          await (await matA1.forceCross(addr, { gasLimit: 6_000_000 })).wait();
+          await (await matA1.forceCross(addr, { gasLimit: 12_000_000 })).wait();
           crossed++;
         } catch (e) {
           console.warn(`    ⚠ forceCross failed for ${addr.slice(0,10)}: ${e.message.slice(0,100)}`);
+          // Nonce too low means the NonceManager cached a stale nonce — reset it so
+          // the next call fetches the current on-chain nonce fresh from the RPC.
+          if (e.message.includes("nonce too low") || e.message.includes("nonce has already been used")) {
+            deployer.reset();
+            await sleep(3);
+          }
         }
       }
 
