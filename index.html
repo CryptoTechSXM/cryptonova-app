@@ -534,8 +534,16 @@
             <input type="text" id="input-referrer" placeholder="0x... paste your referrer's wallet address here"
               style="border:2px solid var(--green2);background:rgba(0,229,160,0.05);font-size:14px;padding:13px 14px;"
               onfocus="this.style.borderColor='var(--green)';this.style.boxShadow='0 0 0 3px rgba(0,229,160,0.15)'"
-              onblur="this.style.borderColor='var(--green2)';this.style.boxShadow='none'" />
-            <div class="form-hint" style="color:var(--text2)">⚠️ This is permanent — your referrer is locked on-chain for life. Leave blank to be auto-assigned to a founding member.</div>
+              onblur="this.style.borderColor='var(--green2)';this.style.boxShadow='none'"
+              oninput="checkDefaultSponsorWarn()" />
+            <div class="form-hint" style="color:var(--text2)">⚠️ This is permanent — your referrer is locked on-chain for life.</div>
+            <div id="default-sponsor-warn" style="display:none;margin-top:10px;background:rgba(245,158,11,.08);border:1px solid rgba(245,158,11,.35);border-radius:8px;padding:12px 14px;font-size:13px;color:var(--yellow)">
+              ⚠️ <strong style="color:var(--yellow)">No referrer entered.</strong> You will be assigned to a default founding member as your permanent sponsor. If someone invited you, enter their address above before continuing.
+              <div style="margin-top:8px;display:flex;gap:8px">
+                <button onclick="document.getElementById('input-referrer').focus();document.getElementById('default-sponsor-warn').style.background='rgba(245,158,11,.14)'" style="background:none;border:1px solid var(--yellow);border-radius:6px;padding:5px 12px;font-size:12px;color:var(--yellow);cursor:pointer;font-weight:600">Enter a Referrer</button>
+                <button onclick="document.getElementById('default-sponsor-warn').style.display='none';document.getElementById('btn-approve').disabled=false;document.getElementById('btn-approve').className='btn btn-green full-w'" style="background:var(--yellow);border:none;border-radius:6px;padding:5px 14px;font-size:12px;color:#000;cursor:pointer;font-weight:700">Continue with Default</button>
+              </div>
+            </div>
           </div>
 
           <div style="margin-bottom:20px">
@@ -695,7 +703,7 @@
           <div class="section-title" style="margin-bottom:16px"><div class="dot"></div> Withdraw Earnings</div>
           <div style="font-size:28px;font-weight:800;color:var(--green);margin-bottom:4px" id="dash-withdraw-amount">$0.00</div>
           <div style="font-size:13px;color:var(--text3);margin-bottom:20px">Available USDC</div>
-          <button class="btn btn-green full-w" id="btn-withdraw" onclick="doWithdrawAll()" disabled>
+          <button class="btn btn-green full-w" id="btn-withdraw" onclick="doWithdraw()" disabled>
             Withdraw to Wallet
           </button>
           <div id="withdraw-status" style="margin-top:12px;font-size:13px;color:var(--text2)"></div>
@@ -1133,6 +1141,9 @@ const TIER_ROUTER_ABI = [
   'function globalJoined(address) external view returns (bool)',
   'function tierCycles(address, uint8) external view returns (uint256)',
   'function totalSystemCycles() external view returns (uint256)',
+  'function memberHighestTier(address) external view returns (uint8)',
+  'event MemberRegistered(address indexed member, uint8 tier, address referrer)',
+  'event MemberUpgraded(address indexed member, uint8 fromTier, uint8 toTier, uint256 fee)',
 ];
 
 const MATRIX_ABI = [
@@ -1152,9 +1163,11 @@ const MATRIX_ABI = [
 const CNOVA_ABI = [
   'function balanceOf(address) external view returns (uint256)',
   'function totalSupply() external view returns (uint256)',
-  'function currentEpoch() external view returns (uint8)',
-  'function epochRewards(uint8) external view returns (uint256)',
+  'function currentEpochNumber() external view returns (uint8)',
+  'function epochRewards(uint256) external view returns (uint256)',
   'function TOTAL_EPOCHS() external view returns (uint8)',
+  'function approve(address,uint256) external returns (bool)',
+  'function transfer(address,uint256) external returns (bool)',
 ];
 
 const SF_ABI = [
@@ -1361,7 +1374,7 @@ async function loadHomeStats() {
     const cnova  = new ethers.Contract(ADDRS.cnova,  CNOVA_ABI,  rp);
     const sf     = new ethers.Contract(ADDRS.stabilityFund, SF_ABI, rp);
     const tr     = new ethers.Contract(ADDRS.tierRouter, TIER_ROUTER_ABI, rp);
-    const treas  = new ethers.Contract(ADDRS.treasury, TREASURY_ABI, rp);
+    const usdc   = new ethers.Contract(ADDRS.usdc, USDC_ABI, rp);
 
     const [
       occA, cyclesA, occB, poolB, totalJoined,
@@ -1379,9 +1392,9 @@ async function loadHomeStats() {
       matB2.poolAccumulator().catch(()=>0n),
       tr.totalSystemCycles().catch(()=>0n),
       cnova.totalSupply().catch(()=>0n),
-      cnova.currentEpoch().catch(()=>0n),
+      cnova.currentEpochNumber().catch(()=>0n),
       sf.totalBalance().catch(()=>0n),
-      treas.usdcReserve().catch(()=>0n),
+      usdc.balanceOf(ADDRS.treasury).catch(()=>0n),
     ]);
 
     // Stat cards
@@ -1431,7 +1444,7 @@ async function loadHomeStats() {
 
     // Epoch reward per entry (epochRewards[current])
     try {
-      const reward = await cnova.epochRewards(epoch);
+      const reward = await cnova.epochRewards(Number(epoch));
       const rewardFormatted = Number(ethers.formatEther(reward)).toLocaleString();
       setText('stat-reward', rewardFormatted + ' CNOVA');
     } catch(_) { setText('stat-reward', '50 CNOVA'); }
@@ -1535,17 +1548,34 @@ async function loadRegisterTab() {
 
     if (btnApprove && btnReg) {
       if (allowance >= T1_FEE) {
+        // Already approved — Step 1 done (green check), Step 2 active
         btnApprove.textContent = '✅ Step 1: Approved';
         btnApprove.disabled = true;
+        btnApprove.className = 'btn btn-ghost full-w';
         btnApprove.style.borderColor = 'var(--green)';
         btnApprove.style.color = 'var(--green)';
         btnReg.disabled = false;
         btnReg.className = 'btn btn-green full-w';
+        document.getElementById('default-sponsor-warn').style.display = 'none';
       } else {
-        btnApprove.disabled = false;
+        // Not yet approved — Step 1 is active, check referrer
+        const refVal = (document.getElementById('input-referrer')?.value || '').trim();
+        const hasRef = refVal.length > 0 && ethers.isAddress(refVal);
+        if (!hasRef) {
+          // Show default-sponsor warning instead of activating Step 1 immediately
+          document.getElementById('default-sponsor-warn').style.display = 'block';
+          btnApprove.disabled = true;
+          btnApprove.className = 'btn btn-ghost full-w';
+          btnApprove.style.borderColor = '';
+          btnApprove.style.color = '';
+        } else {
+          document.getElementById('default-sponsor-warn').style.display = 'none';
+          btnApprove.disabled = false;
+          btnApprove.className = 'btn btn-green full-w';
+          btnApprove.style.borderColor = '';
+          btnApprove.style.color = '';
+        }
         btnApprove.textContent = 'Step 1: Approve $10 USDC 🔒';
-        btnApprove.style.borderColor = '';
-        btnApprove.style.color = '';
         btnReg.disabled = true;
         btnReg.className = 'btn btn-ghost full-w';
       }
@@ -1844,14 +1874,16 @@ async function loadMyDirects() {
   if (treeEl) treeEl.style.display='none';
   try {
     const tr = new ethers.Contract(ADDRS.tierRouter, TIER_ROUTER_ABI, rp);
-    // Query registered event logs for members whose referrer = userAddr (last 500k blocks)
-    const filter = tr.filters.MemberRegistered ? tr.filters.MemberRegistered() : null;
     let directs = [];
-    if (filter) {
-      const logs = await tr.queryFilter(filter, -500000).catch(()=>[]);
+    // Use indexed member filter — search last 200k blocks (testnet block range)
+    try {
+      const logs = await tr.queryFilter(tr.filters.MemberRegistered(), -200000);
       directs = logs
-        .filter(l => l.args && l.args.referrer && l.args.referrer.toLowerCase() === userAddr.toLowerCase())
+        .filter(l => l.args && l.args.referrer &&
+          l.args.referrer.toLowerCase() === userAddr.toLowerCase())
         .map(l => l.args.member);
+    } catch(evtErr) {
+      console.warn('MemberRegistered queryFilter failed:', evtErr.message);
     }
     document.getElementById('my-directs-loading').style.display='none';
     if (directs.length === 0) {
@@ -2072,6 +2104,27 @@ async function addUSDCtoMetaMask() {
       params: { type: 'ERC20', options: { address: ADDRS.usdc, symbol: 'USDC', decimals: 6 }},
     });
   } catch(e) { console.error(e); }
+}
+
+function checkDefaultSponsorWarn() {
+  const val = (document.getElementById('input-referrer')?.value || '').trim();
+  const warnEl = document.getElementById('default-sponsor-warn');
+  const btnApprove = document.getElementById('btn-approve');
+  if (!warnEl || !btnApprove) return;
+  if (btnApprove.textContent.includes('✅')) return; // already approved
+  if (val.length > 0 && ethers.isAddress(val)) {
+    warnEl.style.display = 'none';
+    btnApprove.disabled = false;
+    btnApprove.className = 'btn btn-green full-w';
+  } else if (val.length > 0) {
+    warnEl.style.display = 'none';
+    btnApprove.disabled = true;
+    btnApprove.className = 'btn btn-ghost full-w';
+  } else {
+    warnEl.style.display = 'block';
+    btnApprove.disabled = true;
+    btnApprove.className = 'btn btn-ghost full-w';
+  }
 }
 
 function copyReferralLink() {
