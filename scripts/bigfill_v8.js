@@ -264,7 +264,7 @@ async function main() {
           await (await usdc.connect(w1Wallet).approve(T1.pm, T1_FEE)).wait();
         }
         console.log(`  W1 registering…`);
-        await (await tierRouter.connect(w1Wallet).register(ethers.ZeroAddress, { gasLimit: 6_000_000 })).wait();
+        await (await tierRouter.connect(w1Wallet).register(ethers.ZeroAddress, { gasLimit: 8_000_000 })).wait();
         console.log(`  ✓ W1 registered as T1 MatA seed (position-1 root)`);
       }
     }
