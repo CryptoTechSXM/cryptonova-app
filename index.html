@@ -1998,18 +1998,22 @@ async function loadDashboardData() {
       if (lblRe) lblRe.textContent = info.autoReentryEnabled ? 'Enabled' : 'Disabled';
     } catch(_) {}
 
-    // Tier cycles breakdown per tier
+    // Tier cycles breakdown — use on-chain memberHighestTier (authoritative)
     try {
-      const maxIdx = Math.max(highestTier - 1, 0);
+      const onChainTier = Number(await tr.memberHighestTier(userAddr).catch(() => 0));
+      const numTiers    = Math.max(onChainTier, 1); // always query at least T1
       const cycArr = await Promise.all(
-        Array.from({length: maxIdx + 1}, (_, i) => tr.tierCycles(userAddr, i).catch(() => 0n))
+        Array.from({length: numTiers}, (_, i) => tr.tierCycles(userAddr, i).catch(() => 0n))
       );
-      const breakdownEl = document.getElementById('dash-cycles-breakdown');
-      if (breakdownEl && cycArr.length > 0) {
+      const hasAnyCycles = cycArr.some(c => c > 0n);
+      const breakdownEl  = document.getElementById('dash-cycles-breakdown');
+      if (breakdownEl && hasAnyCycles) {
         breakdownEl.innerHTML = cycArr.map((c, i) =>
           `<span style="color:var(--text3)">T${i+1}:</span> <strong style="color:${c>0n?'var(--green)':'var(--text2)'};margin-right:8px">${c}</strong>`
         ).join('');
         breakdownEl.style.display = 'block';
+      } else if (breakdownEl) {
+        breakdownEl.style.display = 'none';
       }
     } catch(_) {}
 
