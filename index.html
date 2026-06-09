@@ -392,8 +392,8 @@
       <div class="token-card-left">
         <div class="token-icon">CN</div>
         <div>
-          <div class="token-name" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><svg width="28" height="28" style="border-radius:50%;flex-shrink:0"><use href="#cnova-icon"/></svg>CNOVA Token <span class="pill pill-green" style="font-size:10px;vertical-align:middle">ERC-20 · Base</span></div>
-          <div class="token-addr">0x8572cf8DB1b1f2badB5132Cb739553A7C8EF692F · 18 decimals</div>
+          <div class="token-name" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><svg width="28" height="28" style="border-radius:50%;flex-shrink:0"><use href="#cnova-icon"/></svg><a href="https://sepolia.basescan.org/token/0x479cD6178a3BE3875fd37AF66c4DFe0752aFd343" target="_blank" rel="noopener" style="color:inherit;text-decoration:none;font-weight:700">CNOVA Token ↗</a> <span class="pill pill-green" style="font-size:10px;vertical-align:middle">ERC-20 · Base</span></div>
+          <div class="token-addr"><a href="https://sepolia.basescan.org/token/0x479cD6178a3BE3875fd37AF66c4DFe0752aFd343" target="_blank" rel="noopener" style="color:var(--green);text-decoration:none;font-family:monospace">0x479cD6178a3BE3875fd37AF66c4DFe0752aFd343</a> · 18 decimals</div>
           <div style="font-size:12px;color:var(--text2);margin-top:4px">Earned on every registration. 50 CNOVA minted per T1 join — vested over time.</div>
         </div>
       </div>
@@ -786,6 +786,15 @@
           
           <div class="info-row"><span class="info-key">Referrer</span><span class="info-val addr" id="dash-orig-referrer">—</span></div>
           <div class="info-row"><span class="info-key">Direct Referrals</span><span class="info-val" id="dash-directs">—</span></div>
+          <div class="info-row" style="padding-top:10px;margin-top:6px;border-top:1px solid var(--border)">
+            <span class="info-key" title="When enabled, if your cycle surplus covers the entry fee, a second registration fires automatically on your next cycle-out.">Double Reentry ⓘ</span>
+            <span class="info-val" style="display:flex;align-items:center;gap:8px">
+              <label style="display:flex;align-items:center;gap:6px;cursor:pointer">
+                <input type="checkbox" id="chk-double-reentry" onchange="setDoubleReentryOption(this.checked)" style="width:15px;height:15px;cursor:pointer;accent-color:var(--green)">
+                <span id="lbl-double-reentry" style="font-size:12px;color:var(--text3)">—</span>
+              </label>
+            </span>
+          </div>
 
           <div id="upgrade-section" style="margin-top:16px;padding-top:16px;border-top:1px solid var(--border);display:none">
             <div style="font-size:14px;font-weight:700;margin-bottom:4px">⬆️ Tier Upgrade Available</div>
@@ -1210,6 +1219,8 @@ const TIER_ROUTER_ABI = [
   'function manualUpgrade(uint8 targetTierIndex) external',
   'event MemberRegistered(address indexed member, uint8 tier, address referrer)',
   'event MemberUpgraded(address indexed member, uint8 fromTier, uint8 toTier, uint256 fee)',
+  'function getMemberInfo(address) external view returns (uint8 highestTier, address referrer, uint256 totalCycles, bool doubleEntry, bool whaleGateEligible, bool autoUpgradeEnabled, bool autoReentryEnabled)',
+  'function setDoubleEntry(bool enabled) external',
 ];
 
 const MATRIX_ABI = [
@@ -1906,6 +1917,17 @@ async function loadDashboardData() {
     const refLinkEl = document.getElementById('ref-link-text');
     if (refLinkEl) refLinkEl.textContent = link;
 
+    // Double reentry toggle state
+    try {
+      const info = await tr.getMemberInfo(userAddr);
+      const chk = document.getElementById('chk-double-reentry');
+      const lbl = document.getElementById('lbl-double-reentry');
+      if (chk) chk.checked = Boolean(info.doubleEntry);
+      if (lbl) lbl.textContent = info.doubleEntry
+        ? 'Enabled — second entry fires when surplus covers fee'
+        : 'Disabled';
+    } catch(_) {}
+
   } catch(e) { console.error('loadDashboardData:', e.message); }
 }
 
@@ -1952,6 +1974,32 @@ async function getMatrixForTier() {
   const tierSelect = document.getElementById('matrix-tier-select');
   const tierNum = tierSelect ? parseInt(tierSelect.value) || 1 : 1;
   return tierNum === 2 ? ADDRS.T2.matA : ADDRS.T1.matA;
+}
+
+async function setDoubleReentryOption(enabled) {
+  const chk = document.getElementById('chk-double-reentry');
+  const lbl = document.getElementById('lbl-double-reentry');
+  if (!userAddr || !signer) {
+    toast('Connect wallet first', 'error');
+    if (chk) chk.checked = !enabled;
+    return;
+  }
+  const prevLabel = lbl ? lbl.textContent : '';
+  if (lbl) lbl.textContent = 'Saving…';
+  try {
+    const tr = new ethers.Contract(ADDRS.tierRouter, TIER_ROUTER_ABI, signer);
+    const tx = await tr.setDoubleEntry(enabled, { gasLimit: 120_000 });
+    if (lbl) lbl.textContent = 'Confirming…';
+    await tx.wait();
+    if (lbl) lbl.textContent = enabled
+      ? 'Enabled — second entry fires when surplus covers fee'
+      : 'Disabled';
+    toast(enabled ? '✅ Double reentry enabled' : 'Double reentry disabled', 'success');
+  } catch(e) {
+    if (chk) chk.checked = !enabled;
+    if (lbl) lbl.textContent = prevLabel || (enabled ? 'Disabled' : 'Enabled — second entry fires when surplus covers fee');
+    toast('Failed: ' + (e.reason || e.message || 'unknown error').slice(0, 80), 'error');
+  }
 }
 
 async function loadQueueView() {
@@ -2051,16 +2099,22 @@ async function loadMyDirects() {
   try {
     const tr = new ethers.Contract(ADDRS.tierRouter, TIER_ROUTER_ABI, rp);
     let directs = [];
-    // Use indexed member filter — search last 200k blocks (testnet block range)
-    try {
-      const logs = await tr.queryFilter(tr.filters.MemberRegistered(), -200000);
-      directs = logs
-        .filter(l => l.args && l.args.referrer &&
-          l.args.referrer.toLowerCase() === userAddr.toLowerCase())
-        .map(l => l.args.member);
-    } catch(evtErr) {
-      console.warn('MemberRegistered queryFilter failed:', evtErr.message);
+    // Query MemberRegistered events — try progressively smaller ranges if RPC limits
+    let queryErr = null;
+    for (const blkRange of [500000, 100000, 20000, 5000]) {
+      try {
+        const logs = await tr.queryFilter(tr.filters.MemberRegistered(), -blkRange);
+        directs = logs
+          .filter(l => l.args && l.args.referrer &&
+            l.args.referrer.toLowerCase() === userAddr.toLowerCase())
+          .map(l => l.args.member);
+        queryErr = null;
+        break;
+      } catch(evtErr) {
+        queryErr = evtErr.message;
+      }
     }
+    if (queryErr) console.warn('MemberRegistered queryFilter failed at all ranges:', queryErr);
     document.getElementById('my-directs-loading').style.display='none';
     if (directs.length === 0) {
       document.getElementById('my-directs-empty').style.display='block';
@@ -2090,7 +2144,7 @@ function renderF8Tree(nodes, myAddr, occ, mSize) {
     &nbsp; <span style="color:var(--text2)">■</span> Filled
     &nbsp; <span style="color:var(--text3)">□</span> Empty
   </div>`;
-  html += '<div style="display:flex;flex-wrap:wrap;gap:5px">';
+  html += '<div style="display:flex;flex-wrap:wrap;gap:4px;justify-content:flex-start">';
   for (let i = 0; i < total; i++) {
     const addr = i < nodes.length ? nodes[i] : null;
     const isYou    = addr && myAddr && addr.toLowerCase() === myAddr.toLowerCase();
@@ -2100,7 +2154,7 @@ function renderF8Tree(nodes, myAddr, occ, mSize) {
     else if (isFilled) { bg='var(--bg3)';       border='1px solid var(--text3)';   color='var(--text2)'; }
     else               { bg='var(--bg3)';       border='1px dashed var(--border)'; color='var(--text3)'; }
     const label = isYou ? '🟢 You' : isFilled ? (addr.slice(0,4)+'…'+addr.slice(-3)) : '#'+(i+1);
-    html += `<div title="${isFilled?addr:''}" style="border-radius:6px;padding:5px 8px;font-size:11px;font-family:monospace;min-width:72px;text-align:center;background:${bg};border:${border};color:${color}">${label}</div>`;
+    html += `<div title="${isFilled?addr:''}" style="border-radius:6px;padding:4px 6px;font-size:11px;font-family:monospace;width:78px;text-align:center;box-sizing:border-box;background:${bg};border:${border};color:${color};white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${label}</div>`;
   }
   html += '</div>';
   return html;
