@@ -43,9 +43,10 @@ const log   = (tag, msg) => console.log(`[${ts()}] [${tag}] ${msg}`);
 
 function loadAddresses() {
   const candidates = [
-    DEPLOYED_FILE,
-    path.join(__dirname, "..", DEPLOYED_FILE),
-    path.join(process.cwd(), DEPLOYED_FILE),
+    path.join(__dirname, DEPLOYED_FILE),          // scripts/deployed_addresses_v8_6.json
+    DEPLOYED_FILE,                                  // relative to cwd
+    path.join(__dirname, "..", DEPLOYED_FILE),     // project root
+    path.join(process.cwd(), DEPLOYED_FILE),       // cwd absolute
   ];
   for (const f of candidates) {
     if (fs.existsSync(f)) return JSON.parse(fs.readFileSync(f, "utf8"));
