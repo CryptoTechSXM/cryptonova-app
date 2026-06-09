@@ -1693,14 +1693,16 @@ async function loadHomeStats() {
 
     // Epoch
     const EPOCH_NAMES = ['Genesis','Pioneer','Expansion','Momentum','Apex','Legacy'];
-    const epochNum = Number(epoch);
-    setText('stat-epoch', `Epoch ${epochNum+1} — ${EPOCH_NAMES[epochNum] || 'Era '+(epochNum+1)}`);
+    const epochNum = Number(epoch); // already 1-based from currentEpochNumber()
+    const epochLabel = `Epoch ${epochNum} — ${EPOCH_NAMES[epochNum-1] || 'Era '+epochNum}`;
+    setText('stat-epoch', epochLabel);
+    setText('cw-epoch', epochLabel);
     setText('stat-supply', Number(ethers.formatEther(supply)).toLocaleString(undefined,{maximumFractionDigits:0})+' CNOVA');
     setText('stat-treasury-usdc', fmt6(treasUsdc));
 
     // Epoch reward per entry (epochRewards[current])
     try {
-      const reward = await cnova.epochRewards(Number(epoch));
+      const reward = await cnova.epochRewards(Number(epoch) - 1); // epochRewards[] is 0-based, epochNum is 1-based
       const rewardFormatted = Number(ethers.formatEther(reward)).toLocaleString();
       setText('stat-reward', rewardFormatted + ' CNOVA');
     } catch(_) { setText('stat-reward', '50 CNOVA'); }
