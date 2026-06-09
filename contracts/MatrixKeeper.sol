@@ -65,6 +65,7 @@ interface IStabilityFundKeeper {
     function payGhostEntry(uint8 tierIndex, address pairManager) external;
     function activateLayer(uint8 layer, bool active) external;  // layers 2 and 4
     function balanceByTier(uint8 tier) external view returns (uint256);
+    function payForceCross(uint8 tierIdx, address sourceMatrix, uint256 fee) external;
 }
 
 interface IFigureEightKeeper {
@@ -78,6 +79,13 @@ interface IFigureEightKeeper {
     function tierIndex() external view returns (uint8);
     function setChainNext(address next) external;
     function owner() external view returns (address);
+    // Parked rescue additions
+    function isParked(address member) external view returns (bool);
+    function getParkedCount() external view returns (uint256);
+    function getParkedMember(uint256 idx) external view returns (address);
+    function forceCrossKeeper(address member) external;
+    function isMatrixA() external view returns (bool);
+    function ENTRY_FEE() external view returns (uint256);
 }
 
 interface IPairManagerKeeper {
@@ -101,7 +109,9 @@ contract MatrixKeeper is Ownable {
     uint8 public constant WORK_VELOCITY  = 0;
     uint8 public constant WORK_GHOST     = 1;
     uint8 public constant WORK_RECLAIM   = 2;
-    uint8 public constant WORK_CHAIN_LINK = 3;
+    uint8 public constant WORK_CHAIN_LINK    = 3;
+    uint8 public constant WORK_PARKED_RESCUE = 4;
+    uint8 public constant WORK_VELOCITY_GATE = 5;
 
     // ── Config (DAO-adjustable via enumerated menus) ───────────────────────────
     /// @notice Rolling window for velocity and deflation checks (seconds)
@@ -153,6 +163,8 @@ contract MatrixKeeper is Ownable {
     event SlotReclaimed(address indexed matrix, address indexed member, uint256 idleSeconds);
     event ChainLinked(address newMatA, address newMatB, address prevMatB);
     event PairManagerSet(uint8 indexed tierIndex, address pairManager);
+    event ParkedRescued(address indexed matrix, address indexed member, uint8 tierIndex);
+    event VelocityGateOpened(uint8 indexed forTierIndex);
 
     // ── Custom errors ─────────────────────────────────────────────────────────
     error MK_NotKeeper();
@@ -279,6 +291,48 @@ contract MatrixKeeper is Ownable {
             }
         }
 
+        // 4. Parked wallet rescue scan (MatA only — members park in MatA)
+        for (uint8 t = 0; t < configuredTierCount && count < maxItemsPerUpkeep; t++) {
+            address pm = pairManagerForTier[t];
+            if (pm == address(0)) continue;
+            uint256 pairCount = IPairManagerKeeper(pm).activePairCount();
+            for (uint256 p = 0; p < pairCount && count < maxItemsPerUpkeep; p++) {
+                (address matA,) = IPairManagerKeeper(pm).getPairAt(p);
+                if (matA == address(0)) continue;
+                IFigureEightKeeper mat = IFigureEightKeeper(matA);
+                uint256 parkedCount = mat.getParkedCount();
+                if (parkedCount > 0) {
+                    address parkedMember = mat.getParkedMember(0);
+                    uint256 fee = mat.ENTRY_FEE();
+                    uint256 sfBal = IStabilityFundKeeper(stabilityFund).balanceByTier(t);
+                    if (sfBal >= fee) {
+                        items[count++] = WorkItem(WORK_PARKED_RESCUE, t, matA, parkedMember);
+                    }
+                }
+            }
+        }
+
+        // 5. Velocity gate check: MatB at >=80% full -> open next tier
+        for (uint8 t = 0; t < configuredTierCount && count < maxItemsPerUpkeep; t++) {
+            if (t + 1 >= 7) continue;                                    // no tier after T7
+            if (ITierRouterKeeper(tierRouter).tierVelocityGreen(t + 1)) continue;  // already open
+            address pm = pairManagerForTier[t];
+            if (pm == address(0)) continue;
+            uint256 pairCount = IPairManagerKeeper(pm).activePairCount();
+            for (uint256 p = 0; p < pairCount; p++) {
+                (, address matB) = IPairManagerKeeper(pm).getPairAt(p);
+                if (matB == address(0)) continue;
+                IFigureEightKeeper mat = IFigureEightKeeper(matB);
+                uint256 occ  = mat.occupancy();
+                uint256 size = mat.MATRIX_SIZE();
+                if (size > 0 && occ * 100 >= size * 80) {
+                    // MatB for tier t is >=80% full — queue gate open for tier t+1
+                    items[count++] = WorkItem(WORK_VELOCITY_GATE, t, address(0), address(0));
+                    break;
+                }
+            }
+        }
+
         if (count == 0) return (false, "");
 
         // Trim array to actual count
@@ -308,6 +362,10 @@ contract MatrixKeeper is Ownable {
             } else if (item.workType == WORK_CHAIN_LINK) {
                 _doChainLink(item.addr1, item.addr2, chainLinkProcessed);
                 chainLinkProcessed++;
+            } else if (item.workType == WORK_PARKED_RESCUE) {
+                _doParkedRescue(item.addr1, item.addr2, item.tierIndex);
+            } else if (item.workType == WORK_VELOCITY_GATE) {
+                _doVelocityGate(item.tierIndex);
             }
         }
 
@@ -315,6 +373,37 @@ contract MatrixKeeper is Ownable {
         if (chainLinkProcessed > 0) {
             _flushChainLinks(chainLinkProcessed);
         }
+    }
+
+    // ── Internal: parked wallet rescue ──────────────────────────────────────────
+
+    function _doParkedRescue(address matrix, address member, uint8 tierIdx) internal {
+        IFigureEightKeeper mat = IFigureEightKeeper(matrix);
+        if (!mat.isParked(member)) return;        // already rescued by another path
+
+        address pm = pairManagerForTier[tierIdx];
+        if (pm == address(0)) return;
+        uint256 fee = mat.ENTRY_FEE();
+
+        uint256 sfBal = IStabilityFundKeeper(stabilityFund).balanceByTier(tierIdx);
+        if (sfBal < fee) return;                  // SF does not have enough for this tier
+
+        // 1. Ask SF to send ENTRY_FEE USDC to the source matrix
+        IStabilityFundKeeper(stabilityFund).payForceCross(tierIdx, matrix, fee);
+        // 2. Tell source matrix to execute the crossing using those funds
+        mat.forceCrossKeeper(member);
+
+        emit ParkedRescued(matrix, member, tierIdx);
+    }
+
+    // ── Internal: velocity gate opener ───────────────────────────────────────────
+
+    function _doVelocityGate(uint8 tierIdx) internal {
+        uint8 nextTier = tierIdx + 1;
+        if (nextTier >= 7) return;                // T7 is the last tier
+        if (ITierRouterKeeper(tierRouter).tierVelocityGreen(nextTier)) return; // already open
+        ITierRouterKeeper(tierRouter).setTierVelocityGreen(nextTier, true);
+        emit VelocityGateOpened(nextTier);
     }
 
     // ── Manual trigger (keeper or admin) ─────────────────────────────────────

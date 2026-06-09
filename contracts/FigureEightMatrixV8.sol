@@ -138,6 +138,10 @@ contract FigureEightMatrixV8 is Ownable2Step {
     address public  pendingCross;
     address public  pendingCrossReferrer;
 
+    // ─── Parked member queue (keeper rescue) ─────────────────────────────────────────
+    /// @notice Members that failed to cross (insufficient funds). Keeper rescues via forceCrossKeeper().
+    address[] public parkedMembers;
+
     // ─── V8.1: Equalization Pool ──────────────────────────────────────────────
     /// @notice Accumulates SPLIT_POOL_BPS per entry. Distributed deficit-weighted
     ///         to all non-root members (pos 2..N) on every cycle-out.
@@ -198,6 +202,7 @@ contract FigureEightMatrixV8 is Ownable2Step {
     event WithdrawalFeeCharged(address indexed member, uint256 fee);
     event StabilityFundSet(address indexed addr);
     event MatrixKeeperSet(address indexed addr);
+    event MemberParked(address indexed member, uint256 shortfall);
 
     // ─── Constructor split config struct ──────────────────────────────────────
     /// @notice V8.1: escrowBps and secondaryBps replaced by poolBps and stabilityBps.
@@ -616,7 +621,10 @@ contract FigureEightMatrixV8 is Ownable2Step {
             if (earnings >= needed) {
                 fromEarnings = needed;
             } else {
-                // Insufficient funds — park. Keeper calls forceCross() with funded fee.
+                // Insufficient funds — park. Keeper rescues via forceCrossKeeper().
+                uint256 shortfall = reentryFee - (esc + earnings);
+                parkedMembers.push(member);
+                emit MemberParked(member, shortfall);
                 return;
             }
         }
@@ -922,6 +930,51 @@ contract FigureEightMatrixV8 is Ownable2Step {
     }
 
     // ─── Views ────────────────────────────────────────────────────────────────
+
+    /// @notice True when member has ever joined but is NOT currently in the matrix.
+    ///         Covers both freshly cycled-out members AND parked members.
+    function isParked(address member) external view returns (bool) {
+        return members[member].hasEverJoined && !members[member].isInMatrix;
+    }
+
+    function getParkedCount() external view returns (uint256) { return parkedMembers.length; }
+
+    function getParkedMember(uint256 idx) external view returns (address) { return parkedMembers[idx]; }
+
+    // ─── Keeper: forceCrossKeeper ──────────────────────────────────────────────────────────────────────
+
+    /**
+     * @notice Keeper-initiated forced crossing for a parked member.
+     *         Caller (MatrixKeeper) MUST have already called
+     *         StabilityFund.payForceCross(tierIndex, address(this), ENTRY_FEE)
+     *         so this contract holds the required ENTRY_FEE USDC before this call.
+     */
+    function forceCrossKeeper(address member) external {
+        require(msg.sender == matrixKeeper,     "F8V8: not keeper");
+        require(members[member].hasEverJoined,  "F8V8: not a member");
+        require(!members[member].isInMatrix,    "F8V8: still in matrix");
+        require(address(partner) != address(0), "F8V8: no partner");
+
+        _removeFromParkedQueue(member);
+
+        address destination = (!isMatrixA && chainNext != address(0))
+            ? chainNext : address(partner);
+        SafeERC20.forceApprove(usdc, destination, ENTRY_FEE);
+
+        emit MemberCrossedToPartner(member, address(this), destination);
+        FigureEightMatrixV8(destination)._enterMatrix(member, members[member].referrer);
+    }
+
+    function _removeFromParkedQueue(address member) internal {
+        uint256 len = parkedMembers.length;
+        for (uint256 i = 0; i < len; i++) {
+            if (parkedMembers[i] == member) {
+                parkedMembers[i] = parkedMembers[len - 1];
+                parkedMembers.pop();
+                return;
+            }
+        }
+    }
 
     function getMember(address member)        external view returns (Member memory) { return members[member]; }
     function getCyclesCompleted(address m)    external view returns (uint256)       { return members[m].cyclesCompleted; }

@@ -34,7 +34,7 @@ require("dotenv").config();
 //   v8_2 = size-64 pre-mainnet  ← default
 const ADDRESSES_FILE = path.join(
   __dirname,
-  process.env.ADDRESSES_FILE || "deployed_addresses_v8_4.json"
+  process.env.ADDRESSES_FILE || "deployed_addresses_v8_5.json"
 );
 
 // COUNT: for 64-seat matrices, 70 fills MatA (W1 seeds pos-1, 63 fill wallets
@@ -426,7 +426,7 @@ async function main() {
         // costing 20k gas (zero→nonzero SSTORE).  32×3×20k ≈ 1.92M gas for
         // _distributePool alone, plus ~0.9M for the position-shift loop.
         // 3M was too tight (OOG mid-loop, reason:null).  6M gives ample headroom.
-        const regTx = await tierRouter.connect(connected).register(W1_ADDR, { gasLimit: 6_000_000 });
+        const regTx = await tierRouter.connect(connected).register(W1_ADDR, { gasLimit: 8_000_000 });
         const receipt = await regTx.wait();
         return receipt;
       })

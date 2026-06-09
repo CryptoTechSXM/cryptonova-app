@@ -1,6 +1,6 @@
 "use strict";
 /**
- * deploy_v8.js  --  V8.1 "Elevator" Full Deploy  (T1-T7 scaffold, Phase 1 active)
+ * deploy_v8.js  --  V8.6 Full Deploy  (all 7 tiers, MATRIX_SIZE=127, auto-keeper)
  * ─────────────────────────────────────────────────────────────────────────────
  * Deploys the complete V8.1 stack:
  *
@@ -52,14 +52,15 @@ require("dotenv").config();
 // v8_1 = size-15 testnet (retired).  v8_2 = size-64 pre-mainnet stress test.
 const ADDRESSES_FILE = path.join(
   __dirname,
-  process.env.ADDRESSES_FILE || "deployed_addresses_v8_5.json"
+  process.env.ADDRESSES_FILE || "deployed_addresses_v8_6.json"
 );
 
 // ── Config ────────────────────────────────────────────────────────────────────
-// MATRIX_SIZE: 64 for final pre-mainnet test and mainnet launch.
-//              Pass MATRIX_SIZE=15 env var to reuse the small-matrix dev config.
-const MATRIX_SIZE    = BigInt(process.env.MATRIX_SIZE || "64");
-const DEPLOY_TIERS   = (process.env.DEPLOY_TIERS || "1,2").split(",").map(Number);
+// MATRIX_SIZE: 127 = 2^7-1 (complete 7-level BFS tree, best pay per cycle).
+//              Pass MATRIX_SIZE=15 env var for quick dev cycles.
+//              Pass MATRIX_SIZE=64 for the old v8_5 config.
+const MATRIX_SIZE    = BigInt(process.env.MATRIX_SIZE || "127");
+const DEPLOY_TIERS   = (process.env.DEPLOY_TIERS || "1,2,3,4,5,6,7").split(",").map(Number);
 
 // ── Tier entry fees (USDC 6-decimal) ─────────────────────────────────────────
 // T2 restored to $25 — with 64-seat matrices the MatB root accumulates ~$63
@@ -293,6 +294,15 @@ async function main() {
     await (await tierRouter.registerMatrix(matBAddr, tIdx)).wait();
     console.log(`       TierRouter.registerTier + registerMatrix T${tierNum} OK`);
 
+    // v8.6: Close velocity gate for T2-T7. Keeper auto-opens each one
+    // when the previous tier's MatB reaches 80% occupancy.
+    if (tierNum > 1) {
+      await (await tierRouter.setTierVelocityGreen(tIdx, false)).wait();
+      console.log(`       Velocity gate T${tierNum} CLOSED (keeper opens at 80% MatB fill)`);
+    } else {
+      console.log(`       Velocity gate T1 OPEN (T1 always open for registration)`);
+    }
+
     // Register matrix pair with PairManager
     await (await pm.addPair(matAAddr, matBAddr)).wait();
     console.log(`       PairManager.addPair T${tierNum} OK`);
@@ -480,12 +490,14 @@ async function main() {
   }
   sep();
   console.log("\n  NEXT STEPS");
-  console.log("  1. Register MatrixKeeper with Chainlink Automation (gas limit: 3,000,000)");
+  console.log("  1. Register MatrixKeeper with Chainlink Automation (gas limit: 6,000,000)");
+  console.log("     127-seat cycle-out costs ~4M gas; 6M gives headroom for parked rescues.");
   console.log(`     Upkeep target: ${keeperAddr}`);
-  console.log("  2. Fund StabilityFund with seed USDC (covers ghost entries)");
+  console.log("  2. Fund StabilityFund with seed USDC (ghost entries + parked rescues)");
+  console.log("     Seed $500+ USDC so keeper has reserves for T1-T7 rescue operations.");
   console.log(`     SF address:    ${sfAddr}`);
   console.log("  3. Run bigfill_v8.js to stress-test the T1→T2 upgrade path");
-  console.log("  4. Verify contracts on BaseScan:");
+  console.log("  5. Verify contracts on BaseScan:");
   console.log("     npx hardhat verify --network baseSepolia <address> <args...>");
   console.log();
 }

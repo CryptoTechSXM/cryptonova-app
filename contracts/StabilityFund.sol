@@ -304,6 +304,43 @@ contract StabilityFund is Ownable2Step {
         emit DiscountPaid(member, discount, totalBalance);
     }
 
+    /**
+     * @notice Fund a forceCross rescue for a parked member.
+     *
+     *         The keeper calls this BEFORE calling sourceMatrix.forceCrossKeeper(member).
+     *         This transfers exactly `fee` USDC to the source matrix so the matrix
+     *         can forward it to the destination matrix as the crossing entry fee.
+     *         The fee flows through normal BPS distribution — the SF is net-neutral
+     *         long-term since parked members would have crossed anyway.
+     *
+     * @param tierIdx      0-based tier index of the source matrix
+     * @param sourceMatrix The MatA contract that holds the parked member
+     * @param fee          ENTRY_FEE of the destination matrix (read by keeper)
+     */
+    function payForceCross(
+        uint8   tierIdx,
+        address sourceMatrix,
+        uint256 fee
+    ) external {
+        require(msg.sender == matrixKeeper, "SF: not keeper");
+        require(tierIdx < 7,               "SF: invalid tier");
+        require(sourceMatrix != address(0), "SF: zero matrix");
+        require(fee > 0,                   "SF: zero fee");
+        require(totalBalance >= fee + stabilityFloor, "SF: below floor");
+        require(totalBalance >= fee,        "SF: insufficient funds");
+
+        if (balanceByTier[tierIdx] >= fee) {
+            balanceByTier[tierIdx] -= fee;
+        } else {
+            balanceByTier[tierIdx] = 0;
+        }
+        totalBalance -= fee;
+
+        usdc.safeTransfer(sourceMatrix, fee);
+
+        emit FundDeposit(tierIdx, fee, 0, address(this)); // reuse event with layer=0 for audit
+    }
+
     // ── CNOVA floor-price redemption ─────────────────────────────────────────
 
     /**
