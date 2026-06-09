@@ -732,7 +732,7 @@
         <div class="card-sm" style="border-color:rgba(245,158,11,.4)" title="Earnings held in escrow — releases to Withdrawable when you complete your next cycle-out.">
           <div class="stat-label">In Escrow &#9432;</div>
           <div class="stat-value" id="dash-escrow" style="color:var(--yellow)">—</div>
-          <div class="stat-sub">Vests at next cycle-out</div>
+          <div class="stat-sub" id="dash-escrow-sub" title="Current escrow balance. Earns no fee — releases to Withdrawable when you cycle out. Includes any amount deducted for auto-upgrades.">Vests at next cycle-out</div>
         </div>
       </div>
 
@@ -1259,6 +1259,7 @@ const MATRIX_ABI = [
   'function posToMember(uint256) external view returns (address)',
   'function rotationCount() external view returns (uint256)',
   'function poolAccumulator() external view returns (uint256)',
+  'function isActiveInMatrix(address) external view returns (bool)',
   'function totalJoined() external view returns (uint256)',
   'function escrowOf(address) external view returns (uint256)',
   'function withdraw() external',
@@ -1668,13 +1669,19 @@ async function loadRegisterTab() {
           sel.value = '1';
           onUpgradeTierChange();
         }
-        // Fetch cycles to determine locked vs active
-        const cycles = Number(await tr.tierCycles(userAddr, 0).catch(() => 0n));
+        // Fetch cycles + highest tier to determine locked / already-upgraded / eligible
+        const cycles     = Number(await tr.tierCycles(userAddr, 0).catch(() => 0n));
+        const hiTier     = Number(await tr.memberHighestTier(userAddr).catch(() => 0));
+        const t2matA     = new ethers.Contract(ADDRS.T2.matA, MATRIX_ABI, rp);
+        const alreadyInT2 = await t2matA.isActiveInMatrix(userAddr).catch(() => false);
         const hint   = document.getElementById('upgrade-tier-hint');
         const btnApp = document.getElementById('btn-upgrade-approve');
         const btnUp  = document.getElementById('btn-upgrade');
-        if (cycles >= 1) {
-          if (hint) hint.innerHTML = '<span style="color:var(--green)">✅ ' + cycles + ' cycle' + (cycles !== 1 ? 's' : '') + ' complete — you qualify for T2 upgrade!</span>';
+        if (hiTier >= 2 || alreadyInT2) {
+          // Already upgraded — hide the card or show status
+          if (upgradeCard) upgradeCard.style.display = 'none';
+        } else if (cycles >= 1) {
+          if (hint) hint.innerHTML = '<span style="color:var(--green)">&#x2705; ' + cycles + ' cycle' + (cycles !== 1 ? 's' : '') + ' complete &#8212; you qualify for T2 upgrade!</span>';
           if (btnApp) { btnApp.disabled = false; btnApp.textContent = 'Step 1: Approve USDC'; btnApp.className = 'btn btn-green'; btnApp.style.flex = '1'; }
         } else {
           if (hint) hint.textContent = 'Locked until your first T1 cycle completes. A full cycle runs in two stages: MatA fills (64 members), then MatB fills (64 members). Once both stages complete for your position, this unlocks automatically.';
@@ -1899,11 +1906,23 @@ async function loadDashboardData() {
     // Show deducted/claimed gap so accounting is transparent
     try {
       const deducted = totalE > totalW + totalEscrow ? totalE - totalW - totalEscrow : 0n;
+      // Total Earned sub-label
       const subEl = document.getElementById('dash-total-earned-sub');
       if (subEl) {
         subEl.textContent = deducted > 0n
           ? `All tiers lifetime \u2022 ${fmt6(deducted)} deducted/claimed`
           : 'All tiers lifetime';
+      }
+      // Escrow sub-label — show breakdown: escrow + deducted adds clarity
+      const escSubEl = document.getElementById('dash-escrow-sub');
+      if (escSubEl) {
+        if (deducted > 0n) {
+          escSubEl.textContent = `Vests at cycle-out \u2022 ${fmt6(deducted)} auto-deducted`;
+          escSubEl.style.color = 'var(--yellow)';
+        } else {
+          escSubEl.textContent = 'Vests at next cycle-out';
+          escSubEl.style.color = '';
+        }
       }
     } catch(_) {}
     setText('dash-escrow',         fmt6(totalEscrow));
