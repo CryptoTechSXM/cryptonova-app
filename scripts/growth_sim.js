@@ -154,7 +154,7 @@ async function main() {
   const addrs = loadAddresses();
 
   // Locate T1 addresses
-  const t1 = addrs.tiers?.["1"] || addrs;  // support both v8.6 and older formats
+  const t1 = addrs.tiers?.["T1"] || addrs.tiers?.["1"] || addrs;  // support v8.6 (T1) and older formats
   const trAddr   = addrs.tierRouter  || t1.tierRouter;
   const sfAddr   = addrs.stabilityFund;
   const mkAddr   = addrs.matrixKeeper;
