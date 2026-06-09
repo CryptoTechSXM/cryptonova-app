@@ -729,6 +729,11 @@
           <div class="stat-value" id="dash-cnova-val">—</div>
           <div class="stat-sub">At current floor</div>
         </div>
+        <div class="card-sm" style="border-color:rgba(245,158,11,.4)" title="Earnings held in escrow — releases to Withdrawable when you complete your next cycle-out.">
+          <div class="stat-label">In Escrow &#9432;</div>
+          <div class="stat-value" id="dash-escrow" style="color:var(--yellow)">—</div>
+          <div class="stat-sub">Vests at next cycle-out</div>
+        </div>
       </div>
 
       <!-- Withdraw + member info -->
@@ -781,8 +786,11 @@
         <div class="card">
           <div class="section-title" style="margin-bottom:12px"><div class="dot"></div> Member Info — <span id="dash-tier-name" style="color:var(--green);font-size:14px">—</span></div>
           <div class="info-row"><span class="info-key">Member ID</span><span class="info-val" id="dash-id">—</span></div>
+          <div class="info-row"><span class="info-key">Active Matrix</span><span class="info-val" id="dash-matrix">—</span></div>
+          <div class="info-row"><span class="info-key">BFS Position</span><span class="info-val" id="dash-bfs">—</span></div>
           
-          <div class="info-row"><span class="info-key">Cycles (Tier 1)</span><span class="info-val" id="dash-cycles">—</span></div>
+          <div class="info-row"><span class="info-key">Tier Cycles</span><span class="info-val" id="dash-cycles">—</span></div>
+          <div id="dash-cycles-breakdown" style="font-size:12px;color:var(--text3);padding:4px 10px;background:var(--bg3);border-radius:6px;margin:-4px 0 6px 0;display:none"></div>
           
           <div class="info-row"><span class="info-key">Referrer</span><span class="info-val addr" id="dash-orig-referrer">—</span></div>
           <div class="info-row"><span class="info-key">Direct Referrals</span><span class="info-val" id="dash-directs">—</span></div>
@@ -792,6 +800,24 @@
               <label style="display:flex;align-items:center;gap:6px;cursor:pointer">
                 <input type="checkbox" id="chk-double-reentry" onchange="setDoubleReentryOption(this.checked)" style="width:15px;height:15px;cursor:pointer;accent-color:var(--green)">
                 <span id="lbl-double-reentry" style="font-size:12px;color:var(--text3)">—</span>
+              </label>
+            </span>
+          </div>
+          <div class="info-row" style="margin-top:4px">
+            <span class="info-key" title="When on, you upgrade tiers automatically once you complete the cycle threshold. Turn off to stay at your current tier.">Auto Upgrade &#9432;</span>
+            <span class="info-val" style="display:flex;align-items:center;gap:8px">
+              <label style="display:flex;align-items:center;gap:6px;cursor:pointer">
+                <input type="checkbox" id="chk-auto-upgrade" onchange="setAutoUpgradeOption(this.checked)" style="width:15px;height:15px;cursor:pointer;accent-color:var(--green)">
+                <span id="lbl-auto-upgrade" style="font-size:12px;color:var(--text3)">—</span>
+              </label>
+            </span>
+          </div>
+          <div class="info-row" style="margin-top:4px">
+            <span class="info-key" title="When on, you re-enter the same tier automatically after completing enough cycles (when auto-upgrade does not fire).">Auto Reentry &#9432;</span>
+            <span class="info-val" style="display:flex;align-items:center;gap:8px">
+              <label style="display:flex;align-items:center;gap:6px;cursor:pointer">
+                <input type="checkbox" id="chk-auto-reentry" onchange="setAutoReentryOption(this.checked)" style="width:15px;height:15px;cursor:pointer;accent-color:var(--green)">
+                <span id="lbl-auto-reentry" style="font-size:12px;color:var(--text3)">—</span>
               </label>
             </span>
           </div>
@@ -1221,6 +1247,7 @@ const TIER_ROUTER_ABI = [
   'event MemberUpgraded(address indexed member, uint8 fromTier, uint8 toTier, uint256 fee)',
   'function getMemberInfo(address) external view returns (uint8 highestTier, address referrer, uint256 totalCycles, bool doubleEntry, bool whaleGateEligible, bool autoUpgradeEnabled, bool autoReentryEnabled)',
   'function setDoubleEntry(bool enabled) external',
+  'function setMemberOptions(bool disableUpgrade, bool enableReentry, bool enableDouble) external',
 ];
 
 const MATRIX_ABI = [
@@ -1917,15 +1944,44 @@ async function loadDashboardData() {
     const refLinkEl = document.getElementById('ref-link-text');
     if (refLinkEl) refLinkEl.textContent = link;
 
-    // Double reentry toggle state
+    // Member options toggles (double reentry, auto-upgrade, auto-reentry)
     try {
       const info = await tr.getMemberInfo(userAddr);
-      const chk = document.getElementById('chk-double-reentry');
-      const lbl = document.getElementById('lbl-double-reentry');
-      if (chk) chk.checked = Boolean(info.doubleEntry);
-      if (lbl) lbl.textContent = info.doubleEntry
-        ? 'Enabled — second entry fires when surplus covers fee'
-        : 'Disabled';
+      window._memberOptions = {
+        disableUpgrade: !Boolean(info.autoUpgradeEnabled),
+        enableReentry:  Boolean(info.autoReentryEnabled),
+        enableDouble:   Boolean(info.doubleEntry),
+      };
+      // Double reentry
+      const chkDbl = document.getElementById('chk-double-reentry');
+      const lblDbl = document.getElementById('lbl-double-reentry');
+      if (chkDbl) chkDbl.checked = Boolean(info.doubleEntry);
+      if (lblDbl) lblDbl.textContent = info.doubleEntry ? 'Enabled' : 'Disabled';
+      // Auto-upgrade
+      const chkUp = document.getElementById('chk-auto-upgrade');
+      const lblUp = document.getElementById('lbl-auto-upgrade');
+      if (chkUp) chkUp.checked = Boolean(info.autoUpgradeEnabled);
+      if (lblUp) lblUp.textContent = info.autoUpgradeEnabled ? 'Enabled' : 'Disabled';
+      // Auto-reentry
+      const chkRe = document.getElementById('chk-auto-reentry');
+      const lblRe = document.getElementById('lbl-auto-reentry');
+      if (chkRe) chkRe.checked = Boolean(info.autoReentryEnabled);
+      if (lblRe) lblRe.textContent = info.autoReentryEnabled ? 'Enabled' : 'Disabled';
+    } catch(_) {}
+
+    // Tier cycles breakdown per tier
+    try {
+      const maxIdx = Math.max(highestTier - 1, 0);
+      const cycArr = await Promise.all(
+        Array.from({length: maxIdx + 1}, (_, i) => tr.tierCycles(userAddr, i).catch(() => 0n))
+      );
+      const breakdownEl = document.getElementById('dash-cycles-breakdown');
+      if (breakdownEl && cycArr.length > 0) {
+        breakdownEl.innerHTML = cycArr.map((c, i) =>
+          `<span style="color:var(--text3)">T${i+1}:</span> <strong style="color:${c>0n?'var(--green)':'var(--text2)'};margin-right:8px">${c}</strong>`
+        ).join('');
+        breakdownEl.style.display = 'block';
+      }
     } catch(_) {}
 
   } catch(e) { console.error('loadDashboardData:', e.message); }
@@ -1998,6 +2054,61 @@ async function setDoubleReentryOption(enabled) {
   } catch(e) {
     if (chk) chk.checked = !enabled;
     if (lbl) lbl.textContent = prevLabel || (enabled ? 'Disabled' : 'Enabled — second entry fires when surplus covers fee');
+    toast('Failed: ' + (e.reason || e.message || 'unknown error').slice(0, 80), 'error');
+  }
+}
+
+async function setAutoUpgradeOption(enabled) {
+  const chk = document.getElementById('chk-auto-upgrade');
+  const lbl = document.getElementById('lbl-auto-upgrade');
+  if (!userAddr || !signer) {
+    toast('Connect wallet first', 'error');
+    if (chk) chk.checked = !enabled;
+    return;
+  }
+  const prevLabel = lbl ? lbl.textContent : '';
+  if (lbl) lbl.textContent = 'Saving…';
+  try {
+    const tr = new ethers.Contract(ADDRS.tierRouter, TIER_ROUTER_ABI, signer);
+    const opts = window._memberOptions || { disableUpgrade: false, enableReentry: false, enableDouble: false };
+    opts.disableUpgrade = !enabled;
+    const tx = await tr.setMemberOptions(opts.disableUpgrade, opts.enableReentry, opts.enableDouble, { gasLimit: 120_000 });
+    if (lbl) lbl.textContent = 'Confirming…';
+    await tx.wait();
+    opts.disableUpgrade = !enabled;
+    window._memberOptions = opts;
+    if (lbl) lbl.textContent = enabled ? 'Enabled' : 'Disabled';
+    toast(enabled ? '✅ Auto-upgrade enabled' : 'Auto-upgrade disabled', 'success');
+  } catch(e) {
+    if (chk) chk.checked = !enabled;
+    if (lbl) lbl.textContent = prevLabel || (enabled ? 'Disabled' : 'Enabled');
+    toast('Failed: ' + (e.reason || e.message || 'unknown error').slice(0, 80), 'error');
+  }
+}
+
+async function setAutoReentryOption(enabled) {
+  const chk = document.getElementById('chk-auto-reentry');
+  const lbl = document.getElementById('lbl-auto-reentry');
+  if (!userAddr || !signer) {
+    toast('Connect wallet first', 'error');
+    if (chk) chk.checked = !enabled;
+    return;
+  }
+  const prevLabel = lbl ? lbl.textContent : '';
+  if (lbl) lbl.textContent = 'Saving…';
+  try {
+    const tr = new ethers.Contract(ADDRS.tierRouter, TIER_ROUTER_ABI, signer);
+    const opts = window._memberOptions || { disableUpgrade: false, enableReentry: false, enableDouble: false };
+    opts.enableReentry = enabled;
+    const tx = await tr.setMemberOptions(opts.disableUpgrade, opts.enableReentry, opts.enableDouble, { gasLimit: 120_000 });
+    if (lbl) lbl.textContent = 'Confirming…';
+    await tx.wait();
+    window._memberOptions = opts;
+    if (lbl) lbl.textContent = enabled ? 'Enabled' : 'Disabled';
+    toast(enabled ? '✅ Auto-reentry enabled' : 'Auto-reentry disabled', 'success');
+  } catch(e) {
+    if (chk) chk.checked = !enabled;
+    if (lbl) lbl.textContent = prevLabel || (enabled ? 'Disabled' : 'Enabled');
     toast('Failed: ' + (e.reason || e.message || 'unknown error').slice(0, 80), 'error');
   }
 }
