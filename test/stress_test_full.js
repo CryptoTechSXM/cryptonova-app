@@ -127,10 +127,10 @@ async function deployFixture() {
   await sf.connect(admin).setMatrixKeeper(keeper.address);
   await sf.connect(admin).setTierFee(0, T1_FEE);
   await sf.connect(admin).setTierFee(1, T2_FEE);
-  // Seed SF with $1000
-  await usdc.mint(deployer.address, 1_000n * UNIT);
-  await usdc.connect(deployer).approve(sfAddr, 1_000n * UNIT);
-  await sf.connect(deployer).receiveLayer(0, 1_000n * UNIT, 1);
+  // Seed SF with $1000 (admin is SF owner)
+  await usdc.mint(admin.address, 1_000n * UNIT);
+  await usdc.connect(admin).approve(sfAddr, 1_000n * UNIT);
+  await sf.connect(admin).receiveLayer(0, 1_000n * UNIT, 1);
 
   // Helper: mint USDC + approve PM for a signer
   const fund = async (sig, fee, pmAddr) => {
