@@ -274,9 +274,35 @@
     /* ── Switch network overlay (fixed, centered) ───────────────── */
     #network-banner { position: fixed; inset: 0; background: rgba(0,0,0,.65); z-index: 600; display: none; align-items: center; justify-content: center; padding: 20px; }
     #network-banner-card { background: var(--bg2); border: 2px solid rgba(245,158,11,.5); border-radius: 16px; padding: 32px 28px; max-width: 380px; width: 100%; text-align: center; }
-  </style>
+  
+    /* ── Launch gate ── */
+    #launch-gate {
+      display: none; position: fixed; inset: 0;
+      background: rgba(10,14,26,.94); backdrop-filter: blur(6px);
+      z-index: 9999; align-items: center; justify-content: center;
+      flex-direction: column; text-align: center; padding: 32px;
+    }
+    #launch-gate.visible { display: flex; }
+    #launch-gate h2 { font-size: 22px; color: var(--green); margin-bottom: 12px; }
+    #launch-gate p  { color: var(--text2); font-size: 14px; line-height: 1.7; max-width: 480px; }
+    #launch-gate .soon-pill {
+      margin-top: 20px; display: inline-block; padding: 6px 20px;
+      background: rgba(245,158,11,.15); border: 1px solid rgba(245,158,11,.4);
+      color: var(--yellow); border-radius: 20px; font-size: 12px;
+      font-weight: 600; letter-spacing: .5px;
+    }
+    </style>
 </head>
 <body>
+  <!-- ══ LAUNCH GATE ══════════════════════════════════════════════════ -->
+  <div id="launch-gate">
+    <h2>&#x26A1; CryptoNova Matrix V8.6</h2>
+    <p>Final infrastructure testing in progress.<br>
+    Chainlink Automation, StabilityFund seeding, and stress-test validation are underway.<br><br>
+    The platform will open for registration once all systems are confirmed live.</p>
+    <div class="soon-pill">&#x1F527; Coming Soon &mdash; Testing in Progress</div>
+  </div>
+
 
 <div id="file-protocol-banner" style="background:rgba(239,68,68,.1);border-bottom:1px solid rgba(239,68,68,.3);padding:10px 24px;text-align:center;font-size:13px;color:#ef4444;display:none">
   ⚠️ <strong>File opened directly</strong> — MetaMask won't inject into <code style="background:rgba(0,0,0,.3);padding:2px 6px;border-radius:3px">file://</code> pages.
@@ -590,211 +616,151 @@
     </div>
   </div>
 
-  <!-- ══ TIERS TAB ════════════════════════════════════════════════════ -->
+  <!-- ══ TIERS TAB ═══════════════════════════════════════════════════════ -->
   <div id="tab-tiers" class="tab-panel">
-    <div class="section-title" style="margin-bottom:16px"><div class="dot"></div> 7-Tier CryptoNova Matrix — Live Stats</div>
-
-    <!-- Tier overview table -->
+    <div class="section-title" style="margin-bottom:16px"><div class="dot"></div> 7-Tier CryptoNova Matrix &#8212; Live Stats</div>
     <div class="card" style="margin-bottom:24px;overflow-x:auto">
       <table style="width:100%;border-collapse:collapse;font-size:13px">
-        <thead>
-          <tr style="border-bottom:1px solid var(--border)">
-            <th style="text-align:left;padding:8px 10px;color:var(--text3);font-weight:600">Tier</th>
-            <th style="text-align:left;padding:8px 10px;color:var(--text3);font-weight:600">Name</th>
-            <th style="text-align:right;padding:8px 10px;color:var(--text3);font-weight:600">Entry</th>
-            <th style="text-align:right;padding:8px 10px;color:var(--text3);font-weight:600">MatA Fill</th>
-            <th style="text-align:right;padding:8px 10px;color:var(--text3);font-weight:600">MatB Fill</th>
-            <th style="text-align:left;padding:8px 10px;color:var(--text3);font-weight:600">Gate</th>
-          </tr>
-        </thead>
+        <thead><tr style="border-bottom:1px solid var(--border)">
+          <th style="text-align:left;padding:8px 10px;color:var(--text3)">Tier</th>
+          <th style="text-align:left;padding:8px 10px;color:var(--text3)">Name</th>
+          <th style="text-align:right;padding:8px 10px;color:var(--text3)">Entry</th>
+          <th style="text-align:right;padding:8px 10px;color:var(--text3)">MatA Fill</th>
+          <th style="text-align:right;padding:8px 10px;color:var(--text3)">MatB Fill</th>
+          <th style="text-align:left;padding:8px 10px;color:var(--text3)">Gate</th>
+        </tr></thead>
         <tbody>
-          <tr style="border-bottom:1px solid var(--border)">
-            <td style="padding:8px 10px;font-weight:700;color:var(--green)">T1</td>
-            <td style="padding:8px 10px">Nova Seed</td>
-            <td style="padding:8px 10px;text-align:right;font-family:monospace">$10</td>
-            <td style="padding:8px 10px;text-align:right" id="tier-t1a-fill">&#8212;/127</td>
-            <td style="padding:8px 10px;text-align:right" id="tier-t1b-fill">&#8212;/127</td>
-            <td style="padding:8px 10px"><span class="pill pill-green" style="font-size:10px">Open</span></td>
-          </tr>
-          <tr style="border-bottom:1px solid var(--border)">
-            <td style="padding:8px 10px;font-weight:700;color:var(--green)">T2</td>
-            <td style="padding:8px 10px">Nova Rise</td>
-            <td style="padding:8px 10px;text-align:right;font-family:monospace">$25</td>
-            <td style="padding:8px 10px;text-align:right" id="tier-t2a-fill">&#8212;/127</td>
-            <td style="padding:8px 10px;text-align:right" id="tier-t2b-fill">&#8212;/127</td>
-            <td style="padding:8px 10px"><span class="pill" style="font-size:10px;background:rgba(245,158,11,.15);color:var(--yellow);border:1px solid rgba(245,158,11,.4)">Velocity Gated</span></td>
-          </tr>
-          <tr style="border-bottom:1px solid var(--border)">
-            <td style="padding:8px 10px;font-weight:700;color:var(--green)">T3</td>
-            <td style="padding:8px 10px">Nova Star</td>
-            <td style="padding:8px 10px;text-align:right;font-family:monospace">$50</td>
-            <td style="padding:8px 10px;text-align:right" id="tier-t3a-fill">&#8212;/127</td>
-            <td style="padding:8px 10px;text-align:right" id="tier-t3b-fill">&#8212;/127</td>
-            <td style="padding:8px 10px"><span class="pill" style="font-size:10px;background:rgba(245,158,11,.15);color:var(--yellow);border:1px solid rgba(245,158,11,.4)">Velocity Gated</span></td>
-          </tr>
-          <tr style="border-bottom:1px solid var(--border)">
-            <td style="padding:8px 10px;font-weight:700;color:var(--text2)">T4</td>
-            <td style="padding:8px 10px">Nova Core</td>
-            <td style="padding:8px 10px;text-align:right;font-family:monospace">$100</td>
-            <td style="padding:8px 10px;text-align:right" id="tier-t4a-fill">&#8212;/127</td>
-            <td style="padding:8px 10px;text-align:right" id="tier-t4b-fill">&#8212;/127</td>
-            <td style="padding:8px 10px"><span class="pill" style="font-size:10px;background:rgba(245,158,11,.15);color:var(--yellow);border:1px solid rgba(245,158,11,.4)">Velocity Gated</span></td>
-          </tr>
-          <tr style="border-bottom:1px solid var(--border)">
-            <td style="padding:8px 10px;font-weight:700;color:var(--text2)">T5</td>
-            <td style="padding:8px 10px">Nova Prime</td>
-            <td style="padding:8px 10px;text-align:right;font-family:monospace">$250</td>
-            <td style="padding:8px 10px;text-align:right" id="tier-t5a-fill">&#8212;/127</td>
-            <td style="padding:8px 10px;text-align:right" id="tier-t5b-fill">&#8212;/127</td>
-            <td style="padding:8px 10px"><span class="pill" style="font-size:10px;background:rgba(245,158,11,.15);color:var(--yellow);border:1px solid rgba(245,158,11,.4)">Velocity Gated</span></td>
-          </tr>
-          <tr style="border-bottom:1px solid var(--border)">
-            <td style="padding:8px 10px;font-weight:700;color:var(--text2)">T6</td>
-            <td style="padding:8px 10px">Nova Apex</td>
-            <td style="padding:8px 10px;text-align:right;font-family:monospace">$500</td>
-            <td style="padding:8px 10px;text-align:right" id="tier-t6a-fill">&#8212;/127</td>
-            <td style="padding:8px 10px;text-align:right" id="tier-t6b-fill">&#8212;/127</td>
-            <td style="padding:8px 10px"><span class="pill" style="font-size:10px;background:rgba(245,158,11,.15);color:var(--yellow);border:1px solid rgba(245,158,11,.4)">Velocity Gated</span></td>
-          </tr>
-          <tr>
-            <td style="padding:8px 10px;font-weight:700;color:var(--text2)">T7</td>
-            <td style="padding:8px 10px">Nova Pinnacle</td>
-            <td style="padding:8px 10px;text-align:right;font-family:monospace">$1,000</td>
-            <td style="padding:8px 10px;text-align:right" id="tier-t7a-fill">&#8212;/127</td>
-            <td style="padding:8px 10px;text-align:right" id="tier-t7b-fill">&#8212;/127</td>
-            <td style="padding:8px 10px"><span class="pill" style="font-size:10px;background:rgba(245,158,11,.15);color:var(--yellow);border:1px solid rgba(245,158,11,.4)">Velocity Gated</span></td>
-          </tr>
+          <tr style="border-bottom:1px solid var(--border)"><td style="padding:8px 10px;font-weight:700;color:var(--green)">T1</td><td style="padding:8px 10px">Nova Seed</td><td style="padding:8px 10px;text-align:right;font-family:monospace">$10</td><td style="padding:8px 10px;text-align:right" id="tier-t1a-fill">&#8212;</td><td style="padding:8px 10px;text-align:right" id="tier-t1b-fill">&#8212;</td><td style="padding:8px 10px"><span class="pill pill-green" style="font-size:10px">Open</span></td></tr>
+          <tr style="border-bottom:1px solid var(--border)"><td style="padding:8px 10px;font-weight:700;color:var(--green)">T2</td><td style="padding:8px 10px">Nova Rise</td><td style="padding:8px 10px;text-align:right;font-family:monospace">$25</td><td style="padding:8px 10px;text-align:right" id="tier-t2a-fill">&#8212;</td><td style="padding:8px 10px;text-align:right" id="tier-t2b-fill">&#8212;</td><td style="padding:8px 10px"><span class="pill" style="font-size:10px;background:rgba(245,158,11,.15);color:var(--yellow);border:1px solid rgba(245,158,11,.4)">Velocity Gated</span></td></tr>
+          <tr style="border-bottom:1px solid var(--border)"><td style="padding:8px 10px;font-weight:700;color:var(--green)">T3</td><td style="padding:8px 10px">Nova Star</td><td style="padding:8px 10px;text-align:right;font-family:monospace">$50</td><td style="padding:8px 10px;text-align:right" id="tier-t3a-fill">&#8212;</td><td style="padding:8px 10px;text-align:right" id="tier-t3b-fill">&#8212;</td><td style="padding:8px 10px"><span class="pill" style="font-size:10px;background:rgba(245,158,11,.15);color:var(--yellow);border:1px solid rgba(245,158,11,.4)">Velocity Gated</span></td></tr>
+          <tr style="border-bottom:1px solid var(--border)"><td style="padding:8px 10px;font-weight:700;color:var(--text2)">T4</td><td style="padding:8px 10px">Nova Core</td><td style="padding:8px 10px;text-align:right;font-family:monospace">$100</td><td style="padding:8px 10px;text-align:right" id="tier-t4a-fill">&#8212;</td><td style="padding:8px 10px;text-align:right" id="tier-t4b-fill">&#8212;</td><td style="padding:8px 10px"><span class="pill" style="font-size:10px;background:rgba(245,158,11,.15);color:var(--yellow);border:1px solid rgba(245,158,11,.4)">Velocity Gated</span></td></tr>
+          <tr style="border-bottom:1px solid var(--border)"><td style="padding:8px 10px;font-weight:700;color:var(--text2)">T5</td><td style="padding:8px 10px">Nova Prime</td><td style="padding:8px 10px;text-align:right;font-family:monospace">$250</td><td style="padding:8px 10px;text-align:right" id="tier-t5a-fill">&#8212;</td><td style="padding:8px 10px;text-align:right" id="tier-t5b-fill">&#8212;</td><td style="padding:8px 10px"><span class="pill" style="font-size:10px;background:rgba(245,158,11,.15);color:var(--yellow);border:1px solid rgba(245,158,11,.4)">Velocity Gated</span></td></tr>
+          <tr style="border-bottom:1px solid var(--border)"><td style="padding:8px 10px;font-weight:700;color:var(--text2)">T6</td><td style="padding:8px 10px">Nova Apex</td><td style="padding:8px 10px;text-align:right;font-family:monospace">$500</td><td style="padding:8px 10px;text-align:right" id="tier-t6a-fill">&#8212;</td><td style="padding:8px 10px;text-align:right" id="tier-t6b-fill">&#8212;</td><td style="padding:8px 10px"><span class="pill" style="font-size:10px;background:rgba(245,158,11,.15);color:var(--yellow);border:1px solid rgba(245,158,11,.4)">Velocity Gated</span></td></tr>
+          <tr><td style="padding:8px 10px;font-weight:700;color:var(--text2)">T7</td><td style="padding:8px 10px">Nova Pinnacle</td><td style="padding:8px 10px;text-align:right;font-family:monospace">$1,000</td><td style="padding:8px 10px;text-align:right" id="tier-t7a-fill">&#8212;</td><td style="padding:8px 10px;text-align:right" id="tier-t7b-fill">&#8212;</td><td style="padding:8px 10px"><span class="pill" style="font-size:10px;background:rgba(245,158,11,.15);color:var(--yellow);border:1px solid rgba(245,158,11,.4)">Velocity Gated</span></td></tr>
         </tbody>
       </table>
-      <div style="margin-top:10px;font-size:11px;color:var(--text3)">Velocity gate opens automatically when the previous tier MatB reaches 80% fill. Each matrix holds 127 seats (2<sup>7</sup>-1 BFS tree).</div>
+      <div style="margin-top:10px;font-size:11px;color:var(--text3)">Velocity gate opens when previous tier MatB reaches 80%. Each matrix holds 127 seats (2<sup>7</sup>&#8722;1).</div>
     </div>
 
-    <!-- T1 pair -->
-    <div style="margin-bottom:8px;font-size:13px;font-weight:700;color:var(--green);letter-spacing:.5px">T1 &mdash; Nova Seed &middot; $10</div>
+    <div style="margin-bottom:8px;font-size:13px;font-weight:700;color:var(--green);letter-spacing:.5px">T1 &#8212; Nova Seed &#183; $10</div>
     <div class="grid-2" style="margin-bottom:20px">
       <div class="card">
-        <div class="section-title" style="margin-bottom:12px"><div class="dot"></div> T1 Matrix A &mdash; Active Fill</div>
+        <div class="section-title" style="margin-bottom:12px"><div class="dot" style="background:var(--green)"></div> T1 Matrix A &#8212; Nova Seed</div>
         <div class="info-row"><span class="info-key">Seats Filled</span><span class="info-val"><span id="t1a-occ">&#8212;</span> / 127</span></div>
         <div class="info-row"><span class="info-key">Matrix Cycles</span><span class="info-val green" id="t1a-cycles">&#8212;</span></div>
         <div style="margin-top:10px"><div style="display:flex;justify-content:space-between;font-size:12px;color:var(--text3);margin-bottom:4px"><span>Fill progress</span><span id="t1a-pct">0%</span></div><div class="progress-wrap"><div class="progress-bar" id="t1a-bar" style="width:0%"></div></div></div>
-        <div style="margin-top:10px;padding:10px 12px;background:var(--bg3);border-radius:8px;font-size:12px;color:var(--text3);line-height:1.6">Stage 1 of 2. Fill your 127-seat matrix to cycle the root across to Matrix B.</div>
+        <div style="margin-top:10px;padding:10px 12px;background:var(--bg3);border-radius:8px;font-size:12px;color:var(--text3);line-height:1.6">T1 is open. Fill all 127 seats to cycle root to MatB.</div>
       </div>
       <div class="card">
-        <div class="section-title" style="margin-bottom:12px"><div class="dot"></div> T1 Matrix B &mdash; Crossing Pool</div>
+        <div class="section-title" style="margin-bottom:12px"><div class="dot" style="background:var(--green)"></div> T1 Matrix B &#8212; Crossing Pool</div>
         <div class="info-row"><span class="info-key">Seats Filled</span><span class="info-val"><span id="t1b-occ">&#8212;</span> / 127</span></div>
         <div class="info-row"><span class="info-key">Pool Accumulator</span><span class="info-val green" id="t1b-pool">&#8212;</span></div>
         <div style="margin-top:10px"><div style="display:flex;justify-content:space-between;font-size:12px;color:var(--text3);margin-bottom:4px"><span>Fill progress</span><span id="t1b-pct">0%</span></div><div class="progress-wrap"><div class="progress-bar" id="t1b-bar" style="width:0%"></div></div></div>
-        <div style="margin-top:10px;padding:10px 12px;background:var(--bg3);border-radius:8px;font-size:12px;color:var(--text3);line-height:1.6">Stage 2 of 2. MatA alumni cross here. When full (127 seats), root auto-upgrades to T2.</div>
+        <div style="margin-top:10px;padding:10px 12px;background:var(--bg3);border-radius:8px;font-size:12px;color:var(--text3);line-height:1.6">MatA alumni cross here. When full (127), root auto-upgrades to T2.</div>
       </div>
     </div>
 
-    <!-- T2 pair -->
-    <div style="margin-bottom:8px;font-size:13px;font-weight:700;color:var(--green);letter-spacing:.5px">T2 &mdash; Nova Rise &middot; $25</div>
+    <div style="margin-bottom:8px;font-size:13px;font-weight:700;color:var(--green);letter-spacing:.5px">T2 &#8212; Nova Rise &#183; $25</div>
     <div class="grid-2" style="margin-bottom:20px">
-      <div class="card">
-        <div class="section-title" style="margin-bottom:12px"><div class="dot"></div> T2 Matrix A &mdash; Nova Rise ($25)</div>
+      <div class="card" style="opacity:0.85">
+        <div class="section-title" style="margin-bottom:12px"><div class="dot" style="background:var(--yellow)"></div> T2 Matrix A &#8212; Nova Rise</div>
         <div class="info-row"><span class="info-key">Seats Filled</span><span class="info-val"><span id="t2a-occ">&#8212;</span> / 127</span></div>
         <div class="info-row"><span class="info-key">Matrix Cycles</span><span class="info-val green" id="t2a-cycles">&#8212;</span></div>
         <div style="margin-top:10px"><div style="display:flex;justify-content:space-between;font-size:12px;color:var(--text3);margin-bottom:4px"><span>Fill progress</span><span id="t2a-pct">0%</span></div><div class="progress-wrap"><div class="progress-bar" id="t2a-bar" style="width:0%"></div></div></div>
-        <div style="margin-top:10px;padding:10px 12px;background:var(--bg3);border-radius:8px;font-size:12px;color:var(--text3);line-height:1.6">T1 graduates auto-upgrade here. Gate opens when T1 MatB hits 80% fill.</div>
+        <div style="margin-top:10px;padding:10px 12px;background:var(--bg3);border-radius:8px;font-size:12px;color:var(--text3);line-height:1.6">Gate opens when T1 MatB hits 80% fill. T1 graduates auto-upgrade.</div>
       </div>
-      <div class="card">
-        <div class="section-title" style="margin-bottom:12px"><div class="dot"></div> T2 Matrix B &mdash; Crossing Pool</div>
+      <div class="card" style="opacity:0.85">
+        <div class="section-title" style="margin-bottom:12px"><div class="dot" style="background:var(--yellow)"></div> T2 Matrix B &#8212; Crossing Pool</div>
         <div class="info-row"><span class="info-key">Seats Filled</span><span class="info-val"><span id="t2b-occ">&#8212;</span> / 127</span></div>
         <div class="info-row"><span class="info-key">Pool Accumulator</span><span class="info-val green" id="t2b-pool">&#8212;</span></div>
         <div style="margin-top:10px"><div style="display:flex;justify-content:space-between;font-size:12px;color:var(--text3);margin-bottom:4px"><span>Fill progress</span><span id="t2b-pct">0%</span></div><div class="progress-wrap"><div class="progress-bar" id="t2b-bar" style="width:0%"></div></div></div>
-        <div style="margin-top:10px;padding:10px 12px;background:var(--bg3);border-radius:8px;font-size:12px;color:var(--text3);line-height:1.6">T2 MatA alumni cross here. When full, root auto-upgrades to T3.</div>
+        <div style="margin-top:10px;padding:10px 12px;background:var(--bg3);border-radius:8px;font-size:12px;color:var(--text3);line-height:1.6">T2 MatA alumni cross here. Full = root upgrades to T3.</div>
       </div>
     </div>
 
-    <!-- T3 pair -->
-    <div style="margin-bottom:8px;font-size:13px;font-weight:700;color:var(--green);letter-spacing:.5px">T3 &mdash; Nova Star &middot; $50</div>
+    <div style="margin-bottom:8px;font-size:13px;font-weight:700;color:var(--green);letter-spacing:.5px">T3 &#8212; Nova Star &#183; $50</div>
     <div class="grid-2" style="margin-bottom:20px">
-      <div class="card">
-        <div class="section-title" style="margin-bottom:12px"><div class="dot"></div> T3 Matrix A &mdash; Nova Star ($50)</div>
+      <div class="card" style="opacity:0.85">
+        <div class="section-title" style="margin-bottom:12px"><div class="dot" style="background:var(--yellow)"></div> T3 Matrix A &#8212; Nova Star</div>
         <div class="info-row"><span class="info-key">Seats Filled</span><span class="info-val"><span id="t3a-occ">&#8212;</span> / 127</span></div>
         <div class="info-row"><span class="info-key">Matrix Cycles</span><span class="info-val green" id="t3a-cycles">&#8212;</span></div>
         <div style="margin-top:10px"><div style="display:flex;justify-content:space-between;font-size:12px;color:var(--text3);margin-bottom:4px"><span>Fill progress</span><span id="t3a-pct">0%</span></div><div class="progress-wrap"><div class="progress-bar" id="t3a-bar" style="width:0%"></div></div></div>
-        <div style="margin-top:10px;padding:10px 12px;background:var(--bg3);border-radius:8px;font-size:12px;color:var(--text3);line-height:1.6">T2 graduates auto-upgrade here. Gate opens when T2 MatB hits 80%.</div>
+        <div style="margin-top:10px;padding:10px 12px;background:var(--bg3);border-radius:8px;font-size:12px;color:var(--text3);line-height:1.6">Gate opens when T2 MatB hits 80% fill. T2 graduates auto-upgrade.</div>
       </div>
-      <div class="card">
-        <div class="section-title" style="margin-bottom:12px"><div class="dot"></div> T3 Matrix B &mdash; Crossing Pool</div>
+      <div class="card" style="opacity:0.85">
+        <div class="section-title" style="margin-bottom:12px"><div class="dot" style="background:var(--yellow)"></div> T3 Matrix B &#8212; Crossing Pool</div>
         <div class="info-row"><span class="info-key">Seats Filled</span><span class="info-val"><span id="t3b-occ">&#8212;</span> / 127</span></div>
         <div class="info-row"><span class="info-key">Pool Accumulator</span><span class="info-val green" id="t3b-pool">&#8212;</span></div>
         <div style="margin-top:10px"><div style="display:flex;justify-content:space-between;font-size:12px;color:var(--text3);margin-bottom:4px"><span>Fill progress</span><span id="t3b-pct">0%</span></div><div class="progress-wrap"><div class="progress-bar" id="t3b-bar" style="width:0%"></div></div></div>
-        <div style="margin-top:10px;padding:10px 12px;background:var(--bg3);border-radius:8px;font-size:12px;color:var(--text3);line-height:1.6">T3 MatA alumni cross here. When full, root auto-upgrades to T4.</div>
+        <div style="margin-top:10px;padding:10px 12px;background:var(--bg3);border-radius:8px;font-size:12px;color:var(--text3);line-height:1.6">T3 MatA alumni cross here. Full = root upgrades to T4.</div>
       </div>
     </div>
 
-    <!-- T4 pair -->
-    <div style="margin-bottom:8px;font-size:13px;font-weight:700;color:var(--text2);letter-spacing:.5px">T4 &mdash; Nova Core &middot; $100</div>
+    <div style="margin-bottom:8px;font-size:13px;font-weight:700;color:var(--text2);letter-spacing:.5px">T4 &#8212; Nova Core &#183; $100</div>
     <div class="grid-2" style="margin-bottom:20px">
       <div class="card" style="opacity:0.85">
-        <div class="section-title" style="margin-bottom:12px"><div class="dot" style="background:var(--yellow)"></div> T4 Matrix A &mdash; Nova Core ($100)</div>
+        <div class="section-title" style="margin-bottom:12px"><div class="dot" style="background:var(--yellow)"></div> T4 Matrix A &#8212; Nova Core</div>
         <div class="info-row"><span class="info-key">Seats Filled</span><span class="info-val"><span id="t4a-occ">&#8212;</span> / 127</span></div>
         <div class="info-row"><span class="info-key">Matrix Cycles</span><span class="info-val green" id="t4a-cycles">&#8212;</span></div>
         <div style="margin-top:10px"><div style="display:flex;justify-content:space-between;font-size:12px;color:var(--text3);margin-bottom:4px"><span>Fill progress</span><span id="t4a-pct">0%</span></div><div class="progress-wrap"><div class="progress-bar" id="t4a-bar" style="width:0%"></div></div></div>
-        <div style="margin-top:10px;padding:10px 12px;background:var(--bg3);border-radius:8px;font-size:12px;color:var(--text3);line-height:1.6">T3 graduates auto-upgrade here. Gate opens when T3 MatB hits 80%.</div>
+        <div style="margin-top:10px;padding:10px 12px;background:var(--bg3);border-radius:8px;font-size:12px;color:var(--text3);line-height:1.6">Gate opens when T3 MatB hits 80% fill. T3 graduates auto-upgrade.</div>
       </div>
       <div class="card" style="opacity:0.85">
-        <div class="section-title" style="margin-bottom:12px"><div class="dot" style="background:var(--yellow)"></div> T4 Matrix B &mdash; Crossing Pool</div>
+        <div class="section-title" style="margin-bottom:12px"><div class="dot" style="background:var(--yellow)"></div> T4 Matrix B &#8212; Crossing Pool</div>
         <div class="info-row"><span class="info-key">Seats Filled</span><span class="info-val"><span id="t4b-occ">&#8212;</span> / 127</span></div>
         <div class="info-row"><span class="info-key">Pool Accumulator</span><span class="info-val green" id="t4b-pool">&#8212;</span></div>
         <div style="margin-top:10px"><div style="display:flex;justify-content:space-between;font-size:12px;color:var(--text3);margin-bottom:4px"><span>Fill progress</span><span id="t4b-pct">0%</span></div><div class="progress-wrap"><div class="progress-bar" id="t4b-bar" style="width:0%"></div></div></div>
-        <div style="margin-top:10px;padding:10px 12px;background:var(--bg3);border-radius:8px;font-size:12px;color:var(--text3);line-height:1.6">T4 MatA alumni cross here. When full, root auto-upgrades to T5.</div>
+        <div style="margin-top:10px;padding:10px 12px;background:var(--bg3);border-radius:8px;font-size:12px;color:var(--text3);line-height:1.6">T4 MatA alumni cross here. Full = root upgrades to T5.</div>
       </div>
     </div>
 
-    <!-- T5 pair -->
-    <div style="margin-bottom:8px;font-size:13px;font-weight:700;color:var(--text2);letter-spacing:.5px">T5 &mdash; Nova Prime &middot; $250</div>
+    <div style="margin-bottom:8px;font-size:13px;font-weight:700;color:var(--text2);letter-spacing:.5px">T5 &#8212; Nova Prime &#183; $250</div>
     <div class="grid-2" style="margin-bottom:20px">
       <div class="card" style="opacity:0.85">
-        <div class="section-title" style="margin-bottom:12px"><div class="dot" style="background:var(--yellow)"></div> T5 Matrix A &mdash; Nova Prime ($250)</div>
+        <div class="section-title" style="margin-bottom:12px"><div class="dot" style="background:var(--yellow)"></div> T5 Matrix A &#8212; Nova Prime</div>
         <div class="info-row"><span class="info-key">Seats Filled</span><span class="info-val"><span id="t5a-occ">&#8212;</span> / 127</span></div>
         <div class="info-row"><span class="info-key">Matrix Cycles</span><span class="info-val green" id="t5a-cycles">&#8212;</span></div>
         <div style="margin-top:10px"><div style="display:flex;justify-content:space-between;font-size:12px;color:var(--text3);margin-bottom:4px"><span>Fill progress</span><span id="t5a-pct">0%</span></div><div class="progress-wrap"><div class="progress-bar" id="t5a-bar" style="width:0%"></div></div></div>
-        <div style="margin-top:10px;padding:10px 12px;background:var(--bg3);border-radius:8px;font-size:12px;color:var(--text3);line-height:1.6">T4 graduates auto-upgrade here. Gate opens when T4 MatB hits 80%.</div>
+        <div style="margin-top:10px;padding:10px 12px;background:var(--bg3);border-radius:8px;font-size:12px;color:var(--text3);line-height:1.6">Gate opens when T4 MatB hits 80% fill. T4 graduates auto-upgrade.</div>
       </div>
       <div class="card" style="opacity:0.85">
-        <div class="section-title" style="margin-bottom:12px"><div class="dot" style="background:var(--yellow)"></div> T5 Matrix B &mdash; Crossing Pool</div>
+        <div class="section-title" style="margin-bottom:12px"><div class="dot" style="background:var(--yellow)"></div> T5 Matrix B &#8212; Crossing Pool</div>
         <div class="info-row"><span class="info-key">Seats Filled</span><span class="info-val"><span id="t5b-occ">&#8212;</span> / 127</span></div>
         <div class="info-row"><span class="info-key">Pool Accumulator</span><span class="info-val green" id="t5b-pool">&#8212;</span></div>
         <div style="margin-top:10px"><div style="display:flex;justify-content:space-between;font-size:12px;color:var(--text3);margin-bottom:4px"><span>Fill progress</span><span id="t5b-pct">0%</span></div><div class="progress-wrap"><div class="progress-bar" id="t5b-bar" style="width:0%"></div></div></div>
-        <div style="margin-top:10px;padding:10px 12px;background:var(--bg3);border-radius:8px;font-size:12px;color:var(--text3);line-height:1.6">T5 MatA alumni cross here. When full, root auto-upgrades to T6.</div>
+        <div style="margin-top:10px;padding:10px 12px;background:var(--bg3);border-radius:8px;font-size:12px;color:var(--text3);line-height:1.6">T5 MatA alumni cross here. Full = root upgrades to T6.</div>
       </div>
     </div>
 
-    <!-- T6 pair -->
-    <div style="margin-bottom:8px;font-size:13px;font-weight:700;color:var(--text2);letter-spacing:.5px">T6 &mdash; Nova Apex &middot; $500</div>
+    <div style="margin-bottom:8px;font-size:13px;font-weight:700;color:var(--text2);letter-spacing:.5px">T6 &#8212; Nova Apex &#183; $500</div>
     <div class="grid-2" style="margin-bottom:20px">
       <div class="card" style="opacity:0.85">
-        <div class="section-title" style="margin-bottom:12px"><div class="dot" style="background:var(--yellow)"></div> T6 Matrix A &mdash; Nova Apex ($500)</div>
+        <div class="section-title" style="margin-bottom:12px"><div class="dot" style="background:var(--yellow)"></div> T6 Matrix A &#8212; Nova Apex</div>
         <div class="info-row"><span class="info-key">Seats Filled</span><span class="info-val"><span id="t6a-occ">&#8212;</span> / 127</span></div>
         <div class="info-row"><span class="info-key">Matrix Cycles</span><span class="info-val green" id="t6a-cycles">&#8212;</span></div>
         <div style="margin-top:10px"><div style="display:flex;justify-content:space-between;font-size:12px;color:var(--text3);margin-bottom:4px"><span>Fill progress</span><span id="t6a-pct">0%</span></div><div class="progress-wrap"><div class="progress-bar" id="t6a-bar" style="width:0%"></div></div></div>
-        <div style="margin-top:10px;padding:10px 12px;background:var(--bg3);border-radius:8px;font-size:12px;color:var(--text3);line-height:1.6">T5 graduates auto-upgrade here. Gate opens when T5 MatB hits 80%.</div>
+        <div style="margin-top:10px;padding:10px 12px;background:var(--bg3);border-radius:8px;font-size:12px;color:var(--text3);line-height:1.6">Gate opens when T5 MatB hits 80% fill. T5 graduates auto-upgrade.</div>
       </div>
       <div class="card" style="opacity:0.85">
-        <div class="section-title" style="margin-bottom:12px"><div class="dot" style="background:var(--yellow)"></div> T6 Matrix B &mdash; Crossing Pool</div>
+        <div class="section-title" style="margin-bottom:12px"><div class="dot" style="background:var(--yellow)"></div> T6 Matrix B &#8212; Crossing Pool</div>
         <div class="info-row"><span class="info-key">Seats Filled</span><span class="info-val"><span id="t6b-occ">&#8212;</span> / 127</span></div>
         <div class="info-row"><span class="info-key">Pool Accumulator</span><span class="info-val green" id="t6b-pool">&#8212;</span></div>
         <div style="margin-top:10px"><div style="display:flex;justify-content:space-between;font-size:12px;color:var(--text3);margin-bottom:4px"><span>Fill progress</span><span id="t6b-pct">0%</span></div><div class="progress-wrap"><div class="progress-bar" id="t6b-bar" style="width:0%"></div></div></div>
-        <div style="margin-top:10px;padding:10px 12px;background:var(--bg3);border-radius:8px;font-size:12px;color:var(--text3);line-height:1.6">T6 MatA alumni cross here. When full, root auto-upgrades to T7.</div>
+        <div style="margin-top:10px;padding:10px 12px;background:var(--bg3);border-radius:8px;font-size:12px;color:var(--text3);line-height:1.6">T6 MatA alumni cross here. Full = root upgrades to T7.</div>
       </div>
     </div>
 
-    <!-- T7 pair -->
-    <div style="margin-bottom:8px;font-size:13px;font-weight:700;color:var(--text2);letter-spacing:.5px">T7 &mdash; Nova Pinnacle &middot; $1,000</div>
+    <div style="margin-bottom:8px;font-size:13px;font-weight:700;color:var(--text2);letter-spacing:.5px">T7 &#8212; Nova Pinnacle &#183; $1,000</div>
     <div class="grid-2" style="margin-bottom:20px">
       <div class="card" style="opacity:0.85">
-        <div class="section-title" style="margin-bottom:12px"><div class="dot" style="background:var(--yellow)"></div> T7 Matrix A &mdash; Nova Pinnacle ($1,000)</div>
+        <div class="section-title" style="margin-bottom:12px"><div class="dot" style="background:var(--yellow)"></div> T7 Matrix A &#8212; Nova Pinnacle</div>
         <div class="info-row"><span class="info-key">Seats Filled</span><span class="info-val"><span id="t7a-occ">&#8212;</span> / 127</span></div>
         <div class="info-row"><span class="info-key">Matrix Cycles</span><span class="info-val green" id="t7a-cycles">&#8212;</span></div>
         <div style="margin-top:10px"><div style="display:flex;justify-content:space-between;font-size:12px;color:var(--text3);margin-bottom:4px"><span>Fill progress</span><span id="t7a-pct">0%</span></div><div class="progress-wrap"><div class="progress-bar" id="t7a-bar" style="width:0%"></div></div></div>
-        <div style="margin-top:10px;padding:10px 12px;background:var(--bg3);border-radius:8px;font-size:12px;color:var(--text3);line-height:1.6">T6 graduates auto-upgrade here. Gate opens when T6 MatB hits 80%.</div>
+        <div style="margin-top:10px;padding:10px 12px;background:var(--bg3);border-radius:8px;font-size:12px;color:var(--text3);line-height:1.6">Gate opens when T6 MatB hits 80% fill. T6 graduates auto-upgrade.</div>
       </div>
       <div class="card" style="opacity:0.85">
-        <div class="section-title" style="margin-bottom:12px"><div class="dot" style="background:var(--yellow)"></div> T7 Matrix B &mdash; Crossing Pool</div>
+        <div class="section-title" style="margin-bottom:12px"><div class="dot" style="background:var(--yellow)"></div> T7 Matrix B &#8212; Crossing Pool</div>
         <div class="info-row"><span class="info-key">Seats Filled</span><span class="info-val"><span id="t7b-occ">&#8212;</span> / 127</span></div>
         <div class="info-row"><span class="info-key">Pool Accumulator</span><span class="info-val green" id="t7b-pool">&#8212;</span></div>
         <div style="margin-top:10px"><div style="display:flex;justify-content:space-between;font-size:12px;color:var(--text3);margin-bottom:4px"><span>Fill progress</span><span id="t7b-pct">0%</span></div><div class="progress-wrap"><div class="progress-bar" id="t7b-bar" style="width:0%"></div></div></div>
@@ -1467,6 +1433,10 @@
 // CONFIG — V8.1 Figure-8 Matrix (Base Sepolia)
 // ═══════════════════════════════════════════════════════════════════════
 const CHAIN_ID = 84532;
+// ══ LAUNCH GATE ═══════════════════════════════════════════════════════════
+// Flip to true when: Chainlink live + SF seeded + bigfill validated + community test OK
+const LAUNCH_READY = false;
+
 const RPC_URL  = 'https://sepolia.base.org';
 
 const ADDRS = {
@@ -1875,44 +1845,38 @@ async function loadHomeStats() {
 
 
 // ═══════════════════════════════════════════════════════════════════════
-// TIERS TAB — live stats for all 7 tier pairs
+// TIERS TAB DATA
 // ═══════════════════════════════════════════════════════════════════════
 async function loadTiersStats() {
   const rp = readProvider || new ethers.JsonRpcProvider(RPC_URL);
   try {
-    const tiers = ['T1','T2','T3','T4','T5','T6','T7'];
+    const TK = ['T1','T2','T3','T4','T5','T6','T7'];
     const cs = {};
-    for (const t of tiers) {
+    for (const t of TK) {
       cs[t] = {
         matA: new ethers.Contract(ADDRS[t].matA, MATRIX_ABI, rp),
         matB: new ethers.Contract(ADDRS[t].matB, MATRIX_ABI, rp),
       };
     }
     const calls = [];
-    for (const t of tiers) {
+    for (const t of TK) {
       calls.push(cs[t].matA.occupancy().catch(()=>0n));
       calls.push(cs[t].matA.rotationCount().catch(()=>0n));
       calls.push(cs[t].matB.occupancy().catch(()=>0n));
       calls.push(cs[t].matB.poolAccumulator().catch(()=>0n));
     }
     const res = await Promise.all(calls);
-    for (let i = 0; i < tiers.length; i++) {
-      const t  = tiers[i].toLowerCase();
-      const occA  = res[i*4],   cycA = res[i*4+1];
-      const occB  = res[i*4+2], poolB = res[i*4+3];
-      const occAn = Number(occA), occBn = Number(occB);
-      const pctA  = Math.round(occAn/127*100);
-      const pctB  = Math.round(occBn/127*100);
-      setText(t+'a-occ', occAn.toString());
-      setText(t+'a-cycles', cycA.toString());
+    for (let i = 0; i < TK.length; i++) {
+      const t = TK[i].toLowerCase();
+      const occAn = Number(res[i*4]),   cycA  = res[i*4+1];
+      const occBn = Number(res[i*4+2]), poolB = res[i*4+3];
+      const pctA = Math.round(occAn/127*100), pctB = Math.round(occBn/127*100);
+      setText(t+'a-occ', occAn); setText(t+'a-cycles', cycA.toString());
       setText(t+'a-pct', pctA+'%');
-      const bA = document.getElementById(t+'a-bar');
-      if (bA) bA.style.width = pctA+'%';
-      setText(t+'b-occ', occBn.toString());
-      setText(t+'b-pool', fmt6(poolB));
+      const bA = document.getElementById(t+'a-bar'); if (bA) bA.style.width = pctA+'%';
+      setText(t+'b-occ', occBn); setText(t+'b-pool', fmt6(poolB));
       setText(t+'b-pct', pctB+'%');
-      const bB = document.getElementById(t+'b-bar');
-      if (bB) bB.style.width = pctB+'%';
+      const bB = document.getElementById(t+'b-bar'); if (bB) bB.style.width = pctB+'%';
       setText('tier-'+t+'a-fill', occAn+'/127');
       setText('tier-'+t+'b-fill', occBn+'/127');
     }
@@ -2940,6 +2904,18 @@ function copyReferralLink() {
 // ═══════════════════════════════════════════════════════════════════════
 document.addEventListener('DOMContentLoaded', async () => {
   loadHomeStats();
+
+  // ── Launch gate ──────────────────────────────────────────────────────
+  if (!LAUNCH_READY) {
+    document.getElementById('launch-gate').classList.add('visible');
+    document.querySelectorAll('nav button').forEach(b => {
+      if (b.textContent.trim().startsWith('Register') || b.textContent.includes('Register')) {
+        b.style.opacity = '0.4';
+        b.style.pointerEvents = 'none';
+        b.title = 'Registration opens soon';
+      }
+    });
+  }
 
   // Auto-reconnect on page load (silent — no popup)
   if (window.ethereum && localStorage.getItem('cnova_connected')) {
