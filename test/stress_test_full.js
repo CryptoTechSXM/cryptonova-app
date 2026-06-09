@@ -466,10 +466,12 @@ describe("S5: Gas estimate at MSIZE=15", function () {
     const tr = await TierRouter.deploy(usdcAddr, admin.address);
     const trAddr = await tr.getAddress();
 
-    const FM = await ethers.getContractFactory("FigureEightMatrixV8");
+    const FM          = await ethers.getContractFactory("FigureEightMatrixV8");
+    const cnovaAddr15 = await cnova.getAddress();
+    const treasAddr15 = await treasury.getAddress();
     const mk = (isA) => FM.deploy(
-      { usdc: usdcAddr, cnova: await cnova.getAddress(),
-        treasury: await treasury.getAddress(),
+      { usdc: usdcAddr, cnova: cnovaAddr15,
+        treasury: treasAddr15,
         devOpsWallet: devOps.address, accountOne: accountOne.address, admin: admin.address },
       T1_FEE, MSIZE15, isA, 0, SPLITS_T1, CHAIN_BPS
     );
