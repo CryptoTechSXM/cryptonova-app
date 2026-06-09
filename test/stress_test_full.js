@@ -130,7 +130,7 @@ async function deployFixture() {
   // Seed SF with $1000
   await usdc.mint(deployer.address, 1_000n * UNIT);
   await usdc.connect(deployer).approve(sfAddr, 1_000n * UNIT);
-  await sf.connect(deployer).deposit(0, 1_000n * UNIT, 1);
+  await sf.connect(deployer).receiveLayer(0, 1_000n * UNIT, 1);
 
   // Helper: mint USDC + approve PM for a signer
   const fund = async (sig, fee, pmAddr) => {
