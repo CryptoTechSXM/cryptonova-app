@@ -512,7 +512,51 @@
           <div class="progress-wrap"><div class="progress-bar" id="t2b-bar" style="width:0%"></div></div>
         </div>
         <div style="margin-top:10px;padding:10px 12px;background:var(--bg3);border-radius:8px;font-size:12px;color:var(--text3);line-height:1.6">
-          T2 MatA alumni cross here. When full, root auto-upgrades to T3. Tiers 3–7 activate with Phase 2.
+          T2 MatA alumni cross here. When full, root auto-upgrades to T3.
+        </div>
+      </div>
+
+      <!-- T3 Matrix A Card -->
+      <div class="card">
+        <div class="section-title" style="margin-bottom:12px"><div class="dot"></div> T3 Matrix A &mdash; Nova Star ($50)</div>
+        <div class="info-row">
+          <span class="info-key">Seats Filled</span>
+          <span class="info-val"><span id="t3a-occ">&#8212;</span> / 64</span>
+        </div>
+        <div class="info-row">
+          <span class="info-key">Matrix Cycles</span>
+          <span class="info-val green" id="t3a-cycles">&#8212;</span>
+        </div>
+        <div style="margin-top:10px">
+          <div style="display:flex;justify-content:space-between;font-size:12px;color:var(--text3);margin-bottom:4px">
+            <span>Fill progress</span><span id="t3a-pct">0%</span>
+          </div>
+          <div class="progress-wrap"><div class="progress-bar" id="t3a-bar" style="width:0%"></div></div>
+        </div>
+        <div style="margin-top:10px;padding:10px 12px;background:var(--bg3);border-radius:8px;font-size:12px;color:var(--text3);line-height:1.6">
+          Members who complete T2 auto-upgrade here. $50 entry, same matrix mechanics.
+        </div>
+      </div>
+
+      <!-- T3 Matrix B Card -->
+      <div class="card">
+        <div class="section-title" style="margin-bottom:12px"><div class="dot"></div> T3 Matrix B &mdash; Crossing Pool</div>
+        <div class="info-row">
+          <span class="info-key">Seats Filled</span>
+          <span class="info-val"><span id="t3b-occ">&#8212;</span> / 64</span>
+        </div>
+        <div class="info-row">
+          <span class="info-key">Pool Accumulator</span>
+          <span class="info-val green" id="t3b-pool">&#8212;</span>
+        </div>
+        <div style="margin-top:10px">
+          <div style="display:flex;justify-content:space-between;font-size:12px;color:var(--text3);margin-bottom:4px">
+            <span>Fill progress</span><span id="t3b-pct">0%</span>
+          </div>
+          <div class="progress-wrap"><div class="progress-bar" id="t3b-bar" style="width:0%"></div></div>
+        </div>
+        <div style="margin-top:10px;padding:10px 12px;background:var(--bg3);border-radius:8px;font-size:12px;color:var(--text3);line-height:1.6">
+          T3 MatA alumni cross here. When full, root auto-upgrades to T4. Tiers 4&ndash;7 activate as community grows.
         </div>
       </div>
     </div>
@@ -1229,10 +1273,16 @@ const ADDRS = {
     matA: '0xc7BF5Ab67E97FdeeA716A656efE8F39dE625c497',
     matB: '0xcdFFF598B3455030372aC59535aE82442EDd05aa',
   },
+  T3: {
+    pm:   '0x4bC413790bA94929FC71b19C4b5DB9e7BD07Dae8',
+    matA: '0x095603b98b7f7268A213d489De264622262f878E',
+    matB: '0x80b9242f2770231bcF97d4b91573072761d6b1E3',
+  },
 };
 
 const T1_FEE = 10_000_000n;   // $10 USDC (6 decimals)
 const T2_FEE = 25_000_000n;   // $25 USDC
+const T3_FEE = 50_000_000n;   // $50 USDC
 
 // ── ABIs ─────────────────────────────────────────────────────────────
 const TIER_ROUTER_ABI = [
@@ -1481,6 +1531,8 @@ async function loadHomeStats() {
     const matB1 = new ethers.Contract(ADDRS.T1.matB, MATRIX_ABI, rp);
     const matA2 = new ethers.Contract(ADDRS.T2.matA, MATRIX_ABI, rp);
     const matB2 = new ethers.Contract(ADDRS.T2.matB, MATRIX_ABI, rp);
+    const matA3 = new ethers.Contract(ADDRS.T3.matA, MATRIX_ABI, rp);
+    const matB3 = new ethers.Contract(ADDRS.T3.matB, MATRIX_ABI, rp);
     const cnova  = new ethers.Contract(ADDRS.cnova,  CNOVA_ABI,  rp);
     const sf     = new ethers.Contract(ADDRS.stabilityFund, SF_ABI, rp);
     const tr     = new ethers.Contract(ADDRS.tierRouter, TIER_ROUTER_ABI, rp);
@@ -1489,7 +1541,8 @@ async function loadHomeStats() {
     const [
       occA, cyclesA, occB, poolB, totalJoined,
       occA2, cyclesA2, occB2, poolB2,
-      sysCycles, supply, epoch, sfBal, treasUsdc
+      sysCycles, supply, epoch, sfBal, treasUsdc,
+      occA3, cyclesA3, occB3, poolB3
     ] = await Promise.all([
       matA1.occupancy().catch(()=>0n),
       matA1.rotationCount().catch(()=>0n),
@@ -1505,6 +1558,10 @@ async function loadHomeStats() {
       cnova.currentEpochNumber().catch(()=>0n),
       sf.totalBalance().catch(()=>0n),
       usdc.balanceOf(ADDRS.treasury).catch(()=>0n),
+      matA3.occupancy().catch(()=>0n),
+      matA3.rotationCount().catch(()=>0n),
+      matB3.occupancy().catch(()=>0n),
+      matB3.poolAccumulator().catch(()=>0n),
     ]);
 
     // Stat cards
@@ -1544,6 +1601,22 @@ async function loadHomeStats() {
     setText('t2b-pct', pctB2+'%');
     const barB2 = document.getElementById('t2b-bar');
     if (barB2) barB2.style.width = pctB2+'%';
+
+    // T3A progress
+    const occA3n = Number(occA3), pctA3 = Math.round(occA3n/64*100);
+    setText('t3a-occ', occA3n.toString());
+    setText('t3a-cycles', cyclesA3.toString());
+    setText('t3a-pct', pctA3+'%');
+    const barA3 = document.getElementById('t3a-bar');
+    if (barA3) barA3.style.width = pctA3+'%';
+
+    // T3B progress
+    const occB3n = Number(occB3), pctB3 = Math.round(occB3n/64*100);
+    setText('t3b-occ', occB3n.toString());
+    setText('t3b-pool', fmt6(poolB3));
+    setText('t3b-pct', pctB3+'%');
+    const barB3 = document.getElementById('t3b-bar');
+    if (barB3) barB3.style.width = pctB3+'%';
 
     // Epoch
     const EPOCH_NAMES = ['Genesis','Pioneer','Expansion','Momentum','Apex','Legacy'];
@@ -1827,12 +1900,14 @@ async function loadDashboardData() {
     // Fetch T1 cycles from TierRouter (manual upgrade gate)
     const t1CyclesTR = await tr.tierCycles(userAddr, 0).catch(() => 0n);
 
-    // Query all 4 matrices (T1A, T1B, T2A, T2B)
+    // Query all 6 matrices (T1A, T1B, T2A, T2B, T3A, T3B)
     const matrices = [
       { addr: ADDRS.T1.matA, label: 'T1 Matrix A' },
       { addr: ADDRS.T1.matB, label: 'T1 Matrix B' },
       { addr: ADDRS.T2.matA, label: 'T2 Matrix A' },
       { addr: ADDRS.T2.matB, label: 'T2 Matrix B' },
+      { addr: ADDRS.T3.matA, label: 'T3 Matrix A' },
+      { addr: ADDRS.T3.matB, label: 'T3 Matrix B' },
     ];
 
     let totalW = 0n, totalE = 0n, totalEscrow = 0n;
@@ -1856,7 +1931,8 @@ async function loadDashboardData() {
           activeBFS = await mc.matrixPos(userAddr).catch(()=>0n); // BFS pos is separate mapping
           activeCycles = BigInt(member.cyclesCompleted);
         }
-        if (m.label.startsWith('T2')) highestTier = Math.max(highestTier, 2);
+        if (m.label.startsWith('T3')) highestTier = Math.max(highestTier, 3);
+        else if (m.label.startsWith('T2')) highestTier = Math.max(highestTier, 2);
         else highestTier = Math.max(highestTier, 1);
       }
     }
@@ -1948,21 +2024,24 @@ async function loadDashboardData() {
     // Manual upgrade panel
     const upgradeSection = document.getElementById('upgrade-section');
     if (upgradeSection) {
-      const canUpgrade = Number(t1CyclesTR) >= 1 && highestTier < 2;
+      // Max deployed tier: 3 (T3 live). Increase when T4+ deployed.
+      const MAX_DEPLOYED_TIER = 3;
+      const curTierCycles = await tr.tierCycles(userAddr, Math.max(highestTier - 1, 0)).catch(() => 0n);
+      const canUpgrade = Number(curTierCycles) >= 1 && highestTier < MAX_DEPLOYED_TIER;
       upgradeSection.style.display = canUpgrade ? 'block' : 'none';
       if (canUpgrade) {
         const UPGRADE_NAMES = ['--','T2 -- Nova Rise','T3 -- Nova Star','T4 -- Nova Prime','T5 -- SuperNova Genesis','T6 -- SuperNova Elite','T7 -- SuperNova Spark'];
         const nextIdx = highestTier;
-        const t2FeeRaw = await tr.tierEntryFees(nextIdx).catch(() => 25_000_000n);
-        window._dashUpgradeFee       = t2FeeRaw;
+        const nextFeeRaw = await tr.tierEntryFees(nextIdx).catch(() => 25_000_000n);
+        window._dashUpgradeFee       = nextFeeRaw;
         window._dashUpgradeTierIndex = nextIdx;
         const usdc2  = new ethers.Contract(ADDRS.usdc, USDC_ABI, rp);
         const uBal   = await usdc2.balanceOf(userAddr).catch(() => 0n);
         setText('upgrade-target-name', UPGRADE_NAMES[nextIdx] || 'Next Tier');
-        setText('upgrade-fee',         fmt6(t2FeeRaw));
+        setText('upgrade-fee',         fmt6(nextFeeRaw));
         setText('upgrade-usdc-bal',    fmt6(uBal));
-        const c = Number(t1CyclesTR);
-        setText('upgrade-desc', `You have completed ${c} T${highestTier} cycle${c !== 1 ? 's' : ''} and qualify for a manual tier upgrade. Pay ${fmt6(t2FeeRaw)} USDC from your wallet to enter the next tier.`);
+        const c = Number(curTierCycles);
+        setText('upgrade-desc', `You have completed ${c} T${highestTier} cycle${c !== 1 ? 's' : ''} and qualify for a manual tier upgrade. Pay ${fmt6(nextFeeRaw)} USDC from your wallet to enter the next tier.`);
         const approveBtn = document.getElementById('btn-dash-approve');
         if (approveBtn) { approveBtn.disabled = false; approveBtn.classList.remove('btn-ghost'); approveBtn.classList.add('btn-green'); }
       }
@@ -2026,7 +2105,7 @@ async function doWithdraw() {
   btn.disabled = true; btn.innerHTML = '<span class="spinner"></span>Withdrawing…';
   const rp = readProvider || new ethers.JsonRpcProvider(RPC_URL);
   try {
-    const matrices = [ADDRS.T1.matA, ADDRS.T1.matB, ADDRS.T2.matA, ADDRS.T2.matB];
+    const matrices = [ADDRS.T1.matA, ADDRS.T1.matB, ADDRS.T2.matA, ADDRS.T2.matB, ADDRS.T3.matA, ADDRS.T3.matB];
     let withdrawn = false;
     for (const addr of matrices) {
       const mc = new ethers.Contract(addr, MATRIX_ABI, rp);
@@ -2062,6 +2141,7 @@ function onMatrixTierChange() { loadQueueView(); setActiveMatrixBtn('btn-load-tr
 async function getMatrixForTier() {
   const tierSelect = document.getElementById('matrix-tier-select');
   const tierNum = tierSelect ? parseInt(tierSelect.value) || 1 : 1;
+  if (tierNum === 3) return ADDRS.T3.matA;
   return tierNum === 2 ? ADDRS.T2.matA : ADDRS.T1.matA;
 }
 
@@ -2187,6 +2267,7 @@ async function loadMyTree() {
     const allMats = [
       {addr: ADDRS.T1.matA, label:'T1 Matrix A'}, {addr: ADDRS.T1.matB, label:'T1 Matrix B'},
       {addr: ADDRS.T2.matA, label:'T2 Matrix A'}, {addr: ADDRS.T2.matB, label:'T2 Matrix B'},
+      {addr: ADDRS.T3.matA, label:'T3 Matrix A'}, {addr: ADDRS.T3.matB, label:'T3 Matrix B'},
     ];
     let activeMat = null, activeBFS = 0n, activeLabel = '', activeMSize = 64n;
     for (const m of allMats) {
