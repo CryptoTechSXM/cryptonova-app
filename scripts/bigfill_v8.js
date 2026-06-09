@@ -34,13 +34,13 @@ require("dotenv").config();
 //   v8_2 = size-64 pre-mainnet  ← default
 const ADDRESSES_FILE = path.join(
   __dirname,
-  process.env.ADDRESSES_FILE || "deployed_addresses_v8_5.json"
+  process.env.ADDRESSES_FILE || "deployed_addresses_v8_6.json"
 );
 
-// COUNT: for 64-seat matrices, 70 fills MatA (W1 seeds pos-1, 63 fill wallets
-// complete the matrix) with 6 extra as a failure buffer.  Use COUNT=130 to
+// COUNT: for 127-seat matrices, 260 fills MatA + MatB (W1 seeds pos-1, 126 fill
+// wallets complete MatA, 126 more fill MatB triggering T2 upgrade) + buffer.
 // also trigger a second MatA cycle and confirm W1 auto-upgrades to T2.
-const COUNT       = Number(process.env.COUNT       || 70);
+const COUNT       = Number(process.env.COUNT       || 260);
 const BATCH_SIZE  = Number(process.env.BATCH_SIZE  || 5);
 const BATCH_DELAY = Number(process.env.BATCH_DELAY || 8);
 const HDR_OFFSET  = Number(process.env.HDR_OFFSET  || 500); // BIP-44 index offset (change to avoid globalJoined collisions)
