@@ -631,6 +631,7 @@
       <div class="card-sm"><div class="stat-label">Total Registered</div><div class="stat-value" id="stat-members"><span class="spinner" style="color:var(--text3)"></span></div><div class="stat-sub">all-time joins</div></div>
       <div class="card-sm"><div class="stat-label">CNOVA Minted</div><div class="stat-value green" id="stat-minted"><span class="spinner" style="color:var(--green)"></span></div><div class="stat-sub">50 per T1 join</div></div>
       <div class="card-sm" title="CNOVA Treasury holds 15% of all entry fees — it backs the CNOVA floor price. Floor price = Treasury USDC ÷ total CNOVA supply."><div class="stat-label">CNOVA USDC Treasury 🏦</div><div class="stat-value green" id="stat-treasury-usdc"><span class="spinner" style="color:var(--green)"></span></div><div class="stat-sub">backing the CNOVA value</div></div>
+      <div class="card-sm" title="Guaranteed minimum redemption price — Treasury USDC ÷ total CNOVA supply."><div class="stat-label">CNOVA Floor Price</div><div class="stat-value green" id="stat-floor-price"><span class="spinner" style="color:var(--green)"></span></div><div class="stat-sub">per CNOVA token</div></div>
       <div class="card-sm" style="border-color:rgba(245,158,11,.4)"><div class="stat-label">System Cycles</div><div class="stat-value" id="stat-cycles" style="color:var(--yellow)"><span class="spinner" style="color:var(--yellow)"></span></div></div>
     </div>
 
@@ -1918,6 +1919,20 @@ async function loadHomeStats() {
     setText('cw-epoch', epochLabel);
     setText('stat-supply', Number(ethers.formatEther(supply)).toLocaleString(undefined,{maximumFractionDigits:0})+' CNOVA');
     setText('stat-treasury-usdc', fmt6(treasUsdc));
+
+    // CNOVA floor price: treasury USDC ÷ total CNOVA supply
+    if (supply > 0n) {
+      const floorRaw = (treasUsdc * BigInt(1000000000000000000)) / supply; // 6-dec USDC per CNOVA
+      const floorUsd = Number(floorRaw) / 1e6;
+      const floorStr = floorUsd === 0     ? '$0.000000'
+                     : floorUsd < 0.0001  ? '$' + floorUsd.toFixed(8)
+                     : floorUsd < 0.01    ? '$' + floorUsd.toFixed(6)
+                     : floorUsd < 1       ? '$' + floorUsd.toFixed(4)
+                     :                      '$' + floorUsd.toFixed(2);
+      setText('stat-floor-price', floorStr);
+    } else {
+      setText('stat-floor-price', '—');
+    }
 
     // Epoch reward per entry (epochRewards[current])
     try {
