@@ -302,21 +302,78 @@
     The platform will open for registration once all systems are confirmed live.</p>
     <div class="soon-pill">&#x1F527; Coming Soon &mdash; Testing in Progress</div>
     <div style="margin-top:20px">
-      <button onclick="addMockUSDC()" style="background:rgba(0,122,255,.15);border:1px solid rgba(0,122,255,.4);color:#4da6ff;padding:10px 20px;border-radius:8px;font-size:13px;cursor:pointer;font-weight:600">
+      <button id="btn-add-usdc" onclick="addMockUSDC()" style="background:rgba(0,122,255,.15);border:1px solid rgba(0,122,255,.4);color:#4da6ff;padding:10px 20px;border-radius:8px;font-size:13px;cursor:pointer;font-weight:600">
         + Add Testnet USDC to MetaMask
       </button>
       <div style="font-size:11px;color:var(--text3);margin-top:8px;opacity:0.7">Base Sepolia mock USDC — needed for testnet registration</div>
+
+      <!-- Fallback panel — shown when wallet_watchAsset is unavailable or fails (mobile) -->
+      <div id="usdc-fallback" style="display:none;margin-top:14px;background:rgba(0,122,255,.07);border:1px solid rgba(0,122,255,.25);border-radius:10px;padding:13px 15px;text-align:left;max-width:380px;margin-left:auto;margin-right:auto">
+        <div style="font-size:12px;color:var(--text2);margin-bottom:10px;line-height:1.6">
+          📋 <strong style="color:var(--text)">Add manually in MetaMask:</strong><br>
+          Tap <strong style="color:#4da6ff">Import tokens</strong> and paste this address:
+        </div>
+        <div style="display:flex;align-items:center;gap:8px;background:rgba(0,0,0,.35);border-radius:7px;padding:9px 11px">
+          <code id="usdc-addr-txt" style="font-size:11px;color:#4da6ff;word-break:break-all;flex:1;line-height:1.5">0x2D8B7b5eDec96bE441b6fb0D45D74a2BcE2C639a</code>
+          <button onclick="copyUSDCAddr(this)" style="background:rgba(0,122,255,.25);border:1px solid rgba(0,122,255,.45);color:#4da6ff;padding:6px 11px;border-radius:6px;font-size:12px;cursor:pointer;white-space:nowrap;flex-shrink:0">Copy</button>
+        </div>
+        <div style="font-size:11px;color:var(--text3);margin-top:8px">Symbol: USDC &nbsp;·&nbsp; Decimals: 6 &nbsp;·&nbsp; Network: Base Sepolia</div>
+      </div>
     </div>
   </div>
   <script>
   async function addMockUSDC() {
-    if (!window.ethereum) { alert('MetaMask not detected'); return; }
+    const USDC_ADDR = '0x2D8B7b5eDec96bE441b6fb0D45D74a2BcE2C639a';
+    const btn      = document.getElementById('btn-add-usdc');
+    const fallback = document.getElementById('usdc-fallback');
+
+    // No injected provider (regular mobile browser, not MetaMask in-app) — show manual fallback
+    if (!window.ethereum) {
+      if (fallback) fallback.style.display = 'block';
+      return;
+    }
+
     try {
-      await window.ethereum.request({
+      const added = await window.ethereum.request({
         method: 'wallet_watchAsset',
-        params: { type: 'ERC20', options: { address: '0x2D8B7b5eDec96bE441b6fb0D45D74a2BcE2C639a', symbol: 'USDC', decimals: 6 } }
+        params: { type: 'ERC20', options: { address: USDC_ADDR, symbol: 'USDC', decimals: 6 } }
       });
-    } catch(e) { console.error(e); }
+      if (added) {
+        // User confirmed — show success on the button
+        if (btn) {
+          btn.textContent = '✅ USDC Added!';
+          btn.style.background    = 'rgba(16,185,129,.18)';
+          btn.style.borderColor   = 'rgba(16,185,129,.4)';
+          btn.style.color         = '#34d399';
+          btn.disabled            = true;
+        }
+      } else {
+        // User dismissed the MetaMask prompt — show manual fallback
+        if (fallback) fallback.style.display = 'block';
+      }
+    } catch(e) {
+      console.error('wallet_watchAsset:', e);
+      // wallet_watchAsset unsupported or errored — show manual fallback
+      if (fallback) fallback.style.display = 'block';
+    }
+  }
+
+  function copyUSDCAddr(btn) {
+    const addr = '0x2D8B7b5eDec96bE441b6fb0D45D74a2BcE2C639a';
+    const orig = btn.textContent;
+    const done = () => { btn.textContent = '✓ Copied!'; setTimeout(() => btn.textContent = orig, 2200); };
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(addr).then(done).catch(() => fallbackCopy(addr, done));
+    } else {
+      fallbackCopy(addr, done);
+    }
+  }
+  function fallbackCopy(text, cb) {
+    const ta = document.createElement('textarea');
+    ta.value = text; ta.style.cssText = 'position:fixed;opacity:0;top:0;left:0';
+    document.body.appendChild(ta); ta.focus(); ta.select();
+    try { document.execCommand('copy'); cb(); } catch(_) {}
+    document.body.removeChild(ta);
   }
   </script>
 
