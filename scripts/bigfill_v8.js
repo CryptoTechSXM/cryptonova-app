@@ -646,23 +646,35 @@ async function main() {
       await (await usdcFunder.transfer(deployerAddr, usdcNeededFC, { nonce: fNonce })).wait();
       fNonce++;
 
-      // 2. Deployer approves matA1 (NonceManager handles deployer nonce — no explicit nonce)
-      console.log(`  Deployer approving matA1 for ${fmt6(usdcNeededFC)} USDC…`);
-      await (await usdc.approve(matA1Addr, usdcNeededFC)).wait();
+      // 2. Deployer approves matA1 — use rawSigner with EXPLICIT nonce (not NonceManager).
+      //    The deployer is a "delegated account" on Base Sepolia, rate-limited to 1 in-flight TX.
+      //    NonceManager loses internal sync on any RPC rejection and causes a "gapped-nonce tx
+      //    from delegated accounts" cascade for all subsequent calls.  Explicit nonce + re-sync
+      //    on failure is the same pattern used for fNonce on the funder.
+      let dNonce = Number(await ethers.provider.getTransactionCount(deployerAddr, 'pending'));
+      console.log(`  Deployer approving matA1 for ${fmt6(usdcNeededFC)} USDC (deployer nonce ${dNonce})…`);
+      await (await usdc.connect(rawSigner).approve(matA1Addr, usdcNeededFC, { nonce: dNonce })).wait();
+      dNonce++;
 
-      // 3. Connect matA1 to deployer (owner) — forceCross is onlyOwner
-      const matA1Deployer = matA1.connect(deployer);
+      // 3. Connect matA1 to rawSigner (owner) — forceCross is onlyOwner.
+      //    rawSigner + explicit dNonce avoids the NonceManager nonce-drift problem.
+      const matA1Raw = matA1.connect(rawSigner);
 
       let crossed = 0;
       for (const addr of toCross) {
         const occNow = await matB1.occupancy();
-        console.log(`  forceCross ${addr.slice(0,10)}… (MatB ${occNow}/${matBSize})`);
+        console.log(`  forceCross ${addr.slice(0,10)}… (MatB ${occNow}/${matBSize}, nonce ${dNonce})`);
         try {
-          await (await matA1Deployer.forceCross(addr, { gasLimit: 12_000_000 })).wait();
+          await (await matA1Raw.forceCross(addr, { gasLimit: 12_000_000, nonce: dNonce })).wait();
+          dNonce++;
           crossed++;
+          await sleep(6); // pause between crossings — Base Sepolia in-flight limit for delegated accounts
         } catch (e) {
-          console.warn(`    ⚠ forceCross failed for ${addr.slice(0,10)}: ${e.message.slice(0,100)}`);
-          await sleep(3);
+          console.warn(`    ⚠ forceCross failed for ${addr.slice(0,10)}: ${e.message.slice(0,120)}`);
+          await sleep(10);
+          // Re-sync deployer nonce from chain so next attempt uses the correct nonce
+          dNonce = Number(await ethers.provider.getTransactionCount(deployerAddr, 'pending'));
+          console.log(`    ↻ Re-synced deployer nonce → ${dNonce}`);
         }
       }
 
@@ -716,4 +728,5 @@ async function main() {
 
 main().catch(err => {
   console.error(err);
- 
+  process.exitCode = 1;
+});
