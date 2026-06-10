@@ -544,8 +544,8 @@
       <div class="token-card-left">
         <div class="token-icon">CN</div>
         <div>
-          <div class="token-name" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><svg width="28" height="28" style="border-radius:50%;flex-shrink:0"><use href="#cnova-icon"/></svg><a href="https://sepolia.basescan.org/token/0xe192D3ae2E881709749884de0cFa1d53e2237F6f" target="_blank" rel="noopener" style="color:inherit;text-decoration:none;font-weight:700">CryptoNOVA Matrix ↗</a> <span class="pill pill-green" style="font-size:10px;vertical-align:middle">CNOVA · ERC-20 · Base</span></div>
-          <div class="token-addr"><a href="https://sepolia.basescan.org/token/0xe192D3ae2E881709749884de0cFa1d53e2237F6f" target="_blank" rel="noopener" style="color:var(--green);text-decoration:none;font-family:monospace">0xe192D3ae2E881709749884de0cFa1d53e2237F6f</a> · 18 decimals</div>
+          <div class="token-name" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><svg width="28" height="28" style="border-radius:50%;flex-shrink:0"><use href="#cnova-icon"/></svg><a href="https://sepolia.basescan.org/token/0xACcD34B5FE055eF7ef3Fe9AC821d316F00BbF004" target="_blank" rel="noopener" style="color:inherit;text-decoration:none;font-weight:700">CryptoNOVA Matrix ↗</a> <span class="pill pill-green" style="font-size:10px;vertical-align:middle">CNOVA · ERC-20 · Base</span></div>
+          <div class="token-addr"><a href="https://sepolia.basescan.org/token/0xACcD34B5FE055eF7ef3Fe9AC821d316F00BbF004" target="_blank" rel="noopener" style="color:var(--green);text-decoration:none;font-family:monospace">0xACcD34B5FE055eF7ef3Fe9AC821d316F00BbF004</a> · 18 decimals</div>
           <div style="font-size:12px;color:var(--text2);margin-top:4px">Earned on every registration. 50 CNOVA minted per T1 join. Add to your wallet to track your balance during testing.</div>
         </div>
       </div>
@@ -573,7 +573,7 @@
     <div class="grid-4" id="stats-grid">
       <div class="card-sm"><div class="stat-label">Total Registered</div><div class="stat-value" id="stat-members"><span class="spinner" style="color:var(--text3)"></span></div><div class="stat-sub">all-time joins</div></div>
       <div class="card-sm"><div class="stat-label">CNOVA Minted</div><div class="stat-value green" id="stat-minted"><span class="spinner" style="color:var(--green)"></span></div><div class="stat-sub">50 per T1 join</div></div>
-      <div class="card-sm" title="The CNOVA Stability Fund receives 15% of every entry fee. It backs the CNOVA floor price — floor = fund balance ÷ total CNOVA supply. It never pays out to individuals."><div class="stat-label">CNOVA Stability Fund 🌊</div><div class="stat-value" id="stat-reserve"><span class="spinner" style="color:var(--text3)"></span></div><div class="stat-sub">CNOVA floor backing</div></div>
+      <div class="card-sm" title="The CNOVA Stability Fund (6% of T1 entries) is an ops reserve — it funds parked wallet rescues and sliding withdrawal fees. CNOVA floor backing is held in the Treasury."><div class="stat-label">CNOVA Stability Fund 🌊</div><div class="stat-value" id="stat-reserve"><span class="spinner" style="color:var(--text3)"></span></div><div class="stat-sub">ops &amp; rescue reserve</div></div>
       <div class="card-sm" style="border-color:rgba(245,158,11,.4)"><div class="stat-label">System Cycles</div><div class="stat-value" id="stat-cycles" style="color:var(--yellow)"><span class="spinner" style="color:var(--yellow)"></span></div></div>
     </div>
 
@@ -593,13 +593,12 @@
     <div class="card">
       <div class="section-title"><div class="dot"></div> Entry Fee Split — per $10 at T1</div>
       <div class="split-row"><span class="split-label">🤝 L1 Direct Referrer</span><span><span class="split-amount">20%</span> <span class="split-pct">$2.00</span></span></div>
-      <div class="split-row"><span class="split-label">🔗 L2 Override</span><span><span class="split-amount">3%</span> <span class="split-pct">$0.30</span></span></div>
-      <div class="split-row"><span class="split-label">🔗 L3 Override</span><span><span class="split-amount">2%</span> <span class="split-pct">$0.20</span></span></div>
       <div class="split-row"><span class="split-label">⛓️ Chain Pay (6 upline levels)</span><span><span class="split-amount">20%</span> <span class="split-pct">$2.00</span></span></div>
       <div class="split-row"><span class="split-label">🌀 Equalization Pool</span><span><span class="split-amount">33%</span> <span class="split-pct">$3.30</span></span></div>
-      <div class="split-row"><span class="split-label">🌊 CNOVA Stability Fund <span style="font-size:10px;color:var(--text3)">(floor backing)</span></span><span><span class="split-amount">15%</span> <span class="split-pct">$1.50</span></span></div>
+      <div class="split-row"><span class="split-label">🏦 CNOVA Treasury <span style="font-size:10px;color:var(--text3)">(floor backing)</span></span><span><span class="split-amount">15%</span> <span class="split-pct">$1.50</span></span></div>
       <div class="split-row"><span class="split-label">⚙️ Dev + Ops</span><span><span class="split-amount">5%</span> <span class="split-pct">$0.50</span></span></div>
-      <div class="split-row"><span class="split-label">🏦 DAO Treasury Reserve</span><span><span class="split-amount">2%</span> <span class="split-pct">$0.20</span></span></div>
+      <div class="split-row"><span class="split-label">🌊 CNOVA Stability Fund <span style="font-size:10px;color:var(--text3)">(ops reserve)</span></span><span><span class="split-amount">6%</span> <span class="split-pct">$0.60</span></span></div>
+      <div class="split-row"><span class="split-label">🔥 CNOVA Buyback Reserve</span><span><span class="split-amount">1%</span> <span class="split-pct">$0.10</span></span></div>
       <div style="margin-top:14px;padding:10px 14px;background:var(--green-dim);border:1px solid var(--green2);border-radius:8px;font-size:13px;color:var(--text2)">
         💡 <strong style="color:var(--green)">CryptoNova Matrix mechanic:</strong> Fill Matrix A → root crosses to Matrix B → fill B → root auto-upgrades to T2. The loop repeats for each tier.
       </div>
@@ -626,7 +625,10 @@
           <tr style="border-bottom:1px solid var(--border)"><td style="padding:8px 10px;font-weight:700;color:var(--text2)">T4</td><td style="padding:8px 10px">Nova Core</td><td style="padding:8px 10px;text-align:right;font-family:monospace">$100</td><td style="padding:8px 10px;text-align:right" id="tier-t4a-fill">&#8212;</td><td style="padding:8px 10px;text-align:right" id="tier-t4b-fill">&#8212;</td><td style="padding:8px 10px"><span class="pill" style="font-size:10px;background:rgba(245,158,11,.15);color:var(--yellow);border:1px solid rgba(245,158,11,.4)">Velocity Gated</span></td></tr>
           <tr style="border-bottom:1px solid var(--border)"><td style="padding:8px 10px;font-weight:700;color:var(--text2)">T5</td><td style="padding:8px 10px">Nova Prime</td><td style="padding:8px 10px;text-align:right;font-family:monospace">$250</td><td style="padding:8px 10px;text-align:right" id="tier-t5a-fill">&#8212;</td><td style="padding:8px 10px;text-align:right" id="tier-t5b-fill">&#8212;</td><td style="padding:8px 10px"><span class="pill" style="font-size:10px;background:rgba(245,158,11,.15);color:var(--yellow);border:1px solid rgba(245,158,11,.4)">Velocity Gated</span></td></tr>
           <tr style="border-bottom:1px solid var(--border)"><td style="padding:8px 10px;font-weight:700;color:var(--text2)">T6</td><td style="padding:8px 10px">Nova Apex</td><td style="padding:8px 10px;text-align:right;font-family:monospace">$500</td><td style="padding:8px 10px;text-align:right" id="tier-t6a-fill">&#8212;</td><td style="padding:8px 10px;text-align:right" id="tier-t6b-fill">&#8212;</td><td style="padding:8px 10px"><span class="pill" style="font-size:10px;background:rgba(245,158,11,.15);color:var(--yellow);border:1px solid rgba(245,158,11,.4)">Velocity Gated</span></td></tr>
-          <tr><td style="padding:8px 10px;font-weight:700;color:var(--text2)">T7</td><td style="padding:8px 10px">Nova Pinnacle</td><td style="padding:8px 10px;text-align:right;font-family:monospace">$1,000</td><td style="padding:8px 10px;text-align:right" id="tier-t7a-fill">&#8212;</td><td style="padding:8px 10px;text-align:right" id="tier-t7b-fill">&#8212;</td><td style="padding:8px 10px"><span class="pill" style="font-size:10px;background:rgba(245,158,11,.15);color:var(--yellow);border:1px solid rgba(245,158,11,.4)">Velocity Gated</span></td></tr>
+          <tr style="border-bottom:1px solid var(--border)"><td style="padding:8px 10px;font-weight:700;color:var(--text2)">T7</td><td style="padding:8px 10px">Nova Pinnacle</td><td style="padding:8px 10px;text-align:right;font-family:monospace">$1,000</td><td style="padding:8px 10px;text-align:right" id="tier-t7a-fill">&#8212;</td><td style="padding:8px 10px;text-align:right" id="tier-t7b-fill">&#8212;</td><td style="padding:8px 10px"><span class="pill" style="font-size:10px;background:rgba(245,158,11,.15);color:var(--yellow);border:1px solid rgba(245,158,11,.4)">Velocity Gated</span></td></tr>
+          <tr style="border-bottom:1px solid var(--border)"><td style="padding:8px 10px;font-weight:700;color:var(--text2)">T8</td><td style="padding:8px 10px">SuperNova Titan</td><td style="padding:8px 10px;text-align:right;font-family:monospace">$2,500</td><td style="padding:8px 10px;text-align:right" id="tier-t8a-fill">&#8212;</td><td style="padding:8px 10px;text-align:right" id="tier-t8b-fill">&#8212;</td><td style="padding:8px 10px"><span class="pill" style="font-size:10px;background:rgba(245,158,11,.15);color:var(--yellow);border:1px solid rgba(245,158,11,.4)">Velocity Gated</span></td></tr>
+          <tr style="border-bottom:1px solid var(--border)"><td style="padding:8px 10px;font-weight:700;color:var(--text2)">T9</td><td style="padding:8px 10px">SuperNova Legend</td><td style="padding:8px 10px;text-align:right;font-family:monospace">$5,000</td><td style="padding:8px 10px;text-align:right" id="tier-t9a-fill">&#8212;</td><td style="padding:8px 10px;text-align:right" id="tier-t9b-fill">&#8212;</td><td style="padding:8px 10px"><span class="pill" style="font-size:10px;background:rgba(245,158,11,.15);color:var(--yellow);border:1px solid rgba(245,158,11,.4)">Velocity Gated</span></td></tr>
+          <tr><td style="padding:8px 10px;font-weight:700;color:var(--text2)">T10</td><td style="padding:8px 10px">SuperNova Apex</td><td style="padding:8px 10px;text-align:right;font-family:monospace">$10,000</td><td style="padding:8px 10px;text-align:right" id="tier-t10a-fill">&#8212;</td><td style="padding:8px 10px;text-align:right" id="tier-t10b-fill">&#8212;</td><td style="padding:8px 10px"><span class="pill" style="font-size:10px;background:rgba(245,158,11,.15);color:var(--yellow);border:1px solid rgba(245,158,11,.4)">Velocity Gated</span></td></tr>
         </tbody>
       </table>
       <div style="margin-top:10px;font-size:11px;color:var(--text3)">Velocity gate opens when previous tier MatB reaches 80%. Each matrix holds 127 seats (2<sup>7</sup>&#8722;1).</div>
@@ -977,7 +979,7 @@
           <!-- Redeem CNOVA for USDC at floor price -->
           <div style="margin-top:20px;padding-top:16px;border-top:1px solid var(--border)">
             <div style="font-size:14px;font-weight:700;margin-bottom:4px">🔥 Redeem CNOVA → USDC</div>
-            <div style="font-size:12px;color:var(--text3);margin-bottom:8px">Burn CNOVA at the current floor price to receive USDC from the CNOVA Stability Fund.</div>
+            <div style="font-size:12px;color:var(--text3);margin-bottom:8px">Burn CNOVA at the current floor price to receive USDC from the CNOVA Treasury.</div>
             <div id="redeem-penalty-info" style="display:none;background:rgba(245,158,11,.08);border:1px solid rgba(245,158,11,.25);border-radius:8px;padding:10px 12px;font-size:12px;color:var(--text2);line-height:1.6;margin-bottom:12px"></div>
             <div class="info-row"><span class="info-key">Your CNOVA</span><span class="info-val green" id="redeem-cnova-bal">—</span></div>
             <div class="info-row"><span class="info-key">Floor Price</span><span class="info-val" id="redeem-floor">—</span></div>
@@ -1437,6 +1439,7 @@ const ADDRS = {
   cnova:         '0xACcD34B5FE055eF7ef3Fe9AC821d316F00BbF004',
   treasury:      '0x32bbbACE3E14F59c678A401d3a69A7D6Cf12883a',
   stabilityFund: '0x55d7f6cc578145DFe85a6F6597634b8e50Ca4521',
+  buybackReserve:'0xe6836b794150A0Ac99962C370c8c5bE6a32E941F',
   tierRouter:    '0xe32573D7571372c3C6b6B6a72D7e2BF1F7d0da92',
   matrixKeeper:  '0x8171Df0F0DaD705E216b08D0Fa517F3F0A2C81Fb',
   v8Governance:  '0x553c307D9235b25691d00A27AeCA2421275aa277',
@@ -1520,7 +1523,7 @@ const TIER_ROUTER_ABI = [
 ];
 
 const MATRIX_ABI = [
-  'function getMember(address) external view returns (tuple(uint256 id, address referrer, address l2, address l3, uint256 joinedAt, uint256 withdrawable, uint256 totalEarned, uint256 cyclesCompleted, bool isInMatrix, bool hasEverJoined))',
+  'function getMember(address) external view returns (tuple(uint256 id, address referrer, uint256 joinedAt, uint256 withdrawable, uint256 totalEarned, uint256 cyclesCompleted, bool isInMatrix, bool hasEverJoined))',
   'function occupancy() external view returns (uint256)',
   'function MATRIX_SIZE() external view returns (uint256)',
   'function ENTRY_FEE() external view returns (uint256)',
@@ -1549,8 +1552,6 @@ const CNOVA_ABI = [
 
 const SF_ABI = [
   'function totalBalance() external view returns (uint256)',
-  'function floorPrice() external view returns (uint256)',
-  'function redeemCNOVA(uint256 cnovaAmount) external',
 ];
 
 const USDC_ABI = [
@@ -1562,6 +1563,9 @@ const USDC_ABI = [
 
 const TREASURY_ABI = [
   'function usdcReserve() external view returns (uint256)',
+  'function floorPrice() external view returns (uint256)',
+  'function usdcValueAtFloor(uint256 cnovaAmount) external view returns (uint256)',
+  'function redeemAtFloor(uint256 cnovaAmount) external',
 ];
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -2199,9 +2203,8 @@ async function loadDashboardData() {
           activeBFS = await mc.matrixPos(userAddr).catch(()=>0n); // BFS pos is separate mapping
           activeCycles = BigInt(member.cyclesCompleted);
         }
-        if (m.label.startsWith('T3')) highestTier = Math.max(highestTier, 3);
-        else if (m.label.startsWith('T2')) highestTier = Math.max(highestTier, 2);
-        else highestTier = Math.max(highestTier, 1);
+        const tNum = parseInt(m.label.match(/^T(\d+)/)?.[1] || '1');
+        highestTier = Math.max(highestTier, tNum);
       }
     }
 
@@ -2216,7 +2219,7 @@ async function loadDashboardData() {
     // cnovabal=18dec, sfBal=6dec, cnovaSupply=18dec → result is 6dec USDC
     const cnovaValRaw = cnovaSupply > 0n ? (cnovabal * sfBal) / cnovaSupply : 0n;
 
-    const TIER_NAMES = ['—','Nova Seed','Nova Rise','Nova Star','Nova Prime','SuperNova Genesis','SuperNova Elite','SuperNova Spark'];
+    const TIER_NAMES = ['—','Nova Seed','Nova Rise','Nova Star','Nova Core','Nova Prime','Nova Apex','Nova Pinnacle','SuperNova Titan','SuperNova Legend','SuperNova Apex'];
 
     // Render
     setText('dash-withdrawable',   fmt6(totalW));
@@ -2411,7 +2414,7 @@ async function doWithdraw() {
 function setActiveMatrixBtn(id) {
   ['btn-load-tree','btn-my-position','btn-my-directs'].forEach(bid => {
     const b = document.getElementById(bid);
-    if (b) b.classList.toggle('active', bid === id);
+    if (b) b.classList.toggle('matrix-active', bid === id);
   });
 }
 
@@ -2690,11 +2693,11 @@ async function loadRedeemData() {
   if (!userAddr) return;
   const rp = readProvider || new ethers.JsonRpcProvider(RPC_URL);
   try {
-    const cnova = new ethers.Contract(ADDRS.cnova, CNOVA_ABI, rp);
-    const sf    = new ethers.Contract(ADDRS.stabilityFund, SF_ABI, rp);
+    const cnova    = new ethers.Contract(ADDRS.cnova,    CNOVA_ABI,    rp);
+    const treasury = new ethers.Contract(ADDRS.treasury, TREASURY_ABI, rp);
     const [bal, floorRaw, vestDur, penaltyBps] = await Promise.all([
       cnova.balanceOf(userAddr).catch(()=>0n),
-      sf.floorPrice().catch(()=>0n),         // returns sfBal*1e18/supply — 6-dec result
+      treasury.floorPrice().catch(()=>0n),   // (usdcReserve * 1e18) / cnovaSupply — 6-dec result
       cnova.vestDuration().catch(()=>BigInt(180*86400)),
       cnova.maxPenaltyBps().catch(()=>5000n),
     ]);
@@ -2777,10 +2780,10 @@ async function approveCNOVAForRedeem() {
   if (!amt || amt <= 0) { toast('Enter CNOVA amount first','error'); return; }
   btn.disabled = true; btn.innerHTML = '<span class="spinner"></span>Approving…';
   try {
-    const sfAddr = ADDRS.stabilityFund;
+    const treasuryAddr = ADDRS.treasury;
     const cnovaW = new ethers.Contract(ADDRS.cnova, CNOVA_ABI, signer);
     const amtWei = BigInt(Math.floor(amt * 1e18));
-    const tx = await cnovaW.approve(sfAddr, amtWei);
+    const tx = await cnovaW.approve(treasuryAddr, amtWei);
     setStatus('redeem-status','⏳ Approving CNOVA…','info');
     await tx.wait();
     setStatus('redeem-status','✅ Approved! Click Redeem.','ok');
@@ -2801,9 +2804,9 @@ async function doRedeemAtFloor() {
   if (!amt || amt <= 0) { toast('Enter CNOVA amount','error'); return; }
   btn.disabled = true; btn.innerHTML = '<span class="spinner"></span>Redeeming…';
   try {
-    const sf  = new ethers.Contract(ADDRS.stabilityFund, SF_ABI, signer);
+    const treasury = new ethers.Contract(ADDRS.treasury, TREASURY_ABI, signer);
     const amtWei = BigInt(Math.floor(amt * 1e18));
-    const tx = await sf.redeemCNOVA(amtWei);
+    const tx = await treasury.redeemAtFloor(amtWei);
     setStatus('redeem-status','⏳ Confirming redemption…','info');
     await tx.wait();
     setStatus('redeem-status','✅ Redeemed! USDC sent to your wallet.','ok');
@@ -2932,178 +2935,4 @@ function copyReferralLink() {
   navigator.clipboard.writeText(inp.value).then(() => {
     const btn = document.getElementById('copy-ref-btn');
     if (btn) { btn.textContent = 'Copied!'; setTimeout(()=>{ btn.textContent='Copy'; }, 2000); }
-  }).catch(() => {
-    inp.select(); document.execCommand('copy');
-  });
-}
-
-// ═══════════════════════════════════════════════════════════════════════
-// BOOT
-// ═══════════════════════════════════════════════════════════════════════
-document.addEventListener('DOMContentLoaded', async () => {
-  loadHomeStats();
-
-  // ── Launch gate ──────────────────────────────────────────────────────
-  if (!LAUNCH_READY) {
-    document.getElementById('launch-gate').classList.add('visible');
-    document.querySelectorAll('nav button').forEach(b => {
-      if (b.textContent.trim().startsWith('Register') || b.textContent.includes('Register')) {
-        b.style.opacity = '0.4';
-        b.style.pointerEvents = 'none';
-        b.title = 'Registration opens soon';
-      }
-    });
-  }
-
-  // Auto-reconnect on page load (silent — no popup)
-  if (window.ethereum && localStorage.getItem('cnova_connected')) {
-    try {
-      const accounts = await window.ethereum.request({ method: 'eth_accounts' });
-      if (accounts && accounts.length > 0) await connectWallet(true);
-      else localStorage.removeItem('cnova_connected');
-    } catch(e) {}
-  }
-
-  // Auto-fill referrer from URL ?ref=0x...
-  const urlRef = new URLSearchParams(window.location.search).get('ref');
-  if (urlRef && ethers.isAddress(urlRef)) {
-    const inp = document.getElementById('input-referrer');
-    if (inp) inp.value = urlRef;
-  }
-
-  // Wallet event listeners
-  if (window.ethereum) {
-    window.ethereum.on('accountsChanged', async (accounts) => {
-      if (accounts.length === 0) {
-        userAddr = null; signer = null;
-        localStorage.removeItem('cnova_connected');
-        const btn = document.getElementById('connect-btn');
-        if (btn) { btn.textContent = 'Connect Wallet'; btn.classList.remove('connected'); }
-        document.getElementById('referral-link-card').style.display = 'none';
-        document.getElementById('upgrade-card').style.display = 'none';
-      } else {
-        await connectWallet(true);
-      }
-    });
-    window.ethereum.on('chainChanged', () => window.location.reload());
-  }
-});
-
-async function approveUSDCForUpgrade() {
-  if (!signer) { toast('Connect your wallet first.', 'error'); return; }
-  // Support both register-tab (btn-upgrade-approve) and dashboard (btn-dash-approve) contexts
-  const btnReg  = document.getElementById('btn-upgrade-approve');
-  const btnDash = document.getElementById('btn-dash-approve');
-  const stReg   = document.getElementById('upgrade-status');
-  const stDash  = document.getElementById('upgrade-status-dash');
-  const setStatus = function(msg) {
-    if (stReg)  stReg.textContent  = msg;
-    if (stDash) stDash.textContent = msg;
-  };
-  const fee = window._upgradeCardFee || window._dashUpgradeFee || 25_000_000n;
-  try {
-    if (btnReg)  btnReg.disabled  = true;
-    if (btnDash) btnDash.disabled = true;
-    setStatus('Approving USDC...');
-    const usdc = new ethers.Contract(ADDRS.usdc, USDC_ABI, signer);
-    const tx   = await usdc.approve(ADDRS.tierRouter, fee);
-    setStatus('Waiting for confirmation...');
-    await tx.wait();
-    setStatus('✅ USDC approved. Now click Step 2 to upgrade.');
-    const btnManual = document.getElementById('btn-manual-upgrade');
-    const btnUp     = document.getElementById('btn-upgrade');
-    if (btnManual) { btnManual.disabled = false; btnManual.classList.remove('btn-ghost'); btnManual.classList.add('btn-green'); }
-    if (btnUp)     { btnUp.disabled     = false; btnUp.classList.remove('btn-ghost'); btnUp.classList.add('btn-green'); }
-  } catch(e) {
-    setStatus('❌ ' + (e.reason || e.message));
-    if (btnReg)  btnReg.disabled  = false;
-    if (btnDash) btnDash.disabled = false;
-  }
-}
-
-async function doManualUpgrade() {
-  if (!signer) { alert('Connect your wallet first.'); return; }
-  const btn    = document.getElementById('btn-manual-upgrade');
-  const status = document.getElementById('upgrade-status-dash');
-  const idx    = window._dashUpgradeTierIndex ?? 1;
-  try {
-    btn.disabled = true;
-    status.textContent = 'Submitting upgrade transaction...';
-    const tr = new ethers.Contract(ADDRS.tierRouter, TIER_ROUTER_ABI, signer);
-    const tx = await tr.manualUpgrade(idx, { gasLimit: 3_000_000 });
-    status.textContent = 'Transaction submitted. Waiting for confirmation...';
-    await tx.wait();
-    status.textContent = '🎉 Tier upgrade confirmed! Refreshing dashboard...';
-    setTimeout(() => loadDashboardData(), 2000);
-  } catch(e) {
-    status.textContent = '❌ ' + (e.reason || e.message);
-    btn.disabled = false;
-  }
-}
-function onUpgradeTierChange() {
-  const sel  = document.getElementById('upgrade-tier-select');
-  const hint = document.getElementById('upgrade-tier-hint');
-  if (!sel || !sel.value) { if (hint) hint.textContent = ''; return; }
-  const fees = { '1': 25_000_000n, '2': 50_000_000n, '3': 100_000_000n };
-  const fee  = fees[sel.value] || 25_000_000n;
-  window._upgradeCardFee     = fee;
-  window._upgradeCardTierIdx = Number(sel.value);
-  if (hint) hint.textContent = 'Entry fee: $' + (Number(fee) / 1_000_000) + ' USDC from your wallet';
-}
-
-async function checkUpgradeAllowance() {
-  if (!userAddr) { toast('Connect wallet first', 'error'); return; }
-  const rp   = readProvider || new ethers.JsonRpcProvider(RPC_URL);
-  const usdc = new ethers.Contract(ADDRS.usdc, USDC_ABI, rp);
-  const fee  = window._upgradeCardFee || 25_000_000n;
-  const al   = await usdc.allowance(userAddr, ADDRS.tierRouter).catch(() => 0n);
-  const btn  = document.getElementById('btn-upgrade');
-  if (btn) btn.disabled = al < fee;
-  toast(al >= fee ? '✅ Allowance confirmed — ready to upgrade' : '⏳ Not yet approved', al >= fee ? 'success' : 'info');
-}
-
-async function doUpgrade() {
-  if (!signer) { toast('Connect wallet first', 'error'); return; }
-  const btn    = document.getElementById('btn-upgrade');
-  const status = document.getElementById('upgrade-status');
-  const idx    = window._upgradeCardTierIdx ?? 1;
-  try {
-    if (btn) btn.disabled = true;
-    if (status) status.textContent = 'Submitting upgrade transaction...';
-    const tr = new ethers.Contract(ADDRS.tierRouter, TIER_ROUTER_ABI, signer);
-    const tx = await tr.manualUpgrade(idx, { gasLimit: 3_000_000 });
-    if (status) status.textContent = 'Waiting for confirmation...';
-    await tx.wait();
-    if (status) status.innerHTML = '<span style="color:var(--green)">🎉 Upgraded to T' + (idx + 1) + '! Check your Dashboard.</span>';
-    toast('Tier upgraded successfully!', 'success');
-    setTimeout(() => loadDashboardData(), 2000);
-  } catch(e) {
-    if (status) status.textContent = '❌ ' + (e.reason || e.message);
-    if (btn) btn.disabled = false;
-  }
-}
-
-
-// ── v8.6 helper: updateAddrsFromDeployed ─────────────────────────────────────
-// Paste deployed_addresses_v8_6.json content into window._v86Addrs then call this.
-// Example: fetch('deployed_addresses_v8_6.json').then(r=>r.json()).then(updateAddrsFromDeployed)
-function updateAddrsFromDeployed(d) {
-  if (!d) return;
-  if (d.usdc)          ADDRS.usdc          = d.usdc;
-  if (d.cnova)         ADDRS.cnova         = d.cnova;
-  if (d.stabilityFund) ADDRS.stabilityFund = d.stabilityFund;
-  if (d.tierRouter)    ADDRS.tierRouter    = d.tierRouter;
-  if (d.matrixKeeper)  ADDRS.matrixKeeper  = d.matrixKeeper;
-  const t = d.tiers || {};
-  for (let i = 1; i <= 7; i++) {
-    const tier = t[String(i)] || t[i];
-    if (tier) {
-      const key = 'T' + i;
-      ADDRS[key] = { pm: tier.pairManager || tier.pm || '', matA: tier.matA || '', matB: tier.matB || '' };
-    }
-  }
-  console.log('[v8.6] ADDRS updated from deployed JSON');
-}
-</script>
-</body>
-</html>
+  }).cat
