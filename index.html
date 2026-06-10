@@ -2470,6 +2470,7 @@ async function doWithdraw() {
       }
     }
     setStatus('withdraw-status', withdrawn ? '✅ Earnings withdrawn!' : 'Nothing to withdraw.', withdrawn ? 'ok' : 'info');
+    if (withdrawn) await new Promise(r => setTimeout(r, 3500)); // let Base Sepolia RPC nodes index the withdrawal
     await loadDashboardData();
   } catch(e) {
     setStatus('withdraw-status', '❌ ' + friendlyError(e), 'err');
@@ -2881,6 +2882,7 @@ async function doRedeemAtFloor() {
     await tx.wait();
     setStatus('redeem-status','✅ Redeemed! USDC sent to your wallet.','ok');
     toast('CNOVA redeemed successfully!','success');
+    await new Promise(r => setTimeout(r, 3500)); // let Base Sepolia RPC nodes index the burn
     await loadRedeemData();
     await loadDashboardData();
   } catch(e) {
