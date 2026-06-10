@@ -34,13 +34,13 @@ require("dotenv").config();
 //   v8_2 = size-64 pre-mainnet  ← default
 const ADDRESSES_FILE = path.join(
   __dirname,
-  process.env.ADDRESSES_FILE || "deployed_addresses_v8_6.json"
+  process.env.ADDRESSES_FILE || "deployed_addresses_v8_7.json"
 );
 
 // COUNT: for 127-seat matrices, 260 fills MatA + MatB (W1 seeds pos-1, 126 fill
 // wallets complete MatA, 126 more fill MatB triggering T2 upgrade) + buffer.
 // also trigger a second MatA cycle and confirm W1 auto-upgrades to T2.
-const COUNT       = Number(process.env.COUNT       || 260);
+const COUNT       = Number(process.env.COUNT       || 50);
 const BATCH_SIZE  = Number(process.env.BATCH_SIZE  || 5);
 const BATCH_DELAY = Number(process.env.BATCH_DELAY || 8);
 const HDR_OFFSET  = Number(process.env.HDR_OFFSET  || 500); // BIP-44 index offset (change to avoid globalJoined collisions)
@@ -57,9 +57,18 @@ function sep(label = "") {
   else       console.log(`  ${dashes}`);
 }
 
-// Generate COUNT deterministic wallets from a fixed mnemonic
+// Generate COUNT deterministic wallets from a private mnemonic.
+// IMPORTANT: Do NOT use the public "test junk" mnemonic on Base Sepolia —
+// EIP-7702 drainer contracts have been set on those well-known addresses.
+// Set FILL_MNEMONIC in .env to a private mnemonic only this project knows.
 function makeWallets(count) {
-  const mnemo = "test test test test test test test test test test test junk";
+  const mnemo = process.env.FILL_MNEMONIC;
+  if (!mnemo) {
+    console.error("\n  ❌  FILL_MNEMONIC not set in .env.");
+    console.error("     Generate one: node -e \"const {ethers}=require('ethers');console.log(ethers.Wallet.createRandom().mnemonic.phrase)\"");
+    console.error("     Then add FILL_MNEMONIC=<phrase> to .env");
+    process.exit(1);
+  }
   const wallets = [];
   for (let i = 0; i < count; i++) {
     const path = `m/44'/60'/0'/0/${i + HDR_OFFSET}`; // configurable offset — change HDR_OFFSET env var to get fresh addresses
@@ -168,9 +177,26 @@ async function main() {
   }
 
   const addrs = JSON.parse(fs.readFileSync(ADDRESSES_FILE, "utf8"));
-  const [rawSigner]  = await ethers.getSigners();
-  const deployer     = new NonceManager(rawSigner); // avoids nonce collisions in parallel batch sends
-  const deployerAddr = rawSigner.address;           // NonceManager doesn't expose .address
+  const signers      = await ethers.getSigners();
+  const rawSigner    = signers[0];
+  // FILL_FUNDER: a fresh wallet (low nonce, no throttle) used for ETH sends only.
+  // The main deployer is throttled to 1 in-flight TX at a time on Base Sepolia after
+  // accumulating a high nonce count.  Keep deployer for USDC mints (owner-only), use
+  // funder for ETH transfers which have no special access requirements.
+  const rawFunder    = signers[1] || rawSigner;  // falls back to deployer if no funder key set
+  const deployer     = new NonceManager(rawSigner); // forceCross approve + rare owner calls only
+  // DO NOT use NonceManager for the funder — it accumulates internal nonce drift on any TX
+  // failure, causing "replacement transaction underpriced" cascades for all subsequent sends.
+  // Instead we track fNonce explicitly (re-synced from chain after every error).
+  const deployerAddr = rawSigner.address;
+  const funderAddr   = rawFunder.address;
+  if (funderAddr === deployerAddr) {
+    console.log(`  ⚠  FILL_FUNDER_KEY not set — using deployer for ETH sends (may hit in-flight limit)`);
+  } else {
+    console.log(`  Funder:     ${funderAddr}  (ETH + USDC sends — fresh wallet)`);
+    // Do NOT auto-topup here — that would burn the deployer's 1 allowed TX slot.
+    // Run fund_funder.js once before bigfill to pre-load funder with ETH + bulk USDC.
+  }
 
   // ── Load contracts ──────────────────────────────────────────────────────────
   // V8.1 address file uses lowercase keys and tiers nested object
@@ -183,6 +209,13 @@ async function main() {
   const T2          = addrs.tiers?.T2   || { matA: addrs.T2?.MatrixA,  matB: addrs.T2?.MatrixB,  pm: addrs.T2?.PairManager };
 
   const usdc         = await ethers.getContractAt("MockUSDC",            USDC_ADDR, deployer);
+  // usdcFunder: same contract, but signed by the fresh funder wallet.
+  // Used for ERC-20 transfer() calls (not mint) — avoids burning deployer's throttled TX slot.
+  const usdcFunder   = await ethers.getContractAt("MockUSDC",            USDC_ADDR, rawFunder);
+
+  // Initialize fNonce from the pending nonce so we pick up after any prior partial run.
+  // Initialized here (before W1 seed block) so all funder TXs use explicit nonce tracking.
+  let fNonce = Number(await ethers.provider.getTransactionCount(funderAddr, "pending"));
   const cnova        = await ethers.getContractAt("CNOVAToken",          CNOVA_ADDR);
   const treasury     = await ethers.getContractAt("CNOVATreasury",       TREAS_ADDR);
   const tierRouter   = await ethers.getContractAt("TierRouter",          TR_ADDR);
@@ -248,14 +281,17 @@ async function main() {
         // Fund W1 with ETH if needed
         const w1Eth = await ethers.provider.getBalance(W1_ADDR);
         if (w1Eth < ETH_PER / 2n) {
-          console.log(`  Sending ETH to W1…`);
-          await (await deployer.sendTransaction({ to: W1_ADDR, value: ETH_PER })).wait();
+          console.log(`  Sending ETH to W1 from funder (nonce ${fNonce})…`);
+          await (await rawFunder.sendTransaction({ to: W1_ADDR, value: ETH_PER, nonce: fNonce })).wait();
+          fNonce++;
         }
-        // Fund W1 with USDC if needed
+        // Fund W1 with USDC if needed — use funder.transfer() (not mint) to avoid
+        // burning the deployer's rate-limited TX slot.
         const w1Usdc = await usdc.balanceOf(W1_ADDR);
         if (w1Usdc < T1_FEE) {
-          console.log(`  Minting USDC for W1…`);
-          await (await usdc.mint(W1_ADDR, T1_FEE)).wait();
+          console.log(`  Transferring USDC for W1 from funder (nonce ${fNonce})…`);
+          await (await usdcFunder.transfer(W1_ADDR, T1_FEE, { nonce: fNonce })).wait();
+          fNonce++;
         }
         // Approve + register
         const allowance = await usdc.allowance(W1_ADDR, T1.pm);
@@ -295,17 +331,30 @@ async function main() {
   }
   console.log(`  Wallets needing funding: ${walletsToFund.length} / ${wallets.length} (${wallets.length - walletsToFund.length} already funded)`);
 
-  // Pre-flight: verify deployer has enough ETH to fund unfunded wallets
-  const deployerBal = await ethers.provider.getBalance(deployerAddr);
-  const ethNeeded   = ETH_PER * BigInt(walletsToFund.length);
-  console.log(`  Deployer ETH:   ${ethers.formatEther(deployerBal)}`);
-  console.log(`  ETH needed:     ${ethers.formatEther(ethNeeded)}  (${walletsToFund.length} × ${ethers.formatEther(ETH_PER)})`);
-  if (deployerBal < ethNeeded) {
-    console.error(`  ❌  Deployer has insufficient ETH. Get more from the Base Sepolia faucet.`);
-    console.error(`      https://www.alchemy.com/faucets/base-sepolia`);
+  // Pre-flight: verify funder has enough ETH AND USDC to cover all unfunded wallets.
+  // Run scripts/fund_funder.js first if either balance is too low.
+  const funderBal2   = await ethers.provider.getBalance(funderAddr);
+  const funderUsdc2  = await usdc.balanceOf(funderAddr);
+  const ethNeeded    = ETH_PER * BigInt(walletsToFund.length);
+  const usdcNeeded2  = T1_FEE  * BigInt(walletsToFund.length);
+  console.log(`  Deployer ETH:   ${ethers.formatEther(await ethers.provider.getBalance(deployerAddr))}`);
+  console.log(`  Funder ETH:     ${ethers.formatEther(funderBal2)}  (need ${ethers.formatEther(ethNeeded)})`);
+  console.log(`  Funder USDC:    ${fmt6(funderUsdc2)}  (need ${fmt6(usdcNeeded2)})`);
+  if (funderBal2 < ethNeeded) {
+    console.error(`  ❌  Funder has insufficient ETH (${ethers.formatEther(funderBal2)} < ${ethers.formatEther(ethNeeded)}).`);
+    console.error(`      Run: npx hardhat run scripts/fund_funder.js --network baseSepolia`);
     process.exit(1);
   }
-  console.log(`  ✓ Deployer has enough ETH`);
+  if (funderUsdc2 < usdcNeeded2) {
+    console.error(`  ❌  Funder has insufficient USDC (${fmt6(funderUsdc2)} < ${fmt6(usdcNeeded2)}).`);
+    console.error(`      Run: npx hardhat run scripts/fund_funder.js --network baseSepolia`);
+    process.exit(1);
+  }
+  console.log(`  ✓ Funder has enough ETH + USDC`);
+
+  // Re-sync fNonce before the funding loop in case the W1 seed block incremented it.
+  fNonce = Number(await ethers.provider.getTransactionCount(funderAddr, "pending"));
+  console.log(`  Funder nonce:   ${fNonce} (pending)`);
 
   const fundingFailed = []; // addresses where ETH send failed (e.g. contract addresses)
   for (let i = 0; i < walletsToFund.length; i += SLICE) {
@@ -316,20 +365,27 @@ async function main() {
     // rawSigner re-fetches pending nonce independently and corrupts NonceManager's
     // cached delta, causing "nonce too low" on the very next NonceManager call.
     for (const w of slice) {
-      // ETH send
+      // ETH send — explicit nonce, no NonceManager drift possible.
       try {
-        const tx = await deployer.sendTransaction({ to: w.address, value: ETH_PER });
+        const tx = await rawFunder.sendTransaction({ to: w.address, value: ETH_PER, nonce: fNonce });
         await tx.wait();
+        fNonce++; // only increment after confirmed
       } catch (e) {
         console.warn(`  ⚠  ETH send to ${w.address.slice(0,10)} failed: ${e.shortMessage || e.message.slice(0,80)}`);
         fundingFailed.push(w.address);
+        // Re-sync nonce from chain so next wallet uses correct nonce (don't guess)
+        fNonce = Number(await ethers.provider.getTransactionCount(funderAddr, "pending"));
       }
-      // USDC mint (sequential — same NonceManager keeps delta correct)
+      // USDC transfer — explicit nonce override on the contract call.
+      // funder holds a pre-minted bulk balance from fund_funder.js (2M USDC).
       try {
-        const tx = await usdc.mint(w.address, T1_FEE);
+        const tx = await usdcFunder.transfer(w.address, T1_FEE, { nonce: fNonce });
         await tx.wait();
+        fNonce++; // only increment after confirmed
       } catch (e) {
-        console.warn(`  ⚠  USDC mint to ${w.address.slice(0,10)} failed: ${e.shortMessage || e.message.slice(0,80)}`);
+        console.warn(`  ⚠  USDC transfer to ${w.address.slice(0,10)} failed: ${e.shortMessage || e.message.slice(0,80)}`);
+        // Re-sync nonce from chain
+        fNonce = Number(await ethers.provider.getTransactionCount(funderAddr, "pending"));
       }
     }
 
@@ -345,19 +401,37 @@ async function main() {
   await sleep(90);
 
   // Post-sleep verification: check all funded wallets actually have ETH
+  // BUG FIX: retry must re-verify balance — tx.wait() returning ≠ ETH actually landed
   let fundingOk = 0, fundingFail = 0;
+  const insufficientEth = new Set(); // wallets that still lack ETH after retry
   for (const w of walletsToFund) {
     const bal = await ethers.provider.getBalance(w.address);
     if (bal < ETH_PER / 2n) {
       console.warn(`  ⚠  ${w.address.slice(0,10)} only has ${ethers.formatEther(bal)} ETH after funding — retrying`);
-      // One retry: sequential send
-      try {
-        const tx = await deployer.sendTransaction({ to: w.address, value: ETH_PER });
-        await tx.wait();
-        await sleep(8);
-        fundingOk++;
-      } catch(e) {
-        console.warn(`     retry failed: ${e.message.slice(0,80)}`);
+      // One retry: sequential send — wait longer then VERIFY balance actually updated
+      let retried = false;
+      for (let attempt = 0; attempt < 3; attempt++) {
+        try {
+          // Use funder (not deployer) — deployer is rate-limited on Base Sepolia
+          const tx = await rawFunder.sendTransaction({ to: w.address, value: ETH_PER, nonce: fNonce });
+          await tx.wait();
+          fNonce++;
+          await sleep(20); // give RPC extra time to reflect
+          const newBal = await ethers.provider.getBalance(w.address);
+          if (newBal >= ETH_PER / 2n) {
+            fundingOk++;
+            retried = true;
+            break;
+          }
+          console.warn(`     attempt ${attempt+1}: still ${ethers.formatEther(newBal)} ETH — retrying`);
+        } catch(e) {
+          console.warn(`     attempt ${attempt+1} failed: ${e.message.slice(0,80)}`);
+          fNonce = Number(await ethers.provider.getTransactionCount(funderAddr, "pending"));
+        }
+      }
+      if (!retried) {
+        console.warn(`     ❌ ${w.address.slice(0,10)} could not be funded after 3 attempts — will skip registration`);
+        insufficientEth.add(w.address);
         fundingFail++;
       }
     } else {
@@ -396,6 +470,11 @@ async function main() {
         const alreadyJoined = await tierRouter.globalJoined(wallet.address);
         if (alreadyJoined) {
           throw new Error(`wallet ${wallet.address.slice(0,10)} already registered — skip`);
+        }
+
+        // Skip wallets that failed funding after all retries
+        if (insufficientEth.has(wallet.address)) {
+          throw new Error(`wallet ${wallet.address.slice(0,10)} had insufficient ETH after all funding attempts — skipped`);
         }
 
         // Skip wallets with insufficient ETH for gas.
@@ -501,16 +580,23 @@ async function main() {
     // When HDR_OFFSET != 500 (e.g. 1000), new registrations cycle out wallets
     // from the ORIGINAL offset-500 batch — those parked wallets won't appear
     // in the current `wallets` array unless we explicitly scan the old range too.
-    const MNEMO_SCAN = "test test test test test test test test test test test junk";
+    // IMPORTANT: use FILL_MNEMONIC — the public "test junk" mnemonic wallets
+    // are EIP-7702 drained on Base Sepolia and cannot hold ETH/USDC.
+    const MNEMO_SCAN = process.env.FILL_MNEMONIC;
+    if (!MNEMO_SCAN) {
+      console.warn("  ⚠  FILL_MNEMONIC not set — forceCross scan will only cover current batch");
+    }
     const scanSet = new Map(); // address → wallet (dedup)
     // Scan all historically used offset ranges so parked wallets from prior runs
     // are picked up even if their HDR_OFFSET differs from the current batch.
-    // Add new offsets here as runs accumulate (e.g. 2500, 3000 after more fills).
-    const SCAN_OFFSETS = [500, 1000, 1500, 1700, 1800, 2000, 2500]; // 1800 added June 8 (v8_4 run 2)
-    for (const base of SCAN_OFFSETS) {
-      for (let i = 0; i < 70; i++) {
-        const w = ethers.HDNodeWallet.fromPhrase(MNEMO_SCAN, undefined, `m/44'/60'/0'/0/${base + i}`);
-        scanSet.set(w.address, w);
+    // Keep this list up to date as new HDR_OFFSETs are used.
+    const SCAN_OFFSETS = [500, 1000, 1500, 1700, 1800, 2000, 2500, 3000]; // 3000 added June 9 (v8_6 fill)
+    if (MNEMO_SCAN) {
+      for (const base of SCAN_OFFSETS) {
+        for (let i = 0; i < 70; i++) {
+          const w = ethers.HDNodeWallet.fromPhrase(MNEMO_SCAN, undefined, `m/44'/60'/0'/0/${base + i}`);
+          scanSet.set(w.address, w);
+        }
       }
     }
     // Also scan the current batch in case HDR_OFFSET isn't in the static list above
@@ -544,39 +630,39 @@ async function main() {
     if (toCross.length === 0) {
       console.log("  Nothing to forceCross — MatB already handled");
     } else {
-      // Mint USDC to deployer for each forceCross if needed
-      const usdcNeeded   = T1_FEE * BigInt(toCross.length);
-      const deployerUsdc = await usdc.balanceOf(deployerAddr);
-      if (deployerUsdc < usdcNeeded) {
-        const toMint = usdcNeeded - deployerUsdc;
-        console.log(`  Minting ${fmt6(toMint)} USDC to deployer for forceCross…`);
-        await (await usdc.mint(deployerAddr, toMint)).wait();
+      // forceCross is onlyOwner — must be called from deployer (owner).
+      // Strategy: transfer USDC funder→deployer, deployer approves matA1, deployer calls forceCross.
+      const usdcNeededFC  = T1_FEE * BigInt(toCross.length);
+      const funderUsdcBal = await usdc.balanceOf(funderAddr);
+      if (funderUsdcBal < usdcNeededFC) {
+        console.error(`  ❌  Funder has insufficient USDC for forceCross (${fmt6(funderUsdcBal)} < ${fmt6(usdcNeededFC)}).`);
+        console.error(`      Run: npx hardhat run scripts/fund_funder.js --network baseSepolia`);
+        process.exit(1);
       }
 
-      // Reset NonceManager before approve — after 40+ registration batches the cached
-      // nonce delta can lag behind the chain state, causing "nonce too low" on the approve.
-      // reset() forces a fresh eth_getTransactionCount on the next send.
-      deployer.reset();
-      await sleep(2);
+      // 1. Move USDC funder → deployer so deployer can fund the crossings
+      const matA1Addr = await matA1.getAddress();
+      console.log(`  Transferring ${fmt6(usdcNeededFC)} USDC: funder → deployer for forceCross (nonce ${fNonce})…`);
+      await (await usdcFunder.transfer(deployerAddr, usdcNeededFC, { nonce: fNonce })).wait();
+      fNonce++;
 
-      // Single bulk approve — avoids per-iteration approve+forceCross double-tx nonce collision
-      await (await usdc.approve(await matA1.getAddress(), usdcNeeded)).wait();
+      // 2. Deployer approves matA1 (NonceManager handles deployer nonce — no explicit nonce)
+      console.log(`  Deployer approving matA1 for ${fmt6(usdcNeededFC)} USDC…`);
+      await (await usdc.approve(matA1Addr, usdcNeededFC)).wait();
+
+      // 3. Connect matA1 to deployer (owner) — forceCross is onlyOwner
+      const matA1Deployer = matA1.connect(deployer);
 
       let crossed = 0;
       for (const addr of toCross) {
         const occNow = await matB1.occupancy();
         console.log(`  forceCross ${addr.slice(0,10)}… (MatB ${occNow}/${matBSize})`);
         try {
-          await (await matA1.forceCross(addr, { gasLimit: 12_000_000 })).wait();
+          await (await matA1Deployer.forceCross(addr, { gasLimit: 12_000_000 })).wait();
           crossed++;
         } catch (e) {
           console.warn(`    ⚠ forceCross failed for ${addr.slice(0,10)}: ${e.message.slice(0,100)}`);
-          // Nonce too low means the NonceManager cached a stale nonce — reset it so
-          // the next call fetches the current on-chain nonce fresh from the RPC.
-          if (e.message.includes("nonce too low") || e.message.includes("nonce has already been used")) {
-            deployer.reset();
-            await sleep(3);
-          }
+          await sleep(3);
         }
       }
 
@@ -611,7 +697,7 @@ async function main() {
     const matA2occ = await matA2.occupancy();
     const t2fee    = await matA2.ENTRY_FEE();
     console.log(`      Check T2 MatA occupancy above to see if OTHER roots upgraded.`);
-    console.log(`      T2 entry fee: $${Number(t2fee)/1e6}  |  T2 MatA occ: ${matA2occ}/64`);
+    console.log(`      T2 entry fee: $${Number(t2fee)/1e6}  |  T2 MatA occ: ${matA2occ}/${mSize}`);
   }
 
   console.log("");
@@ -630,5 +716,4 @@ async function main() {
 
 main().catch(err => {
   console.error(err);
-  process.exitCode = 1;
-});
+ 
