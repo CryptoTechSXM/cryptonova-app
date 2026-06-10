@@ -527,9 +527,9 @@
       <div class="token-card-left">
         <div class="token-icon">CN</div>
         <div>
-          <div class="token-name" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><svg width="28" height="28" style="border-radius:50%;flex-shrink:0"><use href="#cnova-icon"/></svg><a href="https://sepolia.basescan.org/token/0xe192D3ae2E881709749884de0cFa1d53e2237F6f" target="_blank" rel="noopener" style="color:inherit;text-decoration:none;font-weight:700">CNOVA Token ↗</a> <span class="pill pill-green" style="font-size:10px;vertical-align:middle">ERC-20 · Base</span></div>
+          <div class="token-name" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><svg width="28" height="28" style="border-radius:50%;flex-shrink:0"><use href="#cnova-icon"/></svg><a href="https://sepolia.basescan.org/token/0xe192D3ae2E881709749884de0cFa1d53e2237F6f" target="_blank" rel="noopener" style="color:inherit;text-decoration:none;font-weight:700">CryptoNOVA Matrix ↗</a> <span class="pill pill-green" style="font-size:10px;vertical-align:middle">CNOVA · ERC-20 · Base</span></div>
           <div class="token-addr"><a href="https://sepolia.basescan.org/token/0xe192D3ae2E881709749884de0cFa1d53e2237F6f" target="_blank" rel="noopener" style="color:var(--green);text-decoration:none;font-family:monospace">0xe192D3ae2E881709749884de0cFa1d53e2237F6f</a> · 18 decimals</div>
-          <div style="font-size:12px;color:var(--text2);margin-top:4px">Earned on every registration. 50 CNOVA minted per T1 join — vested over time.</div>
+          <div style="font-size:12px;color:var(--text2);margin-top:4px">Earned on every registration. 50 CNOVA minted per T1 join. Add to your wallet to track your balance during testing.</div>
         </div>
       </div>
       <button class="btn-metamask" onclick="addCNOVAtoMetaMask()">
@@ -541,9 +541,9 @@
       <div class="token-card-left">
         <div class="token-icon" style="background:linear-gradient(135deg,#2775ca,#5b8dee)">$</div>
         <div>
-          <div class="token-name">USD Coin <span class="pill" style="font-size:10px;vertical-align:middle;background:rgba(59,130,246,.15);color:#5b8dee;border:1px solid rgba(59,130,246,.3)">USDC · Base</span></div>
+          <div class="token-name">Mock USDC <span class="pill" style="font-size:10px;vertical-align:middle;background:rgba(59,130,246,.15);color:#5b8dee;border:1px solid rgba(59,130,246,.3)">USDC · Base Sepolia</span></div>
           <div class="token-addr">0x2D8B7b5eDec96bE441b6fb0D45D74a2BcE2C639a · 6 decimals</div>
-          <div style="font-size:12px;color:var(--text2);margin-top:4px">Required to join. $10 USDC to enter T1, $25 for T2. Test USDC available on request.</div>
+          <div style="font-size:12px;color:var(--text2);margin-top:4px">Testnet Mock USDC — required to enter. Add to your wallet to see your test balance. $10 for T1, $25 for T2. Request test funds via Telegram.</div>
         </div>
       </div>
       <button class="btn-metamask" style="background:#2775ca" onclick="addUSDCtoMetaMask()">
@@ -737,7 +737,7 @@
         <div class="info-row"><span class="info-key">Seats Filled</span><span class="info-val"><span id="t7b-occ">&#8212;</span> / 127</span></div>
         <div class="info-row"><span class="info-key">Pool Accumulator</span><span class="info-val green" id="t7b-pool">&#8212;</span></div>
         <div style="margin-top:10px"><div style="display:flex;justify-content:space-between;font-size:12px;color:var(--text3);margin-bottom:4px"><span>Fill progress</span><span id="t7b-pct">0%</span></div><div class="progress-wrap"><div class="progress-bar" id="t7b-bar" style="width:0%"></div></div></div>
-        <div style="margin-top:10px;padding:10px 12px;background:var(--bg3);border-radius:8px;font-size:12px;color:var(--text3);line-height:1.6">T7 is the apex tier. Completing T7 earns the highest CNOVA multiplier (80x base).</div>
+        <div style="margin-top:10px;padding:10px 12px;background:var(--bg3);border-radius:8px;font-size:12px;color:var(--text3);line-height:1.6">T7 unlocks the $2,500+ whale tiers. Completing T7 earns a 70x CNOVA multiplier and opens T8-T10 upgrade eligibility.</div>
       </div>
     </div>
   </div>
@@ -1119,9 +1119,12 @@
             <option value="2">Tier 2 — Nova Rise ($25)</option>
             <option value="3">Tier 3 — Nova Star ($50)</option>
             <option value="4">Tier 4 — Nova Prime ($100)</option>
-            <option value="5">Tier 5 — SuperNova Genesis ($250) 🐋</option>
+            <option value="5">Tier 5 — SuperNova Genesis ($250)</option>
             <option value="6">Tier 6 — SuperNova Elite ($500)</option>
             <option value="7">Tier 7 — SuperNova Spark ($1,000)</option>
+            <option value="8">Tier 8 — SuperNova Titan ($2,500)</option>
+            <option value="9">Tier 9 — SuperNova Legend ($5,000)</option>
+            <option value="10">Tier 10 — SuperNova Apex ($10,000)</option>
           </select>
         </div>
       </div>
@@ -1414,56 +1417,74 @@ const RPC_URL  = 'https://sepolia.base.org';
 
 const ADDRS = {
   usdc:          '0x2D8B7b5eDec96bE441b6fb0D45D74a2BcE2C639a',
-  cnova:         '0xe192D3ae2E881709749884de0cFa1d53e2237F6f',
-  treasury:      '0x7F7AD30E786BC059cd25Db3BB7Fb5d34b80615F7',
-  stabilityFund: '0x075f0da27B5feFc84567738d06F7265F883386Ee',
-  tierRouter:    '0xE29e6f13f651cDFD88a9Ae11f35259A19BAa3425',
-  matrixKeeper:  '0xBf59Ed175a37d2e5606d1aA427338e4d1c53194B',
-  v8Governance:  '0x7587c3893Ff4255E57D806e39E4F1839861Ab14F',
+  cnova:         '0xACcD34B5FE055eF7ef3Fe9AC821d316F00BbF004',
+  treasury:      '0x32bbbACE3E14F59c678A401d3a69A7D6Cf12883a',
+  stabilityFund: '0x55d7f6cc578145DFe85a6F6597634b8e50Ca4521',
+  tierRouter:    '0xe32573D7571372c3C6b6B6a72D7e2BF1F7d0da92',
+  matrixKeeper:  '0x8171Df0F0DaD705E216b08D0Fa517F3F0A2C81Fb',
+  v8Governance:  '0x553c307D9235b25691d00A27AeCA2421275aa277',
   T1: {
-    pm:   '0x9d0f06d141d36fE4eb9666a41ef600B0Fd52D43D',
-    matA: '0x80c10540329274e01854e1BF53acb1BC51611b18',
-    matB: '0xFfb87c3957065Cfde8C31B28441A07e8aA278C40',
+    pm:   '0xcabA95428D1fD0Df5b5e051fDcc4129ffee115b3',
+    matA: '0x8DDD4CaB1c0339a467BD37a9761e6F52a064A0FB',
+    matB: '0x9399A7bEcb3aFC50Cb6085378688f477784D7142',
   },
   T2: {
-    pm:   '0x30f67B0C1455aA0952Aa69f3067c50a009AACA47',
-    matA: '0x4075Eb568bF27F3dA2Eaa258754ce79B6fA9f4ba',
-    matB: '0xa2Cb612293f39FeCCeEbB31379DCBb0779E4e17e',
+    pm:   '0x9104bf3E6c833cDcc234a8B78f56Ee94Ff513CAd',
+    matA: '0x9a8A8DD47b7c2927CDE9c424EC8fCD33454fDd33',
+    matB: '0x9cAB4A285b368cF429c6Ce9B214D7f6de763f279',
   },
   T3: {
-    pm:   '0x4515415FcFC5BE241b7f215cffC72fD02d9d8B57',
-    matA: '0xe4caC292C63536172c1376721e923351b2a353eA',
-    matB: '0xAB633A03AE6f192cc7dF70C31D311ff59fA078EE',
+    pm:   '0x2d148e42254eB2d160Fbdf9b630fF96d5F72336F',
+    matA: '0xb041a3EAC3948adE0AD91AA57cdFF96913B59A2a',
+    matB: '0x9b6F38eE124FAaAa56150f203ea1bC351FEeE944',
   },
   T4: {
-    pm:   '0x3734F148913219e1f7D55f319bc67B5923f71081',
-    matA: '0xA503cf50Eac644e737A95E4888f26D9F1ff89c4d',
-    matB: '0x3a8c6176f8A1c6800775c408BCDE1C7ecCA35628',
+    pm:   '0x489046d2a4C9EE87838a94803bE8308C03A69c7c',
+    matA: '0x004E9BCB9081Ab88798F63b7813c35C3D3c5368C',
+    matB: '0xAE44d93fCA3c7b51f18A6e9d1AC8D070AfA2134C',
   },
   T5: {
-    pm:   '0xd03dcaFe48e2d05561e0765ec632a2550f49DB9E',
-    matA: '0x8FEF5B3902Bf1e0323740F0b4978607799D4Dc60',
-    matB: '0xAd958AB9A3e28811935fd7ef49b6e5F2f9F07351',
+    pm:   '0xa521357685b5f7A4e6999C4De92d9D8Aa975bD57',
+    matA: '0x3D8a7E7b91FDc846Ee6fFb5AB0A5d64b7B914A58',
+    matB: '0xc35061A510Ee9F60fa02d4BF6b8Eba68A25C8754',
   },
   T6: {
-    pm:   '0x3B45448b895ED9804011f6127d7b8128dcCB5570',
-    matA: '0x85B928A85b453c6f473877DA7915d00295a72de3',
-    matB: '0xB71eBAb86E20C9A3075841C5AD6eF0506f445192',
+    pm:   '0xC4d7aAD2c8d5e169FCcae42404D288D69DE295f8',
+    matA: '0x0f58f4826481bC7228A3873bB90B4857b4ea9c4C',
+    matB: '0xb7491686f9a3b07aeED17e3a3504b0228BCACC70',
   },
   T7: {
-    pm:   '0xE9bbB096AF72c4fF597Ac3C1FAf6b3D471fF97E9',
-    matA: '0x1873e62cbFc4688CeFb0DD4EF2cDBC29657AEEB9',
-    matB: '0xdDecED76cB770AC3E21ceF20DD032042499cdA3B',
+    pm:   '0x3cC3264874c939a36BD4FFd6446040f2dd0F050d',
+    matA: '0x7166aDE5e8Af6d84BDe1dF46fbAf9BB05627a333',
+    matB: '0xEAd15876cf58e6407477A35b0e0e8EaC5cAf637f',
+  },
+  T8: {
+    pm:   '0xd26aB2728b75a6Ae3cd8EcAFfC21769B81e67a7B',
+    matA: '0x00a15E0fa0aAB4F6555b9c614F6DD9C94dCCCD98',
+    matB: '0x015B353D417529b001E553a1C132D163B782188d',
+  },
+  T9: {
+    pm:   '0xCBa01f7CB6ccED6e3c1244492641A0035B03FC3F',
+    matA: '0x529A51fba90B5CD2Ec95C4f01b27b1Be7452Ab67',
+    matB: '0xa1D768070EE439fcb92Ffa1361b806294e541854',
+  },
+  T10: {
+    pm:   '0xf814bc4f621566E770a5bc2dE1AA368B1a1DA5a5',
+    matA: '0xf81d95Ab6bd161b99C2b52436E8C85cf2AdEEB6E',
+    matB: '0xd35a64DEc77E2E95fda0A97Ad35c58120DFF122A',
   },
 };
 
-const T1_FEE = 10_000_000n;   // $10 USDC (6 decimals)
-const T2_FEE = 25_000_000n;   // $25 USDC
-const T3_FEE = 50_000_000n;   // $50 USDC
-const T4_FEE = 100_000_000n;  // $100 USDC
-const T5_FEE = 250_000_000n;  // $250 USDC
-const T6_FEE = 500_000_000n;  // $500 USDC
-const T7_FEE = 1_000_000_000n; // $1000 USDC
+const T1_FEE  = 10_000_000n;       // $10 USDC (6 decimals)
+const T2_FEE  = 25_000_000n;       // $25 USDC
+const T3_FEE  = 50_000_000n;       // $50 USDC
+const T4_FEE  = 100_000_000n;      // $100 USDC
+const T5_FEE  = 250_000_000n;      // $250 USDC
+const T6_FEE  = 500_000_000n;      // $500 USDC
+const T7_FEE  = 1_000_000_000n;    // $1,000 USDC
+const T8_FEE  = 2_500_000_000n;    // $2,500 USDC
+const T9_FEE  = 5_000_000_000n;    // $5,000 USDC
+const T10_FEE = 10_000_000_000n;   // $10,000 USDC
 
 // ── ABIs ─────────────────────────────────────────────────────────────
 const TIER_ROUTER_ABI = [
@@ -1825,7 +1846,7 @@ async function loadHomeStats() {
 async function loadTiersStats() {
   const rp = readProvider || new ethers.JsonRpcProvider(RPC_URL);
   try {
-    const TK = ['T1','T2','T3','T4','T5','T6','T7'];
+    const TK = ['T1','T2','T3','T4','T5','T6','T7','T8','T9','T10'];
     const cs = {};
     for (const t of TK) {
       cs[t] = {
@@ -2135,6 +2156,9 @@ async function loadDashboardData() {
       ...(ADDRS.T5.matA ? [{addr:ADDRS.T5.matA,label:'T5 Matrix A'},{addr:ADDRS.T5.matB,label:'T5 Matrix B'}] : []),
       ...(ADDRS.T6.matA ? [{addr:ADDRS.T6.matA,label:'T6 Matrix A'},{addr:ADDRS.T6.matB,label:'T6 Matrix B'}] : []),
       ...(ADDRS.T7.matA ? [{addr:ADDRS.T7.matA,label:'T7 Matrix A'},{addr:ADDRS.T7.matB,label:'T7 Matrix B'}] : []),
+      ...(ADDRS.T8.matA ? [{addr:ADDRS.T8.matA,label:'T8 Matrix A'},{addr:ADDRS.T8.matB,label:'T8 Matrix B'}] : []),
+      ...(ADDRS.T9.matA ? [{addr:ADDRS.T9.matA,label:'T9 Matrix A'},{addr:ADDRS.T9.matB,label:'T9 Matrix B'}] : []),
+      ...(ADDRS.T10.matA ? [{addr:ADDRS.T10.matA,label:'T10 Matrix A'},{addr:ADDRS.T10.matB,label:'T10 Matrix B'}] : []),
     ];
 
     let totalW = 0n, totalE = 0n, totalEscrow = 0n;
@@ -2252,7 +2276,7 @@ async function loadDashboardData() {
     const upgradeSection = document.getElementById('upgrade-section');
     if (upgradeSection) {
       // Max deployed tier: 3 (T3 live). Increase when T4+ deployed.
-      const MAX_DEPLOYED_TIER = 7; // v8.6: all 7 tiers live
+      const MAX_DEPLOYED_TIER = 10; // v8.7: all 10 tiers live
       const curTierCycles = await tr.tierCycles(userAddr, Math.max(highestTier - 1, 0)).catch(() => 0n);
       const canUpgrade = Number(curTierCycles) >= 1 && highestTier < MAX_DEPLOYED_TIER;
       upgradeSection.style.display = canUpgrade ? 'block' : 'none';
@@ -2340,6 +2364,9 @@ async function doWithdraw() {
       ...(ADDRS.T5.matA ? [ADDRS.T5.matA, ADDRS.T5.matB] : []),
       ...(ADDRS.T6.matA ? [ADDRS.T6.matA, ADDRS.T6.matB] : []),
       ...(ADDRS.T7.matA ? [ADDRS.T7.matA, ADDRS.T7.matB] : []),
+      ...(ADDRS.T8.matA ? [ADDRS.T8.matA, ADDRS.T8.matB] : []),
+      ...(ADDRS.T9.matA ? [ADDRS.T9.matA, ADDRS.T9.matB] : []),
+      ...(ADDRS.T10.matA ? [ADDRS.T10.matA, ADDRS.T10.matB] : []),
     ];
     let withdrawn = false;
     for (const addr of matrices) {
@@ -2376,10 +2403,13 @@ function onMatrixTierChange() { loadQueueView(); setActiveMatrixBtn('btn-load-tr
 async function getMatrixForTier() {
   const tierSelect = document.getElementById('matrix-tier-select');
   const tierNum = tierSelect ? parseInt(tierSelect.value) || 1 : 1;
-  if (tierNum === 7 && ADDRS.T7.matA) return ADDRS.T7.matA;
-  if (tierNum === 6 && ADDRS.T6.matA) return ADDRS.T6.matA;
-  if (tierNum === 5 && ADDRS.T5.matA) return ADDRS.T5.matA;
-  if (tierNum === 4 && ADDRS.T4.matA) return ADDRS.T4.matA;
+  if (tierNum === 10 && ADDRS.T10.matA) return ADDRS.T10.matA;
+  if (tierNum === 9 && ADDRS.T9.matA)  return ADDRS.T9.matA;
+  if (tierNum === 8 && ADDRS.T8.matA)  return ADDRS.T8.matA;
+  if (tierNum === 7 && ADDRS.T7.matA)  return ADDRS.T7.matA;
+  if (tierNum === 6 && ADDRS.T6.matA)  return ADDRS.T6.matA;
+  if (tierNum === 5 && ADDRS.T5.matA)  return ADDRS.T5.matA;
+  if (tierNum === 4 && ADDRS.T4.matA)  return ADDRS.T4.matA;
   if (tierNum === 3) return ADDRS.T3.matA;
   return tierNum === 2 ? ADDRS.T2.matA : ADDRS.T1.matA;
 }
@@ -2511,6 +2541,9 @@ async function loadMyTree() {
       ...(ADDRS.T5.matA ? [{addr:ADDRS.T5.matA,label:'T5 Matrix A'},{addr:ADDRS.T5.matB,label:'T5 Matrix B'}] : []),
       ...(ADDRS.T6.matA ? [{addr:ADDRS.T6.matA,label:'T6 Matrix A'},{addr:ADDRS.T6.matB,label:'T6 Matrix B'}] : []),
       ...(ADDRS.T7.matA ? [{addr:ADDRS.T7.matA,label:'T7 Matrix A'},{addr:ADDRS.T7.matB,label:'T7 Matrix B'}] : []),
+      ...(ADDRS.T8.matA ? [{addr:ADDRS.T8.matA,label:'T8 Matrix A'},{addr:ADDRS.T8.matB,label:'T8 Matrix B'}] : []),
+      ...(ADDRS.T9.matA ? [{addr:ADDRS.T9.matA,label:'T9 Matrix A'},{addr:ADDRS.T9.matB,label:'T9 Matrix B'}] : []),
+      ...(ADDRS.T10.matA ? [{addr:ADDRS.T10.matA,label:'T10 Matrix A'},{addr:ADDRS.T10.matB,label:'T10 Matrix B'}] : []),
     ];
     let activeMat = null, activeBFS = 0n, activeLabel = '', activeMSize = 64n;
     for (const m of allMats) {
@@ -2833,6 +2866,16 @@ function friendlyError(e) {
   if (msg.includes('USDC') && msg.includes('allowance')) return 'USDC not approved — complete Step 1 first.';
   if (msg.includes('execution reverted')) return 'Transaction reverted: ' + (msg.split('execution reverted:')[1]||'').trim().slice(0,80);
   return msg.slice(0, 120);
+}
+
+async function addCNOVAtoMetaMask() {
+  if (!window.ethereum) return;
+  try {
+    await window.ethereum.request({
+      method: 'wallet_watchAsset',
+      params: { type: 'ERC20', options: { address: ADDRS.cnova, symbol: 'CNOVA', decimals: 18, image: '' }},
+    });
+  } catch(e) { console.error(e); }
 }
 
 async function addUSDCtoMetaMask() {
