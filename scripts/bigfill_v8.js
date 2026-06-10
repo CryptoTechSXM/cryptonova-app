@@ -655,6 +655,10 @@ async function main() {
       console.log(`  Deployer approving matA1 for ${fmt6(usdcNeededFC)} USDC (deployer nonce ${dNonce})…`);
       await (await usdc.connect(rawSigner).approve(matA1Addr, usdcNeededFC, { nonce: dNonce })).wait();
       dNonce++;
+      // Wait after the approve — Base Sepolia's "delegated account" rate limiter rejects
+      // the very first forceCross if it arrives too soon after the preceding approve TX.
+      // The sleep here prevents the first-call failure that otherwise always hits nonce N+1.
+      await sleep(8);
 
       // 3. Connect matA1 to rawSigner (owner) — forceCross is onlyOwner.
       //    rawSigner + explicit dNonce avoids the NonceManager nonce-drift problem.
