@@ -2220,16 +2220,17 @@ async function loadDashboardData() {
       }
     }
 
-    // CNOVA balance + floor price (sfBal / cnovaSupply)
+    // CNOVA balance + floor price (treasuryUsdc / cnovaSupply)
+    // v8.7: floor is backed by Treasury USDC (15% BPS), not SF
     const cnova = new ethers.Contract(ADDRS.cnova, CNOVA_ABI, rp);
-    const sf    = new ethers.Contract(ADDRS.stabilityFund, SF_ABI, rp);
-    const [cnovabal, sfBal, cnovaSupply] = await Promise.all([
+    const usdcT = new ethers.Contract(ADDRS.usdc,  USDC_ABI,  rp);
+    const [cnovabal, treasuryUsdc, cnovaSupply] = await Promise.all([
       cnova.balanceOf(userAddr).catch(()=>0n),
-      sf.totalBalance().catch(()=>0n),
+      usdcT.balanceOf(ADDRS.treasury).catch(()=>0n),
       cnova.totalSupply().catch(()=>0n),
     ]);
-    // cnovabal=18dec, sfBal=6dec, cnovaSupply=18dec → result is 6dec USDC
-    const cnovaValRaw = cnovaSupply > 0n ? (cnovabal * sfBal) / cnovaSupply : 0n;
+    // cnovabal=18dec, treasuryUsdc=6dec, cnovaSupply=18dec → result is 6dec USDC
+    const cnovaValRaw = cnovaSupply > 0n ? (cnovabal * treasuryUsdc) / cnovaSupply : 0n;
 
     const TIER_NAMES = ['—','Nova Seed','Nova Rise','Nova Star','Nova Core','Nova Prime','Nova Apex','Nova Pinnacle','SuperNova Titan','SuperNova Legend','SuperNova Apex'];
 
