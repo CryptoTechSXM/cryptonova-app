@@ -1003,6 +1003,11 @@
           <div class="stat-value" id="dash-cnova-val">—</div>
           <div class="stat-sub">At current floor</div>
         </div>
+        <div class="card-sm" title="Total CNOVA you have burned via Redeem → USDC. Loaded from on-chain Transfer events.">
+          <div class="stat-label">🔥 CNOVA Burned</div>
+          <div class="stat-value" id="dash-cnova-burned" style="color:var(--red)">—</div>
+          <div class="stat-sub">Redeemed lifetime</div>
+        </div>
         <div class="card-sm" style="border-color:rgba(245,158,11,.4)" title="Earnings held in escrow — releases to Withdrawable when you complete your next cycle-out.">
           <div class="stat-label">In Escrow &#9432;</div>
           <div class="stat-value" id="dash-escrow" style="color:var(--yellow)">—</div>
@@ -1600,6 +1605,7 @@ const MATRIX_ABI = [
 const CNOVA_ABI = [
   'function balanceOf(address) external view returns (uint256)',
   'function totalSupply() external view returns (uint256)',
+  'function totalMinted() external view returns (uint256)',
   'function currentEpochNumber() external view returns (uint8)',
   'function epochRewards(uint256) external view returns (uint256)',
   'function TOTAL_EPOCHS() external view returns (uint8)',
@@ -1607,6 +1613,7 @@ const CNOVA_ABI = [
   'function transfer(address,uint256) external returns (bool)',
   'function vestDuration() external view returns (uint256)',
   'function maxPenaltyBps() external view returns (uint256)',
+  'event Transfer(address indexed from, address indexed to, uint256 value)',
 ];
 
 const SF_ABI = [
@@ -2360,6 +2367,8 @@ async function loadDashboardData() {
     setText('dash-escrow',         fmt6(totalEscrow));
     setText('dash-cnova',          Number(ethers.formatEther(cnovabal)).toFixed(2));
     setText('dash-cnova-val',      fmt6(cnovaValRaw));
+    // Burn history: fire-and-forget (queryFilter can be slow; don't await)
+    loadUserBurnHistory(cnova, userAddr);
     setText('dash-tier',           highestTier > 0 ? `T${highestTier}` : 'T1');
     setText('dash-tier-name',      TIER_NAMES[highestTier] || '—');
     setText('dash-matrix',         activeMat ? activeLabel : '—');
@@ -2453,6 +2462,24 @@ async function loadDashboardData() {
     } catch(_) {}
 
   } catch(e) { console.error('loadDashboardData:', e.message); }
+}
+
+/**
+ * Query on-chain Transfer(user → address(0)) events to sum all CNOVA the
+ * user has ever burned via Redeem → USDC.  Runs independently so it
+ * doesn't slow the main dashboard load.
+ */
+async function loadUserBurnHistory(cnova, user) {
+  try {
+    setText('dash-cnova-burned', '…');
+    const burnFilter = cnova.filters.Transfer(user, ethers.ZeroAddress);
+    const events     = await cnova.queryFilter(burnFilter, 0, 'latest');
+    const totalBurned = events.reduce((acc, e) => acc + BigInt(e.args.value), 0n);
+    setText('dash-cnova-burned', Number(ethers.formatEther(totalBurned)).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
+  } catch(e) {
+    console.warn('loadUserBurnHistory:', e.message);
+    setText('dash-cnova-burned', '—');
+  }
 }
 
 async function doWithdraw() {
