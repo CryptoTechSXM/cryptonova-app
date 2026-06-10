@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>CryptoNova V8.6 — The Matrix | v8.crypto-nova.app</title>
+  <title>CryptoNova V8.7 — The Matrix | crypto-nova.app</title>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/6.7.1/ethers.umd.min.js"></script>
   <style>
     :root {
@@ -296,12 +296,29 @@
 <body>
   <!-- ══ LAUNCH GATE ══════════════════════════════════════════════════ -->
   <div id="launch-gate">
-    <h2>&#x26A1; CryptoNova Matrix V8.6</h2>
+    <h2>&#x26A1; CryptoNova Matrix V8.7</h2>
     <p>Final infrastructure testing in progress.<br>
     Chainlink Automation, StabilityFund seeding, and stress-test validation are underway.<br><br>
     The platform will open for registration once all systems are confirmed live.</p>
     <div class="soon-pill">&#x1F527; Coming Soon &mdash; Testing in Progress</div>
+    <div style="margin-top:20px">
+      <button onclick="addMockUSDC()" style="background:rgba(0,122,255,.15);border:1px solid rgba(0,122,255,.4);color:#4da6ff;padding:10px 20px;border-radius:8px;font-size:13px;cursor:pointer;font-weight:600">
+        + Add Testnet USDC to MetaMask
+      </button>
+      <div style="font-size:11px;color:var(--text3);margin-top:8px;opacity:0.7">Base Sepolia mock USDC — needed for testnet registration</div>
+    </div>
   </div>
+  <script>
+  async function addMockUSDC() {
+    if (!window.ethereum) { alert('MetaMask not detected'); return; }
+    try {
+      await window.ethereum.request({
+        method: 'wallet_watchAsset',
+        params: { type: 'ERC20', options: { address: '0x2D8B7b5eDec96bE441b6fb0D45D74a2BcE2C639a', symbol: 'USDC', decimals: 6 } }
+      });
+    } catch(e) { console.error(e); }
+  }
+  </script>
 
 
 <div id="file-protocol-banner" style="background:rgba(239,68,68,.1);border-bottom:1px solid rgba(239,68,68,.3);padding:10px 24px;text-align:center;font-size:13px;color:#ef4444;display:none">
