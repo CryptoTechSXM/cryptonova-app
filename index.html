@@ -1752,8 +1752,6 @@ async function switchToBaseSepolia() {
 // HOME STATS
 // ═══════════════════════════════════════════════════════════════════════
 // ── RPC timeout wrapper — prevents hanging when Base Sepolia is slow ──────
-// Each call races against an 8-second fallback. On timeout, the .catch(()=>0n)
-// in each Promise.all entry catches it and substitutes zero so data still renders.
 function rpc(p) {
   return Promise.race([
     p,
@@ -2949,4 +2947,178 @@ function copyReferralLink() {
   navigator.clipboard.writeText(inp.value).then(() => {
     const btn = document.getElementById('copy-ref-btn');
     if (btn) { btn.textContent = 'Copied!'; setTimeout(()=>{ btn.textContent='Copy'; }, 2000); }
-  }).cat
+  }).catch(() => {
+    inp.select(); document.execCommand('copy');
+  });
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// BOOT
+// ═══════════════════════════════════════════════════════════════════════
+document.addEventListener('DOMContentLoaded', async () => {
+  loadHomeStats();
+
+  // ── Launch gate ──────────────────────────────────────────────────────
+  if (!LAUNCH_READY) {
+    document.getElementById('launch-gate').classList.add('visible');
+    document.querySelectorAll('nav button').forEach(b => {
+      if (b.textContent.trim().startsWith('Register') || b.textContent.includes('Register')) {
+        b.style.opacity = '0.4';
+        b.style.pointerEvents = 'none';
+        b.title = 'Registration opens soon';
+      }
+    });
+  }
+
+  // Auto-reconnect on page load (silent — no popup)
+  if (window.ethereum && localStorage.getItem('cnova_connected')) {
+    try {
+      const accounts = await window.ethereum.request({ method: 'eth_accounts' });
+      if (accounts && accounts.length > 0) await connectWallet(true);
+      else localStorage.removeItem('cnova_connected');
+    } catch(e) {}
+  }
+
+  // Auto-fill referrer from URL ?ref=0x...
+  const urlRef = new URLSearchParams(window.location.search).get('ref');
+  if (urlRef && ethers.isAddress(urlRef)) {
+    const inp = document.getElementById('input-referrer');
+    if (inp) inp.value = urlRef;
+  }
+
+  // Wallet event listeners
+  if (window.ethereum) {
+    window.ethereum.on('accountsChanged', async (accounts) => {
+      if (accounts.length === 0) {
+        userAddr = null; signer = null;
+        localStorage.removeItem('cnova_connected');
+        const btn = document.getElementById('connect-btn');
+        if (btn) { btn.textContent = 'Connect Wallet'; btn.classList.remove('connected'); }
+        document.getElementById('referral-link-card').style.display = 'none';
+        document.getElementById('upgrade-card').style.display = 'none';
+      } else {
+        await connectWallet(true);
+      }
+    });
+    window.ethereum.on('chainChanged', () => window.location.reload());
+  }
+});
+
+async function approveUSDCForUpgrade() {
+  if (!signer) { toast('Connect your wallet first.', 'error'); return; }
+  // Support both register-tab (btn-upgrade-approve) and dashboard (btn-dash-approve) contexts
+  const btnReg  = document.getElementById('btn-upgrade-approve');
+  const btnDash = document.getElementById('btn-dash-approve');
+  const stReg   = document.getElementById('upgrade-status');
+  const stDash  = document.getElementById('upgrade-status-dash');
+  const setStatus = function(msg) {
+    if (stReg)  stReg.textContent  = msg;
+    if (stDash) stDash.textContent = msg;
+  };
+  const fee = window._upgradeCardFee || window._dashUpgradeFee || 25_000_000n;
+  try {
+    if (btnReg)  btnReg.disabled  = true;
+    if (btnDash) btnDash.disabled = true;
+    setStatus('Approving USDC...');
+    const usdc = new ethers.Contract(ADDRS.usdc, USDC_ABI, signer);
+    const tx   = await usdc.approve(ADDRS.tierRouter, fee);
+    setStatus('Waiting for confirmation...');
+    await tx.wait();
+    setStatus('✅ USDC approved. Now click Step 2 to upgrade.');
+    const btnManual = document.getElementById('btn-manual-upgrade');
+    const btnUp     = document.getElementById('btn-upgrade');
+    if (btnManual) { btnManual.disabled = false; btnManual.classList.remove('btn-ghost'); btnManual.classList.add('btn-green'); }
+    if (btnUp)     { btnUp.disabled     = false; btnUp.classList.remove('btn-ghost'); btnUp.classList.add('btn-green'); }
+  } catch(e) {
+    setStatus('❌ ' + (e.reason || e.message));
+    if (btnReg)  btnReg.disabled  = false;
+    if (btnDash) btnDash.disabled = false;
+  }
+}
+
+async function doManualUpgrade() {
+  if (!signer) { alert('Connect your wallet first.'); return; }
+  const btn    = document.getElementById('btn-manual-upgrade');
+  const status = document.getElementById('upgrade-status-dash');
+  const idx    = window._dashUpgradeTierIndex ?? 1;
+  try {
+    btn.disabled = true;
+    status.textContent = 'Submitting upgrade transaction...';
+    const tr = new ethers.Contract(ADDRS.tierRouter, TIER_ROUTER_ABI, signer);
+    const tx = await tr.manualUpgrade(idx, { gasLimit: 3_000_000 });
+    status.textContent = 'Transaction submitted. Waiting for confirmation...';
+    await tx.wait();
+    status.textContent = '🎉 Tier upgrade confirmed! Refreshing dashboard...';
+    setTimeout(() => loadDashboardData(), 2000);
+  } catch(e) {
+    status.textContent = '❌ ' + (e.reason || e.message);
+    btn.disabled = false;
+  }
+}
+function onUpgradeTierChange() {
+  const sel  = document.getElementById('upgrade-tier-select');
+  const hint = document.getElementById('upgrade-tier-hint');
+  if (!sel || !sel.value) { if (hint) hint.textContent = ''; return; }
+  const fees = { '1': 25_000_000n, '2': 50_000_000n, '3': 100_000_000n };
+  const fee  = fees[sel.value] || 25_000_000n;
+  window._upgradeCardFee     = fee;
+  window._upgradeCardTierIdx = Number(sel.value);
+  if (hint) hint.textContent = 'Entry fee: $' + (Number(fee) / 1_000_000) + ' USDC from your wallet';
+}
+
+async function checkUpgradeAllowance() {
+  if (!userAddr) { toast('Connect wallet first', 'error'); return; }
+  const rp   = readProvider || new ethers.JsonRpcProvider(RPC_URL, 84532, { staticNetwork: true });
+  const usdc = new ethers.Contract(ADDRS.usdc, USDC_ABI, rp);
+  const fee  = window._upgradeCardFee || 25_000_000n;
+  const al   = await usdc.allowance(userAddr, ADDRS.tierRouter).catch(() => 0n);
+  const btn  = document.getElementById('btn-upgrade');
+  if (btn) btn.disabled = al < fee;
+  toast(al >= fee ? '✅ Allowance confirmed — ready to upgrade' : '⏳ Not yet approved', al >= fee ? 'success' : 'info');
+}
+
+async function doUpgrade() {
+  if (!signer) { toast('Connect wallet first', 'error'); return; }
+  const btn    = document.getElementById('btn-upgrade');
+  const status = document.getElementById('upgrade-status');
+  const idx    = window._upgradeCardTierIdx ?? 1;
+  try {
+    if (btn) btn.disabled = true;
+    if (status) status.textContent = 'Submitting upgrade transaction...';
+    const tr = new ethers.Contract(ADDRS.tierRouter, TIER_ROUTER_ABI, signer);
+    const tx = await tr.manualUpgrade(idx, { gasLimit: 3_000_000 });
+    if (status) status.textContent = 'Waiting for confirmation...';
+    await tx.wait();
+    if (status) status.innerHTML = '<span style="color:var(--green)">🎉 Upgraded to T' + (idx + 1) + '! Check your Dashboard.</span>';
+    toast('Tier upgraded successfully!', 'success');
+    setTimeout(() => loadDashboardData(), 2000);
+  } catch(e) {
+    if (status) status.textContent = '❌ ' + (e.reason || e.message);
+    if (btn) btn.disabled = false;
+  }
+}
+
+
+// ── v8.6 helper: updateAddrsFromDeployed ─────────────────────────────────────
+// Paste deployed_addresses_v8_6.json content into window._v86Addrs then call this.
+// Example: fetch('deployed_addresses_v8_6.json').then(r=>r.json()).then(updateAddrsFromDeployed)
+function updateAddrsFromDeployed(d) {
+  if (!d) return;
+  if (d.usdc)          ADDRS.usdc          = d.usdc;
+  if (d.cnova)         ADDRS.cnova         = d.cnova;
+  if (d.stabilityFund) ADDRS.stabilityFund = d.stabilityFund;
+  if (d.tierRouter)    ADDRS.tierRouter    = d.tierRouter;
+  if (d.matrixKeeper)  ADDRS.matrixKeeper  = d.matrixKeeper;
+  const t = d.tiers || {};
+  for (let i = 1; i <= 7; i++) {
+    const tier = t[String(i)] || t[i];
+    if (tier) {
+      const key = 'T' + i;
+      ADDRS[key] = { pm: tier.pairManager || tier.pm || '', matA: tier.matA || '', matB: tier.matB || '' };
+    }
+  }
+  console.log('[v8.6] ADDRS updated from deployed JSON');
+}
+</script>
+</body>
+</html>
