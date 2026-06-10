@@ -27,7 +27,7 @@
  *   npx hardhat run scripts/fill_t2.js --network baseSepolia
  *
  * Optional env vars:
- *   ADDRESSES_FILE   path to deployed JSON (default: deployed_addresses_v8_4.json)
+ *   ADDRESSES_FILE   path to deployed JSON (default: deployed_addresses_v8_5.json)
  *   MAX_ITERS        max T1B forceCross iterations (default: 200)
  */
 "use strict";
@@ -39,17 +39,27 @@ const path       = require("path");
 // ── Config ─────────────────────────────────────────────────────────────────────
 const ADDRESSES_FILE = path.join(
   __dirname,
-  process.env.ADDRESSES_FILE || "deployed_addresses_v8_4.json"
+  process.env.ADDRESSES_FILE || "deployed_addresses_v8_7.json"
 );
 const MAX_ITERS  = Number(process.env.MAX_ITERS || 200);
 const GAS_LIMIT  = 12_000_000;
 
-// Scan all historically used HDR_OFFSETs (100 wallets each)
-// 2200 and 2300 cover next two bigfill windows; 2000 with width 100 also
-// captures 2000-2099 (bigfill at 2000 registered 2000-2199, prev width only got 2000-2069).
-const SCAN_OFFSETS = [500, 1000, 1500, 1700, 1800, 2000, 2200, 2300, 2500];
+// Scan all historically used HDR_OFFSETs (100 wallets each).
+// IMPORTANT: must match the FILL_MNEMONIC used in bigfill_v8.js runs.
+// Add each new HDR_OFFSET here before running fill_t2.
+const SCAN_OFFSETS = [500, 1000, 1500, 1700, 1800, 2000, 2200, 2300, 2500, 3000];
 const SCAN_WIDTH   = 100;
-const MNEMO        = "test test test test test test test test test test test junk";
+
+// IMPORTANT: use process.env.FILL_MNEMONIC — bigfill_v8.js derives wallets from
+// FILL_MNEMONIC (never from the public "test junk" mnemonic which has EIP-7702
+// drainer contracts on Base Sepolia).  Using the wrong mnemonic here would produce
+// a scan set of addresses that were never registered, finding 0 parked wallets.
+const MNEMO = process.env.FILL_MNEMONIC;
+if (!MNEMO) {
+  console.error("\n  ❌  FILL_MNEMONIC not set in .env.");
+  console.error("     Must be the same mnemonic used in bigfill_v8.js.");
+  process.exit(1);
+}
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 const sleep = s  => new Promise(r => setTimeout(r, s * 1000));
@@ -236,9 +246,14 @@ async function main() {
   // ── Sanity checks ────────────────────────────────────────────────────────────
   const w1Tier = await tierRouter.memberHighestTier(W1_ADDR);
   if (w1Tier < 2n) {
-    console.error(`  ERR  W1 is at T${w1Tier} — must be T2+ before running fill_t2.`);
-    console.error(`       Run bigfill_v8.js first to complete the T1 cycle.`);
-    process.exit(1);
+    // W1 may have completed a T1 cycle but not yet upgraded (e.g. velocity gate was
+    // closed when handleCycleOut fired, then gate was opened manually).  With
+    // reentryMinCycles=2, W1 was re-inserted into T1A and needs one more full
+    // T1B cycle-out to upgrade.  Continue running — the forceCross loop will drive
+    // T1B cycles and W1's second handleCycleOut will fire the upgrade.
+    console.log(`  ⚠  W1 is still T${w1Tier}. Driving T1B cycles — W1 will upgrade when gate + funds conditions are met.`);
+    const w1Cycles = await tierRouter.tierCycles(W1_ADDR, 0);
+    console.log(`     W1 T1 cycles so far: ${w1Cycles}  (needs 2nd T1B cycle-out to upgrade)`);
   }
 
   const t1bOccStart = await matB1.occupancy();
@@ -273,23 +288,38 @@ async function main() {
   if (deployerUsdcInit < mintBuffer) {
     const toMint = mintBuffer - deployerUsdcInit;
     console.log(`  Minting ${fmt6(toMint)} USDC to deployer…`);
+    // Mint via deployer NonceManager (not a forceCross, rate-limit is looser here)
     await (await usdc.mint(deployerAddr, toMint)).wait();
   }
-  // Reset NonceManager before approves — ensures fresh on-chain nonce after
-  // any preceding txs (mint above, or prior bigfill runs in same session).
-  deployer.reset();
-  await sleep(2);
-  // Bulk approve both MatA contracts upfront
+
+  // ── Use rawSigner + explicit nonce for all deployer forceCross calls ──────────
+  // The deployer (0xCd0Af6…) has a very high nonce on Base Sepolia and is treated
+  // as a "delegated account" with a 1-TX in-flight rate limit.  NonceManager's
+  // internal counter drifts after any rejection, cascading all subsequent TXs.
+  // Fix: always use rawSigner with explicit nonce, sleep(6) between successes,
+  // re-sync from chain on failure.  Same pattern as bigfill_v8.js.
+  let dNonce = Number(await ethers.provider.getTransactionCount(deployerAddr, 'pending'));
+  const usdcRaw = usdc.connect(rawSigner);
+
+  // Bulk approve both MatA contracts upfront using rawSigner + explicit nonce
   const allow1 = await usdc.allowance(deployerAddr, T1.matA);
   if (allow1 < T1_FEE * 200n) {
-    await (await usdc.approve(T1.matA, T1_FEE * 200n)).wait();
+    await (await usdcRaw.approve(T1.matA, T1_FEE * 200n, { nonce: dNonce })).wait();
+    dNonce++;
+    await sleep(8); // wait for in-flight limit to clear before next TX
     console.log(`  Approved T1 MatA for ${fmt6(T1_FEE * 200n)}`);
   }
   const allow2 = await usdc.allowance(deployerAddr, T2.matA);
   if (allow2 < T2_FEE * 100n) {
-    await (await usdc.approve(T2.matA, T2_FEE * 100n)).wait();
+    await (await usdcRaw.approve(T2.matA, T2_FEE * 100n, { nonce: dNonce })).wait();
+    dNonce++;
+    await sleep(8);
     console.log(`  Approved T2 MatA for ${fmt6(T2_FEE * 100n)}`);
   }
+
+  // rawSigner-connected matrix contracts for all forceCross calls
+  const matA1Raw = matA1.connect(rawSigner);
+  const matA2Raw = matA2.connect(rawSigner);
 
 
   // ── Repair previously parked wallets ────────────────────────────────────────
@@ -333,27 +363,27 @@ async function main() {
     if (depBal2 < t2aNeeded) {
       await (await usdc.mint(deployerAddr, t2aNeeded - depBal2)).wait();
     }
-    deployer.reset();
-    await sleep(1);
-    const allow2 = await usdc.allowance(deployerAddr, T2.matA);
-    if (allow2 < T2_FEE * BigInt(t2aParkedAlumni.length)) {
-      await (await usdc.approve(T2.matA, T2_FEE * BigInt(t2aParkedAlumni.length + 5))).wait();
+    dNonce = Number(await ethers.provider.getTransactionCount(deployerAddr, 'pending'));
+    await sleep(2);
+    const allow2chk = await usdc.allowance(deployerAddr, T2.matA);
+    if (allow2chk < T2_FEE * BigInt(t2aParkedAlumni.length)) {
+      await (await usdcRaw.approve(T2.matA, T2_FEE * BigInt(t2aParkedAlumni.length + 5), { nonce: dNonce })).wait();
+      dNonce++;
+      await sleep(8);
     }
-    deployer.reset();
-    await sleep(1);
     for (const t2aAddr of t2aParkedAlumni) {
       const t2bBefore = await matB2.occupancy();
       process.stdout.write(`  T2A→T2B ${t2aAddr.slice(0,10)}  T2B ${t2bBefore}/${mSize}… `);
       try {
-        await (await matA2.forceCross(t2aAddr, { gasLimit: GAS_LIMIT })).wait();
+        await (await matA2Raw.forceCross(t2aAddr, { gasLimit: GAS_LIMIT, nonce: dNonce })).wait();
+        dNonce++;
         const t2bAfter = await matB2.occupancy();
         console.log(`✓  T2B ${t2bAfter}/${mSize}`);
+        await sleep(6);
       } catch (e) {
         console.log(`✗  ${e.message.slice(0, 80)}`);
-        if (e.message.includes("nonce too low") || e.message.includes("nonce has already been used")) {
-          deployer.reset();
-          await sleep(3);
-        }
+        await sleep(10);
+        dNonce = Number(await ethers.provider.getTransactionCount(deployerAddr, 'pending'));
       }
     }
   } else {
@@ -441,8 +471,12 @@ async function main() {
     );
 
     try {
-      await (await matA1.forceCross(t1aTarget, { gasLimit: GAS_LIMIT })).wait();
+      // forceCross is onlyOwner — use rawSigner + explicit nonce (not NonceManager).
+      // The deployer is a "delegated account" on Base Sepolia (1-TX in-flight limit).
+      await (await matA1Raw.forceCross(t1aTarget, { gasLimit: GAS_LIMIT, nonce: dNonce })).wait();
+      dNonce++;
       t1bCrossed++;
+      await sleep(6); // prevent in-flight rate limit on next TX
 
       const t1bNow = await matB1.occupancy();
       let t2aNow   = await matA2.occupancy();
@@ -460,6 +494,7 @@ async function main() {
 
       // Auto-upgrade guard e failed (escrow < T2_FEE) → drive via manualUpgrade
       // The T1B root that just cycled out is the wallet we peeked at above.
+      // Re-sync dNonce after manualUpgrade (it uses the deployer for minting/funding).
       if (t2aGained === 0 && nextT1BRoot !== ethers.ZeroAddress) {
         process.stdout.write(`  ↳ T2A unchanged, manualUpgrade ${nextT1BRoot.slice(0,10)}… `);
         const upgraded = await fundAndManualUpgrade(
@@ -469,6 +504,9 @@ async function main() {
           t2aNow = await matA2.occupancy();
           console.log(`✓  T2A ${t2aNow}/${mSize}`);
         }
+        // Re-sync dNonce — manualUpgrade may have sent deployer TXs
+        await sleep(3);
+        dNonce = Number(await ethers.provider.getTransactionCount(deployerAddr, 'pending'));
       }
 
       // Check if T2 MatA rotation count increased (T2 MatA cycled, root crossed/parked)
@@ -488,32 +526,35 @@ async function main() {
         if (t2aParked.length > 0) {
           console.log(`\n  T2A parked alumni: ${t2aParked.length} — pushing to T2B…`);
 
-          // Ensure allowance is still sufficient
+          // Ensure allowance and balance
+          const dep2Usdc = await usdc.balanceOf(deployerAddr);
+          const t2aNeed = T2_FEE * BigInt(t2aParked.length + 5);
+          if (dep2Usdc < t2aNeed) {
+            await (await usdc.mint(deployerAddr, t2aNeed - dep2Usdc)).wait();
+          }
+          dNonce = Number(await ethers.provider.getTransactionCount(deployerAddr, 'pending'));
+          await sleep(3);
           const allow2Now = await usdc.allowance(deployerAddr, T2.matA);
           if (allow2Now < T2_FEE * BigInt(t2aParked.length)) {
-            await (await usdc.approve(T2.matA, T2_FEE * BigInt(t2aParked.length + 10))).wait();
-          }
-          // Ensure USDC balance
-          const dep2Usdc = await usdc.balanceOf(deployerAddr);
-          if (dep2Usdc < T2_FEE * BigInt(t2aParked.length)) {
-            const toMint2 = T2_FEE * BigInt(t2aParked.length + 10);
-            await (await usdc.mint(deployerAddr, toMint2)).wait();
+            await (await usdcRaw.approve(T2.matA, T2_FEE * BigInt(t2aParked.length + 10), { nonce: dNonce })).wait();
+            dNonce++;
+            await sleep(8);
           }
 
           for (const t2aAddr of t2aParked) {
             const t2bBefore2 = await matB2.occupancy();
             process.stdout.write(`    T2A cross ${t2aAddr.slice(0,10)}… `);
             try {
-              await (await matA2.forceCross(t2aAddr, { gasLimit: GAS_LIMIT })).wait();
+              await (await matA2Raw.forceCross(t2aAddr, { gasLimit: GAS_LIMIT, nonce: dNonce })).wait();
+              dNonce++;
               t2aCrossed++;
               const t2bAfter2 = await matB2.occupancy();
               console.log(`T2B ${t2bBefore2} → ${t2bAfter2}/${mSize}`);
+              await sleep(6);
             } catch (e) {
               console.log(`FAILED: ${e.message.slice(0, 80)}`);
-              if (e.message.includes("nonce too low") || e.message.includes("nonce has already been used")) {
-                deployer.reset();
-                await sleep(3);
-              }
+              await sleep(10);
+              dNonce = Number(await ethers.provider.getTransactionCount(deployerAddr, 'pending'));
             }
           }
         } else {
@@ -525,15 +566,13 @@ async function main() {
     } catch (e) {
       console.log(`FAILED`);
       console.warn(`    ERR: ${e.message.slice(0, 120)}`);
-      if (e.message.includes("nonce too low") || e.message.includes("nonce has already been used")) {
-        deployer.reset();
-        await sleep(3);
-      }
+      await sleep(10);
+      dNonce = Number(await ethers.provider.getTransactionCount(deployerAddr, 'pending'));
+      console.log(`    ↻ Re-synced deployer nonce → ${dNonce}`);
       // Put the wallet back at the end of the queue for retry
       parkedT1A.push(t1aTarget);
     }
-
-    await sleep(1); // 1s pause to avoid hammering RPC
+    // no extra sleep(1) — sleep(6) is already embedded in the success path above
   }
 
   // ── Final snapshot + summary ─────────────────────────────────────────────────
@@ -560,7 +599,7 @@ async function main() {
     console.log(`\n  W1 has NOT yet completed T2 cycle. T2B: ${finalT2bOcc}/${mSize}`);
     console.log(`  Re-run fill_t2.js to continue. T2B needs ${Number(mSize) - Number(finalT2bOcc)} more members.`);
     console.log(`\n  If parked T1A wallets are exhausted, run first:`);
-    console.log(`    $env:COUNT="200"; $env:HDR_OFFSET="2000"`);
+    console.log(`    $env:COUNT="250"; $env:HDR_OFFSET="3000"`);
     console.log(`    npx hardhat run scripts/bigfill_v8.js --network baseSepolia`);
   }
   sep();
