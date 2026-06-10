@@ -40,10 +40,14 @@ const ADDRESSES_FILE = path.join(
 // COUNT: for 127-seat matrices, 260 fills MatA + MatB (W1 seeds pos-1, 126 fill
 // wallets complete MatA, 126 more fill MatB triggering T2 upgrade) + buffer.
 // also trigger a second MatA cycle and confirm W1 auto-upgrades to T2.
-const COUNT       = Number(process.env.COUNT       || 50);
+//
+// Next run after HDR_OFFSET=3000 (126 ok, 124 failed sub-call OOG):
+//   HDR_OFFSET=3126 COUNT=124  → retry the 124 failed wallets (gasLimit now 15M)
+//   HDR_OFFSET=3250 COUNT=200  → continue filling to drive W1's 2nd T1B cycle → T2 upgrade
+const COUNT       = Number(process.env.COUNT       || 124);
 const BATCH_SIZE  = Number(process.env.BATCH_SIZE  || 5);
 const BATCH_DELAY = Number(process.env.BATCH_DELAY || 8);
-const HDR_OFFSET  = Number(process.env.HDR_OFFSET  || 500); // BIP-44 index offset (change to avoid globalJoined collisions)
+const HDR_OFFSET  = Number(process.env.HDR_OFFSET  || 3126); // BIP-44 index offset (change to avoid globalJoined collisions)
 const ETH_PER     = ethers.parseEther("0.02");   // gas budget per wallet — 0.02 ETH covers approve + register even at 10+ gwei on Base Sepolia
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -499,13 +503,26 @@ async function main() {
         }
 
         // Register via TierRouter (routes to active T1 pair).
-        // gasLimit is explicit: at MATRIX_SIZE=64 the cycle-out path distributes
-        // pool shares to 63 members.  32 of those (BFS leaf level, positions 33-64)
-        // have zero-valued withdrawable/totalEarned/lastActivityTime slots, each
-        // costing 20k gas (zero→nonzero SSTORE).  32×3×20k ≈ 1.92M gas for
-        // _distributePool alone, plus ~0.9M for the position-shift loop.
-        // 3M was too tight (OOG mid-loop, reason:null).  6M gives ample headroom.
-        const regTx = await tierRouter.connect(connected).register(W1_ADDR, { gasLimit: 8_000_000 });
+        // gasLimit is explicit: at MATRIX_SIZE=127 the DOUBLE cycle-out path
+        // (both T1A and T1B simultaneously full) is the limiting case.
+        //
+        // Gas breakdown per double cycle-out at MSIZE=127:
+        //   MatrixA shift loop (cold): 126 × 25k ≈ 3.15M
+        //   MatrixA _distributePool (cold, 127 members): 0.64M
+        //   MatrixB shift loop (cold): 3.15M
+        //   MatrixB _distributePool: 0.64M
+        //   Third MatrixA cycle-out (warm slots): ~0.1M
+        //   _distributePayments × 2 + ERC20s + TierRouter overhead: ~1.0M
+        //   Total: ~8.8M
+        //
+        // The 63/64 sub-call gas forwarding rule is the actual failure point:
+        //   MatrixA consumes ~3.86M → 4.14M remaining → forwards ~4.07M to MatrixB
+        //   MatrixB consumes ~3.86M for its cycle-out → ~0.21M left for _distributePayments
+        //   _distributePayments needs ~200K → OOGs → revert propagates (no try/catch).
+        //
+        // At gasLimit=8M, gasUsed=7,571,404 with status=0, logs=[] confirms this.
+        // 15M gives MatrixB ~7M forwarded gas, more than enough for the full path.
+        const regTx = await tierRouter.connect(connected).register(W1_ADDR, { gasLimit: 15_000_000 });
         const receipt = await regTx.wait();
         return receipt;
       })
