@@ -1433,6 +1433,7 @@ const CHAIN_ID = 84532;
 const LAUNCH_READY = true;
 
 const RPC_URL  = 'https://sepolia.base.org';
+const RPC_FALLBACK = 'https://base-sepolia.public.blastapi.io';
 
 const ADDRS = {
   usdc:          '0x2D8B7b5eDec96bE441b6fb0D45D74a2BcE2C639a',
@@ -1620,7 +1621,10 @@ async function reportEvent(type, details = {}) {
 // ═══════════════════════════════════════════════════════════════════════
 window.addEventListener('DOMContentLoaded', async () => {
   if (window.location.protocol==='file:') document.getElementById('file-protocol-banner').style.display='block';
-  readProvider = new ethers.JsonRpcProvider(RPC_URL);
+  // staticNetwork:true skips the async eth_chainId detection call in ethers v6
+  // — prevents page freeze when sepolia.base.org is slow to respond
+  const _net84532 = ethers.Network.from(84532);
+  readProvider = new ethers.JsonRpcProvider(RPC_URL, _net84532, { staticNetwork: _net84532 });
   loadHomeStats();
 
   // Auto-reconnect if wallet was previously connected (silent — no popup)
@@ -1747,8 +1751,18 @@ async function switchToBaseSepolia() {
 // ═══════════════════════════════════════════════════════════════════════
 // HOME STATS
 // ═══════════════════════════════════════════════════════════════════════
+// ── RPC timeout wrapper — prevents hanging when Base Sepolia is slow ──────
+// Each call races against an 8-second fallback. On timeout, the .catch(()=>0n)
+// in each Promise.all entry catches it and substitutes zero so data still renders.
+function rpc(p) {
+  return Promise.race([
+    p,
+    new Promise((_,r) => setTimeout(() => r(new Error('rpc_timeout')), 8000))
+  ]);
+}
+
 async function loadHomeStats() {
-  const rp = readProvider || new ethers.JsonRpcProvider(RPC_URL);
+  const rp = readProvider || new ethers.JsonRpcProvider(RPC_URL, 84532, { staticNetwork: true });
   try {
     const matA1 = new ethers.Contract(ADDRS.T1.matA, MATRIX_ABI, rp);
     const matB1 = new ethers.Contract(ADDRS.T1.matB, MATRIX_ABI, rp);
@@ -1865,7 +1879,7 @@ async function loadHomeStats() {
 // TIERS TAB DATA
 // ═══════════════════════════════════════════════════════════════════════
 async function loadTiersStats() {
-  const rp = readProvider || new ethers.JsonRpcProvider(RPC_URL);
+  const rp = readProvider || new ethers.JsonRpcProvider(RPC_URL, 84532, { staticNetwork: true });
   try {
     const TK = ['T1','T2','T3','T4','T5','T6','T7','T8','T9','T10'];
     const cs = {};
@@ -1905,7 +1919,7 @@ async function loadTiersStats() {
 // ═══════════════════════════════════════════════════════════════════════
 async function loadUserData() {
   if (!userAddr) return;
-  const rp = readProvider || new ethers.JsonRpcProvider(RPC_URL);
+  const rp = readProvider || new ethers.JsonRpcProvider(RPC_URL, 84532, { staticNetwork: true });
   try {
     const tr = new ethers.Contract(ADDRS.tierRouter, TIER_ROUTER_ABI, rp);
     const joined = await tr.globalJoined(userAddr).catch(()=>false);
@@ -1952,7 +1966,7 @@ async function loadUserData() {
 // ═══════════════════════════════════════════════════════════════════════
 async function loadRegisterTab() {
   if (!userAddr) return;
-  const rp = readProvider || new ethers.JsonRpcProvider(RPC_URL);
+  const rp = readProvider || new ethers.JsonRpcProvider(RPC_URL, 84532, { staticNetwork: true });
 
   try {
     const tr   = new ethers.Contract(ADDRS.tierRouter, TIER_ROUTER_ABI, rp);
@@ -2150,7 +2164,7 @@ async function loadDashboardData() {
   if (!userAddr) {
     showEl('dash-no-wallet'); hideEl('dash-not-registered'); hideEl('dash-content'); return;
   }
-  const rp = readProvider || new ethers.JsonRpcProvider(RPC_URL);
+  const rp = readProvider || new ethers.JsonRpcProvider(RPC_URL, 84532, { staticNetwork: true });
 
   try {
     const tr = new ethers.Contract(ADDRS.tierRouter, TIER_ROUTER_ABI, rp);
@@ -2374,7 +2388,7 @@ async function doWithdraw() {
   if (!signer) return;
   const btn = document.getElementById('btn-withdraw');
   btn.disabled = true; btn.innerHTML = '<span class="spinner"></span>Withdrawing…';
-  const rp = readProvider || new ethers.JsonRpcProvider(RPC_URL);
+  const rp = readProvider || new ethers.JsonRpcProvider(RPC_URL, 84532, { staticNetwork: true });
   try {
     const matrices = [
       ADDRS.T1.matA, ADDRS.T1.matB,
@@ -2516,7 +2530,7 @@ async function setAutoReentryOption(enabled) {
 }
 
 async function loadQueueView() {
-  const rp = readProvider || new ethers.JsonRpcProvider(RPC_URL);
+  const rp = readProvider || new ethers.JsonRpcProvider(RPC_URL, 84532, { staticNetwork: true });
   const addrToLoad = await getMatrixForTier();
   const loadingEl = document.getElementById('matrix-loading');
   const treeEl    = document.getElementById('matrix-tree');
@@ -2545,7 +2559,7 @@ async function loadQueueView() {
 
 async function loadMyTree() {
   if (!userAddr) { toast('Connect wallet first','error'); return; }
-  const rp = readProvider || new ethers.JsonRpcProvider(RPC_URL);
+  const rp = readProvider || new ethers.JsonRpcProvider(RPC_URL, 84532, { staticNetwork: true });
   const loadingEl = document.getElementById('matrix-loading');
   const treeEl    = document.getElementById('matrix-tree');
   if (loadingEl) { loadingEl.style.display='block'; loadingEl.textContent='Finding your position…'; }
@@ -2607,7 +2621,7 @@ async function loadMyTree() {
 
 async function loadMyDirects() {
   if (!userAddr) { toast('Connect wallet first','error'); return; }
-  const rp = readProvider || new ethers.JsonRpcProvider(RPC_URL);
+  const rp = readProvider || new ethers.JsonRpcProvider(RPC_URL, 84532, { staticNetwork: true });
   document.getElementById('my-directs-card').style.display='block';
   document.getElementById('my-directs-loading').style.display='block';
   document.getElementById('my-directs-empty').style.display='none';
@@ -2691,7 +2705,7 @@ let _redeemFloor = 0n, _redeemBal = 0n, _redeemPenaltyBps = 5000n;
 
 async function loadRedeemData() {
   if (!userAddr) return;
-  const rp = readProvider || new ethers.JsonRpcProvider(RPC_URL);
+  const rp = readProvider || new ethers.JsonRpcProvider(RPC_URL, 84532, { staticNetwork: true });
   try {
     const cnova    = new ethers.Contract(ADDRS.cnova,    CNOVA_ABI,    rp);
     const treasury = new ethers.Contract(ADDRS.treasury, TREASURY_ABI, rp);
