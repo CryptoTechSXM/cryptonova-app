@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>CryptoNova V8.6 — The Matrix | v8.crypto-nova.app</title>
+  <title>CryptoNova V8.7 — The Matrix | v8.crypto-nova.app</title>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/6.7.1/ethers.umd.min.js"></script>
   <style>
     :root {
@@ -296,12 +296,29 @@
 <body>
   <!-- ══ LAUNCH GATE ══════════════════════════════════════════════════ -->
   <div id="launch-gate">
-    <h2>&#x26A1; CryptoNova Matrix V8.6</h2>
+    <h2>&#x26A1; CryptoNova Matrix V8.7</h2>
     <p>Final infrastructure testing in progress.<br>
     Chainlink Automation, StabilityFund seeding, and stress-test validation are underway.<br><br>
     The platform will open for registration once all systems are confirmed live.</p>
     <div class="soon-pill">&#x1F527; Coming Soon &mdash; Testing in Progress</div>
+    <div style="margin-top:20px">
+      <button onclick="addMockUSDC()" style="background:rgba(0,122,255,.15);border:1px solid rgba(0,122,255,.4);color:#4da6ff;padding:10px 20px;border-radius:8px;font-size:13px;cursor:pointer;font-weight:600">
+        + Add Testnet USDC to MetaMask
+      </button>
+      <div style="font-size:11px;color:var(--text3);margin-top:8px;opacity:0.7">Base Sepolia mock USDC — needed for testnet registration</div>
+    </div>
   </div>
+  <script>
+  async function addMockUSDC() {
+    if (!window.ethereum) { alert('MetaMask not detected'); return; }
+    try {
+      await window.ethereum.request({
+        method: 'wallet_watchAsset',
+        params: { type: 'ERC20', options: { address: '0x2D8B7b5eDec96bE441b6fb0D45D74a2BcE2C639a', symbol: 'USDC', decimals: 6 } }
+      });
+    } catch(e) { console.error(e); }
+  }
+  </script>
 
 
 <div id="file-protocol-banner" style="background:rgba(239,68,68,.1);border-bottom:1px solid rgba(239,68,68,.3);padding:10px 24px;text-align:center;font-size:13px;color:#ef4444;display:none">
@@ -462,7 +479,7 @@
   </div>
     <div class="logo-text">Crypto<span>Nova</span></div>
     <span class="logo-badge" id="network-badge">Base Sepolia</span>
-    <span style="background:rgba(0,229,160,.15);color:var(--green);border:1px solid var(--green2);border-radius:4px;padding:2px 8px;font-size:10px;font-weight:700;margin-left:6px">V8.6</span>
+    <span style="background:rgba(0,229,160,.15);color:var(--green);border:1px solid var(--green2);border-radius:4px;padding:2px 8px;font-size:10px;font-weight:700;margin-left:6px">V8.7</span>
   </div>
   <div style="display:flex;align-items:center;gap:8px">
     <button class="theme-toggle" id="theme-btn" onclick="toggleTheme()">☀️ Light</button>
@@ -1411,7 +1428,7 @@
 const CHAIN_ID = 84532;
 // ══ LAUNCH GATE ═══════════════════════════════════════════════════════════
 // Flip to true when: Chainlink live + SF seeded + bigfill validated + community test OK
-const LAUNCH_READY = false;
+const LAUNCH_READY = true;
 
 const RPC_URL  = 'https://sepolia.base.org';
 
