@@ -626,7 +626,7 @@
     </div>
 
     <!-- Live Stats -->
-    <div class="section-title"><div class="dot"></div> Live Stats <span id="stats-refresh" style="font-size:12px;color:var(--text3);font-weight:400;margin-left:8px;cursor:pointer" onclick="loadHomeStats()">↻ Refresh</span></div>
+    <div class="section-title"><div class="dot"></div> Live Stats <span id="stats-refresh" style="font-size:12px;color:var(--text3);font-weight:400;margin-left:8px;cursor:pointer" onclick="loadHomeStats(); setTimeout(loadTiersStats, 800);">↻ Refresh</span></div>
     <div class="grid-4" id="stats-grid">
       <div class="card-sm"><div class="stat-label">Total Registered</div><div class="stat-value" id="stat-members"><span class="spinner" style="color:var(--text3)"></span></div><div class="stat-sub">all-time joins</div></div>
       <div class="card-sm"><div class="stat-label">CNOVA Minted</div><div class="stat-value green" id="stat-minted"><span class="spinner" style="color:var(--green)"></span></div><div class="stat-sub">50 per T1 join</div></div>
@@ -1631,6 +1631,12 @@ const USDC_ABI = [
   'function decimals() external view returns (uint8)',
 ];
 
+const PM_ABI = [
+  'function allPairsStatus() external view returns (address[] memory, address[] memory, uint256[] memory, uint256[] memory, uint256[] memory, bool[] memory)',
+  'function activePairIndex() external view returns (uint256)',
+  'function pairCount() external view returns (uint256)',
+];
+
 const TREASURY_ABI = [
   'function usdcReserve() external view returns (uint256)',
   'function floorPrice() external view returns (uint256)',
@@ -1695,6 +1701,7 @@ window.addEventListener('DOMContentLoaded', async () => {
   const _net84532 = ethers.Network.from(84532);
   readProvider = new ethers.JsonRpcProvider(RPC_URL, _net84532, { staticNetwork: _net84532 });
   loadHomeStats();
+  setTimeout(loadTiersStats, 1500);  // stagger after loadHomeStats to avoid RPC rate-limiting
 
   // Auto-reconnect if wallet was previously connected (silent — no popup)
   if (window.ethereum && localStorage.getItem('cnova_connected')) {
@@ -1967,34 +1974,67 @@ async function loadTiersStats() {
   const rp = readProvider || new ethers.JsonRpcProvider(RPC_URL, 84532, { staticNetwork: true });
   try {
     const TK = ['T1','T2','T3','T4','T5','T6','T7','T8','T9','T10'];
-    const cs = {};
-    for (const t of TK) {
-      cs[t] = {
-        matA: new ethers.Contract(ADDRS[t].matA, MATRIX_ABI, rp),
-        matB: new ethers.Contract(ADDRS[t].matB, MATRIX_ABI, rp),
-      };
+
+    // Phase 1: one allPairsStatus() call per tier PairManager (10 calls → 10 occupancy results)
+    // allPairsStatus() returns the current ACTIVE pair's data — always correct even after pair expansion
+    const statusCalls = TK.map(t =>
+      new ethers.Contract(ADDRS[t].pm, PM_ABI, rp)
+        .allPairsStatus()
+        .catch(() => null)   // null = RPC failed; don't overwrite with 0
+    );
+    const statuses = await Promise.all(statusCalls);
+
+    // Phase 2: secondary detail calls for the active pair's rotationCount + poolAccumulator
+    // (staggered after phase 1 to reduce simultaneous call count)
+    const detailCalls = [];
+    const detailIndex = []; // track which (tier, field) each result maps to
+    for (let i = 0; i < TK.length; i++) {
+      const status = statuses[i];
+      if (!status) { detailCalls.push(Promise.resolve(null), Promise.resolve(null)); }
+      else {
+        const [matrixAs,,,,, actives] = status;
+        const activeIdx = actives.findIndex(a => a);
+        const matrixBs = status[1];
+        const activeMatA = activeIdx >= 0 ? matrixAs[activeIdx] : ADDRS[TK[i]].matA;
+        const activeMatB = activeIdx >= 0 ? matrixBs[activeIdx] : ADDRS[TK[i]].matB;
+        detailCalls.push(
+          new ethers.Contract(activeMatA, MATRIX_ABI, rp).rotationCount().catch(()=>null),
+          new ethers.Contract(activeMatB, MATRIX_ABI, rp).poolAccumulator().catch(()=>null),
+        );
+      }
+      detailIndex.push(i);
     }
-    const calls = [];
-    for (const t of TK) {
-      calls.push(cs[t].matA.occupancy().catch(()=>0n));
-      calls.push(cs[t].matA.rotationCount().catch(()=>0n));
-      calls.push(cs[t].matB.occupancy().catch(()=>0n));
-      calls.push(cs[t].matB.poolAccumulator().catch(()=>0n));
-    }
-    const res = await Promise.all(calls);
+    const details = await Promise.all(detailCalls);
+
+    // Apply results to DOM
     for (let i = 0; i < TK.length; i++) {
       const t = TK[i].toLowerCase();
-      const occAn = Number(res[i*4]),   cycA  = res[i*4+1];
-      const occBn = Number(res[i*4+2]), poolB = res[i*4+3];
-      const pctA = Math.round(occAn/127*100), pctB = Math.round(occBn/127*100);
-      setText(t+'a-occ', occAn); setText(t+'a-cycles', cycA.toString());
-      setText(t+'a-pct', pctA+'%');
-      const bA = document.getElementById(t+'a-bar'); if (bA) bA.style.width = pctA+'%';
-      setText(t+'b-occ', occBn); setText(t+'b-pool', fmt6(poolB));
-      setText(t+'b-pct', pctB+'%');
-      const bB = document.getElementById(t+'b-bar'); if (bB) bB.style.width = pctB+'%';
-      setText('tier-'+t+'a-fill', occAn+'/127');
-      setText('tier-'+t+'b-fill', occBn+'/127');
+      const status = statuses[i];
+
+      if (status) {
+        const [matrixAs, matrixBs, occupancyA, occupancyB, registered, actives] = status;
+        const activeIdx = actives.findIndex(a => a);
+        if (activeIdx >= 0) {
+          const occAn = Number(occupancyA[activeIdx]);
+          const occBn = Number(occupancyB[activeIdx]);
+          const pctA = Math.round(occAn/127*100), pctB = Math.round(occBn/127*100);
+
+          setText(t+'a-occ', occAn);
+          setText(t+'a-pct', pctA+'%');
+          setText('tier-'+t+'a-fill', occAn+'/127');
+          const bA = document.getElementById(t+'a-bar'); if (bA) bA.style.width = pctA+'%';
+
+          setText(t+'b-occ', occBn);
+          setText(t+'b-pct', pctB+'%');
+          setText('tier-'+t+'b-fill', occBn+'/127');
+          const bB = document.getElementById(t+'b-bar'); if (bB) bB.style.width = pctB+'%';
+        }
+      }
+
+      const rotCnt = details[i*2];
+      const poolB  = details[i*2+1];
+      if (rotCnt !== null) setText(t+'a-cycles', rotCnt.toString());
+      if (poolB  !== null) setText(t+'b-pool', fmt6(poolB));
     }
   } catch(e) { console.error('loadTiersStats:', e.message); }
 }
