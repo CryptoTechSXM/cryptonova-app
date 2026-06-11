@@ -34,20 +34,29 @@ require("dotenv").config();
 //   v8_2 = size-64 pre-mainnet  ← default
 const ADDRESSES_FILE = path.join(
   __dirname,
-  process.env.ADDRESSES_FILE || "deployed_addresses_v8_8.json"
+  process.env.ADDRESSES_FILE || "deployed_addresses_v8_9.json"
 );
 
 // COUNT: for 127-seat matrices, 260 fills MatA + MatB (W1 seeds pos-1, 126 fill
 // wallets complete MatA, 126 more fill MatB triggering T2 upgrade) + buffer.
 // also trigger a second MatA cycle and confirm W1 auto-upgrades to T2.
 //
-// Next run after HDR_OFFSET=3000 (126 ok, 124 failed sub-call OOG):
-//   HDR_OFFSET=3126 COUNT=124  → retry the 124 failed wallets (gasLimit now 15M)
-//   HDR_OFFSET=3250 COUNT=200  → continue filling to drive W1's 2nd T1B cycle → T2 upgrade
-const COUNT       = Number(process.env.COUNT       || 124);
+// V8.9 fresh deploy — start HDR_OFFSET=0 (new contracts, no globalJoined collisions)
+// Previous V8.8 runs used HDR_OFFSET=0..3249. V8.9 is a brand-new deploy so 0 is clean.
+// Suggested run sequence for V8.9:
+//   HDR_OFFSET=0   COUNT=127  → fill T1 MatA → trigger first MatA cycle-out
+//   HDR_OFFSET=127 COUNT=127  → fill T1 MatB → trigger MatB cycle → auto-open T2
+//   HDR_OFFSET=254 COUNT=200  → drive W1 T2 upgrade + T2 MatA fill
+const COUNT       = Number(process.env.COUNT       || 127);
 const BATCH_SIZE  = Number(process.env.BATCH_SIZE  || 5);
 const BATCH_DELAY = Number(process.env.BATCH_DELAY || 8);
-const HDR_OFFSET  = Number(process.env.HDR_OFFSET  || 3126); // BIP-44 index offset (change to avoid globalJoined collisions)
+const HDR_OFFSET  = Number(process.env.HDR_OFFSET  || 0); // BIP-44 index offset — fresh V8.9 deploy starts at 0
+// WATCH_WALLETS: comma-separated addresses to report after each batch.
+// e.g. WATCH_WALLETS=0xAbc...,0xDef... node scripts/bigfill_v8.js
+// Always includes W1_ADDR automatically.
+const WATCH_WALLETS_RAW = process.env.WATCH_WALLETS || '';
+// WATCH_EVERY: print watched wallet status every N batches (default 5, set to 1 for every batch)
+const WATCH_EVERY = Number(process.env.WATCH_EVERY || 5);
 const ETH_PER     = ethers.parseEther("0.02");   // gas budget per wallet — 0.02 ETH covers approve + register even at 10+ gwei on Base Sepolia
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -79,6 +88,38 @@ function makeWallets(count) {
     wallets.push(ethers.HDNodeWallet.fromPhrase(mnemo, undefined, path));
   }
   return wallets;
+}
+
+// ── Watched Wallet Reporter ───────────────────────────────────────────────────
+// Queries a list of addresses and prints a compact status table.
+// Call after batches to track key wallets (W1, test accounts, etc.) during a fill run.
+async function reportWatchedWallets(watchList, { tierRouter, matA1, matB1, communityWallet, usdc }) {
+  if (watchList.length === 0) return;
+  console.log('');
+  sep('WATCHED WALLETS');
+  const COHORT = ['—', 'Genesis', 'Pioneer'];
+  for (const addr of watchList) {
+    try {
+      const [tier, wdA, wdB, cohortVal, cwBalance] = await Promise.all([
+        tierRouter.memberHighestTier(addr).catch(() => 0n),
+        matA1.withdrawableOf(addr).catch(() => 0n),
+        matB1.withdrawableOf(addr).catch(() => 0n),
+        communityWallet ? communityWallet.cohort(addr).catch(() => 0n) : Promise.resolve(0n),
+        usdc.balanceOf(addr).catch(() => 0n),
+      ]);
+      const label = addr.slice(0, 10) + '…';
+      const cohortStr = COHORT[Number(cohortVal)] || '—';
+      const wdStr = (wdA > 0n || wdB > 0n)
+        ? `T1A: ${fmt6(wdA)}  T1B: ${fmt6(wdB)}`
+        : 'no withdrawable';
+      console.log(
+        `  ${label}  T${tier || 0}  ${wdStr.padEnd(30)}  CW: ${cohortStr.padEnd(8)}  USDC: ${fmt6(cwBalance)}`
+      );
+    } catch (e) {
+      console.warn(`  ⚠  watchWallet ${addr.slice(0,10)} query failed: ${e.message.slice(0,60)}`);
+    }
+  }
+  console.log('');
 }
 
 // ── Snapshot helper (V8.1) ────────────────────────────────────────────────────
@@ -230,9 +271,19 @@ async function main() {
   const matB2        = T2.matB ? await ethers.getContractAt("FigureEightMatrixV8", T2.matB) : null;
   const stabilityFund = SF_ADDR ? await ethers.getContractAt("StabilityFund", SF_ADDR) : null;
 
+  // CommunityWallet for watched-wallet cohort queries (graceful fallback if not in addresses file)
+  const CW_ADDR = addrs.communityWallet || addrs.CommunityWallet || null;
+  const communityWallet = CW_ADDR ? await ethers.getContractAt("CommunityWallet", CW_ADDR) : null;
+  const usdcContract = await ethers.getContractAt("MockUSDC", addrs.usdc || addrs.USDC);
+
   const T1_FEE  = await matA1.ENTRY_FEE();
   const mSize   = await matA1.MATRIX_SIZE();
   const W1_ADDR = process.env.REFERRER || addrs.accountOne || addrs.AccountOne;
+
+  // Build watched wallet list: always include W1, add any from WATCH_WALLETS env
+  const watchAddrs = [W1_ADDR,
+    ...WATCH_WALLETS_RAW.split(',').map(a => a.trim()).filter(a => ethers.isAddress(a))
+  ].filter((a, i, arr) => a && arr.indexOf(a) === i); // dedupe
 
   sep(`bigfill_v8.js — ${COUNT} wallets · batch ${BATCH_SIZE} · delay ${BATCH_DELAY}s · offset ${HDR_OFFSET}`);
   console.log(`  Deployer:   ${deployerAddr}`);
@@ -240,6 +291,8 @@ async function main() {
   console.log(`  T1 fee:     ${fmt6(T1_FEE)}`);
   console.log(`  Matrix sz:  ${mSize}  (testnet)`);
   console.log(`  TierRouter: ${addrs.tierRouter || addrs.TierRouter}`);
+  console.log(`  Watching:   ${watchAddrs.length} wallet(s) — report every ${WATCH_EVERY} batches`);
+  if (watchAddrs.length > 0) watchAddrs.forEach(a => console.log(`              ${a}`));
   sep();
 
   // ── W1 status (informational — referrer need not be registered) ───────────
@@ -566,6 +619,11 @@ async function main() {
       break;
     }
 
+    // Watched wallet report (every WATCH_EVERY batches, always on last batch)
+    if (watchAddrs.length > 0 && (batchNum % WATCH_EVERY === 0 || b === batches.length - 1)) {
+      await reportWatchedWallets(watchAddrs, { tierRouter, matA1, matB1, communityWallet, usdc: usdcContract });
+    }
+
     if (b < batches.length - 1) await sleep(BATCH_DELAY);
   }
 
@@ -689,20 +747,18 @@ async function main() {
           await (await matA1Raw.forceCross(addr, { gasLimit: 12_000_000, nonce: dNonce })).wait();
           dNonce++;
           crossed++;
+   
           await sleep(6); // pause between crossings — Base Sepolia in-flight limit for delegated accounts
         } catch (e) {
           console.warn(`    ⚠ forceCross failed for ${addr.slice(0,10)}: ${e.message.slice(0,120)}`);
           await sleep(10);
-          // Re-sync deployer nonce from chain so next attempt uses the correct nonce
           dNonce = Number(await ethers.provider.getTransactionCount(deployerAddr, 'pending'));
-          console.log(`    ↻ Re-synced deployer nonce → ${dNonce}`);
         }
       }
 
       const matBAfter = await matB1.occupancy();
       console.log(`  MatB after forceCross: ${matBAfter} / ${matBSize}`);
-      console.log(`  Crossed: ${crossed} / ${toCross.length}`);
-    } // end if toCross.length > 0
+      console.log(`  Crossed ${crossed} / ${toCross.length} wallets`);
 
     } // end else (forceCross — cycles have happened)
   } // end outer forceCross block
@@ -711,43 +767,29 @@ async function main() {
   sep();
   await snapshot("POST-FILL SNAPSHOT", { tierRouter, pm1, matA1, matB1, matA2, matB2, cnova, treasury, stabilityFund, w1Addr: W1_ADDR });
 
-  // ── Summary ───────────────────────────────────────────────────────────────
-  sep("SUMMARY");
-  console.log(`  Wallets funded:   ${wallets.length}`);
-  console.log(`  Registered:       ${registered}`);
-  console.log(`  Failures:         ${failures.length}`);
-  const showN = Math.min(failures.length, 5);
-  for (let i = 0; i < showN; i++) console.log(`    [${i}] ${failures[i]}`);
-  if (failures.length > showN) console.log(`    ... and ${failures.length - showN} more`);
-
-  const finalTier = await tierRouter.memberHighestTier(W1_ADDR);
-  if (finalTier >= 2n) {
-    console.log(`\n  ✅  W1 (${W1_ADDR.slice(0,10)}) upgraded to T${finalTier}!`);
-  } else {
-    console.log(`\n  ⚠   W1 (${W1_ADDR.slice(0,10)}) still at T${finalTier}`);
-    console.log(`      W1 = accountOne fee-recipient — it only upgrades if it was`);
-    console.log(`      pre-registered as position-1 seed before the fill started.`);
-    const matA2occ = await matA2.occupancy();
-    const t2fee    = await matA2.ENTRY_FEE();
-    console.log(`      Check T2 MatA occupancy above to see if OTHER roots upgraded.`);
-    console.log(`      T2 entry fee: $${Number(t2fee)/1e6}  |  T2 MatA occ: ${matA2occ}/${mSize}`);
+  // ── Watched wallets — final report ────────────────────────────────────────
+  if (watchAddrs.length > 0) {
+    await reportWatchedWallets(watchAddrs, { tierRouter, matA1, matB1, communityWallet, usdc: usdcContract });
   }
 
-  console.log("");
-  sep();
-  console.log("  NEXT STEPS:");
-  console.log("    1. Re-run — forceCross logic will pick up remaining parked wallets");
-  console.log("    2. If W1 not upgrading, check W1 MatB escrow vs T2 fee above");
-  if (registered === 0 && failures.length === wallets.length) {
+  // ── Next-run hint ─────────────────────────────────────────────────────────
+  sep("NEXT RUN HINT");
+  const nextOffset = HDR_OFFSET + wallets.length;
+  console.log(`    To continue with fresh wallets:`);
+  console.log(`    HDR_OFFSET=${nextOffset} COUNT=${COUNT} npx hardhat run scripts/bigfill_v8.js --network baseSepolia`);
+  if (wallets.filter(w => w._skip).length > 0) {
+    console.log(`    (Some wallets were skipped — check logs above)`);
+  }
+  if (wallets.length === wallets.filter((_, i) => i < wallets.length).length) {
     console.log(`    3. All ${wallets.length} wallets already registered at offset ${HDR_OFFSET}`);
-    console.log(`       Try: HDR_OFFSET=${HDR_OFFSET + 500} COUNT=6 npx hardhat run scripts/bigfill_v8.js --network baseSepolia`);
-  } else {
-    console.log("    3. bigfill_v8.js again with COUNT=200 for full stress test");
+    console.log(`       Try: HDR_OFFSET=${nextOffset} COUNT=6 npx hardhat run scripts/bigfill_v8.js --network baseSepolia`);
   }
   sep();
 }
+}
 
-main().catch(err => {
-  console.error(err);
-  process.exitCode = 1;
+
+main().catch(e => {
+  console.error('\n  ❌  bigfill_v8.js fatal error:', e);
+  process.exit(1);
 });
