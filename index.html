@@ -1847,7 +1847,7 @@ async function loadHomeStats() {
       occA2, cyclesA2, occB2, poolB2,
       sysCycles, supply, epoch, sfBal, treasUsdc,
       occA3, cyclesA3, occB3, poolB3,
-      cwPoolBal
+      cwPoolBal, allTimeMinted
     ] = await Promise.all([
       matA1.occupancy().catch(()=>0n),
       matA1.rotationCount().catch(()=>0n),
@@ -1868,11 +1868,12 @@ async function loadHomeStats() {
       matB3.occupancy().catch(()=>0n),
       matB3.poolAccumulator().catch(()=>0n),
       usdc.balanceOf(ADDRS.communityWallet || ethers.ZeroAddress).catch(()=>0n),
+      cnova.totalMinted().catch(()=>0n),  // all-time minted (never decreases on burn)
     ]);
 
     // Stat cards
     setText('stat-members',  totalJoined.toString());
-    setText('stat-minted',   Number(ethers.formatEther(supply)).toLocaleString(undefined,{maximumFractionDigits:0}));
+    setText('stat-minted',   Number(ethers.formatEther(allTimeMinted)).toLocaleString(undefined,{maximumFractionDigits:0})); // all-time, never decreases
     setText('stat-reserve',  fmt6(sfBal));
     setText('stat-cw-balance', fmt6(cwPoolBal));
     setText('stat-cycles',   sysCycles.toString());
@@ -1931,7 +1932,7 @@ async function loadHomeStats() {
     const epochLabel = `Epoch ${epochNum} — ${EPOCH_NAMES[epochNum-1] || 'Era '+epochNum}`;
     setText('stat-epoch', epochLabel);
     setText('cw-epoch', epochLabel);
-    setText('stat-supply', Number(ethers.formatEther(supply)).toLocaleString(undefined,{maximumFractionDigits:0})+' CNOVA');
+    setText('stat-supply', Number(ethers.formatEther(supply)).toLocaleString(undefined,{maximumFractionDigits:0})+' CNOVA'); // current circulating (decreases on redeem/burn)
     setText('stat-treasury-usdc', fmt6(treasUsdc));
 
     // CNOVA floor price: treasury USDC ÷ total CNOVA supply
@@ -2922,9 +2923,11 @@ async function doRedeemAtFloor() {
     await tx.wait();
     setStatus('redeem-status','✅ Redeemed! USDC sent to your wallet.','ok');
     toast('CNOVA redeemed successfully!','success');
+    btn.disabled = false; btn.textContent = 'Step 2: Redeem for USDC';
     await new Promise(r => setTimeout(r, 3500)); // let Base Sepolia RPC nodes index the burn
     await loadRedeemData();
     await loadDashboardData();
+    loadHomeStats(); // refresh CNOVA Minted + Total Supply in live stats
   } catch(e) {
     btn.disabled = false; btn.textContent = 'Step 2: Redeem for USDC';
     setStatus('redeem-status','❌ ' + friendlyError(e),'err');
