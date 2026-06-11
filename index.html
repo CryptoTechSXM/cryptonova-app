@@ -643,6 +643,7 @@
         <div><div style="font-size:12px;color:var(--text3);margin-bottom:4px">Current Epoch</div><div style="font-weight:700;color:var(--yellow)" id="stat-epoch">—</div></div>
         <div><div style="font-size:12px;color:var(--text3);margin-bottom:4px">Reward Per Entry</div><div style="font-weight:700;color:var(--green)" id="stat-reward">—</div></div>
         <div><div style="font-size:12px;color:var(--text3);margin-bottom:4px">Stability Rescue Fund</div><div style="font-weight:700" id="stat-reserve">—</div></div>
+        <div><div style="font-size:12px;color:var(--text3);margin-bottom:4px">Community Wallet</div><div style="font-weight:700;color:#a855f7" id="stat-cw-balance">—</div></div>
         <div><div style="font-size:12px;color:var(--text3);margin-bottom:4px">Total Supply</div><div style="font-weight:700" id="stat-supply">—</div></div>
       </div>
     </div>
@@ -657,6 +658,9 @@
       <div class="split-row"><span class="split-label">⚙️ Dev + Ops</span><span><span class="split-amount">5%</span> <span class="split-pct">$0.50</span></span></div>
       <div class="split-row"><span class="split-label">🌊 CNOVA Stability Fund <span style="font-size:10px;color:var(--text3)">(ops reserve)</span></span><span><span class="split-amount">6%</span> <span class="split-pct">$0.60</span></span></div>
       <div class="split-row"><span class="split-label">🔥 CNOVA Buyback Reserve</span><span><span class="split-amount">1%</span> <span class="split-pct">$0.10</span></span></div>
+      <div style="margin-top:8px;padding:8px 12px;background:rgba(168,85,247,.08);border:1px solid rgba(168,85,247,.25);border-radius:8px;font-size:12px;color:var(--text2);line-height:1.6">
+        🏛️ <strong style="color:#a855f7">Community Wallet</strong> — funded automatically from orphan fees (empty upline slots in the matrix tree). Not a fixed % split.
+      </div>
       <div style="margin-top:14px;padding:10px 14px;background:var(--green-dim);border:1px solid var(--green2);border-radius:8px;font-size:13px;color:var(--text2)">
         💡 <strong style="color:var(--green)">CryptoNova Matrix mechanic:</strong> Fill Matrix A → root crosses to Matrix B → fill B → root auto-upgrades to T2. The loop repeats for each tier.
       </div>
@@ -991,7 +995,7 @@
         <div class="card-sm">
           <div class="stat-label">Total Earned</div>
           <div class="stat-value" id="dash-total-earned">—</div>
-<div class="stat-sub" id="dash-total-earned-sub" title="Total USDC ever credited to your account. Includes current balance, escrow, amounts spent on tier upgrades, and past withdrawals.">All tiers lifetime</div>
+<div class="stat-sub" id="dash-total-earned-sub" title="Total USDC ever credited to your account. Includes current balance, amounts auto-deducted for tier upgrades, and past withdrawals.">All tiers lifetime</div>
         </div>
         <div class="card-sm">
           <div class="stat-label"><svg width="14" height="14" style="vertical-align:middle;border-radius:50%;margin-right:3px"><use href="#cnova-icon"/></svg>CNOVA Balance</div>
@@ -1008,10 +1012,10 @@
           <div class="stat-value" id="dash-cnova-burned" style="color:var(--red)">—</div>
           <div class="stat-sub">Redeemed lifetime</div>
         </div>
-        <div class="card-sm" style="border-color:rgba(245,158,11,.4)" title="Earnings held in escrow — releases to Withdrawable when you complete your next cycle-out.">
-          <div class="stat-label">In Escrow &#9432;</div>
-          <div class="stat-value" id="dash-escrow" style="color:var(--yellow)">—</div>
-          <div class="stat-sub" id="dash-escrow-sub" title="Current escrow balance. Earns no fee — releases to Withdrawable when you cycle out. Includes any amount deducted for auto-upgrades.">Vests at next cycle-out</div>
+        <div class="card-sm" style="border-color:rgba(168,85,247,.4)" title="Total USDC held in the Community Wallet — funded by orphan fees from empty upline positions.">
+          <div class="stat-label">🏛️ Community Pool</div>
+          <div class="stat-value" id="dash-cw-pool" style="color:#a855f7">—</div>
+          <div class="stat-sub">Orphan fees collected</div>
         </div>
       </div>
 
@@ -1133,7 +1137,7 @@
       <div class="card" style="margin-bottom:24px">
         <div class="section-title" style="margin-bottom:14px"><div class="dot" style="background:var(--purple)"></div> Community Wallet</div>
         <div id="cw-not-founder" style="display:none;padding:14px;background:var(--bg3);border-radius:10px;font-size:13px;color:var(--text2)">
-          You are not a founding member. The first <strong id="cw-max-founders">2,000</strong> members earn Community Wallet payouts every 25 days — the first 1,000 as <strong>Nova Originals</strong> (70% share) and the next 1,000 as <strong>Nova Pioneers</strong> (30% share).
+          You are not a founding member. The first <strong id="cw-max-founders">1,000</strong> members earn Community Wallet payouts — the first 500 as <strong>Genesis Members</strong> (#1–500, 60% share) and the next 500 as <strong>Pioneer Members</strong> (#501–1,000, 40% share).
         </div>
         <div id="cw-founder-panel" style="display:none">
           <div class="grid-2" style="margin-bottom:16px">
@@ -1150,8 +1154,8 @@
           </div>
           <div class="info-row"><span class="info-key">Pending Pool</span><span class="info-val" id="cw-pending">—</span></div>
           <div class="info-row"><span class="info-key">Current Epoch</span><span class="info-val" id="cw-epoch">—</span></div>
-          <div class="info-row"><span class="info-key">Nova Original Slots</span><span class="info-val" id="cw-tranche-a">—</span></div>
-          <div class="info-row"><span class="info-key">Nova Pioneer Slots</span><span class="info-val" id="cw-tranche-b">—</span></div>
+          <div class="info-row"><span class="info-key">Genesis Slots (60%)</span><span class="info-val" id="cw-tranche-a">—</span></div>
+          <div class="info-row"><span class="info-key">Pioneer Slots (40%)</span><span class="info-val" id="cw-tranche-b">—</span></div>
           <div style="margin-top:16px">
             <button class="btn btn-green full-w" id="btn-cw-claim" onclick="doCWClaimAll()" disabled>
               Claim All Available
@@ -1160,10 +1164,9 @@
           </div>
         </div>
         <div id="cw-loading" style="padding:16px;background:var(--bg3);border-radius:10px;font-size:13px;color:var(--text2);line-height:1.6">
-          <strong style="color:var(--green)">🏛️ Community Wallet — Phase 2</strong><br>
-          The Community Wallet pays out to the first 2,000 members every 25 days.
-          Nova Originals (#1–1,000) receive 70% of the pool; Nova Pioneers (#1,001–2,000) receive 30%.<br><br>
-          This feature activates with the Phase 2 contract deployment. Your founder status is already being tracked on-chain.
+          <strong style="color:#a855f7">🏛️ Community Wallet — Live</strong><br>
+          The first 1,000 founding members earn payouts from orphan fees. Genesis Members (#1–500) receive 60% of each distribution; Pioneer Members (#501–1,000) receive 40%.<br><br>
+          Connect your wallet to check your founder status and claimable balance.
         </div>
       </div>
 
@@ -1843,7 +1846,8 @@ async function loadHomeStats() {
       occA, cyclesA, occB, poolB, totalJoined,
       occA2, cyclesA2, occB2, poolB2,
       sysCycles, supply, epoch, sfBal, treasUsdc,
-      occA3, cyclesA3, occB3, poolB3
+      occA3, cyclesA3, occB3, poolB3,
+      cwPoolBal
     ] = await Promise.all([
       matA1.occupancy().catch(()=>0n),
       matA1.rotationCount().catch(()=>0n),
@@ -1863,12 +1867,14 @@ async function loadHomeStats() {
       matA3.rotationCount().catch(()=>0n),
       matB3.occupancy().catch(()=>0n),
       matB3.poolAccumulator().catch(()=>0n),
+      usdc.balanceOf(ADDRS.communityWallet || ethers.ZeroAddress).catch(()=>0n),
     ]);
 
     // Stat cards
     setText('stat-members',  totalJoined.toString());
     setText('stat-minted',   Number(ethers.formatEther(supply)).toLocaleString(undefined,{maximumFractionDigits:0}));
     setText('stat-reserve',  fmt6(sfBal));
+    setText('stat-cw-balance', fmt6(cwPoolBal));
     setText('stat-cycles',   sysCycles.toString());
 
     // T1A progress
@@ -2304,10 +2310,11 @@ async function loadDashboardData() {
     // v8.7: floor is backed by Treasury USDC (15% BPS), not SF
     const cnova = new ethers.Contract(ADDRS.cnova, CNOVA_ABI, rp);
     const usdcT = new ethers.Contract(ADDRS.usdc,  USDC_ABI,  rp);
-    const [cnovabal, treasuryUsdc, cnovaSupply] = await Promise.all([
+    const [cnovabal, treasuryUsdc, cnovaSupply, cwPoolDash] = await Promise.all([
       cnova.balanceOf(userAddr).catch(()=>0n),
       usdcT.balanceOf(ADDRS.treasury).catch(()=>0n),
       cnova.totalSupply().catch(()=>0n),
+      usdcT.balanceOf(ADDRS.communityWallet || ethers.ZeroAddress).catch(()=>0n),
     ]);
     // cnovabal=18dec, treasuryUsdc=6dec, cnovaSupply=18dec → result is 6dec USDC
     const cnovaValRaw = cnovaSupply > 0n ? (cnovabal * treasuryUsdc) / cnovaSupply : 0n;
@@ -2353,19 +2360,9 @@ async function loadDashboardData() {
           ? `All tiers lifetime \u2022 ${fmt6(deducted)} deducted/claimed`
           : 'All tiers lifetime';
       }
-      // Escrow sub-label — show breakdown: escrow + deducted adds clarity
-      const escSubEl = document.getElementById('dash-escrow-sub');
-      if (escSubEl) {
-        if (deducted > 0n) {
-          escSubEl.textContent = `Vests at cycle-out \u2022 ${fmt6(deducted)} auto-deducted`;
-          escSubEl.style.color = 'var(--yellow)';
-        } else {
-          escSubEl.textContent = 'Vests at next cycle-out';
-          escSubEl.style.color = '';
-        }
-      }
+      // V8.8: escrow removed — escrow card replaced by Community Pool card
     } catch(_) {}
-    setText('dash-escrow',         fmt6(totalEscrow));
+    setText('dash-cw-pool',         fmt6(cwPoolDash));
     setText('dash-cnova',          Number(ethers.formatEther(cnovabal)).toFixed(2));
     setText('dash-cnova-val',      fmt6(cnovaValRaw));
     // Burn history: fire-and-forget (queryFilter can be slow; don't await)
