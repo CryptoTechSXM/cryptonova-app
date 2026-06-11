@@ -328,12 +328,12 @@
   <div id="launch-gate">
     <h2>&#x1F680; CryptoNova Matrix</h2>
     <p style="font-size:15px;font-weight:600;color:var(--text);margin-bottom:4px">
-      Community Testnet Launch &mdash; Tonight at 8 PM
+      Community Testnet Launch &mdash; Friday, June 12 at 12 PM ET
     </p>
     <p style="max-width:440px">
-      V8.9 contracts are deploying now. Chainlink Automation, StabilityFund,
-      and all 10 tier matrices will be live and ready for you to test.<br><br>
-      Register, cycle, earn CNOVA, withdraw &mdash; put everything through its paces.
+      Register, earn, and redeem <strong style="color:var(--green)">CryptoNova Tokens</strong> across 10 live tiers.<br><br>
+      Test the full cycle &mdash; register, cycle out, withdraw, unlock your tokens.
+      Your feedback shapes the mainnet launch.
     </p>
 
     <!-- Countdown -->
@@ -342,7 +342,7 @@
       <div class="cd-box"><span class="cd-num" id="cd-m">00</span><div class="cd-lbl">Minutes</div></div>
       <div class="cd-box"><span class="cd-num" id="cd-s">00</span><div class="cd-lbl">Seconds</div></div>
     </div>
-    <div class="launch-sub" id="cd-date-label">8:00 PM Eastern &bull; Tonight, June 11 2026</div>
+    <div class="launch-sub" id="cd-date-label">12:00 PM Eastern &bull; Friday, June 12 2026</div>
 
     <!-- City timezone grid -->
     <div id="cd-cities-wrap" style="margin-top:14px;max-width:400px;width:100%;text-align:left">
@@ -1547,12 +1547,12 @@
 // ═══════════════════════════════════════════════════════════════════════
 const CHAIN_ID = 84532;
 
-// ── Countdown to 8 PM Eastern (fixed UTC anchor) ─────────────────────────
+// ── Countdown to 12 PM (noon) Eastern Friday June 12 ────────────────────────
 (function initCountdown() {
-  // 8:00 PM EDT (Eastern Daylight Time) = 00:00 UTC next day (June 12 2026).
+  // 12:00 PM EDT (noon Eastern) = 16:00 UTC on June 12 2026.
   // This is a FIXED UTC timestamp — same countdown for every viewer worldwide.
   // To reschedule: update this ISO string.
-  const LAUNCH_UTC = new Date('2026-06-12T00:00:00Z');
+  const LAUNCH_UTC = new Date('2026-06-12T16:00:00Z'); // noon EDT = 16:00 UTC
 
   // Major city local equivalents — shown below the countdown
   const CITY_ZONES = [
