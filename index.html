@@ -669,7 +669,7 @@
 
   <!-- ══ TIERS TAB ═══════════════════════════════════════════════════════ -->
   <div id="tab-tiers" class="tab-panel">
-    <div class="section-title" style="margin-bottom:16px"><div class="dot"></div> 10-Tier CryptoNova Matrix &#8212; Live Stats</div>
+    <div class="section-title" style="margin-bottom:16px"><div class="dot"></div> 7-Tier CryptoNova Matrix &#8212; Live Stats</div>
     <div class="card" style="margin-bottom:24px;overflow-x:auto">
       <table style="width:100%;border-collapse:collapse;font-size:13px">
         <thead><tr style="border-bottom:1px solid var(--border)">
@@ -2039,7 +2039,7 @@ async function loadTiersStats() {
     }
 
     // Phase 3: read velocity gate state for all 10 tiers via tierVelocityGreen(uint8)
-    // NOTE: getVelocityGates() has a bool[7] vs MAX_TIERS=10 bug in deployed contract →
+    // NOTE: getVelocityGates() has a bool[7] vs MAX_TIERS=10 bug in deployed contract
     // always use individual tierVelocityGreen(i) calls instead.
     try {
       const router = new ethers.Contract(ADDRS.tierRouter, TIER_ROUTER_ABI, rp);
@@ -2049,10 +2049,9 @@ async function loadTiersStats() {
       for (let i = 0; i < TK.length; i++) {
         const isGreen = gates[i]; // null = RPC failed, leave as-is
         if (isGreen === null) continue;
-        const tNum = TK[i].toLowerCase(); // 't1'..'t10'
+        const tNum = TK[i].toLowerCase();
         const n = i + 1;
 
-        // Summary table pill
         const pill = document.getElementById('tier-t'+n+'-gate');
         if (pill) {
           if (isGreen) {
@@ -2066,7 +2065,6 @@ async function loadTiersStats() {
           }
         }
 
-        // Card section-title dots (T1-T7 have cards; T8-T10 only appear in the summary table)
         const dotColor = isGreen ? 'var(--green)' : 'var(--yellow)';
         const dotA = document.getElementById(tNum+'a-dot');
         const dotB = document.getElementById(tNum+'b-dot');
@@ -3209,4 +3207,98 @@ async function approveUSDCForUpgrade() {
     setStatus('✅ USDC approved. Now click Step 2 to upgrade.');
     const btnManual = document.getElementById('btn-manual-upgrade');
     const btnUp     = document.getElementById('btn-upgrade');
-    if (btnManual) { btnManual.disabled = false; btnManual.classList.remove('btn-ghost'); btnManual.classList.add
+    if (btnManual) { btnManual.disabled = false; btnManual.classList.remove('btn-ghost'); btnManual.classList.add('btn-green'); }
+    if (btnUp)     { btnUp.disabled     = false; btnUp.classList.remove('btn-ghost'); btnUp.classList.add('btn-green'); }
+  } catch(e) {
+    setStatus('❌ ' + (e.reason || e.message));
+    if (btnReg)  btnReg.disabled  = false;
+    if (btnDash) btnDash.disabled = false;
+  }
+}
+
+async function doManualUpgrade() {
+  if (!signer) { alert('Connect your wallet first.'); return; }
+  const btn    = document.getElementById('btn-manual-upgrade');
+  const status = document.getElementById('upgrade-status-dash');
+  const idx    = window._dashUpgradeTierIndex ?? 1;
+  try {
+    btn.disabled = true;
+    status.textContent = 'Submitting upgrade transaction...';
+    const tr = new ethers.Contract(ADDRS.tierRouter, TIER_ROUTER_ABI, signer);
+    const tx = await tr.manualUpgrade(idx, { gasLimit: 3_000_000 });
+    status.textContent = 'Transaction submitted. Waiting for confirmation...';
+    await tx.wait();
+    status.textContent = '🎉 Tier upgrade confirmed! Refreshing dashboard...';
+    setTimeout(() => loadDashboardData(), 2000);
+  } catch(e) {
+    status.textContent = '❌ ' + (e.reason || e.message);
+    btn.disabled = false;
+  }
+}
+function onUpgradeTierChange() {
+  const sel  = document.getElementById('upgrade-tier-select');
+  const hint = document.getElementById('upgrade-tier-hint');
+  if (!sel || !sel.value) { if (hint) hint.textContent = ''; return; }
+  const fees = { '1': 25_000_000n, '2': 50_000_000n, '3': 100_000_000n };
+  const fee  = fees[sel.value] || 25_000_000n;
+  window._upgradeCardFee     = fee;
+  window._upgradeCardTierIdx = Number(sel.value);
+  if (hint) hint.textContent = 'Entry fee: $' + (Number(fee) / 1_000_000) + ' USDC from your wallet';
+}
+
+async function checkUpgradeAllowance() {
+  if (!userAddr) { toast('Connect wallet first', 'error'); return; }
+  const rp   = readProvider || new ethers.JsonRpcProvider(RPC_URL, 84532, { staticNetwork: true });
+  const usdc = new ethers.Contract(ADDRS.usdc, USDC_ABI, rp);
+  const fee  = window._upgradeCardFee || 25_000_000n;
+  const al   = await usdc.allowance(userAddr, ADDRS.tierRouter).catch(() => 0n);
+  const btn  = document.getElementById('btn-upgrade');
+  if (btn) btn.disabled = al < fee;
+  toast(al >= fee ? '✅ Allowance confirmed — ready to upgrade' : '⏳ Not yet approved', al >= fee ? 'success' : 'info');
+}
+
+async function doUpgrade() {
+  if (!signer) { toast('Connect wallet first', 'error'); return; }
+  const btn    = document.getElementById('btn-upgrade');
+  const status = document.getElementById('upgrade-status');
+  const idx    = window._upgradeCardTierIdx ?? 1;
+  try {
+    if (btn) btn.disabled = true;
+    if (status) status.textContent = 'Submitting upgrade transaction...';
+    const tr = new ethers.Contract(ADDRS.tierRouter, TIER_ROUTER_ABI, signer);
+    const tx = await tr.manualUpgrade(idx, { gasLimit: 3_000_000 });
+    if (status) status.textContent = 'Waiting for confirmation...';
+    await tx.wait();
+    if (status) status.innerHTML = '<span style="color:var(--green)">🎉 Upgraded to T' + (idx + 1) + '! Check your Dashboard.</span>';
+    toast('Tier upgraded successfully!', 'success');
+    setTimeout(() => loadDashboardData(), 2000);
+  } catch(e) {
+    if (status) status.textContent = '❌ ' + (e.reason || e.message);
+    if (btn) btn.disabled = false;
+  }
+}
+
+
+// ── v8.6 helper: updateAddrsFromDeployed ─────────────────────────────────────
+// Paste deployed_addresses_v8_8.json content into window._v88Addrs then call this.
+// Example: fetch('deployed_addresses_v8_8.json').then(r=>r.json()).then(updateAddrsFromDeployed)
+function updateAddrsFromDeployed(d) {
+  if (!d) return;
+  if (d.usdc)          ADDRS.usdc          = d.usdc;
+  if (d.cnova)         ADDRS.cnova         = d.cnova;
+  if (d.stabilityFund) ADDRS.stabilityFund = d.stabilityFund;
+  if (d.tierRouter)    ADDRS.tierRouter    = d.tierRouter;
+  if (d.matrixKeeper)  ADDRS.matrixKeeper  = d.matrixKeeper;
+  const t = d.tiers || {};
+  for (let i = 1; i <= 10; i++) {
+    const tier = t[String(i)] || t[i];
+    if (tier) {
+      const key = 'T' + i;
+      ADDRS[key] = { pm: tier.pairManager || tier.pm || '', matA: tier.matA || '', matB: tier.matB || '' };
+    }
+  }
+  console.log('[v8.8] ADDRS updated from deployed JSON');
+}
+</script>
+</body>
+</html>
