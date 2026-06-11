@@ -395,9 +395,6 @@
       <div id="cd-cities"></div>
     </div>
 
-    <!-- Shown when countdown hits zero -->
-    <div class="cd-live" id="cd-live-msg">&#x1F7E2; We&rsquo;re Live!</div>
-    <button id="btn-enter-now" onclick="openGate()">Enter CryptoNova &rarr;</button>
     <div style="margin-top:20px">
       <button id="btn-add-usdc" onclick="addMockUSDC()" style="background:rgba(0,122,255,.15);border:1px solid rgba(0,122,255,.4);color:#4da6ff;padding:10px 20px;border-radius:8px;font-size:13px;cursor:pointer;font-weight:600">
         + Add Testnet USDC to MetaMask
@@ -1612,11 +1609,6 @@ const CHAIN_ID = 84532;
     { city: 'Sydney',             tz: 'Australia/Sydney'    },
   ];
 
-  function openGate() {
-    document.getElementById('launch-gate').classList.remove('visible');
-  }
-  window.openGate = openGate;
-
   function pad(n) { return String(n).padStart(2, '0'); }
 
   // Build city time grid once
@@ -1640,13 +1632,8 @@ const CHAIN_ID = 84532;
     const diff = LAUNCH_UTC - new Date();
 
     if (diff <= 0) {
-      document.getElementById('cd-h').textContent = '00';
-      document.getElementById('cd-m').textContent = '00';
-      document.getElementById('cd-s').textContent = '00';
-      document.getElementById('cd-date-label').style.display = 'none';
-      document.getElementById('cd-cities-wrap').style.display = 'none';
-      document.getElementById('cd-live-msg').style.display = 'block';
-      document.getElementById('btn-enter-now').style.display = 'inline-block';
+      // Auto-lift gate at launch time — no manual button needed
+      document.getElementById('launch-gate').classList.remove('visible');
       // Banner live state
       document.querySelector('#launch-banner .bn-cd').style.display = 'none';
       document.querySelector('#launch-banner .bn-sep').style.display = 'none';
