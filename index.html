@@ -291,16 +291,68 @@
       color: var(--yellow); border-radius: 20px; font-size: 12px;
       font-weight: 600; letter-spacing: .5px;
     }
+
+    /* ── Countdown timer ──────────────────────────────────── */
+    /* ── City timezone grid ──────────────────────────── */
+    #cd-cities-wrap { margin: 10px auto 0; max-width: 400px; width: 100%; }
+    #cd-cities-wrap h4 { font-size: 11px; color: var(--text3); text-transform: uppercase;
+                         letter-spacing: 1px; margin-bottom: 8px; }
+    .cd-city-row  { display: flex; justify-content: space-between; align-items: center;
+                    padding: 5px 10px; border-radius: 7px; }
+    .cd-city-row:nth-child(odd)  { background: rgba(255,255,255,.03); }
+    .cd-city-name { font-size: 12px; color: var(--text2); }
+    .cd-city-time { font-size: 12px; color: var(--green); font-family: monospace;
+                    font-weight: 600; }
+
+    .cd-wrap { display: flex; gap: 14px; margin: 22px auto 18px; justify-content: center; }
+    .cd-box  { text-align: center; background: rgba(0,255,136,.07);
+               border: 1px solid rgba(0,255,136,.25); border-radius: 12px;
+               padding: 14px 20px; min-width: 74px; }
+    .cd-num  { font-size: 40px; font-weight: 800; color: var(--green);
+               font-family: monospace; line-height: 1; display: block; }
+    .cd-lbl  { font-size: 10px; color: var(--text3); text-transform: uppercase;
+               letter-spacing: 1.2px; margin-top: 5px; }
+    .cd-live { font-size: 28px; font-weight: 800; color: var(--green);
+               animation: cdpulse 1.2s infinite; display: none; margin: 16px 0 8px; }
+    @keyframes cdpulse { 0%,100%{opacity:1} 50%{opacity:.4} }
+    #btn-enter-now { display: none; margin-top: 16px; padding: 14px 36px;
+               background: var(--green); color: #000; border: none;
+               border-radius: 10px; font-size: 16px; font-weight: 800;
+               cursor: pointer; letter-spacing: .5px; }
+    #btn-enter-now:hover { background: #00e676; }
+    .launch-sub { font-size: 12px; color: var(--text3); margin-top: 6px; letter-spacing: .5px; }
     </style>
 </head>
 <body>
   <!-- ══ LAUNCH GATE ══════════════════════════════════════════════════ -->
   <div id="launch-gate">
-    <h2>&#x26A1; CryptoNova Matrix V8.8</h2>
-    <p>Final infrastructure testing in progress.<br>
-    Chainlink Automation, StabilityFund seeding, and stress-test validation are underway.<br><br>
-    The platform will open for registration once all systems are confirmed live.</p>
-    <div class="soon-pill">&#x1F527; Coming Soon &mdash; Testing in Progress</div>
+    <h2>&#x1F680; CryptoNova Matrix</h2>
+    <p style="font-size:15px;font-weight:600;color:var(--text);margin-bottom:4px">
+      Community Testnet Launch &mdash; Tonight at 8 PM
+    </p>
+    <p style="max-width:440px">
+      V8.9 contracts are deploying now. Chainlink Automation, StabilityFund,
+      and all 10 tier matrices will be live and ready for you to test.<br><br>
+      Register, cycle, earn CNOVA, withdraw &mdash; put everything through its paces.
+    </p>
+
+    <!-- Countdown -->
+    <div class="cd-wrap">
+      <div class="cd-box"><span class="cd-num" id="cd-h">00</span><div class="cd-lbl">Hours</div></div>
+      <div class="cd-box"><span class="cd-num" id="cd-m">00</span><div class="cd-lbl">Minutes</div></div>
+      <div class="cd-box"><span class="cd-num" id="cd-s">00</span><div class="cd-lbl">Seconds</div></div>
+    </div>
+    <div class="launch-sub" id="cd-date-label">8:00 PM Eastern &bull; Tonight, June 11 2026</div>
+
+    <!-- City timezone grid -->
+    <div id="cd-cities-wrap" style="margin-top:14px;max-width:400px;width:100%;text-align:left">
+      <h4 style="font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px;text-align:center">Your local launch time</h4>
+      <div id="cd-cities"></div>
+    </div>
+
+    <!-- Shown when countdown hits zero -->
+    <div class="cd-live" id="cd-live-msg">&#x1F7E2; We&rsquo;re Live!</div>
+    <button id="btn-enter-now" onclick="openGate()">Enter CryptoNova &rarr;</button>
     <div style="margin-top:20px">
       <button id="btn-add-usdc" onclick="addMockUSDC()" style="background:rgba(0,122,255,.15);border:1px solid rgba(0,122,255,.4);color:#4da6ff;padding:10px 20px;border-radius:8px;font-size:13px;cursor:pointer;font-weight:600">
         + Add Testnet USDC to MetaMask
@@ -682,7 +734,7 @@
         </tr></thead>
         <tbody>
           <tr style="border-bottom:1px solid var(--border)"><td style="padding:8px 10px;font-weight:700;color:var(--green)">T1</td><td style="padding:8px 10px">Nova Seed</td><td style="padding:8px 10px;text-align:right;font-family:monospace">$10</td><td style="padding:8px 10px;text-align:right" id="tier-t1a-fill">&#8212;</td><td style="padding:8px 10px;text-align:right" id="tier-t1b-fill">&#8212;</td><td style="padding:8px 10px"><span id="tier-t1-gate" class="pill pill-green" style="font-size:10px">Open</span></td></tr>
-          <tr style="border-bottom:1px solid var(--border)"><td style="padding:8px 10px;font-weight:700;color:var(--green)">T2</td><td style="padding:8px 10px">Nova Rise</td><td style="padding:8px 10px;text-align:right;font-family:monospace">$25</td><td style="padding:8px 10px;text-align:right" id="tier-t2a-fill">&#8212;</td><td style="padding:8px 10px;text-align:right" id="tier-t2b-fill">&#8212;</td><td style="padding:8px 10px"><span id="tier-t2-gate" class="pill" style="font-size:10px;background:rgba(245,158,11,.15);color:var(--yellow);border:1px solid rgba(245,158,11,.4)">Velocity Gated</span></td></tr>
+          <tr style="border-bottom:1px solid var(--border)"><td style="padding:8px 10px;font-weight:700;color:var(--green)">T2</td><td style="padding:8px 10px">Nova Rise</td><td style="padding:8px 10px;text-align:right;font-family:monospace">$25</td><td style="padding:8px 10px;text-align:right" id="tier-t2a-fill">&#8212;</td><td style="padding:8px 10px;text-align:right" id="tier-t2b-fill">&#8212;</td><td style="padding:8px 10px"><span id="tier-t2-gate" class="pill pill-green" style="font-size:10px">Open</span></td></tr>
           <tr style="border-bottom:1px solid var(--border)"><td style="padding:8px 10px;font-weight:700;color:var(--green)">T3</td><td style="padding:8px 10px">Nova Star</td><td style="padding:8px 10px;text-align:right;font-family:monospace">$50</td><td style="padding:8px 10px;text-align:right" id="tier-t3a-fill">&#8212;</td><td style="padding:8px 10px;text-align:right" id="tier-t3b-fill">&#8212;</td><td style="padding:8px 10px"><span id="tier-t3-gate" class="pill" style="font-size:10px;background:rgba(245,158,11,.15);color:var(--yellow);border:1px solid rgba(245,158,11,.4)">Velocity Gated</span></td></tr>
           <tr style="border-bottom:1px solid var(--border)"><td style="padding:8px 10px;font-weight:700;color:var(--text2)">T4</td><td style="padding:8px 10px">Nova Core</td><td style="padding:8px 10px;text-align:right;font-family:monospace">$100</td><td style="padding:8px 10px;text-align:right" id="tier-t4a-fill">&#8212;</td><td style="padding:8px 10px;text-align:right" id="tier-t4b-fill">&#8212;</td><td style="padding:8px 10px"><span id="tier-t4-gate" class="pill" style="font-size:10px;background:rgba(245,158,11,.15);color:var(--yellow);border:1px solid rgba(245,158,11,.4)">Velocity Gated</span></td></tr>
           <tr style="border-bottom:1px solid var(--border)"><td style="padding:8px 10px;font-weight:700;color:var(--text2)">T5</td><td style="padding:8px 10px">Nova Prime</td><td style="padding:8px 10px;text-align:right;font-family:monospace">$250</td><td style="padding:8px 10px;text-align:right" id="tier-t5a-fill">&#8212;</td><td style="padding:8px 10px;text-align:right" id="tier-t5b-fill">&#8212;</td><td style="padding:8px 10px"><span id="tier-t5-gate" class="pill" style="font-size:10px;background:rgba(245,158,11,.15);color:var(--yellow);border:1px solid rgba(245,158,11,.4)">Velocity Gated</span></td></tr>
@@ -1494,9 +1546,83 @@
 // CONFIG — V8.1 Figure-8 Matrix (Base Sepolia)
 // ═══════════════════════════════════════════════════════════════════════
 const CHAIN_ID = 84532;
+
+// ── Countdown to 8 PM Eastern (fixed UTC anchor) ─────────────────────────
+(function initCountdown() {
+  // 8:00 PM EDT (Eastern Daylight Time) = 00:00 UTC next day (June 12 2026).
+  // This is a FIXED UTC timestamp — same countdown for every viewer worldwide.
+  // To reschedule: update this ISO string.
+  const LAUNCH_UTC = new Date('2026-06-12T00:00:00Z');
+
+  // Major city local equivalents — shown below the countdown
+  const CITY_ZONES = [
+    { city: 'New York / Miami',   tz: 'America/New_York'    },
+    { city: 'Chicago / Dallas',   tz: 'America/Chicago'     },
+    { city: 'Denver',             tz: 'America/Denver'      },
+    { city: 'Los Angeles',        tz: 'America/Los_Angeles' },
+    { city: 'London',             tz: 'Europe/London'       },
+    { city: 'Paris / Berlin',     tz: 'Europe/Paris'        },
+    { city: 'Lagos / Accra',      tz: 'Africa/Lagos'        },
+    { city: 'Dubai',              tz: 'Asia/Dubai'          },
+    { city: 'Sydney',             tz: 'Australia/Sydney'    },
+  ];
+
+  function openGate() {
+    document.getElementById('launch-gate').classList.remove('visible');
+  }
+  window.openGate = openGate;
+
+  function pad(n) { return String(n).padStart(2, '0'); }
+
+  // Build city time grid once
+  function buildCityGrid() {
+    const el = document.getElementById('cd-cities');
+    if (!el) return;
+    const rows = CITY_ZONES.map(({ city, tz }) => {
+      let timeStr;
+      try {
+        timeStr = LAUNCH_UTC.toLocaleTimeString('en-US', {
+          timeZone: tz, hour: 'numeric', minute: '2-digit',
+          hour12: true, weekday: 'short'
+        });
+      } catch(e) { timeStr = '—'; }
+      return `<div class="cd-city-row"><span class="cd-city-name">${city}</span><span class="cd-city-time">${timeStr}</span></div>`;
+    });
+    el.innerHTML = rows.join('');
+  }
+
+  function tick() {
+    const diff = LAUNCH_UTC - new Date();
+
+    if (diff <= 0) {
+      document.getElementById('cd-h').textContent = '00';
+      document.getElementById('cd-m').textContent = '00';
+      document.getElementById('cd-s').textContent = '00';
+      document.getElementById('cd-date-label').style.display = 'none';
+      document.getElementById('cd-cities-wrap').style.display = 'none';
+      document.getElementById('cd-live-msg').style.display = 'block';
+      document.getElementById('btn-enter-now').style.display = 'inline-block';
+      clearInterval(timer);
+      return;
+    }
+
+    const hh = Math.floor(diff / 3600000);
+    const mm = Math.floor((diff % 3600000) / 60000);
+    const ss = Math.floor((diff % 60000) / 1000);
+
+    document.getElementById('cd-h').textContent = pad(hh);
+    document.getElementById('cd-m').textContent = pad(mm);
+    document.getElementById('cd-s').textContent = pad(ss);
+  }
+
+  const timer = setInterval(tick, 1000);
+  tick();
+  buildCityGrid();
+})();
+
 // ══ LAUNCH GATE ═══════════════════════════════════════════════════════════
 // Flip to true when: Chainlink live + SF seeded + bigfill validated + community test OK
-const LAUNCH_READY = true;
+const LAUNCH_READY = false;  // flipped — countdown gate active
 
 const RPC_URL  = 'https://sepolia.base.org';
 const RPC_FALLBACK = 'https://base-sepolia.public.blastapi.io';
