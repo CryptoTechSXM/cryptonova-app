@@ -1662,8 +1662,9 @@ const CHAIN_ID = 84532;
 })();
 
 // ══ LAUNCH GATE ═══════════════════════════════════════════════════════════
-// Hostname-based: crypto-nova.app = blocking gate shown; v8.* preview and localhost = gate off, full access
-const LAUNCH_READY = window.location.hostname !== 'crypto-nova.app';
+// Hostname-based: crypto-nova.app + www.crypto-nova.app = blocking gate; v8.* preview and localhost = gate off
+const _PROD_HOSTS = ['crypto-nova.app', 'www.crypto-nova.app'];
+const LAUNCH_READY = !_PROD_HOSTS.includes(window.location.hostname);
 
 const RPC_URL  = 'https://sepolia.base.org';
 const RPC_FALLBACK = 'https://base-sepolia.public.blastapi.io';
