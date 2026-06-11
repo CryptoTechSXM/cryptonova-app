@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>CryptoNova V8.7 — The Matrix | crypto-nova.app</title>
+  <title>CryptoNova — The Matrix</title>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/6.7.1/ethers.umd.min.js"></script>
   <style>
     :root {
@@ -291,32 +291,186 @@
       color: var(--yellow); border-radius: 20px; font-size: 12px;
       font-weight: 600; letter-spacing: .5px;
     }
+
+    /* ── Countdown timer ──────────────────────────────────── */
+    /* ── City timezone grid ──────────────────────────── */
+    #cd-cities-wrap { margin: 10px auto 0; max-width: 400px; width: 100%; }
+    #cd-cities-wrap h4 { font-size: 11px; color: var(--text3); text-transform: uppercase;
+                         letter-spacing: 1px; margin-bottom: 8px; }
+    .cd-city-row  { display: flex; justify-content: space-between; align-items: center;
+                    padding: 5px 10px; border-radius: 7px; }
+    .cd-city-row:nth-child(odd)  { background: rgba(255,255,255,.03); }
+    .cd-city-name { font-size: 12px; color: var(--text2); }
+    .cd-city-time { font-size: 12px; color: var(--green); font-family: monospace;
+                    font-weight: 600; }
+
+    .cd-wrap { display: flex; gap: 14px; margin: 22px auto 18px; justify-content: center; }
+    .cd-box  { text-align: center; background: rgba(0,255,136,.07);
+               border: 1px solid rgba(0,255,136,.25); border-radius: 12px;
+               padding: 14px 20px; min-width: 74px; }
+    .cd-num  { font-size: 40px; font-weight: 800; color: var(--green);
+               font-family: monospace; line-height: 1; display: block; }
+    .cd-lbl  { font-size: 10px; color: var(--text3); text-transform: uppercase;
+               letter-spacing: 1.2px; margin-top: 5px; }
+    .cd-live { font-size: 28px; font-weight: 800; color: var(--green);
+               animation: cdpulse 1.2s infinite; display: none; margin: 16px 0 8px; }
+    @keyframes cdpulse { 0%,100%{opacity:1} 50%{opacity:.4} }
+    #btn-enter-now { display: none; margin-top: 16px; padding: 14px 36px;
+               background: var(--green); color: #000; border: none;
+               border-radius: 10px; font-size: 16px; font-weight: 800;
+               cursor: pointer; letter-spacing: .5px; }
+    #btn-enter-now:hover { background: #00e676; }
+    .launch-sub { font-size: 12px; color: var(--text3); margin-top: 6px; letter-spacing: .5px; }
+
+    /* ── Launch announcement banner ─────────────────────── */
+    #launch-banner {
+      background: linear-gradient(90deg, rgba(0,255,136,.12) 0%, rgba(0,180,100,.08) 100%);
+      border-bottom: 1px solid rgba(0,255,136,.25);
+      padding: 10px 20px; display: flex; align-items: center;
+      justify-content: center; gap: 18px; flex-wrap: wrap;
+      position: sticky; top: 0; z-index: 100; text-align: center;
+    }
+    #launch-banner .bn-title {
+      font-size: 13px; font-weight: 700; color: var(--green);
+      white-space: nowrap;
+    }
+    #launch-banner .bn-cd {
+      display: flex; align-items: center; gap: 6px;
+      font-family: monospace; font-size: 15px; font-weight: 800;
+      color: var(--text);
+    }
+    #launch-banner .bn-cd span { color: var(--green); }
+    #launch-banner .bn-sep { color: var(--text3); font-size: 11px; }
+    #launch-banner .bn-date {
+      font-size: 11px; color: var(--text3); white-space: nowrap;
+    }
+    #launch-banner .bn-live {
+      font-size: 13px; font-weight: 700; color: var(--green);
+      animation: cdpulse 1.2s infinite; display: none;
+    }
+    @media (max-width: 480px) {
+      #launch-banner { gap: 10px; padding: 8px 14px; }
+      #launch-banner .bn-date { display: none; }
+    }
     </style>
 </head>
 <body>
+
+  <!-- ══ LAUNCH ANNOUNCEMENT BANNER ══════════════════════════════════════ -->
+  <div id="launch-banner">
+    <div class="bn-title">&#x1F680; CryptoNova Tokens &mdash; Community Testnet Launch</div>
+    <div class="bn-cd">
+      <span id="bn-h">00</span>h
+      <span id="bn-m">00</span>m
+      <span id="bn-s">00</span>s
+    </div>
+    <div class="bn-sep">|</div>
+    <div class="bn-date">Friday June 12 &bull; 12:00 PM Eastern</div>
+    <div class="bn-live" id="bn-live">&#x1F7E2; We&rsquo;re Live &mdash; Register Now!</div>
+  </div>
+
   <!-- ══ LAUNCH GATE ══════════════════════════════════════════════════ -->
   <div id="launch-gate">
-    <h2>&#x26A1; CryptoNova Matrix V8.7</h2>
-    <p>Final infrastructure testing in progress.<br>
-    Chainlink Automation, StabilityFund seeding, and stress-test validation are underway.<br><br>
-    The platform will open for registration once all systems are confirmed live.</p>
-    <div class="soon-pill">&#x1F527; Coming Soon &mdash; Testing in Progress</div>
+    <h2>&#x1F680; CryptoNova Matrix</h2>
+    <p style="font-size:15px;font-weight:600;color:var(--text);margin-bottom:4px">
+      Community Testnet Launch &mdash; Friday, June 12 at 12 PM ET
+    </p>
+    <p style="max-width:440px">
+      Register, earn, and redeem <strong style="color:var(--green)">CryptoNova Tokens</strong> across 10 live tiers.<br><br>
+      Test the full cycle &mdash; register, cycle out, withdraw, unlock your tokens.
+      Your feedback shapes the mainnet launch.
+    </p>
+
+    <!-- Countdown -->
+    <div class="cd-wrap">
+      <div class="cd-box"><span class="cd-num" id="cd-h">00</span><div class="cd-lbl">Hours</div></div>
+      <div class="cd-box"><span class="cd-num" id="cd-m">00</span><div class="cd-lbl">Minutes</div></div>
+      <div class="cd-box"><span class="cd-num" id="cd-s">00</span><div class="cd-lbl">Seconds</div></div>
+    </div>
+    <div class="launch-sub" id="cd-date-label">12:00 PM Eastern &bull; Friday, June 12 2026</div>
+
+    <!-- City timezone grid -->
+    <div id="cd-cities-wrap" style="margin-top:14px;max-width:400px;width:100%;text-align:left">
+      <h4 style="font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px;text-align:center">Your local launch time</h4>
+      <div id="cd-cities"></div>
+    </div>
+
+    <!-- Shown when countdown hits zero -->
+    <div class="cd-live" id="cd-live-msg">&#x1F7E2; We&rsquo;re Live!</div>
+    <button id="btn-enter-now" onclick="openGate()">Enter CryptoNova &rarr;</button>
     <div style="margin-top:20px">
-      <button onclick="addMockUSDC()" style="background:rgba(0,122,255,.15);border:1px solid rgba(0,122,255,.4);color:#4da6ff;padding:10px 20px;border-radius:8px;font-size:13px;cursor:pointer;font-weight:600">
+      <button id="btn-add-usdc" onclick="addMockUSDC()" style="background:rgba(0,122,255,.15);border:1px solid rgba(0,122,255,.4);color:#4da6ff;padding:10px 20px;border-radius:8px;font-size:13px;cursor:pointer;font-weight:600">
         + Add Testnet USDC to MetaMask
       </button>
       <div style="font-size:11px;color:var(--text3);margin-top:8px;opacity:0.7">Base Sepolia mock USDC — needed for testnet registration</div>
+
+      <!-- Fallback panel — shown when wallet_watchAsset is unavailable or fails (mobile) -->
+      <div id="usdc-fallback" style="display:none;margin-top:14px;background:rgba(0,122,255,.07);border:1px solid rgba(0,122,255,.25);border-radius:10px;padding:13px 15px;text-align:left;max-width:380px;margin-left:auto;margin-right:auto">
+        <div style="font-size:12px;color:var(--text2);margin-bottom:10px;line-height:1.6">
+          📋 <strong style="color:var(--text)">Add manually in MetaMask:</strong><br>
+          Tap <strong style="color:#4da6ff">Import tokens</strong> and paste this address:
+        </div>
+        <div style="display:flex;align-items:center;gap:8px;background:rgba(0,0,0,.35);border-radius:7px;padding:9px 11px">
+          <code id="usdc-addr-txt" style="font-size:11px;color:#4da6ff;word-break:break-all;flex:1;line-height:1.5">0x2D8B7b5eDec96bE441b6fb0D45D74a2BcE2C639a</code>
+          <button onclick="copyUSDCAddr(this)" style="background:rgba(0,122,255,.25);border:1px solid rgba(0,122,255,.45);color:#4da6ff;padding:6px 11px;border-radius:6px;font-size:12px;cursor:pointer;white-space:nowrap;flex-shrink:0">Copy</button>
+        </div>
+        <div style="font-size:11px;color:var(--text3);margin-top:8px">Symbol: USDC &nbsp;·&nbsp; Decimals: 6 &nbsp;·&nbsp; Network: Base Sepolia</div>
+      </div>
     </div>
   </div>
   <script>
   async function addMockUSDC() {
-    if (!window.ethereum) { alert('MetaMask not detected'); return; }
+    const USDC_ADDR = '0x2D8B7b5eDec96bE441b6fb0D45D74a2BcE2C639a';
+    const btn      = document.getElementById('btn-add-usdc');
+    const fallback = document.getElementById('usdc-fallback');
+
+    // No injected provider (regular mobile browser, not MetaMask in-app) — show manual fallback
+    if (!window.ethereum) {
+      if (fallback) fallback.style.display = 'block';
+      return;
+    }
+
     try {
-      await window.ethereum.request({
+      const added = await window.ethereum.request({
         method: 'wallet_watchAsset',
-        params: { type: 'ERC20', options: { address: '0x2D8B7b5eDec96bE441b6fb0D45D74a2BcE2C639a', symbol: 'USDC', decimals: 6 } }
+        params: { type: 'ERC20', options: { address: USDC_ADDR, symbol: 'USDC', decimals: 6 } }
       });
-    } catch(e) { console.error(e); }
+      if (added) {
+        // User confirmed — show success on the button
+        if (btn) {
+          btn.textContent = '✅ USDC Added!';
+          btn.style.background    = 'rgba(16,185,129,.18)';
+          btn.style.borderColor   = 'rgba(16,185,129,.4)';
+          btn.style.color         = '#34d399';
+          btn.disabled            = true;
+        }
+      } else {
+        // User dismissed the MetaMask prompt — show manual fallback
+        if (fallback) fallback.style.display = 'block';
+      }
+    } catch(e) {
+      console.error('wallet_watchAsset:', e);
+      // wallet_watchAsset unsupported or errored — show manual fallback
+      if (fallback) fallback.style.display = 'block';
+    }
+  }
+
+  function copyUSDCAddr(btn) {
+    const addr = '0x2D8B7b5eDec96bE441b6fb0D45D74a2BcE2C639a';
+    const orig = btn.textContent;
+    const done = () => { btn.textContent = '✓ Copied!'; setTimeout(() => btn.textContent = orig, 2200); };
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(addr).then(done).catch(() => fallbackCopy(addr, done));
+    } else {
+      fallbackCopy(addr, done);
+    }
+  }
+  function fallbackCopy(text, cb) {
+    const ta = document.createElement('textarea');
+    ta.value = text; ta.style.cssText = 'position:fixed;opacity:0;top:0;left:0';
+    document.body.appendChild(ta); ta.focus(); ta.select();
+    try { document.execCommand('copy'); cb(); } catch(_) {}
+    document.body.removeChild(ta);
   }
   </script>
 
@@ -358,20 +512,128 @@
 <header>
   <div class="logo">
     <div class="logo-icon">
-    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 40" width="38" height="38">
-      <defs>
-        <linearGradient id="lg1" x1="0%" y1="0%" x2="100%" y2="100%">
-          <stop offset="0%" stop-color="#00e5a0"/>
-          <stop offset="100%" stop-color="#0095ff"/>
-        </linearGradient>
-      </defs>
-      <polygon points="20,2 36,11 36,29 20,38 4,29 4,11" fill="url(#lg1)" opacity="0.2" stroke="url(#lg1)" stroke-width="1.5"/>
-      <polygon points="20,8 28,20 23,20 23,32 17,32 17,20 12,20" fill="url(#lg1)"/>
-    </svg>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400" width="40" height="40" style="border-radius:8px">
+
+  <!-- Background -->
+  <rect width="400" height="400" rx="32" fill="#071410"/>
+
+  <!-- Star particles -->
+  <circle cx="42"  cy="55"  r="1"   fill="#ffffff" opacity="0.30"/>
+  <circle cx="355" cy="48"  r="0.8" fill="#ffffff" opacity="0.25"/>
+  <circle cx="80"  cy="340" r="1"   fill="#ffffff" opacity="0.25"/>
+  <circle cx="360" cy="330" r="0.8" fill="#ffffff" opacity="0.28"/>
+  <circle cx="320" cy="80"  r="1"   fill="#ffffff" opacity="0.22"/>
+  <circle cx="55"  cy="180" r="0.8" fill="#ffffff" opacity="0.20"/>
+  <circle cx="345" cy="210" r="1"   fill="#ffffff" opacity="0.22"/>
+  <circle cx="130" cy="370" r="0.8" fill="#ffffff" opacity="0.20"/>
+  <circle cx="280" cy="368" r="1"   fill="#ffffff" opacity="0.22"/>
+
+  <!-- All fire, orbit and node centred at (200,155) -->
+  <g transform="translate(200,155)">
+
+    <!-- Outer fire glow halos — reduced 50% -->
+    <circle r="108" fill="#ff5500" opacity="0.013"/>
+    <circle r="90"  fill="#ff7700" opacity="0.018"/>
+    <circle r="74"  fill="#ff9900" opacity="0.028"/>
+    <circle r="58"  fill="#ffbb00" opacity="0.035"/>
+    <circle r="44"  fill="#ffdd44" opacity="0.030"/>
+    <circle r="95"  fill="#00d68f" opacity="0.015"/>
+
+    <!-- FLAMES — outer layer (orange-amber) reduced 50% -->
+    <g transform="rotate(0)">    <path d="M -7,0 Q -13,-53 0,-77 Q 13,-53 7,0"   fill="#ff8800" opacity="0.31"/></g>
+    <g transform="rotate(45)">   <path d="M -6,0 Q -11,-46 0,-66 Q 11,-46 6,0"   fill="#ff8800" opacity="0.29"/></g>
+    <g transform="rotate(90)">   <path d="M -7,0 Q -13,-53 0,-77 Q 13,-53 7,0"   fill="#ff8800" opacity="0.31"/></g>
+    <g transform="rotate(135)">  <path d="M -6,0 Q -11,-46 0,-66 Q 11,-46 6,0"   fill="#ff8800" opacity="0.29"/></g>
+    <g transform="rotate(180)">  <path d="M -7,0 Q -13,-53 0,-77 Q 13,-53 7,0"   fill="#ff8800" opacity="0.31"/></g>
+    <g transform="rotate(225)">  <path d="M -6,0 Q -11,-46 0,-66 Q 11,-46 6,0"   fill="#ff8800" opacity="0.29"/></g>
+    <g transform="rotate(270)">  <path d="M -7,0 Q -13,-53 0,-77 Q 13,-53 7,0"   fill="#ff8800" opacity="0.31"/></g>
+    <g transform="rotate(315)">  <path d="M -6,0 Q -11,-46 0,-66 Q 11,-46 6,0"   fill="#ff8800" opacity="0.29"/></g>
+    <g transform="rotate(22.5)"> <path d="M -4,0 Q -7,-38 0,-54 Q 7,-38 4,0"     fill="#ff6600" opacity="0.24"/></g>
+    <g transform="rotate(67.5)"> <path d="M -4,0 Q -7,-38 0,-54 Q 7,-38 4,0"     fill="#ff6600" opacity="0.24"/></g>
+    <g transform="rotate(112.5)"><path d="M -4,0 Q -7,-38 0,-54 Q 7,-38 4,0"     fill="#ff6600" opacity="0.24"/></g>
+    <g transform="rotate(157.5)"><path d="M -4,0 Q -7,-38 0,-54 Q 7,-38 4,0"     fill="#ff6600" opacity="0.24"/></g>
+    <g transform="rotate(202.5)"><path d="M -4,0 Q -7,-38 0,-54 Q 7,-38 4,0"     fill="#ff6600" opacity="0.24"/></g>
+    <g transform="rotate(247.5)"><path d="M -4,0 Q -7,-38 0,-54 Q 7,-38 4,0"     fill="#ff6600" opacity="0.24"/></g>
+    <g transform="rotate(292.5)"><path d="M -4,0 Q -7,-38 0,-54 Q 7,-38 4,0"     fill="#ff6600" opacity="0.24"/></g>
+    <g transform="rotate(337.5)"><path d="M -4,0 Q -7,-38 0,-54 Q 7,-38 4,0"     fill="#ff6600" opacity="0.24"/></g>
+
+    <!-- FLAMES — inner layer (yellow) reduced 50% -->
+    <g transform="rotate(0)">   <path d="M -5,0 Q -9,-42 0,-60 Q 9,-42 5,0"      fill="#ffcc00" opacity="0.29"/></g>
+    <g transform="rotate(45)">  <path d="M -4,0 Q -7,-35 0,-50 Q 7,-35 4,0"      fill="#ffdd44" opacity="0.26"/></g>
+    <g transform="rotate(90)">  <path d="M -5,0 Q -9,-42 0,-60 Q 9,-42 5,0"      fill="#ffcc00" opacity="0.29"/></g>
+    <g transform="rotate(135)"> <path d="M -4,0 Q -7,-35 0,-50 Q 7,-35 4,0"      fill="#ffdd44" opacity="0.26"/></g>
+    <g transform="rotate(180)"> <path d="M -5,0 Q -9,-42 0,-60 Q 9,-42 5,0"      fill="#ffcc00" opacity="0.29"/></g>
+    <g transform="rotate(225)"> <path d="M -4,0 Q -7,-35 0,-50 Q 7,-35 4,0"      fill="#ffdd44" opacity="0.26"/></g>
+    <g transform="rotate(270)"> <path d="M -5,0 Q -9,-42 0,-60 Q 9,-42 5,0"      fill="#ffcc00" opacity="0.29"/></g>
+    <g transform="rotate(315)"> <path d="M -4,0 Q -7,-35 0,-50 Q 7,-35 4,0"      fill="#ffdd44" opacity="0.26"/></g>
+
+    <!-- CORONA LOOPS reduced 50% -->
+    <path d="M -14,-18 C -52,-74 52,-74 14,-18"  fill="none" stroke="#ff9900" stroke-width="1.5" opacity="0.24"/>
+    <g transform="rotate(72)"> <path d="M -12,-18 C -44,-68 44,-68 12,-18" fill="none" stroke="#ff8800" stroke-width="1.3" opacity="0.20"/></g>
+    <g transform="rotate(144)"><path d="M -12,-18 C -40,-62 40,-62 12,-18" fill="none" stroke="#ff9900" stroke-width="1.2" opacity="0.19"/></g>
+    <g transform="rotate(216)"><path d="M -13,-18 C -46,-70 46,-70 13,-18" fill="none" stroke="#ffaa00" stroke-width="1.3" opacity="0.18"/></g>
+    <g transform="rotate(288)"><path d="M -10,-18 C -36,-58 36,-58 10,-18" fill="none" stroke="#ff9900" stroke-width="1.1" opacity="0.17"/></g>
+
+    <!-- Ember sparks reduced 50% -->
+    <circle cx="64"  cy="-56" r="2"   fill="#ffdd00" opacity="0.30"/>
+    <circle cx="-70" cy="-30" r="1.5" fill="#ff9900" opacity="0.26"/>
+    <circle cx="-52" cy="60"  r="2"   fill="#ffcc00" opacity="0.28"/>
+    <circle cx="72"  cy="36"  r="1.5" fill="#ff8800" opacity="0.24"/>
+    <circle cx="22"  cy="-74" r="1.5" fill="#ffffff"  opacity="0.21"/>
+    <circle cx="-24" cy="-72" r="1.5" fill="#ffffff"  opacity="0.19"/>
+
+    <!-- ORBITAL RINGS — brand green (unchanged) -->
+    <ellipse rx="102" ry="26" fill="none" stroke="#00d68f" stroke-width="1.2" transform="rotate(-28)" opacity="0.58"/>
+    <ellipse rx="124" ry="20" fill="none" stroke="#00d68f" stroke-width="0.9" transform="rotate(42)"  opacity="0.38"/>
+
+    <!-- Planets -->
+    <circle cx="80"  cy="-28" r="5.5" fill="#00d68f" opacity="0.88"/>
+    <circle cx="80"  cy="-28" r="2.2" fill="#ffffff"  opacity="0.80"/>
+    <circle cx="-74" cy="-36" r="4.2" fill="#00d68f" opacity="0.76"/>
+    <circle cx="-74" cy="-36" r="1.8" fill="#ffffff"  opacity="0.68"/>
+
+    <!-- NODE SYMBOL RAYS — unchanged -->
+    <line x1="0" y1="0" x2="0"   y2="-72" stroke="#00d68f" stroke-width="3"   stroke-linecap="round"/>
+    <line x1="0" y1="0" x2="45"  y2="-45" stroke="#00d68f" stroke-width="2.5" stroke-linecap="round"/>
+    <line x1="0" y1="0" x2="70"  y2="0"   stroke="#00d68f" stroke-width="3"   stroke-linecap="round"/>
+    <line x1="0" y1="0" x2="38"  y2="38"  stroke="#00d68f" stroke-width="2.5" stroke-linecap="round"/>
+    <line x1="0" y1="0" x2="0"   y2="70"  stroke="#00d68f" stroke-width="3"   stroke-linecap="round"/>
+    <line x1="0" y1="0" x2="-44" y2="44"  stroke="#00d68f" stroke-width="2.5" stroke-linecap="round"/>
+    <line x1="0" y1="0" x2="-64" y2="0"   stroke="#00d68f" stroke-width="3"   stroke-linecap="round"/>
+    <line x1="0" y1="0" x2="-40" y2="-40" stroke="#00d68f" stroke-width="2.5" stroke-linecap="round"/>
+
+    <!-- Node end dots -->
+    <circle cx="0"   cy="-72" r="8.5" fill="#00d68f"/>
+    <circle cx="47"  cy="-47" r="6"   fill="#00d68f"/>
+    <circle cx="70"  cy="0"   r="8.5" fill="#00d68f"/>
+    <circle cx="40"  cy="40"  r="6"   fill="#00d68f"/>
+    <circle cx="0"   cy="70"  r="8.5" fill="#00d68f"/>
+    <circle cx="-46" cy="46"  r="6"   fill="#00d68f"/>
+    <circle cx="-64" cy="0"   r="7"   fill="#00d68f"/>
+    <circle cx="-42" cy="-42" r="6"   fill="#00d68f"/>
+
+    <!-- Centre node -->
+    <circle cx="0" cy="0" r="17"  fill="#071410" stroke="#00d68f" stroke-width="2.2"/>
+    <circle cx="0" cy="0" r="6"   fill="#00d68f" opacity="0.28"/>
+    <circle cx="0" cy="0" r="3.5" fill="#ffffff"  opacity="0.88"/>
+
+  </g>
+
+  <!-- EST. 2026 -->
+  <text x="98"  y="160" text-anchor="end"   font-family="Arial, sans-serif" font-size="13" font-weight="500" fill="#00d68f" letter-spacing="1">EST.</text>
+  <text x="302" y="160" text-anchor="start" font-family="Arial, sans-serif" font-size="13" font-weight="500" fill="#00d68f" letter-spacing="1">2026</text>
+
+  <!-- CRYPTONOVA wordmark -->
+  <text x="200" y="278" text-anchor="middle" font-family="Arial, sans-serif" font-size="34" font-weight="700" fill="#e8e8e8" letter-spacing="4">CRYPTONOVA</text>
+
+  <!-- Tagline -->
+  <text x="200" y="306" text-anchor="middle" font-family="Arial, sans-serif" font-size="11.5" fill="#00d68f" letter-spacing="0.8">Built on chain. Powered by community</text>
+
+</svg>
   </div>
     <div class="logo-text">Crypto<span>Nova</span></div>
     <span class="logo-badge" id="network-badge">Base Sepolia</span>
-    <span style="background:rgba(0,229,160,.15);color:var(--green);border:1px solid var(--green2);border-radius:4px;padding:2px 8px;font-size:10px;font-weight:700;margin-left:6px">V8.6</span>
+    <span style="background:rgba(0,229,160,.15);color:var(--green);border:1px solid var(--green2);border-radius:4px;padding:2px 8px;font-size:10px;font-weight:700;margin-left:6px">V8.8</span>
   </div>
   <div style="display:flex;align-items:center;gap:8px">
     <button class="theme-toggle" id="theme-btn" onclick="toggleTheme()">☀️ Light</button>
@@ -436,9 +698,9 @@
       <div class="token-card-left">
         <div class="token-icon">CN</div>
         <div>
-          <div class="token-name" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><svg width="28" height="28" style="border-radius:50%;flex-shrink:0"><use href="#cnova-icon"/></svg><a href="https://sepolia.basescan.org/token/0xe192D3ae2E881709749884de0cFa1d53e2237F6f" target="_blank" rel="noopener" style="color:inherit;text-decoration:none;font-weight:700">CNOVA Token ↗</a> <span class="pill pill-green" style="font-size:10px;vertical-align:middle">ERC-20 · Base</span></div>
-          <div class="token-addr"><a href="https://sepolia.basescan.org/token/0xe192D3ae2E881709749884de0cFa1d53e2237F6f" target="_blank" rel="noopener" style="color:var(--green);text-decoration:none;font-family:monospace">0xe192D3ae2E881709749884de0cFa1d53e2237F6f</a> · 18 decimals</div>
-          <div style="font-size:12px;color:var(--text2);margin-top:4px">Earned on every registration. 50 CNOVA minted per T1 join — vested over time.</div>
+          <div class="token-name" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><svg width="28" height="28" style="border-radius:50%;flex-shrink:0"><use href="#cnova-icon"/></svg><a href="https://sepolia.basescan.org/token/0xc2b85354F2E8628E7D0874Dd236dbA0F9c3a0301" target="_blank" rel="noopener" style="color:inherit;text-decoration:none;font-weight:700">CryptoNOVA Matrix ↗</a> <span class="pill pill-green" style="font-size:10px;vertical-align:middle">CNOVA · ERC-20 · Base</span></div>
+          <div class="token-addr"><a href="https://sepolia.basescan.org/token/0xc2b85354F2E8628E7D0874Dd236dbA0F9c3a0301" target="_blank" rel="noopener" style="color:var(--green);text-decoration:none;font-family:monospace">0xc2b85354F2E8628E7D0874Dd236dbA0F9c3a0301</a> · 18 decimals</div>
+          <div style="font-size:12px;color:var(--text2);margin-top:4px">Earned on every registration. 50 CNOVA minted per T1 join. Add to your wallet to track your balance during testing.</div>
         </div>
       </div>
       <button class="btn-metamask" onclick="addCNOVAtoMetaMask()">
@@ -450,9 +712,9 @@
       <div class="token-card-left">
         <div class="token-icon" style="background:linear-gradient(135deg,#2775ca,#5b8dee)">$</div>
         <div>
-          <div class="token-name">USD Coin <span class="pill" style="font-size:10px;vertical-align:middle;background:rgba(59,130,246,.15);color:#5b8dee;border:1px solid rgba(59,130,246,.3)">USDC · Base</span></div>
+          <div class="token-name">Mock USDC <span class="pill" style="font-size:10px;vertical-align:middle;background:rgba(59,130,246,.15);color:#5b8dee;border:1px solid rgba(59,130,246,.3)">USDC · Base Sepolia</span></div>
           <div class="token-addr">0x2D8B7b5eDec96bE441b6fb0D45D74a2BcE2C639a · 6 decimals</div>
-          <div style="font-size:12px;color:var(--text2);margin-top:4px">Required to join. $10 USDC to enter T1, $25 for T2. Test USDC available on request.</div>
+          <div style="font-size:12px;color:var(--text2);margin-top:4px">Testnet Mock USDC — required to enter. Add to your wallet to see your test balance. $10 for T1, $25 for T2. Request test funds via Telegram.</div>
         </div>
       </div>
       <button class="btn-metamask" style="background:#2775ca" onclick="addUSDCtoMetaMask()">
@@ -461,149 +723,15 @@
     </div>
 
     <!-- Live Stats -->
-    <div class="section-title"><div class="dot"></div> Live Stats <span id="stats-refresh" style="font-size:12px;color:var(--text3);font-weight:400;margin-left:8px;cursor:pointer" onclick="loadHomeStats()">↻ Refresh</span></div>
+    <div class="section-title"><div class="dot"></div> Live Stats <span id="stats-refresh" style="font-size:12px;color:var(--text3);font-weight:400;margin-left:8px;cursor:pointer" onclick="loadHomeStats(); setTimeout(loadTiersStats, 800);">↻ Refresh</span></div>
     <div class="grid-4" id="stats-grid">
       <div class="card-sm"><div class="stat-label">Total Registered</div><div class="stat-value" id="stat-members"><span class="spinner" style="color:var(--text3)"></span></div><div class="stat-sub">all-time joins</div></div>
       <div class="card-sm"><div class="stat-label">CNOVA Minted</div><div class="stat-value green" id="stat-minted"><span class="spinner" style="color:var(--green)"></span></div><div class="stat-sub">50 per T1 join</div></div>
-      <div class="card-sm" title="The Stability Fund receives 15% of every entry fee. It backs the CNOVA floor price — floor = fund balance ÷ total CNOVA supply. It never pays out to individuals."><div class="stat-label">Stability Fund 🌊</div><div class="stat-value" id="stat-reserve"><span class="spinner" style="color:var(--text3)"></span></div><div class="stat-sub">CNOVA floor backing</div></div>
+      <div class="card-sm" title="CNOVA Treasury holds 15% of all entry fees — it backs the CNOVA floor price. Floor price = Treasury USDC ÷ total CNOVA supply."><div class="stat-label">CNOVA USDC Treasury 🏦</div><div class="stat-value green" id="stat-treasury-usdc"><span class="spinner" style="color:var(--green)"></span></div><div class="stat-sub">backing the CNOVA value</div></div>
+      <div class="card-sm" title="Guaranteed minimum redemption price — Treasury USDC ÷ total CNOVA supply."><div class="stat-label">CNOVA Floor Price</div><div class="stat-value green" id="stat-floor-price"><span class="spinner" style="color:var(--green)"></span></div><div class="stat-sub">per CNOVA token</div></div>
       <div class="card-sm" style="border-color:rgba(245,158,11,.4)"><div class="stat-label">System Cycles</div><div class="stat-value" id="stat-cycles" style="color:var(--yellow)"><span class="spinner" style="color:var(--yellow)"></span></div></div>
     </div>
 
-    <!-- CryptoNova Matrix Progress -->
-    <div class="grid-2" style="margin-bottom:24px">
-
-      <!-- T1 Matrix A Card -->
-      <div class="card">
-        <div class="section-title" style="margin-bottom:12px"><div class="dot"></div> T1 Matrix A — Active Fill</div>
-        <div class="info-row">
-          <span class="info-key">Seats Filled</span>
-          <span class="info-val"><span id="t1a-occ">—</span> / 64</span>
-        </div>
-        <div class="info-row">
-          <span class="info-key">Matrix Cycles</span>
-          <span class="info-val green" id="t1a-cycles">—</span>
-        </div>
-        <div style="margin-top:10px">
-          <div style="display:flex;justify-content:space-between;font-size:12px;color:var(--text3);margin-bottom:4px">
-            <span>Fill progress</span><span id="t1a-pct">0%</span>
-          </div>
-          <div class="progress-wrap"><div class="progress-bar" id="t1a-bar" style="width:0%"></div></div>
-        </div>
-        <div style="margin-top:10px;padding:10px 12px;background:var(--bg3);border-radius:8px;font-size:12px;color:var(--text3);line-height:1.6">
-          Stage 1 of 2. Fill your 64-seat matrix to cycle the root across to Matrix B. You earn chain pay as members fill below you. Once both stages complete, you qualify to manually upgrade to the next tier.
-        </div>
-      </div>
-
-      <!-- T1 Matrix B Card -->
-      <div class="card">
-        <div class="section-title" style="margin-bottom:12px"><div class="dot"></div> T1 Matrix B — Crossing Pool</div>
-        <div class="info-row">
-          <span class="info-key">Seats Filled</span>
-          <span class="info-val"><span id="t1b-occ">—</span> / 64</span>
-        </div>
-        <div class="info-row">
-          <span class="info-key">Pool Accumulator</span>
-          <span class="info-val green" id="t1b-pool">—</span>
-        </div>
-        <div style="margin-top:10px">
-          <div style="display:flex;justify-content:space-between;font-size:12px;color:var(--text3);margin-bottom:4px">
-            <span>Fill progress</span><span id="t1b-pct">0%</span>
-          </div>
-          <div class="progress-wrap"><div class="progress-bar" id="t1b-bar" style="width:0%"></div></div>
-        </div>
-        <div style="margin-top:10px;padding:10px 12px;background:var(--bg3);border-radius:8px;font-size:12px;color:var(--text3);line-height:1.6">
-          Stage 2 of 2. MatA alumni cross here via the crossing mechanism. When B fills to 64, the root cycles out — auto-upgrading to T2. All other members who completed this stage become eligible to manually upgrade. The loop then restarts at T1.
-        </div>
-      </div>
-
-      <!-- T2 Matrix A Card -->
-      <div class="card">
-        <div class="section-title" style="margin-bottom:12px"><div class="dot"></div> T2 Matrix A — Nova Rise ($25)</div>
-        <div class="info-row">
-          <span class="info-key">Seats Filled</span>
-          <span class="info-val"><span id="t2a-occ">—</span> / 64</span>
-        </div>
-        <div class="info-row">
-          <span class="info-key">Matrix Cycles</span>
-          <span class="info-val green" id="t2a-cycles">—</span>
-        </div>
-        <div style="margin-top:10px">
-          <div style="display:flex;justify-content:space-between;font-size:12px;color:var(--text3);margin-bottom:4px">
-            <span>Fill progress</span><span id="t2a-pct">0%</span>
-          </div>
-          <div class="progress-wrap"><div class="progress-bar" id="t2a-bar" style="width:0%"></div></div>
-        </div>
-        <div style="margin-top:10px;padding:10px 12px;background:var(--bg3);border-radius:8px;font-size:12px;color:var(--text3);line-height:1.6">
-          Members who complete T1 auto-upgrade here. $25 entry, same matrix mechanics.
-        </div>
-      </div>
-
-      <!-- T2 Matrix B Card -->
-      <div class="card">
-        <div class="section-title" style="margin-bottom:12px"><div class="dot"></div> T2 Matrix B — Crossing Pool</div>
-        <div class="info-row">
-          <span class="info-key">Seats Filled</span>
-          <span class="info-val"><span id="t2b-occ">—</span> / 64</span>
-        </div>
-        <div class="info-row">
-          <span class="info-key">Pool Accumulator</span>
-          <span class="info-val green" id="t2b-pool">—</span>
-        </div>
-        <div style="margin-top:10px">
-          <div style="display:flex;justify-content:space-between;font-size:12px;color:var(--text3);margin-bottom:4px">
-            <span>Fill progress</span><span id="t2b-pct">0%</span>
-          </div>
-          <div class="progress-wrap"><div class="progress-bar" id="t2b-bar" style="width:0%"></div></div>
-        </div>
-        <div style="margin-top:10px;padding:10px 12px;background:var(--bg3);border-radius:8px;font-size:12px;color:var(--text3);line-height:1.6">
-          T2 MatA alumni cross here. When full, root auto-upgrades to T3.
-        </div>
-      </div>
-
-      <!-- T3 Matrix A Card -->
-      <div class="card">
-        <div class="section-title" style="margin-bottom:12px"><div class="dot"></div> T3 Matrix A &mdash; Nova Star ($50)</div>
-        <div class="info-row">
-          <span class="info-key">Seats Filled</span>
-          <span class="info-val"><span id="t3a-occ">&#8212;</span> / 64</span>
-        </div>
-        <div class="info-row">
-          <span class="info-key">Matrix Cycles</span>
-          <span class="info-val green" id="t3a-cycles">&#8212;</span>
-        </div>
-        <div style="margin-top:10px">
-          <div style="display:flex;justify-content:space-between;font-size:12px;color:var(--text3);margin-bottom:4px">
-            <span>Fill progress</span><span id="t3a-pct">0%</span>
-          </div>
-          <div class="progress-wrap"><div class="progress-bar" id="t3a-bar" style="width:0%"></div></div>
-        </div>
-        <div style="margin-top:10px;padding:10px 12px;background:var(--bg3);border-radius:8px;font-size:12px;color:var(--text3);line-height:1.6">
-          Members who complete T2 auto-upgrade here. $50 entry, same matrix mechanics.
-        </div>
-      </div>
-
-      <!-- T3 Matrix B Card -->
-      <div class="card">
-        <div class="section-title" style="margin-bottom:12px"><div class="dot"></div> T3 Matrix B &mdash; Crossing Pool</div>
-        <div class="info-row">
-          <span class="info-key">Seats Filled</span>
-          <span class="info-val"><span id="t3b-occ">&#8212;</span> / 64</span>
-        </div>
-        <div class="info-row">
-          <span class="info-key">Pool Accumulator</span>
-          <span class="info-val green" id="t3b-pool">&#8212;</span>
-        </div>
-        <div style="margin-top:10px">
-          <div style="display:flex;justify-content:space-between;font-size:12px;color:var(--text3);margin-bottom:4px">
-            <span>Fill progress</span><span id="t3b-pct">0%</span>
-          </div>
-          <div class="progress-wrap"><div class="progress-bar" id="t3b-bar" style="width:0%"></div></div>
-        </div>
-        <div style="margin-top:10px;padding:10px 12px;background:var(--bg3);border-radius:8px;font-size:12px;color:var(--text3);line-height:1.6">
-          T3 MatA alumni cross here. When full, root auto-upgrades to T4. Tiers 4&ndash;7 activate as community grows.
-        </div>
-      </div>
-    </div>
 
     <!-- CNOVA Mining -->
     <div class="card" style="margin-bottom:24px">
@@ -611,22 +739,25 @@
       <div class="grid-4">
         <div><div style="font-size:12px;color:var(--text3);margin-bottom:4px">Current Epoch</div><div style="font-weight:700;color:var(--yellow)" id="stat-epoch">—</div></div>
         <div><div style="font-size:12px;color:var(--text3);margin-bottom:4px">Reward Per Entry</div><div style="font-weight:700;color:var(--green)" id="stat-reward">—</div></div>
-        <div><div style="font-size:12px;color:var(--text3);margin-bottom:4px">Treasury USDC</div><div style="font-weight:700" id="stat-treasury-usdc">—</div></div>
+        <div><div style="font-size:12px;color:var(--text3);margin-bottom:4px">Stability Rescue Fund</div><div style="font-weight:700" id="stat-reserve">—</div></div>
+        <div><div style="font-size:12px;color:var(--text3);margin-bottom:4px">Community Wallet</div><div style="font-weight:700;color:#a855f7" id="stat-cw-balance">—</div></div>
         <div><div style="font-size:12px;color:var(--text3);margin-bottom:4px">Total Supply</div><div style="font-weight:700" id="stat-supply">—</div></div>
       </div>
     </div>
 
     <!-- Entry split -->
     <div class="card">
-      <div class="section-title"><div class="dot"></div> V8 Entry Fee Split — per $10 at T1</div>
+      <div class="section-title"><div class="dot"></div> Entry Fee Split — per $10 at T1</div>
       <div class="split-row"><span class="split-label">🤝 L1 Direct Referrer</span><span><span class="split-amount">20%</span> <span class="split-pct">$2.00</span></span></div>
-      <div class="split-row"><span class="split-label">🔗 L2 Override</span><span><span class="split-amount">3%</span> <span class="split-pct">$0.30</span></span></div>
-      <div class="split-row"><span class="split-label">🔗 L3 Override</span><span><span class="split-amount">2%</span> <span class="split-pct">$0.20</span></span></div>
       <div class="split-row"><span class="split-label">⛓️ Chain Pay (6 upline levels)</span><span><span class="split-amount">20%</span> <span class="split-pct">$2.00</span></span></div>
       <div class="split-row"><span class="split-label">🌀 Equalization Pool</span><span><span class="split-amount">33%</span> <span class="split-pct">$3.30</span></span></div>
-      <div class="split-row"><span class="split-label">🌊 Stability Fund <span style="font-size:10px;color:var(--text3)">(CNOVA floor backing)</span></span><span><span class="split-amount">15%</span> <span class="split-pct">$1.50</span></span></div>
+      <div class="split-row"><span class="split-label">🏦 CNOVA Treasury <span style="font-size:10px;color:var(--text3)">(floor backing)</span></span><span><span class="split-amount">15%</span> <span class="split-pct">$1.50</span></span></div>
       <div class="split-row"><span class="split-label">⚙️ Dev + Ops</span><span><span class="split-amount">5%</span> <span class="split-pct">$0.50</span></span></div>
-      <div class="split-row"><span class="split-label">🏦 DAO Treasury Reserve</span><span><span class="split-amount">2%</span> <span class="split-pct">$0.20</span></span></div>
+      <div class="split-row"><span class="split-label">🌊 CNOVA Stability Fund <span style="font-size:10px;color:var(--text3)">(ops reserve)</span></span><span><span class="split-amount">6%</span> <span class="split-pct">$0.60</span></span></div>
+      <div class="split-row"><span class="split-label">🔥 CNOVA Buyback Reserve</span><span><span class="split-amount">1%</span> <span class="split-pct">$0.10</span></span></div>
+      <div style="margin-top:8px;padding:8px 12px;background:rgba(168,85,247,.08);border:1px solid rgba(168,85,247,.25);border-radius:8px;font-size:12px;color:var(--text2);line-height:1.6">
+        🏛️ <strong style="color:#a855f7">Community Wallet</strong> — funded automatically from orphan fees (empty upline slots in the matrix tree). Not a fixed % split.
+      </div>
       <div style="margin-top:14px;padding:10px 14px;background:var(--green-dim);border:1px solid var(--green2);border-radius:8px;font-size:13px;color:var(--text2)">
         💡 <strong style="color:var(--green)">CryptoNova Matrix mechanic:</strong> Fill Matrix A → root crosses to Matrix B → fill B → root auto-upgrades to T2. The loop repeats for each tier.
       </div>
@@ -647,13 +778,16 @@
           <th style="text-align:left;padding:8px 10px;color:var(--text3)">Gate</th>
         </tr></thead>
         <tbody>
-          <tr style="border-bottom:1px solid var(--border)"><td style="padding:8px 10px;font-weight:700;color:var(--green)">T1</td><td style="padding:8px 10px">Nova Seed</td><td style="padding:8px 10px;text-align:right;font-family:monospace">$10</td><td style="padding:8px 10px;text-align:right" id="tier-t1a-fill">&#8212;</td><td style="padding:8px 10px;text-align:right" id="tier-t1b-fill">&#8212;</td><td style="padding:8px 10px"><span class="pill pill-green" style="font-size:10px">Open</span></td></tr>
-          <tr style="border-bottom:1px solid var(--border)"><td style="padding:8px 10px;font-weight:700;color:var(--green)">T2</td><td style="padding:8px 10px">Nova Rise</td><td style="padding:8px 10px;text-align:right;font-family:monospace">$25</td><td style="padding:8px 10px;text-align:right" id="tier-t2a-fill">&#8212;</td><td style="padding:8px 10px;text-align:right" id="tier-t2b-fill">&#8212;</td><td style="padding:8px 10px"><span class="pill" style="font-size:10px;background:rgba(245,158,11,.15);color:var(--yellow);border:1px solid rgba(245,158,11,.4)">Velocity Gated</span></td></tr>
-          <tr style="border-bottom:1px solid var(--border)"><td style="padding:8px 10px;font-weight:700;color:var(--green)">T3</td><td style="padding:8px 10px">Nova Star</td><td style="padding:8px 10px;text-align:right;font-family:monospace">$50</td><td style="padding:8px 10px;text-align:right" id="tier-t3a-fill">&#8212;</td><td style="padding:8px 10px;text-align:right" id="tier-t3b-fill">&#8212;</td><td style="padding:8px 10px"><span class="pill" style="font-size:10px;background:rgba(245,158,11,.15);color:var(--yellow);border:1px solid rgba(245,158,11,.4)">Velocity Gated</span></td></tr>
-          <tr style="border-bottom:1px solid var(--border)"><td style="padding:8px 10px;font-weight:700;color:var(--text2)">T4</td><td style="padding:8px 10px">Nova Core</td><td style="padding:8px 10px;text-align:right;font-family:monospace">$100</td><td style="padding:8px 10px;text-align:right" id="tier-t4a-fill">&#8212;</td><td style="padding:8px 10px;text-align:right" id="tier-t4b-fill">&#8212;</td><td style="padding:8px 10px"><span class="pill" style="font-size:10px;background:rgba(245,158,11,.15);color:var(--yellow);border:1px solid rgba(245,158,11,.4)">Velocity Gated</span></td></tr>
-          <tr style="border-bottom:1px solid var(--border)"><td style="padding:8px 10px;font-weight:700;color:var(--text2)">T5</td><td style="padding:8px 10px">Nova Prime</td><td style="padding:8px 10px;text-align:right;font-family:monospace">$250</td><td style="padding:8px 10px;text-align:right" id="tier-t5a-fill">&#8212;</td><td style="padding:8px 10px;text-align:right" id="tier-t5b-fill">&#8212;</td><td style="padding:8px 10px"><span class="pill" style="font-size:10px;background:rgba(245,158,11,.15);color:var(--yellow);border:1px solid rgba(245,158,11,.4)">Velocity Gated</span></td></tr>
-          <tr style="border-bottom:1px solid var(--border)"><td style="padding:8px 10px;font-weight:700;color:var(--text2)">T6</td><td style="padding:8px 10px">Nova Apex</td><td style="padding:8px 10px;text-align:right;font-family:monospace">$500</td><td style="padding:8px 10px;text-align:right" id="tier-t6a-fill">&#8212;</td><td style="padding:8px 10px;text-align:right" id="tier-t6b-fill">&#8212;</td><td style="padding:8px 10px"><span class="pill" style="font-size:10px;background:rgba(245,158,11,.15);color:var(--yellow);border:1px solid rgba(245,158,11,.4)">Velocity Gated</span></td></tr>
-          <tr><td style="padding:8px 10px;font-weight:700;color:var(--text2)">T7</td><td style="padding:8px 10px">Nova Pinnacle</td><td style="padding:8px 10px;text-align:right;font-family:monospace">$1,000</td><td style="padding:8px 10px;text-align:right" id="tier-t7a-fill">&#8212;</td><td style="padding:8px 10px;text-align:right" id="tier-t7b-fill">&#8212;</td><td style="padding:8px 10px"><span class="pill" style="font-size:10px;background:rgba(245,158,11,.15);color:var(--yellow);border:1px solid rgba(245,158,11,.4)">Velocity Gated</span></td></tr>
+          <tr style="border-bottom:1px solid var(--border)"><td style="padding:8px 10px;font-weight:700;color:var(--green)">T1</td><td style="padding:8px 10px">Nova Seed</td><td style="padding:8px 10px;text-align:right;font-family:monospace">$10</td><td style="padding:8px 10px;text-align:right" id="tier-t1a-fill">&#8212;</td><td style="padding:8px 10px;text-align:right" id="tier-t1b-fill">&#8212;</td><td style="padding:8px 10px"><span id="tier-t1-gate" class="pill pill-green" style="font-size:10px">Open</span></td></tr>
+          <tr style="border-bottom:1px solid var(--border)"><td style="padding:8px 10px;font-weight:700;color:var(--green)">T2</td><td style="padding:8px 10px">Nova Rise</td><td style="padding:8px 10px;text-align:right;font-family:monospace">$25</td><td style="padding:8px 10px;text-align:right" id="tier-t2a-fill">&#8212;</td><td style="padding:8px 10px;text-align:right" id="tier-t2b-fill">&#8212;</td><td style="padding:8px 10px"><span id="tier-t2-gate" class="pill pill-green" style="font-size:10px">Open</span></td></tr>
+          <tr style="border-bottom:1px solid var(--border)"><td style="padding:8px 10px;font-weight:700;color:var(--green)">T3</td><td style="padding:8px 10px">Nova Star</td><td style="padding:8px 10px;text-align:right;font-family:monospace">$50</td><td style="padding:8px 10px;text-align:right" id="tier-t3a-fill">&#8212;</td><td style="padding:8px 10px;text-align:right" id="tier-t3b-fill">&#8212;</td><td style="padding:8px 10px"><span id="tier-t3-gate" class="pill" style="font-size:10px;background:rgba(245,158,11,.15);color:var(--yellow);border:1px solid rgba(245,158,11,.4)">Velocity Gated</span></td></tr>
+          <tr style="border-bottom:1px solid var(--border)"><td style="padding:8px 10px;font-weight:700;color:var(--text2)">T4</td><td style="padding:8px 10px">Nova Core</td><td style="padding:8px 10px;text-align:right;font-family:monospace">$100</td><td style="padding:8px 10px;text-align:right" id="tier-t4a-fill">&#8212;</td><td style="padding:8px 10px;text-align:right" id="tier-t4b-fill">&#8212;</td><td style="padding:8px 10px"><span id="tier-t4-gate" class="pill" style="font-size:10px;background:rgba(245,158,11,.15);color:var(--yellow);border:1px solid rgba(245,158,11,.4)">Velocity Gated</span></td></tr>
+          <tr style="border-bottom:1px solid var(--border)"><td style="padding:8px 10px;font-weight:700;color:var(--text2)">T5</td><td style="padding:8px 10px">Nova Prime</td><td style="padding:8px 10px;text-align:right;font-family:monospace">$250</td><td style="padding:8px 10px;text-align:right" id="tier-t5a-fill">&#8212;</td><td style="padding:8px 10px;text-align:right" id="tier-t5b-fill">&#8212;</td><td style="padding:8px 10px"><span id="tier-t5-gate" class="pill" style="font-size:10px;background:rgba(245,158,11,.15);color:var(--yellow);border:1px solid rgba(245,158,11,.4)">Velocity Gated</span></td></tr>
+          <tr style="border-bottom:1px solid var(--border)"><td style="padding:8px 10px;font-weight:700;color:var(--text2)">T6</td><td style="padding:8px 10px">Nova Apex</td><td style="padding:8px 10px;text-align:right;font-family:monospace">$500</td><td style="padding:8px 10px;text-align:right" id="tier-t6a-fill">&#8212;</td><td style="padding:8px 10px;text-align:right" id="tier-t6b-fill">&#8212;</td><td style="padding:8px 10px"><span id="tier-t6-gate" class="pill" style="font-size:10px;background:rgba(245,158,11,.15);color:var(--yellow);border:1px solid rgba(245,158,11,.4)">Velocity Gated</span></td></tr>
+          <tr style="border-bottom:1px solid var(--border)"><td style="padding:8px 10px;font-weight:700;color:var(--text2)">T7</td><td style="padding:8px 10px">Nova Pinnacle</td><td style="padding:8px 10px;text-align:right;font-family:monospace">$1,000</td><td style="padding:8px 10px;text-align:right" id="tier-t7a-fill">&#8212;</td><td style="padding:8px 10px;text-align:right" id="tier-t7b-fill">&#8212;</td><td style="padding:8px 10px"><span id="tier-t7-gate" class="pill" style="font-size:10px;background:rgba(245,158,11,.15);color:var(--yellow);border:1px solid rgba(245,158,11,.4)">Velocity Gated</span></td></tr>
+          <tr style="border-bottom:1px solid var(--border)"><td style="padding:8px 10px;font-weight:700;color:var(--text2)">T8</td><td style="padding:8px 10px">SuperNova Titan</td><td style="padding:8px 10px;text-align:right;font-family:monospace">$2,500</td><td style="padding:8px 10px;text-align:right" id="tier-t8a-fill">&#8212;</td><td style="padding:8px 10px;text-align:right" id="tier-t8b-fill">&#8212;</td><td style="padding:8px 10px"><span id="tier-t8-gate" class="pill" style="font-size:10px;background:rgba(245,158,11,.15);color:var(--yellow);border:1px solid rgba(245,158,11,.4)">Velocity Gated</span></td></tr>
+          <tr style="border-bottom:1px solid var(--border)"><td style="padding:8px 10px;font-weight:700;color:var(--text2)">T9</td><td style="padding:8px 10px">SuperNova Legend</td><td style="padding:8px 10px;text-align:right;font-family:monospace">$5,000</td><td style="padding:8px 10px;text-align:right" id="tier-t9a-fill">&#8212;</td><td style="padding:8px 10px;text-align:right" id="tier-t9b-fill">&#8212;</td><td style="padding:8px 10px"><span id="tier-t9-gate" class="pill" style="font-size:10px;background:rgba(245,158,11,.15);color:var(--yellow);border:1px solid rgba(245,158,11,.4)">Velocity Gated</span></td></tr>
+          <tr><td style="padding:8px 10px;font-weight:700;color:var(--text2)">T10</td><td style="padding:8px 10px">SuperNova Apex</td><td style="padding:8px 10px;text-align:right;font-family:monospace">$10,000</td><td style="padding:8px 10px;text-align:right" id="tier-t10a-fill">&#8212;</td><td style="padding:8px 10px;text-align:right" id="tier-t10b-fill">&#8212;</td><td style="padding:8px 10px"><span id="tier-t10-gate" class="pill" style="font-size:10px;background:rgba(245,158,11,.15);color:var(--yellow);border:1px solid rgba(245,158,11,.4)">Velocity Gated</span></td></tr>
         </tbody>
       </table>
       <div style="margin-top:10px;font-size:11px;color:var(--text3)">Velocity gate opens when previous tier MatB reaches 80%. Each matrix holds 127 seats (2<sup>7</sup>&#8722;1).</div>
@@ -662,14 +796,14 @@
     <div style="margin-bottom:8px;font-size:13px;font-weight:700;color:var(--green);letter-spacing:.5px">T1 &#8212; Nova Seed &#183; $10</div>
     <div class="grid-2" style="margin-bottom:20px">
       <div class="card">
-        <div class="section-title" style="margin-bottom:12px"><div class="dot" style="background:var(--green)"></div> T1 Matrix A &#8212; Nova Seed</div>
+        <div class="section-title" style="margin-bottom:12px"><div id="t1a-dot" class="dot" style="background:var(--green)"></div> T1 Matrix A &#8212; Nova Seed</div>
         <div class="info-row"><span class="info-key">Seats Filled</span><span class="info-val"><span id="t1a-occ">&#8212;</span> / 127</span></div>
         <div class="info-row"><span class="info-key">Matrix Cycles</span><span class="info-val green" id="t1a-cycles">&#8212;</span></div>
         <div style="margin-top:10px"><div style="display:flex;justify-content:space-between;font-size:12px;color:var(--text3);margin-bottom:4px"><span>Fill progress</span><span id="t1a-pct">0%</span></div><div class="progress-wrap"><div class="progress-bar" id="t1a-bar" style="width:0%"></div></div></div>
         <div style="margin-top:10px;padding:10px 12px;background:var(--bg3);border-radius:8px;font-size:12px;color:var(--text3);line-height:1.6">T1 is open. Fill all 127 seats to cycle root to MatB.</div>
       </div>
       <div class="card">
-        <div class="section-title" style="margin-bottom:12px"><div class="dot" style="background:var(--green)"></div> T1 Matrix B &#8212; Crossing Pool</div>
+        <div class="section-title" style="margin-bottom:12px"><div id="t1b-dot" class="dot" style="background:var(--green)"></div> T1 Matrix B &#8212; Crossing Pool</div>
         <div class="info-row"><span class="info-key">Seats Filled</span><span class="info-val"><span id="t1b-occ">&#8212;</span> / 127</span></div>
         <div class="info-row"><span class="info-key">Pool Accumulator</span><span class="info-val green" id="t1b-pool">&#8212;</span></div>
         <div style="margin-top:10px"><div style="display:flex;justify-content:space-between;font-size:12px;color:var(--text3);margin-bottom:4px"><span>Fill progress</span><span id="t1b-pct">0%</span></div><div class="progress-wrap"><div class="progress-bar" id="t1b-bar" style="width:0%"></div></div></div>
@@ -680,14 +814,14 @@
     <div style="margin-bottom:8px;font-size:13px;font-weight:700;color:var(--green);letter-spacing:.5px">T2 &#8212; Nova Rise &#183; $25</div>
     <div class="grid-2" style="margin-bottom:20px">
       <div class="card" style="opacity:0.85">
-        <div class="section-title" style="margin-bottom:12px"><div class="dot" style="background:var(--yellow)"></div> T2 Matrix A &#8212; Nova Rise</div>
+        <div class="section-title" style="margin-bottom:12px"><div id="t2a-dot" class="dot" style="background:var(--yellow)"></div> T2 Matrix A &#8212; Nova Rise</div>
         <div class="info-row"><span class="info-key">Seats Filled</span><span class="info-val"><span id="t2a-occ">&#8212;</span> / 127</span></div>
         <div class="info-row"><span class="info-key">Matrix Cycles</span><span class="info-val green" id="t2a-cycles">&#8212;</span></div>
         <div style="margin-top:10px"><div style="display:flex;justify-content:space-between;font-size:12px;color:var(--text3);margin-bottom:4px"><span>Fill progress</span><span id="t2a-pct">0%</span></div><div class="progress-wrap"><div class="progress-bar" id="t2a-bar" style="width:0%"></div></div></div>
         <div style="margin-top:10px;padding:10px 12px;background:var(--bg3);border-radius:8px;font-size:12px;color:var(--text3);line-height:1.6">Gate opens when T1 MatB hits 80% fill. T1 graduates auto-upgrade.</div>
       </div>
       <div class="card" style="opacity:0.85">
-        <div class="section-title" style="margin-bottom:12px"><div class="dot" style="background:var(--yellow)"></div> T2 Matrix B &#8212; Crossing Pool</div>
+        <div class="section-title" style="margin-bottom:12px"><div id="t2b-dot" class="dot" style="background:var(--yellow)"></div> T2 Matrix B &#8212; Crossing Pool</div>
         <div class="info-row"><span class="info-key">Seats Filled</span><span class="info-val"><span id="t2b-occ">&#8212;</span> / 127</span></div>
         <div class="info-row"><span class="info-key">Pool Accumulator</span><span class="info-val green" id="t2b-pool">&#8212;</span></div>
         <div style="margin-top:10px"><div style="display:flex;justify-content:space-between;font-size:12px;color:var(--text3);margin-bottom:4px"><span>Fill progress</span><span id="t2b-pct">0%</span></div><div class="progress-wrap"><div class="progress-bar" id="t2b-bar" style="width:0%"></div></div></div>
@@ -698,14 +832,14 @@
     <div style="margin-bottom:8px;font-size:13px;font-weight:700;color:var(--green);letter-spacing:.5px">T3 &#8212; Nova Star &#183; $50</div>
     <div class="grid-2" style="margin-bottom:20px">
       <div class="card" style="opacity:0.85">
-        <div class="section-title" style="margin-bottom:12px"><div class="dot" style="background:var(--yellow)"></div> T3 Matrix A &#8212; Nova Star</div>
+        <div class="section-title" style="margin-bottom:12px"><div id="t3a-dot" class="dot" style="background:var(--yellow)"></div> T3 Matrix A &#8212; Nova Star</div>
         <div class="info-row"><span class="info-key">Seats Filled</span><span class="info-val"><span id="t3a-occ">&#8212;</span> / 127</span></div>
         <div class="info-row"><span class="info-key">Matrix Cycles</span><span class="info-val green" id="t3a-cycles">&#8212;</span></div>
         <div style="margin-top:10px"><div style="display:flex;justify-content:space-between;font-size:12px;color:var(--text3);margin-bottom:4px"><span>Fill progress</span><span id="t3a-pct">0%</span></div><div class="progress-wrap"><div class="progress-bar" id="t3a-bar" style="width:0%"></div></div></div>
         <div style="margin-top:10px;padding:10px 12px;background:var(--bg3);border-radius:8px;font-size:12px;color:var(--text3);line-height:1.6">Gate opens when T2 MatB hits 80% fill. T2 graduates auto-upgrade.</div>
       </div>
       <div class="card" style="opacity:0.85">
-        <div class="section-title" style="margin-bottom:12px"><div class="dot" style="background:var(--yellow)"></div> T3 Matrix B &#8212; Crossing Pool</div>
+        <div class="section-title" style="margin-bottom:12px"><div id="t3b-dot" class="dot" style="background:var(--yellow)"></div> T3 Matrix B &#8212; Crossing Pool</div>
         <div class="info-row"><span class="info-key">Seats Filled</span><span class="info-val"><span id="t3b-occ">&#8212;</span> / 127</span></div>
         <div class="info-row"><span class="info-key">Pool Accumulator</span><span class="info-val green" id="t3b-pool">&#8212;</span></div>
         <div style="margin-top:10px"><div style="display:flex;justify-content:space-between;font-size:12px;color:var(--text3);margin-bottom:4px"><span>Fill progress</span><span id="t3b-pct">0%</span></div><div class="progress-wrap"><div class="progress-bar" id="t3b-bar" style="width:0%"></div></div></div>
@@ -716,14 +850,14 @@
     <div style="margin-bottom:8px;font-size:13px;font-weight:700;color:var(--text2);letter-spacing:.5px">T4 &#8212; Nova Core &#183; $100</div>
     <div class="grid-2" style="margin-bottom:20px">
       <div class="card" style="opacity:0.85">
-        <div class="section-title" style="margin-bottom:12px"><div class="dot" style="background:var(--yellow)"></div> T4 Matrix A &#8212; Nova Core</div>
+        <div class="section-title" style="margin-bottom:12px"><div id="t4a-dot" class="dot" style="background:var(--yellow)"></div> T4 Matrix A &#8212; Nova Core</div>
         <div class="info-row"><span class="info-key">Seats Filled</span><span class="info-val"><span id="t4a-occ">&#8212;</span> / 127</span></div>
         <div class="info-row"><span class="info-key">Matrix Cycles</span><span class="info-val green" id="t4a-cycles">&#8212;</span></div>
         <div style="margin-top:10px"><div style="display:flex;justify-content:space-between;font-size:12px;color:var(--text3);margin-bottom:4px"><span>Fill progress</span><span id="t4a-pct">0%</span></div><div class="progress-wrap"><div class="progress-bar" id="t4a-bar" style="width:0%"></div></div></div>
         <div style="margin-top:10px;padding:10px 12px;background:var(--bg3);border-radius:8px;font-size:12px;color:var(--text3);line-height:1.6">Gate opens when T3 MatB hits 80% fill. T3 graduates auto-upgrade.</div>
       </div>
       <div class="card" style="opacity:0.85">
-        <div class="section-title" style="margin-bottom:12px"><div class="dot" style="background:var(--yellow)"></div> T4 Matrix B &#8212; Crossing Pool</div>
+        <div class="section-title" style="margin-bottom:12px"><div id="t4b-dot" class="dot" style="background:var(--yellow)"></div> T4 Matrix B &#8212; Crossing Pool</div>
         <div class="info-row"><span class="info-key">Seats Filled</span><span class="info-val"><span id="t4b-occ">&#8212;</span> / 127</span></div>
         <div class="info-row"><span class="info-key">Pool Accumulator</span><span class="info-val green" id="t4b-pool">&#8212;</span></div>
         <div style="margin-top:10px"><div style="display:flex;justify-content:space-between;font-size:12px;color:var(--text3);margin-bottom:4px"><span>Fill progress</span><span id="t4b-pct">0%</span></div><div class="progress-wrap"><div class="progress-bar" id="t4b-bar" style="width:0%"></div></div></div>
@@ -734,14 +868,14 @@
     <div style="margin-bottom:8px;font-size:13px;font-weight:700;color:var(--text2);letter-spacing:.5px">T5 &#8212; Nova Prime &#183; $250</div>
     <div class="grid-2" style="margin-bottom:20px">
       <div class="card" style="opacity:0.85">
-        <div class="section-title" style="margin-bottom:12px"><div class="dot" style="background:var(--yellow)"></div> T5 Matrix A &#8212; Nova Prime</div>
+        <div class="section-title" style="margin-bottom:12px"><div id="t5a-dot" class="dot" style="background:var(--yellow)"></div> T5 Matrix A &#8212; Nova Prime</div>
         <div class="info-row"><span class="info-key">Seats Filled</span><span class="info-val"><span id="t5a-occ">&#8212;</span> / 127</span></div>
         <div class="info-row"><span class="info-key">Matrix Cycles</span><span class="info-val green" id="t5a-cycles">&#8212;</span></div>
         <div style="margin-top:10px"><div style="display:flex;justify-content:space-between;font-size:12px;color:var(--text3);margin-bottom:4px"><span>Fill progress</span><span id="t5a-pct">0%</span></div><div class="progress-wrap"><div class="progress-bar" id="t5a-bar" style="width:0%"></div></div></div>
         <div style="margin-top:10px;padding:10px 12px;background:var(--bg3);border-radius:8px;font-size:12px;color:var(--text3);line-height:1.6">Gate opens when T4 MatB hits 80% fill. T4 graduates auto-upgrade.</div>
       </div>
       <div class="card" style="opacity:0.85">
-        <div class="section-title" style="margin-bottom:12px"><div class="dot" style="background:var(--yellow)"></div> T5 Matrix B &#8212; Crossing Pool</div>
+        <div class="section-title" style="margin-bottom:12px"><div id="t5b-dot" class="dot" style="background:var(--yellow)"></div> T5 Matrix B &#8212; Crossing Pool</div>
         <div class="info-row"><span class="info-key">Seats Filled</span><span class="info-val"><span id="t5b-occ">&#8212;</span> / 127</span></div>
         <div class="info-row"><span class="info-key">Pool Accumulator</span><span class="info-val green" id="t5b-pool">&#8212;</span></div>
         <div style="margin-top:10px"><div style="display:flex;justify-content:space-between;font-size:12px;color:var(--text3);margin-bottom:4px"><span>Fill progress</span><span id="t5b-pct">0%</span></div><div class="progress-wrap"><div class="progress-bar" id="t5b-bar" style="width:0%"></div></div></div>
@@ -752,14 +886,14 @@
     <div style="margin-bottom:8px;font-size:13px;font-weight:700;color:var(--text2);letter-spacing:.5px">T6 &#8212; Nova Apex &#183; $500</div>
     <div class="grid-2" style="margin-bottom:20px">
       <div class="card" style="opacity:0.85">
-        <div class="section-title" style="margin-bottom:12px"><div class="dot" style="background:var(--yellow)"></div> T6 Matrix A &#8212; Nova Apex</div>
+        <div class="section-title" style="margin-bottom:12px"><div id="t6a-dot" class="dot" style="background:var(--yellow)"></div> T6 Matrix A &#8212; Nova Apex</div>
         <div class="info-row"><span class="info-key">Seats Filled</span><span class="info-val"><span id="t6a-occ">&#8212;</span> / 127</span></div>
         <div class="info-row"><span class="info-key">Matrix Cycles</span><span class="info-val green" id="t6a-cycles">&#8212;</span></div>
         <div style="margin-top:10px"><div style="display:flex;justify-content:space-between;font-size:12px;color:var(--text3);margin-bottom:4px"><span>Fill progress</span><span id="t6a-pct">0%</span></div><div class="progress-wrap"><div class="progress-bar" id="t6a-bar" style="width:0%"></div></div></div>
         <div style="margin-top:10px;padding:10px 12px;background:var(--bg3);border-radius:8px;font-size:12px;color:var(--text3);line-height:1.6">Gate opens when T5 MatB hits 80% fill. T5 graduates auto-upgrade.</div>
       </div>
       <div class="card" style="opacity:0.85">
-        <div class="section-title" style="margin-bottom:12px"><div class="dot" style="background:var(--yellow)"></div> T6 Matrix B &#8212; Crossing Pool</div>
+        <div class="section-title" style="margin-bottom:12px"><div id="t6b-dot" class="dot" style="background:var(--yellow)"></div> T6 Matrix B &#8212; Crossing Pool</div>
         <div class="info-row"><span class="info-key">Seats Filled</span><span class="info-val"><span id="t6b-occ">&#8212;</span> / 127</span></div>
         <div class="info-row"><span class="info-key">Pool Accumulator</span><span class="info-val green" id="t6b-pool">&#8212;</span></div>
         <div style="margin-top:10px"><div style="display:flex;justify-content:space-between;font-size:12px;color:var(--text3);margin-bottom:4px"><span>Fill progress</span><span id="t6b-pct">0%</span></div><div class="progress-wrap"><div class="progress-bar" id="t6b-bar" style="width:0%"></div></div></div>
@@ -770,18 +904,18 @@
     <div style="margin-bottom:8px;font-size:13px;font-weight:700;color:var(--text2);letter-spacing:.5px">T7 &#8212; Nova Pinnacle &#183; $1,000</div>
     <div class="grid-2" style="margin-bottom:20px">
       <div class="card" style="opacity:0.85">
-        <div class="section-title" style="margin-bottom:12px"><div class="dot" style="background:var(--yellow)"></div> T7 Matrix A &#8212; Nova Pinnacle</div>
+        <div class="section-title" style="margin-bottom:12px"><div id="t7a-dot" class="dot" style="background:var(--yellow)"></div> T7 Matrix A &#8212; Nova Pinnacle</div>
         <div class="info-row"><span class="info-key">Seats Filled</span><span class="info-val"><span id="t7a-occ">&#8212;</span> / 127</span></div>
         <div class="info-row"><span class="info-key">Matrix Cycles</span><span class="info-val green" id="t7a-cycles">&#8212;</span></div>
         <div style="margin-top:10px"><div style="display:flex;justify-content:space-between;font-size:12px;color:var(--text3);margin-bottom:4px"><span>Fill progress</span><span id="t7a-pct">0%</span></div><div class="progress-wrap"><div class="progress-bar" id="t7a-bar" style="width:0%"></div></div></div>
         <div style="margin-top:10px;padding:10px 12px;background:var(--bg3);border-radius:8px;font-size:12px;color:var(--text3);line-height:1.6">Gate opens when T6 MatB hits 80% fill. T6 graduates auto-upgrade.</div>
       </div>
       <div class="card" style="opacity:0.85">
-        <div class="section-title" style="margin-bottom:12px"><div class="dot" style="background:var(--yellow)"></div> T7 Matrix B &#8212; Crossing Pool</div>
+        <div class="section-title" style="margin-bottom:12px"><div id="t7b-dot" class="dot" style="background:var(--yellow)"></div> T7 Matrix B &#8212; Crossing Pool</div>
         <div class="info-row"><span class="info-key">Seats Filled</span><span class="info-val"><span id="t7b-occ">&#8212;</span> / 127</span></div>
         <div class="info-row"><span class="info-key">Pool Accumulator</span><span class="info-val green" id="t7b-pool">&#8212;</span></div>
         <div style="margin-top:10px"><div style="display:flex;justify-content:space-between;font-size:12px;color:var(--text3);margin-bottom:4px"><span>Fill progress</span><span id="t7b-pct">0%</span></div><div class="progress-wrap"><div class="progress-bar" id="t7b-bar" style="width:0%"></div></div></div>
-        <div style="margin-top:10px;padding:10px 12px;background:var(--bg3);border-radius:8px;font-size:12px;color:var(--text3);line-height:1.6">T7 is the apex tier. Completing T7 earns the highest CNOVA multiplier (80x base).</div>
+        <div style="margin-top:10px;padding:10px 12px;background:var(--bg3);border-radius:8px;font-size:12px;color:var(--text3);line-height:1.6">T7 unlocks the $2,500+ whale tiers. Completing T7 earns a 70x CNOVA multiplier and opens T8-T10 upgrade eligibility.</div>
       </div>
     </div>
   </div>
@@ -958,7 +1092,7 @@
         <div class="card-sm">
           <div class="stat-label">Total Earned</div>
           <div class="stat-value" id="dash-total-earned">—</div>
-<div class="stat-sub" id="dash-total-earned-sub" title="Total USDC ever credited to your account. Includes current balance, escrow, amounts spent on tier upgrades, and past withdrawals.">All tiers lifetime</div>
+<div class="stat-sub" id="dash-total-earned-sub" title="Total USDC ever credited to your account. Includes current balance, amounts auto-deducted for tier upgrades, and past withdrawals.">All tiers lifetime</div>
         </div>
         <div class="card-sm">
           <div class="stat-label"><svg width="14" height="14" style="vertical-align:middle;border-radius:50%;margin-right:3px"><use href="#cnova-icon"/></svg>CNOVA Balance</div>
@@ -970,10 +1104,15 @@
           <div class="stat-value" id="dash-cnova-val">—</div>
           <div class="stat-sub">At current floor</div>
         </div>
-        <div class="card-sm" style="border-color:rgba(245,158,11,.4)" title="Earnings held in escrow — releases to Withdrawable when you complete your next cycle-out.">
-          <div class="stat-label">In Escrow &#9432;</div>
-          <div class="stat-value" id="dash-escrow" style="color:var(--yellow)">—</div>
-          <div class="stat-sub" id="dash-escrow-sub" title="Current escrow balance. Earns no fee — releases to Withdrawable when you cycle out. Includes any amount deducted for auto-upgrades.">Vests at next cycle-out</div>
+        <div class="card-sm" title="Total CNOVA you have burned via Redeem → USDC. Loaded from on-chain Transfer events.">
+          <div class="stat-label">🔥 CNOVA Burned</div>
+          <div class="stat-value" id="dash-cnova-burned" style="color:var(--red)">—</div>
+          <div class="stat-sub">Redeemed lifetime</div>
+        </div>
+        <div class="card-sm" style="border-color:rgba(168,85,247,.4)" title="Total USDC held in the Community Wallet — funded by orphan fees from empty upline positions.">
+          <div class="stat-label">🏛️ Community Pool</div>
+          <div class="stat-value" id="dash-cw-pool" style="color:#a855f7">—</div>
+          <div class="stat-sub">Orphan fees collected</div>
         </div>
       </div>
 
@@ -1004,7 +1143,7 @@
           <!-- Redeem CNOVA for USDC at floor price -->
           <div style="margin-top:20px;padding-top:16px;border-top:1px solid var(--border)">
             <div style="font-size:14px;font-weight:700;margin-bottom:4px">🔥 Redeem CNOVA → USDC</div>
-            <div style="font-size:12px;color:var(--text3);margin-bottom:8px">Burn CNOVA at the current floor price to receive USDC from the Stability Fund.</div>
+            <div style="font-size:12px;color:var(--text3);margin-bottom:8px">Burn CNOVA at the current floor price to receive USDC from the CNOVA Treasury.</div>
             <div id="redeem-penalty-info" style="display:none;background:rgba(245,158,11,.08);border:1px solid rgba(245,158,11,.25);border-radius:8px;padding:10px 12px;font-size:12px;color:var(--text2);line-height:1.6;margin-bottom:12px"></div>
             <div class="info-row"><span class="info-key">Your CNOVA</span><span class="info-val green" id="redeem-cnova-bal">—</span></div>
             <div class="info-row"><span class="info-key">Floor Price</span><span class="info-val" id="redeem-floor">—</span></div>
@@ -1095,7 +1234,7 @@
       <div class="card" style="margin-bottom:24px">
         <div class="section-title" style="margin-bottom:14px"><div class="dot" style="background:var(--purple)"></div> Community Wallet</div>
         <div id="cw-not-founder" style="display:none;padding:14px;background:var(--bg3);border-radius:10px;font-size:13px;color:var(--text2)">
-          You are not a founding member. The first <strong id="cw-max-founders">2,000</strong> members earn Community Wallet payouts every 25 days — the first 1,000 as <strong>Nova Originals</strong> (70% share) and the next 1,000 as <strong>Nova Pioneers</strong> (30% share).
+          You are not a founding member. The first <strong id="cw-max-founders">1,000</strong> members earn Community Wallet payouts — the first 500 as <strong>Genesis Members</strong> (#1–500, 60% share) and the next 500 as <strong>Pioneer Members</strong> (#501–1,000, 40% share).
         </div>
         <div id="cw-founder-panel" style="display:none">
           <div class="grid-2" style="margin-bottom:16px">
@@ -1112,8 +1251,8 @@
           </div>
           <div class="info-row"><span class="info-key">Pending Pool</span><span class="info-val" id="cw-pending">—</span></div>
           <div class="info-row"><span class="info-key">Current Epoch</span><span class="info-val" id="cw-epoch">—</span></div>
-          <div class="info-row"><span class="info-key">Nova Original Slots</span><span class="info-val" id="cw-tranche-a">—</span></div>
-          <div class="info-row"><span class="info-key">Nova Pioneer Slots</span><span class="info-val" id="cw-tranche-b">—</span></div>
+          <div class="info-row"><span class="info-key">Genesis Slots (60%)</span><span class="info-val" id="cw-tranche-a">—</span></div>
+          <div class="info-row"><span class="info-key">Pioneer Slots (40%)</span><span class="info-val" id="cw-tranche-b">—</span></div>
           <div style="margin-top:16px">
             <button class="btn btn-green full-w" id="btn-cw-claim" onclick="doCWClaimAll()" disabled>
               Claim All Available
@@ -1122,10 +1261,9 @@
           </div>
         </div>
         <div id="cw-loading" style="padding:16px;background:var(--bg3);border-radius:10px;font-size:13px;color:var(--text2);line-height:1.6">
-          <strong style="color:var(--green)">🏛️ Community Wallet — Phase 2</strong><br>
-          The Community Wallet pays out to the first 2,000 members every 25 days.
-          Nova Originals (#1–1,000) receive 70% of the pool; Nova Pioneers (#1,001–2,000) receive 30%.<br><br>
-          This feature activates with the Phase 2 contract deployment. Your founder status is already being tracked on-chain.
+          <strong style="color:#a855f7">🏛️ Community Wallet — Live</strong><br>
+          The first 1,000 founding members earn payouts from orphan fees. Genesis Members (#1–500) receive 60% of each distribution; Pioneer Members (#501–1,000) receive 40%.<br><br>
+          Connect your wallet to check your founder status and claimable balance.
         </div>
       </div>
 
@@ -1163,9 +1301,12 @@
             <option value="2">Tier 2 — Nova Rise ($25)</option>
             <option value="3">Tier 3 — Nova Star ($50)</option>
             <option value="4">Tier 4 — Nova Prime ($100)</option>
-            <option value="5">Tier 5 — SuperNova Genesis ($250) 🐋</option>
+            <option value="5">Tier 5 — SuperNova Genesis ($250)</option>
             <option value="6">Tier 6 — SuperNova Elite ($500)</option>
             <option value="7">Tier 7 — SuperNova Spark ($1,000)</option>
+            <option value="8">Tier 8 — SuperNova Titan ($2,500)</option>
+            <option value="9">Tier 9 — SuperNova Legend ($5,000)</option>
+            <option value="10">Tier 10 — SuperNova Apex ($10,000)</option>
           </select>
         </div>
       </div>
@@ -1450,64 +1591,168 @@
 // CONFIG — V8.1 Figure-8 Matrix (Base Sepolia)
 // ═══════════════════════════════════════════════════════════════════════
 const CHAIN_ID = 84532;
+
+// ── Countdown to 12 PM (noon) Eastern Friday June 12 ────────────────────────
+(function initCountdown() {
+  // 12:00 PM EDT (noon Eastern) = 16:00 UTC on June 12 2026.
+  // This is a FIXED UTC timestamp — same countdown for every viewer worldwide.
+  // To reschedule: update this ISO string.
+  const LAUNCH_UTC = new Date('2026-06-12T16:00:00Z'); // noon EDT = 16:00 UTC
+
+  // Major city local equivalents — shown below the countdown
+  const CITY_ZONES = [
+    { city: 'New York / Miami',   tz: 'America/New_York'    },
+    { city: 'Chicago / Dallas',   tz: 'America/Chicago'     },
+    { city: 'Denver',             tz: 'America/Denver'      },
+    { city: 'Los Angeles',        tz: 'America/Los_Angeles' },
+    { city: 'London',             tz: 'Europe/London'       },
+    { city: 'Paris / Berlin',     tz: 'Europe/Paris'        },
+    { city: 'Lagos / Accra',      tz: 'Africa/Lagos'        },
+    { city: 'Dubai',              tz: 'Asia/Dubai'          },
+    { city: 'Sydney',             tz: 'Australia/Sydney'    },
+  ];
+
+  function openGate() {
+    document.getElementById('launch-gate').classList.remove('visible');
+  }
+  window.openGate = openGate;
+
+  function pad(n) { return String(n).padStart(2, '0'); }
+
+  // Build city time grid once
+  function buildCityGrid() {
+    const el = document.getElementById('cd-cities');
+    if (!el) return;
+    const rows = CITY_ZONES.map(({ city, tz }) => {
+      let timeStr;
+      try {
+        timeStr = LAUNCH_UTC.toLocaleTimeString('en-US', {
+          timeZone: tz, hour: 'numeric', minute: '2-digit',
+          hour12: true, weekday: 'short'
+        });
+      } catch(e) { timeStr = '—'; }
+      return `<div class="cd-city-row"><span class="cd-city-name">${city}</span><span class="cd-city-time">${timeStr}</span></div>`;
+    });
+    el.innerHTML = rows.join('');
+  }
+
+  function tick() {
+    const diff = LAUNCH_UTC - new Date();
+
+    if (diff <= 0) {
+      document.getElementById('cd-h').textContent = '00';
+      document.getElementById('cd-m').textContent = '00';
+      document.getElementById('cd-s').textContent = '00';
+      document.getElementById('cd-date-label').style.display = 'none';
+      document.getElementById('cd-cities-wrap').style.display = 'none';
+      document.getElementById('cd-live-msg').style.display = 'block';
+      document.getElementById('btn-enter-now').style.display = 'inline-block';
+      // Banner live state
+      document.querySelector('#launch-banner .bn-cd').style.display = 'none';
+      document.querySelector('#launch-banner .bn-sep').style.display = 'none';
+      document.querySelector('#launch-banner .bn-date').style.display = 'none';
+      document.getElementById('bn-live').style.display = 'block';
+      clearInterval(timer);
+      return;
+    }
+
+    const hh = Math.floor(diff / 3600000);
+    const mm = Math.floor((diff % 3600000) / 60000);
+    const ss = Math.floor((diff % 60000) / 1000);
+
+    document.getElementById('cd-h').textContent = pad(hh);
+    document.getElementById('cd-m').textContent = pad(mm);
+    document.getElementById('cd-s').textContent = pad(ss);
+    // Also drive the banner
+    document.getElementById('bn-h').textContent = pad(hh);
+    document.getElementById('bn-m').textContent = pad(mm);
+    document.getElementById('bn-s').textContent = pad(ss);
+  }
+
+  const timer = setInterval(tick, 1000);
+  tick();
+  buildCityGrid();
+})();
+
 // ══ LAUNCH GATE ═══════════════════════════════════════════════════════════
-// Flip to true when: Chainlink live + SF seeded + bigfill validated + community test OK
-const LAUNCH_READY = false;
+// Hostname-based: crypto-nova.app = blocking gate shown; v8.* preview and localhost = gate off, full access
+const LAUNCH_READY = window.location.hostname !== 'crypto-nova.app';
 
 const RPC_URL  = 'https://sepolia.base.org';
+const RPC_FALLBACK = 'https://base-sepolia.public.blastapi.io';
 
 const ADDRS = {
   usdc:          '0x2D8B7b5eDec96bE441b6fb0D45D74a2BcE2C639a',
-  cnova:         '0xe192D3ae2E881709749884de0cFa1d53e2237F6f',
-  treasury:      '0x7F7AD30E786BC059cd25Db3BB7Fb5d34b80615F7',
-  stabilityFund: '0x075f0da27B5feFc84567738d06F7265F883386Ee',
-  tierRouter:    '0xE29e6f13f651cDFD88a9Ae11f35259A19BAa3425',
-  matrixKeeper:  '0xBf59Ed175a37d2e5606d1aA427338e4d1c53194B',
-  v8Governance:  '0x7587c3893Ff4255E57D806e39E4F1839861Ab14F',
+  cnova:         '0xc2b85354F2E8628E7D0874Dd236dbA0F9c3a0301',
+  treasury:      '0x44060f1513AE4B0b24E97e655E04Cf466e0e88B6',
+  stabilityFund: '0xfEA2De4db7f32Ca6716f9C2eC922Ef0d09bD379e',
+  buybackReserve:'0x24d3c758D5A29a49db4d98dCD5216F1369050D7B',
+  tierRouter:    '0x16c34eE760868E54E2450d6B10c0C44B0f704856',
+  matrixKeeper:  '0x3009f21D51f7C46ED7EBDC9Fe7f26a4e4C596AAe',
+  v8Governance:  '0xE7E3a1F7c446Be41a2285c9e470533A4C510f0AF',
+  communityWallet:'0x57AD88819433d3608736b0b5a1c16d4c55fFb5f8',
   T1: {
-    pm:   '0x9d0f06d141d36fE4eb9666a41ef600B0Fd52D43D',
-    matA: '0x80c10540329274e01854e1BF53acb1BC51611b18',
-    matB: '0xFfb87c3957065Cfde8C31B28441A07e8aA278C40',
+    pm:   '0x3F95a92b029e0aD84d9d544Bb89c65656A145b4C',
+    matA: '0xE23eF8d2c5d90CD8239ea729479fEdd1E9Fd3e1b',
+    matB: '0xF059Da5E6C86A7aDeA9AaEAA2Fb8f717BcCD0E4d',
   },
   T2: {
-    pm:   '0x30f67B0C1455aA0952Aa69f3067c50a009AACA47',
-    matA: '0x4075Eb568bF27F3dA2Eaa258754ce79B6fA9f4ba',
-    matB: '0xa2Cb612293f39FeCCeEbB31379DCBb0779E4e17e',
+    pm:   '0x72344b6B2633dab8611D0b10097C6c775ca86661',
+    matA: '0xb024A680FEA2bf465FB9871b25a5380f5871559b',
+    matB: '0x4eff7927c285c9D762b5379875a40C12FB2de61A',
   },
   T3: {
-    pm:   '0x4515415FcFC5BE241b7f215cffC72fD02d9d8B57',
-    matA: '0xe4caC292C63536172c1376721e923351b2a353eA',
-    matB: '0xAB633A03AE6f192cc7dF70C31D311ff59fA078EE',
+    pm:   '0x034a3715D4dEcBb545DDafcDA444E1b7656A2167',
+    matA: '0x8BFA49D34d7D25B0986c4036EdbdB9C4406385c0',
+    matB: '0x649A128279E081Da6986a3d9f6693339BAe3f06D',
   },
   T4: {
-    pm:   '0x3734F148913219e1f7D55f319bc67B5923f71081',
-    matA: '0xA503cf50Eac644e737A95E4888f26D9F1ff89c4d',
-    matB: '0x3a8c6176f8A1c6800775c408BCDE1C7ecCA35628',
+    pm:   '0xF84806D29b7CDE961008977Fb6BE562f041C86E7',
+    matA: '0x86A0114231D91f240bF8Bb259cDd107A114615f6',
+    matB: '0x74A4F49d42f90E20Bb12370Fa88f23ceE04E488D',
   },
   T5: {
-    pm:   '0xd03dcaFe48e2d05561e0765ec632a2550f49DB9E',
-    matA: '0x8FEF5B3902Bf1e0323740F0b4978607799D4Dc60',
-    matB: '0xAd958AB9A3e28811935fd7ef49b6e5F2f9F07351',
+    pm:   '0x4042843B31901163c400524CD84672c01867BE88',
+    matA: '0x274EDfB7A0c2FA5613519B28B47043a4bb631Dd6',
+    matB: '0xbee7e4ca9991002E06359aA31fcB9B385e06c167',
   },
   T6: {
-    pm:   '0x3B45448b895ED9804011f6127d7b8128dcCB5570',
-    matA: '0x85B928A85b453c6f473877DA7915d00295a72de3',
-    matB: '0xB71eBAb86E20C9A3075841C5AD6eF0506f445192',
+    pm:   '0xa7fd1F510895d610D0d5FeD6c6F0d12D29156960',
+    matA: '0x55a33B994942C5587d00f0D6b944F33f885555Df',
+    matB: '0x5190531F8117f3C778b34b24087110cb013fA4C2',
   },
   T7: {
-    pm:   '0xE9bbB096AF72c4fF597Ac3C1FAf6b3D471fF97E9',
-    matA: '0x1873e62cbFc4688CeFb0DD4EF2cDBC29657AEEB9',
-    matB: '0xdDecED76cB770AC3E21ceF20DD032042499cdA3B',
+    pm:   '0xA3478508Bc880b777DDE63059dA4C6d477e32938',
+    matA: '0xC8A9C06B7fF2Cf36e3509aA253F736602764712B',
+    matB: '0x1cB9eCA061Ec18833642f03104d90B8596C4Eea0',
+  },
+  T8: {
+    pm:   '0x57016DC64753a158bc2Be2f62316fBE7b05D2C98',
+    matA: '0x5968bC0D949E2B16b2D7a55956912512551F5eDc',
+    matB: '0x508Ed4Aa8ae99e45ed78dFdBe53786433b8E188E',
+  },
+  T9: {
+    pm:   '0xA6Ea31Cbd308328B6D4B090eCF79cC4381dd05dA',
+    matA: '0x45cD12826b3bD8361D1749Cf484680D5A2Da7bBD',
+    matB: '0x91CED201a9780d91638e937B72CDfab7fd81bCb2',
+  },
+  T10: {
+    pm:   '0x407ddB85CE8289Cbe577CF5BA1583CD928adDae5',
+    matA: '0x3223a95F0dad6adA0feA90fd01089815E196Be01',
+    matB: '0x51C8465d1c1e082B4F3E209585E848af06F7B5f4',
   },
 };
 
-const T1_FEE = 10_000_000n;   // $10 USDC (6 decimals)
-const T2_FEE = 25_000_000n;   // $25 USDC
-const T3_FEE = 50_000_000n;   // $50 USDC
-const T4_FEE = 100_000_000n;  // $100 USDC
-const T5_FEE = 250_000_000n;  // $250 USDC
-const T6_FEE = 500_000_000n;  // $500 USDC
-const T7_FEE = 1_000_000_000n; // $1000 USDC
+const T1_FEE  = 10_000_000n;       // $10 USDC (6 decimals)
+const T2_FEE  = 25_000_000n;       // $25 USDC
+const T3_FEE  = 50_000_000n;       // $50 USDC
+const T4_FEE  = 100_000_000n;      // $100 USDC
+const T5_FEE  = 250_000_000n;      // $250 USDC
+const T6_FEE  = 500_000_000n;      // $500 USDC
+const T7_FEE  = 1_000_000_000n;    // $1,000 USDC
+const T8_FEE  = 2_500_000_000n;    // $2,500 USDC
+const T9_FEE  = 5_000_000_000n;    // $5,000 USDC
+const T10_FEE = 10_000_000_000n;   // $10,000 USDC
 
 // ── ABIs ─────────────────────────────────────────────────────────────
 const TIER_ROUTER_ABI = [
@@ -1523,10 +1768,11 @@ const TIER_ROUTER_ABI = [
   'function getMemberInfo(address) external view returns (uint8 highestTier, address referrer, uint256 totalCycles, bool doubleEntry, bool whaleGateEligible, bool autoUpgradeEnabled, bool autoReentryEnabled)',
   'function setDoubleEntry(bool enabled) external',
   'function setMemberOptions(bool disableUpgrade, bool enableReentry, bool enableDouble) external',
+  'function tierVelocityGreen(uint8 tierIdx) external view returns (bool)',
 ];
 
 const MATRIX_ABI = [
-  'function getMember(address) external view returns (tuple(uint256 id, address referrer, address l2, address l3, uint256 joinedAt, uint256 withdrawable, uint256 totalEarned, uint256 cyclesCompleted, bool isInMatrix, bool hasEverJoined))',
+  'function getMember(address) external view returns (tuple(uint256 id, address referrer, uint256 joinedAt, uint256 withdrawable, uint256 totalEarned, uint256 cyclesCompleted, bool isInMatrix, bool hasEverJoined))',
   'function occupancy() external view returns (uint256)',
   'function MATRIX_SIZE() external view returns (uint256)',
   'function ENTRY_FEE() external view returns (uint256)',
@@ -1544,6 +1790,7 @@ const MATRIX_ABI = [
 const CNOVA_ABI = [
   'function balanceOf(address) external view returns (uint256)',
   'function totalSupply() external view returns (uint256)',
+  'function totalMinted() external view returns (uint256)',
   'function currentEpochNumber() external view returns (uint8)',
   'function epochRewards(uint256) external view returns (uint256)',
   'function TOTAL_EPOCHS() external view returns (uint8)',
@@ -1551,12 +1798,11 @@ const CNOVA_ABI = [
   'function transfer(address,uint256) external returns (bool)',
   'function vestDuration() external view returns (uint256)',
   'function maxPenaltyBps() external view returns (uint256)',
+  'event Transfer(address indexed from, address indexed to, uint256 value)',
 ];
 
 const SF_ABI = [
   'function totalBalance() external view returns (uint256)',
-  'function floorPrice() external view returns (uint256)',
-  'function redeemCNOVA(uint256 cnovaAmount) external',
 ];
 
 const USDC_ABI = [
@@ -1566,8 +1812,17 @@ const USDC_ABI = [
   'function decimals() external view returns (uint8)',
 ];
 
+const PM_ABI = [
+  'function allPairsStatus() external view returns (address[] memory, address[] memory, uint256[] memory, uint256[] memory, uint256[] memory, bool[] memory)',
+  'function activePairIndex() external view returns (uint256)',
+  'function pairCount() external view returns (uint256)',
+];
+
 const TREASURY_ABI = [
   'function usdcReserve() external view returns (uint256)',
+  'function floorPrice() external view returns (uint256)',
+  'function usdcValueAtFloor(uint256 cnovaAmount) external view returns (uint256)',
+  'function redeemAtFloor(uint256 cnovaAmount) external',
 ];
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -1622,8 +1877,12 @@ async function reportEvent(type, details = {}) {
 // ═══════════════════════════════════════════════════════════════════════
 window.addEventListener('DOMContentLoaded', async () => {
   if (window.location.protocol==='file:') document.getElementById('file-protocol-banner').style.display='block';
-  readProvider = new ethers.JsonRpcProvider(RPC_URL);
+  // staticNetwork:true skips the async eth_chainId detection call in ethers v6
+  // — prevents page freeze when sepolia.base.org is slow to respond
+  const _net84532 = ethers.Network.from(84532);
+  readProvider = new ethers.JsonRpcProvider(RPC_URL, _net84532, { staticNetwork: _net84532 });
   loadHomeStats();
+  setTimeout(loadTiersStats, 1500);  // stagger after loadHomeStats to avoid RPC rate-limiting
 
   // Auto-reconnect if wallet was previously connected (silent — no popup)
   if (window.ethereum && localStorage.getItem('cnova_connected')) {
@@ -1749,8 +2008,16 @@ async function switchToBaseSepolia() {
 // ═══════════════════════════════════════════════════════════════════════
 // HOME STATS
 // ═══════════════════════════════════════════════════════════════════════
+// ── RPC timeout wrapper — prevents hanging when Base Sepolia is slow ──────
+function rpc(p) {
+  return Promise.race([
+    p,
+    new Promise((_,r) => setTimeout(() => r(new Error('rpc_timeout')), 8000))
+  ]);
+}
+
 async function loadHomeStats() {
-  const rp = readProvider || new ethers.JsonRpcProvider(RPC_URL);
+  const rp = readProvider || new ethers.JsonRpcProvider(RPC_URL, 84532, { staticNetwork: true });
   try {
     const matA1 = new ethers.Contract(ADDRS.T1.matA, MATRIX_ABI, rp);
     const matB1 = new ethers.Contract(ADDRS.T1.matB, MATRIX_ABI, rp);
@@ -1767,7 +2034,8 @@ async function loadHomeStats() {
       occA, cyclesA, occB, poolB, totalJoined,
       occA2, cyclesA2, occB2, poolB2,
       sysCycles, supply, epoch, sfBal, treasUsdc,
-      occA3, cyclesA3, occB3, poolB3
+      occA3, cyclesA3, occB3, poolB3,
+      cwPoolBal, allTimeMinted
     ] = await Promise.all([
       matA1.occupancy().catch(()=>0n),
       matA1.rotationCount().catch(()=>0n),
@@ -1780,19 +2048,22 @@ async function loadHomeStats() {
       matB2.poolAccumulator().catch(()=>0n),
       tr.totalSystemCycles().catch(()=>0n),
       cnova.totalSupply().catch(()=>0n),
-      cnova.currentEpochNumber().catch(()=>0n),
+      cnova.currentEpochNumber().catch(()=>1n),
       sf.totalBalance().catch(()=>0n),
       usdc.balanceOf(ADDRS.treasury).catch(()=>0n),
       matA3.occupancy().catch(()=>0n),
       matA3.rotationCount().catch(()=>0n),
       matB3.occupancy().catch(()=>0n),
       matB3.poolAccumulator().catch(()=>0n),
+      usdc.balanceOf(ADDRS.communityWallet || ethers.ZeroAddress).catch(()=>0n),
+      cnova.totalMinted().catch(()=>0n),  // all-time minted (never decreases on burn)
     ]);
 
     // Stat cards
     setText('stat-members',  totalJoined.toString());
-    setText('stat-minted',   Number(ethers.formatEther(supply)).toLocaleString(undefined,{maximumFractionDigits:0}));
+    setText('stat-minted',   Number(ethers.formatEther(allTimeMinted)).toLocaleString(undefined,{maximumFractionDigits:0})); // all-time, never decreases
     setText('stat-reserve',  fmt6(sfBal));
+    setText('stat-cw-balance', fmt6(cwPoolBal));
     setText('stat-cycles',   sysCycles.toString());
 
     // T1A progress
@@ -1845,14 +2116,30 @@ async function loadHomeStats() {
 
     // Epoch
     const EPOCH_NAMES = ['Genesis','Pioneer','Expansion','Momentum','Apex','Legacy'];
-    const epochNum = Number(epoch);
-    setText('stat-epoch', `Epoch ${epochNum+1} — ${EPOCH_NAMES[epochNum] || 'Era '+(epochNum+1)}`);
-    setText('stat-supply', Number(ethers.formatEther(supply)).toLocaleString(undefined,{maximumFractionDigits:0})+' CNOVA');
+    const epochNum = Math.max(1, Number(epoch));
+    const epochLabel = `Epoch ${epochNum} — ${EPOCH_NAMES[epochNum-1] || 'Era '+epochNum}`;
+    setText('stat-epoch', epochLabel);
+    setText('cw-epoch', epochLabel);
+    setText('stat-supply', Number(ethers.formatEther(supply)).toLocaleString(undefined,{maximumFractionDigits:0})+' CNOVA'); // current circulating (decreases on redeem/burn)
     setText('stat-treasury-usdc', fmt6(treasUsdc));
+
+    // CNOVA floor price: treasury USDC ÷ total CNOVA supply
+    if (supply > 0n) {
+      const floorRaw = (treasUsdc * BigInt(1000000000000000000)) / supply; // 6-dec USDC per CNOVA
+      const floorUsd = Number(floorRaw) / 1e6;
+      const floorStr = floorUsd === 0     ? '$0.000000'
+                     : floorUsd < 0.0001  ? '$' + floorUsd.toFixed(8)
+                     : floorUsd < 0.01    ? '$' + floorUsd.toFixed(6)
+                     : floorUsd < 1       ? '$' + floorUsd.toFixed(4)
+                     :                      '$' + floorUsd.toFixed(2);
+      setText('stat-floor-price', floorStr);
+    } else {
+      setText('stat-floor-price', '—');
+    }
 
     // Epoch reward per entry (epochRewards[current])
     try {
-      const reward = await cnova.epochRewards(Number(epoch));
+      const reward = await cnova.epochRewards(Number(epoch) - 1); // epochRewards[] is 0-based, epochNum is 1-based
       const rewardFormatted = Number(ethers.formatEther(reward)).toLocaleString();
       setText('stat-reward', rewardFormatted + ' CNOVA');
     } catch(_) { setText('stat-reward', '50 CNOVA'); }
@@ -1865,38 +2152,107 @@ async function loadHomeStats() {
 // TIERS TAB DATA
 // ═══════════════════════════════════════════════════════════════════════
 async function loadTiersStats() {
-  const rp = readProvider || new ethers.JsonRpcProvider(RPC_URL);
+  const rp = readProvider || new ethers.JsonRpcProvider(RPC_URL, 84532, { staticNetwork: true });
   try {
-    const TK = ['T1','T2','T3','T4','T5','T6','T7'];
-    const cs = {};
-    for (const t of TK) {
-      cs[t] = {
-        matA: new ethers.Contract(ADDRS[t].matA, MATRIX_ABI, rp),
-        matB: new ethers.Contract(ADDRS[t].matB, MATRIX_ABI, rp),
-      };
+    const TK = ['T1','T2','T3','T4','T5','T6','T7','T8','T9','T10'];
+
+    // Phase 1: one allPairsStatus() call per tier PairManager (10 calls → 10 occupancy results)
+    // allPairsStatus() returns the current ACTIVE pair's data — always correct even after pair expansion
+    const statusCalls = TK.map(t =>
+      new ethers.Contract(ADDRS[t].pm, PM_ABI, rp)
+        .allPairsStatus()
+        .catch(() => null)   // null = RPC failed; don't overwrite with 0
+    );
+    const statuses = await Promise.all(statusCalls);
+
+    // Phase 2: secondary detail calls for the active pair's rotationCount + poolAccumulator
+    // (staggered after phase 1 to reduce simultaneous call count)
+    const detailCalls = [];
+    const detailIndex = []; // track which (tier, field) each result maps to
+    for (let i = 0; i < TK.length; i++) {
+      const status = statuses[i];
+      if (!status) { detailCalls.push(Promise.resolve(null), Promise.resolve(null)); }
+      else {
+        const [matrixAs,,,,, actives] = status;
+        const activeIdx = actives.findIndex(a => a);
+        const matrixBs = status[1];
+        const activeMatA = activeIdx >= 0 ? matrixAs[activeIdx] : ADDRS[TK[i]].matA;
+        const activeMatB = activeIdx >= 0 ? matrixBs[activeIdx] : ADDRS[TK[i]].matB;
+        detailCalls.push(
+          new ethers.Contract(activeMatA, MATRIX_ABI, rp).rotationCount().catch(()=>null),
+          new ethers.Contract(activeMatB, MATRIX_ABI, rp).poolAccumulator().catch(()=>null),
+        );
+      }
+      detailIndex.push(i);
     }
-    const calls = [];
-    for (const t of TK) {
-      calls.push(cs[t].matA.occupancy().catch(()=>0n));
-      calls.push(cs[t].matA.rotationCount().catch(()=>0n));
-      calls.push(cs[t].matB.occupancy().catch(()=>0n));
-      calls.push(cs[t].matB.poolAccumulator().catch(()=>0n));
-    }
-    const res = await Promise.all(calls);
+    const details = await Promise.all(detailCalls);
+
+    // Apply results to DOM
     for (let i = 0; i < TK.length; i++) {
       const t = TK[i].toLowerCase();
-      const occAn = Number(res[i*4]),   cycA  = res[i*4+1];
-      const occBn = Number(res[i*4+2]), poolB = res[i*4+3];
-      const pctA = Math.round(occAn/127*100), pctB = Math.round(occBn/127*100);
-      setText(t+'a-occ', occAn); setText(t+'a-cycles', cycA.toString());
-      setText(t+'a-pct', pctA+'%');
-      const bA = document.getElementById(t+'a-bar'); if (bA) bA.style.width = pctA+'%';
-      setText(t+'b-occ', occBn); setText(t+'b-pool', fmt6(poolB));
-      setText(t+'b-pct', pctB+'%');
-      const bB = document.getElementById(t+'b-bar'); if (bB) bB.style.width = pctB+'%';
-      setText('tier-'+t+'a-fill', occAn+'/127');
-      setText('tier-'+t+'b-fill', occBn+'/127');
+      const status = statuses[i];
+
+      if (status) {
+        const [matrixAs, matrixBs, occupancyA, occupancyB, registered, actives] = status;
+        const activeIdx = actives.findIndex(a => a);
+        if (activeIdx >= 0) {
+          const occAn = Number(occupancyA[activeIdx]);
+          const occBn = Number(occupancyB[activeIdx]);
+          const pctA = Math.round(occAn/127*100), pctB = Math.round(occBn/127*100);
+
+          setText(t+'a-occ', occAn);
+          setText(t+'a-pct', pctA+'%');
+          setText('tier-'+t+'a-fill', occAn+'/127');
+          const bA = document.getElementById(t+'a-bar'); if (bA) bA.style.width = pctA+'%';
+
+          setText(t+'b-occ', occBn);
+          setText(t+'b-pct', pctB+'%');
+          setText('tier-'+t+'b-fill', occBn+'/127');
+          const bB = document.getElementById(t+'b-bar'); if (bB) bB.style.width = pctB+'%';
+        }
+      }
+
+      const rotCnt = details[i*2];
+      const poolB  = details[i*2+1];
+      if (rotCnt !== null) setText(t+'a-cycles', rotCnt.toString());
+      if (poolB  !== null) setText(t+'b-pool', fmt6(poolB));
     }
+
+    // Phase 3: read velocity gate state for all 10 tiers via tierVelocityGreen(uint8)
+    // NOTE: getVelocityGates() has a bool[7] vs MAX_TIERS=10 bug in deployed contract
+    // always use individual tierVelocityGreen(i) calls instead.
+    try {
+      const router = new ethers.Contract(ADDRS.tierRouter, TIER_ROUTER_ABI, rp);
+      const gateCalls = TK.map((_, i) => router.tierVelocityGreen(i).catch(() => null));
+      const gates = await Promise.all(gateCalls);
+
+      for (let i = 0; i < TK.length; i++) {
+        const isGreen = gates[i]; // null = RPC failed, leave as-is
+        if (isGreen === null) continue;
+        const tNum = TK[i].toLowerCase();
+        const n = i + 1;
+
+        const pill = document.getElementById('tier-t'+n+'-gate');
+        if (pill) {
+          if (isGreen) {
+            pill.className = 'pill pill-green';
+            pill.style.cssText = 'font-size:10px';
+            pill.textContent = 'Open';
+          } else {
+            pill.className = 'pill';
+            pill.style.cssText = 'font-size:10px;background:rgba(245,158,11,.15);color:var(--yellow);border:1px solid rgba(245,158,11,.4)';
+            pill.textContent = 'Velocity Gated';
+          }
+        }
+
+        const dotColor = isGreen ? 'var(--green)' : 'var(--yellow)';
+        const dotA = document.getElementById(tNum+'a-dot');
+        const dotB = document.getElementById(tNum+'b-dot');
+        if (dotA) dotA.style.background = dotColor;
+        if (dotB) dotB.style.background = dotColor;
+      }
+    } catch(e) { console.error('loadTiersStats gates:', e.message); }
+
   } catch(e) { console.error('loadTiersStats:', e.message); }
 }
 
@@ -1905,7 +2261,7 @@ async function loadTiersStats() {
 // ═══════════════════════════════════════════════════════════════════════
 async function loadUserData() {
   if (!userAddr) return;
-  const rp = readProvider || new ethers.JsonRpcProvider(RPC_URL);
+  const rp = readProvider || new ethers.JsonRpcProvider(RPC_URL, 84532, { staticNetwork: true });
   try {
     const tr = new ethers.Contract(ADDRS.tierRouter, TIER_ROUTER_ABI, rp);
     const joined = await tr.globalJoined(userAddr).catch(()=>false);
@@ -1952,7 +2308,7 @@ async function loadUserData() {
 // ═══════════════════════════════════════════════════════════════════════
 async function loadRegisterTab() {
   if (!userAddr) return;
-  const rp = readProvider || new ethers.JsonRpcProvider(RPC_URL);
+  const rp = readProvider || new ethers.JsonRpcProvider(RPC_URL, 84532, { staticNetwork: true });
 
   try {
     const tr   = new ethers.Contract(ADDRS.tierRouter, TIER_ROUTER_ABI, rp);
@@ -2150,7 +2506,7 @@ async function loadDashboardData() {
   if (!userAddr) {
     showEl('dash-no-wallet'); hideEl('dash-not-registered'); hideEl('dash-content'); return;
   }
-  const rp = readProvider || new ethers.JsonRpcProvider(RPC_URL);
+  const rp = readProvider || new ethers.JsonRpcProvider(RPC_URL, 84532, { staticNetwork: true });
 
   try {
     const tr = new ethers.Contract(ADDRS.tierRouter, TIER_ROUTER_ABI, rp);
@@ -2177,6 +2533,9 @@ async function loadDashboardData() {
       ...(ADDRS.T5.matA ? [{addr:ADDRS.T5.matA,label:'T5 Matrix A'},{addr:ADDRS.T5.matB,label:'T5 Matrix B'}] : []),
       ...(ADDRS.T6.matA ? [{addr:ADDRS.T6.matA,label:'T6 Matrix A'},{addr:ADDRS.T6.matB,label:'T6 Matrix B'}] : []),
       ...(ADDRS.T7.matA ? [{addr:ADDRS.T7.matA,label:'T7 Matrix A'},{addr:ADDRS.T7.matB,label:'T7 Matrix B'}] : []),
+      ...(ADDRS.T8.matA ? [{addr:ADDRS.T8.matA,label:'T8 Matrix A'},{addr:ADDRS.T8.matB,label:'T8 Matrix B'}] : []),
+      ...(ADDRS.T9.matA ? [{addr:ADDRS.T9.matA,label:'T9 Matrix A'},{addr:ADDRS.T9.matB,label:'T9 Matrix B'}] : []),
+      ...(ADDRS.T10.matA ? [{addr:ADDRS.T10.matA,label:'T10 Matrix A'},{addr:ADDRS.T10.matB,label:'T10 Matrix B'}] : []),
     ];
 
     let totalW = 0n, totalE = 0n, totalEscrow = 0n;
@@ -2200,24 +2559,25 @@ async function loadDashboardData() {
           activeBFS = await mc.matrixPos(userAddr).catch(()=>0n); // BFS pos is separate mapping
           activeCycles = BigInt(member.cyclesCompleted);
         }
-        if (m.label.startsWith('T3')) highestTier = Math.max(highestTier, 3);
-        else if (m.label.startsWith('T2')) highestTier = Math.max(highestTier, 2);
-        else highestTier = Math.max(highestTier, 1);
+        const tNum = parseInt(m.label.match(/^T(\d+)/)?.[1] || '1');
+        highestTier = Math.max(highestTier, tNum);
       }
     }
 
-    // CNOVA balance + floor price (sfBal / cnovaSupply)
+    // CNOVA balance + floor price (treasuryUsdc / cnovaSupply)
+    // v8.7: floor is backed by Treasury USDC (15% BPS), not SF
     const cnova = new ethers.Contract(ADDRS.cnova, CNOVA_ABI, rp);
-    const sf    = new ethers.Contract(ADDRS.stabilityFund, SF_ABI, rp);
-    const [cnovabal, sfBal, cnovaSupply] = await Promise.all([
+    const usdcT = new ethers.Contract(ADDRS.usdc,  USDC_ABI,  rp);
+    const [cnovabal, treasuryUsdc, cnovaSupply, cwPoolDash] = await Promise.all([
       cnova.balanceOf(userAddr).catch(()=>0n),
-      sf.totalBalance().catch(()=>0n),
+      usdcT.balanceOf(ADDRS.treasury).catch(()=>0n),
       cnova.totalSupply().catch(()=>0n),
+      usdcT.balanceOf(ADDRS.communityWallet || ethers.ZeroAddress).catch(()=>0n),
     ]);
-    // cnovabal=18dec, sfBal=6dec, cnovaSupply=18dec → result is 6dec USDC
-    const cnovaValRaw = cnovaSupply > 0n ? (cnovabal * sfBal) / cnovaSupply : 0n;
+    // cnovabal=18dec, treasuryUsdc=6dec, cnovaSupply=18dec → result is 6dec USDC
+    const cnovaValRaw = cnovaSupply > 0n ? (cnovabal * treasuryUsdc) / cnovaSupply : 0n;
 
-    const TIER_NAMES = ['—','Nova Seed','Nova Rise','Nova Star','Nova Prime','SuperNova Genesis','SuperNova Elite','SuperNova Spark'];
+    const TIER_NAMES = ['—','Nova Seed','Nova Rise','Nova Star','Nova Core','Nova Prime','Nova Apex','Nova Pinnacle','SuperNova Titan','SuperNova Legend','SuperNova Apex'];
 
     // Render
     setText('dash-withdrawable',   fmt6(totalW));
@@ -2258,21 +2618,13 @@ async function loadDashboardData() {
           ? `All tiers lifetime \u2022 ${fmt6(deducted)} deducted/claimed`
           : 'All tiers lifetime';
       }
-      // Escrow sub-label — show breakdown: escrow + deducted adds clarity
-      const escSubEl = document.getElementById('dash-escrow-sub');
-      if (escSubEl) {
-        if (deducted > 0n) {
-          escSubEl.textContent = `Vests at cycle-out \u2022 ${fmt6(deducted)} auto-deducted`;
-          escSubEl.style.color = 'var(--yellow)';
-        } else {
-          escSubEl.textContent = 'Vests at next cycle-out';
-          escSubEl.style.color = '';
-        }
-      }
+      // V8.8: escrow removed — escrow card replaced by Community Pool card
     } catch(_) {}
-    setText('dash-escrow',         fmt6(totalEscrow));
+    setText('dash-cw-pool',         fmt6(cwPoolDash));
     setText('dash-cnova',          Number(ethers.formatEther(cnovabal)).toFixed(2));
     setText('dash-cnova-val',      fmt6(cnovaValRaw));
+    // Burn history: fire-and-forget (queryFilter can be slow; don't await)
+    loadUserBurnHistory(cnova, userAddr);
     setText('dash-tier',           highestTier > 0 ? `T${highestTier}` : 'T1');
     setText('dash-tier-name',      TIER_NAMES[highestTier] || '—');
     setText('dash-matrix',         activeMat ? activeLabel : '—');
@@ -2294,7 +2646,7 @@ async function loadDashboardData() {
     const upgradeSection = document.getElementById('upgrade-section');
     if (upgradeSection) {
       // Max deployed tier: 3 (T3 live). Increase when T4+ deployed.
-      const MAX_DEPLOYED_TIER = 7; // v8.6: all 7 tiers live
+      const MAX_DEPLOYED_TIER = 10; // v8.7: all 10 tiers live
       const curTierCycles = await tr.tierCycles(userAddr, Math.max(highestTier - 1, 0)).catch(() => 0n);
       const canUpgrade = Number(curTierCycles) >= 1 && highestTier < MAX_DEPLOYED_TIER;
       upgradeSection.style.display = canUpgrade ? 'block' : 'none';
@@ -2368,11 +2720,29 @@ async function loadDashboardData() {
   } catch(e) { console.error('loadDashboardData:', e.message); }
 }
 
+/**
+ * Query on-chain Transfer(user → address(0)) events to sum all CNOVA the
+ * user has ever burned via Redeem → USDC.  Runs independently so it
+ * doesn't slow the main dashboard load.
+ */
+async function loadUserBurnHistory(cnova, user) {
+  try {
+    setText('dash-cnova-burned', '…');
+    const burnFilter = cnova.filters.Transfer(user, ethers.ZeroAddress);
+    const events     = await cnova.queryFilter(burnFilter, 0, 'latest');
+    const totalBurned = events.reduce((acc, e) => acc + BigInt(e.args.value), 0n);
+    setText('dash-cnova-burned', Number(ethers.formatEther(totalBurned)).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
+  } catch(e) {
+    console.warn('loadUserBurnHistory:', e.message);
+    setText('dash-cnova-burned', '—');
+  }
+}
+
 async function doWithdraw() {
   if (!signer) return;
   const btn = document.getElementById('btn-withdraw');
   btn.disabled = true; btn.innerHTML = '<span class="spinner"></span>Withdrawing…';
-  const rp = readProvider || new ethers.JsonRpcProvider(RPC_URL);
+  const rp = readProvider || new ethers.JsonRpcProvider(RPC_URL, 84532, { staticNetwork: true });
   try {
     const matrices = [
       ADDRS.T1.matA, ADDRS.T1.matB,
@@ -2382,6 +2752,9 @@ async function doWithdraw() {
       ...(ADDRS.T5.matA ? [ADDRS.T5.matA, ADDRS.T5.matB] : []),
       ...(ADDRS.T6.matA ? [ADDRS.T6.matA, ADDRS.T6.matB] : []),
       ...(ADDRS.T7.matA ? [ADDRS.T7.matA, ADDRS.T7.matB] : []),
+      ...(ADDRS.T8.matA ? [ADDRS.T8.matA, ADDRS.T8.matB] : []),
+      ...(ADDRS.T9.matA ? [ADDRS.T9.matA, ADDRS.T9.matB] : []),
+      ...(ADDRS.T10.matA ? [ADDRS.T10.matA, ADDRS.T10.matB] : []),
     ];
     let withdrawn = false;
     for (const addr of matrices) {
@@ -2395,6 +2768,7 @@ async function doWithdraw() {
       }
     }
     setStatus('withdraw-status', withdrawn ? '✅ Earnings withdrawn!' : 'Nothing to withdraw.', withdrawn ? 'ok' : 'info');
+    if (withdrawn) await new Promise(r => setTimeout(r, 3500)); // let Base Sepolia RPC nodes index the withdrawal
     await loadDashboardData();
   } catch(e) {
     setStatus('withdraw-status', '❌ ' + friendlyError(e), 'err');
@@ -2409,7 +2783,7 @@ async function doWithdraw() {
 function setActiveMatrixBtn(id) {
   ['btn-load-tree','btn-my-position','btn-my-directs'].forEach(bid => {
     const b = document.getElementById(bid);
-    if (b) b.classList.toggle('active', bid === id);
+    if (b) b.classList.toggle('matrix-active', bid === id);
   });
 }
 
@@ -2418,10 +2792,13 @@ function onMatrixTierChange() { loadQueueView(); setActiveMatrixBtn('btn-load-tr
 async function getMatrixForTier() {
   const tierSelect = document.getElementById('matrix-tier-select');
   const tierNum = tierSelect ? parseInt(tierSelect.value) || 1 : 1;
-  if (tierNum === 7 && ADDRS.T7.matA) return ADDRS.T7.matA;
-  if (tierNum === 6 && ADDRS.T6.matA) return ADDRS.T6.matA;
-  if (tierNum === 5 && ADDRS.T5.matA) return ADDRS.T5.matA;
-  if (tierNum === 4 && ADDRS.T4.matA) return ADDRS.T4.matA;
+  if (tierNum === 10 && ADDRS.T10.matA) return ADDRS.T10.matA;
+  if (tierNum === 9 && ADDRS.T9.matA)  return ADDRS.T9.matA;
+  if (tierNum === 8 && ADDRS.T8.matA)  return ADDRS.T8.matA;
+  if (tierNum === 7 && ADDRS.T7.matA)  return ADDRS.T7.matA;
+  if (tierNum === 6 && ADDRS.T6.matA)  return ADDRS.T6.matA;
+  if (tierNum === 5 && ADDRS.T5.matA)  return ADDRS.T5.matA;
+  if (tierNum === 4 && ADDRS.T4.matA)  return ADDRS.T4.matA;
   if (tierNum === 3) return ADDRS.T3.matA;
   return tierNum === 2 ? ADDRS.T2.matA : ADDRS.T1.matA;
 }
@@ -2508,7 +2885,7 @@ async function setAutoReentryOption(enabled) {
 }
 
 async function loadQueueView() {
-  const rp = readProvider || new ethers.JsonRpcProvider(RPC_URL);
+  const rp = readProvider || new ethers.JsonRpcProvider(RPC_URL, 84532, { staticNetwork: true });
   const addrToLoad = await getMatrixForTier();
   const loadingEl = document.getElementById('matrix-loading');
   const treeEl    = document.getElementById('matrix-tree');
@@ -2537,7 +2914,7 @@ async function loadQueueView() {
 
 async function loadMyTree() {
   if (!userAddr) { toast('Connect wallet first','error'); return; }
-  const rp = readProvider || new ethers.JsonRpcProvider(RPC_URL);
+  const rp = readProvider || new ethers.JsonRpcProvider(RPC_URL, 84532, { staticNetwork: true });
   const loadingEl = document.getElementById('matrix-loading');
   const treeEl    = document.getElementById('matrix-tree');
   if (loadingEl) { loadingEl.style.display='block'; loadingEl.textContent='Finding your position…'; }
@@ -2553,6 +2930,9 @@ async function loadMyTree() {
       ...(ADDRS.T5.matA ? [{addr:ADDRS.T5.matA,label:'T5 Matrix A'},{addr:ADDRS.T5.matB,label:'T5 Matrix B'}] : []),
       ...(ADDRS.T6.matA ? [{addr:ADDRS.T6.matA,label:'T6 Matrix A'},{addr:ADDRS.T6.matB,label:'T6 Matrix B'}] : []),
       ...(ADDRS.T7.matA ? [{addr:ADDRS.T7.matA,label:'T7 Matrix A'},{addr:ADDRS.T7.matB,label:'T7 Matrix B'}] : []),
+      ...(ADDRS.T8.matA ? [{addr:ADDRS.T8.matA,label:'T8 Matrix A'},{addr:ADDRS.T8.matB,label:'T8 Matrix B'}] : []),
+      ...(ADDRS.T9.matA ? [{addr:ADDRS.T9.matA,label:'T9 Matrix A'},{addr:ADDRS.T9.matB,label:'T9 Matrix B'}] : []),
+      ...(ADDRS.T10.matA ? [{addr:ADDRS.T10.matA,label:'T10 Matrix A'},{addr:ADDRS.T10.matB,label:'T10 Matrix B'}] : []),
     ];
     let activeMat = null, activeBFS = 0n, activeLabel = '', activeMSize = 64n;
     for (const m of allMats) {
@@ -2596,7 +2976,7 @@ async function loadMyTree() {
 
 async function loadMyDirects() {
   if (!userAddr) { toast('Connect wallet first','error'); return; }
-  const rp = readProvider || new ethers.JsonRpcProvider(RPC_URL);
+  const rp = readProvider || new ethers.JsonRpcProvider(RPC_URL, 84532, { staticNetwork: true });
   document.getElementById('my-directs-card').style.display='block';
   document.getElementById('my-directs-loading').style.display='block';
   document.getElementById('my-directs-empty').style.display='none';
@@ -2609,11 +2989,13 @@ async function loadMyDirects() {
   try {
     const tr = new ethers.Contract(ADDRS.tierRouter, TIER_ROUTER_ABI, rp);
     let directs = [];
-    // Query MemberRegistered events — try progressively smaller ranges if RPC limits
+    // Query MemberRegistered — try from block 0 first, then progressive fallback
     let queryErr = null;
-    for (const blkRange of [500000, 100000, 20000, 5000]) {
+    const blkRanges = [0, 500000, 100000, 20000, 5000];
+    for (const blkRange of blkRanges) {
       try {
-        const logs = await tr.queryFilter(tr.filters.MemberRegistered(), -blkRange);
+        const from = blkRange === 0 ? 0 : -blkRange;
+        const logs = await tr.queryFilter(tr.filters.MemberRegistered(), from);
         directs = logs
           .filter(l => l.args && l.args.referrer &&
             l.args.referrer.toLowerCase() === userAddr.toLowerCase())
@@ -2622,9 +3004,10 @@ async function loadMyDirects() {
         break;
       } catch(evtErr) {
         queryErr = evtErr.message;
+        console.warn('MemberRegistered query range=' + blkRange + ' failed:', evtErr.message);
       }
     }
-    if (queryErr) console.warn('MemberRegistered queryFilter failed at all ranges:', queryErr);
+    if (queryErr) console.warn('MemberRegistered all ranges failed:', queryErr);
     document.getElementById('my-directs-loading').style.display='none';
     if (directs.length === 0) {
       document.getElementById('my-directs-empty').style.display='block';
@@ -2677,13 +3060,13 @@ let _redeemFloor = 0n, _redeemBal = 0n, _redeemPenaltyBps = 5000n;
 
 async function loadRedeemData() {
   if (!userAddr) return;
-  const rp = readProvider || new ethers.JsonRpcProvider(RPC_URL);
+  const rp = readProvider || new ethers.JsonRpcProvider(RPC_URL, 84532, { staticNetwork: true });
   try {
-    const cnova = new ethers.Contract(ADDRS.cnova, CNOVA_ABI, rp);
-    const sf    = new ethers.Contract(ADDRS.stabilityFund, SF_ABI, rp);
+    const cnova    = new ethers.Contract(ADDRS.cnova,    CNOVA_ABI,    rp);
+    const treasury = new ethers.Contract(ADDRS.treasury, TREASURY_ABI, rp);
     const [bal, floorRaw, vestDur, penaltyBps] = await Promise.all([
       cnova.balanceOf(userAddr).catch(()=>0n),
-      sf.floorPrice().catch(()=>0n),         // returns sfBal*1e18/supply — 6-dec result
+      treasury.floorPrice().catch(()=>0n),   // (usdcReserve * 1e18) / cnovaSupply — 6-dec result
       cnova.vestDuration().catch(()=>BigInt(180*86400)),
       cnova.maxPenaltyBps().catch(()=>5000n),
     ]);
@@ -2766,10 +3149,10 @@ async function approveCNOVAForRedeem() {
   if (!amt || amt <= 0) { toast('Enter CNOVA amount first','error'); return; }
   btn.disabled = true; btn.innerHTML = '<span class="spinner"></span>Approving…';
   try {
-    const sfAddr = ADDRS.stabilityFund;
+    const treasuryAddr = ADDRS.treasury;
     const cnovaW = new ethers.Contract(ADDRS.cnova, CNOVA_ABI, signer);
     const amtWei = BigInt(Math.floor(amt * 1e18));
-    const tx = await cnovaW.approve(sfAddr, amtWei);
+    const tx = await cnovaW.approve(treasuryAddr, amtWei);
     setStatus('redeem-status','⏳ Approving CNOVA…','info');
     await tx.wait();
     setStatus('redeem-status','✅ Approved! Click Redeem.','ok');
@@ -2790,15 +3173,18 @@ async function doRedeemAtFloor() {
   if (!amt || amt <= 0) { toast('Enter CNOVA amount','error'); return; }
   btn.disabled = true; btn.innerHTML = '<span class="spinner"></span>Redeeming…';
   try {
-    const sf  = new ethers.Contract(ADDRS.stabilityFund, SF_ABI, signer);
+    const treasury = new ethers.Contract(ADDRS.treasury, TREASURY_ABI, signer);
     const amtWei = BigInt(Math.floor(amt * 1e18));
-    const tx = await sf.redeemCNOVA(amtWei);
+    const tx = await treasury.redeemAtFloor(amtWei);
     setStatus('redeem-status','⏳ Confirming redemption…','info');
     await tx.wait();
     setStatus('redeem-status','✅ Redeemed! USDC sent to your wallet.','ok');
     toast('CNOVA redeemed successfully!','success');
+    btn.disabled = false; btn.textContent = 'Step 2: Redeem for USDC';
+    await new Promise(r => setTimeout(r, 3500)); // let Base Sepolia RPC nodes index the burn
     await loadRedeemData();
     await loadDashboardData();
+    loadHomeStats(); // refresh CNOVA Minted + Total Supply in live stats
   } catch(e) {
     btn.disabled = false; btn.textContent = 'Step 2: Redeem for USDC';
     setStatus('redeem-status','❌ ' + friendlyError(e),'err');
@@ -2872,6 +3258,16 @@ function friendlyError(e) {
   if (msg.includes('USDC') && msg.includes('allowance')) return 'USDC not approved — complete Step 1 first.';
   if (msg.includes('execution reverted')) return 'Transaction reverted: ' + (msg.split('execution reverted:')[1]||'').trim().slice(0,80);
   return msg.slice(0, 120);
+}
+
+async function addCNOVAtoMetaMask() {
+  if (!window.ethereum) return;
+  try {
+    await window.ethereum.request({
+      method: 'wallet_watchAsset',
+      params: { type: 'ERC20', options: { address: ADDRS.cnova, symbol: 'CNOVA', decimals: 18, image: '' }},
+    });
+  } catch(e) { console.error(e); }
 }
 
 async function addUSDCtoMetaMask() {
@@ -3032,7 +3428,7 @@ function onUpgradeTierChange() {
 
 async function checkUpgradeAllowance() {
   if (!userAddr) { toast('Connect wallet first', 'error'); return; }
-  const rp   = readProvider || new ethers.JsonRpcProvider(RPC_URL);
+  const rp   = readProvider || new ethers.JsonRpcProvider(RPC_URL, 84532, { staticNetwork: true });
   const usdc = new ethers.Contract(ADDRS.usdc, USDC_ABI, rp);
   const fee  = window._upgradeCardFee || 25_000_000n;
   const al   = await usdc.allowance(userAddr, ADDRS.tierRouter).catch(() => 0n);
@@ -3064,8 +3460,8 @@ async function doUpgrade() {
 
 
 // ── v8.6 helper: updateAddrsFromDeployed ─────────────────────────────────────
-// Paste deployed_addresses_v8_6.json content into window._v86Addrs then call this.
-// Example: fetch('deployed_addresses_v8_6.json').then(r=>r.json()).then(updateAddrsFromDeployed)
+// Paste deployed_addresses_v8_8.json content into window._v88Addrs then call this.
+// Example: fetch('deployed_addresses_v8_8.json').then(r=>r.json()).then(updateAddrsFromDeployed)
 function updateAddrsFromDeployed(d) {
   if (!d) return;
   if (d.usdc)          ADDRS.usdc          = d.usdc;
@@ -3074,14 +3470,14 @@ function updateAddrsFromDeployed(d) {
   if (d.tierRouter)    ADDRS.tierRouter    = d.tierRouter;
   if (d.matrixKeeper)  ADDRS.matrixKeeper  = d.matrixKeeper;
   const t = d.tiers || {};
-  for (let i = 1; i <= 7; i++) {
+  for (let i = 1; i <= 10; i++) {
     const tier = t[String(i)] || t[i];
     if (tier) {
       const key = 'T' + i;
       ADDRS[key] = { pm: tier.pairManager || tier.pm || '', matA: tier.matA || '', matB: tier.matB || '' };
     }
   }
-  console.log('[v8.6] ADDRS updated from deployed JSON');
+  console.log('[v8.8] ADDRS updated from deployed JSON');
 }
 </script>
 </body>
