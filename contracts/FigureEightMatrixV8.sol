@@ -336,6 +336,12 @@ contract FigureEightMatrixV8 is Ownable2Step {
         emit MatrixKeeperSet(_keeper);
     }
 
+    /// @notice Set the CommunityWallet address for orphan fee routing.
+    ///         Pass address(0) to disable CW routing (orphan fees fall back to SF layer 6).
+    function setCommunityWallet(address _cw) external onlyOwner {
+        communityWallet = _cw;
+    }
+
     // ─── Governance setters (DAO-votable, enumerated menus only) ─────────────
 
     /// @notice Adjust withdrawal health fee. Allowed: 50, 100, 150, 200, 250.
