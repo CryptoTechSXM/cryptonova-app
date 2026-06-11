@@ -7,9 +7,10 @@ pragma solidity ^0.8.24;
  *
  * V8.1 changes from V7
  * --------------------
- * 1. Tier multiplier  -- mintReward() accepts tierIndex (0=T1 ... 6=T7).
+ * 1. Tier multiplier  -- mintReward() accepts tierIndex (0=T1 ... 9=T10).
  *    Minted amount = base epoch reward x multiplier.
  *    T1:1x  T2:2x  T3:4x  T4:8x  T5:20x  T6:40x  T7:80x
+ *    T8:160x  T9:320x  T10:640x
  *
  * 2. Triple epoch trigger -- epoch advances when ANY of these fires first:
  *    a) MINT   -- totalMinted - epochStartMinted >= epochMintLimit
@@ -86,7 +87,7 @@ contract CNOVAToken is ERC20, ERC20Burnable, AccessControl {
     // Tier multipliers  (index 0 = T1 ... index 6 = T7)
     // =========================================================================
 
-    uint256[7] public tierMultipliers = [1, 2, 4, 8, 20, 40, 80];
+    uint256[10] public tierMultipliers = [1, 2, 4, 8, 20, 40, 80, 160, 320, 640];
 
     // =========================================================================
     // Epoch configuration
@@ -397,7 +398,7 @@ contract CNOVAToken is ERC20, ERC20Burnable, AccessControl {
      *         Epoch 9 (Final Frontier) : floor-price formula x multiplier
      *
      * @param  to         Recipient address.
-     * @param  tierIndex  0 = T1 ... 6 = T7.
+     * @param  tierIndex  0 = T1 ... 9 = T10.
      * @return amount     CNOVA minted (0 if cap reached or all epochs done).
      */
     function mintReward(address to, uint8 tierIndex)
@@ -405,7 +406,7 @@ contract CNOVAToken is ERC20, ERC20Burnable, AccessControl {
         onlyRole(MINTER_ROLE)
         returns (uint256 amount)
     {
-        require(tierIndex < 7, "CNOVA: invalid tier");
+        require(tierIndex < 10, "CNOVA: invalid tier");
         _tryAdvanceEpoch();
         if (currentEpoch >= TOTAL_EPOCHS) return 0;
 
@@ -774,7 +775,7 @@ contract CNOVAToken is ERC20, ERC20Burnable, AccessControl {
 
     /// @notice Full reward for a tier in the current epoch.
     function currentRewardForTier(uint8 tierIndex) external view returns (uint256) {
-        if (tierIndex >= 7 || currentEpoch >= TOTAL_EPOCHS) return 0;
+        if (tierIndex >= 10 || currentEpoch >= TOTAL_EPOCHS) return 0;
         return epochRewards[currentEpoch] * tierMultipliers[tierIndex];
     }
 

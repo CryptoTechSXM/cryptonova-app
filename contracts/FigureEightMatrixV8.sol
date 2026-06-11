@@ -10,19 +10,21 @@ pragma solidity ^0.8.24;
  * V8.1 CHANGES (Option B BPS)
  * ─────────────────────────────────────────────────────────────────────────────
  *  1. Equalization Pool (Option B)
- *       SPLIT_ESCROW_BPS + SPLIT_SECONDARY_BPS replaced by SPLIT_POOL_BPS
+ *       V8.8: escrow storage removed; orphan fees → CommunityWallet / SF L6
  *       + SPLIT_STABILITY_BPS. Chain pay halved (4000→2000 T1-T5, 3500→1750
  *       T6-T7). Freed BPS flows into equalization pool accumulated per-entry.
  *       On every cycle-out, pool distributes to all non-root members (pos 2..N)
  *       weighted by BFS position (deeper = larger deficit = larger share).
  *
- *       BPS table:
- *         T1-T3: l1=2500, l2=300, l3=200, chain=2000, pool=3800, treasury=500,
- *                devOps=500, stability=200  (sum=10000)
- *         T4-T5: l1=2500, l2=300, l3=200, chain=2000, pool=3300, treasury=800,
- *                devOps=700, stability=200  (sum=10000)
- *         T6-T7: l1=2500, l2=300, l3=200, chain=1750, pool=3050, treasury=1200,
- *                devOps=800, stability=200  (sum=10000)
+ *       BPS table (V8.7 -- l2/l3 removed, buyback added, 10 tiers):
+ *         T1-T3:  l1=2000, chain=2000, pool=3300, treasury=1500,
+ *                 devOps=500, stability=600, buyback=100   (sum=10000)
+ *         T4-T5:  l1=2000, chain=2000, pool=3100, treasury=1700,
+ *                 devOps=600, stability=500, buyback=100   (sum=10000)
+ *         T6-T7:  l1=2000, chain=1750, pool=2950, treasury=1900,
+ *                 devOps=700, stability=500, buyback=200   (sum=10000)
+ *         T8-T10: l1=2000, chain=1750, pool=2750, treasury=2000,
+ *                 devOps=800, stability=500, buyback=200   (sum=10000)
  *
  *  2. StabilityFund hooks (zero treasury — treasury is SACRED)
  *       L1: 200 bps per entry (permanent)  → receiveLayer(tier, amt, 1)
@@ -39,8 +41,8 @@ pragma solidity ^0.8.24;
  *  4. reclaimIdleSlot() — keeper-only
  *       Removes idle member from BFS tree. Earnings/escrow untouched.
  *
- *  5. earlyEscrowRelease() — member opt-in
- *       Release escrow early with penalty. Penalty → StabilityFund L5.
+ *  5. earlyEscrowRelease() — REMOVED in V8.8 (escrow storage removed)
+ *       Orphan fees now route to CommunityWallet / StabilityFund layer 6.
  *
  *  6. Governance-adjustable fee parameters (enumerated menus, DAO-votable)
  *       withdrawalFeeBps: 50/100/150/200/250 (default 150 = 1.5%)
@@ -90,17 +92,16 @@ contract FigureEightMatrixV8 is Ownable2Step {
     uint256 public immutable MATRIX_SIZE;
     uint256 public immutable ENTRY_FEE;
     bool    public immutable isMatrixA;
-    uint8   public immutable tierIndex;          // 0=T1, 1=T2, ..., 6=T7
+    uint8   public immutable tierIndex;          // 0=T1, 1=T2, ..., 9=T10
 
     // ─── Per-tier BPS splits (immutable, set in constructor) ──────────────────
-    uint256 public immutable SPLIT_L1_BPS;        // 2500 all tiers
-    uint256 public immutable SPLIT_L2_BPS;        // 300  all tiers
-    uint256 public immutable SPLIT_L3_BPS;        // 200  all tiers
-    uint256 public immutable SPLIT_CHAIN_BPS;     // 2000 T1-T5, 1750 T6-T7  (V8.1: halved)
-    uint256 public immutable SPLIT_POOL_BPS;      // 3800/3300/3050 — equalization pool
-    uint256 public immutable SPLIT_TREASURY_BPS;  // 500/800/1200 per tier group
-    uint256 public immutable SPLIT_DEVOPS_BPS;    // 500/700/800 per tier group
-    uint256 public immutable SPLIT_STABILITY_BPS; // 200 all tiers — L1 carve to StabilityFund
+    uint256 public immutable SPLIT_L1_BPS;        // 2000 all tiers
+    uint256 public immutable SPLIT_CHAIN_BPS;     // 2000 T1-T5, 1750 T6-T10
+    uint256 public immutable SPLIT_POOL_BPS;      // 3300/3100/2950/2750 per tier group
+    uint256 public immutable SPLIT_TREASURY_BPS;  // 1500/1700/1900/2000 per tier group
+    uint256 public immutable SPLIT_DEVOPS_BPS;    // 500/600/700/800 per tier group
+    uint256 public immutable SPLIT_STABILITY_BPS; // 600/500 per tier group -- L1 carve to SF
+    uint256 public immutable SPLIT_BUYBACK_BPS;   // 100/200 per tier group -- to BuybackReserve
     uint256 public constant  BPS_DENOM = 10_000;
 
     // ─── Chain pay weights per BFS level (6 levels in V8) ────────────────────
@@ -115,6 +116,8 @@ contract FigureEightMatrixV8 is Ownable2Step {
     address        public pairManager;             // PairManager — set post-deploy
     address        public accountOne;              // orphan fee fallback
     address        public stabilityFund;           // StabilityFund.sol — set post-deploy
+    address        public communityWallet;         // CommunityWallet.sol — set post-deploy (deferred to mainnet)
+    address        public buybackReserve;          // CNOVABuybackReserve.sol — set post-deploy
     address        public matrixKeeper;            // MatrixKeeper (Chainlink) — set post-deploy
 
     // ─── Figure-8 partner ────────────────────────────────────────────────────
@@ -158,20 +161,14 @@ contract FigureEightMatrixV8 is Ownable2Step {
     /// @notice Early exit penalty in BPS. Default 2000 (20%). Feeds L5.
     uint256 public earlyExitPenaltyBps = 2000;
 
-    // ─── Follow Me Escrow (used for crossing logic, funded by orphan routing) ─
-    mapping(address => uint256) public escrowBalance;
-    uint256 public totalEscrowHeld;
-
-    // ─── Orphan fee health monitor ────────────────────────────────────────────
-    uint256 public noReferrerEscrowRouted;
+    // ─── Orphan fee health monitor (escrow replaced by community pool routing) ─
+    uint256 public noReferrerPoolRouted;     // renamed from noReferrerEscrowRouted
     uint256 public noReferrerFounderRouted;
 
     // ─── Member data ─────────────────────────────────────────────────────────
     struct Member {
         uint256 id;
         address referrer;
-        address l2;
-        address l3;
         uint256 joinedAt;
         uint256 withdrawable;
         uint256 totalEarned;
@@ -188,8 +185,8 @@ contract FigureEightMatrixV8 is Ownable2Step {
     event MemberCrossedToPartner(address indexed member, address fromMatrix, address toMatrix);
     event CrossingFunded(address indexed member, uint256 fromEscrow, uint256 fromEarnings, uint256 total);
     event ChainPayDistributed(address indexed recipient, address indexed payer, uint256 level, uint256 amount);
-    event EscrowCredited(address indexed root, uint256 amount, uint256 newBalance);
-    event OrphanFeeRouted(uint256 amount, uint256 acct1Share, uint256 escrowShare, uint256 founderShare, string source);
+    event OrphanFeePooled(uint256 poolShare, address destination, string source);
+    event OrphanFeeRouted(uint256 amount, uint256 acct1Share, uint256 poolShare, uint256 founderShare, string source);
     event EarningsWithdrawn(address indexed member, uint256 amount);
     event PartnerSet(address indexed partner, bool isMatrixA);
     event UpgradeFundsDeducted(address indexed member, uint256 escrowAmt, uint256 withdrawableAmt);
@@ -205,16 +202,15 @@ contract FigureEightMatrixV8 is Ownable2Step {
     event MemberParked(address indexed member, uint256 shortfall);
 
     // ─── Constructor split config struct ──────────────────────────────────────
-    /// @notice V8.1: escrowBps and secondaryBps replaced by poolBps and stabilityBps.
+    /// @notice V8.7: l2Bps and l3Bps removed, buybackBps added (7 fields total).
     struct SplitConfig {
         uint256 l1Bps;
-        uint256 l2Bps;
-        uint256 l3Bps;
         uint256 chainBps;
-        uint256 poolBps;        // equalization pool (replaces escrow + secondary)
-        uint256 treasuryBps;
+        uint256 poolBps;        // equalization pool
+        uint256 treasuryBps;    // CNOVA backing (SACRED)
         uint256 devOpsBps;
         uint256 stabilityBps;   // per-entry L1 carve to StabilityFund
+        uint256 buybackBps;     // per-entry carve to CNOVABuybackReserve
         // Sum must == 10,000
     }
 
@@ -247,12 +243,12 @@ contract FigureEightMatrixV8 is Ownable2Step {
         require(_p.accountOne   != address(0), "F8V8: zero accountOne");
         require(_entryFee     > 0,             "F8V8: zero fee");
         require(_matrixSize   >= 3 && _matrixSize <= 1023, "F8V8: invalid size");
-        require(_tierIndex    < 7,             "F8V8: invalid tier");
+        require(_tierIndex    < 10,            "F8V8: invalid tier");
 
-        // V8.1: validate new split fields (poolBps + stabilityBps replace escrow + secondary)
-        uint256 sum = _splits.l1Bps + _splits.l2Bps + _splits.l3Bps
-            + _splits.chainBps + _splits.poolBps
-            + _splits.treasuryBps + _splits.devOpsBps + _splits.stabilityBps;
+        // V8.7: validate new split fields (7 fields, l2/l3 removed, buyback added)
+        uint256 sum = _splits.l1Bps + _splits.chainBps + _splits.poolBps
+            + _splits.treasuryBps + _splits.devOpsBps
+            + _splits.stabilityBps + _splits.buybackBps;
         require(sum == BPS_DENOM, "F8V8: splits != 10000");
 
         usdc         = IERC20(_p.usdc);
@@ -267,13 +263,12 @@ contract FigureEightMatrixV8 is Ownable2Step {
         nextSlot     = 1;
 
         SPLIT_L1_BPS        = _splits.l1Bps;
-        SPLIT_L2_BPS        = _splits.l2Bps;
-        SPLIT_L3_BPS        = _splits.l3Bps;
         SPLIT_CHAIN_BPS     = _splits.chainBps;
         SPLIT_POOL_BPS      = _splits.poolBps;
         SPLIT_TREASURY_BPS  = _splits.treasuryBps;
         SPLIT_DEVOPS_BPS    = _splits.devOpsBps;
         SPLIT_STABILITY_BPS = _splits.stabilityBps;
+        SPLIT_BUYBACK_BPS   = _splits.buybackBps;
 
         for (uint256 i = 0; i < 6; i++) {
             chainPayBps[i] = _chainPayBps[i];
@@ -328,6 +323,12 @@ contract FigureEightMatrixV8 is Ownable2Step {
         emit StabilityFundSet(_sf);
     }
 
+    /// @notice V8.7: Set BuybackReserve address.
+    function setBuybackReserve(address _bbr) external onlyOwner {
+        require(_bbr != address(0), "F8V8: zero bbr");
+        buybackReserve = _bbr;
+    }
+
     /// @notice V8.1: Set MatrixKeeper (Chainlink Automation) address.
     function setMatrixKeeper(address _keeper) external onlyOwner {
         require(_keeper != address(0), "F8V8: zero keeper");
@@ -374,11 +375,7 @@ contract FigureEightMatrixV8 is Ownable2Step {
     ) external {
         require(msg.sender == tierRouter, "F8V8: not tierRouter");
 
-        if (escrowAmt > 0) {
-            require(escrowBalance[member] >= escrowAmt, "F8V8: insufficient escrow");
-            escrowBalance[member] -= escrowAmt;
-            totalEscrowHeld       -= escrowAmt;
-        }
+        // escrowAmt always 0 in V8.8 — escrow storage removed
         if (withdrawableAmt > 0) {
             require(
                 members[member].withdrawable >= withdrawableAmt,
@@ -444,14 +441,10 @@ contract FigureEightMatrixV8 is Ownable2Step {
             totalJoined += 1;
             address l1 = (referrer != address(0) && members[referrer].hasEverJoined)
                 ? referrer : address(0);
-            address l2 = l1 != address(0) ? members[l1].referrer : address(0);
-            address l3 = l2 != address(0) ? members[l2].referrer : address(0);
 
             members[member] = Member({
                 id:              totalJoined,
                 referrer:        l1,
-                l2:              l2,
-                l3:              l3,
                 joinedAt:        block.timestamp,
                 withdrawable:    0,
                 totalEarned:     0,
@@ -520,7 +513,7 @@ contract FigureEightMatrixV8 is Ownable2Step {
             try ITierRouter(tierRouter).handleCycleOut(
                 root,
                 tierIndex,
-                escrowBalance[root],
+                0,                       // escrow removed — crossing is withdrawable-only
                 members[root].withdrawable
             ) {} catch {}
         } else {
@@ -607,35 +600,21 @@ contract FigureEightMatrixV8 is Ownable2Step {
 
         uint256 reentryFee = FigureEightMatrixV8(destination).ENTRY_FEE();
 
-        uint256 esc      = escrowBalance[member];
+        // V8.8: escrow removed — crossing funded entirely from withdrawable earnings.
         uint256 earnings = members[member].withdrawable;
 
-        uint256 fromEscrow;
-        uint256 fromEarnings;
-
-        if (esc >= reentryFee) {
-            fromEscrow = reentryFee;
-        } else {
-            fromEscrow = esc;
-            uint256 needed = reentryFee - esc;
-            if (earnings >= needed) {
-                fromEarnings = needed;
-            } else {
-                // Insufficient funds — park. Keeper rescues via forceCrossKeeper().
-                uint256 shortfall = reentryFee - (esc + earnings);
-                parkedMembers.push(member);
-                emit MemberParked(member, shortfall);
-                return;
-            }
+        if (earnings < reentryFee) {
+            // Insufficient funds — park. Keeper rescues via forceCrossKeeper().
+            uint256 shortfall = reentryFee - earnings;
+            parkedMembers.push(member);
+            emit MemberParked(member, shortfall);
+            return;
         }
 
-        if (fromEscrow > 0) {
-            escrowBalance[member] -= fromEscrow;
-            totalEscrowHeld       -= fromEscrow;
-        }
-        if (fromEarnings > 0) {
-            members[member].withdrawable -= fromEarnings;
-        }
+        members[member].withdrawable -= reentryFee;
+
+        uint256 fromEscrow   = 0;    // kept for CrossingFunded event compat
+        uint256 fromEarnings = reentryFee;
 
         emit CrossingFunded(member, fromEscrow, fromEarnings, reentryFee);
 
@@ -672,23 +651,7 @@ contract FigureEightMatrixV8 is Ownable2Step {
             _routeOrphanFee(l1Amt, "L1");
         }
 
-        // ── L2 Override ───────────────────────────────────────────────────────
-        uint256 l2Amt = ENTRY_FEE * SPLIT_L2_BPS / BPS_DENOM;
-        if (m.l2 != address(0)) {
-            _credit(m.l2, l2Amt);
-        } else {
-            _routeOrphanFee(l2Amt, "L2");
-        }
-
-        // ── L3 Override ───────────────────────────────────────────────────────
-        uint256 l3Amt = ENTRY_FEE * SPLIT_L3_BPS / BPS_DENOM;
-        if (m.l3 != address(0)) {
-            _credit(m.l3, l3Amt);
-        } else {
-            _routeOrphanFee(l3Amt, "L3");
-        }
-
-        // ── Chain Pay (6 BFS levels — V8.1: halved per-level BPS) ─────────────
+        // ── Chain Pay (6 BFS levels) ──────────────────────────────────────────
         _distributeChainPay(newMember);
 
         // ── Treasury (SACRED — no change, no reduction, no V8.1 touch) ────────
@@ -702,10 +665,16 @@ contract FigureEightMatrixV8 is Ownable2Step {
         uint256 poolAmt = ENTRY_FEE * SPLIT_POOL_BPS / BPS_DENOM;
         poolAccumulator += poolAmt;
 
-        // ── V8.1: StabilityFund L1 carve (200 bps per entry, permanent) ───────
+        // ── V8.7: StabilityFund L1 carve ─────────────────────────────────────
         uint256 stabilityAmt = ENTRY_FEE * SPLIT_STABILITY_BPS / BPS_DENOM;
         if (stabilityAmt > 0) {
             _forwardToStabilityFund(stabilityAmt, 1);
+        }
+
+        // ── V8.7: BuybackReserve carve ────────────────────────────────────────
+        uint256 buybackAmt = ENTRY_FEE * SPLIT_BUYBACK_BPS / BPS_DENOM;
+        if (buybackAmt > 0) {
+            _forwardToBuybackReserve(buybackAmt);
         }
 
         // ── Dev/Ops (combined) ────────────────────────────────────────────────
@@ -723,12 +692,26 @@ contract FigureEightMatrixV8 is Ownable2Step {
             try IStabilityFund(stabilityFund).receiveLayer(tierIndex, amount, layer) {}
             catch { usdc.safeTransfer(devOpsWallet, amount); }
         } else {
-            // StabilityFund not yet deployed — hold in devOps as interim escrow
+            // StabilityFund not yet deployed -- hold in devOps as interim escrow
             if (devOpsWallet != address(0)) {
                 usdc.safeTransfer(devOpsWallet, amount);
             }
         }
         emit StabilityContribution(tierIndex, amount, layer);
+    }
+
+    /// @dev Forward USDC to CNOVABuybackReserve. Falls back to devOpsWallet if BBR not set.
+    function _forwardToBuybackReserve(uint256 amount) internal {
+        if (amount == 0) return;
+        if (buybackReserve != address(0)) {
+            SafeERC20.forceApprove(usdc, buybackReserve, amount);
+            usdc.safeTransfer(buybackReserve, amount);
+        } else {
+            // BuybackReserve not yet set -- route to devOps
+            if (devOpsWallet != address(0)) {
+                usdc.safeTransfer(devOpsWallet, amount);
+            }
+        }
     }
 
     function _routeOrphanFee(uint256 amount, string memory source) internal {
@@ -739,19 +722,17 @@ contract FigureEightMatrixV8 is Ownable2Step {
 
         uint256 remaining = amount - acct1Share;
 
-        (uint256 escrowBps, uint256 founderBps) = _getOrphanRoutingRatios();
-        uint256 denom        = escrowBps + founderBps;
-        uint256 escrowShare  = remaining * escrowBps / denom;
-        uint256 founderShare = remaining - escrowShare;
+        // Self-balancing: if pool is getting >65% of orphan fees, swing toward
+        // devOps; if <35%, swing toward pool.  Keeps the ratio self-correcting.
+        (uint256 poolBps, uint256 founderBps) = _getOrphanRoutingRatios();
+        uint256 denom      = poolBps + founderBps;
+        uint256 poolShare  = remaining * poolBps / denom;
+        uint256 founderShare = remaining - poolShare;
 
-        address currentRoot = posToMember[1];
-        if (currentRoot != address(0)) {
-            escrowBalance[currentRoot] += escrowShare;
-            totalEscrowHeld            += escrowShare;
-            noReferrerEscrowRouted     += escrowShare;
-            emit EscrowCredited(currentRoot, escrowShare, escrowBalance[currentRoot]);
-        } else {
-            _credit(accountOne, escrowShare);
+        // Route pool share → CommunityWallet (SF layer 6 fallback)
+        if (poolShare > 0) {
+            _forwardToCommunityPool(poolShare, source);
+            noReferrerPoolRouted += poolShare;
         }
 
         if (founderShare > 0) {
@@ -763,18 +744,43 @@ contract FigureEightMatrixV8 is Ownable2Step {
             }
         }
 
-        emit OrphanFeeRouted(amount, acct1Share, escrowShare, founderShare, source);
+        emit OrphanFeeRouted(amount, acct1Share, poolShare, founderShare, source);
+    }
+
+    /// @notice Forward orphan pool share to CommunityWallet.
+    ///         Falls back to StabilityFund (layer 6 = orphan routing) if CW not yet set.
+    ///         try/catch on CW call so a bad CW contract can never brick the matrix.
+    function _forwardToCommunityPool(uint256 amount, string memory source) internal {
+        if (amount == 0) return;
+        if (communityWallet != address(0)) {
+            SafeERC20.forceApprove(usdc, communityWallet, amount);
+            try ICommunityWalletV8(communityWallet).deposit(amount) {
+                emit OrphanFeePooled(amount, communityWallet, source);
+                return;
+            } catch {
+                // CW reverted — fall through to SF
+            }
+        }
+        // SF fallback (layer 6 = orphan community pool carve)
+        if (stabilityFund != address(0)) {
+            SafeERC20.forceApprove(usdc, stabilityFund, amount);
+            try IStabilityFund(stabilityFund).receiveLayer(tierIndex, amount, 6) {}
+                catch { _credit(accountOne, amount); }
+        } else {
+            _credit(accountOne, amount);
+        }
+        emit OrphanFeePooled(amount, communityWallet != address(0) ? communityWallet : stabilityFund, source);
     }
 
     function _getOrphanRoutingRatios()
         internal view
-        returns (uint256 escrowBps, uint256 founderBps)
+        returns (uint256 poolBps, uint256 founderBps)
     {
-        uint256 total = noReferrerEscrowRouted + noReferrerFounderRouted;
+        uint256 total = noReferrerPoolRouted + noReferrerFounderRouted;
         if (total == 0) return (4000, 4000);
-        uint256 escrowPct = noReferrerEscrowRouted * 100 / total;
-        if      (escrowPct < 35) return (6000, 2000);
-        else if (escrowPct > 65) return (2000, 6000);
+        uint256 poolPct = noReferrerPoolRouted * 100 / total;
+        if      (poolPct < 35) return (6000, 2000);
+        else if (poolPct > 65) return (2000, 6000);
         return (4000, 4000);
     }
 
@@ -796,14 +802,14 @@ contract FigureEightMatrixV8 is Ownable2Step {
     }
 
     /// @dev Credit withdrawable earnings. Does NOT touch lastActivityTime
-    ///      (passive income != activity; see withdraw/earlyEscrowRelease).
+    ///      (passive income != activity; see withdraw()).
     function _credit(address recipient, uint256 amount) internal {
         if (recipient == address(0) || amount == 0) return;
         members[recipient].withdrawable += amount;
         members[recipient].totalEarned  += amount;
         // NOTE: lastActivityTime NOT updated here — passive credit != activity.
-        // Updated only on explicit actions: _placeInMatrix, withdraw,
-        // earlyEscrowRelease.  Avoids 63x cold SSTOREs during _distributePool.
+        // Updated only on explicit actions: _placeInMatrix, withdraw.
+        // Avoids 63x cold SSTOREs during _distributePool.
     }
 
     // ─── Withdraw ─────────────────────────────────────────────────────────────
@@ -836,43 +842,11 @@ contract FigureEightMatrixV8 is Ownable2Step {
         emit EarningsWithdrawn(msg.sender, payout);
     }
 
-    // ─── V8.1: Early Escrow Release ──────────────────────────────────────────
-
-    /**
-     * @notice Member opt-in: release escrow balance early at a penalty.
-     *
-     *         In V8.1, escrow is primarily funded by orphan routing. Members
-     *         who received escrow (as former roots with no-referrer entries) can
-     *         unlock it immediately by forfeiting earlyExitPenaltyBps (default 20%).
-     *
-     *         Penalty → StabilityFund L5 (counter-cyclical reserve).
-     *         Payout → member's withdrawable (withdraw() then transfers to wallet).
-     *
-     *         Callable at any time, including while member is still in the matrix.
-     */
-    function earlyEscrowRelease() external {
-        uint256 escrow = escrowBalance[msg.sender];
-        require(escrow > 0, "F8V8: no escrow to release");
-
-        lastActivityTime[msg.sender] = block.timestamp;  // explicit action = activity
-        uint256 penalty = escrow * earlyExitPenaltyBps / BPS_DENOM;
-        uint256 payout  = escrow - penalty;
-
-        escrowBalance[msg.sender] = 0;
-        totalEscrowHeld          -= escrow;
-
-        if (penalty > 0) {
-            _forwardToStabilityFund(penalty, 5);
-        }
-
-        if (payout > 0) {
-            // Credit to withdrawable so member calls withdraw() in a separate tx
-            members[msg.sender].withdrawable += payout;
-            members[msg.sender].totalEarned  += payout;
-        }
-
-        emit EarlyEscrowRelease(msg.sender, escrow, penalty, payout);
-    }
+    // ─── V8.8: earlyEscrowRelease() removed ─────────────────────────────────
+    // Escrow storage removed in V8.8. Orphan fees now route to CommunityWallet /
+    // StabilityFund (layer 6) instead of per-member escrow slots. Members crossing
+    // to their partner matrix use withdrawable earnings only.  The early-exit
+    // penalty path (→ SF L5) is preserved via the withdraw() withdrawal fee (L3).
 
     // ─── V8.1: Keeper — Reclaim Idle Slot ────────────────────────────────────
 
@@ -979,7 +953,7 @@ contract FigureEightMatrixV8 is Ownable2Step {
     function getMember(address member)        external view returns (Member memory) { return members[member]; }
     function getCyclesCompleted(address m)    external view returns (uint256)       { return members[m].cyclesCompleted; }
     function withdrawableOf(address member)   external view returns (uint256)       { return members[member].withdrawable; }
-    function escrowOf(address member)         external view returns (uint256)       { return escrowBalance[member]; }
+    function escrowOf(address /* member */)   external pure  returns (uint256)       { return 0; } // V8.8: escrow removed
     function isFull()                         external view returns (bool)          { return occupancy == MATRIX_SIZE; }
     function isActiveInMatrix(address member) external view returns (bool)          { return members[member].isInMatrix; }
 
@@ -993,9 +967,9 @@ contract FigureEightMatrixV8 is Ownable2Step {
         external view
         returns (uint256 total, uint256 fromEscrow, uint256 fromEarnings)
     {
-        fromEscrow   = escrowBalance[member];
+        fromEscrow   = 0;  // V8.8: escrow removed
         fromEarnings = members[member].withdrawable;
-        total        = fromEscrow + fromEarnings;
+        total        = fromEarnings;
     }
 
     function getPendingCross() external view returns (address member, address referrer) {
@@ -1011,30 +985,27 @@ contract FigureEightMatrixV8 is Ownable2Step {
         return poolAccumulator * pos / totalWeight;
     }
 
-    /// @notice V8.1: Return all BPS splits. Returns poolBps and stabilityBps
-    ///         instead of the V8 Phase 1 escrowBps/secondaryBps.
+    /// @notice V8.7: Return all BPS splits (7 fields -- l2/l3 removed, buyback added).
     function getSplits()
         external view
         returns (
             uint256 l1Bps,
-            uint256 l2Bps,
-            uint256 l3Bps,
             uint256 chainBps,
             uint256 poolBps,
             uint256 treasuryBps,
             uint256 devOpsBps,
-            uint256 stabilityBps
+            uint256 stabilityBps,
+            uint256 buybackBps
         )
     {
         return (
             SPLIT_L1_BPS,
-            SPLIT_L2_BPS,
-            SPLIT_L3_BPS,
             SPLIT_CHAIN_BPS,
             SPLIT_POOL_BPS,
             SPLIT_TREASURY_BPS,
             SPLIT_DEVOPS_BPS,
-            SPLIT_STABILITY_BPS
+            SPLIT_STABILITY_BPS,
+            SPLIT_BUYBACK_BPS
         );
     }
 }

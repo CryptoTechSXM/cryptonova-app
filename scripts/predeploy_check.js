@@ -49,7 +49,7 @@ for (const v of REQUIRED_VARS) {
   else                fail(`${v} is NOT set in .env`);
 }
 
-const ADDR_FILE = process.env.ADDRESSES_FILE || "deployed_addresses_v8_6.json";
+const ADDR_FILE = process.env.ADDRESSES_FILE || "deployed_addresses_v8_8.json";
 console.log(`  ℹ  ADDRESSES_FILE = ${ADDR_FILE}`);
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -59,16 +59,16 @@ sep("deploy_v8.js — StabilityFund constructor");
 const deployText = read("scripts/deploy_v8.js");
 if (deployText) {
   // Look for the deploy(...) call for StabilityFund
-  // Should have [usdcAddr, cnovaAddr, admin] (3 elements)
+  // V8.7 SF v3: should have [usdcAddr, admin] (2 elements)
   const sfMatch = deployText.match(/deploy\s*\(\s*StabilityFund\s*,\s*\[([^\]]+)\]/);
   if (!sfMatch) {
     fail("Could not find StabilityFund deploy() call — check deploy_v8.js manually");
   } else {
     const args = sfMatch[1].split(",").map(s => s.trim()).filter(Boolean);
-    if (args.length === 3) {
-      ok(`StabilityFund constructor has 3 args: [${args.join(", ")}]`);
+    if (args.length === 2) {
+      ok(`StabilityFund constructor has 2 args: [${args.join(", ")}]`);
     } else {
-      fail(`StabilityFund constructor has ${args.length} arg(s): [${args.join(", ")}] — expected 3 (usdc, cnova, admin)`);
+      fail(`StabilityFund constructor has ${args.length} arg(s): [${args.join(", ")}] — expected 2 (usdc, admin) for V8.7 SF v3`);
     }
   }
 
@@ -213,34 +213,34 @@ if (!htmlTxt) {
 
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 8. deploy_v8.js — v8.6 MATRIX_SIZE=127 + all 7 tiers
+// 8. deploy_v8.js — v8.7 MATRIX_SIZE=127 + all 10 tiers
 // ─────────────────────────────────────────────────────────────────────────────
-sep("deploy_v8.js — v8.6 config (MATRIX_SIZE=127, all 7 tiers)");
+sep("deploy_v8.js — v8.7 config (MATRIX_SIZE=127, all 10 tiers)");
 if (deployText) {
   // Check MATRIX_SIZE default
   const msMatch = deployText.match(/MATRIX_SIZE\s*[=\|][^\n]*?"(\d+)"/);
   if (msMatch) {
     const ms = parseInt(msMatch[1], 10);
     if (ms === 127) ok(`MATRIX_SIZE default = 127 (correct)`);
-    else            fail(`MATRIX_SIZE default = ${ms} — expected 127 for v8.6`);
+    else            fail(`MATRIX_SIZE default = ${ms} — expected 127 for v8.7`);
   } else {
     // Looser check
     if (deployText.includes('"127"')) ok('MATRIX_SIZE uses "127" (found in script)');
-    else fail('MATRIX_SIZE "127" not found in deploy_v8.js — expected for v8.6');
+    else fail('MATRIX_SIZE "127" not found in deploy_v8.js — expected for v8.7');
   }
 
   // Check DEPLOY_TIERS default
   const dtMatch = deployText.match(/DEPLOY_TIERS\s*[=\|][^\n]*?"([^"]+)"/);
   if (dtMatch) {
     const tiers = dtMatch[1].split(",").map(t => t.trim());
-    if (tiers.length === 7 && tiers.includes("7")) {
-      ok(`DEPLOY_TIERS = "${dtMatch[1]}" (all 7 tiers)`);
+    if (tiers.length === 10 && tiers.includes("10")) {
+      ok(`DEPLOY_TIERS = "${dtMatch[1]}" (all 10 tiers)`);
     } else {
-      fail(`DEPLOY_TIERS = "${dtMatch[1]}" — expected "1,2,3,4,5,6,7" for v8.6`);
+      fail(`DEPLOY_TIERS = "${dtMatch[1]}" — expected "1,2,3,4,5,6,7,8,9,10" for v8.7`);
     }
   } else {
-    if (deployText.includes('"1,2,3,4,5,6,7"')) ok('DEPLOY_TIERS uses "1,2,3,4,5,6,7" (found)');
-    else fail('DEPLOY_TIERS "1,2,3,4,5,6,7" not found in deploy_v8.js');
+    if (deployText.includes('"1,2,3,4,5,6,7,8,9,10"')) ok('DEPLOY_TIERS uses "1,2,3,4,5,6,7,8,9,10" (found)');
+    else fail('DEPLOY_TIERS "1,2,3,4,5,6,7,8,9,10" not found in deploy_v8.js');
   }
 
   // Check velocity gate closure logic is present
@@ -250,11 +250,11 @@ if (deployText) {
     fail("Velocity gate closure (setTierVelocityGreen + CLOSED) not found in deploy_v8.js");
   }
 
-  // Check ADDRESSES_FILE default is v8_6
-  if (deployText.includes("deployed_addresses_v8_6.json")) {
-    ok("deploy_v8.js output file: deployed_addresses_v8_6.json");
+  // Check ADDRESSES_FILE default is v8_8
+  if (deployText.includes("deployed_addresses_v8_8.json")) {
+    ok("deploy_v8.js output file: deployed_addresses_v8_8.json");
   } else {
-    fail("deploy_v8.js does not output to deployed_addresses_v8_6.json");
+    fail("deploy_v8.js does not output to deployed_addresses_v8_8.json");
   }
 
   // Chainlink gas limit should be 6M+
@@ -269,7 +269,7 @@ if (deployText) {
 // ─────────────────────────────────────────────────────────────────────────────
 // 9. FigureEightMatrixV8.sol — v8.6 parked wallet feature
 // ─────────────────────────────────────────────────────────────────────────────
-sep("FigureEightMatrixV8.sol — v8.6 parked wallet features");
+sep("FigureEightMatrixV8.sol — v8.7 parked wallet features");
 if (matTxt) {
   // MemberParked event
   if (matTxt.includes("event MemberParked")) {
@@ -310,7 +310,7 @@ if (matTxt) {
 // ─────────────────────────────────────────────────────────────────────────────
 // 10. StabilityFund.sol — payForceCross function
 // ─────────────────────────────────────────────────────────────────────────────
-sep("StabilityFund.sol — v8.6 payForceCross");
+sep("StabilityFund.sol — v8.7 payForceCross");
 const sfText = read("contracts/StabilityFund.sol");
 if (sfText) {
   if (sfText.includes("payForceCross")) {
@@ -330,7 +330,7 @@ if (sfText) {
 // ─────────────────────────────────────────────────────────────────────────────
 // 11. MatrixKeeper.sol — v8.6 WORK_PARKED_RESCUE + WORK_VELOCITY_GATE
 // ─────────────────────────────────────────────────────────────────────────────
-sep("MatrixKeeper.sol — v8.6 work types");
+sep("MatrixKeeper.sol — v8.7 work types");
 const mkText = read("contracts/MatrixKeeper.sol");
 if (mkText) {
   if (mkText.includes("WORK_PARKED_RESCUE")) {
@@ -377,29 +377,29 @@ if (bigfillText) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 13. deployed_addresses_v8_6.json — exists and has expected keys
+// 13. deployed_addresses_v8_8.json — exists and has expected keys
 // ─────────────────────────────────────────────────────────────────────────────
-sep("deployed_addresses_v8_6.json — presence check");
+sep("deployed_addresses_v8_8.json — presence check");
 {
-  const addrFile = path.join(ROOT, "deployed_addresses_v8_6.json");
+  const addrFile = path.join(ROOT, "deployed_addresses_v8_8.json");
   if (!fs.existsSync(addrFile)) {
-    console.log("  ℹ  deployed_addresses_v8_6.json not found — run deploy_v8.js first");
+    console.log("  ℹ  deployed_addresses_v8_8.json not found — run deploy_v8.js first");
   } else {
     const addrData = JSON.parse(fs.readFileSync(addrFile, "utf8"));
     const required = ["tierRouter", "stabilityFund", "matrixKeeper"];
     for (const key of required) {
       if (addrData[key]) ok(`addresses: ${key} = ${addrData[key]}`);
-      else               fail(`addresses: ${key} missing from deployed_addresses_v8_6.json`);
+      else               fail(`addresses: ${key} missing from deployed_addresses_v8_8.json`);
     }
     // Check tiers 1-7 present
     const tiers = addrData.tiers || {};
     const tierCount = Object.keys(tiers).length;
     if (tierCount >= 7) {
-      ok(`addresses: ${tierCount} tiers registered (expected 7)`);
+      ok(`addresses: ${tierCount} tiers registered (expected 10)`);
     } else if (tierCount > 0) {
-      console.log(`  ℹ  addresses: ${tierCount} tiers registered (deploy all 7 for v8.6)`);
+      console.log(`  ℹ  addresses: ${tierCount}/10 tiers registered`);
     } else {
-      fail("addresses: no tiers found — run deploy_v8.js with DEPLOY_TIERS=1,2,3,4,5,6,7");
+      fail("addresses: no tiers found — run deploy_v8.js with DEPLOY_TIERS=1,2,3,4,5,6,7,8,9,10");
     }
   }
 }

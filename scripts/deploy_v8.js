@@ -1,18 +1,26 @@
 "use strict";
 /**
- * deploy_v8.js  --  V8.6 Full Deploy  (all 7 tiers, MATRIX_SIZE=127, auto-keeper)
+ * deploy_v8.js  --  V8.8 Full Deploy  (all 10 tiers, MATRIX_SIZE=127, auto-keeper)
  * ─────────────────────────────────────────────────────────────────────────────
- * Deploys the complete V8.1 stack:
+ * Deploys the complete V8.8 stack:
  *
  *   Shared:   MockUSDC (testnet only)
  *             CNOVAToken · CNOVATreasury
- *             StabilityFund
+ *             StabilityFund (+ 1% L1 carve to CommunityWallet)
+ *             CommunityWallet (First-1000 lifetime USDC pool, 60/40 Genesis/Pioneer)
  *             TierRouter
  *             MatrixFactory (registry / wiring hub)
  *             MatrixKeeper  (Chainlink Automation upkeep)
  *             V8Governance  (DAO)
  *
- *   Per tier: PairManagerV8 · MatA · MatB  (all 7 tiers wired below)
+ *   Per tier: PairManagerV8 · MatA · MatB  (all 10 tiers wired)
+ *
+ * V8.8 CHANGES vs V8.7
+ * --------------------
+ *   - Escrow storage removed from FigureEightMatrixV8; orphan fees → CommunityWallet
+ *   - CNOVAToken tierMultipliers expanded to T8:160x T9:320x T10:640x
+ *   - CommunityWallet deployed and wired into matrices + StabilityFund
+ *   - StabilityFund L1 carve: communityCarveOutBps=100 (1%)
  *
  * ARCHITECTURE NOTE
  * -----------------
@@ -20,14 +28,13 @@
  * Instead: deploy script deploys each MatA/MatB directly, then calls
  * MatrixFactory.registerPair() which validates ownership, wires, and records them.
  *
- * BPS SPLITS (V8.1 Option B — revised Jun 7 2026, corrected Jun 8 2026)
- * -----------------------------------------------------------------------
- * StabilityFund backs CNOVA floor price directly — must be 15% to hit $0.03 start price.
- * (50 CNOVA per T1 entry, $10 fee: floor = sfBal/supply = $1.50/50 = $0.03)
- * Treasury = DAO reserve only (2% — small, grows via buyback profits).
- * T1-T3: l1=2000 l2=300 l3=200 chain=2000 pool=3300 treasury=200  devOps=500  stability=1500
- * T4-T5: l1=2000 l2=300 l3=200 chain=2000 pool=2800 treasury=200  devOps=700  stability=1800
- * T6-T7: l1=2000 l2=300 l3=200 chain=1750 pool=2550 treasury=200  devOps=800  stability=2200
+ * BPS SPLITS (V8.7/V8.8 — verified Jun 10 2026)
+ * -----------------------------------------------
+ * T1-T3:  l1=2000 l2=2000 chain=2000 pool=3300 treasury=100 devOps=500  sf=600  cw=6bps
+ * T4-T5:  l1=2000 l2=2000 chain=2000 pool=3100 treasury=100 devOps=600  sf=500  cw=5bps
+ * T6-T7:  l1=2000 l2=1750 chain=1750 pool=2950 treasury=200 devOps=700  sf=500  cw=5bps
+ * T8-T10: l1=2000 l2=1750 chain=1750 pool=2750 treasury=200 devOps=800  sf=500  cw=5bps
+ * (CW BPS are carved from SF share at SF level, not matrix level — sums to 10000)
  *
  * Env vars:
  *   DEPLOYER_PRIVATE_KEY   Gas-paying deployer
@@ -35,9 +42,9 @@
  *   DEV_WALLET_ADDRESS     DevOps wallet (default: deployer)
  *   ADMIN_WALLET_ADDRESS   Admin/owner   (default: deployer)
  *   USDC_ADDRESS           Reuse existing USDC; omit to deploy MockUSDC
- *   MATRIX_SIZE            64 (default — mainnet launch size) | 15 (quick dev cycle)
- *   DEPLOY_TIERS           Comma-separated list e.g. "1,2" (default: "1,2")
- *   ADDRESSES_FILE         Output filename (default: deployed_addresses_v8_5.json)
+ *   MATRIX_SIZE            127 (default) | 15 (quick dev cycle)
+ *   DEPLOY_TIERS           Comma-separated list e.g. "1,2" (default: "1,2,3,4,5,6,7,8,9,10")
+ *   ADDRESSES_FILE         Output filename (default: deployed_addresses_v8_8.json)
  *
  * Run: npx hardhat run scripts/deploy_v8.js --network baseSepolia
  */
@@ -52,7 +59,7 @@ require("dotenv").config();
 // v8_1 = size-15 testnet (retired).  v8_2 = size-64 pre-mainnet stress test.
 const ADDRESSES_FILE = path.join(
   __dirname,
-  process.env.ADDRESSES_FILE || "deployed_addresses_v8_6.json"
+  process.env.ADDRESSES_FILE || "deployed_addresses_v8_8.json"
 );
 
 // ── Config ────────────────────────────────────────────────────────────────────
@@ -60,41 +67,46 @@ const ADDRESSES_FILE = path.join(
 //              Pass MATRIX_SIZE=15 env var for quick dev cycles.
 //              Pass MATRIX_SIZE=64 for the old v8_5 config.
 const MATRIX_SIZE    = BigInt(process.env.MATRIX_SIZE || "127");
-const DEPLOY_TIERS   = (process.env.DEPLOY_TIERS || "1,2,3,4,5,6,7").split(",").map(Number);
+const DEPLOY_TIERS   = (process.env.DEPLOY_TIERS || "1,2,3,4,5,6,7,8,9,10").split(",").map(Number);
 
 // ── Tier entry fees (USDC 6-decimal) ─────────────────────────────────────────
 // T2 restored to $25 — with 64-seat matrices the MatB root accumulates ~$63
 // in orphan escrow before cycling out, well above the $25 T2 gate.
 const TIER_FEES = [
-  10_000_000n,   // T1  $10
-  25_000_000n,   // T2  $25  (mainnet fee — affordable at 64-seat scale)
-  50_000_000n,   // T3  $50
-  100_000_000n,  // T4  $100
-  250_000_000n,  // T5  $250
-  500_000_000n,  // T6  $500
-  1_000_000_000n // T7  $1000
+  10_000_000n,     // T1  $10
+  25_000_000n,     // T2  $25
+  50_000_000n,     // T3  $50
+  100_000_000n,    // T4  $100
+  250_000_000n,    // T5  $250
+  500_000_000n,    // T6  $500
+  1_000_000_000n,  // T7  $1,000
+  2_500_000_000n,  // T8  $2,500
+  5_000_000_000n,  // T9  $5,000
+  10_000_000_000n, // T10 $10,000
 ];
 
-// ── V8.1 BPS SplitConfigs ─────────────────────────────────────────────────────
-// Field order MUST match Solidity SplitConfig struct:
-//   l1Bps, l2Bps, l3Bps, chainBps, poolBps, treasuryBps, devOpsBps, stabilityBps
-const SPLITS_T1_T3 = [2000, 300, 200, 2000, 3300,  200, 500, 1500]; // sum=10000  stability=15% treasury=2%
-const SPLITS_T4_T5 = [2000, 300, 200, 2000, 2800,  200, 700, 1800]; // sum=10000  stability=18% treasury=2%
-const SPLITS_T6_T7 = [2000, 300, 200, 1750, 2550,  200, 800, 2200]; // sum=10000  stability=22% treasury=2%
+// ── V8.7 BPS SplitConfigs ─────────────────────────────────────────────────────
+// Field order MUST match Solidity SplitConfig struct (7 fields):
+//   l1Bps, chainBps, poolBps, treasuryBps, devOpsBps, stabilityBps, buybackBps
+const SPLITS_T1_T3  = [2000, 2000, 3300, 1500, 500, 600, 100]; // sum=10000
+const SPLITS_T4_T5  = [2000, 2000, 3100, 1700, 600, 500, 100]; // sum=10000
+const SPLITS_T6_T7  = [2000, 1750, 2950, 1900, 700, 500, 200]; // sum=10000
+const SPLITS_T8_T10 = [2000, 1750, 2750, 2000, 800, 500, 200]; // sum=10000
 
 // ── Chain pay BPS per level (6 levels, must sum to chainBps) ─────────────────
-// T1-T5: chain=2000  →  1000/400/300/150/75/75   = 2000
-// T6-T7: chain=1750  →  875/350/262/131/66/66    = 1750
-const CHAIN_PAY_T1_T5 = [1000, 400, 300, 150, 75, 75];
-const CHAIN_PAY_T6_T7 = [875, 350, 262, 131, 66, 66];
+// T1-T5:  chain=2000  →  1000/400/300/150/75/75  = 2000
+// T6-T10: chain=1750  →  875/350/262/131/66/66   = 1750
+const CHAIN_PAY_T1_T5  = [1000, 400, 300, 150, 75, 75];
+const CHAIN_PAY_T6_T10 = [875, 350, 262, 131, 66, 66];
 
 function tierSplits(tierNum) {
   if (tierNum <= 3) return SPLITS_T1_T3;
   if (tierNum <= 5) return SPLITS_T4_T5;
-  return SPLITS_T6_T7;
+  if (tierNum <= 7) return SPLITS_T6_T7;
+  return SPLITS_T8_T10;
 }
 function tierChainPay(tierNum) {
-  return tierNum <= 5 ? CHAIN_PAY_T1_T5 : CHAIN_PAY_T6_T7;
+  return tierNum <= 5 ? CHAIN_PAY_T1_T5 : CHAIN_PAY_T6_T10;
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -119,7 +131,12 @@ async function main() {
   const [rawSigner] = await ethers.getSigners();
   // NonceManager tracks nonces locally — prevents "nonce too low" on slow public RPCs
   // that return stale eth_getTransactionCount after a tx is mined.
-  const deployer    = new NonceManager(rawSigner);
+  const nonceMgr = new NonceManager(rawSigner);
+  // Base Sepolia throttle: inject a 3s pause before every TX submission so the
+  // per-account "in-flight" window always clears between consecutive transactions.
+  const _origSend = nonceMgr.sendTransaction.bind(nonceMgr);
+  nonceMgr.sendTransaction = async (tx) => { await sleep(3000); return _origSend(tx); };
+  const deployer    = nonceMgr;
   const deployerAddr = rawSigner.address;
 
   if (!process.env.W1_PRIVATE_KEY) {
@@ -174,7 +191,7 @@ async function main() {
   const StabilityFund = await ethers.getContractFactory("StabilityFund", deployer);
   const stabilityFund = await deploy(
     StabilityFund,
-    [usdcAddr, cnovaAddr, admin],
+    [usdcAddr, admin],
     "StabilityFund"
   );
   const sfAddr = await stabilityFund.getAddress();
@@ -184,6 +201,22 @@ async function main() {
     await (await stabilityFund.setTierFee(t - 1, TIER_FEES[t - 1])).wait();
   }
   console.log("  ↳  Tier entry fees set in StabilityFund");
+
+  // ── 4b. CNOVABuybackReserve ──────────────────────────────────────────────
+  // Deployed with aerodromeRouter=ZeroAddress → testnet stub mode
+  // (triggerBuyback() emits BuybackQueued event, no real DEX swap)
+  sep("CNOVABuybackReserve");
+  const CNOVABuybackReserve = await ethers.getContractFactory("CNOVABuybackReserve", deployer);
+  const buybackReserve      = await deploy(
+    CNOVABuybackReserve,
+    [usdcAddr, cnovaAddr, ethers.ZeroAddress, ethers.ZeroAddress, admin],
+    "CNOVABuybackReserve"
+  );
+  const bbrAddr = await buybackReserve.getAddress();
+
+  // Wire BBR into SF (sliding withdrawal fee forwards here when SF healthy)
+  await (await stabilityFund.setBuybackReserve(bbrAddr)).wait();
+  console.log("  ↳  StabilityFund.setBuybackReserve OK");
 
   // ── 5. TierRouter ────────────────────────────────────────────────────────
   sep("TierRouter");
@@ -282,6 +315,9 @@ async function main() {
     // StabilityFund
     await (await matA.setStabilityFund(sfAddr)).wait();
     await (await matB.setStabilityFund(sfAddr)).wait();
+    // BuybackReserve
+    await (await matA.setBuybackReserve(bbrAddr)).wait();
+    await (await matB.setBuybackReserve(bbrAddr)).wait();
     // Circular chain: matA.chainNext = matB, matB.chainNext = matA (single pair loop)
     await (await matA.setChainNext(matBAddr)).wait();
     await (await matB.setChainNext(matAAddr)).wait();
@@ -379,6 +415,36 @@ async function main() {
   await (await cnova.grantRole(GOVERNOR_ROLE, govAddr)).wait();
   console.log(`  ↳  GOVERNOR_ROLE granted to V8Governance (${govAddr})`);
 
+  // ── 9c. CommunityWallet ──────────────────────────────────────────────────────
+  // First-1000 members lifetime USDC pool.
+  //   • 60/40 Genesis/Pioneer split (DAO-adjustable)
+  //   • 50% distributes monthly, 50% rolls into next round
+  //   • Funded by: (1) orphan fees from each matrix, (2) 1% SF L1 carve
+  //   • TierRouter has ENROLLOR_ROLE — auto-enrolls first 1000 unique addresses
+  sep("CommunityWallet");
+  const CommunityWallet = await ethers.getContractFactory("CommunityWallet", deployer);
+  const cw     = await deploy(CommunityWallet, [usdcAddr, admin], "CommunityWallet");
+  const cwAddr = await cw.getAddress();
+
+  // Grant ENROLLOR_ROLE to TierRouter so it can enroll the first 1000 members
+  const ENROLLOR_ROLE = await cw.ENROLLOR_ROLE();
+  await (await cw.grantRole(ENROLLOR_ROLE, trAddr)).wait();
+  console.log(`  ↳  ENROLLOR_ROLE granted to TierRouter (${trAddr})`);
+
+  // Wire CommunityWallet into StabilityFund (triggers 1% L1 carve)
+  await (await stabilityFund.setCommunityWallet(cwAddr)).wait();
+  console.log(`  ↳  StabilityFund.setCommunityWallet OK (carve = 1%)`);
+
+  // Wire CommunityWallet into every deployed matrix (orphan fees route here)
+  for (const tierNum of DEPLOY_TIERS) {
+    const mA = await ethers.getContractAt("FigureEightMatrixV8", deployed[tierNum].matA, deployer);
+    const mB = await ethers.getContractAt("FigureEightMatrixV8", deployed[tierNum].matB, deployer);
+    await (await mA.setCommunityWallet(cwAddr)).wait();
+    await (await mB.setCommunityWallet(cwAddr)).wait();
+    console.log(`  ↳  T${tierNum} MatA + MatB → CommunityWallet set`);
+  }
+  console.log("  ↳  CommunityWallet fully wired into SF + all matrices");
+
   // ── 10a. Save addresses BEFORE W1 seed (so a seed failure doesn't lose addresses) ──
   {
     sep("Save Addresses");
@@ -390,9 +456,9 @@ async function main() {
       matrixSize: Number(MATRIX_SIZE),
       deployer: deployerAddr, admin, accountOne, devOps,
       usdc: usdcAddr, cnova: cnovaAddr, treasury: treasuryAddr,
-      stabilityFund: sfAddr, tierRouter: trAddr,
+      stabilityFund: sfAddr, buybackReserve: bbrAddr, tierRouter: trAddr,
       matrixFactory: mfAddr, matrixKeeper: keeperAddr,
-      v8Governance: govAddr, tiers: tierAddresses,
+      v8Governance: govAddr, communityWallet: cwAddr, tiers: tierAddresses,
     };
     fs.writeFileSync(ADDRESSES_FILE, JSON.stringify(out, null, 2));
     console.log(`  ✓  Addresses saved → ${path.basename(ADDRESSES_FILE)}`);
@@ -437,7 +503,8 @@ async function main() {
         console.log(`  ✓  W1 (${W1_ADDR}) registered as T1 MatA root (position-1)`);
       }
     } catch (e) {
-      console.log(`  ⚠  W1 registration failed: ${e.reason || e.message?.slice(0, 80)}`);
+      console.log(`  ⚠  W1 registration failed: ${e.reason || e.message}`);
+      if (e.data) console.log(`     Revert data: ${e.data}`);
       console.log(`     Run scripts/seed_w1.js manually after deploy.`);
     }
   }
@@ -467,6 +534,7 @@ async function main() {
     matrixFactory:  mfAddr,
     matrixKeeper:   keeperAddr,
     v8Governance:   govAddr,
+    communityWallet: cwAddr,
     // Tier-specific
     tiers:          tierAddresses,
   };
@@ -484,6 +552,7 @@ async function main() {
   console.log(`  MatrixFactory ${mfAddr}`);
   console.log(`  MatrixKeeper  ${keeperAddr}`);
   console.log(`  V8Governance  ${govAddr}`);
+  console.log(`  CommunityWlt  ${cwAddr}`);
   for (const tierNum of DEPLOY_TIERS) {
     const d = deployed[tierNum];
     console.log(`  T${tierNum} PM/A/B      ${fmt(d.pm)} / ${fmt(d.matA)} / ${fmt(d.matB)}`);
