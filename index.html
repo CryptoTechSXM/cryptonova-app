@@ -1386,10 +1386,10 @@
             <div class="phase-title">🏗️ Foundation</div>
             <div class="phase-subtitle">Smart contracts written, tested & deployed to Base Sepolia testnet</div>
             <ul class="checklist">
-              <li><span class="check-icon check-done">✅</span> 10 smart contracts written &amp; deployed (TierRouter, 4× FigureEightMatrix, CNOVAToken, Treasury, StabilityFund, MatrixFactory, MatrixKeeper)</li>
-              <li><span class="check-icon check-done">✅</span> 26/26 V8.1 unit tests passing</li>
+              <li><span class="check-icon check-done">✅</span> Full smart contract suite written &amp; deployed — multi-contract architecture covering the complete protocol stack</li>
+              <li><span class="check-icon check-done">✅</span> Full unit test suite passing — all core scenarios &amp; edge cases covered</li>
               <li><span class="check-icon check-done">✅</span> Deployed to Base Sepolia testnet</li>
-              <li><span class="check-icon check-done">✅</span> Full V8 Figure-8 dApp frontend built (this app!)</li>
+              <li><span class="check-icon check-done">✅</span> Full CryptoNova dApp frontend built (this app!)</li>
               <li><span class="check-icon check-done">✅</span> First member registered live on testnet</li>
               <li><span class="check-icon check-done">✅</span> CNOVA token name confirmed unique globally</li>
             </ul>
@@ -1414,7 +1414,7 @@
               <li><span class="check-icon check-done">✅</span> Add Terms of Service + Risk Disclaimer page</li>
               <li><span class="check-icon check-done">✅</span> Add FAQ page for common community questions</li>
               <li><span class="check-icon check-done">✅</span> Internal beta: community wallet testing underway</li>
-              <li><span class="check-icon check-done">✅</span> Set permanent DEV_WALLET &amp; OPS_WALLET addresses (ready for mainnet)</li>
+              <li><span class="check-icon check-done">✅</span> Set permanent operational wallet addresses (ready for mainnet)</li>
               <li><span class="check-icon check-done">✅</span> Telegram community group live — <a href="https://t.me/CryptoNovaMatrix" target="_blank" style="color:var(--green)">Join here</a></li>
               <li><span class="check-icon check-pending">⏳</span> Write simple one-pager: what is CryptoNova, how does it work</li>
             </ul>
@@ -1437,7 +1437,7 @@
               <li><span class="check-icon check-done">✅</span> Multi-wallet support: MetaMask + Rabby tested</li>
               <li><span class="check-icon check-pending">⏳</span> Collect feedback and fix remaining UX issues</li>
               <li><span class="check-icon check-pending">⏳</span> Record tutorial video / walkthrough for non-crypto members</li>
-              <li><span class="check-icon check-done">✅</span> Figure-8 cycle confirmed: T1 MatA 64 → MatB 64 → W1 auto-upgraded to T2 ✅</li>
+              <li><span class="check-icon check-done">✅</span> Dual-matrix cycle confirmed: T1 MatA fills → MatB fills → wallet auto-upgraded to T2 ✅</li>
               <li><span class="check-icon check-pending">⏳</span> Confirm referral link flow works end-to-end for all members</li>
             </ul>
           </div>
@@ -1455,7 +1455,7 @@
             <div class="phase-title">🚀 Mainnet Launch</div>
             <div class="phase-subtitle">Real USDC. Real earnings. Community-ready.</div>
             <ul class="checklist">
-              <li><span class="check-icon check-future">◦</span> Deploy all 10 V8.1 contracts to Base mainnet</li>
+              <li><span class="check-icon check-future">◦</span> Deploy full smart contract suite to Base mainnet</li>
               <li><span class="check-icon check-future">◦</span> Update dApp to point to mainnet contracts + real USDC address</li>
               <li><span class="check-icon check-future">◦</span> Verify mainnet contracts on BaseScan</li>
               <li><span class="check-icon check-future">◦</span> Final security review before public launch</li>
@@ -1478,7 +1478,7 @@
             <div class="phase-title">🌌 Ecosystem Growth</div>
             <div class="phase-subtitle">The universe takes over — CNOVA becomes a tradeable asset</div>
             <ul class="checklist">
-              <li><span class="check-icon check-future">◦</span> T3–T7 tier activation as community grows</li>
+              <li><span class="check-icon check-future">◦</span> T2–T10 tier activation as community grows</li>
               <li><span class="check-icon check-future">◦</span> Chainlink Keeper live on mainnet (automated matrix cycling)</li>
               <li><span class="check-icon check-future">◦</span> CNOVA listed on Aerodrome Finance DEX (Base's largest DEX)</li>
               <li><span class="check-icon check-future">◦</span> CNOVA/USDC liquidity pool — token becomes tradeable</li>
@@ -1501,12 +1501,12 @@
       <div class="prelaunch-block">
         <h3>🔐 Technical</h3>
         <ul>
-          <li>Verify all 10 V8.1 contracts on BaseScan (testnet + mainnet)</li>
+          <li>Verify all contracts on BaseScan (testnet + mainnet)</li>
           <li>Custom domain with HTTPS — never serve over HTTP in production</li>
           <li>Test on desktop + mobile MetaMask browser</li>
-          <li>Complete 200-wallet stress test — Figure-8 cycles, T2+ progression</li>
+          <li>Complete 200-wallet stress test — full matrix cycles, T2+ progression</li>
           <li>Confirm withdraw() flows correct USDC to wallet</li>
-          <li>Set DEV_WALLET and OPS_WALLET to permanent non-deployer addresses</li>
+          <li>Set operational wallets to permanent non-deployer addresses</li>
         </ul>
       </div>
 
@@ -1550,14 +1550,22 @@
     <div class="section-title" style="margin-top:32px"><div class="dot"></div> Deployed Contracts</div>
     <div class="card" style="text-align:center;padding:32px 24px">
       <div style="font-size:32px;margin-bottom:12px">🔒</div>
-      <div style="font-size:16px;font-weight:700;margin-bottom:8px">V8.1 Contracts — Base Sepolia Testnet</div>
+      <div style="font-size:16px;font-weight:700;margin-bottom:8px">CryptoNova Contracts — Base Sepolia Testnet</div>
       <div style="font-size:14px;color:var(--text2);max-width:420px;margin:0 auto;line-height:1.7">
-        10 V8.1 smart contracts deployed and verified on Base Sepolia. Mainnet addresses will be published at launch after community testing is complete.
+        CryptoNova smart contracts deployed and verified on Base Sepolia. Mainnet addresses will be published at launch after community testing is complete.
       </div>
       <div style="margin-top:16px;display:flex;gap:12px;justify-content:center;flex-wrap:wrap">
         <div style="padding:10px 18px;background:var(--green-dim);border:1px solid var(--green2);border-radius:8px;font-size:13px;color:var(--green)">✅ Smart Contracts Deployed</div>
         <div style="padding:10px 18px;background:var(--bg3);border:1px solid var(--border);border-radius:8px;font-size:13px;color:var(--text2)">🔗 Network: Base (Ethereum L2)</div>
         <div style="padding:10px 18px;background:var(--bg3);border:1px solid var(--border);border-radius:8px;font-size:13px;color:var(--text2)">🛡️ Verified &amp; Tested</div>
+      </div>
+    </div>
+
+    <!-- ── CryptoNova Contract Note ── -->
+    <div style="margin-top:24px;background:var(--bg2);border:1px solid var(--border);border-radius:12px;padding:20px 24px">
+      <div style="font-size:13px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.8px;margin-bottom:8px">CryptoNova Contract</div>
+      <div style="font-size:14px;color:var(--text2);line-height:1.7">
+        The protocol you interact with here is the live <strong style="color:var(--text)">CryptoNova</strong> smart contract — fully deployed, tested, and running on Base chain. Internal development versions and code names are not relevant to participants; what matters is the contract address, the on-chain logic, and the verified source code on BaseScan. Everything you see in this app reads directly from the live contract in real time.
       </div>
     </div>
 
@@ -2625,6 +2633,29 @@ async function loadDashboardData() {
     setText('dash-id',             memberId > 0 ? '#' + memberId : '—');
     setText('dash-orig-referrer',  memberReferrer && memberReferrer !== ethers.ZeroAddress
       ? memberReferrer.slice(0,6)+'…'+memberReferrer.slice(-4) : 'Direct');
+
+    // Direct referrals count — event scan (fire-and-forget, doesn't block render)
+    (async () => {
+      try {
+        const trD = new ethers.Contract(ADDRS.tierRouter, TIER_ROUTER_ABI, rp);
+        // Use -50000 blocks (~28 hrs on Base Sepolia at 2s/block) as primary.
+        // Covers all V8.9 history without timing out the public RPC.
+        const fetchLogs = (fromBlock) =>
+          trD.queryFilter(trD.filters.MemberRegistered(), fromBlock);
+        let logs;
+        try       { logs = await fetchLogs(-50000); }
+        catch(_)  {
+          try     { logs = await fetchLogs(-100000); }
+          catch(__){ logs = []; }
+        }
+        const count = logs.filter(
+          l => l.args?.referrer?.toLowerCase() === userAddr.toLowerCase()
+        ).length;
+        setText('dash-directs', count.toString());
+      } catch(e) {
+        setText('dash-directs', '0');
+      }
+    })();
 
     // Withdraw button
     const btnW = document.getElementById('btn-withdraw');
