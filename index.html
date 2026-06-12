@@ -1696,7 +1696,7 @@ const CHAIN_ID = 84532;
   // 12:00 PM EDT (noon Eastern) = 16:00 UTC on June 12 2026.
   // This is a FIXED UTC timestamp — same countdown for every viewer worldwide.
   // To reschedule: update this ISO string.
-  const LAUNCH_UTC = new Date('2026-06-12T16:00:00Z'); // noon EDT = 16:00 UTC
+  const LAUNCH_UTC = new Date('2020-01-01T00:00:00Z'); // gate off for beta // noon EDT = 16:00 UTC
 
   // Major city local equivalents — shown below the countdown
   const CITY_ZONES = [
@@ -1770,7 +1770,7 @@ const LAUNCH_READY = !_PROD_HOSTS.includes(window.location.hostname);
 
 // Show the launch gate on production if launch date hasn't passed yet
 (function() {
-  const _launchTime = new Date('2026-06-12T16:00:00Z');
+  const _launchTime = new Date('2020-01-01T00:00:00Z');
   if (!LAUNCH_READY && new Date() < _launchTime) {
     document.getElementById('launch-gate').classList.add('visible');
   }
