@@ -1726,6 +1726,14 @@ const CHAIN_ID = 84532;
 const _PROD_HOSTS = ['crypto-nova.app', 'www.crypto-nova.app'];
 const LAUNCH_READY = !_PROD_HOSTS.includes(window.location.hostname);
 
+// Show the launch gate on production if launch date hasn't passed yet
+(function() {
+  const _launchTime = new Date('2026-06-19T16:00:00Z');
+  if (!LAUNCH_READY && new Date() < _launchTime) {
+    document.getElementById('launch-gate').classList.add('visible');
+  }
+})();
+
 const RPC_URL  = 'https://sepolia.base.org';
 const RPC_FALLBACK = 'https://base-sepolia.public.blastapi.io';
 
