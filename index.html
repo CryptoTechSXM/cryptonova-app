@@ -2066,18 +2066,29 @@ function rpc(p) {
 }
 
 async function loadHomeStats() {
-  const rp = readProvider || new ethers.JsonRpcProvider(RPC_URL, 84532, { staticNetwork: true });
+  // Try primary RPC, fall back to blast if it hangs or errors
+  let rp = readProvider || new ethers.JsonRpcProvider(RPC_URL, 84532, { staticNetwork: true });
+  const _net = ethers.Network.from(84532);
+
+  const STAT_IDS = ['stat-members','stat-minted','stat-burned','stat-reserve','stat-cw-balance',
+                    'stat-cycles','stat-epoch','stat-supply','stat-treasury-usdc','stat-floor-price','stat-reward'];
+
+  async function _fetchStats(provider) {
+    const matA1 = new ethers.Contract(ADDRS.T1.matA, MATRIX_ABI, provider);
+    const matB1 = new ethers.Contract(ADDRS.T1.matB, MATRIX_ABI, provider);
+    const matA2 = new ethers.Contract(ADDRS.T2.matA, MATRIX_ABI, provider);
+    const matB2 = new ethers.Contract(ADDRS.T2.matB, MATRIX_ABI, provider);
+    const matA3 = new ethers.Contract(ADDRS.T3.matA, MATRIX_ABI, provider);
+    const matB3 = new ethers.Contract(ADDRS.T3.matB, MATRIX_ABI, provider);
+    const cnova  = new ethers.Contract(ADDRS.cnova,  CNOVA_ABI,  provider);
+    const sf     = new ethers.Contract(ADDRS.stabilityFund, SF_ABI, provider);
+    const tr     = new ethers.Contract(ADDRS.tierRouter, TIER_ROUTER_ABI, provider);
+    const usdc   = new ethers.Contract(ADDRS.usdc, USDC_ABI, provider);
+    return { matA1, matB1, matA2, matB2, matA3, matB3, cnova, sf, tr, usdc };
+  }
+
   try {
-    const matA1 = new ethers.Contract(ADDRS.T1.matA, MATRIX_ABI, rp);
-    const matB1 = new ethers.Contract(ADDRS.T1.matB, MATRIX_ABI, rp);
-    const matA2 = new ethers.Contract(ADDRS.T2.matA, MATRIX_ABI, rp);
-    const matB2 = new ethers.Contract(ADDRS.T2.matB, MATRIX_ABI, rp);
-    const matA3 = new ethers.Contract(ADDRS.T3.matA, MATRIX_ABI, rp);
-    const matB3 = new ethers.Contract(ADDRS.T3.matB, MATRIX_ABI, rp);
-    const cnova  = new ethers.Contract(ADDRS.cnova,  CNOVA_ABI,  rp);
-    const sf     = new ethers.Contract(ADDRS.stabilityFund, SF_ABI, rp);
-    const tr     = new ethers.Contract(ADDRS.tierRouter, TIER_ROUTER_ABI, rp);
-    const usdc   = new ethers.Contract(ADDRS.usdc, USDC_ABI, rp);
+    let { matA1, matB1, matA2, matB2, matA3, matB3, cnova, sf, tr, usdc } = await _fetchStats(rp);
 
     const [
       occA, cyclesA, occB, poolB, totalJoined,
@@ -2086,27 +2097,27 @@ async function loadHomeStats() {
       occA3, cyclesA3, occB3, poolB3,
       cwPoolBal, allTimeMinted, allTimeBurned
     ] = await Promise.all([
-      matA1.occupancy().catch(()=>0n),
-      matA1.rotationCount().catch(()=>0n),
-      matB1.occupancy().catch(()=>0n),
-      matB1.poolAccumulator().catch(()=>0n),
-      matA1.totalJoined().catch(()=>0n),
-      matA2.occupancy().catch(()=>0n),
-      matA2.rotationCount().catch(()=>0n),
-      matB2.occupancy().catch(()=>0n),
-      matB2.poolAccumulator().catch(()=>0n),
-      tr.totalSystemCycles().catch(()=>0n),
-      cnova.totalSupply().catch(()=>0n),
-      cnova.currentEpochNumber().catch(()=>1n),
-      sf.totalBalance().catch(()=>0n),
-      usdc.balanceOf(ADDRS.treasury).catch(()=>0n),
-      matA3.occupancy().catch(()=>0n),
-      matA3.rotationCount().catch(()=>0n),
-      matB3.occupancy().catch(()=>0n),
-      matB3.poolAccumulator().catch(()=>0n),
-      usdc.balanceOf(ADDRS.communityWallet || ethers.ZeroAddress).catch(()=>0n),
-      cnova.totalMinted().catch(()=>0n),  // all-time minted (never decreases on burn)
-      cnova.totalBurned().catch(()=>0n),  // V8.9: global burned counter from contract
+      rpc(matA1.occupancy()).catch(()=>0n),
+      rpc(matA1.rotationCount()).catch(()=>0n),
+      rpc(matB1.occupancy()).catch(()=>0n),
+      rpc(matB1.poolAccumulator()).catch(()=>0n),
+      rpc(matA1.totalJoined()).catch(()=>0n),
+      rpc(matA2.occupancy()).catch(()=>0n),
+      rpc(matA2.rotationCount()).catch(()=>0n),
+      rpc(matB2.occupancy()).catch(()=>0n),
+      rpc(matB2.poolAccumulator()).catch(()=>0n),
+      rpc(tr.totalSystemCycles()).catch(()=>0n),
+      rpc(cnova.totalSupply()).catch(()=>0n),
+      rpc(cnova.currentEpochNumber()).catch(()=>1n),
+      rpc(sf.totalBalance()).catch(()=>0n),
+      rpc(usdc.balanceOf(ADDRS.treasury)).catch(()=>0n),
+      rpc(matA3.occupancy()).catch(()=>0n),
+      rpc(matA3.rotationCount()).catch(()=>0n),
+      rpc(matB3.occupancy()).catch(()=>0n),
+      rpc(matB3.poolAccumulator()).catch(()=>0n),
+      rpc(usdc.balanceOf(ADDRS.communityWallet || ethers.ZeroAddress)).catch(()=>0n),
+      rpc(cnova.totalMinted()).catch(()=>0n),
+      rpc(cnova.totalBurned()).catch(()=>0n),
     ]);
 
     // Stat cards
@@ -2195,7 +2206,31 @@ async function loadHomeStats() {
       setText('stat-reward', rewardFormatted + ' CNOVA');
     } catch(_) { setText('stat-reward', '50 CNOVA'); }
 
-  } catch(e) { console.error('loadHomeStats:', e.message); }
+  } catch(e) {
+    console.error('loadHomeStats:', e.message);
+    // Clear any spinners still showing so the page doesn't stay frozen
+    STAT_IDS.forEach(id => { const el = document.getElementById(id); if (el && el.querySelector('.spinner')) setText(id, '—'); });
+    // Retry once with the fallback RPC (sepolia.base.org can be flaky)
+    if (!e._retried) {
+      try {
+        const fb = new ethers.JsonRpcProvider(RPC_FALLBACK, _net, { staticNetwork: _net });
+        const { matA1:fA1, matB1:fB1, cnova:fC, sf:fSF, tr:fTR, usdc:fU } = await _fetchStats(fb);
+        const [s, ep, sf2, tr2] = await Promise.all([
+          rpc(fC.totalSupply()).catch(()=>0n),
+          rpc(fC.currentEpochNumber()).catch(()=>1n),
+          rpc(fSF.totalBalance()).catch(()=>0n),
+          rpc(fTR.totalSystemCycles()).catch(()=>0n),
+        ]);
+        const EPOCH_NAMES_FB = ['Nebula Genesis','Mercury Rise','Lunar Cluster','Aurora Zenith','Solaris Echo','Cosmic Core','Galaxy Grid','Supernova Spark','Final Frontier'];
+        const epN = Math.max(1, Number(ep));
+        setText('stat-supply', Number(ethers.formatEther(s)).toLocaleString(undefined,{maximumFractionDigits:0})+' CNOVA');
+        setText('stat-epoch', `Epoch ${epN} — ${EPOCH_NAMES_FB[epN-1] || 'Era '+epN}`);
+        setText('stat-reserve', fmt6(sf2));
+        setText('stat-cycles', tr2.toString());
+        console.log('loadHomeStats: fallback RPC succeeded');
+      } catch(_) { /* fallback also failed — dashes already shown */ }
+    }
+  }
 }
 
 
