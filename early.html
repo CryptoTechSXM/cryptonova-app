@@ -1,0 +1,1104 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="CryptoNova Early Registration — Secure your position in the matrix before the public launch.">
+  <title>CryptoNova — Early Registration</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/6.7.1/ethers.umd.min.js"></script>
+  <style>
+    :root {
+      --bg:         #0a0a0f;
+      --bg2:        #111118;
+      --bg3:        #1a1a26;
+      --bg4:        #20202e;
+      --border:     rgba(255,255,255,0.07);
+      --border2:    rgba(255,255,255,0.12);
+      --green:      #00d4aa;
+      --green2:     rgba(0,212,170,0.25);
+      --green-dim:  rgba(0,212,170,0.08);
+      --green-glow: rgba(0,212,170,0.15);
+      --purple:     #a855f7;
+      --purple2:    rgba(168,85,247,0.2);
+      --yellow:     #fbbf24;
+      --red:        #ef4444;
+      --red2:       rgba(239,68,68,0.15);
+      --blue:       #3b82f6;
+      --blue2:      rgba(59,130,246,0.15);
+      --text1:      #f0f0ff;
+      --text2:      #a0a0c0;
+      --text3:      #60607a;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: var(--bg);
+      color: var(--text1);
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Inter', sans-serif;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+
+    /* ── Top testnet banner ── */
+    .net-banner {
+      width: 100%;
+      background: linear-gradient(90deg, rgba(168,85,247,.25) 0%, rgba(59,130,246,.2) 100%);
+      border-bottom: 1px solid rgba(168,85,247,.35);
+      text-align: center;
+      padding: 9px 16px;
+      font-size: 12px;
+      font-weight: 600;
+      letter-spacing: .4px;
+      color: #c084fc;
+    }
+    .net-banner span { color: var(--text2); font-weight: 400; margin-left: 8px; }
+
+    /* ── Page wrapper ── */
+    .page {
+      width: 100%;
+      max-width: 480px;
+      padding: 32px 16px 64px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 20px;
+    }
+
+    /* ── Logo ── */
+    .logo-row {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 4px;
+    }
+    .logo-hex {
+      width: 44px; height: 44px;
+      background: linear-gradient(135deg, var(--green) 0%, #00a88a 100%);
+      border-radius: 12px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 22px;
+      box-shadow: 0 0 20px rgba(0,212,170,.3);
+    }
+    .logo-text { font-size: 22px; font-weight: 800; letter-spacing: -.5px; }
+    .logo-text span { color: var(--green); }
+
+    /* ── Early access pill ── */
+    .early-pill {
+      background: linear-gradient(90deg, var(--purple2), var(--green-dim));
+      border: 1px solid rgba(168,85,247,.4);
+      border-radius: 999px;
+      padding: 6px 16px;
+      font-size: 12px;
+      font-weight: 700;
+      color: #c084fc;
+      letter-spacing: .5px;
+      text-transform: uppercase;
+    }
+
+    /* ── Headline ── */
+    .headline {
+      text-align: center;
+      line-height: 1.3;
+    }
+    .headline h1 {
+      font-size: 26px;
+      font-weight: 800;
+      letter-spacing: -.5px;
+      margin-bottom: 8px;
+    }
+    .headline h1 em { font-style: normal; color: var(--green); }
+    .headline p {
+      font-size: 14px;
+      color: var(--text2);
+      line-height: 1.6;
+      max-width: 360px;
+      margin: 0 auto;
+    }
+
+    /* ── Card ── */
+    .card {
+      width: 100%;
+      background: var(--bg2);
+      border: 1px solid var(--border2);
+      border-radius: 16px;
+      padding: 24px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+    .card-title {
+      font-size: 15px;
+      font-weight: 700;
+      color: var(--text1);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .card-title .badge {
+      background: var(--green-dim);
+      border: 1px solid var(--green2);
+      color: var(--green);
+      font-size: 11px;
+      font-weight: 700;
+      padding: 2px 8px;
+      border-radius: 999px;
+    }
+
+    /* ── Wallet connect ── */
+    .wallet-box {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .wallet-dot {
+      width: 10px; height: 10px;
+      border-radius: 50%;
+      background: var(--text3);
+      flex-shrink: 0;
+      transition: background .3s;
+    }
+    .wallet-dot.connected { background: var(--green); box-shadow: 0 0 8px var(--green); }
+    .wallet-addr {
+      font-family: monospace;
+      font-size: 13px;
+      color: var(--green);
+      flex: 1;
+    }
+    #btn-connect {
+      width: 100%;
+      padding: 13px;
+      background: linear-gradient(135deg, var(--green) 0%, #00a88a 100%);
+      border: none;
+      border-radius: 10px;
+      color: #000;
+      font-size: 15px;
+      font-weight: 700;
+      cursor: pointer;
+      letter-spacing: .2px;
+      transition: opacity .2s, transform .1s;
+    }
+    #btn-connect:hover { opacity: .9; transform: translateY(-1px); }
+    #btn-connect:disabled { opacity: .5; cursor: not-allowed; transform: none; }
+
+    /* ── Info rows ── */
+    .info-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 8px 0;
+      border-bottom: 1px solid var(--border);
+      font-size: 13px;
+    }
+    .info-row:last-child { border-bottom: none; }
+    .info-key { color: var(--text2); }
+    .info-val { color: var(--text1); font-weight: 600; }
+    .info-val.green { color: var(--green); }
+    .info-val.red   { color: var(--red); }
+
+    /* ── Input ── */
+    .input-group { display: flex; flex-direction: column; gap: 6px; }
+    .input-label { font-size: 12px; color: var(--text2); font-weight: 600; letter-spacing: .3px; }
+    .input-field {
+      width: 100%;
+      padding: 11px 14px;
+      background: var(--bg3);
+      border: 1px solid var(--border2);
+      border-radius: 9px;
+      color: var(--text1);
+      font-size: 13px;
+      font-family: monospace;
+      outline: none;
+      transition: border-color .2s;
+    }
+    .input-field:focus { border-color: rgba(0,212,170,.5); }
+    .input-field::placeholder { color: var(--text3); font-family: -apple-system, sans-serif; }
+
+    /* ── Buttons ── */
+    .btn {
+      width: 100%;
+      padding: 13px;
+      border-radius: 10px;
+      font-size: 14px;
+      font-weight: 700;
+      cursor: pointer;
+      border: none;
+      transition: opacity .2s, transform .1s, background .2s;
+      letter-spacing: .2px;
+    }
+    .btn:hover:not(:disabled) { opacity: .9; transform: translateY(-1px); }
+    .btn:disabled { opacity: .4; cursor: not-allowed; transform: none; }
+
+    .btn-step1 {
+      background: var(--bg4);
+      border: 1px solid var(--border2);
+      color: var(--text1);
+    }
+    .btn-step1.active {
+      background: rgba(59,130,246,.15);
+      border-color: rgba(59,130,246,.5);
+      color: #93c5fd;
+    }
+    .btn-step1.done {
+      background: var(--green-dim);
+      border-color: var(--green2);
+      color: var(--green);
+      cursor: default;
+    }
+    .btn-step2 {
+      background: var(--bg4);
+      border: 1px solid var(--border2);
+      color: var(--text2);
+    }
+    .btn-step2.active {
+      background: linear-gradient(135deg, var(--green) 0%, #00a88a 100%);
+      color: #000;
+      border: none;
+    }
+
+    /* ── Status message ── */
+    #reg-status {
+      font-size: 13px;
+      color: var(--text2);
+      text-align: center;
+      min-height: 18px;
+      transition: color .2s;
+    }
+
+    /* ── Warning box ── */
+    .warn-box {
+      background: rgba(251,191,36,.08);
+      border: 1px solid rgba(251,191,36,.3);
+      border-radius: 9px;
+      padding: 12px 14px;
+      font-size: 12px;
+      color: var(--yellow);
+      line-height: 1.6;
+      display: none;
+    }
+    .warn-box.show { display: block; }
+
+    /* ── Alert box ── */
+    .alert-box {
+      width: 100%;
+      background: var(--green-dim);
+      border: 1px solid var(--green2);
+      border-radius: 12px;
+      padding: 18px 20px;
+      font-size: 14px;
+      color: var(--green);
+      display: none;
+      text-align: center;
+      line-height: 1.6;
+    }
+    .alert-box.show { display: block; }
+
+    /* ── Success card ── */
+    #success-card {
+      width: 100%;
+      background: var(--bg2);
+      border: 1px solid var(--green2);
+      border-radius: 16px;
+      padding: 28px 24px;
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      gap: 16px;
+      text-align: center;
+    }
+    #success-card.show { display: flex; }
+    .success-emoji { font-size: 48px; margin-bottom: 4px; }
+    .success-title { font-size: 20px; font-weight: 800; color: var(--green); }
+    .success-sub   { font-size: 13px; color: var(--text2); line-height: 1.6; }
+
+    .member-grid {
+      width: 100%;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      margin: 4px 0;
+    }
+    .member-stat {
+      background: var(--bg3);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 14px 12px;
+      text-align: center;
+    }
+    .member-stat-val { font-size: 22px; font-weight: 800; color: var(--green); }
+    .member-stat-lbl { font-size: 11px; color: var(--text3); margin-top: 4px; font-weight: 600; text-transform: uppercase; letter-spacing: .4px; }
+
+    /* ── Referral link box ── */
+    .ref-link-box {
+      width: 100%;
+      background: var(--bg3);
+      border: 1px solid var(--border2);
+      border-radius: 10px;
+      padding: 12px 14px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .ref-link-url {
+      flex: 1;
+      font-size: 12px;
+      color: var(--text2);
+      word-break: break-all;
+      font-family: monospace;
+      line-height: 1.4;
+    }
+    .btn-copy {
+      flex-shrink: 0;
+      background: var(--green-dim);
+      border: 1px solid var(--green2);
+      color: var(--green);
+      font-size: 12px;
+      font-weight: 700;
+      padding: 7px 12px;
+      border-radius: 7px;
+      cursor: pointer;
+      white-space: nowrap;
+      transition: background .2s;
+    }
+    .btn-copy:hover { background: rgba(0,212,170,.18); }
+
+    /* ── How it works ── */
+    .how-steps {
+      width: 100%;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    .how-step {
+      display: flex;
+      align-items: flex-start;
+      gap: 14px;
+    }
+    .step-num {
+      width: 28px; height: 28px;
+      flex-shrink: 0;
+      background: var(--green-dim);
+      border: 1px solid var(--green2);
+      border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 13px;
+      font-weight: 700;
+      color: var(--green);
+    }
+    .step-text { font-size: 13px; color: var(--text2); line-height: 1.5; padding-top: 5px; }
+    .step-text strong { color: var(--text1); }
+
+    /* ── Footer ── */
+    footer {
+      width: 100%;
+      max-width: 480px;
+      padding: 0 16px 32px;
+      text-align: center;
+      font-size: 12px;
+      color: var(--text3);
+      line-height: 1.8;
+    }
+    footer a { color: var(--text2); text-decoration: none; }
+    footer a:hover { color: var(--green); }
+    .footer-divider { margin: 0 8px; }
+
+    /* ── Toast ── */
+    #toast {
+      position: fixed;
+      bottom: 24px;
+      left: 50%;
+      transform: translateX(-50%) translateY(10px);
+      background: var(--bg3);
+      border: 1px solid var(--border2);
+      border-radius: 10px;
+      padding: 12px 20px;
+      font-size: 14px;
+      color: var(--text1);
+      opacity: 0;
+      transition: opacity .3s, transform .3s;
+      pointer-events: none;
+      z-index: 999;
+      white-space: nowrap;
+      max-width: 90vw;
+    }
+    #toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+    #toast.success { border-color: var(--green2); color: var(--green); }
+    #toast.error   { border-color: rgba(239,68,68,.4); color: var(--red); }
+
+    /* ── Spinner ── */
+    .spinner {
+      display: inline-block;
+      width: 14px; height: 14px;
+      border: 2px solid rgba(255,255,255,.25);
+      border-top-color: currentColor;
+      border-radius: 50%;
+      animation: spin .7s linear infinite;
+      vertical-align: middle;
+      margin-right: 6px;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ── USDC helper ── */
+    .usdc-help {
+      background: var(--blue2);
+      border: 1px solid rgba(59,130,246,.3);
+      border-radius: 9px;
+      padding: 12px 14px;
+      font-size: 12px;
+      color: #93c5fd;
+      line-height: 1.6;
+    }
+    .usdc-help button {
+      background: rgba(59,130,246,.2);
+      border: 1px solid rgba(59,130,246,.4);
+      color: #93c5fd;
+      font-size: 11px;
+      font-weight: 700;
+      padding: 4px 10px;
+      border-radius: 6px;
+      cursor: pointer;
+      margin-left: 6px;
+    }
+
+    @media (max-width: 400px) {
+      .page { padding: 24px 12px 48px; }
+      .card { padding: 18px 16px; }
+      .headline h1 { font-size: 22px; }
+      .member-grid { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- Testnet banner -->
+<div class="net-banner">
+  ⚡ Base Sepolia Testnet
+  <span>· Early Access · V8.10 Contracts</span>
+</div>
+
+<div class="page">
+
+  <!-- Logo -->
+  <div class="logo-row">
+    <div class="logo-hex">◈</div>
+    <div class="logo-text">Crypto<span>Nova</span></div>
+  </div>
+
+  <!-- Early access badge -->
+  <div class="early-pill">🔐 Early Registration Open</div>
+
+  <!-- Headline -->
+  <div class="headline">
+    <h1>Secure Your<br><em>Matrix Position</em></h1>
+    <p>Join CryptoNova before the public launch. Start at T1 for $10 USDC and auto-upgrade through 10 tiers as the matrix fills.</p>
+  </div>
+
+  <!-- ═══ CONNECT WALLET CARD ═══ -->
+  <div class="card" id="connect-card">
+    <div class="card-title">
+      Wallet Connection
+      <span class="badge">Required</span>
+    </div>
+
+    <!-- Not connected -->
+    <div id="not-connected-view">
+      <p style="font-size:13px;color:var(--text2);margin-bottom:14px;line-height:1.6">
+        Connect your MetaMask or Rabby wallet on <strong style="color:var(--text1)">Base Sepolia</strong> to register.
+      </p>
+      <button id="btn-connect" onclick="connectWallet()">Connect Wallet</button>
+    </div>
+
+    <!-- Connected -->
+    <div id="connected-view" style="display:none">
+      <div class="wallet-box">
+        <div class="wallet-dot connected"></div>
+        <div class="wallet-addr" id="connected-addr">—</div>
+        <button onclick="disconnectWallet()" style="background:none;border:1px solid var(--border2);border-radius:6px;padding:4px 10px;font-size:11px;color:var(--text3);cursor:pointer;flex-shrink:0">Disconnect</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ ALREADY REGISTERED ALERT ═══ -->
+  <div class="alert-box" id="already-alert">
+    ✅ <strong>Already registered!</strong><br>
+    This wallet is already a CryptoNova member.<br>
+    <a href="https://crypto-nova.app" style="color:var(--green);text-decoration:underline;font-size:13px">→ Visit main site to view your dashboard</a>
+  </div>
+
+  <!-- ═══ REGISTER CARD ═══ -->
+  <div class="card" id="register-card" style="display:none">
+    <div class="card-title">
+      Register — $10 USDC
+      <span class="badge">T1 Entry</span>
+    </div>
+
+    <!-- Referral input -->
+    <div class="input-group">
+      <div class="input-label">REFERRAL ADDRESS (OPTIONAL)</div>
+      <input
+        class="input-field"
+        id="input-referrer"
+        type="text"
+        placeholder="0x… paste referrer's wallet address"
+        oninput="onReferrerInput()"
+        autocomplete="off"
+        spellcheck="false"
+      >
+      <div id="ref-valid-note" style="font-size:11px;color:var(--green);display:none">✓ Valid referrer address</div>
+    </div>
+
+    <!-- No referrer warning -->
+    <div class="warn-box" id="no-ref-warn">
+      ⚠️ No referral address entered. Continuing without a referrer places you under the default sponsor wallet. <button onclick="dismissNoRefWarn()" style="background:rgba(251,191,36,.15);border:1px solid rgba(251,191,36,.4);color:var(--yellow);font-size:11px;font-weight:700;padding:3px 9px;border-radius:5px;cursor:pointer;margin-left:4px">OK, Continue</button>
+    </div>
+
+    <!-- Balance info -->
+    <div>
+      <div class="info-row">
+        <span class="info-key">USDC Balance</span>
+        <span class="info-val" id="usdc-bal">—</span>
+      </div>
+      <div class="info-row">
+        <span class="info-key">Approved to PairManager</span>
+        <span class="info-val" id="usdc-approved">—</span>
+      </div>
+      <div class="info-row">
+        <span class="info-key">Entry Fee</span>
+        <span class="info-val green">$10.00 USDC</span>
+      </div>
+    </div>
+
+    <!-- Low balance warning -->
+    <div class="warn-box" id="low-bal-warn">
+      ⚠️ Your USDC balance is below $10. You need testnet USDC to register. Contact the dev team on Telegram for a test transfer.
+    </div>
+
+    <!-- Step 1 -->
+    <button class="btn btn-step1" id="btn-approve" onclick="approveUSDC()" disabled>
+      Step 1: Approve $10 USDC 🔒
+    </button>
+
+    <!-- Step 2 -->
+    <button class="btn btn-step2" id="btn-register" onclick="doRegister()" disabled>
+      Step 2: Register ($10 USDC)
+    </button>
+
+    <!-- Status -->
+    <div id="reg-status"></div>
+
+    <!-- USDC helper -->
+    <div class="usdc-help">
+      Need testnet USDC?
+      <button onclick="addUSDCtoWallet()">+ Add to wallet</button>
+      &nbsp;USDC address: <code style="font-size:10px">0x2D8B7b5…39a</code>
+    </div>
+  </div>
+
+  <!-- ═══ SUCCESS CARD ═══ -->
+  <div id="success-card">
+    <div class="success-emoji">🎉</div>
+    <div class="success-title">Welcome to CryptoNova!</div>
+    <div class="success-sub">You're in. Your matrix seat is secured and earnings start flowing as the network grows.</div>
+
+    <div class="member-grid">
+      <div class="member-stat">
+        <div class="member-stat-val" id="suc-member-id">—</div>
+        <div class="member-stat-lbl">Member ID</div>
+      </div>
+      <div class="member-stat">
+        <div class="member-stat-val" id="suc-matrix-pos">—</div>
+        <div class="member-stat-lbl">Matrix Position</div>
+      </div>
+    </div>
+
+    <div style="font-size:13px;color:var(--text2);font-weight:600;align-self:flex-start">Your Referral Link</div>
+    <div class="ref-link-box">
+      <div class="ref-link-url" id="ref-link-url">—</div>
+      <button class="btn-copy" onclick="copyRefLink()">Copy</button>
+    </div>
+    <div style="font-size:12px;color:var(--text3);line-height:1.6">
+      Share your link. Every direct referral earns you an instant USDC bonus when they register.
+    </div>
+
+    <a href="https://crypto-nova.app" style="color:var(--green);font-size:13px;font-weight:700;text-decoration:none;margin-top:4px">
+      → View full dashboard at crypto-nova.app ↗
+    </a>
+  </div>
+
+  <!-- ═══ HOW IT WORKS ═══ -->
+  <div class="card">
+    <div class="card-title">How It Works</div>
+    <div class="how-steps">
+      <div class="how-step">
+        <div class="step-num">1</div>
+        <div class="step-text"><strong>Approve $10 USDC</strong> — one MetaMask click. The contract can only ever pull exactly $10.</div>
+      </div>
+      <div class="how-step">
+        <div class="step-num">2</div>
+        <div class="step-text"><strong>Register</strong> — you're placed into the T1 Figure-8 matrix at the next available seat.</div>
+      </div>
+      <div class="how-step">
+        <div class="step-num">3</div>
+        <div class="step-text"><strong>Earn</strong> — as new members join, USDC flows up through the chain. Withdraw anytime.</div>
+      </div>
+      <div class="how-step">
+        <div class="step-num">4</div>
+        <div class="step-text"><strong>Auto-upgrade</strong> — once your matrix fills (127 seats), you automatically advance to T2 ($25).</div>
+      </div>
+    </div>
+  </div>
+
+</div><!-- /page -->
+
+<footer>
+  <div style="margin-bottom:8px">
+    <a href="https://crypto-nova.app">crypto-nova.app</a>
+    <span class="footer-divider">·</span>
+    <a href="https://sepolia.basescan.org/address/0x9bdb62Ac866F222c7062398F891eC860c1F89034" target="_blank" rel="noopener">TierRouter ↗</a>
+    <span class="footer-divider">·</span>
+    <a href="https://crypto-nova.app/faq">FAQ</a>
+  </div>
+  <div>CryptoNova V8.10 · Base Sepolia Testnet · Entry fees are testnet USDC only</div>
+</footer>
+
+<div id="toast"></div>
+
+<script>
+// ═══════════════════════════════════════════════════════════════
+// CONFIG
+// ═══════════════════════════════════════════════════════════════
+const RPC_URL  = 'https://sepolia.base.org';
+const CHAIN_ID = 84532;
+const T1_FEE   = 10_000_000n; // $10 USDC (6 decimals)
+
+const ADDRS = {
+  usdc:       '0x2D8B7b5eDec96bE441b6fb0D45D74a2BcE2C639a',
+  tierRouter: '0x9bdb62Ac866F222c7062398F891eC860c1F89034',
+  T1: {
+    pm:   '0x2638c81CE7a8541A125640f1Af5A23eA2C3e3180',
+    matA: '0x68f61839354f3FbceebD9662E5301B1EaeD5a862',
+    matB: '0x620be4FC94D70B109467eDE4A71176221b005497',
+  },
+};
+
+const TIER_ROUTER_ABI = [
+  'function register(address referrer) external',
+  'function globalJoined(address) external view returns (bool)',
+];
+
+const MATRIX_ABI = [
+  'function getMember(address) external view returns (tuple(uint256 id, address referrer, uint256 joinedAt, uint256 withdrawable, uint256 totalEarned, uint256 totalWithdrawn, uint256 cyclesCompleted, bool isInMatrix, bool hasEverJoined))',
+  'function matrixPos(address) external view returns (uint256)',
+];
+
+const USDC_ABI = [
+  'function balanceOf(address) external view returns (uint256)',
+  'function allowance(address,address) external view returns (uint256)',
+  'function approve(address,uint256) external returns (bool)',
+];
+
+// ═══════════════════════════════════════════════════════════════
+// STATE
+// ═══════════════════════════════════════════════════════════════
+let provider = null, signer = null, userAddr = null;
+let _toastTimer = null;
+let noRefWarningDismissed = false;
+
+// ═══════════════════════════════════════════════════════════════
+// HELPERS
+// ═══════════════════════════════════════════════════════════════
+function setText(id, val) {
+  const el = document.getElementById(id);
+  if (el) el.innerHTML = val;
+}
+function showEl(id) { const el = document.getElementById(id); if (el) el.style.display = 'block'; }
+function hideEl(id) { const el = document.getElementById(id); if (el) el.style.display = 'none'; }
+function showFlex(id) { const el = document.getElementById(id); if (el) el.style.display = 'flex'; }
+
+function fmt6(raw) {
+  const n = Number(typeof raw === 'bigint' ? raw : BigInt(raw || 0)) / 1e6;
+  return '$' + n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+function toast(msg, type = 'info') {
+  const el = document.getElementById('toast');
+  if (!el) return;
+  el.textContent = msg;
+  el.className = type + ' show';
+  clearTimeout(_toastTimer);
+  _toastTimer = setTimeout(() => { el.className = type; }, 3500);
+}
+
+function setStatus(msg, type = 'info') {
+  const el = document.getElementById('reg-status');
+  if (!el) return;
+  el.textContent = msg;
+  el.style.color = type === 'ok' ? 'var(--green)' : type === 'err' ? 'var(--red)' : 'var(--text2)';
+}
+
+function friendlyError(e) {
+  if (!e) return 'Unknown error';
+  const msg = e.reason || e.data?.message || e.message || String(e);
+  if (msg.includes('user rejected') || e.code === 4001) return 'Transaction cancelled.';
+  if (msg.includes('insufficient funds')) return 'Not enough ETH for gas fees.';
+  if (msg.includes('AlreadyJoined') || msg.includes('already registered')) return 'This wallet is already registered.';
+  if (msg.includes('USDC') && msg.includes('allowance')) return 'USDC not approved — complete Step 1 first.';
+  if (msg.includes('execution reverted')) return 'Transaction reverted: ' + (msg.split('execution reverted:')[1]||'').trim().slice(0,80);
+  return msg.slice(0, 120);
+}
+
+// ═══════════════════════════════════════════════════════════════
+// REFERRAL INPUT
+// ═══════════════════════════════════════════════════════════════
+function onReferrerInput() {
+  const val = (document.getElementById('input-referrer')?.value || '').trim();
+  const noteEl = document.getElementById('ref-valid-note');
+  if (ethers.isAddress(val)) {
+    if (noteEl) noteEl.style.display = 'block';
+  } else {
+    if (noteEl) noteEl.style.display = 'none';
+  }
+}
+
+function dismissNoRefWarn() {
+  noRefWarningDismissed = true;
+  hideEl('no-ref-warn');
+  activateStep1();
+}
+
+// ═══════════════════════════════════════════════════════════════
+// WALLET
+// ═══════════════════════════════════════════════════════════════
+async function connectWallet() {
+  if (!window.ethereum) {
+    toast('No wallet detected. Install MetaMask or Rabby.', 'error');
+    return;
+  }
+  const btn = document.getElementById('btn-connect');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span>Connecting…';
+  try {
+    const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
+    const chainIdHex = await window.ethereum.request({ method: 'eth_chainId' });
+    const chainId = parseInt(chainIdHex, 16);
+
+    if (chainId !== CHAIN_ID) {
+      // Prompt network switch
+      try {
+        await window.ethereum.request({
+          method: 'wallet_switchEthereumChain',
+          params: [{ chainId: '0x14a34' }], // Base Sepolia
+        });
+      } catch (swErr) {
+        // Add network if not present
+        if (swErr.code === 4902) {
+          await window.ethereum.request({
+            method: 'wallet_addEthereumChain',
+            params: [{
+              chainId: '0x14a34',
+              chainName: 'Base Sepolia Testnet',
+              nativeCurrency: { name: 'Ether', symbol: 'ETH', decimals: 18 },
+              rpcUrls: ['https://sepolia.base.org'],
+              blockExplorerUrls: ['https://sepolia.basescan.org'],
+            }],
+          });
+        } else {
+          throw swErr;
+        }
+      }
+    }
+
+    provider = new ethers.BrowserProvider(window.ethereum);
+    signer   = await provider.getSigner();
+    userAddr = accounts[0];
+
+    onConnected();
+  } catch (e) {
+    btn.disabled = false;
+    btn.textContent = 'Connect Wallet';
+    toast(friendlyError(e), 'error');
+  }
+}
+
+function disconnectWallet() {
+  provider = signer = userAddr = null;
+  hideEl('connected-view');
+  showEl('not-connected-view');
+  const btn = document.getElementById('btn-connect');
+  btn.disabled = false;
+  btn.textContent = 'Connect Wallet';
+  hideEl('register-card');
+  hideEl('already-alert');
+  document.getElementById('success-card').classList.remove('show');
+}
+
+async function onConnected() {
+  // Show connected state
+  const addrEl = document.getElementById('connected-addr');
+  if (addrEl) addrEl.textContent = userAddr.slice(0,6) + '…' + userAddr.slice(-4);
+  hideEl('not-connected-view');
+  showEl('connected-view');
+
+  // Load chain data
+  await loadRegistrationState();
+
+  // Listen for account changes
+  window.ethereum.on('accountsChanged', (accs) => {
+    if (!accs.length) { disconnectWallet(); return; }
+    userAddr = accs[0];
+    const addrEl = document.getElementById('connected-addr');
+    if (addrEl) addrEl.textContent = userAddr.slice(0,6) + '…' + userAddr.slice(-4);
+    loadRegistrationState();
+  });
+}
+
+// ═══════════════════════════════════════════════════════════════
+// LOAD REGISTRATION STATE
+// ═══════════════════════════════════════════════════════════════
+async function loadRegistrationState() {
+  if (!userAddr) return;
+
+  const rp = new ethers.JsonRpcProvider(RPC_URL, CHAIN_ID, { staticNetwork: true });
+
+  try {
+    const tr   = new ethers.Contract(ADDRS.tierRouter, TIER_ROUTER_ABI, rp);
+    const usdc = new ethers.Contract(ADDRS.usdc, USDC_ABI, rp);
+
+    const [joined, bal, allowance] = await Promise.all([
+      tr.globalJoined(userAddr).catch(() => false),
+      usdc.balanceOf(userAddr).catch(() => 0n),
+      usdc.allowance(userAddr, ADDRS.T1.pm).catch(() => 0n),
+    ]);
+
+    hideEl('already-alert');
+    hideEl('register-card');
+    document.getElementById('success-card').classList.remove('show');
+
+    if (joined) {
+      showEl('already-alert');
+      await loadSuccessState(rp, userAddr);
+      return;
+    }
+
+    // Show register card
+    showEl('register-card');
+
+    // Update balance displays
+    setText('usdc-bal', fmt6(bal));
+    setText('usdc-approved', allowance >= T1_FEE ? '✅ $10 Approved' : 'Not approved');
+
+    // Low balance warning
+    const lowWarn = document.getElementById('low-bal-warn');
+    if (lowWarn) lowWarn.classList.toggle('show', bal < T1_FEE);
+
+    if (allowance >= T1_FEE) {
+      // Step 1 already done
+      const btnApprove = document.getElementById('btn-approve');
+      if (btnApprove) {
+        btnApprove.textContent = '✅ Step 1 Done — Approved';
+        btnApprove.className = 'btn btn-step1 done';
+        btnApprove.disabled = true;
+      }
+      const btnReg = document.getElementById('btn-register');
+      if (btnReg) {
+        btnReg.disabled = false;
+        btnReg.className = 'btn btn-step2 active';
+      }
+    } else {
+      // Determine if referrer is entered
+      const refVal = (document.getElementById('input-referrer')?.value || '').trim();
+      if (!refVal || !ethers.isAddress(refVal)) {
+        // Show no-ref warning first
+        document.getElementById('no-ref-warn').classList.add('show');
+        const btnApprove = document.getElementById('btn-approve');
+        if (btnApprove && !noRefWarningDismissed) btnApprove.disabled = true;
+      } else {
+        activateStep1();
+      }
+    }
+
+    // Pre-fill referral from URL
+    const urlRef = new URLSearchParams(window.location.search).get('ref');
+    if (urlRef && ethers.isAddress(urlRef)) {
+      const inp = document.getElementById('input-referrer');
+      if (inp && !inp.value) {
+        inp.value = urlRef;
+        onReferrerInput();
+        noRefWarningDismissed = true;
+        document.getElementById('no-ref-warn').classList.remove('show');
+        activateStep1();
+      }
+    }
+
+  } catch (e) {
+    console.error('loadRegistrationState:', e);
+    toast('Failed to load chain data: ' + e.message.slice(0,60), 'error');
+    showEl('register-card');
+  }
+}
+
+function activateStep1() {
+  const btnApprove = document.getElementById('btn-approve');
+  if (btnApprove && btnApprove.className.includes('done')) return; // already done
+  if (btnApprove) {
+    btnApprove.disabled = false;
+    btnApprove.className = 'btn btn-step1 active';
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// LOAD SUCCESS / ALREADY-REGISTERED STATE
+// ═══════════════════════════════════════════════════════════════
+async function loadSuccessState(rp, addr) {
+  try {
+    const matA = new ethers.Contract(ADDRS.T1.matA, MATRIX_ABI, rp);
+    const matB = new ethers.Contract(ADDRS.T1.matB, MATRIX_ABI, rp);
+
+    // Try matA first, then matB
+    let member = null, pos = 0n, matUsed = matA;
+    const mA = await matA.getMember(addr).catch(() => null);
+    if (mA && mA.hasEverJoined) { member = mA; matUsed = matA; }
+    else {
+      const mB = await matB.getMember(addr).catch(() => null);
+      if (mB && mB.hasEverJoined) { member = mB; matUsed = matB; }
+    }
+
+    if (member) {
+      pos = await matUsed.matrixPos(addr).catch(() => 0n);
+      setText('suc-member-id', '#' + Number(member.id));
+      setText('suc-matrix-pos', pos > 0n ? '#' + Number(pos) : 'In Queue');
+    } else {
+      setText('suc-member-id', '—');
+      setText('suc-matrix-pos', 'Loading…');
+    }
+
+    // Build referral link
+    const base = window.location.origin + window.location.pathname;
+    const refUrl = base + '?ref=' + addr;
+    const urlEl = document.getElementById('ref-link-url');
+    if (urlEl) urlEl.textContent = refUrl;
+
+    document.getElementById('success-card').classList.add('show');
+  } catch (e) {
+    console.error('loadSuccessState:', e);
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// APPROVE USDC
+// ═══════════════════════════════════════════════════════════════
+async function approveUSDC() {
+  if (!signer) { toast('Connect wallet first', 'error'); return; }
+  const btn = document.getElementById('btn-approve');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span>Approving…';
+  try {
+    const usdcW = new ethers.Contract(ADDRS.usdc, USDC_ABI, signer);
+    const tx = await usdcW.approve(ADDRS.T1.pm, T1_FEE);
+    setStatus('⏳ Approving $10 USDC to PairManager…', 'info');
+    await tx.wait();
+    setStatus('✅ Approved! Now click Step 2 to join.', 'ok');
+    btn.textContent = '✅ Step 1 Done — Approved';
+    btn.className = 'btn btn-step1 done';
+    setText('usdc-approved', '✅ $10 Approved');
+    const btnReg = document.getElementById('btn-register');
+    if (btnReg) {
+      btnReg.disabled = false;
+      btnReg.className = 'btn btn-step2 active';
+    }
+  } catch (e) {
+    btn.disabled = false;
+    btn.className = 'btn btn-step1 active';
+    btn.textContent = 'Step 1: Approve $10 USDC 🔒';
+    setStatus('❌ ' + friendlyError(e), 'err');
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// REGISTER
+// ═══════════════════════════════════════════════════════════════
+async function doRegister() {
+  if (!signer) { toast('Connect wallet first', 'error'); return; }
+  const btn = document.getElementById('btn-register');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span>Joining CryptoNova…';
+  try {
+    const refInput = document.getElementById('input-referrer');
+    const referrer = refInput && ethers.isAddress(refInput.value.trim())
+      ? refInput.value.trim()
+      : ethers.ZeroAddress;
+
+    const tr = new ethers.Contract(ADDRS.tierRouter, TIER_ROUTER_ABI, signer);
+    const tx = await tr.register(referrer);
+    setStatus('⏳ Confirming transaction on Base Sepolia…', 'info');
+    await tx.wait();
+
+    setStatus('🎉 Welcome to CryptoNova!', 'ok');
+    btn.textContent = '✅ Registered!';
+    toast('Welcome to CryptoNova V8.10! 🎉', 'success');
+
+    // Hide register card, show success
+    hideEl('register-card');
+    hideEl('already-alert');
+    const rp = new ethers.JsonRpcProvider(RPC_URL, CHAIN_ID, { staticNetwork: true });
+    await loadSuccessState(rp, userAddr);
+
+  } catch (e) {
+    btn.disabled = false;
+    btn.className = 'btn btn-step2 active';
+    btn.textContent = 'Step 2: Register ($10 USDC)';
+    setStatus('❌ ' + friendlyError(e), 'err');
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// COPY REFERRAL LINK
+// ═══════════════════════════════════════════════════════════════
+function copyRefLink() {
+  const urlEl = document.getElementById('ref-link-url');
+  if (!urlEl) return;
+  navigator.clipboard.writeText(urlEl.textContent).then(() => {
+    toast('Referral link copied!', 'success');
+  }).catch(() => {
+    // Fallback
+    const ta = document.createElement('textarea');
+    ta.value = urlEl.textContent;
+    document.body.appendChild(ta);
+    ta.select();
+    document.execCommand('copy');
+    document.body.removeChild(ta);
+    toast('Referral link copied!', 'success');
+  });
+}
+
+// ═══════════════════════════════════════════════════════════════
+// ADD USDC TO WALLET
+// ═══════════════════════════════════════════════════════════════
+async function addUSDCtoWallet() {
+  if (!window.ethereum) { toast('No wallet detected', 'error'); return; }
+  try {
+    await window.ethereum.request({
+      method: 'wallet_watchAsset',
+      params: { type: 'ERC20', options: { address: ADDRS.usdc, symbol: 'USDC', decimals: 6 }},
+    });
+  } catch (e) { console.error(e); }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// INIT — auto-fill ?ref= from URL on load
+// ═══════════════════════════════════════════════════════════════
+(function init() {
+  const urlRef = new URLSearchParams(window.location.search).get('ref');
+  if (urlRef && ethers.isAddress(urlRef)) {
+    const inp = document.getElementById('input-referrer');
+    if (inp) {
+      inp.value = urlRef;
+      onReferrerInput();
+      noRefWarningDismissed = true;
+    }
+  }
+})();
+</script>
+</body>
+</html>
