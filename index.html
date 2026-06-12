@@ -74,6 +74,33 @@
     .stat-value { font-size: 24px; font-weight: 700; color: var(--text); }
     .stat-value.green { color: var(--green); }
     .stat-sub { font-size: 12px; color: var(--text3); margin-top: 4px; }
+    .detail-hint { font-size: 10px; color: var(--text3); margin-top: 8px; letter-spacing: .3px; display: none; }
+    .card-sm.clickable { cursor: pointer; transition: border-color .25s, box-shadow .25s, transform .15s; user-select: none; }
+    .card-sm.clickable:hover { border-color: rgba(0,212,170,.45) !important; box-shadow: 0 4px 16px rgba(0,212,170,.08); transform: translateY(-2px); }
+    .card-sm.clickable:hover .detail-hint { display: block; color: var(--green); }
+    .card-sm.clickable.active-detail { border-color: rgba(0,212,170,.6) !important; box-shadow: 0 0 0 2px rgba(0,212,170,.15); }
+    #dash-detail-panel {
+      width: 100%; background: var(--bg2); border: 1px solid rgba(0,212,170,.3);
+      border-radius: 12px; padding: 20px 22px; margin-bottom: 24px;
+      display: none; animation: slideDown .2s ease;
+    }
+    #dash-detail-panel.show { display: block; }
+    @keyframes slideDown { from { opacity:0; transform: translateY(-6px); } to { opacity:1; transform: translateY(0); } }
+    .detail-panel-title { font-size: 14px; font-weight: 700; color: var(--green); margin-bottom: 16px; display: flex; align-items: center; justify-content: space-between; }
+    .detail-close { cursor: pointer; color: var(--text3); font-size: 18px; line-height: 1; padding: 0 4px; }
+    .detail-close:hover { color: var(--text1); }
+    .detail-row { display: flex; justify-content: space-between; align-items: center; padding: 9px 0; border-bottom: 1px solid var(--border); font-size: 13px; }
+    .detail-row:last-child { border-bottom: none; }
+    .detail-row.total { font-weight: 700; padding-top: 12px; font-size: 14px; }
+    .detail-key { color: var(--text2); }
+    .detail-val { color: var(--text1); font-weight: 600; }
+    .detail-val.green { color: var(--green); }
+    .detail-val.red   { color: var(--red); }
+    .detail-val.purple { color: #a855f7; }
+    .detail-val.yellow { color: var(--yellow); }
+    .detail-note { font-size: 11px; color: var(--text3); margin-top: 12px; line-height: 1.6; padding: 10px 12px; background: var(--bg3); border-radius: 7px; }
+    .detail-section { font-size: 11px; font-weight: 700; color: var(--text3); letter-spacing: .6px; text-transform: uppercase; margin: 14px 0 6px; }
+    .detail-loading { color: var(--text3); font-size: 13px; }
 
     /* ── Section titles ──────────────────────── */
     .section-title { font-size: 18px; font-weight: 700; margin-bottom: 16px; display: flex; align-items: center; gap: 8px; }
@@ -358,14 +385,14 @@
 
   <!-- ══ LAUNCH ANNOUNCEMENT BANNER ══════════════════════════════════════ -->
   <div id="launch-banner">
-    <div class="bn-title">&#x1F680; CryptoNova Tokens &mdash; Public Launch Friday June 19</div>
+    <div class="bn-title">&#x1F680; CryptoNova Tokens &mdash; Public Launch Friday June 12</div>
     <div class="bn-cd">
       <span id="bn-h">00</span>h
       <span id="bn-m">00</span>m
       <span id="bn-s">00</span>s
     </div>
     <div class="bn-sep">|</div>
-    <div class="bn-date">Friday June 19 &bull; 12:00 PM Eastern</div>
+    <div class="bn-date">Friday June 12 &bull; 12:00 PM Eastern</div>
     <div class="bn-live" id="bn-live">&#x1F7E2; We&rsquo;re Live &mdash; Register Now!</div>
   </div>
 
@@ -373,7 +400,7 @@
   <div id="launch-gate">
     <h2>&#x1F680; CryptoNova Matrix</h2>
     <p style="font-size:15px;font-weight:600;color:var(--text);margin-bottom:4px">
-      Public Launch &mdash; Friday, June 19 at 12 PM ET
+      Public Launch &mdash; Friday, June 12 at 12 PM ET
     </p>
     <p style="max-width:440px">
       Register, earn, and redeem <strong style="color:var(--green)">CryptoNova Tokens</strong> across 10 live tiers.<br><br>
@@ -387,7 +414,7 @@
       <div class="cd-box"><span class="cd-num" id="cd-m">00</span><div class="cd-lbl">Minutes</div></div>
       <div class="cd-box"><span class="cd-num" id="cd-s">00</span><div class="cd-lbl">Seconds</div></div>
     </div>
-    <div class="launch-sub" id="cd-date-label">12:00 PM Eastern &bull; Friday, June 19 2026</div>
+    <div class="launch-sub" id="cd-date-label">12:00 PM Eastern &bull; Friday, June 12 2026</div>
 
     <!-- City timezone grid -->
     <div id="cd-cities-wrap" style="margin-top:14px;max-width:400px;width:100%;text-align:left">
@@ -1131,36 +1158,51 @@
     <div id="dash-content" style="display:none">
       <!-- Earnings cards -->
       <div class="grid-4" style="margin-bottom:24px">
-        <div class="card-sm" style="border-color:var(--green2)">
+        <div class="card-sm clickable" style="border-color:var(--green2)" onclick="openDashDetail('withdrawable',this)" title="Click for breakdown">
           <div class="stat-label">Withdrawable</div>
           <div class="stat-value green" id="dash-withdrawable">—</div>
           <div class="stat-sub">Ready to claim</div>
+          <div class="detail-hint">Details ↗</div>
         </div>
-        <div class="card-sm">
+        <div class="card-sm clickable" onclick="openDashDetail('earned',this)" title="Click for tier breakdown">
           <div class="stat-label">Total Earned</div>
           <div class="stat-value" id="dash-total-earned">—</div>
 <div class="stat-sub" id="dash-total-earned-sub" title="Total USDC ever credited to your account. Includes current balance, amounts auto-deducted for tier upgrades, and past withdrawals.">All tiers lifetime</div>
+          <div class="detail-hint">Details ↗</div>
         </div>
-        <div class="card-sm">
+        <div class="card-sm clickable" onclick="openDashDetail('cnova',this)" title="Click for CNOVA breakdown">
           <div class="stat-label"><svg width="14" height="14" style="vertical-align:middle;border-radius:50%;margin-right:3px"><use href="#cnova-icon"/></svg>CNOVA Balance</div>
           <div class="stat-value green" id="dash-cnova">—</div>
           <div class="stat-sub">Mined tokens</div>
+          <div class="detail-hint">Details ↗</div>
         </div>
-        <div class="card-sm">
+        <div class="card-sm clickable" onclick="openDashDetail('cnova',this)" title="Click for CNOVA breakdown">
           <div class="stat-label">CNOVA Value</div>
           <div class="stat-value" id="dash-cnova-val">—</div>
           <div class="stat-sub">At current floor</div>
+          <div class="detail-hint">Details ↗</div>
         </div>
-        <div class="card-sm" title="Total CNOVA you have burned via Redeem → USDC. Loaded from on-chain Transfer events.">
+        <div class="card-sm clickable" onclick="openDashDetail('burned',this)" title="Click for redemption history">
           <div class="stat-label">🔥 CNOVA Burned</div>
           <div class="stat-value" id="dash-cnova-burned" style="color:var(--red)">—</div>
           <div class="stat-sub">Redeemed lifetime</div>
+          <div class="detail-hint">Details ↗</div>
         </div>
-        <div class="card-sm" style="border-color:rgba(168,85,247,.4)" title="Total USDC held in the Community Wallet — funded by orphan fees from empty upline positions.">
+        <div class="card-sm clickable" style="border-color:rgba(168,85,247,.4)" onclick="openDashDetail('community',this)" title="Click for eligibility details">
           <div class="stat-label">🏛️ Community Pool</div>
           <div class="stat-value" id="dash-cw-pool" style="color:#a855f7">—</div>
           <div class="stat-sub">Orphan fees collected</div>
+          <div class="detail-hint">Details ↗</div>
         </div>
+      </div>
+
+      <!-- ── Card detail panel ── -->
+      <div id="dash-detail-panel">
+        <div class="detail-panel-title">
+          <span id="detail-panel-title-text">Details</span>
+          <span class="detail-close" onclick="closeDashDetail()">✕</span>
+        </div>
+        <div id="detail-panel-body"><span class="detail-loading">Loading…</span></div>
       </div>
 
       <!-- Withdraw + member info -->
@@ -1654,7 +1696,7 @@ const CHAIN_ID = 84532;
   // 12:00 PM EDT (noon Eastern) = 16:00 UTC on June 12 2026.
   // This is a FIXED UTC timestamp — same countdown for every viewer worldwide.
   // To reschedule: update this ISO string.
-  const LAUNCH_UTC = new Date('2026-06-19T16:00:00Z'); // noon EDT = 16:00 UTC
+  const LAUNCH_UTC = new Date('2026-06-19T16:00:00Z'); // noon EDT = 16:00 UTC // noon EDT = 16:00 UTC
 
   // Major city local equivalents — shown below the countdown
   const CITY_ZONES = [
@@ -2874,6 +2916,253 @@ async function loadUserBurnHistory(cnova, user) {
     console.warn('loadUserBurnHistory:', e.message);
     setText('dash-cnova-burned', '—');
   }
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// DASHBOARD CARD DETAIL PANELS
+// ═══════════════════════════════════════════════════════════════════════
+let _activeDetailCard = null;
+
+function closeDashDetail() {
+  const panel = document.getElementById('dash-detail-panel');
+  if (panel) panel.classList.remove('show');
+  if (_activeDetailCard) { _activeDetailCard.classList.remove('active-detail'); _activeDetailCard = null; }
+}
+
+async function openDashDetail(type, cardEl) {
+  const panel   = document.getElementById('dash-detail-panel');
+  const titleEl = document.getElementById('detail-panel-title-text');
+  const bodyEl  = document.getElementById('detail-panel-body');
+  if (!panel || !bodyEl) return;
+
+  // Toggle off if same card clicked again
+  if (_activeDetailCard === cardEl && panel.classList.contains('show')) {
+    closeDashDetail(); return;
+  }
+  if (_activeDetailCard) _activeDetailCard.classList.remove('active-detail');
+  _activeDetailCard = cardEl;
+  if (cardEl) cardEl.classList.add('active-detail');
+
+  panel.classList.add('show');
+  setTimeout(() => panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' }), 50);
+  bodyEl.innerHTML = '<span class="detail-loading"><span class="spinner"></span> Loading…</span>';
+
+  const rp = readProvider || new ethers.JsonRpcProvider(RPC_URL, 84532, { staticNetwork: true });
+  try {
+    if      (type === 'withdrawable') { titleEl.textContent = '💰 Withdrawable — Balance Breakdown';      await renderWithdrawableDetail(bodyEl, rp); }
+    else if (type === 'earned')       { titleEl.textContent = '📈 Total Earned — Tier Breakdown';          await renderEarnedDetail(bodyEl, rp); }
+    else if (type === 'cnova')        { titleEl.textContent = '◈ CNOVA — Balance & Epoch Breakdown';       await renderCnovaDetail(bodyEl, rp); }
+    else if (type === 'burned')       { titleEl.textContent = '🔥 CNOVA Burned — Redemption History';      await renderBurnedDetail(bodyEl, rp); }
+    else if (type === 'community')    { titleEl.textContent = '🏛️ Community Pool — Your Eligibility';     await renderCommunityDetail(bodyEl, rp); }
+  } catch(e) {
+    bodyEl.innerHTML = `<div class="detail-note">⚠️ Failed to load: ${e.message.slice(0,120)}</div>`;
+  }
+}
+
+// ── Helpers ──────────────────────────────────────────────────────────
+async function _getAllMatrixMembers(userAddr, rp) {
+  const mats = [
+    ADDRS.T1.matA, ADDRS.T1.matB, ADDRS.T2.matA, ADDRS.T2.matB,
+    ADDRS.T3.matA, ADDRS.T3.matB,
+    ...(ADDRS.T4?.matA ? [ADDRS.T4.matA, ADDRS.T4.matB] : []),
+    ...(ADDRS.T5?.matA ? [ADDRS.T5.matA, ADDRS.T5.matB] : []),
+    ...(ADDRS.T6?.matA ? [ADDRS.T6.matA, ADDRS.T6.matB] : []),
+    ...(ADDRS.T7?.matA ? [ADDRS.T7.matA, ADDRS.T7.matB] : []),
+    ...(ADDRS.T8?.matA ? [ADDRS.T8.matA, ADDRS.T8.matB] : []),
+    ...(ADDRS.T9?.matA ? [ADDRS.T9.matA, ADDRS.T9.matB] : []),
+    ...(ADDRS.T10?.matA ? [ADDRS.T10.matA, ADDRS.T10.matB] : []),
+  ];
+  let totalEarned = 0n, totalWithdrawn = 0n, totalWithdrawable = 0n, joinedAt = 0n, memberId = 0;
+  for (const addr of mats) {
+    const mc = new ethers.Contract(addr, MATRIX_ABI, rp);
+    const m  = await mc.getMember(userAddr).catch(() => null);
+    if (m && m.hasEverJoined) {
+      totalEarned      += BigInt(m.totalEarned);
+      totalWithdrawn   += BigInt(m.totalWithdrawn);
+      totalWithdrawable += BigInt(m.withdrawable);
+      if (!joinedAt && m.joinedAt) joinedAt = BigInt(m.joinedAt);
+      if (!memberId) memberId = Number(m.id);
+    }
+  }
+  return { totalEarned, totalWithdrawn, totalWithdrawable, joinedAt, memberId };
+}
+
+// ── Withdrawable breakdown ────────────────────────────────────────────
+async function renderWithdrawableDetail(el, rp) {
+  const { totalEarned, totalWithdrawn, totalWithdrawable, joinedAt } = await _getAllMatrixMembers(userAddr, rp);
+  const autoDeducted = totalEarned > (totalWithdrawn + totalWithdrawable)
+    ? totalEarned - totalWithdrawn - totalWithdrawable : 0n;
+
+  const matFee = new ethers.Contract(ADDRS.T1.matA, MATRIX_ABI, rp);
+  const feeBps = await matFee.withdrawalFeeBps().catch(() => 150n);
+  const feeAmt = totalWithdrawable * feeBps / 10000n;
+  const netAmt = totalWithdrawable - feeAmt;
+  const feePct = (Number(feeBps) / 100).toFixed(1);
+
+  const joinDate   = joinedAt > 0n ? new Date(Number(joinedAt) * 1000).toLocaleDateString('en-US',{year:'numeric',month:'short',day:'numeric'}) : '—';
+  const daysSince  = joinedAt > 0n ? Math.floor((Date.now()/1000 - Number(joinedAt)) / 86400) : 0;
+
+  el.innerHTML = `
+    <div class="detail-row"><span class="detail-key">Total Ever Earned</span><span class="detail-val green">${fmt6(totalEarned)}</span></div>
+    <div class="detail-row"><span class="detail-key">Previously Withdrawn</span><span class="detail-val">− ${fmt6(totalWithdrawn)}</span></div>
+    <div class="detail-row"><span class="detail-key">Auto-Deducted (upgrades)</span><span class="detail-val">− ${fmt6(autoDeducted)}</span></div>
+    <div class="detail-row total"><span class="detail-key">= Available to Claim</span><span class="detail-val green">${fmt6(totalWithdrawable)}</span></div>
+    ${totalWithdrawable > 0n ? `
+    <div class="detail-section">After ${feePct}% Withdrawal Fee</div>
+    <div class="detail-row"><span class="detail-key">Fee Deducted</span><span class="detail-val red">− ${fmt6(feeAmt)}</span></div>
+    <div class="detail-row total"><span class="detail-key">You Receive</span><span class="detail-val green">${fmt6(netAmt)}</span></div>
+    ` : ''}
+    <div class="detail-note">📅 Member since ${joinDate}${daysSince > 0 ? ` · ${daysSince} days in the matrix` : ''}</div>`;
+}
+
+// ── Total Earned breakdown (tier-by-tier) ────────────────────────────
+async function renderEarnedDetail(el, rp) {
+  const tr = new ethers.Contract(ADDRS.tierRouter, TIER_ROUTER_ABI, rp);
+  const onChainTier = Number(await tr.memberHighestTier(userAddr).catch(() => 0));
+  const numTiers    = Math.max(onChainTier, 1);
+
+  const [cycArr, feeArr] = await Promise.all([
+    Promise.all(Array.from({length: numTiers}, (_, i) => tr.tierCycles(userAddr, i).catch(() => 0n))),
+    Promise.all(Array.from({length: numTiers}, (_, i) => tr.tierEntryFees(i).catch(() => 0n))),
+  ]);
+
+  const TIER_NAMES = ['Nova Seed','Nova Rise','Nova Star','Nova Core','Nova Prime','Nova Apex','Nova Pinnacle','SuperNova Titan','SuperNova Legend','SuperNova Apex'];
+  let totalCycles = 0n;
+  const rows = cycArr.map((c, i) => {
+    totalCycles += c;
+    if (!c || c === 0n) return '';
+    const label = TIER_NAMES[i] || `T${i+1}`;
+    const fee   = feeArr[i] || 0n;
+    return `<div class="detail-row">
+      <span class="detail-key">T${i+1} · ${label}</span>
+      <span class="detail-val">${c.toString()} cycle${c===1n?'':'s'} <span style="color:var(--text3);font-weight:400;font-size:11px">· ${fmt6(fee)} entry</span></span>
+    </div>`;
+  }).join('');
+
+  const { totalEarned } = await _getAllMatrixMembers(userAddr, rp);
+  const avgPerCycle = totalCycles > 0n ? fmt6(totalEarned / totalCycles) : '—';
+
+  el.innerHTML = `
+    <div class="detail-section">Cycles Completed by Tier</div>
+    ${rows || '<div class="detail-row"><span class="detail-key" style="color:var(--text3)">No cycles recorded yet</span></div>'}
+    <div class="detail-row total"><span class="detail-key">Total Cycles</span><span class="detail-val green">${totalCycles.toString()}</span></div>
+    <div class="detail-section">Summary</div>
+    <div class="detail-row"><span class="detail-key">Total Earned (all tiers)</span><span class="detail-val green">${fmt6(totalEarned)}</span></div>
+    <div class="detail-row"><span class="detail-key">Average per Cycle</span><span class="detail-val">${avgPerCycle}</span></div>
+    <div class="detail-note">💡 Each cycle completes when your matrix fills all 127 seats. Earnings per cycle grow as you unlock more chain-pay levels through upgrades.</div>`;
+}
+
+// ── CNOVA balance breakdown ───────────────────────────────────────────
+async function renderCnovaDetail(el, rp) {
+  const cnova  = new ethers.Contract(ADDRS.cnova, CNOVA_ABI, rp);
+  const usdcC  = new ethers.Contract(ADDRS.usdc,  USDC_ABI,  rp);
+
+  const [cnovabal, supply, treasuryUsdc, epochNum] = await Promise.all([
+    cnova.balanceOf(userAddr).catch(() => 0n),
+    cnova.totalSupply().catch(() => 0n),
+    usdcC.balanceOf(ADDRS.treasury).catch(() => 0n),
+    cnova.currentEpochNumber().catch(() => 1),
+  ]);
+
+  const cnovaValRaw = supply > 0n ? (cnovabal * treasuryUsdc) / supply : 0n;
+  const floorPerToken = supply > 0n
+    ? '$' + (Number(treasuryUsdc) / Number(supply) * 1e12).toFixed(6)
+    : '$0.000000';
+  const balFmt = Number(ethers.formatEther(cnovabal)).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2});
+
+  // Epoch reward schedule (8 epochs)
+  const epochRewards = await Promise.all(
+    Array.from({length:8}, (_, i) => cnova.epochRewards(i).catch(() => null))
+  );
+  const epochRows = epochRewards.map((r, i) => {
+    if (r === null || r === 0n) return '';
+    const amt = Number(ethers.formatEther(r)).toFixed(2);
+    const isCur = (i === Number(epochNum) - 1);
+    return `<div class="detail-row">
+      <span class="detail-key">Epoch ${i+1}${isCur ? ' <span style="background:rgba(0,212,170,.15);color:var(--green);font-size:10px;padding:1px 6px;border-radius:4px;font-weight:700">ACTIVE</span>' : ''}</span>
+      <span class="detail-val ${isCur ? 'green' : ''}">${amt} CNOVA / cycle</span>
+    </div>`;
+  }).join('');
+
+  el.innerHTML = `
+    <div class="detail-section">Your Balance</div>
+    <div class="detail-row"><span class="detail-key">CNOVA Held</span><span class="detail-val green">${balFmt} CNOVA</span></div>
+    <div class="detail-row"><span class="detail-key">Floor Price</span><span class="detail-val">${floorPerToken} / CNOVA</span></div>
+    <div class="detail-row total"><span class="detail-key">USD Value at Floor</span><span class="detail-val green">${fmt6(cnovaValRaw)}</span></div>
+    <div class="detail-section">Mining Schedule</div>
+    ${epochRows || '<div class="detail-row"><span class="detail-key" style="color:var(--text3)">Epoch data unavailable</span></div>'}
+    <div class="detail-note">◈ CNOVA is minted each time you complete a matrix cycle. The reward decreases each epoch as total supply grows. Floor price = CNOVA Treasury USDC ÷ total supply — guaranteed minimum redemption value.</div>`;
+}
+
+// ── CNOVA Burned breakdown ────────────────────────────────────────────
+async function renderBurnedDetail(el, rp) {
+  el.innerHTML = '<span class="detail-loading"><span class="spinner"></span> Scanning redemption history…</span>';
+  const cnova = new ethers.Contract(ADDRS.cnova, CNOVA_ABI, rp);
+  try {
+    const events = await cnova.queryFilter(cnova.filters.Transfer(userAddr, ethers.ZeroAddress), 0, 'latest');
+    const total  = events.reduce((a, e) => a + BigInt(e.args.value), 0n);
+    const totalFmt = Number(ethers.formatEther(total)).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2});
+
+    if (events.length === 0) {
+      el.innerHTML = `
+        <div class="detail-row"><span class="detail-key">Total Burned Lifetime</span><span class="detail-val">0.00 CNOVA</span></div>
+        <div class="detail-note">No redemptions yet. Use the <strong>Redeem CNOVA → USDC</strong> panel below to burn CNOVA at the current floor price and receive USDC.</div>`;
+      return;
+    }
+
+    const recent = events.slice(-5).reverse();
+    const rows = await Promise.all(recent.map(async e => {
+      let dateStr = '';
+      try { const blk = await rp.getBlock(e.blockNumber); dateStr = blk ? new Date(blk.timestamp*1000).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}) : ''; } catch(_) {}
+      const amt = Number(ethers.formatEther(e.args.value)).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2});
+      return `<div class="detail-row"><span class="detail-key">${dateStr || 'Block #'+e.blockNumber}</span><span class="detail-val red">− ${amt} CNOVA</span></div>`;
+    }));
+
+    el.innerHTML = `
+      <div class="detail-row total"><span class="detail-key">Total Burned Lifetime</span><span class="detail-val red">${totalFmt} CNOVA</span></div>
+      <div class="detail-row"><span class="detail-key">Total Redemptions</span><span class="detail-val">${events.length}</span></div>
+      <div class="detail-section">${events.length > 5 ? 'Last 5 Redemptions' : 'All Redemptions'}</div>
+      ${rows.join('')}`;
+  } catch(e) {
+    el.innerHTML = `<div class="detail-note">⚠️ Could not scan burn history on this RPC (block range limit on testnet). Your total is shown on the card. Full history will load automatically on mainnet with a full-archive RPC.</div>`;
+  }
+}
+
+// ── Community Pool breakdown ──────────────────────────────────────────
+async function renderCommunityDetail(el, rp) {
+  const usdc  = new ethers.Contract(ADDRS.usdc, USDC_ABI, rp);
+  const cwBal = await usdc.balanceOf(ADDRS.communityWallet).catch(() => 0n);
+
+  // Member ID
+  const { memberId } = await _getAllMatrixMembers(userAddr, rp);
+
+  const isGenesis  = memberId >= 1   && memberId <= 500;
+  const isPioneer  = memberId > 500  && memberId <= 1000;
+  const isEligible = isGenesis || isPioneer;
+
+  const groupLabel    = isGenesis ? 'Genesis (members #1–500)' : isPioneer ? 'Pioneer (members #501–1,000)' : 'Not eligible (above #1,000)';
+  const groupShare    = isGenesis ? 0.65 : isPioneer ? 0.35 : 0;
+  const groupMax      = 500n; // max per group
+  const distributable = cwBal / 2n;
+  const groupPool     = BigInt(Math.floor(Number(distributable) * groupShare));
+  const estShare      = groupMax > 0n ? groupPool / groupMax : 0n;
+  const eligIcon      = isGenesis ? '🟢' : isPioneer ? '🟡' : '🔴';
+
+  el.innerHTML = `
+    <div class="detail-section">Pool Balance</div>
+    <div class="detail-row"><span class="detail-key">Total Pool</span><span class="detail-val purple">${fmt6(cwBal)}</span></div>
+    <div class="detail-row"><span class="detail-key">Monthly Distributable (50%)</span><span class="detail-val">${fmt6(distributable)}</span></div>
+    <div class="detail-row"><span class="detail-key">Rolls Over (50%)</span><span class="detail-val">${fmt6(cwBal - distributable)}</span></div>
+    <div class="detail-section">Your Eligibility</div>
+    <div class="detail-row"><span class="detail-key">Your Member ID</span><span class="detail-val">${memberId ? '#' + memberId : '—'}</span></div>
+    <div class="detail-row"><span class="detail-key">Category</span><span class="detail-val">${eligIcon} ${memberId ? groupLabel : 'Loading…'}</span></div>
+    ${isEligible ? `
+    <div class="detail-row"><span class="detail-key">Your Group's Share</span><span class="detail-val">${(groupShare*100).toFixed(0)}% of distributable = ${fmt6(groupPool)}</span></div>
+    <div class="detail-row total"><span class="detail-key">Est. Your Share / Month</span><span class="detail-val green">${fmt6(estShare)} <span style="color:var(--text3);font-size:11px;font-weight:400">÷ max ${groupMax} members</span></span></div>
+    ` : `
+    <div class="detail-row"><span class="detail-key">Eligible</span><span class="detail-val red">No — first 1,000 members only</span></div>
+    `}
+    <div class="detail-note">🏛️ The Community Pool collects 1% of every entry fee (orphan fees). First 1,000 members split it monthly — Genesis (#1–500) receive 65%, Pioneer (#501–1,000) receive 35%. 50% distributes each month, 50% rolls over and compounds. Distributions begin at mainnet launch.</div>`;
 }
 
 async function doWithdraw() {
