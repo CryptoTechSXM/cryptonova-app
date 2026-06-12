@@ -1880,6 +1880,24 @@ const TREASURY_ABI = [
 let provider=null, signer=null, userAddr=null, readProvider=null, isConnecting=false;
 
 // ═══════════════════════════════════════════════════════════════════════
+// HELPERS
+// ═══════════════════════════════════════════════════════════════════════
+function setText(id, val) {
+  const el = document.getElementById(id);
+  if (el) el.innerHTML = val;
+}
+
+function fmt6(raw) {
+  // Format a raw 6-decimal USDC value (BigInt or number) as a dollar string
+  const n = Number(typeof raw === 'bigint' ? raw : BigInt(raw || 0)) / 1e6;
+  if (n === 0) return '$0.00';
+  if (n < 0.01) return '<$0.01';
+  if (n >= 1_000_000) return '$' + (n / 1_000_000).toFixed(2) + 'M';
+  if (n >= 10_000)    return '$' + n.toLocaleString(undefined, { maximumFractionDigits: 0 });
+  return '$' + n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+// ═══════════════════════════════════════════════════════════════════════
 // ERROR REPORTING — sends to /api/log-error → Telegram admin channel
 // ═══════════════════════════════════════════════════════════════════════
 function getDevice() {
