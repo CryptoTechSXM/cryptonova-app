@@ -358,7 +358,7 @@
 
   <!-- ══ LAUNCH ANNOUNCEMENT BANNER ══════════════════════════════════════ -->
   <div id="launch-banner">
-    <div class="bn-title">&#x1F680; CryptoNova Tokens &mdash; Community Testnet Launch</div>
+    <div class="bn-title">&#x1F680; CryptoNova Tokens &mdash; Public Launch Friday June 19</div>
     <div class="bn-cd">
       <span id="bn-h">00</span>h
       <span id="bn-m">00</span>m
@@ -373,7 +373,7 @@
   <div id="launch-gate">
     <h2>&#x1F680; CryptoNova Matrix</h2>
     <p style="font-size:15px;font-weight:600;color:var(--text);margin-bottom:4px">
-      Community Testnet Launch &mdash; Friday, June 12 at 12 PM ET
+      Public Launch &mdash; Friday, June 19 at 12 PM ET
     </p>
     <p style="max-width:440px">
       Register, earn, and redeem <strong style="color:var(--green)">CryptoNova Tokens</strong> across 10 live tiers.<br><br>
@@ -387,7 +387,7 @@
       <div class="cd-box"><span class="cd-num" id="cd-m">00</span><div class="cd-lbl">Minutes</div></div>
       <div class="cd-box"><span class="cd-num" id="cd-s">00</span><div class="cd-lbl">Seconds</div></div>
     </div>
-    <div class="launch-sub" id="cd-date-label">12:00 PM Eastern &bull; Friday, June 12 2026</div>
+    <div class="launch-sub" id="cd-date-label">12:00 PM Eastern &bull; Friday, June 19 2026</div>
 
     <!-- City timezone grid -->
     <div id="cd-cities-wrap" style="margin-top:14px;max-width:400px;width:100%;text-align:left">
@@ -630,7 +630,7 @@
   </div>
     <div class="logo-text">Crypto<span>Nova</span></div>
     <span class="logo-badge" id="network-badge">Base Sepolia</span>
-    <span style="background:rgba(0,229,160,.15);color:var(--green);border:1px solid var(--green2);border-radius:4px;padding:2px 8px;font-size:10px;font-weight:700;margin-left:6px">V8.9</span>
+    <span style="background:rgba(0,229,160,.15);color:var(--green);border:1px solid var(--green2);border-radius:4px;padding:2px 8px;font-size:10px;font-weight:700;margin-left:6px">V8.10</span>
   </div>
   <div style="display:flex;align-items:center;gap:8px">
     <button class="theme-toggle" id="theme-btn" onclick="toggleTheme()">☀️ Light</button>
@@ -695,8 +695,8 @@
       <div class="token-card-left">
         <div class="token-icon">CN</div>
         <div>
-          <div class="token-name" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><svg width="28" height="28" style="border-radius:50%;flex-shrink:0"><use href="#cnova-icon"/></svg><a href="https://sepolia.basescan.org/token/0xc2b85354F2E8628E7D0874Dd236dbA0F9c3a0301" target="_blank" rel="noopener" style="color:inherit;text-decoration:none;font-weight:700">CryptoNOVA Matrix ↗</a> <span class="pill pill-green" style="font-size:10px;vertical-align:middle">CNOVA · ERC-20 · Base</span></div>
-          <div class="token-addr"><a href="https://sepolia.basescan.org/token/0xc2b85354F2E8628E7D0874Dd236dbA0F9c3a0301" target="_blank" rel="noopener" style="color:var(--green);text-decoration:none;font-family:monospace">0xc2b85354F2E8628E7D0874Dd236dbA0F9c3a0301</a> · 18 decimals</div>
+          <div class="token-name" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><svg width="28" height="28" style="border-radius:50%;flex-shrink:0"><use href="#cnova-icon"/></svg><a href="https://sepolia.basescan.org/token/0xBa2592aef54225C1d77898740296b656227BDcbc" target="_blank" rel="noopener" style="color:inherit;text-decoration:none;font-weight:700">CryptoNOVA Matrix ↗</a> <span class="pill pill-green" style="font-size:10px;vertical-align:middle">CNOVA · ERC-20 · Base</span></div>
+          <div class="token-addr"><a href="https://sepolia.basescan.org/token/0xBa2592aef54225C1d77898740296b656227BDcbc" target="_blank" rel="noopener" style="color:var(--green);text-decoration:none;font-family:monospace">0xBa2592aef54225C1d77898740296b656227BDcbc</a> · 18 decimals</div>
           <div style="font-size:12px;color:var(--text2);margin-top:4px">Earned on every registration. 50 CNOVA minted per T1 join. Add to your wallet to track your balance during testing.</div>
         </div>
       </div>
@@ -724,38 +724,33 @@
     <div class="grid-4" id="stats-grid">
       <div class="card-sm"><div class="stat-label">Total Registered</div><div class="stat-value" id="stat-members"><span class="spinner" style="color:var(--text3)"></span></div><div class="stat-sub">all-time joins</div></div>
       <div class="card-sm"><div class="stat-label">CNOVA Minted</div><div class="stat-value green" id="stat-minted"><span class="spinner" style="color:var(--green)"></span></div><div class="stat-sub">50 per T1 join</div></div>
-      <div class="card-sm" title="Total CNOVA burned system-wide — all users, all time."><div class="stat-label">🔥 CNOVA Burned</div><div class="stat-value" id="stat-burned" style="color:var(--red)"><span class="spinner" style="color:var(--red)"></span></div><div class="stat-sub">All users lifetime</div></div>
       <div class="card-sm" title="CNOVA Treasury holds 15% of all entry fees — it backs the CNOVA floor price. Floor price = Treasury USDC ÷ total CNOVA supply."><div class="stat-label">CNOVA USDC Treasury 🏦</div><div class="stat-value green" id="stat-treasury-usdc"><span class="spinner" style="color:var(--green)"></span></div><div class="stat-sub">backing the CNOVA value</div></div>
       <div class="card-sm" title="Guaranteed minimum redemption price — Treasury USDC ÷ total CNOVA supply."><div class="stat-label">CNOVA Floor Price</div><div class="stat-value green" id="stat-floor-price"><span class="spinner" style="color:var(--green)"></span></div><div class="stat-sub">per CNOVA token</div></div>
+      <div class="card-sm"><div class="stat-label">CNOVA Total Supply</div><div class="stat-value" id="stat-supply"><span class="spinner" style="color:var(--text3)"></span></div><div class="stat-sub">circulating CNOVA</div></div>
       <div class="card-sm" style="border-color:rgba(245,158,11,.4)"><div class="stat-label">System Cycles</div><div class="stat-value" id="stat-cycles" style="color:var(--yellow)"><span class="spinner" style="color:var(--yellow)"></span></div></div>
     </div>
 
 
-    <!-- CNOVA Mining -->
-    <div class="card" style="margin-bottom:24px">
-      <div class="section-title" style="margin-bottom:12px"><div class="dot"></div> <svg width="18" height="18" style="vertical-align:middle;border-radius:50%;margin-right:4px"><use href="#cnova-icon"/></svg> CNOVA Mining</div>
-      <div class="grid-4">
-        <div><div style="font-size:12px;color:var(--text3);margin-bottom:4px">Current Epoch</div><div style="font-weight:700;color:var(--yellow)" id="stat-epoch">—</div></div>
-        <div><div style="font-size:12px;color:var(--text3);margin-bottom:4px">Reward Per Entry</div><div style="font-weight:700;color:var(--green)" id="stat-reward">—</div></div>
-        <div><div style="font-size:12px;color:var(--text3);margin-bottom:4px">Stability Rescue Fund</div><div style="font-weight:700" id="stat-reserve">—</div></div>
-        <div><div style="font-size:12px;color:var(--text3);margin-bottom:4px">Community Wallet</div><div style="font-weight:700;color:#a855f7" id="stat-cw-balance">—</div></div>
-        <div><div style="font-size:12px;color:var(--text3);margin-bottom:4px">Total Supply</div><div style="font-weight:700" id="stat-supply">—</div></div>
-      </div>
+    <!-- CNOVA Mining Stats -->
+    <div class="grid-4" style="margin-bottom:24px">
+      <div class="card-sm"><div class="stat-label">Current Epoch</div><div class="stat-value" id="stat-epoch" style="color:var(--yellow)">—</div></div>
+      <div class="card-sm"><div class="stat-label">CNOVA Reward / Entry</div><div class="stat-value green" id="stat-reward">—</div></div>
+      <div class="card-sm"><div class="stat-label">Stability Rescue Fund</div><div class="stat-value" id="stat-reserve">—</div></div>
+      <div class="card-sm"><div class="stat-label">Community Wallet</div><div class="stat-value" id="stat-cw-balance" style="color:#a855f7">—</div></div>
     </div>
 
     <!-- Entry split -->
     <div class="card">
       <div class="section-title"><div class="dot"></div> Entry Fee Split — per $10 at T1</div>
-      <div class="split-row"><span class="split-label">🤝 L1 Direct Referrer</span><span><span class="split-amount">20%</span> <span class="split-pct">$2.00</span></span></div>
-      <div class="split-row"><span class="split-label">⛓️ Chain Pay (6 upline levels)</span><span><span class="split-amount">20%</span> <span class="split-pct">$2.00</span></span></div>
       <div class="split-row"><span class="split-label">🌀 Equalization Pool</span><span><span class="split-amount">33%</span> <span class="split-pct">$3.30</span></span></div>
+      <div class="split-row"><span class="split-label">⛓️ Chain Pay (6 upline levels)</span><span><span class="split-amount">20%</span> <span class="split-pct">$2.00</span></span></div>
+      <div class="split-row"><span class="split-label">🤝 L1 Direct Referrer</span><span><span class="split-amount">20%</span> <span class="split-pct">$2.00</span></span></div>
       <div class="split-row"><span class="split-label">🏦 CNOVA Treasury <span style="font-size:10px;color:var(--text3)">(floor backing)</span></span><span><span class="split-amount">15%</span> <span class="split-pct">$1.50</span></span></div>
-      <div class="split-row"><span class="split-label">⚙️ Dev + Ops</span><span><span class="split-amount">5%</span> <span class="split-pct">$0.50</span></span></div>
-      <div class="split-row"><span class="split-label">🌊 CNOVA Stability Fund <span style="font-size:10px;color:var(--text3)">(ops reserve)</span></span><span><span class="split-amount">6%</span> <span class="split-pct">$0.60</span></span></div>
+      <div class="split-row"><span class="split-label">🌊 CNOVA Stability Fund <span style="font-size:10px;color:var(--text3)">(rescue reserve)</span></span><span><span class="split-amount">5%</span> <span class="split-pct">$0.50</span></span></div>
+      <div class="split-row"><span class="split-label">⚙️ Dev</span><span><span class="split-amount">3%</span> <span class="split-pct">$0.30</span></span></div>
+      <div class="split-row"><span class="split-label">⚙️ Ops</span><span><span class="split-amount">2%</span> <span class="split-pct">$0.20</span></span></div>
+      <div class="split-row"><span class="split-label">🏛️ Community</span><span><span class="split-amount">1%</span> <span class="split-pct">$0.10</span></span></div>
       <div class="split-row"><span class="split-label">🔥 CNOVA Buyback Reserve</span><span><span class="split-amount">1%</span> <span class="split-pct">$0.10</span></span></div>
-      <div style="margin-top:8px;padding:8px 12px;background:rgba(168,85,247,.08);border:1px solid rgba(168,85,247,.25);border-radius:8px;font-size:12px;color:var(--text2);line-height:1.6">
-        🏛️ <strong style="color:#a855f7">Community Wallet</strong> — funded automatically from orphan fees (empty upline slots in the matrix tree). Not a fixed % split.
-      </div>
       <div style="margin-top:14px;padding:10px 14px;background:var(--green-dim);border:1px solid var(--green2);border-radius:8px;font-size:13px;color:var(--text2)">
         💡 <strong style="color:var(--green)">CryptoNova Matrix mechanic:</strong> Fill Matrix A → root crosses to Matrix B → fill B → root auto-upgrades to T2. The loop repeats for each tier.
       </div>
@@ -764,7 +759,7 @@
 
   <!-- ══ TIERS TAB ═══════════════════════════════════════════════════════ -->
   <div id="tab-tiers" class="tab-panel">
-    <div class="section-title" style="margin-bottom:16px"><div class="dot"></div> 7-Tier CryptoNova Matrix &#8212; Live Stats</div>
+    <div class="section-title" style="margin-bottom:16px"><div class="dot"></div> 10-Tier CryptoNova Matrix &#8212; Live Stats</div>
     <div class="card" style="margin-bottom:24px;overflow-x:auto">
       <table style="width:100%;border-collapse:collapse;font-size:13px">
         <thead><tr style="border-bottom:1px solid var(--border)">
@@ -914,6 +909,60 @@
         <div class="info-row"><span class="info-key">Pool Accumulator</span><span class="info-val green" id="t7b-pool">&#8212;</span></div>
         <div style="margin-top:10px"><div style="display:flex;justify-content:space-between;font-size:12px;color:var(--text3);margin-bottom:4px"><span>Fill progress</span><span id="t7b-pct">0%</span></div><div class="progress-wrap"><div class="progress-bar" id="t7b-bar" style="width:0%"></div></div></div>
         <div style="margin-top:10px;padding:10px 12px;background:var(--bg3);border-radius:8px;font-size:12px;color:var(--text3);line-height:1.6">T7 unlocks the $2,500+ whale tiers. Completing T7 earns a 70x CNOVA multiplier and opens T8-T10 upgrade eligibility.</div>
+      </div>
+    </div>
+
+    <div style="margin-bottom:8px;font-size:13px;font-weight:700;color:var(--text2);letter-spacing:.5px">T8 &#8212; SuperNova Titan &#183; $2,500</div>
+    <div class="grid-2" style="margin-bottom:20px">
+      <div class="card" style="opacity:0.85">
+        <div class="section-title" style="margin-bottom:12px"><div id="t8a-dot" class="dot" style="background:var(--yellow)"></div> T8 Matrix A &#8212; SuperNova Titan</div>
+        <div class="info-row"><span class="info-key">Seats Filled</span><span class="info-val"><span id="t8a-occ">&#8212;</span> / 127</span></div>
+        <div class="info-row"><span class="info-key">Matrix Cycles</span><span class="info-val green" id="t8a-cycles">&#8212;</span></div>
+        <div style="margin-top:10px"><div style="display:flex;justify-content:space-between;font-size:12px;color:var(--text3);margin-bottom:4px"><span>Fill progress</span><span id="t8a-pct">0%</span></div><div class="progress-wrap"><div class="progress-bar" id="t8a-bar" style="width:0%"></div></div></div>
+        <div style="margin-top:10px;padding:10px 12px;background:var(--bg3);border-radius:8px;font-size:12px;color:var(--text3);line-height:1.6">Gate opens when T7 MatB hits 80% fill. T7 graduates auto-upgrade.</div>
+      </div>
+      <div class="card" style="opacity:0.85">
+        <div class="section-title" style="margin-bottom:12px"><div id="t8b-dot" class="dot" style="background:var(--yellow)"></div> T8 Matrix B &#8212; Crossing Pool</div>
+        <div class="info-row"><span class="info-key">Seats Filled</span><span class="info-val"><span id="t8b-occ">&#8212;</span> / 127</span></div>
+        <div class="info-row"><span class="info-key">Pool Accumulator</span><span class="info-val green" id="t8b-pool">&#8212;</span></div>
+        <div style="margin-top:10px"><div style="display:flex;justify-content:space-between;font-size:12px;color:var(--text3);margin-bottom:4px"><span>Fill progress</span><span id="t8b-pct">0%</span></div><div class="progress-wrap"><div class="progress-bar" id="t8b-bar" style="width:0%"></div></div></div>
+        <div style="margin-top:10px;padding:10px 12px;background:var(--bg3);border-radius:8px;font-size:12px;color:var(--text3);line-height:1.6">T8 MatA alumni cross here. Full = root upgrades to T9.</div>
+      </div>
+    </div>
+
+    <div style="margin-bottom:8px;font-size:13px;font-weight:700;color:var(--text2);letter-spacing:.5px">T9 &#8212; SuperNova Legend &#183; $5,000</div>
+    <div class="grid-2" style="margin-bottom:20px">
+      <div class="card" style="opacity:0.85">
+        <div class="section-title" style="margin-bottom:12px"><div id="t9a-dot" class="dot" style="background:var(--yellow)"></div> T9 Matrix A &#8212; SuperNova Legend</div>
+        <div class="info-row"><span class="info-key">Seats Filled</span><span class="info-val"><span id="t9a-occ">&#8212;</span> / 127</span></div>
+        <div class="info-row"><span class="info-key">Matrix Cycles</span><span class="info-val green" id="t9a-cycles">&#8212;</span></div>
+        <div style="margin-top:10px"><div style="display:flex;justify-content:space-between;font-size:12px;color:var(--text3);margin-bottom:4px"><span>Fill progress</span><span id="t9a-pct">0%</span></div><div class="progress-wrap"><div class="progress-bar" id="t9a-bar" style="width:0%"></div></div></div>
+        <div style="margin-top:10px;padding:10px 12px;background:var(--bg3);border-radius:8px;font-size:12px;color:var(--text3);line-height:1.6">Gate opens when T8 MatB hits 80% fill. T8 graduates auto-upgrade.</div>
+      </div>
+      <div class="card" style="opacity:0.85">
+        <div class="section-title" style="margin-bottom:12px"><div id="t9b-dot" class="dot" style="background:var(--yellow)"></div> T9 Matrix B &#8212; Crossing Pool</div>
+        <div class="info-row"><span class="info-key">Seats Filled</span><span class="info-val"><span id="t9b-occ">&#8212;</span> / 127</span></div>
+        <div class="info-row"><span class="info-key">Pool Accumulator</span><span class="info-val green" id="t9b-pool">&#8212;</span></div>
+        <div style="margin-top:10px"><div style="display:flex;justify-content:space-between;font-size:12px;color:var(--text3);margin-bottom:4px"><span>Fill progress</span><span id="t9b-pct">0%</span></div><div class="progress-wrap"><div class="progress-bar" id="t9b-bar" style="width:0%"></div></div></div>
+        <div style="margin-top:10px;padding:10px 12px;background:var(--bg3);border-radius:8px;font-size:12px;color:var(--text3);line-height:1.6">T9 MatA alumni cross here. Full = root upgrades to T10.</div>
+      </div>
+    </div>
+
+    <div style="margin-bottom:8px;font-size:13px;font-weight:700;color:var(--text2);letter-spacing:.5px">T10 &#8212; SuperNova Apex &#183; $10,000</div>
+    <div class="grid-2" style="margin-bottom:20px">
+      <div class="card" style="opacity:0.85">
+        <div class="section-title" style="margin-bottom:12px"><div id="t10a-dot" class="dot" style="background:var(--yellow)"></div> T10 Matrix A &#8212; SuperNova Apex</div>
+        <div class="info-row"><span class="info-key">Seats Filled</span><span class="info-val"><span id="t10a-occ">&#8212;</span> / 127</span></div>
+        <div class="info-row"><span class="info-key">Matrix Cycles</span><span class="info-val green" id="t10a-cycles">&#8212;</span></div>
+        <div style="margin-top:10px"><div style="display:flex;justify-content:space-between;font-size:12px;color:var(--text3);margin-bottom:4px"><span>Fill progress</span><span id="t10a-pct">0%</span></div><div class="progress-wrap"><div class="progress-bar" id="t10a-bar" style="width:0%"></div></div></div>
+        <div style="margin-top:10px;padding:10px 12px;background:var(--bg3);border-radius:8px;font-size:12px;color:var(--text3);line-height:1.6">Gate opens when T9 MatB hits 80% fill. T9 graduates auto-upgrade.</div>
+      </div>
+      <div class="card" style="opacity:0.85">
+        <div class="section-title" style="margin-bottom:12px"><div id="t10b-dot" class="dot" style="background:var(--yellow)"></div> T10 Matrix B &#8212; Crossing Pool</div>
+        <div class="info-row"><span class="info-key">Seats Filled</span><span class="info-val"><span id="t10b-occ">&#8212;</span> / 127</span></div>
+        <div class="info-row"><span class="info-key">Pool Accumulator</span><span class="info-val green" id="t10b-pool">&#8212;</span></div>
+        <div style="margin-top:10px"><div style="display:flex;justify-content:space-between;font-size:12px;color:var(--text3);margin-bottom:4px"><span>Fill progress</span><span id="t10b-pct">0%</span></div><div class="progress-wrap"><div class="progress-bar" id="t10b-bar" style="width:0%"></div></div></div>
+        <div style="margin-top:10px;padding:10px 12px;background:var(--bg3);border-radius:8px;font-size:12px;color:var(--text3);line-height:1.6">The apex tier. T10 root is the final SuperNova Apex position — the pinnacle of the CryptoNova Matrix.</div>
       </div>
     </div>
   </div>
@@ -1585,6 +1634,8 @@
     <span style="color:var(--border)">|</span>
     <a href="faq.html" style="color:var(--text2);text-decoration:none;transition:color .2s" onmouseover="this.style.color='var(--green)'" onmouseout="this.style.color='var(--text2)'">FAQ &amp; Glossary</a>
     <span style="color:var(--border)">|</span>
+    <a href="compensation.html" style="color:var(--text2);text-decoration:none;transition:color .2s" onmouseover="this.style.color='var(--green)'" onmouseout="this.style.color='var(--text2)'">Compensation Plan</a>
+    <span style="color:var(--border)">|</span>
     <span>© 2026 CryptoNova. Smart contracts are immutable and open-source.</span>
   </div>
 </footer>
@@ -1603,7 +1654,7 @@ const CHAIN_ID = 84532;
   // 12:00 PM EDT (noon Eastern) = 16:00 UTC on June 12 2026.
   // This is a FIXED UTC timestamp — same countdown for every viewer worldwide.
   // To reschedule: update this ISO string.
-  const LAUNCH_UTC = new Date('2026-06-12T16:00:00Z'); // noon EDT = 16:00 UTC
+  const LAUNCH_UTC = new Date('2026-06-19T16:00:00Z'); // noon EDT = 16:00 UTC
 
   // Major city local equivalents — shown below the countdown
   const CITY_ZONES = [
@@ -1680,63 +1731,63 @@ const RPC_FALLBACK = 'https://base-sepolia.public.blastapi.io';
 
 const ADDRS = {
   usdc:          '0x2D8B7b5eDec96bE441b6fb0D45D74a2BcE2C639a',
-  cnova:         '0xeAAA7d8CAA315d17321524790E52D55971b03777',
-  treasury:      '0x5Be91D0C6493F923220C18cb4f6779F6e79f3ECE',
-  stabilityFund: '0x1f375CEcB492Ba544437683DFC2A6B1AC700150C',
-  buybackReserve:'0x4BcB5A7E209269A145aC823e4539166B8E445c9f',
-  tierRouter:    '0x44aD72D63d501F5d2893F1A15Df8DDfB174E56d7',
-  matrixKeeper:  '0x95a69F7d1735174F314b32f97c32b7e8E515C002',
-  v8Governance:  '0xbAadA4830939fAC3c31C0a896c9c009D828FFC76',
-  communityWallet:'0xbF0C84Cc30D38Ced2F16aC729472Fc8808369D50',
+  cnova:         '0xBa2592aef54225C1d77898740296b656227BDcbc',
+  treasury:      '0x79D308455969f5e943C7BBc52C87A4681Eec6052',
+  stabilityFund: '0x3fF7B59c8FFFc85F267131484dC1bF71DED9Ecd6',
+  buybackReserve:'0x5162e64344dcBe278E0013b60581b969Fb7A7522',
+  tierRouter:    '0x9bdb62Ac866F222c7062398F891eC860c1F89034',
+  matrixKeeper:  '0xEDAb96F480585b572c17dB612aBbA64830d3Dd85',
+  v8Governance:  '0x22e9322011AC786D3c584e029262e108c0eC8415',
+  communityWallet:'0x525D14dA6042cd0223388E922a8FA8E91eC2304D',
   T1: {
-    pm:   '0x31Fe8e59459CebAf967edbF86CFfd4598632b666',
-    matA: '0x6f42Cf432D82cB0ce33B572b73F31b9e58ae978e',
-    matB: '0xE7557506b2a766DbeF5BA3841baC865E36C0991E',
+    pm:   '0x2638c81CE7a8541A125640f1Af5A23eA2C3e3180',
+    matA: '0x68f61839354f3FbceebD9662E5301B1EaeD5a862',
+    matB: '0x620be4FC94D70B109467eDE4A71176221b005497',
   },
   T2: {
-    pm:   '0xdA60fdB045c9E156ce71140b0BF51Ac8ff55aDd8',
-    matA: '0x5B70F232D73bc4fE1e29E469DBDF168c3289B47d',
-    matB: '0x0E984030b43d9FB71044f31142215101A60036c7',
+    pm:   '0x570704D0C9Ec0DFf24dd0799ECdc2eaFa391EA4B',
+    matA: '0xdcb22C24B4383112dbE2f83b8A8C41941b24aE62',
+    matB: '0xC110aa8086fe2A3B46E52f44F564dA7849151275',
   },
   T3: {
-    pm:   '0xb2c744dc4089D050a56A9D1c49Be37084da65E59',
-    matA: '0xcb52F16926699cbd2287D518D4EfDfFC5f2E7cEd',
-    matB: '0xCFb8C3EeE6d71a1F39b1Ae103892EC215FA47c60',
+    pm:   '0x9893211DA58905eF61F1B243887080f328270e4d',
+    matA: '0xFA08b08B87a9BD1608acaE189b0Fc9F35B06828a',
+    matB: '0x85728Ac177f72EcD2E10dFc346b25Be08C79e48b',
   },
   T4: {
-    pm:   '0xdE30066F79822ab8997fd46d21E72e20985AC4Dc',
-    matA: '0xe2A119443bAe10286DFacB75248E0b9Dc998C380',
-    matB: '0x98601fE894e9341Ed5d7488Fc852b349DcFc2353',
+    pm:   '0x6C7EB801C62a643836f1315EEd3B5C08fa714d29',
+    matA: '0x71043205ed5F83c853E2089570112f300d702C75',
+    matB: '0x2aeBBEB17682b83271Ea683Ce5215AD59dAd95e2',
   },
   T5: {
-    pm:   '0x54d5A9c82F1Aa94f89712FC66B22b9c79abbB075',
-    matA: '0xD0D79874F31962e8467E1a70183DB1Cb1079975c',
-    matB: '0xE56Fe0794fC42ab2A1167aAFED39c0b87fA1EB2b',
+    pm:   '0x3ee03E1d846cB9709AE04d54a8f4804ed4c31F35',
+    matA: '0xF71014127bf5A752e5E69EDC129955358db38104',
+    matB: '0x8cbb563eC84cAb5A154d6943724f99bbdB80c9D5',
   },
   T6: {
-    pm:   '0x5cEe72a04bfFFDC62841C5c39B81d619001066eF',
-    matA: '0xBeaF7909256F6Ec17b4C48Df2FD2fAd6683B4957',
-    matB: '0x65E0B1a07975013c4569393b375e26a60728fD83',
+    pm:   '0x0562D9A9F14c62Bb56f8Dda70cD7C2A7f6640E3e',
+    matA: '0x99459c720004890890947563DD3baFfFAc95EaEf',
+    matB: '0x7308b031d6DA4E3CAb3da46F31571c6E07003dF8',
   },
   T7: {
-    pm:   '0x1b46FbF4ebd4A22eA2713E41ad31fce8d3C1243B',
-    matA: '0xB6F1844f86182857345B3EA701982E3715c2Af7e',
-    matB: '0xe75FEeA8fC07F1818c8cd9f67C8712F65010b50e',
+    pm:   '0xfb0d50CF6d5C1b9C3CCb681162970bea613D3718',
+    matA: '0x59Bc01032167057736c1f8D2a548181a728bC850',
+    matB: '0xb8ee6604DeD74BAC555B6571fd913618C7ecD8Fa',
   },
   T8: {
-    pm:   '0xEf80e42b5a6025382fB98d414Db3839A28a95F9c',
-    matA: '0x7569AC9FDcf487dDFCBfAD5B5c2b97459D8733Da',
-    matB: '0x84153189FB98503610Ca06F06e31B105aEE7D4c4',
+    pm:   '0xAA20A1050b6EF9bbD9B360036e5372f01FB3e063',
+    matA: '0x55D5b59Ceb2D40A6E523Dcc43b344E2A53811713',
+    matB: '0x19AB9E3D7795188c3c87476F2B4474846EfA87b5',
   },
   T9: {
-    pm:   '0xf057FFB28854e5a8eC55DC83627878ad9451f05b',
-    matA: '0xC9432946183b545a0e9ca9eCCAE5f1A10181F217',
-    matB: '0x5116a6806B640995887BB39829D4683E4F640C58',
+    pm:   '0x9687Cf356bD77428C6557086e0E618FbdBF63f43',
+    matA: '0x1343dB1E7dE3336b6a4A8bbc9Dd7A3476647aB99',
+    matB: '0x611a2cBa118d6e1E7De625df98D0257E99ADF66A',
   },
   T10: {
-    pm:   '0x0253951c84D8abE110016d034730695d5511986E',
-    matA: '0xfDA591EFf27806Cf9f88aB24b02d5c7Dc1716169',
-    matB: '0x40FF01246324F0d3337469f3e4462BE14F6477aA',
+    pm:   '0x285962D3C3c94f27b3fB6e6374a49F847b6ADb1e',
+    matA: '0xd9D370d0f29EE1777cf12F71bDD8c96F307E63D3',
+    matB: '0x425B1FAB4600C23163656A11eE6D402aD5a41fc0',
   },
 };
 
@@ -2115,7 +2166,7 @@ async function loadHomeStats() {
     if (barB3) barB3.style.width = pctB3+'%';
 
     // Epoch
-    const EPOCH_NAMES = ['Genesis','Pioneer','Expansion','Momentum','Apex','Legacy'];
+    const EPOCH_NAMES = ['Nebula Genesis','Mercury Rise','Lunar Cluster','Aurora Zenith','Solaris Echo','Cosmic Core','Galaxy Grid','Supernova Spark','Final Frontier'];
     const epochNum = Math.max(1, Number(epoch));
     const epochLabel = `Epoch ${epochNum} — ${EPOCH_NAMES[epochNum-1] || 'Era '+epochNum}`;
     setText('stat-epoch', epochLabel);
@@ -2634,6 +2685,7 @@ async function loadDashboardData() {
     setText('dash-orig-referrer',  memberReferrer && memberReferrer !== ethers.ZeroAddress
       ? memberReferrer.slice(0,6)+'…'+memberReferrer.slice(-4) : 'Direct');
 
+<<<<<<< HEAD
     // Direct referrals count — event scan (fire-and-forget, doesn't block render)
     (async () => {
       try {
@@ -2655,6 +2707,18 @@ async function loadDashboardData() {
       } catch(e) {
         setText('dash-directs', '0');
       }
+=======
+    // Direct referrals count — fire-and-forget event scan
+    (async () => {
+      try {
+        const trD = new ethers.Contract(ADDRS.tierRouter, TIER_ROUTER_ABI, rp);
+        const logs = await trD.queryFilter(trD.filters.MemberRegistered(), 0).catch(async () =>
+          trD.queryFilter(trD.filters.MemberRegistered(), -100000).catch(() => [])
+        );
+        const count = logs.filter(l => l.args?.referrer?.toLowerCase() === userAddr.toLowerCase()).length;
+        setText('dash-directs', count.toString());
+      } catch(_) { setText('dash-directs', '0'); }
+>>>>>>> v8
     })();
 
     // Withdraw button
@@ -3227,281 +3291,4 @@ function showTab(name) {
   if (navBtns[idx]) navBtns[idx].classList.add('active');
   if (name === 'register') { if (userAddr) loadRegisterTab(); }
   if (name === 'dashboard') { loadDashboardData(); loadRedeemData(); }
-  if (name === 'matrix') { loadQueueView(); setActiveMatrixBtn('btn-load-tree'); }
-  if (name === 'home') loadHomeStats();
-  if (name === 'tiers') loadTiersStats();
-}
-
-// ═══════════════════════════════════════════════════════════════════════
-// HELPERS
-// ═══════════════════════════════════════════════════════════════════════
-function short(addr) {
-  if (!addr || addr === ethers.ZeroAddress) return '—';
-  return addr.slice(0,6)+'…'+addr.slice(-4);
-}
-function fmt6(n) {
-  const v = Number(BigInt(n)) / 1e6;
-  return '$' + v.toFixed(2);
-}
-function setText(id, val) {
-  const el = document.getElementById(id);
-  if (el) el.textContent = val;
-}
-function showEl(id) { const el = document.getElementById(id); if (el) el.style.display = 'block'; }
-function hideEl(id) { const el = document.getElementById(id); if (el) el.style.display = 'none'; }
-
-let _toastTimer;
-function toast(msg, type='info') {
-  const el = document.getElementById('toast');
-  if (!el) return;
-  el.textContent = msg;
-  el.className = type;
-  el.style.opacity = '1';
-  el.style.transform = 'translateY(0)';
-  clearTimeout(_toastTimer);
-  _toastTimer = setTimeout(() => {
-    el.style.opacity = '0';
-    el.style.transform = 'translateY(8px)';
-  }, 3500);
-}
-
-function setStatus(id, msg, type) {
-  const el = document.getElementById(id);
-  if (!el) return;
-  el.textContent = msg;
-  el.style.color = type === 'ok' ? 'var(--green)' : type === 'err' ? 'var(--red)' : 'var(--text2)';
-}
-
-function friendlyError(e) {
-  if (!e) return 'Unknown error';
-  const msg = e.reason || e.data?.message || e.message || String(e);
-  if (msg.includes('user rejected') || e.code === 4001) return 'Transaction cancelled.';
-  if (msg.includes('insufficient funds')) return 'Insufficient ETH for gas.';
-  if (msg.includes('already registered') || msg.includes('AlreadyJoined')) return 'This wallet is already registered.';
-  if (msg.includes('USDC') && msg.includes('allowance')) return 'USDC not approved — complete Step 1 first.';
-  if (msg.includes('execution reverted')) return 'Transaction reverted: ' + (msg.split('execution reverted:')[1]||'').trim().slice(0,80);
-  return msg.slice(0, 120);
-}
-
-async function addCNOVAtoMetaMask() {
-  if (!window.ethereum) return;
-  try {
-    await window.ethereum.request({
-      method: 'wallet_watchAsset',
-      params: { type: 'ERC20', options: { address: ADDRS.cnova, symbol: 'CNOVA', decimals: 18, image: '' }},
-    });
-  } catch(e) { console.error(e); }
-}
-
-async function addUSDCtoMetaMask() {
-  if (!window.ethereum) return;
-  try {
-    await window.ethereum.request({
-      method: 'wallet_watchAsset',
-      params: { type: 'ERC20', options: { address: ADDRS.usdc, symbol: 'USDC', decimals: 6 }},
-    });
-  } catch(e) { console.error(e); }
-}
-
-function checkDefaultSponsorWarn() {
-  const val = (document.getElementById('input-referrer')?.value || '').trim();
-  const warnEl = document.getElementById('default-sponsor-warn');
-  const btnApprove = document.getElementById('btn-approve');
-  if (!warnEl || !btnApprove) return;
-  if (btnApprove.textContent.includes('✅')) return; // already approved
-  if (val.length > 0 && ethers.isAddress(val)) {
-    warnEl.style.display = 'none';
-    btnApprove.disabled = false;
-    btnApprove.className = 'btn btn-green full-w';
-  } else if (val.length > 0) {
-    warnEl.style.display = 'none';
-    btnApprove.disabled = true;
-    btnApprove.className = 'btn btn-ghost full-w';
-  } else {
-    warnEl.style.display = 'block';
-    btnApprove.disabled = true;
-    btnApprove.className = 'btn btn-ghost full-w';
-  }
-}
-
-function copyReferralLink() {
-  const inp = document.getElementById('referral-url');
-  if (!inp) return;
-  navigator.clipboard.writeText(inp.value).then(() => {
-    const btn = document.getElementById('copy-ref-btn');
-    if (btn) { btn.textContent = 'Copied!'; setTimeout(()=>{ btn.textContent='Copy'; }, 2000); }
-  }).catch(() => {
-    inp.select(); document.execCommand('copy');
-  });
-}
-
-// ═══════════════════════════════════════════════════════════════════════
-// BOOT
-// ═══════════════════════════════════════════════════════════════════════
-document.addEventListener('DOMContentLoaded', async () => {
-  loadHomeStats();
-
-  // ── Launch gate ──────────────────────────────────────────────────────
-  if (!LAUNCH_READY) {
-    document.getElementById('launch-gate').classList.add('visible');
-    document.querySelectorAll('nav button').forEach(b => {
-      if (b.textContent.trim().startsWith('Register') || b.textContent.includes('Register')) {
-        b.style.opacity = '0.4';
-        b.style.pointerEvents = 'none';
-        b.title = 'Registration opens soon';
-      }
-    });
-  }
-
-  // Auto-reconnect on page load (silent — no popup)
-  if (window.ethereum && localStorage.getItem('cnova_connected')) {
-    try {
-      const accounts = await window.ethereum.request({ method: 'eth_accounts' });
-      if (accounts && accounts.length > 0) await connectWallet(true);
-      else localStorage.removeItem('cnova_connected');
-    } catch(e) {}
-  }
-
-  // Auto-fill referrer from URL ?ref=0x...
-  const urlRef = new URLSearchParams(window.location.search).get('ref');
-  if (urlRef && ethers.isAddress(urlRef)) {
-    const inp = document.getElementById('input-referrer');
-    if (inp) inp.value = urlRef;
-  }
-
-  // Wallet event listeners
-  if (window.ethereum) {
-    window.ethereum.on('accountsChanged', async (accounts) => {
-      if (accounts.length === 0) {
-        userAddr = null; signer = null;
-        localStorage.removeItem('cnova_connected');
-        const btn = document.getElementById('connect-btn');
-        if (btn) { btn.textContent = 'Connect Wallet'; btn.classList.remove('connected'); }
-        document.getElementById('referral-link-card').style.display = 'none';
-        document.getElementById('upgrade-card').style.display = 'none';
-      } else {
-        await connectWallet(true);
-      }
-    });
-    window.ethereum.on('chainChanged', () => window.location.reload());
-  }
-});
-
-async function approveUSDCForUpgrade() {
-  if (!signer) { toast('Connect your wallet first.', 'error'); return; }
-  // Support both register-tab (btn-upgrade-approve) and dashboard (btn-dash-approve) contexts
-  const btnReg  = document.getElementById('btn-upgrade-approve');
-  const btnDash = document.getElementById('btn-dash-approve');
-  const stReg   = document.getElementById('upgrade-status');
-  const stDash  = document.getElementById('upgrade-status-dash');
-  const setStatus = function(msg) {
-    if (stReg)  stReg.textContent  = msg;
-    if (stDash) stDash.textContent = msg;
-  };
-  const fee = window._upgradeCardFee || window._dashUpgradeFee || 25_000_000n;
-  try {
-    if (btnReg)  btnReg.disabled  = true;
-    if (btnDash) btnDash.disabled = true;
-    setStatus('Approving USDC...');
-    const usdc = new ethers.Contract(ADDRS.usdc, USDC_ABI, signer);
-    const tx   = await usdc.approve(ADDRS.tierRouter, fee);
-    setStatus('Waiting for confirmation...');
-    await tx.wait();
-    setStatus('✅ USDC approved. Now click Step 2 to upgrade.');
-    const btnManual = document.getElementById('btn-manual-upgrade');
-    const btnUp     = document.getElementById('btn-upgrade');
-    if (btnManual) { btnManual.disabled = false; btnManual.classList.remove('btn-ghost'); btnManual.classList.add('btn-green'); }
-    if (btnUp)     { btnUp.disabled     = false; btnUp.classList.remove('btn-ghost'); btnUp.classList.add('btn-green'); }
-  } catch(e) {
-    setStatus('❌ ' + (e.reason || e.message));
-    if (btnReg)  btnReg.disabled  = false;
-    if (btnDash) btnDash.disabled = false;
-  }
-}
-
-async function doManualUpgrade() {
-  if (!signer) { alert('Connect your wallet first.'); return; }
-  const btn    = document.getElementById('btn-manual-upgrade');
-  const status = document.getElementById('upgrade-status-dash');
-  const idx    = window._dashUpgradeTierIndex ?? 1;
-  try {
-    btn.disabled = true;
-    status.textContent = 'Submitting upgrade transaction...';
-    const tr = new ethers.Contract(ADDRS.tierRouter, TIER_ROUTER_ABI, signer);
-    const tx = await tr.manualUpgrade(idx, { gasLimit: 3_000_000 });
-    status.textContent = 'Transaction submitted. Waiting for confirmation...';
-    await tx.wait();
-    status.textContent = '🎉 Tier upgrade confirmed! Refreshing dashboard...';
-    setTimeout(() => loadDashboardData(), 2000);
-  } catch(e) {
-    status.textContent = '❌ ' + (e.reason || e.message);
-    btn.disabled = false;
-  }
-}
-function onUpgradeTierChange() {
-  const sel  = document.getElementById('upgrade-tier-select');
-  const hint = document.getElementById('upgrade-tier-hint');
-  if (!sel || !sel.value) { if (hint) hint.textContent = ''; return; }
-  const fees = { '1': 25_000_000n, '2': 50_000_000n, '3': 100_000_000n };
-  const fee  = fees[sel.value] || 25_000_000n;
-  window._upgradeCardFee     = fee;
-  window._upgradeCardTierIdx = Number(sel.value);
-  if (hint) hint.textContent = 'Entry fee: $' + (Number(fee) / 1_000_000) + ' USDC from your wallet';
-}
-
-async function checkUpgradeAllowance() {
-  if (!userAddr) { toast('Connect wallet first', 'error'); return; }
-  const rp   = readProvider || new ethers.JsonRpcProvider(RPC_URL, 84532, { staticNetwork: true });
-  const usdc = new ethers.Contract(ADDRS.usdc, USDC_ABI, rp);
-  const fee  = window._upgradeCardFee || 25_000_000n;
-  const al   = await usdc.allowance(userAddr, ADDRS.tierRouter).catch(() => 0n);
-  const btn  = document.getElementById('btn-upgrade');
-  if (btn) btn.disabled = al < fee;
-  toast(al >= fee ? '✅ Allowance confirmed — ready to upgrade' : '⏳ Not yet approved', al >= fee ? 'success' : 'info');
-}
-
-async function doUpgrade() {
-  if (!signer) { toast('Connect wallet first', 'error'); return; }
-  const btn    = document.getElementById('btn-upgrade');
-  const status = document.getElementById('upgrade-status');
-  const idx    = window._upgradeCardTierIdx ?? 1;
-  try {
-    if (btn) btn.disabled = true;
-    if (status) status.textContent = 'Submitting upgrade transaction...';
-    const tr = new ethers.Contract(ADDRS.tierRouter, TIER_ROUTER_ABI, signer);
-    const tx = await tr.manualUpgrade(idx, { gasLimit: 3_000_000 });
-    if (status) status.textContent = 'Waiting for confirmation...';
-    await tx.wait();
-    if (status) status.innerHTML = '<span style="color:var(--green)">🎉 Upgraded to T' + (idx + 1) + '! Check your Dashboard.</span>';
-    toast('Tier upgraded successfully!', 'success');
-    setTimeout(() => loadDashboardData(), 2000);
-  } catch(e) {
-    if (status) status.textContent = '❌ ' + (e.reason || e.message);
-    if (btn) btn.disabled = false;
-  }
-}
-
-
-// ── v8.6 helper: updateAddrsFromDeployed ─────────────────────────────────────
-// Paste deployed_addresses_v8_8.json content into window._v88Addrs then call this.
-// Example: fetch('deployed_addresses_v8_8.json').then(r=>r.json()).then(updateAddrsFromDeployed)
-function updateAddrsFromDeployed(d) {
-  if (!d) return;
-  if (d.usdc)          ADDRS.usdc          = d.usdc;
-  if (d.cnova)         ADDRS.cnova         = d.cnova;
-  if (d.stabilityFund) ADDRS.stabilityFund = d.stabilityFund;
-  if (d.tierRouter)    ADDRS.tierRouter    = d.tierRouter;
-  if (d.matrixKeeper)  ADDRS.matrixKeeper  = d.matrixKeeper;
-  const t = d.tiers || {};
-  for (let i = 1; i <= 10; i++) {
-    const tier = t[String(i)] || t[i];
-    if (tier) {
-      const key = 'T' + i;
-      ADDRS[key] = { pm: tier.pairManager || tier.pm || '', matA: tier.matA || '', matB: tier.matB || '' };
-    }
-  }
-  console.log('[v8.8] ADDRS updated from deployed JSON');
-}
-</script>
-</body>
-</html>
+  if (name === 'matrix') { loadQueueView(); s
