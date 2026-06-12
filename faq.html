@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>FAQ &amp; Glossary — CryptoNova Matrix V8</title>
+  <title>FAQ &amp; Glossary — CryptoNova</title>
   <style>
     :root{--bg:#0a0e1a;--bg2:#111827;--bg3:#1a2236;--border:#1f2d47;--green:#00e5a0;--green2:#00b37d;--green-dim:rgba(0,229,160,0.12);--blue:#3b82f6;--yellow:#f59e0b;--red:#ef4444;--text:#e2e8f0;--text2:#94a3b8;--text3:#64748b}
     *{box-sizing:border-box;margin:0;padding:0}
@@ -90,7 +90,7 @@ function toggleTheme() {
 <main>
 
   <div class="page-title">FAQ &amp; <span>Glossary</span></div>
-  <div class="page-subtitle">Common questions and term definitions for CryptoNova Matrix V8 &mdash; bookmark this page for quick reference.</div>
+  <div class="page-subtitle">Common questions and term definitions for CryptoNova &mdash; bookmark this page for quick reference.</div>
 
   <div class="search-wrap">
     <svg class="search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
@@ -105,7 +105,7 @@ function toggleTheme() {
     <div class="glossary-card" data-terms="bfs queue matrix position breadth first search">
       <div class="acronym">BFS Matrix</div>
       <div class="full-name">Breadth-First Search Matrix</div>
-      <div class="definition">CryptoNova Matrix V8 uses a 64-slot BFS (breadth-first) queue. Members fill positions level-by-level. When all 64 slots are filled, the root member cycles out, receives their pool payout, and the matrix resets for the next cycle. Position determines chain pay depth.</div>
+      <div class="definition">CryptoNova uses a 64-slot BFS (breadth-first) queue per tier. Members fill positions level-by-level. When all 64 slots are filled, the root member cycles out, receives their pool payout, and the matrix resets for the next cycle. Position determines chain pay depth.</div>
     </div>
 
     <div class="glossary-card" data-terms="cnova token reward crypto nova">
@@ -132,10 +132,10 @@ function toggleTheme() {
       <div class="definition">A stablecoin pegged 1:1 to the US Dollar, issued by Circle. The entry fee currency and payout currency for CryptoNova Matrix on the Base blockchain. Always carries 6 decimal places on-chain (1,000,000 = $1.00).</div>
     </div>
 
-    <div class="glossary-card" data-terms="tier router v8 smart contract architecture">
-      <div class="acronym">TierRouter</div>
+    <div class="glossary-card" data-terms="tier router smart contract architecture registration">
+      <div class="acronym">Entry Router</div>
       <div class="full-name">Multi-Tier Entry Router</div>
-      <div class="definition">The V8 smart contract that handles all member registrations. When you call register(), TierRouter determines your tier, routes your USDC to the correct PairManager, mints CNOVA, and records your referrer permanently on-chain.</div>
+      <div class="definition">The smart contract that handles all member registrations. When you register, it determines your tier, routes your USDC to the correct matrix pool, mints CNOVA, and records your referrer permanently on-chain.</div>
     </div>
 
     <div class="glossary-card" data-terms="pair manager matrix a b rotation cycle overflow">
@@ -165,13 +165,13 @@ function toggleTheme() {
     <div class="glossary-card" data-terms="epoch mining period halving cnova reward">
       <div class="acronym">Epoch</div>
       <div class="full-name">CNOVA Mining Period</div>
-      <div class="definition">An epoch is a CNOVA distribution period. Each epoch starts with a set reward per entry. After a threshold of entries, the epoch advances and the reward halves &mdash; similar to Bitcoin's halving. V8 epochs are named: Genesis, Pioneer, Expansion, Momentum, Apex, Legacy, Endgame, Infinity.</div>
+      <div class="definition">An epoch is a CNOVA distribution period. Each epoch starts with a set reward per entry. After a threshold of entries, the epoch advances and the reward halves &mdash; similar to Bitcoin's halving. CryptoNova epoch names in order: Genesis, Pioneer, Expansion, Momentum, Apex, Legacy, Endgame, Infinity.</div>
     </div>
 
     <div class="glossary-card" data-terms="original referrer referrer for life locked sponsor permanent">
       <div class="acronym">Original Referrer</div>
       <div class="full-name">Referrer For Life</div>
-      <div class="definition">The wallet that referred you when you first registered. Permanently locked on-chain by TierRouter and never changes &mdash; not even on tier upgrade. Your referrer earns the L1 referral bonus on your registration and on any tier upgrades you make.</div>
+      <div class="definition">The wallet that referred you when you first registered. Permanently locked on-chain and never changes &mdash; not even on tier upgrade. Your referrer earns the L1 referral bonus on your registration and on any tier upgrades you make.</div>
     </div>
 
     <div class="glossary-card" data-terms="roi return on investment earnings">
@@ -187,14 +187,14 @@ function toggleTheme() {
   <h2 id="started-heading">&#128640; Getting Started</h2>
   <div class="faq-list" id="faq-started">
 
-    <div class="faq-item" data-terms="what is cryptonova protocol matrix v8">
+    <div class="faq-item" data-terms="what is cryptonova protocol matrix">
       <button class="faq-question" onclick="toggleFaq(this)">
         What is CryptoNova Matrix?
         <svg class="faq-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="m6 9 6 6 6-6"/></svg>
       </button>
       <div class="faq-answer"><div class="faq-answer-inner">
-        <p>CryptoNova Matrix is a decentralized, autonomous smart contract protocol deployed on the Base blockchain. It runs a 7-tier BFS (breadth-first search) matrix compensation structure where participants pay an entry fee in USDC and receive payments from subsequent participants according to predefined on-chain rules.</p>
-        <p>V8 introduces a dual-matrix architecture (Matrix A + B per tier), a StabilityFund that backs the CNOVA token floor price, and a TierRouter that handles all tiers from a single entry point. The protocol is fully autonomous &mdash; no admin can pause, modify, or redirect funds.</p>
+        <p>CryptoNova Matrix is a decentralized, autonomous smart contract protocol deployed on the Base blockchain. It runs a 10-tier BFS (breadth-first search) matrix compensation structure where participants pay an entry fee in USDC and receive payments from subsequent participants according to predefined on-chain rules.</p>
+        <p>CryptoNova uses a dual-matrix architecture (Matrix A + B per tier), a StabilityFund that backs the CNOVA token floor price, and a unified smart contract entry point that handles all tiers seamlessly. The protocol is fully autonomous &mdash; no admin can pause, modify, or redirect funds.</p>
       </div></div>
     </div>
 
@@ -205,7 +205,7 @@ function toggleTheme() {
       </button>
       <div class="faq-answer"><div class="faq-answer-inner">
         <p>Connect a Web3 wallet (MetaMask, Coinbase Wallet, etc.) on the Base network. Make sure you have USDC for the entry fee plus a small amount of ETH for gas (under $0.10).</p>
-        <p>Go to the <strong>Register tab</strong>, enter a referral address (or leave blank for auto-assignment), approve USDC spending in Step 1, then click <strong>Join CryptoNova Matrix</strong> in Step 2. The TierRouter contract handles everything instantly.</p>
+        <p>Go to the <strong>Register tab</strong>, enter a referral address (or leave blank for auto-assignment), approve USDC spending in Step 1, then click <strong>Join CryptoNova Matrix</strong> in Step 2. The smart contract handles everything instantly.</p>
       </div></div>
     </div>
 
@@ -228,13 +228,15 @@ function toggleTheme() {
         <p>Tier 1 (Nova Seed) entry fee is <strong>$10.00 USDC</strong>. Fees scale with each tier up to Tier 7 (SuperNova Spark). You also need a small amount of ETH for gas &mdash; typically under $0.10 on Base.</p>
         <p>Your $10 T1 entry is split instantly by the smart contract:</p>
         <ul>
-          <li><strong>$2.00 (20%)</strong> &mdash; L1 referral bonus to your direct sponsor</li>
-          <li><strong>$0.50 (5%)</strong> &mdash; L2 + L3 override bonuses</li>
-          <li><strong>$2.00 (20%)</strong> &mdash; Chain pay distributed across 6 upline levels</li>
+          <li><strong>$2.00 (20%)</strong> &mdash; L1 direct referral bonus to your sponsor</li>
+          <li><strong>$2.00 (20%)</strong> &mdash; Chain pay distributed across 6 upline BFS levels</li>
           <li><strong>$3.30 (33%)</strong> &mdash; Equalization pool (funds matrix cycle payouts)</li>
-          <li><strong>$1.50 (15%)</strong> &mdash; StabilityFund (backs CNOVA floor price)</li>
-          <li><strong>$0.50 (5%)</strong> &mdash; Dev &amp; ops</li>
-          <li><strong>$0.20 (2%)</strong> &mdash; DAO treasury reserve</li>
+          <li><strong>$1.50 (15%)</strong> &mdash; CNOVA Treasury (backs CNOVA floor price)</li>
+          <li><strong>$0.50 (5%)</strong> &mdash; Stability Rescue Fund (CNOVA floor protection)</li>
+          <li><strong>$0.30 (3%)</strong> &mdash; Dev</li>
+          <li><strong>$0.20 (2%)</strong> &mdash; Ops</li>
+          <li><strong>$0.10 (1%)</strong> &mdash; Community Wallet</li>
+          <li><strong>$0.10 (1%)</strong> &mdash; CNOVA Buyback Reserve</li>
         </ul>
       </div></div>
     </div>
@@ -255,13 +257,13 @@ function toggleTheme() {
   <h2 id="matrix-heading">&#127760; How the Matrix Works</h2>
   <div class="faq-list" id="faq-matrix">
 
-    <div class="faq-item" data-terms="bfs matrix tree structure how works v8 64 slots">
+    <div class="faq-item" data-terms="bfs matrix tree structure how works cryptonova 64 slots">
       <button class="faq-question" onclick="toggleFaq(this)">
-        What is the V8 BFS Matrix?
+        What is the CryptoNova BFS Matrix?
         <svg class="faq-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="m6 9 6 6 6-6"/></svg>
       </button>
       <div class="faq-answer"><div class="faq-answer-inner">
-        <p>CryptoNova Matrix V8 uses a 64-slot breadth-first search (BFS) matrix per tier. Members fill positions level-by-level: position 1 (root), then positions 2&ndash;3, then 4&ndash;7, and so on. When you join, you take the next available BFS slot.</p>
+        <p>CryptoNova uses a 64-slot breadth-first search (BFS) matrix per tier. Members fill positions level-by-level: position 1 (root), then positions 2&ndash;3, then 4&ndash;7, and so on. When you join, you take the next available BFS slot.</p>
         <p>When all 64 slots are filled, the root member completes their cycle: they receive a payout from the equalization pool and re-enter at the next available position in the active matrix. The matrix then resets for the next wave.</p>
       </div></div>
     </div>
@@ -272,7 +274,7 @@ function toggleTheme() {
         <svg class="faq-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="m6 9 6 6 6-6"/></svg>
       </button>
       <div class="faq-answer"><div class="faq-answer-inner">
-        <p>Each tier in V8 has two matrices (A and B) that work as a pair. New members always go into the currently active matrix. When it fills and cycles, the system switches to the other matrix so there is always a ready queue.</p>
+        <p>Each tier in CryptoNova has two matrices (A and B) that work as a pair. New members always go into the currently active matrix. When it fills and cycles, the system switches to the other matrix so there is always a ready queue.</p>
         <p>The active matrix is shown on the Matrix tab. You can view your current position, which matrix you are in, and how many members are behind you.</p>
       </div></div>
     </div>
@@ -295,7 +297,7 @@ function toggleTheme() {
       </button>
       <div class="faq-answer"><div class="faq-answer-inner">
         <p>An epoch is a CNOVA mining period. Each epoch starts with a set CNOVA reward per entry. After a threshold number of entries, the epoch advances and the reward per entry is halved &mdash; similar to Bitcoin's halving mechanism. Early participants receive the highest CNOVA rewards.</p>
-        <p>V8 epoch names in order: <em>Genesis, Pioneer, Expansion, Momentum, Apex, Legacy, Endgame, Infinity</em>. The current epoch is displayed on the Home and Dashboard tabs.</p>
+        <p>CryptoNova epoch names in order: <em>Genesis, Pioneer, Expansion, Momentum, Apex, Legacy, Endgame, Infinity</em>. The current epoch is displayed on the Home and Dashboard tabs.</p>
       </div></div>
     </div>
 
@@ -313,11 +315,11 @@ function toggleTheme() {
 
     <div class="faq-item" data-terms="tier upgrade auto automatic t2 t3 advance">
       <button class="faq-question" onclick="toggleFaq(this)">
-        How do tier upgrades work in V8?
+        How do tier upgrades work?
         <svg class="faq-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="m6 9 6 6 6-6"/></svg>
       </button>
       <div class="faq-answer"><div class="faq-answer-inner">
-        <p>V8 includes an <strong>auto-upgrade system</strong>. When you complete a cycle at your current tier, a portion of your equalization pool payout is automatically used to register you at the next tier up &mdash; no manual action needed. Your original referrer is preserved across all tier upgrades.</p>
+        <p>CryptoNova includes an <strong>auto-upgrade system</strong>. When you complete a cycle at your current tier, a portion of your equalization pool payout is automatically used to register you at the next tier up &mdash; no manual action needed. Your original referrer is preserved across all tier upgrades.</p>
         <p>Higher tiers have larger entry fees, larger chain pay amounts, and larger cycle payouts. You can also be upgraded manually from the Dashboard if you have sufficient earnings.</p>
       </div></div>
     </div>
@@ -334,14 +336,14 @@ function toggleTheme() {
         <svg class="faq-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="m6 9 6 6 6-6"/></svg>
       </button>
       <div class="faq-answer"><div class="faq-answer-inner">
-        <p>Every $10 T1 entry generates income across three streams:</p>
+        <p>Every $10 T1 entry generates income across four streams:</p>
         <ul>
-          <li><strong>Referral bonus &mdash; $2.00 (20%)</strong> &mdash; paid instantly to your direct sponsor. You earn this every time someone you referred joins or auto-upgrades.</li>
-          <li><strong>Chain pay &mdash; $2.00 total (20%)</strong> &mdash; distributed across 6 upline BFS positions: L1 earns $1.00, L2 $0.40, L3 $0.30, L4 $0.15, L5 $0.08, L6 $0.08.</li>
+          <li><strong>Direct referral bonus &mdash; $2.00 (20%)</strong> &mdash; paid instantly to your direct sponsor. You earn this every time someone you referred joins or auto-upgrades.</li>
+          <li><strong>Chain pay &mdash; $2.00 total (20%)</strong> &mdash; distributed across 6 upline BFS positions as each new member fills a slot below you.</li>
           <li><strong>Equalization pool &mdash; $3.30 (33%)</strong> &mdash; accumulates and pays out to the root member when a full cycle (64 fills) completes, then restarts.</li>
           <li><strong>CNOVA tokens</strong> &mdash; minted and sent to your wallet on every new entry. Amount decreases each epoch (halving model). Starting at 50 CNOVA per $10 entry in Genesis epoch.</li>
         </ul>
-        <p>Override bonuses (L2 $0.30 + L3 $0.20) go to deeper upline levels. StabilityFund, DevOps, and Treasury splits are protocol reserves and not directly withdrawable by individual members.</p>
+        <p>The remaining split goes to protocol reserves (CNOVA Treasury, Stability Rescue Fund, Dev, Ops, Community Wallet, Buyback Reserve) — these are not directly withdrawable by individual members but back the protocol's long-term health.</p>
       </div></div>
     </div>
 
@@ -389,7 +391,7 @@ function toggleTheme() {
         <svg class="faq-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="m6 9 6 6 6-6"/></svg>
       </button>
       <div class="faq-answer"><div class="faq-answer-inner">
-        <p>When you first register, the wallet that referred you is recorded on-chain by TierRouter as your <strong>original referrer</strong> and locked permanently &mdash; it never changes, even across tier upgrades.</p>
+        <p>When you first register, the wallet that referred you is recorded permanently on-chain as your <strong>original referrer</strong> and locked forever &mdash; it never changes, even across tier upgrades.</p>
         <p>Your referrer earns the <strong>$2.00 L1 referral bonus</strong> whenever you register at any tier. This rewards the person who brought you in for your lifetime participation.</p>
       </div></div>
     </div>
@@ -444,7 +446,7 @@ function toggleTheme() {
         <svg class="faq-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="m6 9 6 6 6-6"/></svg>
       </button>
       <div class="faq-answer"><div class="faq-answer-inner">
-        <p>CNOVA is the native reward token of CryptoNova Matrix. It is minted and distributed to participants each time a new member joins via TierRouter. It is <strong>not a stablecoin</strong> and not a security &mdash; it is an in-protocol utility token with a rising floor price mechanism.</p>
+        <p>CNOVA is the native reward token of CryptoNova Matrix. It is minted and distributed to participants each time a new member joins. It is <strong>not a stablecoin</strong> and not a security &mdash; it is an in-protocol utility token with a rising floor price mechanism.</p>
         <p>Starting CNOVA reward at Genesis epoch: <strong>50 CNOVA per $10 entry</strong>. This halves with each epoch advance. Total supply is capped at 100,000,000 CNOVA.</p>
       </div></div>
     </div>
@@ -498,7 +500,7 @@ function toggleTheme() {
         <svg class="faq-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="m6 9 6 6 6-6"/></svg>
       </button>
       <div class="faq-answer"><div class="faq-answer-inner">
-        <p>The CryptoNova Matrix V8 contracts have undergone extensive internal testing including a full unit test suite (26/26 passing) and stress tests on Base Sepolia testnet. Source code is verified and publicly readable on BaseScan. Despite all efforts, smart contracts may still contain undiscovered bugs &mdash; participation always carries smart contract risk.</p>
+        <p>The CryptoNova contracts have undergone extensive internal testing including a comprehensive unit test suite and large-scale stress tests on Base Sepolia testnet. Source code is verified and publicly readable on BaseScan. Despite all efforts, smart contracts may still contain undiscovered bugs &mdash; participation always carries smart contract risk.</p>
       </div></div>
     </div>
 
@@ -508,7 +510,7 @@ function toggleTheme() {
         <svg class="faq-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="m6 9 6 6 6-6"/></svg>
       </button>
       <div class="faq-answer"><div class="faq-answer-inner">
-        <p>All V8 contracts (TierRouter, FigureEightMatrixV8, CNOVAToken, StabilityFund, MatrixFactory, MatrixKeeper, V8Governance, CNOVATreasury, PairManager) are deployed and verifiable on <a href="https://sepolia.basescan.org" target="_blank" rel="noopener" style="color:var(--blue)">sepolia.basescan.org</a>. Search for the contract addresses shown in the app footer or Dashboard to read full source code and transaction history.</p>
+        <p>All CryptoNova contracts are deployed and verifiable on <a href="https://sepolia.basescan.org" target="_blank" rel="noopener" style="color:var(--blue)">sepolia.basescan.org</a>. Search for the contract addresses shown in the app footer or Dashboard to read full source code and transaction history.</p>
       </div></div>
     </div>
 
@@ -519,7 +521,7 @@ function toggleTheme() {
       </button>
       <div class="faq-answer"><div class="faq-answer-inner">
         <p><strong>No.</strong> The core matrix logic, fee splits, and StabilityFund mechanics are immutable once deployed. No party can alter entry fee distributions, redirect USDC, or access participant funds in the matrix contracts.</p>
-        <p>The V8Governance contract handles protocol-level settings and is subject to timelock delays and community approval. The team cannot unilaterally drain the StabilityFund or Treasury.</p>
+        <p>The governance contract handles protocol-level settings and is subject to timelock delays and community approval. The team cannot unilaterally drain the StabilityFund or Treasury.</p>
       </div></div>
     </div>
 
@@ -529,7 +531,7 @@ function toggleTheme() {
         <svg class="faq-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="m6 9 6 6 6-6"/></svg>
       </button>
       <div class="faq-answer"><div class="faq-answer-inner">
-        <p>CryptoNova Matrix V8 is deployed on <strong>Base Sepolia testnet</strong> for community testing. Base is an Ethereum L2 built by Coinbase, offering fast, low-cost transactions (typically under $0.01). Mainnet launch on Base mainnet follows the successful completion of the testnet phase.</p>
+        <p>CryptoNova is deployed on <strong>Base Sepolia testnet</strong> for community testing. Base is an Ethereum L2 built by Coinbase, offering fast, low-cost transactions (typically under $0.01). Mainnet launch on Base mainnet follows the successful completion of the testnet phase.</p>
       </div></div>
     </div>
 
