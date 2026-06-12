@@ -365,7 +365,7 @@
       <span id="bn-s">00</span>s
     </div>
     <div class="bn-sep">|</div>
-    <div class="bn-date">Friday June 12 &bull; 12:00 PM Eastern</div>
+    <div class="bn-date">Friday June 19 &bull; 12:00 PM Eastern</div>
     <div class="bn-live" id="bn-live">&#x1F7E2; We&rsquo;re Live &mdash; Register Now!</div>
   </div>
 
@@ -677,7 +677,7 @@
   <div id="tab-home" class="tab-panel active">
     <div class="hero">
       <h1>CryptoNova Matrix<br><span>on Base Chain</span></h1>
-      <p>Join the CryptoNova Matrix. Start at T1 ($10 USDC) and auto-upgrade through 7 tiers. Earn referral bonuses, chain pay, and CNOVA tokens — all on Base Chain.</p>
+      <p>Join the CryptoNova Matrix. Start at T1 ($10 USDC) and auto-upgrade through 10 tiers. Earn referral bonuses, chain pay, and CNOVA tokens — all on Base Chain.</p>
       <div class="hero-actions">
         <button class="btn-primary" onclick="showTab('register')">Join Now — $10 USDC</button>
         <button class="btn-outline" onclick="showTab('dashboard')">View Dashboard</button>
@@ -2746,29 +2746,6 @@ async function loadDashboardData() {
     setText('dash-orig-referrer',  memberReferrer && memberReferrer !== ethers.ZeroAddress
       ? memberReferrer.slice(0,6)+'…'+memberReferrer.slice(-4) : 'Direct');
 
-<<<<<<< HEAD
-    // Direct referrals count — event scan (fire-and-forget, doesn't block render)
-    (async () => {
-      try {
-        const trD = new ethers.Contract(ADDRS.tierRouter, TIER_ROUTER_ABI, rp);
-        // Use -50000 blocks (~28 hrs on Base Sepolia at 2s/block) as primary.
-        // Covers all V8.9 history without timing out the public RPC.
-        const fetchLogs = (fromBlock) =>
-          trD.queryFilter(trD.filters.MemberRegistered(), fromBlock);
-        let logs;
-        try       { logs = await fetchLogs(-50000); }
-        catch(_)  {
-          try     { logs = await fetchLogs(-100000); }
-          catch(__){ logs = []; }
-        }
-        const count = logs.filter(
-          l => l.args?.referrer?.toLowerCase() === userAddr.toLowerCase()
-        ).length;
-        setText('dash-directs', count.toString());
-      } catch(e) {
-        setText('dash-directs', '0');
-      }
-=======
     // Direct referrals count — fire-and-forget event scan
     (async () => {
       try {
@@ -2779,7 +2756,6 @@ async function loadDashboardData() {
         const count = logs.filter(l => l.args?.referrer?.toLowerCase() === userAddr.toLowerCase()).length;
         setText('dash-directs', count.toString());
       } catch(_) { setText('dash-directs', '0'); }
->>>>>>> v8
     })();
 
     // Withdraw button
