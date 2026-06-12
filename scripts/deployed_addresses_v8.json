@@ -1,0 +1,27 @@
+{
+  "network": "baseSepolia",
+  "deployedAt": "2026-06-06T03:47:45.051Z",
+  "deployedAtBlock": 42474689,
+  "matrixSize": 15,
+  "phase": "Phase1_T1_T2",
+  "AccountOne": "0x6512e9B5FE1690F2570AFEE5E7b904EF106C9435",
+  "USDC": "0x2D8B7b5eDec96bE441b6fb0D45D74a2BcE2C639a",
+  "CNOVAToken": "0x95516F39451376D50aed15Dbc6e49343C4a7ae90",
+  "CNOVATreasury": "0xFb92a735214c3FdCAEda1334147818cbD5001605",
+  "CNOVAGovernance": "0xa85aab198c86874Ada5F7D02484047f40477F289",
+  "TierRouter": "0x1b075F22B5f756f7Aca7098500cA0548745Fa104",
+  "T1": {
+    "entryFee": "$10",
+    "PairManager": "0x04450072516a3d40127E0a04723a4C1AbE985b0c",
+    "MatrixA": "0x5EF2B86304D0894f2584cC74182b399DbB89bB4e",
+    "MatrixB": "0x3E689379929f91a82abD098D9C35959C1e877F43"
+  },
+  "T2": {
+    "entryFee": "$25",
+    "PairManager": "0x9318489C01aF099499ec12Fc016934E00c4B1922",
+    "MatrixA": "0x37D9Ef20E8d76Cd9C2d94A4f1D013b14026D6Ae6",
+    "MatrixB": "0x8BA5967bDc1E642541Ba29bAd65Cb7538Dc8302A"
+  },
+  "devOpsWallet": "0x7fc2158892F14b9A1fB6e39B788d4d08daF49C0a",
+  "adminWallet": "0xCd0Af6a4116f2062c1594aDf34c1821D45175506"
+}

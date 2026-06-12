@@ -30,7 +30,7 @@ contract MatrixFactory {
     address public immutable stabilityFund;
     address public immutable matrixKeeper;
 
-    uint8 public constant MAX_TIERS = 7;
+    uint8 public constant MAX_TIERS = 10;  // V8.7: expanded from 7 → 10 tiers
 
     // -- Per-tier configuration -----------------------------------------------
     address[MAX_TIERS]        internal pairManagerPerTier;

@@ -1,5 +1,5 @@
 /**
- * push_parked.js — rescue parked wallets from T1 MatA into MatB (V8.8)
+ * push_parked.js — rescue parked wallets from T1 MatA into MatB (V8.10)
  *
  * WHY: checkUpkeep() reverts (calls tierVelocityGreen(uint8) which is broken
  * on the deployed contract), so Chainlink Automation never fires. Parked members
@@ -28,17 +28,26 @@ const BATCH_SIZE   = Number(process.env.BATCH || 10);
 const GAS_NORMAL   = 800_000;
 const GAS_OVERFLOW = 15_000_000;
 
-// ── V8.9 Addresses ────────────────────────────────────────────────────────────
-const MATRIX_KEEPER = '0x95a69F7d1735174F314b32f97c32b7e8E515C002';
-const T1_MATA       = '0x6f42Cf432D82cB0ce33B572b73F31b9e58ae978e';
-const T1_MATB       = '0xE7557506b2a766DbeF5BA3841baC865E36C0991E';
+// ── Addresses (loaded from deployed_addresses_v8_10.json) ────────────────────
+const { fs: _fs, path: _path } = { fs: require('fs'), path: require('path') };
+const ADDR_FILE = _path.join(__dirname, process.env.ADDRESSES_FILE || 'deployed_addresses_v8_10.json');
+if (!_fs.existsSync(ADDR_FILE)) {
+  console.error(`\n❌  ${ADDR_FILE} not found. Run deploy_v8.js first.`);
+  process.exit(1);
+}
+const _addrs = JSON.parse(_fs.readFileSync(ADDR_FILE, 'utf8'));
+const T1_ADDRS    = _addrs.tiers?.['T1'] ?? _addrs.tiers?.['1'] ?? {};
+const MATRIX_KEEPER = _addrs.matrixKeeper;
+const T1_MATA       = T1_ADDRS.matA;
+const T1_MATB       = T1_ADDRS.matB;
+const TIER_ROUTER   = _addrs.tierRouter;
+const W1_ADDR       = process.env.W1_ADDRESS || _addrs.w1Address || ''; // set W1_ADDRESS in .env
+console.log(`📂  Loaded: ${_path.basename(ADDR_FILE)}  MatrixKeeper=${MATRIX_KEEPER?.slice(0,10)}...`);
 
 // WORK_PARKED_RESCUE = 4 (from MatrixKeeper.sol)
 const WORK_PARKED_RESCUE = 4;
 
 // ── ABIs ──────────────────────────────────────────────────────────────────────
-const TIER_ROUTER = '0x44aD72D63d501F5d2893F1A15Df8DDfB174E56d7';
-const W1_ADDR     = '0x6512e9B5FE1690F2570AFEE5E7b904EF106C9435';
 
 const MATA_ABI = [
   'function occupancy() external view returns (uint256)',

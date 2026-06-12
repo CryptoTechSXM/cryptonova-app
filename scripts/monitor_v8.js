@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════
-// CryptoNova V8.9 — Daily Chain Health Monitor
+// CryptoNova V8.10 — Daily Chain Health Monitor
 //
 // Usage:
 //   node scripts/monitor_v8.js
@@ -22,30 +22,32 @@ const RPC_URL = 'https://sepolia.base.org';
 // ── Matrix size ──────────────────────────────────────────────────────
 const MATRIX_SIZE = 127;
 
-// ── Contract addresses (V8.9 — deployed_addresses_v8_9.json) ────────
+// ── Contract addresses — loaded from addresses file ──────────────────
+// Auto-loaded from ADDRESSES_FILE env var or default deployed_addresses_v8_10.json
+// No more hardcoding: just redeploy and the new file is picked up automatically.
+const path    = require('path');
+const fs_sync = require('fs');
+const ADDR_FILE = path.join(__dirname, process.env.ADDRESSES_FILE || 'deployed_addresses_v8_10.json');
+if (!fs_sync.existsSync(ADDR_FILE)) {
+  console.error(`\n❌  ${ADDR_FILE} not found. Run deploy_v8.js first.`);
+  process.exit(1);
+}
+const _raw = JSON.parse(fs_sync.readFileSync(ADDR_FILE, 'utf8'));
 const ADDRS = {
-  usdc:           '0x2D8B7b5eDec96bE441b6fb0D45D74a2BcE2C639a',
-  cnova:          '0xeAAA7d8CAA315d17321524790E52D55971b03777',
-  treasury:       '0x5Be91D0C6493F923220C18cb4f6779F6e79f3ECE',
-  stabilityFund:  '0x1f375CEcB492Ba544437683DFC2A6B1AC700150C',
-  buybackReserve: '0x4BcB5A7E209269A145aC823e4539166B8E445c9f',
-  tierRouter:     '0x44aD72D63d501F5d2893F1A15Df8DDfB174E56d7',
-  matrixKeeper:   '0x95a69F7d1735174F314b32f97c32b7e8E515C002',
-  communityWallet:'0xbF0C84Cc30D38Ced2F16aC729472Fc8808369D50',
-
-  tiers: [
-    { num:1,  fee:'$10',    pm:'0x31Fe8e59459CebAf967edbF86CFfd4598632b666', matA:'0x6f42Cf432D82cB0ce33B572b73F31b9e58ae978e', matB:'0xE7557506b2a766DbeF5BA3841baC865E36C0991E' },
-    { num:2,  fee:'$25',    pm:'0xdA60fdB045c9E156ce71140b0BF51Ac8ff55aDd8', matA:'0x5B70F232D73bc4fE1e29E469DBDF168c3289B47d', matB:'0x0E984030b43d9FB71044f31142215101A60036c7' },
-    { num:3,  fee:'$50',    pm:'0xb2c744dc4089D050a56A9D1c49Be37084da65E59', matA:'0xcb52F16926699cbd2287D518D4EfDfFC5f2E7cEd', matB:'0xCFb8C3EeE6d71a1F39b1Ae103892EC215FA47c60' },
-    { num:4,  fee:'$100',   pm:'0xdE30066F79822ab8997fd46d21E72e20985AC4Dc', matA:'0xe2A119443bAe10286DFacB75248E0b9Dc998C380', matB:'0x98601fE894e9341Ed5d7488Fc852b349DcFc2353' },
-    { num:5,  fee:'$250',   pm:'0x54d5A9c82F1Aa94f89712FC66B22b9c79abbB075', matA:'0xD0D79874F31962e8467E1a70183DB1Cb1079975c', matB:'0xE56Fe0794fC42ab2A1167aAFED39c0b87fA1EB2b' },
-    { num:6,  fee:'$500',   pm:'0x5cEe72a04bfFFDC62841C5c39B81d619001066eF', matA:'0xBeaF7909256F6Ec17b4C48Df2FD2fAd6683B4957', matB:'0x65E0B1a07975013c4569393b375e26a60728fD83' },
-    { num:7,  fee:'$1k',    pm:'0x1b46FbF4ebd4A22eA2713E41ad31fce8d3C1243B', matA:'0xB6F1844f86182857345B3EA701982E3715c2Af7e', matB:'0xe75FEeA8fC07F1818c8cd9f67C8712F65010b50e' },
-    { num:8,  fee:'$2.5k',  pm:'0xEf80e42b5a6025382fB98d414Db3839A28a95F9c', matA:'0x7569AC9FDcf487dDFCBfAD5B5c2b97459D8733Da', matB:'0x84153189FB98503610Ca06F06e31B105aEE7D4c4' },
-    { num:9,  fee:'$5k',    pm:'0xf057FFB28854e5a8eC55DC83627878ad9451f05b', matA:'0xC9432946183b545a0e9ca9eCCAE5f1A10181F217', matB:'0x5116a6806B640995887BB39829D4683E4F640C58' },
-    { num:10, fee:'$10k',   pm:'0x0253951c84D8abE110016d034730695d5511986E', matA:'0xfDA591EFf27806Cf9f88aB24b02d5c7Dc1716169', matB:'0x40FF01246324F0d3337469f3e4462BE14F6477aA' },
-  ],
+  usdc:           _raw.usdc           || '',
+  cnova:          _raw.cnova          || '',
+  treasury:       _raw.treasury       || '',
+  stabilityFund:  _raw.stabilityFund  || '',
+  buybackReserve: _raw.buybackReserve || '',
+  tierRouter:     _raw.tierRouter     || '',
+  matrixKeeper:   _raw.matrixKeeper   || '',
+  communityWallet:_raw.communityWallet|| '',
+  // Convert { "T1": { pm, matA, matB }, ... } OR { "1": ... } → array sorted by tier num
+  tiers: Object.keys(_raw.tiers || {})
+    .sort((a, b) => parseInt(a.replace(/\D/g,'')) - parseInt(b.replace(/\D/g,'')))
+    .map(k => ({ num: parseInt(k.replace(/\D/g,'')), ..._raw.tiers[k] })),
 };
+console.log(`📂  Loaded addresses: ${path.basename(ADDR_FILE)}`);
 
 // ── State file (tracks previous run for delta calculations) ──────────
 const STATE_FILE = './monitor_state.json';
@@ -131,6 +133,7 @@ const MATRIX_ABI = [
 ];
 const CNOVA_ABI = [
   'function totalSupply() external view returns (uint256)',
+  'function totalBurned() external view returns (uint256)',
   'function currentEpoch() external view returns (uint8)',
   'function epochRewards(uint8) external view returns (uint256)',
 ];
@@ -158,7 +161,7 @@ async function main() {
 
   const rp = new ethers.JsonRpcProvider(RPC_URL);
 
-  console.log('CryptoNova V8.8 — Daily Monitor');
+  console.log('CryptoNova V8.9 — Daily Monitor');
   console.log('Time:', today);
   console.log('RPC: ', RPC_URL);
 
@@ -192,15 +195,15 @@ async function main() {
   const cwC    = new ethers.Contract(ADDRS.communityWallet, CW_ABI, rp);
 
   const [
-    totalSupply, epoch, epochReward,
+    totalSupply, totalBurned, epoch,
     sfBal,
     tUSDC, bbUSDC, cwUSDC,
     paused, systemCycles,
     cwEnrolled, cwGenesis, cwPioneer, cwPool, cwDistReady, cwLifetime,
   ] = await Promise.all([
     cnovaC.totalSupply(),
+    cnovaC.totalBurned().catch(() => 0n),
     cnovaC.currentEpoch(),
-    cnovaC.epochRewards(0).catch(() => ethers.parseEther('50')),
     sfC.totalBalance(),
     usdcC.balanceOf(ADDRS.treasury),
     usdcC.balanceOf(ADDRS.buybackReserve),
@@ -215,10 +218,19 @@ async function main() {
     cwC.totalLifetimeClaimed().catch(() => 0n),
   ]);
 
+  // Read current epoch reward separately (needs epoch value from above)
+  const epochReward = await cnovaC.epochRewards(epoch).catch(() => ethers.parseEther('50'));
+
+  // CNOVA floor price: Treasury USDC / total supply (18-dec CNOVA, 6-dec USDC)
+  const floorPriceUSD = totalSupply > 0n
+    ? (Number(tUSDC) / 1e6) / (Number(totalSupply) / 1e18)
+    : 0;
+
   // ── Save current state ─────────────────────────────────────────────
   now.sfBal        = sfBal.toString();
   now.tUSDC        = tUSDC.toString();
   now.supply       = totalSupply.toString();
+  now.burned       = totalBurned.toString();
   now.systemCycles = Number(systemCycles);
   now.timestamp    = Date.now();
   now.paused       = paused;
@@ -292,7 +304,7 @@ async function main() {
 
   // ── Build report ──────────────────────────────────────────────────
   const report = [
-    `📊 <b>CryptoNova V8.8 — Daily Report</b>`,
+    `📊 <b>CryptoNova V8.9 — Daily Report</b>`,
     `📅 ${today}`,
     ``,
     statusLine,
@@ -319,8 +331,10 @@ async function main() {
     ``,
     `<b>── CNOVA TOKEN ─────────────────────</b>`,
     `  Total supply:    ${fmtE(totalSupply)} CNOVA`,
-    `  Current epoch:   ${epoch}`,
+    `  Total burned:    ${fmtE(totalBurned)} CNOVA`,
+    `  Current epoch:   ${Number(epoch)} (${['Genesis','Pioneer','Expansion','Momentum','Apex','Legacy','Endgame','Infinity'][Number(epoch)] || '?'})`,
     `  Reward/entry:    ${fmtE(epochReward)} CNOVA`,
+    `  Floor price:     $${floorPriceUSD.toFixed(4)} USDC/CNOVA`,
     ``,
     `<b>── SYSTEM ──────────────────────────</b>`,
     `  Total cycles:    ${now.systemCycles}${delta(now.systemCycles, prev.systemCycles)}`,
@@ -332,24 +346,4 @@ async function main() {
     report.push('<b>── ALERTS ──────────────────────────</b>');
     alerts.forEach(a => report.push(`  ${a}`));
   } else {
-    report.push('');
-    report.push('✅ No alerts — everything looks normal');
-  }
-
-  report.push('');
-  report.push(`<i>CryptoNova V8.8 · Base Sepolia · node scripts/monitor_v8.js</i>`);
-
-  const message = report.join('\n');
-
-  // ── Output ────────────────────────────────────────────────────────
-  console.log('\n' + message.replace(/<[^>]+>/g, '').replace(/&amp;/g,'&'));
-  await sendTelegram(message);
-
-  saveState(now);
-  console.log('\n✓ State saved to', STATE_FILE);
-}
-
-main().catch(e => {
-  console.error('Monitor failed:', e);
-  process.exit(1);
-});
+    repor

@@ -24,10 +24,12 @@ const T1_FEE = 10n  * UNIT;   // $10
 const T2_FEE = 25n  * UNIT;   // $25
 const MSIZE  = 7n;             // smallest valid full BFS tree for tests
 
+/** V8.7 7-field SplitConfig (l2Bps/l3Bps removed, buybackBps added) */
 const SPLITS_T1 = {
-  l1Bps: 2000, l2Bps: 300, l3Bps: 200, chainBps: 2000,
-  poolBps: 3300, treasuryBps: 200, devOpsBps: 500, stabilityBps: 1500
-};
+  l1Bps: 2000, chainBps: 2000, poolBps: 3300,
+  treasuryBps: 1500, stabilityBps: 500,
+  devBps: 300, opsBps: 200, communityBps: 100, buybackBps: 100,
+};  // sum = 10 000
 const CHAIN_BPS = [1000n, 400n, 300n, 150n, 75n, 75n];
 
 // ─── Shared fixture ─────────────────────────────────────────────────────────────
@@ -49,7 +51,7 @@ async function deployFixture() {
   const treasuryAddr  = await treasury.getAddress();
 
   const StabilityFund = await ethers.getContractFactory("StabilityFund");
-  const sf            = await StabilityFund.deploy(usdcAddr, cnovaAddr, admin.address);
+  const sf            = await StabilityFund.deploy(usdcAddr, admin.address);  // V8.7: SF v3 takes (usdc, admin)
   const sfAddr        = await sf.getAddress();
 
   const TierRouter = await ethers.getContractFactory("TierRouter");
@@ -60,7 +62,7 @@ async function deployFixture() {
 
   const mkMat = (isA, tierIdx, fee) => FM.deploy(
     { usdc: usdcAddr, cnova: cnovaAddr, treasury: treasuryAddr,
-      devOpsWallet: devOps.address, accountOne: accountOne.address, admin: admin.address },
+      devWallet: devOps.address, opsWallet: devOps.address, accountOne: accountOne.address, admin: admin.address },
     fee, MSIZE, isA, tierIdx, SPLITS_T1, CHAIN_BPS
   );
 
@@ -452,7 +454,7 @@ describe("S5: Gas estimate at MSIZE=15", function () {
     const mk = (isA) => FM.deploy(
       { usdc: usdcAddr, cnova: cnovaAddr15,
         treasury: treasAddr15,
-        devOpsWallet: devOps.address, accountOne: accountOne.address, admin: admin.address },
+        devWallet: devOps.address, opsWallet: devOps.address, accountOne: accountOne.address, admin: admin.address },
       T1_FEE, MSIZE15, isA, 0, SPLITS_T1, CHAIN_BPS
     );
     const matA = await mk(true);

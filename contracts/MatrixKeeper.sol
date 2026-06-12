@@ -84,6 +84,10 @@ interface IFigureEightKeeper {
     function getParkedCount() external view returns (uint256);
     function getParkedMember(uint256 idx) external view returns (address);
     function forceCrossKeeper(address member) external;
+    // V8.10 additions
+    function parkedAt(address member) external view returns (uint256);
+    function evictParked(address member) external;
+    function getMemberTotalWithdrawn(address member) external view returns (uint256);
     function isMatrixA() external view returns (bool);
     function ENTRY_FEE() external view returns (uint256);
 }
@@ -106,12 +110,13 @@ contract MatrixKeeper is Ownable {
     uint8 public constant STATE_RECOVERY = 2;
 
     // ── Work item types ───────────────────────────────────────────────────────
-    uint8 public constant WORK_VELOCITY  = 0;
-    uint8 public constant WORK_GHOST     = 1;
-    uint8 public constant WORK_RECLAIM   = 2;
+    uint8 public constant WORK_VELOCITY      = 0;
+    uint8 public constant WORK_GHOST         = 1;
+    uint8 public constant WORK_RECLAIM       = 2;
     uint8 public constant WORK_CHAIN_LINK    = 3;
     uint8 public constant WORK_PARKED_RESCUE = 4;
     uint8 public constant WORK_VELOCITY_GATE = 5;
+    uint8 public constant WORK_EVICT_PARKED  = 6;  // V8.10: grace-period eviction
 
     // ── Config (DAO-adjustable via enumerated menus) ───────────────────────────
     /// @notice Rolling window for velocity and deflation checks (seconds)
@@ -128,6 +133,13 @@ contract MatrixKeeper is Ownable {
     uint256 public extendedIdleTimeout = 86_400; // 24 hours
     /// @notice Max work items processed per upkeep to stay under gas limit
     uint256 public maxItemsPerUpkeep  = 15;
+    /// @notice V8.10: Grace period before evicting or rescuing a parked member (seconds).
+    ///         Member has this window to self-fund re-entry. Default 10 days.
+    uint256 public parkedGracePeriod  = 10 days;
+    /// @notice V8.10: Max totalWithdrawn (in USDC 6-dec) for SF rescue eligibility.
+    ///         Members who have extracted more than N × entry fee are not rescue-eligible
+    ///         — they must self-fund. Default 3 × $10 = $30 (3_000_000 in 6-dec USDC).
+    uint256 public rescueEligibilityThreshold = 3_000_000;  // $30 USDC (6-dec)
 
     // ── Core state ────────────────────────────────────────────────────────────
     address public tierRouter;
@@ -165,6 +177,7 @@ contract MatrixKeeper is Ownable {
     event PairManagerSet(uint8 indexed tierIndex, address pairManager);
     event ParkedRescued(address indexed matrix, address indexed member, uint8 tierIndex);
     event VelocityGateOpened(uint8 indexed forTierIndex);
+    event ParkedMemberEvicted(address indexed matrix, address indexed member, uint256 totalWithdrawn);  // V8.10
 
     // ── Custom errors ─────────────────────────────────────────────────────────
     error MK_NotKeeper();
@@ -246,6 +259,20 @@ contract MatrixKeeper is Ownable {
         maxItemsPerUpkeep = v;
     }
 
+    /// @notice V8.10: Set grace period for parked members (5, 10, or 15 days).
+    function setParkedGracePeriod(uint256 v) external onlyOwner {
+        require(v == 5 days || v == 10 days || v == 15 days,
+            "MK: invalid grace period (allowed: 5,10,15 days)");
+        parkedGracePeriod = v;
+    }
+
+    /// @notice V8.10: Set rescue eligibility threshold (USDC 6-dec).
+    ///         Members with totalWithdrawn above this threshold are not SF-rescue-eligible.
+    function setRescueEligibilityThreshold(uint256 v) external onlyOwner {
+        require(v <= 100_000_000, "MK: threshold too high");  // max $100
+        rescueEligibilityThreshold = v;
+    }
+
     // ── Chainlink Automation interface ─────────────────────────────────────────
 
     /**
@@ -291,7 +318,7 @@ contract MatrixKeeper is Ownable {
             }
         }
 
-        // 4. Parked wallet rescue scan (MatA only — members park in MatA)
+        // 4. Parked wallet scan — V8.10 grace-period aware (helper avoids stack-too-deep)
         for (uint8 t = 0; t < configuredTierCount && count < maxItemsPerUpkeep; t++) {
             address pm = pairManagerForTier[t];
             if (pm == address(0)) continue;
@@ -299,22 +326,16 @@ contract MatrixKeeper is Ownable {
             for (uint256 p = 0; p < pairCount && count < maxItemsPerUpkeep; p++) {
                 (address matA,) = IPairManagerKeeper(pm).getPairAt(p);
                 if (matA == address(0)) continue;
-                IFigureEightKeeper mat = IFigureEightKeeper(matA);
-                uint256 parkedCount = mat.getParkedCount();
-                if (parkedCount > 0) {
-                    address parkedMember = mat.getParkedMember(0);
-                    uint256 fee = mat.ENTRY_FEE();
-                    uint256 sfBal = IStabilityFundKeeper(stabilityFund).balanceByTier(t);
-                    if (sfBal >= fee) {
-                        items[count++] = WorkItem(WORK_PARKED_RESCUE, t, matA, parkedMember);
-                    }
+                (address parkedMember, uint8 workType) = _checkParked(matA, t);
+                if (workType != type(uint8).max) {
+                    items[count++] = WorkItem(workType, t, matA, parkedMember);
                 }
             }
         }
 
         // 5. Velocity gate check: MatB at >=80% full -> open next tier
         for (uint8 t = 0; t < configuredTierCount && count < maxItemsPerUpkeep; t++) {
-            if (t + 1 >= 7) continue;                                    // no tier after T7
+            if (t + 1 >= 10) continue;                                   // no tier after T10
             if (ITierRouterKeeper(tierRouter).tierVelocityGreen(t + 1)) continue;  // already open
             address pm = pairManagerForTier[t];
             if (pm == address(0)) continue;
@@ -364,6 +385,8 @@ contract MatrixKeeper is Ownable {
                 chainLinkProcessed++;
             } else if (item.workType == WORK_PARKED_RESCUE) {
                 _doParkedRescue(item.addr1, item.addr2, item.tierIndex);
+            } else if (item.workType == WORK_EVICT_PARKED) {
+                _doEvictParked(item.addr1, item.addr2);
             } else if (item.workType == WORK_VELOCITY_GATE) {
                 _doVelocityGate(item.tierIndex);
             }
@@ -396,11 +419,21 @@ contract MatrixKeeper is Ownable {
         emit ParkedRescued(matrix, member, tierIdx);
     }
 
+    // ── Internal: V8.10 evict parked member (grace expired, not rescue-eligible) ─────
+    function _doEvictParked(address matrix, address member) internal {
+        IFigureEightKeeper mat = IFigureEightKeeper(matrix);
+        if (mat.parkedAt(member) == 0) return;  // already rescued or cleared
+
+        uint256 withdrawn = mat.getMemberTotalWithdrawn(member);
+        mat.evictParked(member);
+        emit ParkedMemberEvicted(matrix, member, withdrawn);
+    }
+
     // ── Internal: velocity gate opener ───────────────────────────────────────────
 
     function _doVelocityGate(uint8 tierIdx) internal {
         uint8 nextTier = tierIdx + 1;
-        if (nextTier >= 7) return;                // T7 is the last tier
+        if (nextTier >= 10) return;               // T10 is the last tier
         if (ITierRouterKeeper(tierRouter).tierVelocityGreen(nextTier)) return; // already open
         ITierRouterKeeper(tierRouter).setTierVelocityGreen(nextTier, true);
         emit VelocityGateOpened(nextTier);
@@ -540,6 +573,29 @@ contract MatrixKeeper is Ownable {
                 pendingChainLinks.pop();
             }
         }
+    }
+
+    // ── Internal: parked member decision helper (V8.10) ─────────────────────────
+    // Returns (member, workType). workType=type(uint8).max means no action.
+    // Extracted to avoid stack-too-deep in checkUpkeep view function.
+    function _checkParked(address matA, uint8 tierIdx)
+        internal view
+        returns (address parkedMember, uint8 workType)
+    {
+        IFigureEightKeeper mat = IFigureEightKeeper(matA);
+        if (mat.getParkedCount() == 0) return (address(0), type(uint8).max);
+
+        parkedMember = mat.getParkedMember(0);
+        uint256 ts = mat.parkedAt(parkedMember);
+        if (ts == 0) return (address(0), type(uint8).max);
+        if (block.timestamp - ts < parkedGracePeriod) return (address(0), type(uint8).max);
+
+        // Grace expired — rescue or evict
+        uint256 withdrawn = mat.getMemberTotalWithdrawn(parkedMember);
+        uint256 fee       = mat.ENTRY_FEE();
+        uint256 sfBal     = IStabilityFundKeeper(stabilityFund).balanceByTier(tierIdx);
+        bool eligible     = (withdrawn <= rescueEligibilityThreshold) && (sfBal >= fee);
+        workType = eligible ? WORK_PARKED_RESCUE : WORK_EVICT_PARKED;
     }
 
     // ── Internal: idle scan helper ────────────────────────────────────────────

@@ -84,9 +84,11 @@ contract StabilityFund is Ownable2Step {
     // ── CommunityWallet carve-out ─────────────────────────────────────────────
     /// @notice CommunityWallet address. When set, 1% of L1 deposits route here.
     address public communityWallet;
-    /// @notice BPS carved from L1 deposits to CommunityWallet. Default 100 = 1%.
-    ///         Set to 0 to disable without removing the communityWallet address.
-    uint256 public communityCarveOutBps = 100;
+    /// @notice BPS carved from L1 deposits to CommunityWallet. Default 0 in V8.9
+    ///         (community carve moved to SplitConfig in FigureEightMatrixV8).
+    ///         Can be non-zero for emergency/manual SF-level carve via admin.
+    // V8.9: community carve now lives in SplitConfig at matrix level — default 0 here.
+    uint256 public communityCarveOutBps = 0;
 
     // ── Sliding formula target ────────────────────────────────────────────────
     /// @notice Target SF balance (6-dec USDC). Default $300.

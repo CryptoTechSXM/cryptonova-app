@@ -1,0 +1,499 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CryptoNova V8.8 — Live Dashboard</title>
+<style>
+  :root {
+    --bg: #0d1117; --surface: #161b22; --surface2: #1c2230;
+    --border: #30363d; --text: #e6edf3; --muted: #8b949e;
+    --green: #2ea043; --yellow: #d29922; --red: #da3633;
+    --blue: #1f6feb; --purple: #8957e5; --teal: #0d76c8;
+    --accent: #238636;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: 'Segoe UI', -apple-system, monospace; font-size: 13px; }
+
+  header { display: flex; align-items: center; justify-content: space-between;
+    padding: 12px 20px; background: var(--surface); border-bottom: 1px solid var(--border); }
+  header h1 { font-size: 16px; font-weight: 600; letter-spacing: 0.5px; }
+  header h1 span { color: var(--teal); }
+  .header-right { display: flex; align-items: center; gap: 16px; }
+  #status-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--green); display: inline-block; }
+  #refresh-info { color: var(--muted); font-size: 12px; }
+  button { background: var(--surface2); color: var(--text); border: 1px solid var(--border);
+    padding: 5px 12px; border-radius: 6px; cursor: pointer; font-size: 12px; }
+  button:hover { background: var(--border); }
+
+  main { padding: 16px 20px; display: flex; flex-direction: column; gap: 16px; }
+
+  /* stat cards row */
+  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 10px; }
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 12px 14px; }
+  .card .label { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px; }
+  .card .value { font-size: 20px; font-weight: 600; }
+  .card .sub   { color: var(--muted); font-size: 11px; margin-top: 3px; }
+
+  /* tier grid */
+  .tiers { display: grid; grid-template-columns: repeat(auto-fill, minmax(310px, 1fr)); gap: 10px; }
+  .tier-card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 12px 14px; }
+  .tier-card .tier-hdr { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+  .tier-card .tier-title { font-weight: 600; font-size: 14px; }
+  .tier-card .tier-fee { color: var(--muted); font-size: 12px; }
+  .tier-card .gate { font-size: 11px; padding: 2px 7px; border-radius: 10px; }
+  .gate.open   { background: #1a3a1a; color: var(--green); }
+  .gate.closed { background: #2a2000; color: var(--yellow); }
+
+  .mat-row { display: flex; flex-direction: column; gap: 6px; }
+  .mat-line { display: flex; align-items: center; gap: 8px; }
+  .mat-label { width: 36px; font-size: 11px; color: var(--muted); }
+  .bar-wrap { flex: 1; background: #21262d; border-radius: 4px; height: 12px; overflow: hidden; position: relative; }
+  .bar-fill  { height: 100%; border-radius: 4px; transition: width 0.4s ease; }
+  .bar-fill.low    { background: var(--blue); }
+  .bar-fill.mid    { background: var(--yellow); }
+  .bar-fill.high   { background: var(--green); }
+  .bar-fill.full   { background: var(--purple); }
+  .mat-stats { font-size: 11px; color: var(--muted); min-width: 110px; text-align: right; }
+  .mat-pool  { font-size: 11px; color: var(--muted); margin-top: 4px; text-align: right; }
+
+  /* section headers */
+  .section-hdr { display: flex; align-items: center; gap: 8px; font-size: 12px;
+    font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 0.8px;
+    border-bottom: 1px solid var(--border); padding-bottom: 6px; }
+
+  /* watched wallets */
+  #wallet-input { width: 100%; background: var(--surface2); border: 1px solid var(--border);
+    color: var(--text); padding: 8px 10px; border-radius: 6px; font-size: 12px;
+    font-family: monospace; resize: vertical; min-height: 60px; }
+  #wallet-input::placeholder { color: var(--muted); }
+  .wallet-controls { display: flex; gap: 8px; align-items: center; margin-top: 6px; }
+  .wallet-controls span { color: var(--muted); font-size: 11px; }
+
+  table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  th { color: var(--muted); text-align: left; padding: 6px 10px; font-size: 11px;
+    text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 1px solid var(--border); }
+  td { padding: 7px 10px; border-bottom: 1px solid #21262d; font-family: monospace; }
+  tr:last-child td { border-bottom: none; }
+  tr:hover td { background: var(--surface2); }
+  .tier-badge { background: var(--blue); color: #fff; padding: 1px 6px;
+    border-radius: 10px; font-size: 10px; font-weight: 600; }
+  .cohort-g { color: var(--purple); font-weight: 600; }
+  .cohort-p { color: var(--teal); font-weight: 600; }
+  .cohort-n { color: var(--muted); }
+
+  .loading { color: var(--muted); font-style: italic; padding: 20px; text-align: center; }
+  .error   { color: var(--red); padding: 8px 12px; background: #2a1010;
+    border: 1px solid var(--red); border-radius: 6px; margin: 8px 0; }
+  .updated { color: var(--muted); font-size: 11px; }
+  .paused-banner { background: #2a0000; border: 1px solid var(--red);
+    color: var(--red); padding: 10px 16px; border-radius: 8px; font-weight: 600;
+    text-align: center; letter-spacing: 0.5px; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>CryptoNova <span>V8.8</span> — Live Dashboard</h1>
+  <div class="header-right">
+    <span id="status-indicator">
+      <span id="status-dot"></span>
+      <span id="status-text" style="margin-left:6px;font-size:12px;">Loading…</span>
+    </span>
+    <span id="refresh-info">Refresh in <b id="countdown">30</b>s</span>
+    <button onclick="refresh()">↻ Refresh Now</button>
+    <span class="updated">Updated: <span id="last-updated">—</span></span>
+  </div>
+</header>
+
+<main>
+  <div id="paused-banner" style="display:none" class="paused-banner">🚨 SYSTEM PAUSED — TierRouter.systemPaused = true</div>
+  <div id="error-box" class="error" style="display:none"></div>
+
+  <!-- System Stats Row -->
+  <div>
+    <div class="section-hdr">📊 System</div>
+    <div class="cards" id="system-cards">
+      <div class="card"><div class="label">Status</div><div class="value" id="sys-status">—</div></div>
+      <div class="card"><div class="label">Total Cycles</div><div class="value" id="sys-cycles">—</div></div>
+      <div class="card"><div class="label">StabilityFund</div><div class="value" id="sys-sf">—</div></div>
+      <div class="card"><div class="label">Treasury USDC</div><div class="value" id="sys-treasury">—</div></div>
+      <div class="card"><div class="label">Buyback Reserve</div><div class="value" id="sys-bbr">—</div></div>
+      <div class="card"><div class="label">CNOVA Supply</div><div class="value" id="sys-cnova">—</div><div class="sub" id="sys-epoch"></div></div>
+    </div>
+  </div>
+
+  <!-- Community Wallet Row -->
+  <div>
+    <div class="section-hdr">🏦 Community Wallet</div>
+    <div class="cards">
+      <div class="card"><div class="label">Members Enrolled</div><div class="value" id="cw-enrolled">—</div><div class="sub" id="cw-cohorts"></div></div>
+      <div class="card"><div class="label">USDC Balance</div><div class="value" id="cw-balance">—</div></div>
+      <div class="card"><div class="label">Available Pool</div><div class="value" id="cw-pool">—</div></div>
+      <div class="card"><div class="label">Dist Ready</div><div class="value" id="cw-distready">—</div></div>
+    </div>
+  </div>
+
+  <!-- Tier Grid -->
+  <div>
+    <div class="section-hdr">🔢 Tier Matrix Occupancy</div>
+    <div class="tiers" id="tier-grid">
+      <div class="loading">Querying chain…</div>
+    </div>
+  </div>
+
+  <!-- Watched Wallets -->
+  <div>
+    <div class="section-hdr">👁 Watched Wallets</div>
+    <textarea id="wallet-input" placeholder="Paste wallet addresses here, one per line or comma-separated&#10;e.g. 0x6512e9B5FE1690F2570AFEE5E7b904EF106C9435"></textarea>
+    <div class="wallet-controls">
+      <button onclick="queryWallets()">🔍 Query Wallets</button>
+      <span>Queries highest tier, T1 MatA/MatB withdrawable, and CommunityWallet cohort</span>
+    </div>
+    <div id="wallet-table" style="margin-top:10px;"></div>
+  </div>
+</main>
+
+<script>
+// ── Network & Addresses ───────────────────────────────────────────────
+const RPC = 'https://sepolia.base.org';
+const MSIZE = 127;
+const ADDRS = {
+  usdc:           '0x2D8B7b5eDec96bE441b6fb0D45D74a2BcE2C639a',
+  cnova:          '0xc2b85354F2E8628E7D0874Dd236dbA0F9c3a0301',
+  treasury:       '0x44060f1513AE4B0b24E97e655E04Cf466e0e88B6',
+  stabilityFund:  '0xfEA2De4db7f32Ca6716f9C2eC922Ef0d09bD379e',
+  buybackReserve: '0x24d3c758D5A29a49db4d98dCD5216F1369050D7B',
+  tierRouter:     '0x16c34eE760868E54E2450d6B10c0C44B0f704856',
+  communityWallet:'0x57AD88819433d3608736b0b5a1c16d4c55fFb5f8',
+  tiers: [
+    {num:1,  fee:'$10',    matA:'0xE23eF8d2c5d90CD8239ea729479fEdd1E9Fd3e1b', matB:'0xF059Da5E6C86A7aDeA9AaEAA2Fb8f717BcCD0E4d'},
+    {num:2,  fee:'$25',    matA:'0xb024A680FEA2bf465FB9871b25a5380f5871559b', matB:'0x4eff7927c285c9D762b5379875a40C12FB2de61A'},
+    {num:3,  fee:'$50',    matA:'0x8BFA49D34d7D25B0986c4036EdbdB9C4406385c0', matB:'0x649A128279E081Da6986a3d9f6693339BAe3f06D'},
+    {num:4,  fee:'$100',   matA:'0x86A0114231D91f240bF8Bb259cDd107A114615f6', matB:'0x74A4F49d42f90E20Bb12370Fa88f23ceE04E488D'},
+    {num:5,  fee:'$250',   matA:'0x274EDfB7A0c2FA5613519B28B47043a4bb631Dd6', matB:'0xbee7e4ca9991002E06359aA31fcB9B385e06c167'},
+    {num:6,  fee:'$500',   matA:'0x55a33B994942C5587d00f0D6b944F33f885555Df', matB:'0x5190531F8117f3C778b34b24087110cb013fA4C2'},
+    {num:7,  fee:'$1k',    matA:'0xC8A9C06B7fF2Cf36e3509aA253F736602764712B', matB:'0x1cB9eCA061Ec18833642f03104d90B8596C4Eea0'},
+    {num:8,  fee:'$2.5k',  matA:'0x5968bC0D949E2B16b2D7a55956912512551F5eDc', matB:'0x508Ed4Aa8ae99e45ed78dFdBe53786433b8E188E'},
+    {num:9,  fee:'$5k',    matA:'0x45cD12826b3bD8361D1749Cf484680D5A2Da7bBD', matB:'0x91CED201a9780d91638e937B72CDfab7fd81bCb2'},
+    {num:10, fee:'$10k',   matA:'0x3223a95F0dad6adA0feA90fd01089815E196Be01', matB:'0x51C8465d1c1e082B4F3E209585E848af06F7B5f4'},
+  ],
+};
+
+// ── Function Selectors ────────────────────────────────────────────────
+const S = {
+  occupancy:          '0x3f728455',
+  rotationCount:      '0x03f3b39c',
+  poolAccumulator:    '0x31cde2dc',
+  totalJoined:        '0xb7dbd232',
+  totalSupply:        '0x18160ddd',
+  currentEpoch:       '0x76671808',
+  totalBalance:       '0xad7a672f',
+  systemPaused:       '0x9d2f83f0',
+  totalSystemCycles:  '0x7986dd2f',
+  balanceOf:          '0x70a08231',
+  totalEnrolled:      '0xeeb51a5d',
+  genesisCount:       '0xfffad312',
+  pioneerCount:       '0xc37f34ca',
+  availablePool:      '0x2af674dd',
+  distributeReady:    '0x44f74b1f',
+  memberHighestTier:  '0xc4a37634',
+  withdrawable:       '0xce513b6f',
+  cohort:             '0xa0d2b168',
+};
+
+// ── RPC Helpers ───────────────────────────────────────────────────────
+let reqId = 1;
+async function ethCall(to, data) {
+  const res = await fetch(RPC, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ jsonrpc:'2.0', method:'eth_call',
+      params:[{ to, data }, 'latest'], id: reqId++ })
+  });
+  const j = await res.json();
+  return j.result || '0x';
+}
+
+function u256(hex) {
+  if (!hex || hex === '0x' || hex === '0x0') return 0n;
+  return BigInt(hex);
+}
+function bool(hex) { return u256(hex) !== 0n; }
+function fmt6(n) { return '$' + (Number(n) / 1e6).toFixed(2); }
+function fmtE(n) { return (Number(n) / 1e18).toLocaleString('en-US', {maximumFractionDigits:0}) + ' CNOVA'; }
+function encAddr(addr) {
+  return '000000000000000000000000' + addr.replace('0x','').toLowerCase();
+}
+function encU256(n) {
+  return BigInt(n).toString(16).padStart(64, '0');
+}
+function short(addr) { return addr.slice(0,6) + '…' + addr.slice(-4); }
+
+// ── Main Data Fetch ───────────────────────────────────────────────────
+async function fetchAll() {
+  // Build all calls at once for maximum parallelism
+  const tierCalls = ADDRS.tiers.flatMap(t => [
+    ethCall(t.matA, S.occupancy),
+    ethCall(t.matA, S.rotationCount),
+    ethCall(t.matA, S.poolAccumulator),
+    ethCall(t.matA, S.totalJoined),
+    ethCall(t.matB, S.occupancy),
+    ethCall(t.matB, S.rotationCount),
+    ethCall(t.matB, S.poolAccumulator),
+  ]);
+
+  const [
+    // shared
+    totalSupply, epoch,
+    sfBal,
+    tUSDC, bbUSDC, cwUSDC,
+    paused, systemCycles,
+    cwEnrolled, cwGenesis, cwPioneer, cwPool, cwDistReady,
+    // tier results (10 * 7 = 70 values)
+    ...tierRaw
+  ] = await Promise.all([
+    ethCall(ADDRS.cnova, S.totalSupply),
+    ethCall(ADDRS.cnova, S.currentEpoch),
+    ethCall(ADDRS.stabilityFund, S.totalBalance),
+    ethCall(ADDRS.usdc, S.balanceOf + encAddr(ADDRS.treasury)),
+    ethCall(ADDRS.usdc, S.balanceOf + encAddr(ADDRS.buybackReserve)),
+    ethCall(ADDRS.usdc, S.balanceOf + encAddr(ADDRS.communityWallet)),
+    ethCall(ADDRS.tierRouter, S.systemPaused),
+    ethCall(ADDRS.tierRouter, S.totalSystemCycles),
+    ethCall(ADDRS.communityWallet, S.totalEnrolled),
+    ethCall(ADDRS.communityWallet, S.genesisCount),
+    ethCall(ADDRS.communityWallet, S.pioneerCount),
+    ethCall(ADDRS.communityWallet, S.availablePool),
+    ethCall(ADDRS.communityWallet, S.distributeReady),
+    ...tierCalls,
+  ]);
+
+  // Parse tier data
+  const tiers = ADDRS.tiers.map((t, i) => {
+    const base = i * 7;
+    return {
+      num:    t.num,
+      fee:    t.fee,
+      aOcc:   Number(u256(tierRaw[base])),
+      aCycles:Number(u256(tierRaw[base+1])),
+      aPool:  u256(tierRaw[base+2]),
+      aTotal: Number(u256(tierRaw[base+3])),
+      bOcc:   Number(u256(tierRaw[base+4])),
+      bCycles:Number(u256(tierRaw[base+5])),
+      bPool:  u256(tierRaw[base+6]),
+    };
+  });
+
+  return {
+    totalSupply: u256(totalSupply),
+    epoch:       Number(u256(epoch)),
+    sfBal:       u256(sfBal),
+    tUSDC:       u256(tUSDC),
+    bbUSDC:      u256(bbUSDC),
+    cwUSDC:      u256(cwUSDC),
+    paused:      bool(paused),
+    systemCycles:Number(u256(systemCycles)),
+    cwEnrolled:  Number(u256(cwEnrolled)),
+    cwGenesis:   Number(u256(cwGenesis)),
+    cwPioneer:   Number(u256(cwPioneer)),
+    cwPool:      u256(cwPool),
+    cwDistReady: bool(cwDistReady),
+    tiers,
+  };
+}
+
+// ── Bar color ─────────────────────────────────────────────────────────
+function barClass(occ, size) {
+  const pct = occ / size;
+  if (pct >= 1.0) return 'full';
+  if (pct >= 0.8) return 'high';
+  if (pct >= 0.4) return 'mid';
+  return 'low';
+}
+
+// ── Render ────────────────────────────────────────────────────────────
+function render(d) {
+  // System cards
+  document.getElementById('sys-status').textContent   = d.paused ? '🔴 PAUSED' : '🟢 Online';
+  document.getElementById('sys-cycles').textContent   = d.systemCycles.toLocaleString();
+  document.getElementById('sys-sf').textContent       = fmt6(d.sfBal);
+  document.getElementById('sys-treasury').textContent = fmt6(d.tUSDC);
+  document.getElementById('sys-bbr').textContent      = fmt6(d.bbUSDC);
+  document.getElementById('sys-cnova').textContent    = fmtE(d.totalSupply);
+  document.getElementById('sys-epoch').textContent    = 'Epoch ' + d.epoch;
+
+  // CW cards
+  document.getElementById('cw-enrolled').textContent = `${d.cwEnrolled} / 1000`;
+  document.getElementById('cw-cohorts').textContent  = `Genesis: ${d.cwGenesis}  Pioneer: ${d.cwPioneer}`;
+  document.getElementById('cw-balance').textContent  = fmt6(d.cwUSDC);
+  document.getElementById('cw-pool').textContent     = fmt6(d.cwPool);
+  document.getElementById('cw-distready').textContent= d.cwDistReady ? '✅ Ready' : '⏳ Not yet';
+
+  // Paused banner
+  document.getElementById('paused-banner').style.display = d.paused ? 'block' : 'none';
+
+  // Status dot
+  const dot = document.getElementById('status-dot');
+  dot.style.background = d.paused ? 'var(--red)' : 'var(--green)';
+  document.getElementById('status-text').textContent = d.paused ? 'PAUSED' : 'Healthy';
+
+  // Tier grid
+  let totalRegs = 0;
+  d.tiers.forEach(t => totalRegs += t.aTotal);
+
+  const html = d.tiers.map(t => {
+    const aPct = Math.round(t.aOcc / MSIZE * 100);
+    const bPct = Math.round(t.bOcc / MSIZE * 100);
+    const aClass = barClass(t.aOcc, MSIZE);
+    const bClass = barClass(t.bOcc, MSIZE);
+    // T1 always open; T2+ open when MatB >80% or has cycled
+    const gateOpen = t.num === 1 || t.bOcc >= Math.floor(MSIZE * 0.8) || t.bCycles > 0;
+    return `
+    <div class="tier-card">
+      <div class="tier-hdr">
+        <span class="tier-title">T${t.num} <span style="color:var(--muted);font-weight:400;font-size:12px;">${t.fee} entry</span></span>
+        <span class="gate ${gateOpen ? 'open' : 'closed'}">${gateOpen ? '⬤ OPEN' : '○ CLOSED'}</span>
+      </div>
+      <div class="mat-row">
+        <div class="mat-line">
+          <span class="mat-label">MatA</span>
+          <div class="bar-wrap"><div class="bar-fill ${aClass}" style="width:${aPct}%"></div></div>
+          <span class="mat-stats">${t.aOcc}/${MSIZE} &nbsp;·&nbsp; ${t.aCycles} cyc</span>
+        </div>
+        <div class="mat-line">
+          <span class="mat-label">MatB</span>
+          <div class="bar-wrap"><div class="bar-fill ${bClass}" style="width:${bPct}%"></div></div>
+          <span class="mat-stats">${t.bOcc}/${MSIZE} &nbsp;·&nbsp; ${t.bCycles} cyc</span>
+        </div>
+        <div style="display:flex;justify-content:space-between;margin-top:3px;">
+          <span class="mat-pool">Pool A: ${fmt6(t.aPool)}</span>
+          <span class="mat-pool">Pool B: ${fmt6(t.bPool)}</span>
+          <span class="mat-pool" style="color:var(--text)">Joined: ${t.aTotal}</span>
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+  document.getElementById('tier-grid').innerHTML = html;
+
+  // Total regs in system card
+  document.getElementById('sys-status').parentElement.querySelector('.sub')?.remove();
+  const d2 = document.getElementById('sys-cycles').parentElement;
+  d2.querySelector('.sub')?.remove();
+  const regsCard = document.getElementById('sys-status').closest('.card');
+  const sub = document.createElement('div');
+  sub.className = 'sub';
+  sub.textContent = totalRegs + ' total registered';
+  regsCard.appendChild(sub);
+}
+
+// ── Wallet Queries ────────────────────────────────────────────────────
+async function queryWallets() {
+  const raw = document.getElementById('wallet-input').value;
+  const addrs = raw.split(/[\n,\s]+/)
+    .map(a => a.trim())
+    .filter(a => a.startsWith('0x') && a.length === 42);
+
+  if (addrs.length === 0) {
+    document.getElementById('wallet-table').innerHTML = '<p style="color:var(--muted);font-size:12px;">No valid addresses found.</p>';
+    return;
+  }
+
+  document.getElementById('wallet-table').innerHTML = '<div class="loading">Querying ' + addrs.length + ' wallet(s)…</div>';
+
+  // For each wallet: highestTier, T1MatA withdrawable, T1MatB withdrawable, cohort
+  const t1A = ADDRS.tiers[0].matA;
+  const t1B = ADDRS.tiers[0].matB;
+  const results = await Promise.all(addrs.map(async (addr) => {
+    const enc = encAddr(addr);
+    const [tier, wdA, wdB, cohortVal] = await Promise.all([
+      ethCall(ADDRS.tierRouter, S.memberHighestTier + enc),
+      ethCall(t1A, S.withdrawable + enc),
+      ethCall(t1B, S.withdrawable + enc),
+      ethCall(ADDRS.communityWallet, S.cohort + enc),
+    ]);
+    return {
+      addr,
+      tier:    Number(u256(tier)),
+      wdA:     u256(wdA),
+      wdB:     u256(wdB),
+      cohort:  Number(u256(cohortVal)),
+    };
+  }));
+
+  // Also save to localStorage for convenience
+  try { localStorage.setItem('watchedWallets', raw); } catch(e) {}
+
+  const cohortLabel = c => c === 1 ? '<span class="cohort-g">Genesis</span>'
+                         : c === 2 ? '<span class="cohort-p">Pioneer</span>'
+                         : '<span class="cohort-n">—</span>';
+
+  const rows = results.map(r => `
+    <tr>
+      <td title="${r.addr}">${short(r.addr)}</td>
+      <td>${r.tier > 0 ? '<span class="tier-badge">T' + r.tier + '</span>' : '<span style="color:var(--muted)">Not registered</span>'}</td>
+      <td>${r.wdA > 0n ? fmt6(r.wdA) : '—'}</td>
+      <td>${r.wdB > 0n ? fmt6(r.wdB) : '—'}</td>
+      <td>${cohortLabel(r.cohort)}</td>
+    </tr>`).join('');
+
+  document.getElementById('wallet-table').innerHTML = `
+    <table>
+      <thead><tr>
+        <th>Address</th><th>Highest Tier</th>
+        <th>T1 MatA Withdrawable</th><th>T1 MatB Withdrawable</th>
+        <th>CW Cohort</th>
+      </tr></thead>
+      <tbody>${rows}</tbody>
+    </table>`;
+}
+
+// ── Refresh Loop ──────────────────────────────────────────────────────
+let timeLeft = 30;
+let refreshTimer;
+
+function startCountdown() {
+  clearInterval(refreshTimer);
+  timeLeft = 30;
+  refreshTimer = setInterval(() => {
+    timeLeft--;
+    document.getElementById('countdown').textContent = timeLeft;
+    if (timeLeft <= 0) refresh();
+  }, 1000);
+}
+
+async function refresh() {
+  document.getElementById('error-box').style.display = 'none';
+  try {
+    const data = await fetchAll();
+    render(data);
+    const now = new Date().toLocaleTimeString();
+    document.getElementById('last-updated').textContent = now;
+  } catch(err) {
+    document.getElementById('error-box').style.display = 'block';
+    document.getElementById('error-box').textContent = '⚠ RPC error: ' + err.message;
+    console.error(err);
+  }
+  startCountdown();
+}
+
+// ── Init ──────────────────────────────────────────────────────────────
+// Restore saved wallets
+try {
+  const saved = localStorage.getItem('watchedWallets');
+  if (saved) document.getElementById('wallet-input').value = saved;
+} catch(e) {}
+
+// Pre-populate with W1 + deployer
+const defaultWallets = [
+  '0x6512e9B5FE1690F2570AFEE5E7b904EF106C9435',  // W1
+  '0xCd0Af6a4116f2062c1594aDf34c1821D45175506',  // Deployer/Admin
+];
+if (!document.getElementById('wallet-input').value) {
+  document.getElementById('wallet-input').value = defaultWallets.join('\n');
+}
+
+refresh();
+</script>
+</body>
+</html>

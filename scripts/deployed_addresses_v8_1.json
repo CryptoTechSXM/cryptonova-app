@@ -1,0 +1,29 @@
+{
+  "network": "baseSepolia",
+  "deployedAt": "2026-06-07T02:44:47.902Z",
+  "matrixSize": 15,
+  "deployer": "0xCd0Af6a4116f2062c1594aDf34c1821D45175506",
+  "admin": "0xCd0Af6a4116f2062c1594aDf34c1821D45175506",
+  "accountOne": "0x6512e9B5FE1690F2570AFEE5E7b904EF106C9435",
+  "devOps": "0x7fc2158892F14b9A1fB6e39B788d4d08daF49C0a",
+  "usdc": "0x2D8B7b5eDec96bE441b6fb0D45D74a2BcE2C639a",
+  "cnova": "0x714958877fb79B05cfE3cb7CfB519958A2449eC2",
+  "treasury": "0xb233fd67ef37a4C5Ef5800b67b0A08990e71cB54",
+  "stabilityFund": "0xA8c60dbedD8D6B019A5F3c36F94D6e2785383A06",
+  "tierRouter": "0xF9c61EaF73fd29c42a2fB9Bd289F3cCF63375b84",
+  "matrixFactory": "0xC61Dbe8d6A4B2777712fB3824111B8f7e71080f2",
+  "matrixKeeper": "0x1C234a5FDd5b642BFaD30eBb25A421C9eca01cc0",
+  "v8Governance": "0x9f69c122E212F5Afec38CBcDEEa64f79219e75d0",
+  "tiers": {
+    "T1": {
+      "pm": "0x32c168A14411F6b9fE771e1b005EAB7380afe356",
+      "matA": "0xb8B74935377DB8FF4e02F1Bea96C4796Fb2fEB71",
+      "matB": "0xEff107e413B135271397ED3c566D834bC407F56d"
+    },
+    "T2": {
+      "pm": "0xF5338bD1B72060563B19d3FC1dbC3FdDfFBdB92b",
+      "matA": "0x92fBb4b7d38B59a1B01E2f0978C8806774452ac1",
+      "matB": "0xEa653BFc4e3d5F1e34C7e17366bF7cfAD7964718"
+    }
+  }
+}

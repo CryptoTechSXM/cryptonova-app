@@ -55,7 +55,7 @@ pragma solidity ^0.8.24;
  *  3. TierRouter callback on Matrix B cycle-out
  *  4. deductForUpgrade() callable by TierRouter only
  *  5. 6-level chain pay (configurable per-tier via constructor)
- *  6. Single devOpsWallet
+ *  6. Separate devWallet + opsWallet + communityWallet (all per-entry routed)
  */
 
 import "@openzeppelin/contracts/access/Ownable2Step.sol";
@@ -99,7 +99,9 @@ contract FigureEightMatrixV8 is Ownable2Step {
     uint256 public immutable SPLIT_CHAIN_BPS;     // 2000 T1-T5, 1750 T6-T10
     uint256 public immutable SPLIT_POOL_BPS;      // 3300/3100/2950/2750 per tier group
     uint256 public immutable SPLIT_TREASURY_BPS;  // 1500/1700/1900/2000 per tier group
-    uint256 public immutable SPLIT_DEVOPS_BPS;    // 500/600/700/800 per tier group
+    uint256 public immutable SPLIT_DEV_BPS;       // dev portion (300/...) per tier group
+    uint256 public immutable SPLIT_OPS_BPS;       // ops portion (200/...) per tier group
+    uint256 public immutable SPLIT_COMMUNITY_BPS; // community carve (100 all tiers)
     uint256 public immutable SPLIT_STABILITY_BPS; // 600/500 per tier group -- L1 carve to SF
     uint256 public immutable SPLIT_BUYBACK_BPS;   // 100/200 per tier group -- to BuybackReserve
     uint256 public constant  BPS_DENOM = 10_000;
@@ -111,7 +113,8 @@ contract FigureEightMatrixV8 is Ownable2Step {
     IERC20         public immutable usdc;
     CNOVAToken     public immutable cnova;
     CNOVATreasury  public immutable treasury;
-    address        public immutable devOpsWallet;  // combined dev+ops+protocol
+    address        public immutable devWallet;     // dev wallet
+    address        public immutable opsWallet;     // ops wallet
     address        public tierRouter;              // TierRouter — set post-deploy
     address        public pairManager;             // PairManager — set post-deploy
     address        public accountOne;              // orphan fee fallback
@@ -144,6 +147,8 @@ contract FigureEightMatrixV8 is Ownable2Step {
     // ─── Parked member queue (keeper rescue) ─────────────────────────────────────────
     /// @notice Members that failed to cross (insufficient funds). Keeper rescues via forceCrossKeeper().
     address[] public parkedMembers;
+    /// @notice Timestamp when each member was parked. Used by keeper for grace-period logic.
+    mapping(address => uint256) public parkedAt;
 
     // ─── V8.1: Equalization Pool ──────────────────────────────────────────────
     /// @notice Accumulates SPLIT_POOL_BPS per entry. Distributed deficit-weighted
@@ -172,6 +177,7 @@ contract FigureEightMatrixV8 is Ownable2Step {
         uint256 joinedAt;
         uint256 withdrawable;
         uint256 totalEarned;
+        uint256 totalWithdrawn;   // V8.10: cumulative gross amount withdrawn (pre-fee)
         uint256 cyclesCompleted;
         bool    isInMatrix;
         bool    hasEverJoined;
@@ -200,16 +206,19 @@ contract FigureEightMatrixV8 is Ownable2Step {
     event StabilityFundSet(address indexed addr);
     event MatrixKeeperSet(address indexed addr);
     event MemberParked(address indexed member, uint256 shortfall);
+    event MemberEvicted(address indexed member, uint256 totalWithdrawn);  // V8.10: grace-period eviction
 
     // ─── Constructor split config struct ──────────────────────────────────────
-    /// @notice V8.7: l2Bps and l3Bps removed, buybackBps added (7 fields total).
+    /// @notice V8.9: devOpsBps split into devBps + opsBps, communityBps added (9 fields total).
     struct SplitConfig {
         uint256 l1Bps;
         uint256 chainBps;
         uint256 poolBps;        // equalization pool
         uint256 treasuryBps;    // CNOVA backing (SACRED)
-        uint256 devOpsBps;
         uint256 stabilityBps;   // per-entry L1 carve to StabilityFund
+        uint256 devBps;         // dev wallet carve
+        uint256 opsBps;         // ops wallet carve
+        uint256 communityBps;   // community wallet carve (was SF-level carve in V8.8)
         uint256 buybackBps;     // per-entry carve to CNOVABuybackReserve
         // Sum must == 10,000
     }
@@ -221,7 +230,8 @@ contract FigureEightMatrixV8 is Ownable2Step {
         address usdc;
         address cnova;
         address treasury;
-        address devOpsWallet;
+        address devWallet;
+        address opsWallet;
         address accountOne;
         address admin;
     }
@@ -239,22 +249,25 @@ contract FigureEightMatrixV8 is Ownable2Step {
         require(_p.usdc         != address(0), "F8V8: zero usdc");
         require(_p.cnova        != address(0), "F8V8: zero cnova");
         require(_p.treasury     != address(0), "F8V8: zero treasury");
-        require(_p.devOpsWallet != address(0), "F8V8: zero devOps");
+        require(_p.devWallet != address(0),    "F8V8: zero devWallet");
+        require(_p.opsWallet != address(0),    "F8V8: zero opsWallet");
         require(_p.accountOne   != address(0), "F8V8: zero accountOne");
         require(_entryFee     > 0,             "F8V8: zero fee");
         require(_matrixSize   >= 3 && _matrixSize <= 1023, "F8V8: invalid size");
         require(_tierIndex    < 10,            "F8V8: invalid tier");
 
-        // V8.7: validate new split fields (7 fields, l2/l3 removed, buyback added)
+        // V8.9: validate new split fields (9 fields: dev+ops split, communityBps added)
         uint256 sum = _splits.l1Bps + _splits.chainBps + _splits.poolBps
-            + _splits.treasuryBps + _splits.devOpsBps
-            + _splits.stabilityBps + _splits.buybackBps;
+            + _splits.treasuryBps + _splits.stabilityBps
+            + _splits.devBps + _splits.opsBps + _splits.communityBps
+            + _splits.buybackBps;
         require(sum == BPS_DENOM, "F8V8: splits != 10000");
 
         usdc         = IERC20(_p.usdc);
         cnova        = CNOVAToken(_p.cnova);
         treasury     = CNOVATreasury(_p.treasury);
-        devOpsWallet = _p.devOpsWallet;
+        devWallet = _p.devWallet;
+        opsWallet = _p.opsWallet;
         accountOne   = _p.accountOne;
         ENTRY_FEE    = _entryFee;
         MATRIX_SIZE  = _matrixSize;
@@ -266,7 +279,9 @@ contract FigureEightMatrixV8 is Ownable2Step {
         SPLIT_CHAIN_BPS     = _splits.chainBps;
         SPLIT_POOL_BPS      = _splits.poolBps;
         SPLIT_TREASURY_BPS  = _splits.treasuryBps;
-        SPLIT_DEVOPS_BPS    = _splits.devOpsBps;
+        SPLIT_DEV_BPS       = _splits.devBps;
+        SPLIT_OPS_BPS       = _splits.opsBps;
+        SPLIT_COMMUNITY_BPS = _splits.communityBps;
         SPLIT_STABILITY_BPS = _splits.stabilityBps;
         SPLIT_BUYBACK_BPS   = _splits.buybackBps;
 
@@ -316,7 +331,7 @@ contract FigureEightMatrixV8 is Ownable2Step {
     }
 
     /// @notice V8.1: Set StabilityFund address. Call once immediately after deploy.
-    ///         Until set, stability contributions route to devOpsWallet as escrow.
+    ///         Until set, stability contributions route to devWallet as escrow.
     function setStabilityFund(address _sf) external onlyOwner {
         require(_sf != address(0), "F8V8: zero stabilityFund");
         stabilityFund = _sf;
@@ -454,6 +469,7 @@ contract FigureEightMatrixV8 is Ownable2Step {
                 joinedAt:        block.timestamp,
                 withdrawable:    0,
                 totalEarned:     0,
+                totalWithdrawn:  0,
                 cyclesCompleted: 0,
                 isInMatrix:      false,
                 hasEverJoined:   true
@@ -574,8 +590,8 @@ contract FigureEightMatrixV8 is Ownable2Step {
                 : firstNonNull;
             if (dest != address(0)) {
                 _credit(dest, dust);
-            } else if (devOpsWallet != address(0)) {
-                usdc.safeTransfer(devOpsWallet, dust);
+            } else if (devWallet != address(0)) {
+                usdc.safeTransfer(devWallet, dust);
             }
         }
 
@@ -613,6 +629,7 @@ contract FigureEightMatrixV8 is Ownable2Step {
             // Insufficient funds — park. Keeper rescues via forceCrossKeeper().
             uint256 shortfall = reentryFee - earnings;
             parkedMembers.push(member);
+            parkedAt[member] = block.timestamp;  // V8.10: start grace period clock
             emit MemberParked(member, shortfall);
             return;
         }
@@ -683,39 +700,57 @@ contract FigureEightMatrixV8 is Ownable2Step {
             _forwardToBuybackReserve(buybackAmt);
         }
 
-        // ── Dev/Ops (combined) ────────────────────────────────────────────────
-        uint256 devOpsAmt = ENTRY_FEE * SPLIT_DEVOPS_BPS / BPS_DENOM;
-        if (devOpsWallet != address(0)) {
-            usdc.safeTransfer(devOpsWallet, devOpsAmt);
+        // ── Dev (separate) ────────────────────────────────────────────────────
+        uint256 devAmt = ENTRY_FEE * SPLIT_DEV_BPS / BPS_DENOM;
+        if (devAmt > 0 && devWallet != address(0)) {
+            usdc.safeTransfer(devWallet, devAmt);
+        }
+
+        // ── Ops (separate) ────────────────────────────────────────────────────
+        uint256 opsAmt = ENTRY_FEE * SPLIT_OPS_BPS / BPS_DENOM;
+        if (opsAmt > 0 && opsWallet != address(0)) {
+            usdc.safeTransfer(opsWallet, opsAmt);
+        }
+
+        // ── Community wallet carve ────────────────────────────────────────────
+        uint256 communityAmt = ENTRY_FEE * SPLIT_COMMUNITY_BPS / BPS_DENOM;
+        if (communityAmt > 0) {
+            if (communityWallet != address(0)) {
+                SafeERC20.forceApprove(usdc, communityWallet, communityAmt);
+                try ICommunityWalletV8(communityWallet).deposit(communityAmt) {}
+                catch { usdc.safeTransfer(devWallet, communityAmt); }
+            } else if (devWallet != address(0)) {
+                usdc.safeTransfer(devWallet, communityAmt);
+            }
         }
     }
 
-    /// @dev Forward USDC to StabilityFund. Falls back to devOpsWallet if SF not set.
+    /// @dev Forward USDC to StabilityFund. Falls back to devWallet if SF not set.
     function _forwardToStabilityFund(uint256 amount, uint8 layer) internal {
         if (amount == 0) return;
         if (stabilityFund != address(0)) {
             SafeERC20.forceApprove(usdc, stabilityFund, amount);
             try IStabilityFund(stabilityFund).receiveLayer(tierIndex, amount, layer) {}
-            catch { usdc.safeTransfer(devOpsWallet, amount); }
+            catch { usdc.safeTransfer(devWallet, amount); }
         } else {
-            // StabilityFund not yet deployed -- hold in devOps as interim escrow
-            if (devOpsWallet != address(0)) {
-                usdc.safeTransfer(devOpsWallet, amount);
+            // StabilityFund not yet deployed -- hold in devWallet as interim escrow
+            if (devWallet != address(0)) {
+                usdc.safeTransfer(devWallet, amount);
             }
         }
         emit StabilityContribution(tierIndex, amount, layer);
     }
 
-    /// @dev Forward USDC to CNOVABuybackReserve. Falls back to devOpsWallet if BBR not set.
+    /// @dev Forward USDC to CNOVABuybackReserve. Falls back to devWallet if BBR not set.
     function _forwardToBuybackReserve(uint256 amount) internal {
         if (amount == 0) return;
         if (buybackReserve != address(0)) {
             SafeERC20.forceApprove(usdc, buybackReserve, amount);
             usdc.safeTransfer(buybackReserve, amount);
         } else {
-            // BuybackReserve not yet set -- route to devOps
-            if (devOpsWallet != address(0)) {
-                usdc.safeTransfer(devOpsWallet, amount);
+            // BuybackReserve not yet set -- route to devWallet
+            if (devWallet != address(0)) {
+                usdc.safeTransfer(devWallet, amount);
             }
         }
     }
@@ -742,8 +777,8 @@ contract FigureEightMatrixV8 is Ownable2Step {
         }
 
         if (founderShare > 0) {
-            if (devOpsWallet != address(0)) {
-                usdc.safeTransfer(devOpsWallet, founderShare);
+            if (devWallet != address(0)) {
+                usdc.safeTransfer(devWallet, founderShare);
                 noReferrerFounderRouted += founderShare;
             } else {
                 _credit(accountOne, founderShare);
@@ -830,14 +865,26 @@ contract FigureEightMatrixV8 is Ownable2Step {
      *         advancing without touching the treasury.
      */
     function withdraw() external {
-        uint256 amount = members[msg.sender].withdrawable;
-        require(amount > 0, "F8V8: nothing to withdraw");
-        members[msg.sender].withdrawable = 0;
-        lastActivityTime[msg.sender] = block.timestamp;  // explicit action = activity
+        uint256 available = members[msg.sender].withdrawable;
+        require(available > 0, "F8V8: nothing to withdraw");
+
+        // V8.10: Reserve ENTRY_FEE while member is active in the matrix.
+        // This ensures funds for the crossing are always present, preventing
+        // the drain-and-park exploit (withdraw all → get parked → SF pays crossing).
+        // Members who want a full withdrawal must wait until after they have cycled
+        // out and crossed (isInMatrix = false).
+        if (members[msg.sender].isInMatrix) {
+            require(available > ENTRY_FEE, "F8V8: must keep entry fee reserve while active");
+            available = available - ENTRY_FEE;
+        }
+
+        members[msg.sender].withdrawable    -= available;
+        members[msg.sender].totalWithdrawn  += available;   // V8.10: track cumulative
+        lastActivityTime[msg.sender] = block.timestamp;     // explicit action = activity
 
         // ── V8.1: Withdrawal health fee → StabilityFund L3 ───────────────────
-        uint256 fee    = amount * withdrawalFeeBps / BPS_DENOM;
-        uint256 payout = amount - fee;
+        uint256 fee    = available * withdrawalFeeBps / BPS_DENOM;
+        uint256 payout = available - fee;
 
         if (fee > 0) {
             _forwardToStabilityFund(fee, 3);
@@ -951,14 +998,37 @@ contract FigureEightMatrixV8 is Ownable2Step {
             if (parkedMembers[i] == member) {
                 parkedMembers[i] = parkedMembers[len - 1];
                 parkedMembers.pop();
+                parkedAt[member] = 0;  // V8.10: clear grace period clock on rescue
                 return;
             }
         }
     }
 
+    /**
+     * @notice V8.10: Keeper-initiated eviction of a parked member after grace period expires.
+     *         Called when: grace period has passed AND member is not eligible for SF rescue
+     *         (i.e. they have extracted significant value via withdraw()).
+     *
+     *         Effect: member is removed from the parked queue. Their BFS slot was
+     *         already freed when they cycled out. Their withdrawable balance is fully
+     *         preserved — they can call withdraw() at any time.
+     *         They must re-enter fresh via TierRouter to participate again.
+     */
+    function evictParked(address member) external {
+        require(msg.sender == matrixKeeper,    "F8V8: not keeper");
+        require(parkedAt[member] > 0,          "F8V8: member not parked");
+        require(!members[member].isInMatrix,   "F8V8: member is in matrix");
+
+        uint256 withdrawn = members[member].totalWithdrawn;
+        _removeFromParkedQueue(member);   // also clears parkedAt
+
+        emit MemberEvicted(member, withdrawn);
+    }
+
     function getMember(address member)        external view returns (Member memory) { return members[member]; }
     function getCyclesCompleted(address m)    external view returns (uint256)       { return members[m].cyclesCompleted; }
     function withdrawableOf(address member)   external view returns (uint256)       { return members[member].withdrawable; }
+    function getMemberTotalWithdrawn(address member) external view returns (uint256) { return members[member].totalWithdrawn; }  // V8.10: keeper reads for rescue eligibility
     function escrowOf(address /* member */)   external pure  returns (uint256)       { return 0; } // V8.8: escrow removed
     function isFull()                         external view returns (bool)          { return occupancy == MATRIX_SIZE; }
     function isActiveInMatrix(address member) external view returns (bool)          { return members[member].isInMatrix; }
@@ -999,8 +1069,10 @@ contract FigureEightMatrixV8 is Ownable2Step {
             uint256 chainBps,
             uint256 poolBps,
             uint256 treasuryBps,
-            uint256 devOpsBps,
             uint256 stabilityBps,
+            uint256 devBps,
+            uint256 opsBps,
+            uint256 communityBps,
             uint256 buybackBps
         )
     {
@@ -1009,8 +1081,10 @@ contract FigureEightMatrixV8 is Ownable2Step {
             SPLIT_CHAIN_BPS,
             SPLIT_POOL_BPS,
             SPLIT_TREASURY_BPS,
-            SPLIT_DEVOPS_BPS,
             SPLIT_STABILITY_BPS,
+            SPLIT_DEV_BPS,
+            SPLIT_OPS_BPS,
+            SPLIT_COMMUNITY_BPS,
             SPLIT_BUYBACK_BPS
         );
     }

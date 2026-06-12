@@ -1,6 +1,6 @@
 "use strict";
 /**
- * deploy_v8.js  --  V8.8 Full Deploy  (all 10 tiers, MATRIX_SIZE=127, auto-keeper)
+ * deploy_v8.js  --  V8.9 Full Deploy  (all 10 tiers, MATRIX_SIZE=127, auto-keeper)
  * ─────────────────────────────────────────────────────────────────────────────
  * Deploys the complete V8.8 stack:
  *
@@ -20,7 +20,10 @@
  *   - Escrow storage removed from FigureEightMatrixV8; orphan fees → CommunityWallet
  *   - CNOVAToken tierMultipliers expanded to T8:160x T9:320x T10:640x
  *   - CommunityWallet deployed and wired into matrices + StabilityFund
- *   - StabilityFund L1 carve: communityCarveOutBps=100 (1%)
+ *   - V8.9: communityCarveOutBps=0 (community moved to SplitConfig in matrix)
+   - V8.9: devOpsBps split into devBps+opsBps; separate DEV_WALLET / OPS_WALLET
+   - V8.9: stabilityBps T1-T3 reduced 600→500; communityBps=100 in SplitConfig
+   - V8.9: CNOVAToken.totalBurned tracker added; getVelocityGates bool[10] fixed
  *
  * ARCHITECTURE NOTE
  * -----------------
@@ -39,12 +42,13 @@
  * Env vars:
  *   DEPLOYER_PRIVATE_KEY   Gas-paying deployer
  *   W1_PRIVATE_KEY         Account #1 / root wallet
- *   DEV_WALLET_ADDRESS     DevOps wallet (default: deployer)
+ *   DEV_WALLET_ADDRESS     Dev wallet (default: deployer)
+ *   OPS_WALLET_ADDRESS     Ops wallet (default: deployer)
  *   ADMIN_WALLET_ADDRESS   Admin/owner   (default: deployer)
  *   USDC_ADDRESS           Reuse existing USDC; omit to deploy MockUSDC
  *   MATRIX_SIZE            127 (default) | 15 (quick dev cycle)
  *   DEPLOY_TIERS           Comma-separated list e.g. "1,2" (default: "1,2,3,4,5,6,7,8,9,10")
- *   ADDRESSES_FILE         Output filename (default: deployed_addresses_v8_8.json)
+ *   ADDRESSES_FILE         Output filename (default: deployed_addresses_v8_10.json)
  *
  * Run: npx hardhat run scripts/deploy_v8.js --network baseSepolia
  */
@@ -59,7 +63,7 @@ require("dotenv").config();
 // v8_1 = size-15 testnet (retired).  v8_2 = size-64 pre-mainnet stress test.
 const ADDRESSES_FILE = path.join(
   __dirname,
-  process.env.ADDRESSES_FILE || "deployed_addresses_v8_8.json"
+  process.env.ADDRESSES_FILE || "deployed_addresses_v8_10.json"
 );
 
 // ── Config ────────────────────────────────────────────────────────────────────
@@ -85,13 +89,21 @@ const TIER_FEES = [
   10_000_000_000n, // T10 $10,000
 ];
 
-// ── V8.7 BPS SplitConfigs ─────────────────────────────────────────────────────
-// Field order MUST match Solidity SplitConfig struct (7 fields):
-//   l1Bps, chainBps, poolBps, treasuryBps, devOpsBps, stabilityBps, buybackBps
-const SPLITS_T1_T3  = [2000, 2000, 3300, 1500, 500, 600, 100]; // sum=10000
-const SPLITS_T4_T5  = [2000, 2000, 3100, 1700, 600, 500, 100]; // sum=10000
-const SPLITS_T6_T7  = [2000, 1750, 2950, 1900, 700, 500, 200]; // sum=10000
-const SPLITS_T8_T10 = [2000, 1750, 2750, 2000, 800, 500, 200]; // sum=10000
+// ── V8.9 BPS SplitConfigs ─────────────────────────────────────────────────────
+// Field order MUST match Solidity SplitConfig struct (9 fields):
+//   l1Bps, chainBps, poolBps, treasuryBps, stabilityBps, devBps, opsBps, communityBps, buybackBps
+//
+// V8.9 changes from V8.8:
+//   T1-T3: sf 600→500, devOps 500 → dev 300 + ops 200, community 100 added
+//   T4-T5: sf stays 500, devOps 600 → dev 360 + ops 240, community 100 added, treasury 1700→1600
+//   T6-T7: sf stays 500, devOps 700 → dev 420 + ops 280, community 100 added, treasury 1900→1800
+//   T8-T10: sf stays 500, devOps 800 → dev 480 + ops 320, community 100 added, treasury 2000→1900
+//
+//   [  l1,  chain,  pool, treasury,   sf,  dev,  ops, cw,  bbr] sum
+const SPLITS_T1_T3  = [2000,  2000,  3300,    1500,  500,  300,  200, 100,  100]; // 10000
+const SPLITS_T4_T5  = [2000,  2000,  3100,    1600,  500,  360,  240, 100,  100]; // 10000
+const SPLITS_T6_T7  = [2000,  1750,  2950,    1800,  500,  420,  280, 100,  200]; // 10000
+const SPLITS_T8_T10 = [2000,  1750,  2750,    1900,  500,  480,  320, 100,  200]; // 10000
 
 // ── Chain pay BPS per level (6 levels, must sum to chainBps) ─────────────────
 // T1-T5:  chain=2000  →  1000/400/300/150/75/75  = 2000
@@ -146,15 +158,17 @@ async function main() {
 
   const w1          = new ethers.Wallet(process.env.W1_PRIVATE_KEY);
   const accountOne  = w1.address;
-  const devOps      = process.env.DEV_WALLET_ADDRESS   || deployerAddr;
+  const devWallet   = process.env.DEV_WALLET_ADDRESS   || deployerAddr;
+  const opsWallet   = process.env.OPS_WALLET_ADDRESS   || deployerAddr;
   const admin       = process.env.ADMIN_WALLET_ADDRESS || deployerAddr;
 
-  console.log("\n  V8.1 Elevator Deploy");
+  console.log("\n  V8.9 Elevator Deploy");
   sep();
   console.log(`  Deployer   : ${deployerAddr}`);
   console.log(`  AccountOne : ${accountOne}`);
   console.log(`  Admin      : ${admin}`);
-  console.log(`  DevOps     : ${devOps}`);
+  console.log(`  DevWallet  : ${devWallet}`);
+  console.log(`  OpsWallet  : ${opsWallet}`);
   console.log(`  MatrixSize : ${MATRIX_SIZE}`);
   console.log(`  Tiers      : T${DEPLOY_TIERS.join(", T")}`);
   sep();
@@ -270,12 +284,13 @@ async function main() {
 
     // Deploy params struct
     const dpStruct = {
-      usdc:         usdcAddr,
-      cnova:        cnovaAddr,
-      treasury:     treasuryAddr,
-      devOpsWallet: devOps,
-      accountOne:   accountOne,
-      admin:        admin,           // factory wires over ownership
+      usdc:       usdcAddr,
+      cnova:      cnovaAddr,
+      treasury:   treasuryAddr,
+      devWallet:  devWallet,
+      opsWallet:  opsWallet,
+      accountOne: accountOne,
+      admin:      admin,             // factory wires over ownership
     };
 
     // Deploy MatA
@@ -426,14 +441,13 @@ async function main() {
   const cw     = await deploy(CommunityWallet, [usdcAddr, admin], "CommunityWallet");
   const cwAddr = await cw.getAddress();
 
-  // Grant ENROLLOR_ROLE to TierRouter so it can enroll the first 1000 members
-  const ENROLLOR_ROLE = await cw.ENROLLOR_ROLE();
-  await (await cw.grantRole(ENROLLOR_ROLE, trAddr)).wait();
-  console.log(`  ↳  ENROLLOR_ROLE granted to TierRouter (${trAddr})`);
+  // Grant ENROLLOR_ROLE to TierRouter via setEnrollor() (owner-gated wrapper)
+  await (await cw.setEnrollor(trAddr)).wait();
+  console.log(`  ↳  setEnrollor(TierRouter) OK — TierRouter can now enroll first-1000 members`);
 
   // Wire CommunityWallet into StabilityFund (triggers 1% L1 carve)
   await (await stabilityFund.setCommunityWallet(cwAddr)).wait();
-  console.log(`  ↳  StabilityFund.setCommunityWallet OK (carve = 1%)`);
+  console.log(`  ↳  StabilityFund.setCommunityWallet OK (communityCarveOutBps=0 in V8.9 -- carve is in SplitConfig)`);
 
   // Wire CommunityWallet into every deployed matrix (orphan fees route here)
   for (const tierNum of DEPLOY_TIERS) {
@@ -454,7 +468,7 @@ async function main() {
       network: (await ethers.provider.getNetwork()).name,
       deployedAt: new Date().toISOString(),
       matrixSize: Number(MATRIX_SIZE),
-      deployer: deployerAddr, admin, accountOne, devOps,
+      deployer: deployerAddr, admin, accountOne, devWallet, opsWallet,
       usdc: usdcAddr, cnova: cnovaAddr, treasury: treasuryAddr,
       stabilityFund: sfAddr, buybackReserve: bbrAddr, tierRouter: trAddr,
       matrixFactory: mfAddr, matrixKeeper: keeperAddr,
@@ -509,69 +523,25 @@ async function main() {
     }
   }
 
-  // ── 11. Save addresses ────────────────────────────────────────────────────
-  sep("Save Addresses");
-
-  const tierAddresses = {};
-  for (const tierNum of DEPLOY_TIERS) {
-    tierAddresses[`T${tierNum}`] = deployed[tierNum];
-  }
-
-  const out = {
-    network:        (await ethers.provider.getNetwork()).name,
-    deployedAt:     new Date().toISOString(),
-    matrixSize:     Number(MATRIX_SIZE),
-    deployer:       deployerAddr,
-    admin:          admin,
-    accountOne:     accountOne,
-    devOps:         devOps,
-    // Shared contracts
-    usdc:           usdcAddr,
-    cnova:          cnovaAddr,
-    treasury:       treasuryAddr,
-    stabilityFund:  sfAddr,
-    tierRouter:     trAddr,
-    matrixFactory:  mfAddr,
-    matrixKeeper:   keeperAddr,
-    v8Governance:   govAddr,
-    communityWallet: cwAddr,
-    // Tier-specific
-    tiers:          tierAddresses,
-  };
-
-  fs.writeFileSync(ADDRESSES_FILE, JSON.stringify(out, null, 2));
-  console.log(`  ↳  Addresses saved → ${ADDRESSES_FILE}`);
-
-  // ── 12. Summary ───────────────────────────────────────────────────────────
-  sep("Summary");
-  console.log(`  USDC          ${usdcAddr}`);
-  console.log(`  CNOVAToken    ${cnovaAddr}`);
-  console.log(`  Treasury      ${treasuryAddr}`);
-  console.log(`  StabilityFund ${sfAddr}`);
-  console.log(`  TierRouter    ${trAddr}`);
-  console.log(`  MatrixFactory ${mfAddr}`);
-  console.log(`  MatrixKeeper  ${keeperAddr}`);
-  console.log(`  V8Governance  ${govAddr}`);
-  console.log(`  CommunityWlt  ${cwAddr}`);
-  for (const tierNum of DEPLOY_TIERS) {
-    const d = deployed[tierNum];
-    console.log(`  T${tierNum} PM/A/B      ${fmt(d.pm)} / ${fmt(d.matA)} / ${fmt(d.matB)}`);
+  // ── 11. Final summary ────────────────────────────────────────────────────
+  sep("Deploy Complete");
+  console.log(`  Network      : ${(await ethers.provider.getNetwork()).name}`);
+  console.log(`  MockUSDC     : ${usdcAddr}`);
+  console.log(`  CNOVAToken   : ${cnovaAddr}`);
+  console.log(`  Treasury     : ${treasuryAddr}`);
+  console.log(`  StabilityFund: ${sfAddr}`);
+  console.log(`  BuybackReserve:${bbrAddr}`);
+  console.log(`  TierRouter   : ${trAddr}`);
+  console.log(`  MatrixFactory: ${mfAddr}`);
+  console.log(`  MatrixKeeper : ${keeperAddr}`);
+  console.log(`  V8Governance : ${govAddr}`);
+  console.log(`  CommunityWallet:${cwAddr}`);
+  for (const t of DEPLOY_TIERS) {
+    console.log(`  T${t.toString().padStart(2,'0')} PM:${deployed[t].pm.slice(0,10)} MatA:${deployed[t].matA.slice(0,10)} MatB:${deployed[t].matB.slice(0,10)}`);
   }
   sep();
-  console.log("\n  NEXT STEPS");
-  console.log("  1. Register MatrixKeeper with Chainlink Automation (gas limit: 6,000,000)");
-  console.log("     127-seat cycle-out costs ~4M gas; 6M gives headroom for parked rescues.");
-  console.log(`     Upkeep target: ${keeperAddr}`);
-  console.log("  2. Fund StabilityFund with seed USDC (ghost entries + parked rescues)");
-  console.log("     Seed $500+ USDC so keeper has reserves for T1-T7 rescue operations.");
-  console.log(`     SF address:    ${sfAddr}`);
-  console.log("  3. Run bigfill_v8.js to stress-test the T1→T2 upgrade path");
-  console.log("  5. Verify contracts on BaseScan:");
-  console.log("     npx hardhat verify --network baseSepolia <address> <args...>");
-  console.log();
+  console.log(`  Addresses file: ${require("path").basename(ADDRESSES_FILE)}`);
+  console.log("  V8.9 Deploy complete.\n");
 }
 
-main().catch(err => {
-  console.error("\n  ✗  Deploy failed:", err.message);
-  process.exit(1);
-});
+main().catch(e => { console.error(e); process.exitCode = 1; });

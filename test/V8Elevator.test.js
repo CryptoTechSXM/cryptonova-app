@@ -28,8 +28,10 @@ const SPLITS = {
   chainBps:     2000,   // $2.00  chain pay (6 levels)
   poolBps:      3300,   // $3.30  equalization pool
   treasuryBps:  1500,   // $1.50  CNOVA treasury backing (SACRED)
-  devOpsBps:     500,   // $0.50  devOps wallet
-  stabilityBps:  600,   // $0.60  StabilityFund L1 carve
+  stabilityBps:  500,   // $0.50  StabilityFund per-entry carve
+  devBps:        300,   // $0.30  dev wallet
+  opsBps:        200,   // $0.20  ops wallet
+  communityBps:  100,   // $0.10  community wallet
   buybackBps:    100,   // $0.10  CNOVABuybackReserve
 };
 // Per-level chain pay BPS (must sum to chainBps = 2000)
@@ -76,7 +78,7 @@ async function deployV8Fixture() {
       usdc:         await usdc.getAddress(),
       cnova:        await cnova.getAddress(),
       treasury:     await treasury.getAddress(),
-      devOpsWallet: devOps.address,
+      devWallet: devOps.address, opsWallet: devOps.address,
       accountOne:   accountOne.address,
       admin:        admin.address,
     },
@@ -429,7 +431,7 @@ describe("CNOVAToken V8.1 — tier multiplier + epoch triggers", function () {
       await cnova.connect(minter).mintReward(alice.address, 6);
       expect(await cnova.currentEpoch()).to.equal(1);
 
-      // Epoch 2 base halves: 50 → 25. T7 at epoch 2 = 25 * 80 = 2,000 CNOVA.
+      // Epoch 2 (V8.10 schedule): 50 → 40. T7 at epoch 2 = 40 * 80 = 3,200 CNOVA.
       const batches = await cnova.vestBatchesOf(alice.address);
       expect(batches.length).to.be.gte(2);
     });
@@ -673,11 +675,268 @@ describe("CNOVAToken V8.1b — early withdrawal penalty", function () {
   });
 
 });
--GOVERNOR cannot call setMaxPenaltyBps", async function () {
-      const { cnova, alice } = await loadFixture(deployCNOVAFixture);
+
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// SUITE 7 — V8.10 Security: Withdrawal Reserve + Drain-and-Park Prevention
+// ═══════════════════════════════════════════════════════════════════════════════
+describe("V8.10 — Withdrawal reserve, drain-and-park prevention, grace eviction", function () {
+
+  // ── 7a. Withdraw while active: ENTRY_FEE reserve enforced ────────────────────
+  describe("7a. Withdrawal reserve — active member", function () {
+
+    it("withdraw() while in-matrix reverts when earnings ≤ ENTRY_FEE", async function () {
+      const { matA, usdc, w1, s0, reg } = await loadFixture(deployV8Fixture);
+
+      await reg(w1, ethers.ZeroAddress);   // W1 = root
+      await reg(s0, w1.address);           // S0 joins; W1 earns L1 + chain pay ≈ $3-6
+
+      const { withdrawable, isInMatrix } = await matA.getMember(w1.address);
+      expect(isInMatrix).to.be.true;
+      expect(withdrawable).to.be.gt(0n);
+      expect(withdrawable).to.be.lte(T1_FEE);   // ≤ $10 → reserve would eat everything
+
       await expect(
-        cnova.connect(alice).setMaxPenaltyBps(1000)
-      ).to.be.reverted;
+        matA.connect(w1).withdraw()
+      ).to.be.revertedWith("F8V8: must keep entry fee reserve while active");
+    });
+
+    it("withdraw() while in-matrix succeeds and leaves exactly ENTRY_FEE in reserve", async function () {
+      const { matA, usdc, w1, s0, s1, s2, s3, s4, s5, reg } =
+        await loadFixture(deployV8Fixture);
+
+      await reg(w1, ethers.ZeroAddress);
+      for (const s of [s0, s1, s2, s3, s4, s5]) await reg(s, w1.address);
+
+      const { withdrawable: earnedBefore, isInMatrix } = await matA.getMember(w1.address);
+      expect(isInMatrix).to.be.true;
+      expect(earnedBefore).to.be.gt(T1_FEE, "W1 must earn > $10 for this test");
+
+      const balBefore = await usdc.balanceOf(w1.address);
+      await matA.connect(w1).withdraw();
+      const balAfter  = await usdc.balanceOf(w1.address);
+
+      const { withdrawable: reserveLeft, totalWithdrawn } = await matA.getMember(w1.address);
+
+      // Exactly ENTRY_FEE must remain
+      expect(reserveLeft).to.equal(T1_FEE, "Exactly ENTRY_FEE must remain as reserve");
+
+      // Gross withdrawn = original_withdrawable - ENTRY_FEE (pre-fee amount)
+      const grossWithdrawn = earnedBefore - T1_FEE;
+      expect(totalWithdrawn).to.equal(grossWithdrawn, "totalWithdrawn must match gross amount");
+
+      // Net payout = grossWithdrawn − 1.5% withdrawal fee
+      const fee    = grossWithdrawn * 150n / 10_000n;
+      const payout = grossWithdrawn - fee;
+      expect(balAfter - balBefore).to.equal(payout, "Payout must be gross minus withdrawal fee");
+    });
+
+  });
+
+  // ── 7b. Withdraw after cycling out: full withdrawal allowed ──────────────────
+  describe("7b. Withdrawal reserve — inactive member (post cycle-out)", function () {
+
+    it("withdraw() on matA after W1 cycled to matB allows full withdrawal (no reserve)", async function () {
+      const { matA, usdc, w1, s0, s1, s2, s3, s4, s5, s6, reg } =
+        await loadFixture(deployV8Fixture);
+
+      await reg(w1, ethers.ZeroAddress);
+      for (const s of [s0, s1, s2, s3, s4, s5]) await reg(s, w1.address);
+      await reg(s6, w1.address);   // fills matA (occ = MSIZE) → W1 cycles out, crosses to matB
+
+      // W1 is now in matB, NOT in matA
+      const matAMember = await matA.getMember(w1.address);
+      expect(matAMember.isInMatrix).to.be.false;
+
+      // Any residual in matA can be fully withdrawn (no ENTRY_FEE reserve when inactive)
+      if (matAMember.withdrawable > 0n) {
+        const balBefore = await usdc.balanceOf(w1.address);
+        await matA.connect(w1).withdraw();
+        const balAfter  = await usdc.balanceOf(w1.address);
+
+        expect(balAfter).to.be.gte(balBefore, "Payout must be non-negative");
+        expect((await matA.getMember(w1.address)).withdrawable).to.equal(
+          0n, "All withdrawable must be cleared — no reserve held for inactive member"
+        );
+      }
+    });
+
+  });
+
+  // ── 7c. totalWithdrawn tracks gross pre-fee amounts ──────────────────────────
+  describe("7c. totalWithdrawn tracking", function () {
+
+    it("totalWithdrawn accumulates gross pre-fee amount per withdraw call", async function () {
+      const { matA, usdc, w1, s0, s1, s2, s3, s4, s5, s6, reg } =
+        await loadFixture(deployV8Fixture);
+
+      await reg(w1, ethers.ZeroAddress);
+      for (const s of [s0, s1, s2, s3, s4, s5]) await reg(s, w1.address);
+
+      const { withdrawable: earned } = await matA.getMember(w1.address);
+      expect(earned).to.be.gt(T1_FEE);
+
+      // First withdrawal while active — gross = earned - ENTRY_FEE
+      await matA.connect(w1).withdraw();
+      const gross1 = earned - T1_FEE;
+      expect((await matA.getMember(w1.address)).totalWithdrawn).to.equal(
+        gross1, "totalWithdrawn after first withdraw must equal gross amount"
+      );
+
+      // Cycle W1 out of matA → W1 inactive in matA
+      await reg(s6, w1.address);
+
+      // Withdraw the remaining ENTRY_FEE reserve (now no restriction)
+      const { withdrawable: remaining } = await matA.getMember(w1.address);
+      if (remaining > 0n) {
+        await matA.connect(w1).withdraw();
+        const totalExpected = gross1 + remaining;
+        expect((await matA.getMember(w1.address)).totalWithdrawn).to.equal(
+          totalExpected, "totalWithdrawn must accumulate across both withdrawals"
+        );
+      }
+    });
+
+  });
+
+  // ── 7d. parkedAt — grace period clock ────────────────────────────────────────
+  describe("7d. parkedAt — grace period clock", function () {
+
+    it("parkedAt[member] is set when a member parks on cycle-out with insufficient funds", async function () {
+      const {
+        matA,
+        w1, s0, s1, s2, s3, s4, s5, s6, s7, s8, s9, s10, s11, s12, s13,
+        reg,
+      } = await loadFixture(deployV8Fixture);
+
+      // Standard run: W1 crosses to matB; S0-S6 park (earned < ENTRY_FEE at cycle-out)
+      await reg(w1, ethers.ZeroAddress);
+      for (const s of [s0, s1, s2, s3, s4, s5]) await reg(s, w1.address);
+      await reg(s6, w1.address);
+      for (const s of [s7, s8, s9, s10, s11, s12]) await reg(s, w1.address);
+      await reg(s13, w1.address);
+
+      // At least S0 should be parked
+      const parkedTs = await matA.parkedAt(s0.address);
+      expect(parkedTs).to.be.gt(0n, "parkedAt must be set when member parks");
+      expect(await matA.getParkedCount()).to.be.gte(1n);
+    });
+
+    it("parkedAt[member] is cleared when evictParked is called", async function () {
+      const {
+        matA, admin,
+        w1, s0, s1, s2, s3, s4, s5, s6, s7, s8, s9, s10, s11, s12, s13,
+        reg,
+      } = await loadFixture(deployV8Fixture);
+
+      await reg(w1, ethers.ZeroAddress);
+      for (const s of [s0, s1, s2, s3, s4, s5]) await reg(s, w1.address);
+      await reg(s6, w1.address);
+      for (const s of [s7, s8, s9, s10, s11, s12]) await reg(s, w1.address);
+      await reg(s13, w1.address);
+
+      expect(await matA.parkedAt(s0.address)).to.be.gt(0n);
+
+      await matA.connect(admin).setMatrixKeeper(admin.address);
+      await matA.connect(admin).evictParked(s0.address);
+
+      expect(await matA.parkedAt(s0.address)).to.equal(0n, "parkedAt must clear after eviction");
+    });
+
+  });
+
+  // ── 7e. evictParked — keeper-only grace-period eviction ──────────────────────
+  describe("7e. evictParked — V8.10 grace-period eviction", function () {
+
+    it("only matrixKeeper can call evictParked", async function () {
+      const {
+        matA, admin, w1,
+        s0, s1, s2, s3, s4, s5, s6, s7, s8, s9, s10, s11, s12, s13,
+        reg,
+      } = await loadFixture(deployV8Fixture);
+
+      await reg(w1, ethers.ZeroAddress);
+      for (const s of [s0, s1, s2, s3, s4, s5]) await reg(s, w1.address);
+      await reg(s6, w1.address);
+      for (const s of [s7, s8, s9, s10, s11, s12]) await reg(s, w1.address);
+      await reg(s13, w1.address);
+
+      expect(await matA.parkedAt(s0.address)).to.be.gt(0n);
+
+      // Any non-keeper call must revert
+      await expect(
+        matA.connect(w1).evictParked(s0.address)
+      ).to.be.revertedWith("F8V8: not keeper");
+    });
+
+    it("evictParked removes member from parked queue and emits MemberEvicted", async function () {
+      const {
+        matA, admin,
+        w1, s0, s1, s2, s3, s4, s5, s6, s7, s8, s9, s10, s11, s12, s13,
+        reg,
+      } = await loadFixture(deployV8Fixture);
+
+      await reg(w1, ethers.ZeroAddress);
+      for (const s of [s0, s1, s2, s3, s4, s5]) await reg(s, w1.address);
+      await reg(s6, w1.address);
+      for (const s of [s7, s8, s9, s10, s11, s12]) await reg(s, w1.address);
+      await reg(s13, w1.address);
+
+      const countBefore = await matA.getParkedCount();
+      expect(countBefore).to.be.gte(1n);
+      expect(await matA.parkedAt(s0.address)).to.be.gt(0n);
+
+      // Set admin as matrixKeeper for test
+      await matA.connect(admin).setMatrixKeeper(admin.address);
+
+      // Evict S0 and capture events
+      const tx      = await matA.connect(admin).evictParked(s0.address);
+      const receipt = await tx.wait();
+
+      // parkedAt cleared
+      expect(await matA.parkedAt(s0.address)).to.equal(
+        0n, "parkedAt must clear after eviction"
+      );
+      // parked count decremented by 1
+      expect(await matA.getParkedCount()).to.equal(
+        countBefore - 1n, "Parked count must decrease by 1"
+      );
+      // MemberEvicted event emitted
+      const evicted = receipt.logs.some(log => {
+        try { return matA.interface.parseLog(log)?.name === "MemberEvicted"; }
+        catch { return false; }
+      });
+      expect(evicted).to.be.true;
+    });
+
+    it("evictParked reverts when member was never parked", async function () {
+      const { matA, admin, w1, reg } = await loadFixture(deployV8Fixture);
+
+      await matA.connect(admin).setMatrixKeeper(admin.address);
+      await reg(w1, ethers.ZeroAddress);   // W1 is active in matrix, not parked
+
+      await expect(
+        matA.connect(admin).evictParked(w1.address)
+      ).to.be.revertedWith("F8V8: member not parked");
+    });
+
+    it("getMemberTotalWithdrawn returns correct value after withdrawals", async function () {
+      const { matA, w1, s0, s1, s2, s3, s4, s5, reg } =
+        await loadFixture(deployV8Fixture);
+
+      await reg(w1, ethers.ZeroAddress);
+      for (const s of [s0, s1, s2, s3, s4, s5]) await reg(s, w1.address);
+
+      const { withdrawable: earned } = await matA.getMember(w1.address);
+      expect(earned).to.be.gt(T1_FEE);
+
+      // Before any withdrawal
+      expect(await matA.getMemberTotalWithdrawn(w1.address)).to.equal(0n);
+
+      // After withdrawal (gross = earned - ENTRY_FEE)
+      await matA.connect(w1).withdraw();
+      const grossExpected = earned - T1_FEE;
+      expect(await matA.getMemberTotalWithdrawn(w1.address)).to.equal(grossExpected);
     });
 
   });

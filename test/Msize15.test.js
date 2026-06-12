@@ -11,7 +11,8 @@ const MSIZE   = 15n;
 /** V8.7 7-field SplitConfig */
 const SPLITS = {
   l1Bps: 2000, chainBps: 2000, poolBps: 3300,
-  treasuryBps: 1500, devOpsBps: 500, stabilityBps: 600, buybackBps: 100,
+  treasuryBps: 1500, stabilityBps: 500,
+  devBps: 300, opsBps: 200, communityBps: 100, buybackBps: 100,
 };  // sum = 10 000
 const CHAIN_BPS = [1000n, 400n, 300n, 150n, 75n, 75n];  // sum = 2000 = chainBps
 
@@ -43,7 +44,7 @@ async function deployFixture() {
   const FM = await ethers.getContractFactory("FigureEightMatrixV8");
 
   const dp = { usdc: usdcAddr, cnova: cnovaAddr, treasury: treasuryAddr,
-                devOpsWallet: devOps.address, accountOne: accountOne.address, admin: admin.address };
+                devWallet: devOps.address, opsWallet: devOps.address, accountOne: accountOne.address, admin: admin.address };
   const matA  = await FM.deploy(dp, T1_FEE, MSIZE, true,  0, SPLITS, CHAIN_BPS);
   const matB  = await FM.deploy(dp, T1_FEE, MSIZE, false, 0, SPLITS, CHAIN_BPS);
   const matA2 = await FM.deploy(dp, T2_FEE, MSIZE, true,  1, SPLITS, CHAIN_BPS);

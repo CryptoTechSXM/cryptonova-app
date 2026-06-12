@@ -123,16 +123,19 @@ contract CNOVAToken is ERC20, ERC20Burnable, AccessControl {
 
     // V8.1 base rewards per entry (before tier multiplier).
     // Epoch 9 = Final Frontier -- floor-price formula overrides index [8].
+    // Reward schedule: Genesis super-bonus (50), step-down (40), then clean
+    // halvings (40→20→10→5→2.5), plateau at 2.5 for epochs 6-8, Final
+    // Frontier formula capped at 2.5 — never exceeds prior epoch rate.
     uint256[9] public epochRewards = [
-        50 * 1e18,   // Epoch 1 -- Nebula Genesis
-        25 * 1e18,   // Epoch 2 -- Mercury Rise
-        12 * 1e18,   // Epoch 3 -- Lunar Cluster
-         6 * 1e18,   // Epoch 4 -- Aurora Zenith
-         3 * 1e18,   // Epoch 5 -- Solaris Echo
-         2 * 1e18,   // Epoch 6 -- Cosmic Core
-         1 * 1e18,   // Epoch 7 -- Galaxy Grid
-         1 * 1e18,   // Epoch 8 -- Supernova Spark
-         1 * 1e18    // Epoch 9 -- Final Frontier (formula replaces this)
+        50   * 1e18,         // Epoch 1 -- Nebula Genesis    (super-bonus)
+        40   * 1e18,         // Epoch 2 -- Mercury Rise
+        20   * 1e18,         // Epoch 3 -- Lunar Cluster     (÷2)
+        10   * 1e18,         // Epoch 4 -- Aurora Zenith     (÷2)
+         5   * 1e18,         // Epoch 5 -- Solaris Echo      (÷2)
+        25   * 1e17,         // Epoch 6 -- Cosmic Core       (÷2 = 2.5)
+        25   * 1e17,         // Epoch 7 -- Galaxy Grid       (plateau)
+        25   * 1e17,         // Epoch 8 -- Supernova Spark   (plateau)
+        25   * 1e17          // Epoch 9 -- Final Frontier    (formula ≤ 2.5)
     ];
 
     // =========================================================================
@@ -199,6 +202,7 @@ contract CNOVAToken is ERC20, ERC20Burnable, AccessControl {
     uint256 public epochStartTime;    // timestamp of last epoch advance
     uint256 public epochStartMinted;  // totalMinted at last epoch advance
     uint256 public totalMinted;
+    uint256 public totalBurned;                // incremented on every burn, readable by frontend
 
     // =========================================================================
     // Events
@@ -495,9 +499,11 @@ contract CNOVAToken is ERC20, ERC20Burnable, AccessControl {
     {
         if (hasRole(BURNER_ROLE, msg.sender)) {
             _burn(from, amount);
+            totalBurned += amount;
             emit TokensBurnedByRole(from, amount);
         } else {
             super.burnFrom(from, amount);
+            totalBurned += amount;
         }
     }
 
@@ -592,6 +598,7 @@ contract CNOVAToken is ERC20, ERC20Burnable, AccessControl {
             if (dest == address(0)) {
                 // Burn -- most deflationary option, strongest floor support.
                 _burn(msg.sender, penaltyAmt);
+                totalBurned += penaltyAmt;
             } else {
                 // Send to designated buyback / penalty fund.
                 // No vesting lock on this transfer: the batch was already removed.
@@ -650,6 +657,7 @@ contract CNOVAToken is ERC20, ERC20Burnable, AccessControl {
         if (totalPenalty > 0) {
             if (dest == address(0)) {
                 _burn(msg.sender, totalPenalty);
+                totalBurned += totalPenalty;
             } else {
                 _transfer(msg.sender, dest, totalPenalty);
             }

@@ -1,6 +1,6 @@
 "use strict";
 /**
- * system_keeper.js — Autonomous Health Monitor & Auto-Funder for V8.8
+ * system_keeper.js — Autonomous Health Monitor & Auto-Funder for V8.9
  *
  * Runs every hour (via Claude Scheduled Task or Windows Task Scheduler).
  * Checks, alerts, and acts — then exits cleanly.
@@ -32,7 +32,7 @@
  *   BASE_SEPOLIA_RPC_URL     RPC endpoint  (default: https://sepolia.base.org)
  *   DEPLOYER_PRIVATE_KEY     Required for AUTO_RESCUE and SF_AUTOFUND
  *   W1_PRIVATE_KEY           Required for W1_WITHDRAW (separate from deployer on mainnet)
- *   ADDRESSES_FILE           Path to deployed addresses JSON  (default: deployed_addresses_v8_8.json)
+ *   ADDRESSES_FILE           Path to deployed addresses JSON  (default: deployed_addresses_v8_10.json)
  *   SF_MIN_USD               SF warning threshold in USD      (default: 100)
  *   SF_CRITICAL_USD          SF critical threshold in USD     (default: 30)
  *   PARKED_WARN              Parked queue warning threshold   (default: 50)
@@ -59,7 +59,7 @@ require('dotenv').config({ path: path.resolve(__dirname, '../.env') });
 const RPC_URL        = process.env.BASE_SEPOLIA_RPC_URL || 'https://sepolia.base.org';
 const DEPLOYER_KEY   = process.env.DEPLOYER_PRIVATE_KEY;
 const W1_KEY         = process.env.W1_PRIVATE_KEY;          // optional — W1 separate key
-const ADDR_FILE      = path.join(__dirname, process.env.ADDRESSES_FILE || 'deployed_addresses_v8_9.json');
+const ADDR_FILE      = path.join(__dirname, process.env.ADDRESSES_FILE || 'deployed_addresses_v8_10.json');
 const LOG_FILE       = process.env.KEEPER_LOG
   ? path.resolve(process.env.KEEPER_LOG)
   : path.join(__dirname, '../logs/keeper.log');
@@ -186,7 +186,7 @@ const USDC_ABI = [
 async function main() {
   log('');
   log('╔═══════════════════════════════════════════════════════════════╗');
-  log('║        CryptoNova V8.8 — System Keeper                       ║');
+  log('║        CryptoNova V8.9 — System Keeper                       ║');
   log('╚═══════════════════════════════════════════════════════════════╝');
   log(`  Run at:    ${ts()}`);
   log(`  Log file:  ${LOG_FILE}`);
@@ -517,30 +517,49 @@ async function main() {
   log('  SF: ' + fmt6(sfTotal) + ' (' + sfHealthPct.toFixed(0) + '% health)  |  Parked: ' + totalParked + '  |  Cycles: ' + sysCycles + '  |  W1: T' + w1Tier);
   log('');
 
-  if (TG_ENABLED && (isCritical || isWarning)) {
-    const emoji = isCritical ? '\u{1F534}' : '\u{1F7E1}';
+  if (TG_ENABLED) {
+    // Always send a status digest — alerts get a header, healthy runs get a heartbeat.
+    const headerEmoji = isCritical ? '\u{1F534}' : isWarning ? '\u{1F7E1}' : '\u{1F7E2}';
+    const headerLabel = isCritical ? 'ALERT: CRITICAL' : isWarning ? 'ALERT: WARNING' : 'System Healthy';
+
+    const sfEmoji     = sfTotalUSD < SF_CRITICAL_USD ? '\u{1F534}' : sfTotalUSD < SF_MIN_USD ? '\u{1F7E1}' : '\u{1F7E2}';
+    const parkedEmoji = totalParked > PARKED_CRITICAL ? '\u{1F534}' : totalParked > PARKED_WARN ? '\u{1F7E1}' : '\u{1F7E2}';
+
     const lines = [
-      emoji + ' <b>CryptoNova Keeper Alert</b>',
+      headerEmoji + ' <b>CryptoNova Keeper — ' + headerLabel + '</b>',
       '',
-      '<b>StabilityFund:</b> ' + fmt6(sfTotal) + ' (' + sfHealthPct.toFixed(0) + '% health)',
+      sfEmoji + ' <b>StabilityFund:</b> ' + fmt6(sfTotal) + ' / ' + fmt6(sfTarget) + ' (' + sfHealthPct.toFixed(0) + '% health)',
     ];
-    if (sfTotalUSD < SF_CRITICAL_USD) lines.push('SF CRITICAL -- below $' + SF_CRITICAL_USD + '!');
-    else if (sfTotalUSD < SF_MIN_USD) lines.push('SF WARNING -- below $' + SF_MIN_USD);
+
+    if (sfTotalUSD < SF_CRITICAL_USD) lines.push('   ⚠️ SF CRITICAL — below $' + SF_CRITICAL_USD + '!');
+    else if (sfTotalUSD < SF_MIN_USD)  lines.push('   ⚠️ SF WARNING — below $' + SF_MIN_USD);
+
+    lines.push(parkedEmoji + ' <b>Parked wallets:</b> ' + totalParked + ' (T1 MatA: ' + Number(t1aParked) + ')');
+    if (totalParked > PARKED_CRITICAL) lines.push('   ⚠️ Parked CRITICAL — >' + PARKED_CRITICAL + '!');
+    else if (totalParked > PARKED_WARN) lines.push('   ⚠️ Parked WARNING — >' + PARKED_WARN);
+
     lines.push('');
-    lines.push('<b>Parked wallets:</b> ' + totalParked);
-    if (totalParked > PARKED_CRITICAL) lines.push('Parked CRITICAL -- >' + PARKED_CRITICAL + '!');
-    else if (totalParked > PARKED_WARN) lines.push('Parked WARNING -- >' + PARKED_WARN);
-    lines.push('');
-    lines.push('<b>W1 withdrawable:</b> ' + fmt6(w1Total));
-    lines.push('<b>System cycles:</b> ' + sysCycles + '  |  <b>W1 tier:</b> T' + w1Tier);
+    lines.push('\u{1F4CA} <b>Matrix:</b> T1 MatA ' + t1aOcc + '/' + t1aSize + '  MatB ' + t1bOcc + '/' + t1bSize);
+    if (t2aOcc > 0n || t2bOcc > 0n) {
+      lines.push('        T2 MatA ' + t2aOcc + '/' + t2aSize + '  MatB ' + t2bOcc + '/127');
+    }
+    lines.push('\u{1F501} <b>System cycles:</b> ' + sysCycles + '  |  <b>W1 tier:</b> T' + w1Tier);
+    lines.push('\u{1F4B0} <b>W1 withdrawable:</b> ' + fmt6(w1Total));
+    lines.push('\u{1F4B3} <b>Deployer USDC:</b> ' + fmt6(deployerUsdc));
+
+    // Actions taken this cycle
+    if (actions.length > 0) {
+      lines.push('');
+      lines.push('⚙️ <b>Actions taken:</b>');
+      for (const a of actions) lines.push('   ' + a);
+    }
+
     lines.push('');
     lines.push('<i>' + ts() + '</i>');
 
-    const msg   = lines.filter(l => l !== undefined).join('\n');
-    const tgOk  = await sendTelegram(msg);
-    log(tgOk ? '  Telegram alert sent.' : '  Telegram send FAILED -- check BOT_TOKEN/CHAT_ID in .env.');
-  } else if (TG_ENABLED) {
-    log('  Telegram: system healthy -- no alert sent.');
+    const msg  = lines.join('\n');
+    const tgOk = await sendTelegram(msg);
+    log(tgOk ? '  Telegram report sent.' : '  Telegram send FAILED -- check BOT_TOKEN/CHAT_ID in .env.');
   } else {
     log('  Telegram: not configured (set TELEGRAM_BOT_TOKEN + TELEGRAM_CHAT_ID to enable).');
   }

@@ -1,6 +1,6 @@
 "use strict";
 /**
- * predeploy_check.js  --  V8.1 Pre-Deploy Validator
+ * predeploy_check.js  --  V8.10 Pre-Deploy Validator
  * ─────────────────────────────────────────────────────────────────────────────
  * Run this before every deploy to catch configuration bugs early.
  *
@@ -44,12 +44,17 @@ sep("Env vars");
 require("dotenv").config({ path: path.join(ROOT, ".env") });
 
 const REQUIRED_VARS = ["DEPLOYER_PRIVATE_KEY", "W1_PRIVATE_KEY"];
+const OPTIONAL_WALLETS = ["DEV_WALLET_ADDRESS", "OPS_WALLET_ADDRESS"]; // default to deployer if unset
 for (const v of REQUIRED_VARS) {
   if (process.env[v]) ok(`${v} is set`);
   else                fail(`${v} is NOT set in .env`);
 }
+for (const v of OPTIONAL_WALLETS) {
+  if (process.env[v]) ok(`${v} = ${process.env[v].slice(0,10)}... (separate wallet)`);
+  else ok(`${v} not set — will default to deployer address`);
+}
 
-const ADDR_FILE = process.env.ADDRESSES_FILE || "deployed_addresses_v8_8.json";
+const ADDR_FILE = process.env.ADDRESSES_FILE || "deployed_addresses_v8_10.json";
 console.log(`  ℹ  ADDRESSES_FILE = ${ADDR_FILE}`);
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -250,11 +255,11 @@ if (deployText) {
     fail("Velocity gate closure (setTierVelocityGreen + CLOSED) not found in deploy_v8.js");
   }
 
-  // Check ADDRESSES_FILE default is v8_8
-  if (deployText.includes("deployed_addresses_v8_8.json")) {
-    ok("deploy_v8.js output file: deployed_addresses_v8_8.json");
+  // Check ADDRESSES_FILE default is v8_10
+  if (deployText.includes("deployed_addresses_v8_10.json")) {
+    ok("deploy_v8.js output file: deployed_addresses_v8_10.json");
   } else {
-    fail("deploy_v8.js does not output to deployed_addresses_v8_8.json");
+    fail("deploy_v8.js does not output to deployed_addresses_v8_10.json");
   }
 
   // Chainlink gas limit should be 6M+
@@ -377,19 +382,19 @@ if (bigfillText) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 13. deployed_addresses_v8_8.json — exists and has expected keys
+// 13. deployed_addresses_v8_10.json — exists and has expected keys
 // ─────────────────────────────────────────────────────────────────────────────
-sep("deployed_addresses_v8_8.json — presence check");
+sep("deployed_addresses_v8_10.json — presence check");
 {
-  const addrFile = path.join(ROOT, "deployed_addresses_v8_8.json");
+  const addrFile = path.join(ROOT, "deployed_addresses_v8_10.json");
   if (!fs.existsSync(addrFile)) {
-    console.log("  ℹ  deployed_addresses_v8_8.json not found — run deploy_v8.js first");
+    console.log("  ℹ  deployed_addresses_v8_10.json not found — run deploy_v8.js first");
   } else {
     const addrData = JSON.parse(fs.readFileSync(addrFile, "utf8"));
     const required = ["tierRouter", "stabilityFund", "matrixKeeper"];
     for (const key of required) {
       if (addrData[key]) ok(`addresses: ${key} = ${addrData[key]}`);
-      else               fail(`addresses: ${key} missing from deployed_addresses_v8_8.json`);
+      else               fail(`addresses: ${key} missing from deployed_addresses_v8_10.json`);
     }
     // Check tiers 1-7 present
     const tiers = addrData.tiers || {};
@@ -401,6 +406,112 @@ sep("deployed_addresses_v8_8.json — presence check");
     } else {
       fail("addresses: no tiers found — run deploy_v8.js with DEPLOY_TIERS=1,2,3,4,5,6,7,8,9,10");
     }
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 14. V8.10 — FigureEightMatrixV8.sol security patches
+// ─────────────────────────────────────────────────────────────────────────────
+sep("FigureEightMatrixV8.sol — V8.10 security patches");
+if (matTxt) {
+  // evictParked function
+  if (matTxt.includes("function evictParked(")) {
+    ok("evictParked() found — grace-period eviction function present");
+  } else {
+    fail("evictParked() NOT found — add V8.10 grace-period eviction to FigureEightMatrixV8.sol");
+  }
+
+  // MemberEvicted event
+  if (matTxt.includes("event MemberEvicted(")) {
+    ok("event MemberEvicted declared");
+  } else {
+    fail("event MemberEvicted NOT found — add V8.10 event to FigureEightMatrixV8.sol");
+  }
+
+  // parkedAt mapping
+  if (matTxt.includes("mapping(address => uint256) public parkedAt")) {
+    ok("parkedAt[] mapping found — grace-period clock storage present");
+  } else {
+    fail("parkedAt[] mapping NOT found — add V8.10 parkedAt storage to FigureEightMatrixV8.sol");
+  }
+
+  // totalWithdrawn in Member struct
+  if (matTxt.includes("totalWithdrawn")) {
+    ok("totalWithdrawn field found in Member struct");
+  } else {
+    fail("totalWithdrawn NOT found — add V8.10 drain-tracking field to Member struct");
+  }
+
+  // Withdrawal reserve check in withdraw()
+  if (matTxt.includes("must keep entry fee reserve while active")) {
+    ok("Withdrawal reserve guard found in withdraw()");
+  } else {
+    fail("Withdrawal reserve guard NOT found — add 'must keep entry fee reserve while active' check to withdraw()");
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 15. V8.10 — MatrixKeeper.sol grace-period + eviction
+// ─────────────────────────────────────────────────────────────────────────────
+sep("MatrixKeeper.sol — V8.10 grace-period eviction");
+if (mkText) {
+  if (mkText.includes("WORK_EVICT_PARKED")) {
+    ok("WORK_EVICT_PARKED constant found");
+  } else {
+    fail("WORK_EVICT_PARKED NOT found — add constant = 6 to MatrixKeeper.sol");
+  }
+
+  if (mkText.includes("parkedGracePeriod")) {
+    ok("parkedGracePeriod config variable found");
+  } else {
+    fail("parkedGracePeriod NOT found — add V8.10 grace period config to MatrixKeeper.sol");
+  }
+
+  if (mkText.includes("rescueEligibilityThreshold")) {
+    ok("rescueEligibilityThreshold config variable found");
+  } else {
+    fail("rescueEligibilityThreshold NOT found — add V8.10 rescue eligibility threshold to MatrixKeeper.sol");
+  }
+
+  if (mkText.includes("_doEvictParked") || mkText.includes("doEvictParked")) {
+    ok("_doEvictParked() handler found");
+  } else {
+    fail("_doEvictParked() NOT found — add V8.10 eviction handler to MatrixKeeper.sol");
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 16. V8.10 — CNOVAToken.sol epoch rewards schedule
+// ─────────────────────────────────────────────────────────────────────────────
+sep("CNOVAToken.sol — V8.10 epoch rewards (50,40,20,10,5,2.5,...) ");
+const cnovaTxt = read("contracts/CNOVAToken.sol");
+if (cnovaTxt) {
+  // Epoch 1 = 50 * 1e18 (must not still be 25*1e18 from old schedule)
+  if (cnovaTxt.includes("50   * 1e18") || cnovaTxt.includes("50 * 1e18")) {
+    ok("Epoch 1 reward = 50 CNOVA (Nebula Genesis super-bonus confirmed)");
+  } else {
+    fail("Epoch 1 reward not 50 CNOVA — check epochRewards[] in CNOVAToken.sol");
+  }
+
+  // Epoch 2 = 40 * 1e18
+  if (cnovaTxt.includes("40   * 1e18") || cnovaTxt.includes("40 * 1e18")) {
+    ok("Epoch 2 reward = 40 CNOVA (Mercury Rise confirmed)");
+  } else {
+    fail("Epoch 2 reward not 40 CNOVA — V8.10 schedule: 50,40,20,10,5,2.5,...");
+  }
+
+  // Final plateau = 25 * 1e17 (2.5 CNOVA)
+  if (cnovaTxt.includes("25   * 1e17") || cnovaTxt.includes("25 * 1e17")) {
+    ok("Epoch 6-9 plateau = 2.5 CNOVA confirmed (25 * 1e17)");
+  } else {
+    fail("Epoch plateau 25*1e17 not found — check epochRewards[5-8] in CNOVAToken.sol");
+  }
+
+  // MAX_SUPPLY = 21M
+  if (cnovaTxt.includes("21_000_000")) {
+    ok("MAX_SUPPLY = 21,000,000 CNOVA confirmed");
+  } else {
+    fail("MAX_SUPPLY 21_000_000 not found in CNOVAToken.sol");
   }
 }
 

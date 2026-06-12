@@ -1,0 +1,61 @@
+{
+  "network": "baseSepolia",
+  "deployedAt": "2026-05-31T02:34:01.188Z",
+  "deployer": "0xCd0Af6a4116f2062c1594aDf34c1821D45175506",
+  "contracts": {
+    "usdc": "0x2D8B7b5eDec96bE441b6fb0D45D74a2BcE2C639a",
+    "cnovaToken": "0x36F44CDfA794B1ceE39fc69ae68a1730394AC27b",
+    "treasury": "0x1a2cB8B61A22b9b4B572CE925d485CF25d2696F9",
+    "communityWallet": "0x2C95F5c115864b155176F6E5fcfe0D2f9649464F",
+    "tierManager": "0x30e601c5a8A474974EC097d4a33cb1C0b9228A43",
+    "matrices": {
+      "tier1": {
+        "address": "0x0088F3ee7226c447E9b174c0FC0126D258aD9471",
+        "name": "Nova Seed",
+        "feeMultiplier": 10,
+        "feeUSDC": "10000000"
+      },
+      "tier2": {
+        "address": "0x16f4EBcd97D98aF24f0b32EaFA9E3402802536f0",
+        "name": "Nova Rise",
+        "feeMultiplier": 25,
+        "feeUSDC": "25000000"
+      },
+      "tier3": {
+        "address": "0x22B7F8BF4Bcc84390E2deed22648118E59E2Acf0",
+        "name": "Nova Star",
+        "feeMultiplier": 50,
+        "feeUSDC": "50000000"
+      },
+      "tier4": {
+        "address": "0x7E30532968D652E7e778De01757F1a9ab0Cf6518",
+        "name": "Nova Prime",
+        "feeMultiplier": 100,
+        "feeUSDC": "100000000"
+      },
+      "tier5": {
+        "address": "0x6e2Ee3f01eF81E81bD48F8891964D8A8F40d0898",
+        "name": "SuperNova Genesis",
+        "feeMultiplier": 250,
+        "feeUSDC": "250000000"
+      },
+      "tier6": {
+        "address": "0x3165964D604C1c57c6f96752FaF3dD1BF209396d",
+        "name": "SuperNova Elite",
+        "feeMultiplier": 500,
+        "feeUSDC": "500000000"
+      },
+      "tier7": {
+        "address": "0x2ab7D897ae9537Ae6538AD69D8EdC0edC7Ee105c",
+        "name": "SuperNova Spark",
+        "feeMultiplier": 1000,
+        "feeUSDC": "1000000000"
+      }
+    }
+  },
+  "wallets": {
+    "dev": "0x7fc2158892F14b9A1fB6e39B788d4d08daF49C0a",
+    "ops": "0xa23A0492A823a2FfB6D3998dDd487695F5ba4019",
+    "admin": "0xCd0Af6a4116f2062c1594aDf34c1821D45175506"
+  }
+}

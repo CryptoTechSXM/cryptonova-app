@@ -1,0 +1,44 @@
+{
+  "network": "baseSepolia",
+  "deployedAt": "2026-05-29T00:05:50.656Z",
+  "deployer": "0xCd0Af6a4116f2062c1594aDf34c1821D45175506",
+  "contracts": {
+    "usdc": "0x2D8B7b5eDec96bE441b6fb0D45D74a2BcE2C639a",
+    "cnovaToken": "0x3aDD4b15748d28819fd9B7C897eB9Dc97B157B3f",
+    "treasury": "0x33c42D99b98874178a708f114B44d9673896D8A6",
+    "communityWallet": "0x209eCF0c84a4E4A7c330edd0162B377d10BfA752",
+    "tierManager": "0x182C0ED6bf3fd5F39008F0E17a4AeE665bB99962",
+    "matrices": {
+      "tier1": {
+        "address": "0x298F11F05ee1e630be3914c34e7faeAA07dC6742",
+        "name": "Nova Spark",
+        "fee": "10000000"
+      },
+      "tier2": {
+        "address": "0x8657f3E8Cc210de3B1b901379e2783E46b8786C3",
+        "name": "Stellar Rise",
+        "fee": "25000000"
+      },
+      "tier3": {
+        "address": "0x8c0bb4bC8CBDab2072c93228A6A1a2180c8A9bf9",
+        "name": "Cosmic Ascent",
+        "fee": "50000000"
+      },
+      "tier4": {
+        "address": "0x9786e71BAFe8594e1bD7c81806CeB0D20Fa66a6d",
+        "name": "Nebula Elite",
+        "fee": "100000000"
+      },
+      "tier5": {
+        "address": "0xA92B567B11d2549dcfA7B84C46322644aeF13AA6",
+        "name": "Nova Prime",
+        "fee": "250000000"
+      }
+    }
+  },
+  "wallets": {
+    "dev": "0x7fc2158892F14b9A1fB6e39B788d4d08daF49C0a",
+    "ops": "0xa23A0492A823a2FfB6D3998dDd487695F5ba4019",
+    "admin": "0xCd0Af6a4116f2062c1594aDf34c1821D45175506"
+  }
+}

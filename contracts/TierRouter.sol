@@ -43,7 +43,7 @@ pragma solidity ^0.8.24;
  *  - register() → T1 PairManager entry
  *  - handleCycleOut() → upgrade or re-entry routing
  *  - deductForUpgrade() callback to matrix
- *  - Whale Gate (T4→T6 skip after 25 T5 first entries)
+ *  - Whale Gate (T4→T6 skip after 25 T5 first entries) -- V8.7: 10 tiers (T8-T10 added)
  *  - Inactivity Pause (dual-guard days + cycles)
  *  - manualUpgrade() voluntary paid upgrade
  *  - doubleEntry toggle (now aliased to doubleReentry in MemberOptions)
@@ -84,7 +84,7 @@ contract TierRouter is Ownable2Step {
     IERC20 public immutable usdc;
 
     // ─── Tier configuration ───────────────────────────────────────────────────
-    uint8 public constant MAX_TIERS = 7;
+    uint8 public constant MAX_TIERS = 10;
 
     address[MAX_TIERS] public tierPairManagers;
     uint256[MAX_TIERS] public tierEntryFees;
@@ -537,7 +537,7 @@ contract TierRouter is Ownable2Step {
      * @dev V8.1 _resolveDest -- determines upgrade destination with all guards.
      *
      *      Guards (in order):
-     *        a. T7 apex loop guard
+     *        a. T10 apex loop guard
      *        b. autoUpgrade toggle (ignored if earlyPhase = cycles < threshold)
      *        c. Whale Gate (T4 -> T6 skip when active)
      *        d. Destination tier deployed
@@ -558,8 +558,8 @@ contract TierRouter is Ownable2Step {
         destTierIndex = tierIndex;
         primaryFee    = tierEntryFees[tierIndex];
 
-        // Guard a: T7 always loops
-        if (tierIndex >= 6) return (destTierIndex, primaryFee, false);
+        // Guard a: T10 always loops
+        if (tierIndex >= 9) return (destTierIndex, primaryFee, false);
 
         // Guard b: autoUpgrade toggle (only respected after threshold cycles)
         bool earlyPhase = cycles < autoUpgradeCycleThreshold;
@@ -862,7 +862,7 @@ contract TierRouter is Ownable2Step {
         external view
         returns (bool eligible, uint8 nextTierNum, uint256 feeNeeded)
     {
-        if (tierIndex >= 6) return (false, 0, 0);
+        if (tierIndex >= 9) return (false, 0, 0);
         uint256 cycles = tierCycles[member][tierIndex];
         if (cycles == 0) return (false, 0, 0);
         nextTierNum = tierIndex + 2;
@@ -880,8 +880,8 @@ contract TierRouter is Ownable2Step {
     }
 
     function getAllTiers() external view returns (
-        address[7] memory pairManagers,
-        uint256[7] memory entryFees
+        address[10] memory pairManagers,
+        uint256[10] memory entryFees
     ) {
         return (tierPairManagers, tierEntryFees);
     }
@@ -907,7 +907,7 @@ contract TierRouter is Ownable2Step {
     }
 
     /// @notice V8.1: Snapshot of all velocity gates (for keeper dashboard).
-    function getVelocityGates() external view returns (bool[7] memory green) {
+    function getVelocityGates() external view returns (bool[10] memory green) {
         for (uint8 i = 0; i < MAX_TIERS; i++) {
             green[i] = tierVelocityGreen[i];
         }

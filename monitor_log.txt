@@ -1,0 +1,224 @@
+ 
+========================================== 
+Sun 06/07/2026 17:13:14.59 — Monitor starting 
+========================================== 
+CryptoNova V8 — Daily Monitor
+Time: Sun, 07 Jun 2026 21:13:15 GMT
+RPC:  https://sepolia.base.org
+
+📊 CryptoNova V8 — Daily Report
+📅 Sun, 07 Jun 2026 21:13:15 GMT
+
+🟢 All systems healthy
+
+── REGISTRATIONS ──────────────────
+  Total (T1):      365 (no change)
+  Total (T2):      1 (no change)
+  New (24h est):   0
+
+── T1 MATRIX ───────────────────────
+  MatA:  64/64  cycles: 301 (no change)
+  MatB:  64/64  cycles: 2 (no change)
+  MatA pool: $3.80  |  MatB pool: $3.80
+
+── T2 MATRIX ───────────────────────
+  MatA:  1/64  cycles: 0 (no change)
+  MatB:  0/64  cycles: 0 (no change)
+  MatA pool: $9.50
+
+── TREASURY & RESERVES ─────────────
+  Treasury USDC:   $216.75 (no change)
+  StabilityFund:   $86.70 (no change)
+
+── CNOVA TOKEN ─────────────────────
+  Total supply:    21,650 CNOVA (no change)
+  Current epoch:   0
+  Reward/entry:    50 CNOVA
+
+── SYSTEM ──────────────────────────
+  Total cycles:    2 (no change)
+  Paused:          🟢 No
+
+✅ No alerts — everything looks normal
+
+Run: npx hardhat run scripts/monitor_v8.js --network baseSepolia
+
+✓ State saved to ./monitor_state.json
+Sun 06/07/2026 17:13:16.26 — Monitor completed OK 
+ 
+========================================== 
+Mon 06/08/2026  8:00:01.72 — Monitor starting 
+========================================== 
+CryptoNova V8 — Daily Monitor
+Time: Mon, 08 Jun 2026 12:00:02 GMT
+RPC:  https://sepolia.base.org
+
+📊 CryptoNova V8 — Daily Report
+📅 Mon, 08 Jun 2026 12:00:02 GMT
+
+🟡 Healthy with warnings
+
+── REGISTRATIONS ──────────────────
+  Total (T1):      330
+  Total (T2):      0 (no change)
+  New (24h est):   first run
+
+── T1 MATRIX ───────────────────────
+  MatA:  64/64  cycles: 266
+  MatB:  64/64  cycles: 0
+  MatA pool: $3.30  |  MatB pool: $211.20
+
+── T2 MATRIX ───────────────────────
+  MatA:  0/64  cycles: 0 (no change)
+  MatB:  0/64  cycles: 0 (no change)
+  MatA pool: $0.00
+
+── TREASURY & RESERVES ─────────────
+  Treasury USDC:   $78.80
+  StabilityFund:   $0.00
+
+── CNOVA TOKEN ─────────────────────
+  Total supply:    19,700 CNOVA
+  Current epoch:   0
+  Reward/entry:    50 CNOVA
+
+── SYSTEM ──────────────────────────
+  Total cycles:    0
+  Paused:          🟢 No
+
+── ALERTS ──────────────────────────
+  🚨 StabilityFund LOW: $0.00 (minimum: $10.00)
+
+Run: node scripts/monitor_v8.js
+
+✓ State saved to ./monitor_state.json
+Mon 06/08/2026  8:00:03.70 — Monitor completed OK 
+ 
+========================================== 
+Tue 06/09/2026  8:00:09.21 — Monitor starting 
+========================================== 
+CryptoNova V8 — Daily Monitor
+Time: Tue, 09 Jun 2026 12:00:10 GMT
+RPC:  https://sepolia.base.org
+
+📊 CryptoNova V8 — Daily Report
+📅 Tue, 09 Jun 2026 12:00:10 GMT
+
+🟡 Healthy with warnings
+
+── REGISTRATIONS ──────────────────
+  Total (T1):      330 (no change)
+  Total (T2):      0 (no change)
+  New (24h est):   0
+
+── T1 MATRIX ───────────────────────
+  MatA:  64/64  cycles: 266 (no change)
+  MatB:  64/64  cycles: 0 (no change)
+  MatA pool: $3.30  |  MatB pool: $211.20
+
+── T2 MATRIX ───────────────────────
+  MatA:  0/64  cycles: 0 (no change)
+  MatB:  0/64  cycles: 0 (no change)
+  MatA pool: $0.00
+
+── TREASURY & RESERVES ─────────────
+  Treasury USDC:   $78.80 (no change)
+  StabilityFund:   $0.00 (no change)
+
+── CNOVA TOKEN ─────────────────────
+  Total supply:    19,700 CNOVA (no change)
+  Current epoch:   0
+  Reward/entry:    50 CNOVA
+
+── SYSTEM ──────────────────────────
+  Total cycles:    0 (no change)
+  Paused:          🟢 No
+
+── ALERTS ──────────────────────────
+  🚨 StabilityFund LOW: $0.00 (minimum: $10.00)
+  ⚠️  No new registrations in ~24h — check if frontend is reachable
+
+Run: node scripts/monitor_v8.js
+
+✓ State saved to ./monitor_state.json
+Tue 06/09/2026  8:00:11.43 — Monitor completed OK 
+ 
+========================================== 
+Wed 06/10/2026  8:00:01.47 — Monitor starting 
+========================================== 
+CryptoNova V8 — Daily Monitor
+Time: Wed, 10 Jun 2026 12:00:02 GMT
+RPC:  https://sepolia.base.org
+
+📊 CryptoNova V8 — Daily Report
+📅 Wed, 10 Jun 2026 12:00:02 GMT
+
+🟡 Healthy with warnings
+
+── REGISTRATIONS ──────────────────
+  Total (T1):      330 (no change)
+  Total (T2):      0 (no change)
+  New (24h est):   0
+
+── T1 MATRIX ───────────────────────
+  MatA:  64/64  cycles: 266 (no change)
+  MatB:  64/64  cycles: 0 (no change)
+  MatA pool: $3.30  |  MatB pool: $211.20
+
+── T2 MATRIX ───────────────────────
+  MatA:  0/64  cycles: 0 (no change)
+  MatB:  0/64  cycles: 0 (no change)
+  MatA pool: $0.00
+
+── TREASURY & RESERVES ─────────────
+  Treasury USDC:   $78.80 (no change)
+  StabilityFund:   $0.00 (no change)
+
+── CNOVA TOKEN ─────────────────────
+  Total supply:    19,700 CNOVA (no change)
+  Current epoch:   0
+  Reward/entry:    50 CNOVA
+
+── SYSTEM ──────────────────────────
+  Total cycles:    0 (no change)
+  Paused:          🟢 No
+
+── ALERTS ──────────────────────────
+  🚨 StabilityFund LOW: $0.00 (minimum: $10.00)
+  ⚠️  No new registrations in ~24h — check if frontend is reachable
+
+Run: node scripts/monitor_v8.js
+
+✓ State saved to ./monitor_state.json
+Wed 06/10/2026  8:00:03.10 — Monitor completed OK 
+ 
+========================================== 
+Thu 06/11/2026  8:00:01.73 — Monitor starting 
+========================================== 
+CryptoNova V8.8 — Daily Monitor
+Time: Thu, 11 Jun 2026 12:00:02 GMT
+RPC:  https://sepolia.base.org
+Monitor failed: Error: missing revert data (action="call", data=null, reason=null, transaction={ "data": "0x3f728455", "to": "0x5190531F8117f3C778b34b24087110cb013fA4C2" }, invocation=null, revert=null, code=CALL_EXCEPTION, version=6.16.0)
+    at makeError (C:\CryptoNite-Smart-Contracts\CryptoNova\node_modules\ethers\lib.commonjs\utils\errors.js:137:21)
+    at getBuiltinCallException (C:\CryptoNite-Smart-Contracts\CryptoNova\node_modules\ethers\lib.commonjs\abi\abi-coder.js:105:37)
+    at AbiCoder.getBuiltinCallException (C:\CryptoNite-Smart-Contracts\CryptoNova\node_modules\ethers\lib.commonjs\abi\abi-coder.js:206:16)
+    at JsonRpcProvider.getRpcError (C:\CryptoNite-Smart-Contracts\CryptoNova\node_modules\ethers\lib.commonjs\providers\provider-jsonrpc.js:695:43)
+    at C:\CryptoNite-Smart-Contracts\CryptoNova\node_modules\ethers\lib.commonjs\providers\provider-jsonrpc.js:302:45
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5) {
+  code: 'CALL_EXCEPTION',
+  action: 'call',
+  data: null,
+  reason: null,
+  transaction: {
+    to: '0x5190531F8117f3C778b34b24087110cb013fA4C2',
+    data: '0x3f728455'
+  },
+  invocation: null,
+  revert: null,
+  shortMessage: 'missing revert data',
+  info: {
+    error: { code: -32016, message: 'over rate limit' },
+    payload: { method: 'eth_call', params: [Array], id: 41, jsonrpc: '2.0' }
+  }
+}
+Thu 06/11/2026  8:00:03.03 — Monitor FAILED (exit code 1

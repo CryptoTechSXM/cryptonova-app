@@ -16,7 +16,11 @@ require("dotenv").config();
  *   BSCSCAN_API_KEY        -- for BscScan verification (https://bscscan.com/apis)
  */
 
-const DEPLOYER_KEY     = process.env.DEPLOYER_PRIVATE_KEY || "0x" + "0".repeat(64);
+const ZERO_KEY         = "0x" + "0".repeat(64); // placeholder — invalid key, never included in accounts
+const DEPLOYER_KEY     = process.env.DEPLOYER_PRIVATE_KEY || ZERO_KEY;
+const FILL_FUNDER_KEY  = process.env.FILL_FUNDER_KEY      || ZERO_KEY;
+// Only include keys that are valid (not the zero placeholder)
+function validKeys(...keys) { return keys.filter(k => k !== ZERO_KEY); }
 
 // Base
 const BASE_RPC         = process.env.BASE_RPC_URL         || "https://mainnet.base.org";
@@ -48,7 +52,7 @@ module.exports = {
     baseSepolia: {
       url: BASE_SEPOLIA_RPC,
       chainId: 84532,
-      accounts: [DEPLOYER_KEY],
+      accounts: validKeys(DEPLOYER_KEY, FILL_FUNDER_KEY),
       gasPrice: "auto",
     },
 
@@ -114,13 +118,7 @@ module.exports = {
 
   paths: {
     sources:   "./contracts",
-    tests:     "./test",
-    cache:     "./cache",
+    tests:     "./test",    cache:     "./cache",
     artifacts: "./artifacts",
-  },
-
-  // Archive tests (V1/V3) moved to _test_archive/ at project root
-  mocha: {
-    timeout: 120000,
   },
 };
