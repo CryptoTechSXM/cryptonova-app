@@ -1828,7 +1828,7 @@ const TIER_ROUTER_ABI = [
 ];
 
 const MATRIX_ABI = [
-  'function getMember(address) external view returns (tuple(uint256 id, address referrer, uint256 joinedAt, uint256 withdrawable, uint256 totalEarned, uint256 cyclesCompleted, bool isInMatrix, bool hasEverJoined))',
+  'function getMember(address) external view returns (tuple(uint256 id, address referrer, uint256 joinedAt, uint256 withdrawable, uint256 totalEarned, uint256 totalWithdrawn, uint256 cyclesCompleted, bool isInMatrix, bool hasEverJoined))',
   'function occupancy() external view returns (uint256)',
   'function MATRIX_SIZE() external view returns (uint256)',
   'function ENTRY_FEE() external view returns (uint256)',
