@@ -630,7 +630,7 @@
   </div>
     <div class="logo-text">Crypto<span>Nova</span></div>
     <span class="logo-badge" id="network-badge">Base Sepolia</span>
-    <span style="background:rgba(0,229,160,.15);color:var(--green);border:1px solid var(--green2);border-radius:4px;padding:2px 8px;font-size:10px;font-weight:700;margin-left:6px">V8.8</span>
+    <span style="background:rgba(0,229,160,.15);color:var(--green);border:1px solid var(--green2);border-radius:4px;padding:2px 8px;font-size:10px;font-weight:700;margin-left:6px">V8.9</span>
   </div>
   <div style="display:flex;align-items:center;gap:8px">
     <button class="theme-toggle" id="theme-btn" onclick="toggleTheme()">☀️ Light</button>
@@ -724,6 +724,7 @@
     <div class="grid-4" id="stats-grid">
       <div class="card-sm"><div class="stat-label">Total Registered</div><div class="stat-value" id="stat-members"><span class="spinner" style="color:var(--text3)"></span></div><div class="stat-sub">all-time joins</div></div>
       <div class="card-sm"><div class="stat-label">CNOVA Minted</div><div class="stat-value green" id="stat-minted"><span class="spinner" style="color:var(--green)"></span></div><div class="stat-sub">50 per T1 join</div></div>
+      <div class="card-sm" title="Total CNOVA burned system-wide — all users, all time."><div class="stat-label">🔥 CNOVA Burned</div><div class="stat-value" id="stat-burned" style="color:var(--red)"><span class="spinner" style="color:var(--red)"></span></div><div class="stat-sub">All users lifetime</div></div>
       <div class="card-sm" title="CNOVA Treasury holds 15% of all entry fees — it backs the CNOVA floor price. Floor price = Treasury USDC ÷ total CNOVA supply."><div class="stat-label">CNOVA USDC Treasury 🏦</div><div class="stat-value green" id="stat-treasury-usdc"><span class="spinner" style="color:var(--green)"></span></div><div class="stat-sub">backing the CNOVA value</div></div>
       <div class="card-sm" title="Guaranteed minimum redemption price — Treasury USDC ÷ total CNOVA supply."><div class="stat-label">CNOVA Floor Price</div><div class="stat-value green" id="stat-floor-price"><span class="spinner" style="color:var(--green)"></span></div><div class="stat-sub">per CNOVA token</div></div>
       <div class="card-sm" style="border-color:rgba(245,158,11,.4)"><div class="stat-label">System Cycles</div><div class="stat-value" id="stat-cycles" style="color:var(--yellow)"><span class="spinner" style="color:var(--yellow)"></span></div></div>
@@ -1671,63 +1672,63 @@ const RPC_FALLBACK = 'https://base-sepolia.public.blastapi.io';
 
 const ADDRS = {
   usdc:          '0x2D8B7b5eDec96bE441b6fb0D45D74a2BcE2C639a',
-  cnova:         '0xc2b85354F2E8628E7D0874Dd236dbA0F9c3a0301',
-  treasury:      '0x44060f1513AE4B0b24E97e655E04Cf466e0e88B6',
-  stabilityFund: '0xfEA2De4db7f32Ca6716f9C2eC922Ef0d09bD379e',
-  buybackReserve:'0x24d3c758D5A29a49db4d98dCD5216F1369050D7B',
-  tierRouter:    '0x16c34eE760868E54E2450d6B10c0C44B0f704856',
-  matrixKeeper:  '0x3009f21D51f7C46ED7EBDC9Fe7f26a4e4C596AAe',
-  v8Governance:  '0xE7E3a1F7c446Be41a2285c9e470533A4C510f0AF',
-  communityWallet:'0x57AD88819433d3608736b0b5a1c16d4c55fFb5f8',
+  cnova:         '0xeAAA7d8CAA315d17321524790E52D55971b03777',
+  treasury:      '0x5Be91D0C6493F923220C18cb4f6779F6e79f3ECE',
+  stabilityFund: '0x1f375CEcB492Ba544437683DFC2A6B1AC700150C',
+  buybackReserve:'0x4BcB5A7E209269A145aC823e4539166B8E445c9f',
+  tierRouter:    '0x44aD72D63d501F5d2893F1A15Df8DDfB174E56d7',
+  matrixKeeper:  '0x95a69F7d1735174F314b32f97c32b7e8E515C002',
+  v8Governance:  '0xbAadA4830939fAC3c31C0a896c9c009D828FFC76',
+  communityWallet:'0xbF0C84Cc30D38Ced2F16aC729472Fc8808369D50',
   T1: {
-    pm:   '0x3F95a92b029e0aD84d9d544Bb89c65656A145b4C',
-    matA: '0xE23eF8d2c5d90CD8239ea729479fEdd1E9Fd3e1b',
-    matB: '0xF059Da5E6C86A7aDeA9AaEAA2Fb8f717BcCD0E4d',
+    pm:   '0x31Fe8e59459CebAf967edbF86CFfd4598632b666',
+    matA: '0x6f42Cf432D82cB0ce33B572b73F31b9e58ae978e',
+    matB: '0xE7557506b2a766DbeF5BA3841baC865E36C0991E',
   },
   T2: {
-    pm:   '0x72344b6B2633dab8611D0b10097C6c775ca86661',
-    matA: '0xb024A680FEA2bf465FB9871b25a5380f5871559b',
-    matB: '0x4eff7927c285c9D762b5379875a40C12FB2de61A',
+    pm:   '0xdA60fdB045c9E156ce71140b0BF51Ac8ff55aDd8',
+    matA: '0x5B70F232D73bc4fE1e29E469DBDF168c3289B47d',
+    matB: '0x0E984030b43d9FB71044f31142215101A60036c7',
   },
   T3: {
-    pm:   '0x034a3715D4dEcBb545DDafcDA444E1b7656A2167',
-    matA: '0x8BFA49D34d7D25B0986c4036EdbdB9C4406385c0',
-    matB: '0x649A128279E081Da6986a3d9f6693339BAe3f06D',
+    pm:   '0xb2c744dc4089D050a56A9D1c49Be37084da65E59',
+    matA: '0xcb52F16926699cbd2287D518D4EfDfFC5f2E7cEd',
+    matB: '0xCFb8C3EeE6d71a1F39b1Ae103892EC215FA47c60',
   },
   T4: {
-    pm:   '0xF84806D29b7CDE961008977Fb6BE562f041C86E7',
-    matA: '0x86A0114231D91f240bF8Bb259cDd107A114615f6',
-    matB: '0x74A4F49d42f90E20Bb12370Fa88f23ceE04E488D',
+    pm:   '0xdE30066F79822ab8997fd46d21E72e20985AC4Dc',
+    matA: '0xe2A119443bAe10286DFacB75248E0b9Dc998C380',
+    matB: '0x98601fE894e9341Ed5d7488Fc852b349DcFc2353',
   },
   T5: {
-    pm:   '0x4042843B31901163c400524CD84672c01867BE88',
-    matA: '0x274EDfB7A0c2FA5613519B28B47043a4bb631Dd6',
-    matB: '0xbee7e4ca9991002E06359aA31fcB9B385e06c167',
+    pm:   '0x54d5A9c82F1Aa94f89712FC66B22b9c79abbB075',
+    matA: '0xD0D79874F31962e8467E1a70183DB1Cb1079975c',
+    matB: '0xE56Fe0794fC42ab2A1167aAFED39c0b87fA1EB2b',
   },
   T6: {
-    pm:   '0xa7fd1F510895d610D0d5FeD6c6F0d12D29156960',
-    matA: '0x55a33B994942C5587d00f0D6b944F33f885555Df',
-    matB: '0x5190531F8117f3C778b34b24087110cb013fA4C2',
+    pm:   '0x5cEe72a04bfFFDC62841C5c39B81d619001066eF',
+    matA: '0xBeaF7909256F6Ec17b4C48Df2FD2fAd6683B4957',
+    matB: '0x65E0B1a07975013c4569393b375e26a60728fD83',
   },
   T7: {
-    pm:   '0xA3478508Bc880b777DDE63059dA4C6d477e32938',
-    matA: '0xC8A9C06B7fF2Cf36e3509aA253F736602764712B',
-    matB: '0x1cB9eCA061Ec18833642f03104d90B8596C4Eea0',
+    pm:   '0x1b46FbF4ebd4A22eA2713E41ad31fce8d3C1243B',
+    matA: '0xB6F1844f86182857345B3EA701982E3715c2Af7e',
+    matB: '0xe75FEeA8fC07F1818c8cd9f67C8712F65010b50e',
   },
   T8: {
-    pm:   '0x57016DC64753a158bc2Be2f62316fBE7b05D2C98',
-    matA: '0x5968bC0D949E2B16b2D7a55956912512551F5eDc',
-    matB: '0x508Ed4Aa8ae99e45ed78dFdBe53786433b8E188E',
+    pm:   '0xEf80e42b5a6025382fB98d414Db3839A28a95F9c',
+    matA: '0x7569AC9FDcf487dDFCBfAD5B5c2b97459D8733Da',
+    matB: '0x84153189FB98503610Ca06F06e31B105aEE7D4c4',
   },
   T9: {
-    pm:   '0xA6Ea31Cbd308328B6D4B090eCF79cC4381dd05dA',
-    matA: '0x45cD12826b3bD8361D1749Cf484680D5A2Da7bBD',
-    matB: '0x91CED201a9780d91638e937B72CDfab7fd81bCb2',
+    pm:   '0xf057FFB28854e5a8eC55DC83627878ad9451f05b',
+    matA: '0xC9432946183b545a0e9ca9eCCAE5f1A10181F217',
+    matB: '0x5116a6806B640995887BB39829D4683E4F640C58',
   },
   T10: {
-    pm:   '0x407ddB85CE8289Cbe577CF5BA1583CD928adDae5',
-    matA: '0x3223a95F0dad6adA0feA90fd01089815E196Be01',
-    matB: '0x51C8465d1c1e082B4F3E209585E848af06F7B5f4',
+    pm:   '0x0253951c84D8abE110016d034730695d5511986E',
+    matA: '0xfDA591EFf27806Cf9f88aB24b02d5c7Dc1716169',
+    matB: '0x40FF01246324F0d3337469f3e4462BE14F6477aA',
   },
 };
 
@@ -1779,6 +1780,7 @@ const CNOVA_ABI = [
   'function balanceOf(address) external view returns (uint256)',
   'function totalSupply() external view returns (uint256)',
   'function totalMinted() external view returns (uint256)',
+  'function totalBurned() external view returns (uint256)',
   'function currentEpochNumber() external view returns (uint8)',
   'function epochRewards(uint256) external view returns (uint256)',
   'function TOTAL_EPOCHS() external view returns (uint8)',
@@ -2023,7 +2025,7 @@ async function loadHomeStats() {
       occA2, cyclesA2, occB2, poolB2,
       sysCycles, supply, epoch, sfBal, treasUsdc,
       occA3, cyclesA3, occB3, poolB3,
-      cwPoolBal, allTimeMinted
+      cwPoolBal, allTimeMinted, allTimeBurned
     ] = await Promise.all([
       matA1.occupancy().catch(()=>0n),
       matA1.rotationCount().catch(()=>0n),
@@ -2045,11 +2047,13 @@ async function loadHomeStats() {
       matB3.poolAccumulator().catch(()=>0n),
       usdc.balanceOf(ADDRS.communityWallet || ethers.ZeroAddress).catch(()=>0n),
       cnova.totalMinted().catch(()=>0n),  // all-time minted (never decreases on burn)
+      cnova.totalBurned().catch(()=>0n),  // V8.9: global burned counter from contract
     ]);
 
     // Stat cards
     setText('stat-members',  totalJoined.toString());
     setText('stat-minted',   Number(ethers.formatEther(allTimeMinted)).toLocaleString(undefined,{maximumFractionDigits:0})); // all-time, never decreases
+    setText('stat-burned',   Number(ethers.formatEther(allTimeBurned)).toLocaleString(undefined,{maximumFractionDigits:0})); // V8.9 totalBurned()
     setText('stat-reserve',  fmt6(sfBal));
     setText('stat-cw-balance', fmt6(cwPoolBal));
     setText('stat-cycles',   sysCycles.toString());
