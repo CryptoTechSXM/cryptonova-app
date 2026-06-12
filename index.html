@@ -358,7 +358,7 @@
 
   <!-- ══ LAUNCH ANNOUNCEMENT BANNER ══════════════════════════════════════ -->
   <div id="launch-banner">
-    <div class="bn-title">&#x1F680; CryptoNova Tokens &mdash; Community Testnet Launch</div>
+    <div class="bn-title">&#x1F680; CryptoNova Tokens &mdash; Public Launch Friday June 19</div>
     <div class="bn-cd">
       <span id="bn-h">00</span>h
       <span id="bn-m">00</span>m
@@ -373,7 +373,7 @@
   <div id="launch-gate">
     <h2>&#x1F680; CryptoNova Matrix</h2>
     <p style="font-size:15px;font-weight:600;color:var(--text);margin-bottom:4px">
-      Community Testnet Launch &mdash; Friday, June 12 at 12 PM ET
+      Public Launch &mdash; Friday, June 19 at 12 PM ET
     </p>
     <p style="max-width:440px">
       Register, earn, and redeem <strong style="color:var(--green)">CryptoNova Tokens</strong> across 10 live tiers.<br><br>
@@ -387,7 +387,7 @@
       <div class="cd-box"><span class="cd-num" id="cd-m">00</span><div class="cd-lbl">Minutes</div></div>
       <div class="cd-box"><span class="cd-num" id="cd-s">00</span><div class="cd-lbl">Seconds</div></div>
     </div>
-    <div class="launch-sub" id="cd-date-label">12:00 PM Eastern &bull; Friday, June 12 2026</div>
+    <div class="launch-sub" id="cd-date-label">12:00 PM Eastern &bull; Friday, June 19 2026</div>
 
     <!-- City timezone grid -->
     <div id="cd-cities-wrap" style="margin-top:14px;max-width:400px;width:100%;text-align:left">
@@ -724,38 +724,33 @@
     <div class="grid-4" id="stats-grid">
       <div class="card-sm"><div class="stat-label">Total Registered</div><div class="stat-value" id="stat-members"><span class="spinner" style="color:var(--text3)"></span></div><div class="stat-sub">all-time joins</div></div>
       <div class="card-sm"><div class="stat-label">CNOVA Minted</div><div class="stat-value green" id="stat-minted"><span class="spinner" style="color:var(--green)"></span></div><div class="stat-sub">50 per T1 join</div></div>
-      <div class="card-sm" title="Total CNOVA burned system-wide — all users, all time."><div class="stat-label">🔥 CNOVA Burned</div><div class="stat-value" id="stat-burned" style="color:var(--red)"><span class="spinner" style="color:var(--red)"></span></div><div class="stat-sub">All users lifetime</div></div>
       <div class="card-sm" title="CNOVA Treasury holds 15% of all entry fees — it backs the CNOVA floor price. Floor price = Treasury USDC ÷ total CNOVA supply."><div class="stat-label">CNOVA USDC Treasury 🏦</div><div class="stat-value green" id="stat-treasury-usdc"><span class="spinner" style="color:var(--green)"></span></div><div class="stat-sub">backing the CNOVA value</div></div>
       <div class="card-sm" title="Guaranteed minimum redemption price — Treasury USDC ÷ total CNOVA supply."><div class="stat-label">CNOVA Floor Price</div><div class="stat-value green" id="stat-floor-price"><span class="spinner" style="color:var(--green)"></span></div><div class="stat-sub">per CNOVA token</div></div>
+      <div class="card-sm"><div class="stat-label">CNOVA Total Supply</div><div class="stat-value" id="stat-supply"><span class="spinner" style="color:var(--text3)"></span></div><div class="stat-sub">circulating CNOVA</div></div>
       <div class="card-sm" style="border-color:rgba(245,158,11,.4)"><div class="stat-label">System Cycles</div><div class="stat-value" id="stat-cycles" style="color:var(--yellow)"><span class="spinner" style="color:var(--yellow)"></span></div></div>
     </div>
 
 
-    <!-- CNOVA Mining -->
-    <div class="card" style="margin-bottom:24px">
-      <div class="section-title" style="margin-bottom:12px"><div class="dot"></div> <svg width="18" height="18" style="vertical-align:middle;border-radius:50%;margin-right:4px"><use href="#cnova-icon"/></svg> CNOVA Mining</div>
-      <div class="grid-4">
-        <div><div style="font-size:12px;color:var(--text3);margin-bottom:4px">Current Epoch</div><div style="font-weight:700;color:var(--yellow)" id="stat-epoch">—</div></div>
-        <div><div style="font-size:12px;color:var(--text3);margin-bottom:4px">Reward Per Entry</div><div style="font-weight:700;color:var(--green)" id="stat-reward">—</div></div>
-        <div><div style="font-size:12px;color:var(--text3);margin-bottom:4px">Stability Rescue Fund</div><div style="font-weight:700" id="stat-reserve">—</div></div>
-        <div><div style="font-size:12px;color:var(--text3);margin-bottom:4px">Community Wallet</div><div style="font-weight:700;color:#a855f7" id="stat-cw-balance">—</div></div>
-        <div><div style="font-size:12px;color:var(--text3);margin-bottom:4px">Total Supply</div><div style="font-weight:700" id="stat-supply">—</div></div>
-      </div>
+    <!-- CNOVA Mining Stats -->
+    <div class="grid-4" style="margin-bottom:24px">
+      <div class="card-sm"><div class="stat-label">Current Epoch</div><div class="stat-value" id="stat-epoch" style="color:var(--yellow)">—</div></div>
+      <div class="card-sm"><div class="stat-label">CNOVA Reward / Entry</div><div class="stat-value green" id="stat-reward">—</div></div>
+      <div class="card-sm"><div class="stat-label">Stability Rescue Fund</div><div class="stat-value" id="stat-reserve">—</div></div>
+      <div class="card-sm"><div class="stat-label">Community Wallet</div><div class="stat-value" id="stat-cw-balance" style="color:#a855f7">—</div></div>
     </div>
 
     <!-- Entry split -->
     <div class="card">
       <div class="section-title"><div class="dot"></div> Entry Fee Split — per $10 at T1</div>
-      <div class="split-row"><span class="split-label">🤝 L1 Direct Referrer</span><span><span class="split-amount">20%</span> <span class="split-pct">$2.00</span></span></div>
-      <div class="split-row"><span class="split-label">⛓️ Chain Pay (6 upline levels)</span><span><span class="split-amount">20%</span> <span class="split-pct">$2.00</span></span></div>
       <div class="split-row"><span class="split-label">🌀 Equalization Pool</span><span><span class="split-amount">33%</span> <span class="split-pct">$3.30</span></span></div>
+      <div class="split-row"><span class="split-label">⛓️ Chain Pay (6 upline levels)</span><span><span class="split-amount">20%</span> <span class="split-pct">$2.00</span></span></div>
+      <div class="split-row"><span class="split-label">🤝 L1 Direct Referrer</span><span><span class="split-amount">20%</span> <span class="split-pct">$2.00</span></span></div>
       <div class="split-row"><span class="split-label">🏦 CNOVA Treasury <span style="font-size:10px;color:var(--text3)">(floor backing)</span></span><span><span class="split-amount">15%</span> <span class="split-pct">$1.50</span></span></div>
-      <div class="split-row"><span class="split-label">⚙️ Dev + Ops</span><span><span class="split-amount">5%</span> <span class="split-pct">$0.50</span></span></div>
-      <div class="split-row"><span class="split-label">🌊 CNOVA Stability Fund <span style="font-size:10px;color:var(--text3)">(ops reserve)</span></span><span><span class="split-amount">6%</span> <span class="split-pct">$0.60</span></span></div>
+      <div class="split-row"><span class="split-label">🌊 CNOVA Stability Fund <span style="font-size:10px;color:var(--text3)">(rescue reserve)</span></span><span><span class="split-amount">5%</span> <span class="split-pct">$0.50</span></span></div>
+      <div class="split-row"><span class="split-label">⚙️ Dev</span><span><span class="split-amount">3%</span> <span class="split-pct">$0.30</span></span></div>
+      <div class="split-row"><span class="split-label">⚙️ Ops</span><span><span class="split-amount">2%</span> <span class="split-pct">$0.20</span></span></div>
+      <div class="split-row"><span class="split-label">🏛️ Community</span><span><span class="split-amount">1%</span> <span class="split-pct">$0.10</span></span></div>
       <div class="split-row"><span class="split-label">🔥 CNOVA Buyback Reserve</span><span><span class="split-amount">1%</span> <span class="split-pct">$0.10</span></span></div>
-      <div style="margin-top:8px;padding:8px 12px;background:rgba(168,85,247,.08);border:1px solid rgba(168,85,247,.25);border-radius:8px;font-size:12px;color:var(--text2);line-height:1.6">
-        🏛️ <strong style="color:#a855f7">Community Wallet</strong> — funded automatically from orphan fees (empty upline slots in the matrix tree). Not a fixed % split.
-      </div>
       <div style="margin-top:14px;padding:10px 14px;background:var(--green-dim);border:1px solid var(--green2);border-radius:8px;font-size:13px;color:var(--text2)">
         💡 <strong style="color:var(--green)">CryptoNova Matrix mechanic:</strong> Fill Matrix A → root crosses to Matrix B → fill B → root auto-upgrades to T2. The loop repeats for each tier.
       </div>
@@ -764,7 +759,7 @@
 
   <!-- ══ TIERS TAB ═══════════════════════════════════════════════════════ -->
   <div id="tab-tiers" class="tab-panel">
-    <div class="section-title" style="margin-bottom:16px"><div class="dot"></div> 7-Tier CryptoNova Matrix &#8212; Live Stats</div>
+    <div class="section-title" style="margin-bottom:16px"><div class="dot"></div> 10-Tier CryptoNova Matrix &#8212; Live Stats</div>
     <div class="card" style="margin-bottom:24px;overflow-x:auto">
       <table style="width:100%;border-collapse:collapse;font-size:13px">
         <thead><tr style="border-bottom:1px solid var(--border)">
@@ -914,6 +909,60 @@
         <div class="info-row"><span class="info-key">Pool Accumulator</span><span class="info-val green" id="t7b-pool">&#8212;</span></div>
         <div style="margin-top:10px"><div style="display:flex;justify-content:space-between;font-size:12px;color:var(--text3);margin-bottom:4px"><span>Fill progress</span><span id="t7b-pct">0%</span></div><div class="progress-wrap"><div class="progress-bar" id="t7b-bar" style="width:0%"></div></div></div>
         <div style="margin-top:10px;padding:10px 12px;background:var(--bg3);border-radius:8px;font-size:12px;color:var(--text3);line-height:1.6">T7 unlocks the $2,500+ whale tiers. Completing T7 earns a 70x CNOVA multiplier and opens T8-T10 upgrade eligibility.</div>
+      </div>
+    </div>
+
+    <div style="margin-bottom:8px;font-size:13px;font-weight:700;color:var(--text2);letter-spacing:.5px">T8 &#8212; SuperNova Titan &#183; $2,500</div>
+    <div class="grid-2" style="margin-bottom:20px">
+      <div class="card" style="opacity:0.85">
+        <div class="section-title" style="margin-bottom:12px"><div id="t8a-dot" class="dot" style="background:var(--yellow)"></div> T8 Matrix A &#8212; SuperNova Titan</div>
+        <div class="info-row"><span class="info-key">Seats Filled</span><span class="info-val"><span id="t8a-occ">&#8212;</span> / 127</span></div>
+        <div class="info-row"><span class="info-key">Matrix Cycles</span><span class="info-val green" id="t8a-cycles">&#8212;</span></div>
+        <div style="margin-top:10px"><div style="display:flex;justify-content:space-between;font-size:12px;color:var(--text3);margin-bottom:4px"><span>Fill progress</span><span id="t8a-pct">0%</span></div><div class="progress-wrap"><div class="progress-bar" id="t8a-bar" style="width:0%"></div></div></div>
+        <div style="margin-top:10px;padding:10px 12px;background:var(--bg3);border-radius:8px;font-size:12px;color:var(--text3);line-height:1.6">Gate opens when T7 MatB hits 80% fill. T7 graduates auto-upgrade.</div>
+      </div>
+      <div class="card" style="opacity:0.85">
+        <div class="section-title" style="margin-bottom:12px"><div id="t8b-dot" class="dot" style="background:var(--yellow)"></div> T8 Matrix B &#8212; Crossing Pool</div>
+        <div class="info-row"><span class="info-key">Seats Filled</span><span class="info-val"><span id="t8b-occ">&#8212;</span> / 127</span></div>
+        <div class="info-row"><span class="info-key">Pool Accumulator</span><span class="info-val green" id="t8b-pool">&#8212;</span></div>
+        <div style="margin-top:10px"><div style="display:flex;justify-content:space-between;font-size:12px;color:var(--text3);margin-bottom:4px"><span>Fill progress</span><span id="t8b-pct">0%</span></div><div class="progress-wrap"><div class="progress-bar" id="t8b-bar" style="width:0%"></div></div></div>
+        <div style="margin-top:10px;padding:10px 12px;background:var(--bg3);border-radius:8px;font-size:12px;color:var(--text3);line-height:1.6">T8 MatA alumni cross here. Full = root upgrades to T9.</div>
+      </div>
+    </div>
+
+    <div style="margin-bottom:8px;font-size:13px;font-weight:700;color:var(--text2);letter-spacing:.5px">T9 &#8212; SuperNova Legend &#183; $5,000</div>
+    <div class="grid-2" style="margin-bottom:20px">
+      <div class="card" style="opacity:0.85">
+        <div class="section-title" style="margin-bottom:12px"><div id="t9a-dot" class="dot" style="background:var(--yellow)"></div> T9 Matrix A &#8212; SuperNova Legend</div>
+        <div class="info-row"><span class="info-key">Seats Filled</span><span class="info-val"><span id="t9a-occ">&#8212;</span> / 127</span></div>
+        <div class="info-row"><span class="info-key">Matrix Cycles</span><span class="info-val green" id="t9a-cycles">&#8212;</span></div>
+        <div style="margin-top:10px"><div style="display:flex;justify-content:space-between;font-size:12px;color:var(--text3);margin-bottom:4px"><span>Fill progress</span><span id="t9a-pct">0%</span></div><div class="progress-wrap"><div class="progress-bar" id="t9a-bar" style="width:0%"></div></div></div>
+        <div style="margin-top:10px;padding:10px 12px;background:var(--bg3);border-radius:8px;font-size:12px;color:var(--text3);line-height:1.6">Gate opens when T8 MatB hits 80% fill. T8 graduates auto-upgrade.</div>
+      </div>
+      <div class="card" style="opacity:0.85">
+        <div class="section-title" style="margin-bottom:12px"><div id="t9b-dot" class="dot" style="background:var(--yellow)"></div> T9 Matrix B &#8212; Crossing Pool</div>
+        <div class="info-row"><span class="info-key">Seats Filled</span><span class="info-val"><span id="t9b-occ">&#8212;</span> / 127</span></div>
+        <div class="info-row"><span class="info-key">Pool Accumulator</span><span class="info-val green" id="t9b-pool">&#8212;</span></div>
+        <div style="margin-top:10px"><div style="display:flex;justify-content:space-between;font-size:12px;color:var(--text3);margin-bottom:4px"><span>Fill progress</span><span id="t9b-pct">0%</span></div><div class="progress-wrap"><div class="progress-bar" id="t9b-bar" style="width:0%"></div></div></div>
+        <div style="margin-top:10px;padding:10px 12px;background:var(--bg3);border-radius:8px;font-size:12px;color:var(--text3);line-height:1.6">T9 MatA alumni cross here. Full = root upgrades to T10.</div>
+      </div>
+    </div>
+
+    <div style="margin-bottom:8px;font-size:13px;font-weight:700;color:var(--text2);letter-spacing:.5px">T10 &#8212; SuperNova Apex &#183; $10,000</div>
+    <div class="grid-2" style="margin-bottom:20px">
+      <div class="card" style="opacity:0.85">
+        <div class="section-title" style="margin-bottom:12px"><div id="t10a-dot" class="dot" style="background:var(--yellow)"></div> T10 Matrix A &#8212; SuperNova Apex</div>
+        <div class="info-row"><span class="info-key">Seats Filled</span><span class="info-val"><span id="t10a-occ">&#8212;</span> / 127</span></div>
+        <div class="info-row"><span class="info-key">Matrix Cycles</span><span class="info-val green" id="t10a-cycles">&#8212;</span></div>
+        <div style="margin-top:10px"><div style="display:flex;justify-content:space-between;font-size:12px;color:var(--text3);margin-bottom:4px"><span>Fill progress</span><span id="t10a-pct">0%</span></div><div class="progress-wrap"><div class="progress-bar" id="t10a-bar" style="width:0%"></div></div></div>
+        <div style="margin-top:10px;padding:10px 12px;background:var(--bg3);border-radius:8px;font-size:12px;color:var(--text3);line-height:1.6">Gate opens when T9 MatB hits 80% fill. T9 graduates auto-upgrade.</div>
+      </div>
+      <div class="card" style="opacity:0.85">
+        <div class="section-title" style="margin-bottom:12px"><div id="t10b-dot" class="dot" style="background:var(--yellow)"></div> T10 Matrix B &#8212; Crossing Pool</div>
+        <div class="info-row"><span class="info-key">Seats Filled</span><span class="info-val"><span id="t10b-occ">&#8212;</span> / 127</span></div>
+        <div class="info-row"><span class="info-key">Pool Accumulator</span><span class="info-val green" id="t10b-pool">&#8212;</span></div>
+        <div style="margin-top:10px"><div style="display:flex;justify-content:space-between;font-size:12px;color:var(--text3);margin-bottom:4px"><span>Fill progress</span><span id="t10b-pct">0%</span></div><div class="progress-wrap"><div class="progress-bar" id="t10b-bar" style="width:0%"></div></div></div>
+        <div style="margin-top:10px;padding:10px 12px;background:var(--bg3);border-radius:8px;font-size:12px;color:var(--text3);line-height:1.6">The apex tier. T10 root is the final SuperNova Apex position — the pinnacle of the CryptoNova Matrix.</div>
       </div>
     </div>
   </div>
@@ -1595,7 +1644,7 @@ const CHAIN_ID = 84532;
   // 12:00 PM EDT (noon Eastern) = 16:00 UTC on June 12 2026.
   // This is a FIXED UTC timestamp — same countdown for every viewer worldwide.
   // To reschedule: update this ISO string.
-  const LAUNCH_UTC = new Date('2026-06-12T16:00:00Z'); // noon EDT = 16:00 UTC
+  const LAUNCH_UTC = new Date('2026-06-19T16:00:00Z'); // noon EDT = 16:00 UTC
 
   // Major city local equivalents — shown below the countdown
   const CITY_ZONES = [
@@ -2625,6 +2674,18 @@ async function loadDashboardData() {
     setText('dash-id',             memberId > 0 ? '#' + memberId : '—');
     setText('dash-orig-referrer',  memberReferrer && memberReferrer !== ethers.ZeroAddress
       ? memberReferrer.slice(0,6)+'…'+memberReferrer.slice(-4) : 'Direct');
+
+    // Direct referrals count — fire-and-forget event scan
+    (async () => {
+      try {
+        const trD = new ethers.Contract(ADDRS.tierRouter, TIER_ROUTER_ABI, rp);
+        const logs = await trD.queryFilter(trD.filters.MemberRegistered(), 0).catch(async () =>
+          trD.queryFilter(trD.filters.MemberRegistered(), -100000).catch(() => [])
+        );
+        const count = logs.filter(l => l.args?.referrer?.toLowerCase() === userAddr.toLowerCase()).length;
+        setText('dash-directs', count.toString());
+      } catch(_) { setText('dash-directs', '0'); }
+    })();
 
     // Withdraw button
     const btnW = document.getElementById('btn-withdraw');
