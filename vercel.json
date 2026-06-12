@@ -1,16 +1,19 @@
 {
   "version": 2,
-  "builds": [
-    { "src": "api/**/*.js", "use": "@vercel/node" },
-    { "src": "*.html", "use": "@vercel/static" }
-  ],
-  "routes": [
-    { "src": "/api/(.*)", "dest": "/api/$1" },
-    { "src": "/terms", "dest": "/terms.html" },
-    { "src": "/terms.html", "dest": "/terms.html" },
-    { "src": "/faq", "dest": "/faq.html" },
-    { "src": "/faq.html", "dest": "/faq.html" },
-    { "src": "/(.*)\\.html", "dest": "/$1.html" },
-    { "src": "/(.*)", "dest": "/index.html" }
+  "rewrites": [
+    {
+      "source": "/(.*)",
+      "has": [{ "type": "host", "value": "early.crypto-nova.app" }],
+      "destination": "/early.html"
+    },
+    { "source": "/api/:path*", "destination": "/api/:path*" },
+    { "source": "/terms",      "destination": "/terms.html" },
+    { "source": "/terms.html", "destination": "/terms.html" },
+    { "source": "/faq",        "destination": "/faq.html" },
+    { "source": "/faq.html",   "destination": "/faq.html" },
+    { "source": "/early",      "destination": "/early.html" },
+    { "source": "/early.html", "destination": "/early.html" },
+    { "source": "/(.*)\\.html", "destination": "/$1.html" },
+    { "source": "/(.*)",       "destination": "/index.html" }
   ]
 }
