@@ -93,6 +93,11 @@ interface IFigureEightKeeper {
     function ENTRY_FEE() external view returns (uint256);
 }
 
+interface ICommunityWalletKeeper {
+    function distributeReady() external view returns (bool);
+    function distribute() external;
+}
+
 interface IPairManagerKeeper {
     function currentMatA() external view returns (address);
     function currentMatB() external view returns (address);
@@ -118,6 +123,7 @@ contract MatrixKeeper is Ownable {
     uint8 public constant WORK_PARKED_RESCUE = 4;
     uint8 public constant WORK_VELOCITY_GATE = 5;
     uint8 public constant WORK_EVICT_PARKED  = 6;  // V8.10: grace-period eviction
+    uint8 public constant WORK_DISTRIBUTE_CW = 7;  // V8.12: monthly CommunityWallet distribution
 
     // -- Config (DAO-adjustable via enumerated menus) ---------------------------
     /// @notice Rolling window for velocity and deflation checks (seconds)
@@ -149,6 +155,7 @@ contract MatrixKeeper is Ownable {
     // -- Core state ------------------------------------------------------------
     address public tierRouter;
     address public stabilityFund;
+    address public communityWallet;   // V8.12: monthly distribution target (optional, set post-deploy)
 
     uint8   public deflationState;
     uint256 public lastVelocityCheck;
@@ -184,6 +191,7 @@ contract MatrixKeeper is Ownable {
     event VelocityGateOpened(uint8 indexed forTierIndex);
     event ParkedMemberEvicted(address indexed matrix, address indexed member, uint256 totalWithdrawn);  // V8.10
     event ConfigUpdated(string indexed param, uint256 value);                                           // V8.11
+    event CommunityDistributed(address indexed cw);                                                     // V8.12
 
     // -- Custom errors ---------------------------------------------------------
     error MK_NotKeeper();
@@ -290,6 +298,13 @@ contract MatrixKeeper is Ownable {
         emit ConfigUpdated("rescueContributionBps", v);
     }
 
+    /// @notice V8.12: Set the CommunityWallet address for automated monthly distribution.
+    ///         Set to address(0) to disable. Called by deploy_v8.js after CW deploy.
+    function setCommunityWallet(address _cw) external onlyOwner {
+        communityWallet = _cw;
+        emit ConfigUpdated("communityWallet", uint256(uint160(_cw)));
+    }
+
     // -- Chainlink Automation interface -----------------------------------------
 
     /**
@@ -371,6 +386,13 @@ contract MatrixKeeper is Ownable {
             }
         }
 
+        // 6. CommunityWallet monthly distribution (V8.12)
+        if (communityWallet != address(0) && count < maxItemsPerUpkeep) {
+            if (ICommunityWalletKeeper(communityWallet).distributeReady()) {
+                items[count++] = WorkItem(WORK_DISTRIBUTE_CW, 0, communityWallet, address(0));
+            }
+        }
+
         if (count == 0) return (false, "");
 
         // Trim array to actual count
@@ -406,6 +428,8 @@ contract MatrixKeeper is Ownable {
                 _doEvictParked(item.addr1, item.addr2);
             } else if (item.workType == WORK_VELOCITY_GATE) {
                 _doVelocityGate(item.tierIndex);
+            } else if (item.workType == WORK_DISTRIBUTE_CW) {
+                _doDistributeCW(item.addr1);
             }
         }
 
@@ -446,6 +470,14 @@ contract MatrixKeeper is Ownable {
         uint256 withdrawn = mat.getMemberTotalWithdrawn(member);
         mat.evictParked(member);
         emit ParkedMemberEvicted(matrix, member, withdrawn);
+    }
+
+    // -- Internal: CommunityWallet monthly distribution (V8.12) ------------------
+
+    function _doDistributeCW(address cw) internal {
+        try ICommunityWalletKeeper(cw).distribute() {
+            emit CommunityDistributed(cw);
+        } catch {}  // guard: never let CW failure block upkeep
     }
 
     // -- Internal: velocity gate opener -------------------------------------------

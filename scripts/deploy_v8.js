@@ -463,6 +463,10 @@ async function main() {
   }
   console.log("  ↳  CommunityWallet fully wired into SF + all matrices");
 
+  // Wire CommunityWallet into MatrixKeeper (enables distributeReady() → distribute() via Chainlink)
+  await (await keeper.setCommunityWallet(cwAddr)).wait();
+  console.log(`  ↳  MatrixKeeper.setCommunityWallet OK — monthly distribution auto-trigger active`);
+
   // ── 10a. Save addresses BEFORE W1 seed (so a seed failure doesn't lose addresses) ──
   {
     sep("Save Addresses");
