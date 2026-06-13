@@ -78,7 +78,7 @@ Genesis (#1-500) = 60%, Pioneer (#501-1000) = 40%.
 50% distributes on the 25th of each month, 50% rolls over and compounds. Begins at mainnet.
 
 ## How to Register
-1. Visit <a href="https://early.crypto-nova.app">early.crypto-nova.app</a>
+1. Visit <a href="https://crypto-nova.app">crypto-nova.app</a>
 2. Connect MetaMask or Rabby wallet
 3. Switch to <b>Base Sepolia</b> (auto-prompted)
 4. Need funds? Use <code>/faucet 0xYourAddress</code> - bot sends $20 USDC + 0.002 ETH instantly
@@ -125,7 +125,7 @@ TierRouter: <code>0x9bdb62Ac866F222c7062398F891eC860c1F89034</code>
 USDC: <code>0x2D8B7b5eDec96bE441b6fb0D45D74a2BcE2C639a</code>
 
 ## Links
-<a href="https://crypto-nova.app">crypto-nova.app</a> | <a href="https://early.crypto-nova.app">early.crypto-nova.app</a> | <a href="https://crypto-nova.app/faq">FAQ</a>
+<a href="https://crypto-nova.app">crypto-nova.app</a> | <a href="https://crypto-nova.app/faq">FAQ</a>
 <a href="https://changenow.app.link/referral?link_id=c66940e36c06c9">ChangeNow</a> — swap any crypto to USDC on Base (no account needed)
 
 ## Escalate to @admin when
@@ -160,7 +160,7 @@ I can answer questions about:
 
 const REGISTER_TEXT = `<b>How to Register on CryptoNova</b>
 
-1. Visit <a href="https://early.crypto-nova.app">early.crypto-nova.app</a>
+1. Visit <a href="https://crypto-nova.app">crypto-nova.app</a>
 2. Connect MetaMask or Rabby wallet
 3. Switch to <b>Base Sepolia</b> (auto-prompted)
 4. Need testnet funds? Use: <code>/faucet 0xYourWalletAddress</code>
@@ -338,7 +338,7 @@ async function handleFaucetRequest(token, chatId, msgId, rawAddress) {
       `Funds sent to\n<code>${toAddress}</code>\n\n` +
       `<b>$20 testnet USDC</b> - <a href="${BASESCAN}/tx/${result.usdcHash}">View tx</a>\n` +
       `<b>0.002 ETH</b> for gas - <a href="${BASESCAN}/tx/${result.ethHash}">View tx</a>\n\n` +
-      `You're ready to register!\n<a href="https://early.crypto-nova.app">early.crypto-nova.app</a>`,
+      `You're ready to register!\n<a href="https://crypto-nova.app">crypto-nova.app</a>`,
       msgId);
   } else {
     await sendReply(token, chatId, result.reason, msgId);
