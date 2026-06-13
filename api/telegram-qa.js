@@ -58,12 +58,40 @@ T10 SuperNova Apex   $10,000
 Each tier has its own separate 127-seat matrix. You auto-upgrade from T1 through the tiers as you cycle out.
 
 ## CNOVA Token
-- Mined automatically each time you complete a matrix cycle (cycle out of T1 or higher).
-- <b>8 reward epochs</b> with decreasing amounts: 50 → 40 → 20 → 10 → 5 → 2.5 → 2.5 → 2.5 CNOVA per cycle.
+- Mined automatically each time you complete a matrix cycle (cycle out of any tier).
 - Has a guaranteed floor price: <b>Treasury USDC ÷ total CNOVA supply</b>.
 - 15% of every entry fee goes to the CNOVA Treasury, permanently backing the floor price.
 - You can redeem CNOVA for USDC at the floor price at any time from the Dashboard.
 - Floor price only goes up — it never decreases.
+
+## CNOVA Epochs (verified from CNOVAToken.sol)
+Epochs are <b>global and platform-wide</b> — not per-member. There are <b>9 epochs</b> total. The current epoch advances when the FIRST of these three triggers fires:
+- 1,000,000 CNOVA minted in the current epoch
+- 10,000 new member registrations in the current epoch
+- 30 days elapsed since the epoch started
+
+Base reward per cycle (T1) by epoch:
+<code>
+Epoch 1 — Nebula Genesis:    50 CNOVA
+Epoch 2 — Mercury Rise:      40 CNOVA
+Epoch 3 — Lunar Cluster:     20 CNOVA
+Epoch 4 — Aurora Zenith:     10 CNOVA
+Epoch 5 — Solaris Echo:       5 CNOVA
+Epoch 6 — Cosmic Core:      2.5 CNOVA
+Epoch 7 — Galaxy Grid:      2.5 CNOVA
+Epoch 8 — Supernova Spark:  2.5 CNOVA
+Epoch 9 — Final Frontier:  ≤2.5 CNOVA (formula-based)
+</code>
+
+<b>Tier multipliers</b> — higher tiers earn MORE CNOVA per cycle:
+<code>
+T1=1x  T2=2x  T3=4x   T4=8x   T5=20x
+T6=40x T7=80x T8=160x T9=320x T10=640x
+</code>
+Example: cycling out of T5 in Epoch 1 = 50 × 20 = <b>1,000 CNOVA</b>.
+Example: cycling out of T10 in Epoch 1 = 50 × 640 = <b>32,000 CNOVA</b>.
+
+Mining stops when all 9 epochs are exhausted (21 million CNOVA hard cap). It is NOT per-member — do not tell members "after your 8th cycle you stop mining." The epoch is global and everyone in the same epoch gets the same base rate regardless of how many personal cycles they have completed.
 
 ## Community Pool
 - 1% of every entry fee (orphan fees) accumulates in the Community Pool.
