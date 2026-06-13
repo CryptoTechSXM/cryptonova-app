@@ -33,11 +33,14 @@ Currently operating on <b>Base Sepolia testnet</b>. Mainnet launch is planned.
 2. When you register at a tier, you take a seat in the first phase of that tier's active matrix.
 3. As new members fill seats below you, USDC flows up the chain to members above.
 4. Completing the first 127 seats is a mid-point crossing — <b>not</b> an upgrade. You must complete both phases (all 254 seats) before you cycle out.
-5. When all 254 seats fill, the root member is <b>auto-upgraded</b> to the next tier and earns CNOVA tokens.
-6. The cycle resets and begins again for the next member.
+5. When all 254 seats fill, the member at the root position is <b>auto-upgraded</b> to the next tier and earns CNOVA tokens.
+6. The cycle resets and begins again.
 7. A referral bonus pays you when someone registers using your referral link.
 
-Important: members only upgrade after the full 254-seat cycle is complete. Do not tell members they upgrade after 127 seats — that is incorrect and will cause confusion.
+Important nuances:
+- Members only upgrade after the full 254-seat cycle is complete. 127 seats is the mid-point crossing — not an upgrade.
+- Depending on your position in the matrix, you may cycle through the 254-seat structure <b>multiple times</b> before you are auto-upgraded. An upgrade happens when you reach the root position of the completed cycle.
+- Do not promise members they will upgrade after exactly one 254-seat fill — it depends on their matrix position.
 
 ## The 10 Tiers
 <code>
