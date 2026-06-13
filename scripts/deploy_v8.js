@@ -162,7 +162,7 @@ async function main() {
   const opsWallet   = process.env.OPS_WALLET_ADDRESS   || deployerAddr;
   const admin       = process.env.ADMIN_WALLET_ADDRESS || deployerAddr;
 
-  console.log("\n  V8.11 Elevator Deploy");
+  console.log("\n  V8.12 Elevator Deploy");
   sep();
   console.log(`  Deployer   : ${deployerAddr}`);
   console.log(`  AccountOne : ${accountOne}`);
@@ -549,7 +549,7 @@ async function main() {
   }
   sep();
   console.log(`  Addresses file: ${require("path").basename(ADDRESSES_FILE)}`);
-  console.log("  V8.11 Deploy complete.\n");
+  console.log("  V8.12 Deploy complete.\n");
 }
 
 main().catch(e => { console.error(e); process.exitCode = 1; });
