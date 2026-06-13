@@ -283,27 +283,30 @@ async function askClaude(apiKey, question) {
 }
 
 // ─── Main handler ──────────────────────────────────────────────────────────────
+// Synchronous: process fully before returning 200.
+// Vercel kills the process on res.end(), so all Telegram/Claude calls must
+// complete BEFORE we respond. Claude Haiku + Telegram API = ~3-6s, well within
+// the 30s maxDuration set in vercel.json.
 export default async function handler(req, res) {
-  // Always 200 — Telegram stops retrying only on 200
-  res.status(200).json({ ok: true });
+  const ok = () => res.status(200).json({ ok: true });
 
-  if (req.method !== 'POST') return;
+  if (req.method !== 'POST') return ok();
 
   const BOT_TOKEN = process.env.TELEGRAM_QA_BOT_TOKEN;
   const ANTHROPIC = process.env.ANTHROPIC_API_KEY;
 
   if (!BOT_TOKEN || !ANTHROPIC) {
     console.error('[telegram-qa] Missing env vars: TELEGRAM_QA_BOT_TOKEN or ANTHROPIC_API_KEY');
-    return;
+    return ok();
   }
 
   let body;
   try { body = typeof req.body === 'string' ? JSON.parse(req.body) : req.body; }
-  catch (e) { console.error('[telegram-qa] Bad JSON:', e.message); return; }
+  catch (e) { console.error('[telegram-qa] Bad JSON:', e.message); return ok(); }
 
   // Support both regular messages and channel posts
   const msg = body?.message || body?.channel_post;
-  if (!msg) return;
+  if (!msg) return ok();
 
   const chatId   = msg.chat?.id;
   const msgId    = msg.message_id;
@@ -313,7 +316,7 @@ export default async function handler(req, res) {
   const fromBot  = !!msg.from?.is_bot;
 
   // Ignore bot messages and empty messages
-  if (fromBot || !chatId || !rawText) return;
+  if (fromBot || !chatId || !rawText) return ok();
 
   // In groups/supergroups: only respond when @mentioned or using /command
   const mentionPattern = new RegExp(`@${BOT_USERNAME}`, 'i');
@@ -321,13 +324,13 @@ export default async function handler(req, res) {
   const isPrivate   = chatType === 'private';
   const isCommand   = rawText.startsWith('/');
 
-  if (!isPrivate && !isMentioned && !isCommand) return;
+  if (!isPrivate && !isMentioned && !isCommand) return ok();
 
   // Strip @mention from text
   const question = rawText.replace(mentionPattern, '').trim();
   if (!question) {
     await sendReply(BOT_TOKEN, chatId, HELP_TEXT);
-    return;
+    return ok();
   }
 
   // ── Commands ──────────────────────────────────────────────────────────────────
@@ -336,11 +339,11 @@ export default async function handler(req, res) {
 
     if (cmd === '/start' || cmd === '/help') {
       await sendReply(BOT_TOKEN, chatId, HELP_TEXT);
-      return;
+      return ok();
     }
     if (cmd === '/register') {
       await sendReply(BOT_TOKEN, chatId, REGISTER_TEXT);
-      return;
+      return ok();
     }
     if (cmd === '/stats') {
       await sendTyping(BOT_TOKEN, chatId);
@@ -351,16 +354,16 @@ export default async function handler(req, res) {
         await sendReply(BOT_TOKEN, chatId,
           '⚠️ Unable to fetch live stats right now. Check the <a href="https://crypto-nova.app">Dashboard</a> directly.', msgId);
       }
-      return;
+      return ok();
     }
-    // Unknown command — let Claude handle it as a question
+    // Unknown command — fall through to Claude
   }
 
   // ── Rate limit ────────────────────────────────────────────────────────────────
   if (!checkRateLimit(userId)) {
     await sendReply(BOT_TOKEN, chatId,
       `⏳ Too many messages. Please wait a moment before asking another question.`, msgId);
-    return;
+    return ok();
   }
 
   // ── Ask Claude ────────────────────────────────────────────────────────────────
@@ -380,4 +383,6 @@ export default async function handler(req, res) {
       `📋 <a href="https://crypto-nova.app/faq">FAQ</a> | 👥 Tag @admin for urgent help.`,
       msgId);
   }
+
+  return ok();
 }
