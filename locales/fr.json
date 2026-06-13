@@ -1,0 +1,97 @@
+{
+  "meta": {
+    "description": "CryptoNova Inscription Anticipée — Sécurisez votre position dans la matrice avant le lancement public.",
+    "title": "CryptoNova — Inscription Anticipée"
+  },
+  "banner": {
+    "network": "⚡ Testnet Base Sepolia",
+    "subtitle": "· Accès Anticipé · Contrats V8.11"
+  },
+  "hero": {
+    "pill": "🔐 Inscription Anticipée Ouverte",
+    "headline": "Sécurisez Votre<br><em>Position dans la Matrice</em>",
+    "subtitle": "Rejoignez CryptoNova avant le lancement public. Commencez au T1 pour 10 $ USDC et progressez automatiquement à travers 10 niveaux à mesure que la matrice se remplit."
+  },
+  "connect": {
+    "title": "Connexion du Portefeuille",
+    "badge": "Requis",
+    "prompt": "Connectez votre portefeuille MetaMask ou Rabby sur <strong style=\"color:var(--text1)\">Base Sepolia</strong> pour vous inscrire.",
+    "btn_connect": "Connecter le Portefeuille",
+    "btn_disconnect": "Déconnecter"
+  },
+  "already": {
+    "heading": "✅ <strong>Déjà inscrit !</strong>",
+    "body": "Ce portefeuille est déjà membre de CryptoNova.",
+    "link": "→ Visiter le site principal pour voir votre tableau de bord"
+  },
+  "register": {
+    "title": "Inscription — 10 $ USDC",
+    "badge": "Entrée T1",
+    "referral_label": "ADRESSE DE PARRAINAGE (OPTIONNEL)",
+    "referral_placeholder": "0x… collez l'adresse du portefeuille du parrain",
+    "referral_valid": "✓ Adresse de parrain valide",
+    "no_ref_warn": "⚠️ Aucune adresse de parrainage saisie. Continuer sans parrain vous place sous le portefeuille sponsor par défaut.",
+    "no_ref_ok": "OK, Continuer",
+    "balance_label": "Solde USDC",
+    "approved_label": "Approuvé au PairManager",
+    "fee_label": "Frais d'entrée",
+    "fee_value": "10,00 $ USDC",
+    "low_bal": "⚠️ Votre solde USDC est inférieur à 10 $. Vous avez besoin d'USDC de test pour vous inscrire. Contactez l'équipe sur Telegram pour un transfert de test.",
+    "step1": "Étape 1 : Approuver 10 $ USDC 🔒",
+    "step2": "Étape 2 : S'inscrire (10 $ USDC)",
+    "usdc_help": "Besoin d'USDC de test ?",
+    "add_wallet": "+ Ajouter au portefeuille",
+    "usdc_addr_label": "Adresse USDC :"
+  },
+  "success": {
+    "title": "Bienvenue chez CryptoNova !",
+    "subtitle": "Vous êtes inscrit. Votre siège dans la matrice est sécurisé et les gains commencent à affluer à mesure que le réseau se développe.",
+    "member_id": "ID Membre",
+    "matrix_pos": "Position dans la Matrice",
+    "ref_link_label": "Votre Lien de Parrainage",
+    "ref_copy": "Copier",
+    "ref_share": "Partagez votre lien. Chaque parrainage direct vous rapporte un bonus USDC instantané lors de leur inscription.",
+    "dashboard_link": "→ Voir le tableau de bord sur crypto-nova.app ↗"
+  },
+  "how": {
+    "title": "Comment Ça Marche",
+    "step1": "<strong>Approuver 10 $ USDC</strong> — un clic MetaMask. Le contrat ne peut retirer que exactement 10 $.",
+    "step2": "<strong>S'inscrire</strong> — vous êtes placé dans la matrice Figure-8 T1 au prochain siège disponible.",
+    "step3": "<strong>Gagner</strong> — à mesure que de nouveaux membres rejoignent, l'USDC remonte la chaîne. Retirez à tout moment.",
+    "step4": "<strong>Mise à niveau automatique</strong> — une fois votre matrice remplie (127 sièges), vous avancez automatiquement vers T2 (25 $)."
+  },
+  "footer": {
+    "tierrouter": "TierRouter ↗",
+    "faq": "FAQ",
+    "tagline": "CryptoNova V8.11 · Testnet Base Sepolia · Les frais d'entrée sont en USDC de test uniquement"
+  },
+  "js": {
+    "no_wallet": "Aucun portefeuille détecté. Installez MetaMask ou Rabby.",
+    "no_wallet_short": "Aucun portefeuille détecté",
+    "connecting": "Connexion…",
+    "connect_wallet": "Connecter le Portefeuille",
+    "approving": "Approbation…",
+    "approve_status": "⏳ Approbation de 10 $ USDC au PairManager…",
+    "approve_done": "✅ Approuvé ! Cliquez sur l'Étape 2 pour rejoindre.",
+    "approve_label": "✅ Étape 1 Terminée — Approuvé",
+    "approved_val": "✅ 10 $ Approuvés",
+    "not_approved": "Non approuvé",
+    "step1_reset": "Étape 1 : Approuver 10 $ USDC 🔒",
+    "joining": "Rejoindre CryptoNova…",
+    "confirm_tx": "⏳ Confirmation de la transaction sur Base Sepolia…",
+    "welcome_status": "🎉 Bienvenue chez CryptoNova !",
+    "welcome_toast": "Bienvenue chez CryptoNova V8.11 ! 🎉",
+    "registered": "✅ Inscrit !",
+    "step2_reset": "Étape 2 : S'inscrire (10 $ USDC)",
+    "copied": "Lien de parrainage copié !",
+    "connect_first": "Connectez d'abord le portefeuille",
+    "load_failed": "Échec du chargement des données",
+    "in_queue": "En File d'Attente",
+    "loading": "Chargement…",
+    "cancelled": "Transaction annulée.",
+    "no_eth": "Pas assez d'ETH pour les frais de gas.",
+    "already_reg": "Ce portefeuille est déjà inscrit.",
+    "no_approval": "USDC non approuvé — complétez d'abord l'Étape 1.",
+    "tx_reverted": "Transaction annulée : "
+  }
+}

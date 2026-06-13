@@ -3,9 +3,10 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta name="description" content="CryptoNova Early Registration — Secure your position in the matrix before the public launch.">
-  <title>CryptoNova — Early Registration</title>
+  <meta name="description" content="CryptoNova Early Registration — Secure your position in the matrix before the public launch." data-i18n-content="meta.description">
+  <title data-i18n="meta.title">CryptoNova — Early Registration</title>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/6.7.1/ethers.umd.min.js"></script>
+  <script src="/i18n.js" defer></script>
   <style>
     :root {
       --bg:         #0a0a0f;
@@ -47,13 +48,37 @@
       background: linear-gradient(90deg, rgba(168,85,247,.25) 0%, rgba(59,130,246,.2) 100%);
       border-bottom: 1px solid rgba(168,85,247,.35);
       text-align: center;
-      padding: 9px 16px;
+      padding: 9px 48px 9px 16px;
       font-size: 12px;
       font-weight: 600;
       letter-spacing: .4px;
       color: #c084fc;
+      position: relative;
     }
     .net-banner span { color: var(--text2); font-weight: 400; margin-left: 8px; }
+    #lang-switcher {
+      position: absolute;
+      right: 10px;
+      top: 50%;
+      transform: translateY(-50%);
+    }
+    .lang-select {
+      background: rgba(0,0,0,.5);
+      border: 1px solid rgba(168,85,247,.35);
+      border-radius: 6px;
+      color: #c084fc;
+      font-size: 11px;
+      font-weight: 600;
+      padding: 3px 7px;
+      cursor: pointer;
+      outline: none;
+      appearance: none;
+      -webkit-appearance: none;
+      min-width: 54px;
+      text-align: center;
+    }
+    .lang-select:hover { border-color: rgba(0,212,170,.5); color: var(--green); }
+    .lang-select:focus { border-color: rgba(0,212,170,.6); }
 
     /* ── Page wrapper ── */
     .page {
@@ -473,8 +498,9 @@
 
 <!-- Testnet banner -->
 <div class="net-banner">
-  ⚡ Base Sepolia Testnet
-  <span>· Early Access · V8.10 Contracts</span>
+  <span data-i18n="banner.network">⚡ Base Sepolia Testnet</span>
+  <span data-i18n="banner.subtitle">· Early Access · V8.11 Contracts</span>
+  <div id="lang-switcher"></div>
 </div>
 
 <div class="page">
@@ -486,27 +512,27 @@
   </div>
 
   <!-- Early access badge -->
-  <div class="early-pill">🔐 Early Registration Open</div>
+  <div class="early-pill" data-i18n="hero.pill">🔐 Early Registration Open</div>
 
   <!-- Headline -->
   <div class="headline">
-    <h1>Secure Your<br><em>Matrix Position</em></h1>
-    <p>Join CryptoNova before the public launch. Start at T1 for $10 USDC and auto-upgrade through 10 tiers as the matrix fills.</p>
+    <h1 data-i18n="hero.headline">Secure Your<br><em>Matrix Position</em></h1>
+    <p data-i18n="hero.subtitle">Join CryptoNova before the public launch. Start at T1 for $10 USDC and auto-upgrade through 10 tiers as the matrix fills.</p>
   </div>
 
   <!-- ═══ CONNECT WALLET CARD ═══ -->
   <div class="card" id="connect-card">
     <div class="card-title">
-      Wallet Connection
-      <span class="badge">Required</span>
+      <span data-i18n="connect.title">Wallet Connection</span>
+      <span class="badge" data-i18n="connect.badge">Required</span>
     </div>
 
     <!-- Not connected -->
     <div id="not-connected-view">
-      <p style="font-size:13px;color:var(--text2);margin-bottom:14px;line-height:1.6">
+      <p style="font-size:13px;color:var(--text2);margin-bottom:14px;line-height:1.6" data-i18n="connect.prompt">
         Connect your MetaMask or Rabby wallet on <strong style="color:var(--text1)">Base Sepolia</strong> to register.
       </p>
-      <button id="btn-connect" onclick="connectWallet()">Connect Wallet</button>
+      <button id="btn-connect" onclick="connectWallet()" data-i18n="connect.btn_connect">Connect Wallet</button>
     </div>
 
     <!-- Connected -->
@@ -514,73 +540,75 @@
       <div class="wallet-box">
         <div class="wallet-dot connected"></div>
         <div class="wallet-addr" id="connected-addr">—</div>
-        <button onclick="disconnectWallet()" style="background:none;border:1px solid var(--border2);border-radius:6px;padding:4px 10px;font-size:11px;color:var(--text3);cursor:pointer;flex-shrink:0">Disconnect</button>
+        <button onclick="disconnectWallet()" style="background:none;border:1px solid var(--border2);border-radius:6px;padding:4px 10px;font-size:11px;color:var(--text3);cursor:pointer;flex-shrink:0" data-i18n="connect.btn_disconnect">Disconnect</button>
       </div>
     </div>
   </div>
 
   <!-- ═══ ALREADY REGISTERED ALERT ═══ -->
   <div class="alert-box" id="already-alert">
-    ✅ <strong>Already registered!</strong><br>
-    This wallet is already a CryptoNova member.<br>
-    <a href="https://crypto-nova.app" style="color:var(--green);text-decoration:underline;font-size:13px">→ Visit main site to view your dashboard</a>
+    <span data-i18n="already.heading">✅ <strong>Already registered!</strong></span><br>
+    <span data-i18n="already.body">This wallet is already a CryptoNova member.</span><br>
+    <a href="https://crypto-nova.app" style="color:var(--green);text-decoration:underline;font-size:13px" data-i18n="already.link">→ Visit main site to view your dashboard</a>
   </div>
 
   <!-- ═══ REGISTER CARD ═══ -->
   <div class="card" id="register-card" style="display:none">
     <div class="card-title">
-      Register — $10 USDC
-      <span class="badge">T1 Entry</span>
+      <span data-i18n="register.title">Register — $10 USDC</span>
+      <span class="badge" data-i18n="register.badge">T1 Entry</span>
     </div>
 
     <!-- Referral input -->
     <div class="input-group">
-      <div class="input-label">REFERRAL ADDRESS (OPTIONAL)</div>
+      <div class="input-label" data-i18n="register.referral_label">REFERRAL ADDRESS (OPTIONAL)</div>
       <input
         class="input-field"
         id="input-referrer"
         type="text"
         placeholder="0x… paste referrer's wallet address"
+        data-i18n-placeholder="register.referral_placeholder"
         oninput="onReferrerInput()"
         autocomplete="off"
         spellcheck="false"
       >
-      <div id="ref-valid-note" style="font-size:11px;color:var(--green);display:none">✓ Valid referrer address</div>
+      <div id="ref-valid-note" style="font-size:11px;color:var(--green);display:none" data-i18n="register.referral_valid">✓ Valid referrer address</div>
     </div>
 
     <!-- No referrer warning -->
     <div class="warn-box" id="no-ref-warn">
-      ⚠️ No referral address entered. Continuing without a referrer places you under the default sponsor wallet. <button onclick="dismissNoRefWarn()" style="background:rgba(251,191,36,.15);border:1px solid rgba(251,191,36,.4);color:var(--yellow);font-size:11px;font-weight:700;padding:3px 9px;border-radius:5px;cursor:pointer;margin-left:4px">OK, Continue</button>
+      <span data-i18n="register.no_ref_warn">⚠️ No referral address entered. Continuing without a referrer places you under the default sponsor wallet.</span>
+      <button onclick="dismissNoRefWarn()" style="background:rgba(251,191,36,.15);border:1px solid rgba(251,191,36,.4);color:var(--yellow);font-size:11px;font-weight:700;padding:3px 9px;border-radius:5px;cursor:pointer;margin-left:4px" data-i18n="register.no_ref_ok">OK, Continue</button>
     </div>
 
     <!-- Balance info -->
     <div>
       <div class="info-row">
-        <span class="info-key">USDC Balance</span>
+        <span class="info-key" data-i18n="register.balance_label">USDC Balance</span>
         <span class="info-val" id="usdc-bal">—</span>
       </div>
       <div class="info-row">
-        <span class="info-key">Approved to PairManager</span>
+        <span class="info-key" data-i18n="register.approved_label">Approved to PairManager</span>
         <span class="info-val" id="usdc-approved">—</span>
       </div>
       <div class="info-row">
-        <span class="info-key">Entry Fee</span>
-        <span class="info-val green">$10.00 USDC</span>
+        <span class="info-key" data-i18n="register.fee_label">Entry Fee</span>
+        <span class="info-val green" data-i18n="register.fee_value">$10.00 USDC</span>
       </div>
     </div>
 
     <!-- Low balance warning -->
-    <div class="warn-box" id="low-bal-warn">
+    <div class="warn-box" id="low-bal-warn" data-i18n="register.low_bal">
       ⚠️ Your USDC balance is below $10. You need testnet USDC to register. Contact the dev team on Telegram for a test transfer.
     </div>
 
     <!-- Step 1 -->
-    <button class="btn btn-step1" id="btn-approve" onclick="approveUSDC()" disabled>
+    <button class="btn btn-step1" id="btn-approve" onclick="approveUSDC()" disabled data-i18n="register.step1">
       Step 1: Approve $10 USDC 🔒
     </button>
 
     <!-- Step 2 -->
-    <button class="btn btn-step2" id="btn-register" onclick="doRegister()" disabled>
+    <button class="btn btn-step2" id="btn-register" onclick="doRegister()" disabled data-i18n="register.step2">
       Step 2: Register ($10 USDC)
     </button>
 
@@ -589,62 +617,62 @@
 
     <!-- USDC helper -->
     <div class="usdc-help">
-      Need testnet USDC?
-      <button onclick="addUSDCtoWallet()">+ Add to wallet</button>
-      &nbsp;USDC address: <code style="font-size:10px">0x2D8B7b5…39a</code>
+      <span data-i18n="register.usdc_help">Need testnet USDC?</span>
+      <button onclick="addUSDCtoWallet()" data-i18n="register.add_wallet">+ Add to wallet</button>
+      &nbsp;<span data-i18n="register.usdc_addr_label">USDC address:</span> <code style="font-size:10px">0x2D8B7b5…39a</code>
     </div>
   </div>
 
   <!-- ═══ SUCCESS CARD ═══ -->
   <div id="success-card">
     <div class="success-emoji">🎉</div>
-    <div class="success-title">Welcome to CryptoNova!</div>
-    <div class="success-sub">You're in. Your matrix seat is secured and earnings start flowing as the network grows.</div>
+    <div class="success-title" data-i18n="success.title">Welcome to CryptoNova!</div>
+    <div class="success-sub" data-i18n="success.subtitle">You're in. Your matrix seat is secured and earnings start flowing as the network grows.</div>
 
     <div class="member-grid">
       <div class="member-stat">
         <div class="member-stat-val" id="suc-member-id">—</div>
-        <div class="member-stat-lbl">Member ID</div>
+        <div class="member-stat-lbl" data-i18n="success.member_id">Member ID</div>
       </div>
       <div class="member-stat">
         <div class="member-stat-val" id="suc-matrix-pos">—</div>
-        <div class="member-stat-lbl">Matrix Position</div>
+        <div class="member-stat-lbl" data-i18n="success.matrix_pos">Matrix Position</div>
       </div>
     </div>
 
-    <div style="font-size:13px;color:var(--text2);font-weight:600;align-self:flex-start">Your Referral Link</div>
+    <div style="font-size:13px;color:var(--text2);font-weight:600;align-self:flex-start" data-i18n="success.ref_link_label">Your Referral Link</div>
     <div class="ref-link-box">
       <div class="ref-link-url" id="ref-link-url">—</div>
-      <button class="btn-copy" onclick="copyRefLink()">Copy</button>
+      <button class="btn-copy" onclick="copyRefLink()" data-i18n="success.ref_copy">Copy</button>
     </div>
-    <div style="font-size:12px;color:var(--text3);line-height:1.6">
+    <div style="font-size:12px;color:var(--text3);line-height:1.6" data-i18n="success.ref_share">
       Share your link. Every direct referral earns you an instant USDC bonus when they register.
     </div>
 
-    <a href="https://crypto-nova.app" style="color:var(--green);font-size:13px;font-weight:700;text-decoration:none;margin-top:4px">
+    <a href="https://crypto-nova.app" style="color:var(--green);font-size:13px;font-weight:700;text-decoration:none;margin-top:4px" data-i18n="success.dashboard_link">
       → View full dashboard at crypto-nova.app ↗
     </a>
   </div>
 
   <!-- ═══ HOW IT WORKS ═══ -->
   <div class="card">
-    <div class="card-title">How It Works</div>
+    <div class="card-title" data-i18n="how.title">How It Works</div>
     <div class="how-steps">
       <div class="how-step">
         <div class="step-num">1</div>
-        <div class="step-text"><strong>Approve $10 USDC</strong> — one MetaMask click. The contract can only ever pull exactly $10.</div>
+        <div class="step-text" data-i18n="how.step1"><strong>Approve $10 USDC</strong> — one MetaMask click. The contract can only ever pull exactly $10.</div>
       </div>
       <div class="how-step">
         <div class="step-num">2</div>
-        <div class="step-text"><strong>Register</strong> — you're placed into the T1 Figure-8 matrix at the next available seat.</div>
+        <div class="step-text" data-i18n="how.step2"><strong>Register</strong> — you're placed into the T1 Figure-8 matrix at the next available seat.</div>
       </div>
       <div class="how-step">
         <div class="step-num">3</div>
-        <div class="step-text"><strong>Earn</strong> — as new members join, USDC flows up through the chain. Withdraw anytime.</div>
+        <div class="step-text" data-i18n="how.step3"><strong>Earn</strong> — as new members join, USDC flows up through the chain. Withdraw anytime.</div>
       </div>
       <div class="how-step">
         <div class="step-num">4</div>
-        <div class="step-text"><strong>Auto-upgrade</strong> — once your matrix fills (127 seats), you automatically advance to T2 ($25).</div>
+        <div class="step-text" data-i18n="how.step4"><strong>Auto-upgrade</strong> — once your matrix fills (127 seats), you automatically advance to T2 ($25).</div>
       </div>
     </div>
   </div>
@@ -655,11 +683,11 @@
   <div style="margin-bottom:8px">
     <a href="https://crypto-nova.app">crypto-nova.app</a>
     <span class="footer-divider">·</span>
-    <a href="https://sepolia.basescan.org/address/0x9bdb62Ac866F222c7062398F891eC860c1F89034" target="_blank" rel="noopener">TierRouter ↗</a>
+    <a href="https://sepolia.basescan.org/address/0xEAf92580FffAdA9DFf7e67f84ebD706FF82f9915" target="_blank" rel="noopener" data-i18n="footer.tierrouter">TierRouter ↗</a>
     <span class="footer-divider">·</span>
-    <a href="https://crypto-nova.app/faq">FAQ</a>
+    <a href="https://crypto-nova.app/faq" data-i18n="footer.faq">FAQ</a>
   </div>
-  <div>CryptoNova V8.10 · Base Sepolia Testnet · Entry fees are testnet USDC only</div>
+  <div data-i18n="footer.tagline">CryptoNova V8.11 · Base Sepolia Testnet · Entry fees are testnet USDC only</div>
 </footer>
 
 <div id="toast"></div>
@@ -674,11 +702,11 @@ const T1_FEE   = 10_000_000n; // $10 USDC (6 decimals)
 
 const ADDRS = {
   usdc:       '0x2D8B7b5eDec96bE441b6fb0D45D74a2BcE2C639a',
-  tierRouter: '0x9bdb62Ac866F222c7062398F891eC860c1F89034',
+  tierRouter: '0xEAf92580FffAdA9DFf7e67f84ebD706FF82f9915',
   T1: {
-    pm:   '0x2638c81CE7a8541A125640f1Af5A23eA2C3e3180',
-    matA: '0x68f61839354f3FbceebD9662E5301B1EaeD5a862',
-    matB: '0x620be4FC94D70B109467eDE4A71176221b005497',
+    pm:   '0xA891C333e08A3b567c246dc3a2d45d48aAd88f83',
+    matA: '0xC554519E2E7a4F0F08C6e9Ef106A8a016b20a340',
+    matB: '0x56207e9a56916B9C9b5B1F0089Aba8DAEc019Ff0',
   },
 };
 
@@ -716,6 +744,9 @@ function showEl(id) { const el = document.getElementById(id); if (el) el.style.d
 function hideEl(id) { const el = document.getElementById(id); if (el) el.style.display = 'none'; }
 function showFlex(id) { const el = document.getElementById(id); if (el) el.style.display = 'flex'; }
 
+// i18n fallback — returns key if window.t not yet loaded
+function _(key, fallback) { return (typeof window.t === 'function') ? window.t(key, fallback) : (fallback || key); }
+
 function fmt6(raw) {
   const n = Number(typeof raw === 'bigint' ? raw : BigInt(raw || 0)) / 1e6;
   return '$' + n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -740,11 +771,11 @@ function setStatus(msg, type = 'info') {
 function friendlyError(e) {
   if (!e) return 'Unknown error';
   const msg = e.reason || e.data?.message || e.message || String(e);
-  if (msg.includes('user rejected') || e.code === 4001) return 'Transaction cancelled.';
-  if (msg.includes('insufficient funds')) return 'Not enough ETH for gas fees.';
-  if (msg.includes('AlreadyJoined') || msg.includes('already registered')) return 'This wallet is already registered.';
-  if (msg.includes('USDC') && msg.includes('allowance')) return 'USDC not approved — complete Step 1 first.';
-  if (msg.includes('execution reverted')) return 'Transaction reverted: ' + (msg.split('execution reverted:')[1]||'').trim().slice(0,80);
+  if (msg.includes('user rejected') || e.code === 4001) return _('js.cancelled', 'Transaction cancelled.');
+  if (msg.includes('insufficient funds')) return _('js.no_eth', 'Not enough ETH for gas fees.');
+  if (msg.includes('AlreadyJoined') || msg.includes('already registered')) return _('js.already_reg', 'This wallet is already registered.');
+  if (msg.includes('USDC') && msg.includes('allowance')) return _('js.no_approval', 'USDC not approved — complete Step 1 first.');
+  if (msg.includes('execution reverted')) return _('js.tx_reverted', 'Transaction reverted: ') + (msg.split('execution reverted:')[1]||'').trim().slice(0,80);
   return msg.slice(0, 120);
 }
 
@@ -772,26 +803,24 @@ function dismissNoRefWarn() {
 // ═══════════════════════════════════════════════════════════════
 async function connectWallet() {
   if (!window.ethereum) {
-    toast('No wallet detected. Install MetaMask or Rabby.', 'error');
+    toast(_('js.no_wallet', 'No wallet detected. Install MetaMask or Rabby.'), 'error');
     return;
   }
   const btn = document.getElementById('btn-connect');
   btn.disabled = true;
-  btn.innerHTML = '<span class="spinner"></span>Connecting…';
+  btn.innerHTML = '<span class="spinner"></span>' + _('js.connecting', 'Connecting…');
   try {
     const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
     const chainIdHex = await window.ethereum.request({ method: 'eth_chainId' });
     const chainId = parseInt(chainIdHex, 16);
 
     if (chainId !== CHAIN_ID) {
-      // Prompt network switch
       try {
         await window.ethereum.request({
           method: 'wallet_switchEthereumChain',
-          params: [{ chainId: '0x14a34' }], // Base Sepolia
+          params: [{ chainId: '0x14a34' }],
         });
       } catch (swErr) {
-        // Add network if not present
         if (swErr.code === 4902) {
           await window.ethereum.request({
             method: 'wallet_addEthereumChain',
@@ -816,7 +845,7 @@ async function connectWallet() {
     onConnected();
   } catch (e) {
     btn.disabled = false;
-    btn.textContent = 'Connect Wallet';
+    btn.textContent = _('js.connect_wallet', 'Connect Wallet');
     toast(friendlyError(e), 'error');
   }
 }
@@ -827,23 +856,18 @@ function disconnectWallet() {
   showEl('not-connected-view');
   const btn = document.getElementById('btn-connect');
   btn.disabled = false;
-  btn.textContent = 'Connect Wallet';
+  btn.textContent = _('js.connect_wallet', 'Connect Wallet');
   hideEl('register-card');
   hideEl('already-alert');
   document.getElementById('success-card').classList.remove('show');
 }
 
 async function onConnected() {
-  // Show connected state
   const addrEl = document.getElementById('connected-addr');
   if (addrEl) addrEl.textContent = userAddr.slice(0,6) + '…' + userAddr.slice(-4);
   hideEl('not-connected-view');
   showEl('connected-view');
-
-  // Load chain data
   await loadRegistrationState();
-
-  // Listen for account changes
   window.ethereum.on('accountsChanged', (accs) => {
     if (!accs.length) { disconnectWallet(); return; }
     userAddr = accs[0];
@@ -858,9 +882,7 @@ async function onConnected() {
 // ═══════════════════════════════════════════════════════════════
 async function loadRegistrationState() {
   if (!userAddr) return;
-
   const rp = new ethers.JsonRpcProvider(RPC_URL, CHAIN_ID, { staticNetwork: true });
-
   try {
     const tr   = new ethers.Contract(ADDRS.tierRouter, TIER_ROUTER_ABI, rp);
     const usdc = new ethers.Contract(ADDRS.usdc, USDC_ABI, rp);
@@ -881,22 +903,20 @@ async function loadRegistrationState() {
       return;
     }
 
-    // Show register card
     showEl('register-card');
 
-    // Update balance displays
     setText('usdc-bal', fmt6(bal));
-    setText('usdc-approved', allowance >= T1_FEE ? '✅ $10 Approved' : 'Not approved');
+    setText('usdc-approved', allowance >= T1_FEE
+      ? _('js.approved_val', '✅ $10 Approved')
+      : _('js.not_approved', 'Not approved'));
 
-    // Low balance warning
     const lowWarn = document.getElementById('low-bal-warn');
     if (lowWarn) lowWarn.classList.toggle('show', bal < T1_FEE);
 
     if (allowance >= T1_FEE) {
-      // Step 1 already done
       const btnApprove = document.getElementById('btn-approve');
       if (btnApprove) {
-        btnApprove.textContent = '✅ Step 1 Done — Approved';
+        btnApprove.textContent = _('js.approve_label', '✅ Step 1 Done — Approved');
         btnApprove.className = 'btn btn-step1 done';
         btnApprove.disabled = true;
       }
@@ -906,10 +926,8 @@ async function loadRegistrationState() {
         btnReg.className = 'btn btn-step2 active';
       }
     } else {
-      // Determine if referrer is entered
       const refVal = (document.getElementById('input-referrer')?.value || '').trim();
       if (!refVal || !ethers.isAddress(refVal)) {
-        // Show no-ref warning first
         document.getElementById('no-ref-warn').classList.add('show');
         const btnApprove = document.getElementById('btn-approve');
         if (btnApprove && !noRefWarningDismissed) btnApprove.disabled = true;
@@ -918,7 +936,6 @@ async function loadRegistrationState() {
       }
     }
 
-    // Pre-fill referral from URL
     const urlRef = new URLSearchParams(window.location.search).get('ref');
     if (urlRef && ethers.isAddress(urlRef)) {
       const inp = document.getElementById('input-referrer');
@@ -933,14 +950,14 @@ async function loadRegistrationState() {
 
   } catch (e) {
     console.error('loadRegistrationState:', e);
-    toast('Failed to load chain data: ' + e.message.slice(0,60), 'error');
+    toast(_('js.load_failed', 'Failed to load chain data') + ': ' + e.message.slice(0,60), 'error');
     showEl('register-card');
   }
 }
 
 function activateStep1() {
   const btnApprove = document.getElementById('btn-approve');
-  if (btnApprove && btnApprove.className.includes('done')) return; // already done
+  if (btnApprove && btnApprove.className.includes('done')) return;
   if (btnApprove) {
     btnApprove.disabled = false;
     btnApprove.className = 'btn btn-step1 active';
@@ -955,7 +972,6 @@ async function loadSuccessState(rp, addr) {
     const matA = new ethers.Contract(ADDRS.T1.matA, MATRIX_ABI, rp);
     const matB = new ethers.Contract(ADDRS.T1.matB, MATRIX_ABI, rp);
 
-    // Try matA first, then matB
     let member = null, pos = 0n, matUsed = matA;
     const mA = await matA.getMember(addr).catch(() => null);
     if (mA && mA.hasEverJoined) { member = mA; matUsed = matA; }
@@ -967,13 +983,12 @@ async function loadSuccessState(rp, addr) {
     if (member) {
       pos = await matUsed.matrixPos(addr).catch(() => 0n);
       setText('suc-member-id', '#' + Number(member.id));
-      setText('suc-matrix-pos', pos > 0n ? '#' + Number(pos) : 'In Queue');
+      setText('suc-matrix-pos', pos > 0n ? '#' + Number(pos) : _('js.in_queue', 'In Queue'));
     } else {
       setText('suc-member-id', '—');
-      setText('suc-matrix-pos', 'Loading…');
+      setText('suc-matrix-pos', _('js.loading', 'Loading…'));
     }
 
-    // Build referral link
     const base = window.location.origin + window.location.pathname;
     const refUrl = base + '?ref=' + addr;
     const urlEl = document.getElementById('ref-link-url');
@@ -989,19 +1004,19 @@ async function loadSuccessState(rp, addr) {
 // APPROVE USDC
 // ═══════════════════════════════════════════════════════════════
 async function approveUSDC() {
-  if (!signer) { toast('Connect wallet first', 'error'); return; }
+  if (!signer) { toast(_('js.connect_first', 'Connect wallet first'), 'error'); return; }
   const btn = document.getElementById('btn-approve');
   btn.disabled = true;
-  btn.innerHTML = '<span class="spinner"></span>Approving…';
+  btn.innerHTML = '<span class="spinner"></span>' + _('js.approving', 'Approving…');
   try {
     const usdcW = new ethers.Contract(ADDRS.usdc, USDC_ABI, signer);
     const tx = await usdcW.approve(ADDRS.T1.pm, T1_FEE);
-    setStatus('⏳ Approving $10 USDC to PairManager…', 'info');
+    setStatus(_('js.approve_status', '⏳ Approving $10 USDC to PairManager…'), 'info');
     await tx.wait();
-    setStatus('✅ Approved! Now click Step 2 to join.', 'ok');
-    btn.textContent = '✅ Step 1 Done — Approved';
+    setStatus(_('js.approve_done', '✅ Approved! Now click Step 2 to join.'), 'ok');
+    btn.textContent = _('js.approve_label', '✅ Step 1 Done — Approved');
     btn.className = 'btn btn-step1 done';
-    setText('usdc-approved', '✅ $10 Approved');
+    setText('usdc-approved', _('js.approved_val', '✅ $10 Approved'));
     const btnReg = document.getElementById('btn-register');
     if (btnReg) {
       btnReg.disabled = false;
@@ -1010,7 +1025,7 @@ async function approveUSDC() {
   } catch (e) {
     btn.disabled = false;
     btn.className = 'btn btn-step1 active';
-    btn.textContent = 'Step 1: Approve $10 USDC 🔒';
+    btn.textContent = _('js.step1_reset', 'Step 1: Approve $10 USDC 🔒');
     setStatus('❌ ' + friendlyError(e), 'err');
   }
 }
@@ -1019,10 +1034,10 @@ async function approveUSDC() {
 // REGISTER
 // ═══════════════════════════════════════════════════════════════
 async function doRegister() {
-  if (!signer) { toast('Connect wallet first', 'error'); return; }
+  if (!signer) { toast(_('js.connect_first', 'Connect wallet first'), 'error'); return; }
   const btn = document.getElementById('btn-register');
   btn.disabled = true;
-  btn.innerHTML = '<span class="spinner"></span>Joining CryptoNova…';
+  btn.innerHTML = '<span class="spinner"></span>' + _('js.joining', 'Joining CryptoNova…');
   try {
     const refInput = document.getElementById('input-referrer');
     const referrer = refInput && ethers.isAddress(refInput.value.trim())
@@ -1031,14 +1046,13 @@ async function doRegister() {
 
     const tr = new ethers.Contract(ADDRS.tierRouter, TIER_ROUTER_ABI, signer);
     const tx = await tr.register(referrer);
-    setStatus('⏳ Confirming transaction on Base Sepolia…', 'info');
+    setStatus(_('js.confirm_tx', '⏳ Confirming transaction on Base Sepolia…'), 'info');
     await tx.wait();
 
-    setStatus('🎉 Welcome to CryptoNova!', 'ok');
-    btn.textContent = '✅ Registered!';
-    toast('Welcome to CryptoNova V8.10! 🎉', 'success');
+    setStatus(_('js.welcome_status', '🎉 Welcome to CryptoNova!'), 'ok');
+    btn.textContent = _('js.registered', '✅ Registered!');
+    toast(_('js.welcome_toast', 'Welcome to CryptoNova V8.11! 🎉'), 'success');
 
-    // Hide register card, show success
     hideEl('register-card');
     hideEl('already-alert');
     const rp = new ethers.JsonRpcProvider(RPC_URL, CHAIN_ID, { staticNetwork: true });
@@ -1047,7 +1061,7 @@ async function doRegister() {
   } catch (e) {
     btn.disabled = false;
     btn.className = 'btn btn-step2 active';
-    btn.textContent = 'Step 2: Register ($10 USDC)';
+    btn.textContent = _('js.step2_reset', 'Step 2: Register ($10 USDC)');
     setStatus('❌ ' + friendlyError(e), 'err');
   }
 }
@@ -1059,16 +1073,15 @@ function copyRefLink() {
   const urlEl = document.getElementById('ref-link-url');
   if (!urlEl) return;
   navigator.clipboard.writeText(urlEl.textContent).then(() => {
-    toast('Referral link copied!', 'success');
+    toast(_('js.copied', 'Referral link copied!'), 'success');
   }).catch(() => {
-    // Fallback
     const ta = document.createElement('textarea');
     ta.value = urlEl.textContent;
     document.body.appendChild(ta);
     ta.select();
     document.execCommand('copy');
     document.body.removeChild(ta);
-    toast('Referral link copied!', 'success');
+    toast(_('js.copied', 'Referral link copied!'), 'success');
   });
 }
 
@@ -1076,7 +1089,7 @@ function copyRefLink() {
 // ADD USDC TO WALLET
 // ═══════════════════════════════════════════════════════════════
 async function addUSDCtoWallet() {
-  if (!window.ethereum) { toast('No wallet detected', 'error'); return; }
+  if (!window.ethereum) { toast(_('js.no_wallet_short', 'No wallet detected'), 'error'); return; }
   try {
     await window.ethereum.request({
       method: 'wallet_watchAsset',

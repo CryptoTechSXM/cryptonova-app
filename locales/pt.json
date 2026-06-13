@@ -1,0 +1,97 @@
+{
+  "meta": {
+    "description": "CryptoNova Registro Antecipado — Garanta sua posição na matriz antes do lançamento público.",
+    "title": "CryptoNova — Registro Antecipado"
+  },
+  "banner": {
+    "network": "⚡ Testnet Base Sepolia",
+    "subtitle": "· Acesso Antecipado · Contratos V8.11"
+  },
+  "hero": {
+    "pill": "🔐 Registro Antecipado Aberto",
+    "headline": "Garanta Sua<br><em>Posição na Matriz</em>",
+    "subtitle": "Junte-se à CryptoNova antes do lançamento público. Comece no T1 por $10 USDC e avance automaticamente pelos 10 níveis conforme a matriz se preenche."
+  },
+  "connect": {
+    "title": "Conexão da Carteira",
+    "badge": "Obrigatório",
+    "prompt": "Conecte sua carteira MetaMask ou Rabby na <strong style=\"color:var(--text1)\">Base Sepolia</strong> para se registrar.",
+    "btn_connect": "Conectar Carteira",
+    "btn_disconnect": "Desconectar"
+  },
+  "already": {
+    "heading": "✅ <strong>Já registrado!</strong>",
+    "body": "Esta carteira já é membro da CryptoNova.",
+    "link": "→ Visite o site principal para ver seu painel"
+  },
+  "register": {
+    "title": "Registro — $10 USDC",
+    "badge": "Entrada T1",
+    "referral_label": "ENDEREÇO DE INDICAÇÃO (OPCIONAL)",
+    "referral_placeholder": "0x… cole o endereço da carteira do indicador",
+    "referral_valid": "✓ Endereço de indicação válido",
+    "no_ref_warn": "⚠️ Nenhum endereço de indicação inserido. Continuar sem indicador coloca você sob a carteira patrocinadora padrão.",
+    "no_ref_ok": "OK, Continuar",
+    "balance_label": "Saldo USDC",
+    "approved_label": "Aprovado ao PairManager",
+    "fee_label": "Taxa de entrada",
+    "fee_value": "$10,00 USDC",
+    "low_bal": "⚠️ Seu saldo USDC está abaixo de $10. Você precisa de USDC de teste para se registrar. Entre em contato com a equipe no Telegram para uma transferência de teste.",
+    "step1": "Passo 1: Aprovar $10 USDC 🔒",
+    "step2": "Passo 2: Registrar ($10 USDC)",
+    "usdc_help": "Precisa de USDC de teste?",
+    "add_wallet": "+ Adicionar à carteira",
+    "usdc_addr_label": "Endereço USDC:"
+  },
+  "success": {
+    "title": "Bem-vindo à CryptoNova!",
+    "subtitle": "Você está dentro. Seu lugar na matriz está garantido e os ganhos começam a fluir à medida que a rede cresce.",
+    "member_id": "ID de Membro",
+    "matrix_pos": "Posição na Matriz",
+    "ref_link_label": "Seu Link de Indicação",
+    "ref_copy": "Copiar",
+    "ref_share": "Compartilhe seu link. Cada indicação direta rende um bônus instantâneo em USDC quando eles se registram.",
+    "dashboard_link": "→ Ver painel completo em crypto-nova.app ↗"
+  },
+  "how": {
+    "title": "Como Funciona",
+    "step1": "<strong>Aprovar $10 USDC</strong> — um clique no MetaMask. O contrato só pode retirar exatamente $10.",
+    "step2": "<strong>Registrar</strong> — você é colocado na matriz Figure-8 T1 no próximo assento disponível.",
+    "step3": "<strong>Ganhar</strong> — conforme novos membros entram, USDC sobe pela cadeia. Saque a qualquer momento.",
+    "step4": "<strong>Atualização automática</strong> — quando sua matriz estiver cheia (127 assentos), você avança automaticamente para T2 ($25)."
+  },
+  "footer": {
+    "tierrouter": "TierRouter ↗",
+    "faq": "Perguntas Frequentes",
+    "tagline": "CryptoNova V8.11 · Testnet Base Sepolia · As taxas de entrada são apenas USDC de teste"
+  },
+  "js": {
+    "no_wallet": "Nenhuma carteira detectada. Instale MetaMask ou Rabby.",
+    "no_wallet_short": "Nenhuma carteira detectada",
+    "connecting": "Conectando…",
+    "connect_wallet": "Conectar Carteira",
+    "approving": "Aprovando…",
+    "approve_status": "⏳ Aprovando $10 USDC ao PairManager…",
+    "approve_done": "✅ Aprovado! Agora clique no Passo 2 para entrar.",
+    "approve_label": "✅ Passo 1 Concluído — Aprovado",
+    "approved_val": "✅ $10 Aprovados",
+    "not_approved": "Não aprovado",
+    "step1_reset": "Passo 1: Aprovar $10 USDC 🔒",
+    "joining": "Entrando na CryptoNova…",
+    "confirm_tx": "⏳ Confirmando transação na Base Sepolia…",
+    "welcome_status": "🎉 Bem-vindo à CryptoNova!",
+    "welcome_toast": "Bem-vindo à CryptoNova V8.11! 🎉",
+    "registered": "✅ Registrado!",
+    "step2_reset": "Passo 2: Registrar ($10 USDC)",
+    "copied": "Link de indicação copiado!",
+    "connect_first": "Conecte a carteira primeiro",
+    "load_failed": "Falha ao carregar dados da rede",
+    "in_queue": "Na Fila",
+    "loading": "Carregando…",
+    "cancelled": "Transação cancelada.",
+    "no_eth": "ETH insuficiente para as taxas de gas.",
+    "already_reg": "Esta carteira já está registrada.",
+    "no_approval": "USDC não aprovado — complete o Passo 1 primeiro.",
+    "tx_reverted": "Transação revertida: "
+  }
+}

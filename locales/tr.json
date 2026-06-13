@@ -1,0 +1,97 @@
+{
+  "meta": {
+    "description": "CryptoNova Erken Kayıt — Halka açık lansmandan önce matristeki pozisyonunuzu güvenceye alın.",
+    "title": "CryptoNova — Erken Kayıt"
+  },
+  "banner": {
+    "network": "⚡ Base Sepolia Test Ağı",
+    "subtitle": "· Erken Erişim · V8.11 Sözleşmeleri"
+  },
+  "hero": {
+    "pill": "🔐 Erken Kayıt Açık",
+    "headline": "Matris<br><em>Pozisyonunuzu Güvenceye Alın</em>",
+    "subtitle": "Halka açık lansmandan önce CryptoNova'ya katılın. Matrix dolduğunda 10 seviyede otomatik yükselerek T1'de $10 USDC ile başlayın."
+  },
+  "connect": {
+    "title": "Cüzdan Bağlantısı",
+    "badge": "Gerekli",
+    "prompt": "Kayıt olmak için <strong style=\"color:var(--text1)\">Base Sepolia</strong> üzerinde MetaMask veya Rabby cüzdanınızı bağlayın.",
+    "btn_connect": "Cüzdanı Bağla",
+    "btn_disconnect": "Bağlantıyı Kes"
+  },
+  "already": {
+    "heading": "✅ <strong>Zaten kayıtlısınız!</strong>",
+    "body": "Bu cüzdan zaten bir CryptoNova üyesi.",
+    "link": "→ Panonuzu görmek için ana siteyi ziyaret edin"
+  },
+  "register": {
+    "title": "Kayıt — $10 USDC",
+    "badge": "T1 Girişi",
+    "referral_label": "REFERANS ADRESİ (İSTEĞE BAĞLI)",
+    "referral_placeholder": "0x… referansın cüzdan adresini yapıştırın",
+    "referral_valid": "✓ Geçerli referans adresi",
+    "no_ref_warn": "⚠️ Referans adresi girilmedi. Referanssız devam etmek sizi varsayılan sponsor cüzdanının altına yerleştirir.",
+    "no_ref_ok": "Tamam, Devam Et",
+    "balance_label": "USDC Bakiyesi",
+    "approved_label": "PairManager'a Onaylandı",
+    "fee_label": "Giriş Ücreti",
+    "fee_value": "$10,00 USDC",
+    "low_bal": "⚠️ USDC bakiyeniz $10'un altında. Kayıt olmak için test USDC'ye ihtiyacınız var. Telegram'da ekiple iletişime geçin.",
+    "step1": "Adım 1: $10 USDC Onayla 🔒",
+    "step2": "Adım 2: Kayıt Ol ($10 USDC)",
+    "usdc_help": "Test USDC'ye ihtiyacınız var mı?",
+    "add_wallet": "+ Cüzdana ekle",
+    "usdc_addr_label": "USDC adresi:"
+  },
+  "success": {
+    "title": "CryptoNova'ya Hoş Geldiniz!",
+    "subtitle": "İçerisindesiniz. Matris yeriniz güvence altında ve ağ büyüdükçe kazançlar akmaya başlıyor.",
+    "member_id": "Üye Kimliği",
+    "matrix_pos": "Matris Pozisyonu",
+    "ref_link_label": "Referans Bağlantınız",
+    "ref_copy": "Kopyala",
+    "ref_share": "Bağlantınızı paylaşın. Her doğrudan referans, kayıt olduğunda anında USDC bonusu kazandırır.",
+    "dashboard_link": "→ crypto-nova.app'te tam panoyu görüntüle ↗"
+  },
+  "how": {
+    "title": "Nasıl Çalışır",
+    "step1": "<strong>$10 USDC Onayla</strong> — tek bir MetaMask tıklaması. Sözleşme yalnızca tam olarak $10 çekebilir.",
+    "step2": "<strong>Kayıt Ol</strong> — T1 Figure-8 matrisinde bir sonraki uygun koltuğa yerleştirilirsiniz.",
+    "step3": "<strong>Kazan</strong> — yeni üyeler katıldıkça USDC zincir boyunca yukarı akar. İstediğiniz zaman çekin.",
+    "step4": "<strong>Otomatik Yükseltme</strong> — matrisiniz dolduğunda (127 koltuk), T2'ye ($25) otomatik olarak yükselirsiniz."
+  },
+  "footer": {
+    "tierrouter": "TierRouter ↗",
+    "faq": "SSS",
+    "tagline": "CryptoNova V8.11 · Base Sepolia Test Ağı · Giriş ücretleri yalnızca test USDC'si"
+  },
+  "js": {
+    "no_wallet": "Cüzdan bulunamadı. MetaMask veya Rabby yükleyin.",
+    "no_wallet_short": "Cüzdan bulunamadı",
+    "connecting": "Bağlanıyor…",
+    "connect_wallet": "Cüzdanı Bağla",
+    "approving": "Onaylanıyor…",
+    "approve_status": "⏳ PairManager için $10 USDC onaylanıyor…",
+    "approve_done": "✅ Onaylandı! Katılmak için Adım 2'ye tıklayın.",
+    "approve_label": "✅ Adım 1 Tamamlandı — Onaylandı",
+    "approved_val": "✅ $10 Onaylandı",
+    "not_approved": "Onaylanmadı",
+    "step1_reset": "Adım 1: $10 USDC Onayla 🔒",
+    "joining": "CryptoNova'ya katılıyor…",
+    "confirm_tx": "⏳ Base Sepolia'da işlem onaylanıyor…",
+    "welcome_status": "🎉 CryptoNova'ya Hoş Geldiniz!",
+    "welcome_toast": "CryptoNova V8.11'e Hoş Geldiniz! 🎉",
+    "registered": "✅ Kayıt Olundu!",
+    "step2_reset": "Adım 2: Kayıt Ol ($10 USDC)",
+    "copied": "Referans bağlantısı kopyalandı!",
+    "connect_first": "Önce cüzdanı bağlayın",
+    "load_failed": "Ağ verileri yüklenemedi",
+    "in_queue": "Kuyrukta",
+    "loading": "Yükleniyor…",
+    "cancelled": "İşlem iptal edildi.",
+    "no_eth": "Gas ücretleri için yeterli ETH yok.",
+    "already_reg": "Bu cüzdan zaten kayıtlı.",
+    "no_approval": "USDC onaylanmadı — önce Adım 1'i tamamlayın.",
+    "tx_reverted": "İşlem geri alındı: "
+  }
+}
