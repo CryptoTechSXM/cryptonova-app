@@ -23,11 +23,11 @@ const RPC_URL = 'https://sepolia.base.org';
 const MATRIX_SIZE = 127;
 
 // ── Contract addresses — loaded from addresses file ──────────────────
-// Auto-loaded from ADDRESSES_FILE env var or default deployed_addresses_v8_10.json
+// Auto-loaded from ADDRESSES_FILE env var or default deployed_addresses_v8_11.json
 // No more hardcoding: just redeploy and the new file is picked up automatically.
 const path    = require('path');
 const fs_sync = require('fs');
-const ADDR_FILE = path.join(__dirname, process.env.ADDRESSES_FILE || 'deployed_addresses_v8_10.json');
+const ADDR_FILE = path.join(__dirname, process.env.ADDRESSES_FILE || 'deployed_addresses_v8_11.json');
 if (!fs_sync.existsSync(ADDR_FILE)) {
   console.error(`\n❌  ${ADDR_FILE} not found. Run deploy_v8.js first.`);
   process.exit(1);

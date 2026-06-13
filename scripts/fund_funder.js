@@ -17,7 +17,7 @@ const fs          = require("fs");
 const path        = require("path");
 require("dotenv").config();
 
-const ADDRESSES_FILE = path.join(__dirname, process.env.ADDRESSES_FILE || "deployed_addresses_v8_10.json");
+const ADDRESSES_FILE = path.join(__dirname, process.env.ADDRESSES_FILE || "deployed_addresses_v8_11.json");
 const ETH_AMOUNT     = ethers.parseEther("10");       // 10 ETH to funder
 const USDC_AMOUNT    = 2_000_000n * 1_000_000n;       // $2,000,000 USDC (6 decimals) — enough for 200,000 registrations
 const COOLDOWN       = 180;                           // seconds between deployer TXs

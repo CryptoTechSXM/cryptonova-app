@@ -54,7 +54,7 @@ for (const v of OPTIONAL_WALLETS) {
   else ok(`${v} not set — will default to deployer address`);
 }
 
-const ADDR_FILE = process.env.ADDRESSES_FILE || "deployed_addresses_v8_10.json";
+const ADDR_FILE = process.env.ADDRESSES_FILE || "deployed_addresses_v8_11.json";
 console.log(`  ℹ  ADDRESSES_FILE = ${ADDR_FILE}`);
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -256,10 +256,10 @@ if (deployText) {
   }
 
   // Check ADDRESSES_FILE default is v8_10
-  if (deployText.includes("deployed_addresses_v8_10.json")) {
-    ok("deploy_v8.js output file: deployed_addresses_v8_10.json");
+  if (deployText.includes("deployed_addresses_v8_11.json")) {
+    ok("deploy_v8.js output file: deployed_addresses_v8_11.json");
   } else {
-    fail("deploy_v8.js does not output to deployed_addresses_v8_10.json");
+    fail("deploy_v8.js does not output to deployed_addresses_v8_11.json");
   }
 
   // Chainlink gas limit should be 6M+
@@ -382,19 +382,19 @@ if (bigfillText) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 13. deployed_addresses_v8_10.json — exists and has expected keys
+// 13. deployed_addresses_v8_11.json — exists and has expected keys
 // ─────────────────────────────────────────────────────────────────────────────
-sep("deployed_addresses_v8_10.json — presence check");
+sep("deployed_addresses_v8_11.json — presence check");
 {
-  const addrFile = path.join(ROOT, "deployed_addresses_v8_10.json");
+  const addrFile = path.join(ROOT, "deployed_addresses_v8_11.json");
   if (!fs.existsSync(addrFile)) {
-    console.log("  ℹ  deployed_addresses_v8_10.json not found — run deploy_v8.js first");
+    console.log("  ℹ  deployed_addresses_v8_11.json not found — run deploy_v8.js first");
   } else {
     const addrData = JSON.parse(fs.readFileSync(addrFile, "utf8"));
     const required = ["tierRouter", "stabilityFund", "matrixKeeper"];
     for (const key of required) {
       if (addrData[key]) ok(`addresses: ${key} = ${addrData[key]}`);
-      else               fail(`addresses: ${key} missing from deployed_addresses_v8_10.json`);
+      else               fail(`addresses: ${key} missing from deployed_addresses_v8_11.json`);
     }
     // Check tiers 1-7 present
     const tiers = addrData.tiers || {};
@@ -467,10 +467,11 @@ if (mkText) {
     fail("parkedGracePeriod NOT found — add V8.10 grace period config to MatrixKeeper.sol");
   }
 
-  if (mkText.includes("rescueEligibilityThreshold")) {
-    ok("rescueEligibilityThreshold config variable found");
+  // V8.11: ratio-based rescue replaced flat threshold
+  if (mkText.includes("rescueRatioBps") && mkText.includes("rescueContributionBps")) {
+    ok("V8.11 rescueRatioBps + rescueContributionBps config variables found");
   } else {
-    fail("rescueEligibilityThreshold NOT found — add V8.10 rescue eligibility threshold to MatrixKeeper.sol");
+    fail("rescueRatioBps/rescueContributionBps NOT found — V8.11 ratio-based rescue not patched into MatrixKeeper.sol");
   }
 
   if (mkText.includes("_doEvictParked") || mkText.includes("doEvictParked")) {

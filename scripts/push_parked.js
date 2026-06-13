@@ -28,9 +28,9 @@ const BATCH_SIZE   = Number(process.env.BATCH || 10);
 const GAS_NORMAL   = 800_000;
 const GAS_OVERFLOW = 15_000_000;
 
-// ── Addresses (loaded from deployed_addresses_v8_10.json) ────────────────────
+// ── Addresses (loaded from deployed_addresses_v8_11.json) ────────────────────
 const { fs: _fs, path: _path } = { fs: require('fs'), path: require('path') };
-const ADDR_FILE = _path.join(__dirname, process.env.ADDRESSES_FILE || 'deployed_addresses_v8_10.json');
+const ADDR_FILE = _path.join(__dirname, process.env.ADDRESSES_FILE || 'deployed_addresses_v8_11.json');
 if (!_fs.existsSync(ADDR_FILE)) {
   console.error(`\n❌  ${ADDR_FILE} not found. Run deploy_v8.js first.`);
   process.exit(1);

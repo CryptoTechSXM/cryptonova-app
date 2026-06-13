@@ -35,7 +35,7 @@ require("dotenv").config();
 
 // ── Config ────────────────────────────────────────────────────────────────────
 const ADDRESSES_FILE = path.join(__dirname,
-  process.env.ADDRESSES_FILE || "deployed_addresses_v8_10.json");
+  process.env.ADDRESSES_FILE || "deployed_addresses_v8_11.json");
 
 const COUNT      = Number(process.env.COUNT      || 200);
 const HDR_OFFSET = Number(process.env.HDR_OFFSET || 1504);
