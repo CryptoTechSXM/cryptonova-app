@@ -5,38 +5,23 @@ pragma solidity ^0.8.24;
  * @title  TierRouter
  * @notice V8.1 "Elevator" — central hub that routes members across 7 tiers.
  *
- * V8.1 ADDITIONS
+ * V8.11 ADDITIONS
+ * ─────────────────────────────────────────────────────────────────────────────
+ *  1. communityWallet hook in register()
+ *       ICommunityWallet(communityWallet).enroll(msg.sender) called on every
+ *       new registration. No-op if communityWallet == address(0).
+ *
+ *  2. globalJoinedCount counter
+ *       Increments on every register() call. Readable on-chain for CommunityWallet
+ *       eligibility (first 1,000 members get Community Fund access).
+ *
+ * V8.1 ADDITIONS (unchanged)
  * ─────────────────────────────────────────────────────────────────────────────
  *  1. Three member toggles (setMemberOptions)
- *       autoUpgrade   — default ON. After autoUpgradeCycleThreshold cycles,
- *                       member can disable to stay at current tier.
- *       autoReentry   — default OFF. If ON and upgrade doesn't fire, member
- *                       re-enters same tier automatically. If OFF, member parks
- *                       and accumulates earnings until they manually re-enter.
- *       doubleReentry — default OFF. If ON and surplus covers a second fee,
- *                       fires a second registration on cycle-out.
- *
  *  2. Cycle thresholds (DAO-votable, enumerated)
- *       autoUpgradeCycleThreshold: 1/3/5/10 (default 5)
- *         Below threshold: autoUpgrade always fires (escrow floor still applies).
- *         At/above threshold: respects member's autoUpgrade toggle.
- *       reentryMinCycles: 1/2/3/5 (default 2)
- *         autoReentry and doubleReentry only available after this many cycles.
- *
  *  3. Escrow floor guard
- *       autoUpgrade only fires if escrow >= nextFee * escrowFloorMultiplier / 100.
- *       Default multiplier: 120 (1.2×). DAO-votable: 110, 120, 150, 200.
- *       In early phase (cycles < threshold): escrow floor check is skipped.
- *
  *  4. Velocity gate (keeper-maintained)
- *       tierVelocityGreen[tier] — set by MatrixKeeper (Chainlink Automation).
- *       If false for a destination tier, autoUpgrade defers (routes to re-entry).
- *       Default: true. Keeper sets false when 7-day rolling velocity drops below
- *       the tier's slowModeThreshold. Resets to true on velocity recovery.
- *
  *  5. MemberParked event
- *       Emitted when a member cycles out and no registration fires. Keeper
- *       monitors this and can fund ghost entries via StabilityFund if needed.
  *
  * V8 ORIGINAL BEHAVIOR (unchanged unless noted above)
  * ─────────────────────────────────────────────────────────────────────────────
@@ -54,6 +39,12 @@ import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 
 // ─── Interfaces ────────────────────────────────────────────────────────────────
+
+interface ICommunityWallet {
+    /// @notice Enroll a new member into the Community Fund eligibility pool.
+    ///         Must be called at registration time. No-op if called twice for same member.
+    function enroll(address member) external;
+}
 
 interface IFigureEightMatrixV8 {
     function deductForUpgrade(
@@ -121,26 +112,21 @@ contract TierRouter is Ownable2Step {
     address public matrixKeeper;
 
     // ─── V8.1: Velocity gate (keeper-maintained per tier) ─────────────────────
-    /// @notice true = destination tier has healthy velocity, OK to route upgrades.
-    ///         false = tier is slow, defer upgrades to re-entry.
-    ///         Default: true. MatrixKeeper sets false on slowdown, resets on recovery.
     mapping(uint8 => bool) public tierVelocityGreen;
 
     // ─── V8.1: DAO-votable parameters (enumerated menus only) ────────────────
-    /// @notice Minimum cycles at current tier before autoUpgrade fires.
-    ///         Below threshold: autoUpgrade fires regardless of toggle.
-    ///         Default 5. Allowed: 1, 3, 5, 10.
     uint256 public autoUpgradeCycleThreshold = 5;
-
-    /// @notice Minimum cycles before autoReentry and doubleReentry toggles activate.
-    ///         Default 2. Allowed: 1, 2, 3, 5.
     uint256 public reentryMinCycles = 2;
-
-    /// @notice Escrow must be >= nextFee * multiplier / 100 for autoUpgrade to fire.
-    ///         Ensures members have enough escrow buffer before upgrading.
-    ///         Default 120 (1.2x). Allowed: 110, 120, 150, 200.
-    ///         In early phase (cycles < threshold): floor check is skipped.
     uint256 public escrowFloorMultiplier = 120;
+
+    // ─── Community Fund ───────────────────────────────────────────────────────
+    /// @notice CommunityWallet contract — enrolled at registration.
+    ///         Zero address = hook disabled (safe before CommunityWallet is deployed).
+    address public communityWallet;
+
+    /// @notice Total unique members ever registered system-wide.
+    ///         Increments on every register() call. Used by CommunityWallet eligibility.
+    uint256 public globalJoinedCount;
 
     // ─── Whale Gate ───────────────────────────────────────────────────────────
     uint256 public t5FirstEntries;
@@ -158,7 +144,6 @@ contract TierRouter is Ownable2Step {
     uint256 public cyclesAtLastRegistration;
 
     // ─── Deflation state (set by MatrixKeeper) ────────────────────────────────
-    /// @notice 0=NORMAL 1=SLOW 2=RECOVERY — maintained by MatrixKeeper via Chainlink
     uint8 public deflationState;
 
     // ─── Entry tracking for keeper velocity queries (capped circular log) ─────
@@ -189,6 +174,9 @@ contract TierRouter is Ownable2Step {
     event ReentryMinCyclesSet(uint256 minCycles);
     event EscrowFloorMultiplierSet(uint256 multiplier);
     event MatrixKeeperSet(address indexed keeper);
+    // V8.11 events
+    event CommunityWalletSet(address indexed cw);
+    event MemberEnrolled(address indexed member, uint256 joinedCount);
 
     // ─── Constructor ──────────────────────────────────────────────────────────
 
@@ -261,18 +249,14 @@ contract TierRouter is Ownable2Step {
         emit MatrixKeeperSet(_keeper);
     }
 
+    /// @notice V8.11: Set the CommunityWallet address. Zero address disables the hook.
+    function setCommunityWallet(address _cw) external onlyOwner {
+        communityWallet = _cw;
+        emit CommunityWalletSet(_cw);
+    }
+
     // ─── V8.1: Velocity gate (keeper-only) ───────────────────────────────────
 
-    /**
-     * @notice MatrixKeeper sets velocity gate for a tier.
-     *         green=true:  velocity healthy, autoUpgrade routes to this tier.
-     *         green=false: tier is slow, autoUpgrade defers (member re-enters current).
-     *
-     *         This creates the 4-state deflation system:
-     *           Growth/Normal → all tiers green
-     *           Slow          → upper tiers yellow/red, lower tiers green
-     *           Deflation     → most tiers red, only T1 green
-     */
     function setTierVelocityGreen(uint8 tierIndex, bool green) external {
         require(
             msg.sender == matrixKeeper || msg.sender == owner(),
@@ -285,12 +269,6 @@ contract TierRouter is Ownable2Step {
 
     // ─── V8.1: DAO governance setters (enumerated menus only) ────────────────
 
-    /**
-     * @notice Set minimum cycles before autoUpgrade fires.
-     *         Allowed: 1, 3, 5, 10. Default: 5.
-     *         Below threshold: autoUpgrade always fires (toggle ignored).
-     *         At/above threshold: respects member's autoUpgradeDisabled toggle.
-     */
     function setAutoUpgradeCycleThreshold(uint256 threshold) external onlyOwner {
         require(
             threshold == 1 || threshold == 3 || threshold == 5 || threshold == 10,
@@ -300,10 +278,6 @@ contract TierRouter is Ownable2Step {
         emit AutoUpgradeThresholdSet(threshold);
     }
 
-    /**
-     * @notice Set minimum cycles before autoReentry and doubleReentry activate.
-     *         Allowed: 1, 2, 3, 5. Default: 2.
-     */
     function setReentryMinCycles(uint256 minCycles) external onlyOwner {
         require(
             minCycles == 1 || minCycles == 2 || minCycles == 3 || minCycles == 5,
@@ -313,11 +287,6 @@ contract TierRouter is Ownable2Step {
         emit ReentryMinCyclesSet(minCycles);
     }
 
-    /**
-     * @notice Set escrow floor multiplier for autoUpgrade guard.
-     *         Allowed: 110, 120, 150, 200 (= 1.1x, 1.2x, 1.5x, 2.0x). Default: 120.
-     *         autoUpgrade fires only if escrow >= nextFee * multiplier / 100.
-     */
     function setEscrowFloorMultiplier(uint256 multiplier) external onlyOwner {
         require(
             multiplier == 110 || multiplier == 120 || multiplier == 150 || multiplier == 200,
@@ -378,33 +347,24 @@ contract TierRouter is Ownable2Step {
         memberReferrer[msg.sender]    = resolved;
         globalJoined[msg.sender]      = true;
         memberHighestTier[msg.sender] = 1;
+        globalJoinedCount            += 1;
 
         lastActivityTimestamp    = block.timestamp;
         cyclesAtLastRegistration = totalSystemCycles;
 
         IPairManagerV8(tierPairManagers[0]).registerDirectFor(msg.sender, resolved);
 
+        // Community Fund enrollment (no-op if communityWallet not yet deployed)
+        if (communityWallet != address(0)) {
+            ICommunityWallet(communityWallet).enroll(msg.sender);
+            emit MemberEnrolled(msg.sender, globalJoinedCount);
+        }
+
         _checkT5FirstEntry(msg.sender, 1);
         _recordEntry(0);
         emit MemberRegistered(msg.sender, 1, resolved);
     }
 
-    /**
-     * @notice V8.1: Configure cycle-out behavior in one call.
-     *         Member may call any time. Settings take effect on the NEXT cycle-out.
-     *
-     * @param disableUpgrade  true = don't auto-upgrade after threshold cycles.
-     *                        ONLY takes effect once tierCycles >= autoUpgradeCycleThreshold.
-     *                        Before threshold, autoUpgrade always fires regardless.
-     * @param enableReentry   true = auto-reenter same tier if upgrade doesn't fire.
-     *                        Requires tierCycles >= reentryMinCycles to activate.
-     * @param enableDouble    true = fire a second registration if surplus covers fee.
-     *                        Requires tierCycles >= reentryMinCycles to activate.
-     *
-     * Note: these settings are per-member (not per-tier). A member at T3 who sets
-     * disableUpgrade=true will also not auto-upgrade when they later reach T4, T5, etc.
-     * They can call setMemberOptions() again at any time to change preferences.
-     */
     function setMemberOptions(
         bool disableUpgrade,
         bool enableReentry,
@@ -429,15 +389,6 @@ contract TierRouter is Ownable2Step {
         emit DoubleEntryToggled(msg.sender, enabled);
     }
 
-    /**
-     * @notice Voluntarily upgrade to a higher tier by paying directly from wallet.
-     *         Pre-condition: approve THIS contract for the entry fee before calling.
-     *
-     * Eligibility:
-     *   1. Must have completed >= 1 cycle at tierIndex-1
-     *   2. Must NOT be seated in previous tier's MatB (imminent cycle-out)
-     *   3. Must NOT already be seated in target tier's MatA
-     */
     function manualUpgrade(uint8 targetTierIndex) external whenNotPaused {
         require(globalJoined[msg.sender],                           "TR: not registered");
         require(targetTierIndex > 0 && targetTierIndex < MAX_TIERS, "TR: invalid tier");
@@ -486,18 +437,6 @@ contract TierRouter is Ownable2Step {
 
     // ─── Matrix B cycle-out callback ──────────────────────────────────────────
 
-    /**
-     * @notice Called by Matrix B when root cycles out (full figure-8 complete).
-     *
-     *         V8.1 priority order:
-     *           1. autoUpgrade  -- if enabled AND cycles >= threshold AND escrow >= floor
-     *                             AND velocity green AND destination clear
-     *           2. autoReentry / default re-entry -- if enabled or early phase
-     *           3. park -- emit MemberParked. Keeper monitors, may fund ghost entry.
-     *
-     *         Stack note: heavy lifting delegated to _executeAndDouble() to stay
-     *         within the EVM 16-slot accessible stack limit.
-     */
     function handleCycleOut(
         address member,
         uint8   tierIndex,
@@ -533,21 +472,6 @@ contract TierRouter is Ownable2Step {
 
     // --- Internal: Routing Helpers -------------------------------------------
 
-    /**
-     * @dev V8.1 _resolveDest -- determines upgrade destination with all guards.
-     *
-     *      Guards (in order):
-     *        a. T10 apex loop guard
-     *        b. autoUpgrade toggle (ignored if earlyPhase = cycles < threshold)
-     *        c. Whale Gate (T4 -> T6 skip when active)
-     *        d. Destination tier deployed
-     *        e. Funds check (escrow + withdrawable >= nextFee)
-     *        f. Escrow floor (skipped in early phase)
-     *        g. Velocity gate (keeper-maintained)
-     *        h. Manual-upgrade guard (member already in dest MatA)
-     *
-     *      Returns current-tier re-entry if any guard fails.
-     */
     function _resolveDest(
         address member,
         uint8   tierIndex,
@@ -602,17 +526,6 @@ contract TierRouter is Ownable2Step {
         return (nextIndex, nextFee, true);
     }
 
-    /**
-     * @dev V8.1: Determine if re-entry fires when upgrade didn't.
-     *
-     *      Fires if funds sufficient AND one of:
-     *        - member hasn't configured options (V8 compat), OR
-     *        - still in early cycles (< reentryMinCycles), OR
-     *        - member explicitly enabled autoReentry.
-     *
-     *      If member has configured options, is past minimum cycles, and
-     *      autoReentry=OFF (default): returns false. Member parks.
-     */
     function _shouldFireReentry(
         address member,
         uint256 cycles,
@@ -625,10 +538,6 @@ contract TierRouter is Ownable2Step {
         return opts.autoReentryEnabled;
     }
 
-    /**
-     * @dev Execute deduction + primary registration + optional double reentry.
-     *      Extracted from handleCycleOut to avoid EVM stack depth limits.
-     */
     function _executeAndDouble(
         address matrixB,
         address member,
@@ -642,7 +551,6 @@ contract TierRouter is Ownable2Step {
     ) internal {
         address referrer = memberReferrer[member];
 
-        // Deduct from matrix (scoped to free fe/fw from stack)
         uint256 remEscrow;
         uint256 remWithdrawable;
         {
@@ -652,11 +560,9 @@ contract TierRouter is Ownable2Step {
             IFigureEightMatrixV8(matrixB).deductForUpgrade(member, fe, fw);
         }
 
-        // Register at destination tier
         usdc.forceApprove(tierPairManagers[destTierIndex], primaryFee);
         IPairManagerV8(tierPairManagers[destTierIndex]).registerFor(member, referrer);
 
-        // Bookkeeping + events
         _recordEntry(destTierIndex);
         if (isUpgrade) {
             uint8 destTierNum = destTierIndex + 1;
@@ -667,7 +573,6 @@ contract TierRouter is Ownable2Step {
             emit MemberReentered(member, tierIndex + 1);
         }
 
-        // Double reentry (honor legacy doubleEntryEnabled too)
         bool doubleOn = memberOptions[member].optionsSet
             ? memberOptions[member].doubleReentryEnabled
             : doubleEntryEnabled[member];
@@ -680,11 +585,6 @@ contract TierRouter is Ownable2Step {
         }
     }
 
-    /**
-     * @dev Fire the optional second entry (Double Reentry).
-     *      Upgraded  -> second slot in OLD tier (member keeps a foot there).
-     *      Re-entered -> second slot in SAME tier (two BFS seats).
-     */
     function _handleDoubleEntry(
         address matrixB,
         address member,
@@ -702,7 +602,7 @@ contract TierRouter is Ownable2Step {
         if (tierPairManagers[secIndex] == address(0)) return;
 
         (uint256 esc2, uint256 earn2) = _computeSplit(remEscrow, remWithdrawable, secFee);
-        if (esc2 + earn2 != secFee) return;   // rounding guard
+        if (esc2 + earn2 != secFee) return;
 
         IFigureEightMatrixV8(matrixB).deductForUpgrade(member, esc2, earn2);
         address secPM = tierPairManagers[secIndex];
@@ -711,12 +611,6 @@ contract TierRouter is Ownable2Step {
         emit DoubleEntryFired(member, destTierIndex + 1, secIndex + 1);
     }
 
-    /**
-     * @notice Escrow-first split.
-     *         In V8.1, primary upgrade fuel is withdrawable earnings (escrow is
-     *         small, funded only by orphan routing). Escrow is still used first
-     *         as an upgrade buffer, then withdrawable fills the remainder.
-     */
     function _computeSplit(
         uint256 escrow,
         uint256 /* withdrawable */,
@@ -745,15 +639,10 @@ contract TierRouter is Ownable2Step {
 
     // ─── Entry tracking helper ───────────────────────────────────────────────
 
-    /// @dev Append current timestamp to per-tier and system entry logs.
-    ///      Uses a simple append-only array capped at MAX_ENTRY_LOG.
-    ///      Oldest entries remain visible for velocity window queries.
-    ///      When full, we overwrite from the start (ring buffer).
     function _recordEntry(uint8 tierIdx) internal {
         if (_sysEntryTimes.length < MAX_ENTRY_LOG) {
             _sysEntryTimes.push(block.timestamp);
         } else {
-            // Ring: overwrite oldest slot (index 0 = oldest, shift up)
             for (uint256 i = 0; i < _sysEntryTimes.length - 1; i++) {
                 _sysEntryTimes[i] = _sysEntryTimes[i + 1];
             }
@@ -770,13 +659,8 @@ contract TierRouter is Ownable2Step {
         }
     }
 
-    // ─── Keeper interface (ITierRouterKeeper) ─────────────────────────────────
+    // ─── Keeper interface ─────────────────────────────────────────────────────
 
-    /**
-     * @notice MatrixKeeper sets deflation state after velocity checks.
-     *         state: 0=NORMAL 1=SLOW 2=RECOVERY
-     *         Also callable by owner for manual override.
-     */
     function setDeflationState(uint8 state) external {
         require(
             msg.sender == matrixKeeper || msg.sender == owner(),
@@ -788,10 +672,6 @@ contract TierRouter is Ownable2Step {
         if (state != prev) emit DeflationStateChanged(prev, state);
     }
 
-    /**
-     * @notice Count system-wide entries since fromTimestamp.
-     *         Called by MatrixKeeper velocity check. O(MAX_ENTRY_LOG).
-     */
     function getSystemEntryCount(uint256 fromTimestamp) external view returns (uint256) {
         uint256 cnt = 0;
         uint256 len = _sysEntryTimes.length;
@@ -801,10 +681,6 @@ contract TierRouter is Ownable2Step {
         return cnt;
     }
 
-    /**
-     * @notice Count per-tier entries since fromTimestamp.
-     *         Called by MatrixKeeper velocity check. O(MAX_ENTRY_LOG).
-     */
     function getTierEntryCount(uint8 tier, uint256 fromTimestamp) external view returns (uint256) {
         uint256 cnt = 0;
         uint256[] storage ta = _tierEntryTimes[tier];
