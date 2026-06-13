@@ -3,15 +3,15 @@ pragma solidity ^0.8.24;
 
 /**
  * @title  FigureEightMatrixV8
- * @notice V8.1 "Elevator" — BFS matrix with TierRouter integration,
+ * @notice V8.1 "Elevator" --- BFS matrix with TierRouter integration,
  *         deficit-weighted equalization pool, StabilityFund hooks,
  *         and no-idle-member guarantees.
  *
  * V8.1 CHANGES (Option B BPS)
- * ─────────────────────────────────────────────────────────────────────────────
+ * -----------------------------------------------------------------------------
  *  1. Equalization Pool (Option B)
- *       V8.8: escrow storage removed; orphan fees → CommunityWallet / SF L6
- *       + SPLIT_STABILITY_BPS. Chain pay halved (4000→2000 T1-T5, 3500→1750
+ *       V8.8: escrow storage removed; orphan fees --- CommunityWallet / SF L6
+ *       + SPLIT_STABILITY_BPS. Chain pay halved (4000---2000 T1-T5, 3500---1750
  *       T6-T7). Freed BPS flows into equalization pool accumulated per-entry.
  *       On every cycle-out, pool distributes to all non-root members (pos 2..N)
  *       weighted by BFS position (deeper = larger deficit = larger share).
@@ -26,22 +26,22 @@ pragma solidity ^0.8.24;
  *         T8-T10: l1=2000, chain=1750, pool=2750, treasury=2000,
  *                 devOps=800, stability=500, buyback=200   (sum=10000)
  *
- *  2. StabilityFund hooks (zero treasury — treasury is SACRED)
- *       L1: 200 bps per entry (permanent)  → receiveLayer(tier, amt, 1)
- *       L3: withdrawal health fee 1.5%     → receiveLayer(tier, amt, 3)
- *       L5: early exit penalty 20%         → receiveLayer(tier, amt, 5)
+ *  2. StabilityFund hooks (zero treasury --- treasury is SACRED)
+ *       L1: 200 bps per entry (permanent)  --- receiveLayer(tier, amt, 1)
+ *       L3: withdrawal health fee 1.5%     --- receiveLayer(tier, amt, 3)
+ *       L5: early exit penalty 20%         --- receiveLayer(tier, amt, 5)
  *       Fallback to devOpsWallet if StabilityFund not yet set.
  *
  *  3. Activity tracking
  *       lastActivityTime[member] updated on matrix entry (join) and explicit
- *       member actions (withdraw, earlyEscrowRelease) — NOT on passive credits.
+ *       member actions (withdraw, earlyEscrowRelease) --- NOT on passive credits.
  *       This avoids O(N) cold SSTOREs in _distributePool() at cycle-out.
  *       MatrixKeeper reads getIdleSeconds() to detect idle slots.
  *
- *  4. reclaimIdleSlot() — keeper-only
+ *  4. reclaimIdleSlot() --- keeper-only
  *       Removes idle member from BFS tree. Earnings/escrow untouched.
  *
- *  5. earlyEscrowRelease() — REMOVED in V8.8 (escrow storage removed)
+ *  5. earlyEscrowRelease() --- REMOVED in V8.8 (escrow storage removed)
  *       Orphan fees now route to CommunityWallet / StabilityFund layer 6.
  *
  *  6. Governance-adjustable fee parameters (enumerated menus, DAO-votable)
@@ -49,7 +49,7 @@ pragma solidity ^0.8.24;
  *       earlyExitPenaltyBps: 1000/1500/2000/2500 (default 2000 = 20%)
  *
  * V8 CHANGES (carried forward from Phase 1)
- * ─────────────────────────────────────────────────────────────────────────────
+ * -----------------------------------------------------------------------------
  *  1. Dynamic crossing fee (reads destination.ENTRY_FEE() at crossing time)
  *  2. Per-tier BPS splits passed in constructor (all immutable)
  *  3. TierRouter callback on Matrix B cycle-out
@@ -88,13 +88,13 @@ interface IStabilityFund {
 contract FigureEightMatrixV8 is Ownable2Step {
     using SafeERC20 for IERC20;
 
-    // ─── Immutables ───────────────────────────────────────────────────────────
+    // --- Immutables -----------------------------------------------------------
     uint256 public immutable MATRIX_SIZE;
     uint256 public immutable ENTRY_FEE;
     bool    public immutable isMatrixA;
     uint8   public immutable tierIndex;          // 0=T1, 1=T2, ..., 9=T10
 
-    // ─── Per-tier BPS splits (immutable, set in constructor) ──────────────────
+    // --- Per-tier BPS splits (immutable, set in constructor) ------------------
     uint256 public immutable SPLIT_L1_BPS;        // 2000 all tiers
     uint256 public immutable SPLIT_CHAIN_BPS;     // 2000 T1-T5, 1750 T6-T10
     uint256 public immutable SPLIT_POOL_BPS;      // 3300/3100/2950/2750 per tier group
@@ -106,31 +106,31 @@ contract FigureEightMatrixV8 is Ownable2Step {
     uint256 public immutable SPLIT_BUYBACK_BPS;   // 100/200 per tier group -- to BuybackReserve
     uint256 public constant  BPS_DENOM = 10_000;
 
-    // ─── Chain pay weights per BFS level (6 levels in V8) ────────────────────
+    // --- Chain pay weights per BFS level (6 levels in V8) --------------------
     uint256[6] public chainPayBps;
 
-    // ─── External contracts ───────────────────────────────────────────────────
+    // --- External contracts ---------------------------------------------------
     IERC20         public immutable usdc;
     CNOVAToken     public immutable cnova;
     CNOVATreasury  public immutable treasury;
     address        public immutable devWallet;     // dev wallet
     address        public immutable opsWallet;     // ops wallet
-    address        public tierRouter;              // TierRouter — set post-deploy
-    address        public pairManager;             // PairManager — set post-deploy
+    address        public tierRouter;              // TierRouter --- set post-deploy
+    address        public pairManager;             // PairManager --- set post-deploy
     address        public accountOne;              // orphan fee fallback
-    address        public stabilityFund;           // StabilityFund.sol — set post-deploy
-    address        public communityWallet;         // CommunityWallet.sol — set post-deploy (deferred to mainnet)
-    address        public buybackReserve;          // CNOVABuybackReserve.sol — set post-deploy
-    address        public matrixKeeper;            // MatrixKeeper (Chainlink) — set post-deploy
+    address        public stabilityFund;           // StabilityFund.sol --- set post-deploy
+    address        public communityWallet;         // CommunityWallet.sol --- set post-deploy (deferred to mainnet)
+    address        public buybackReserve;          // CNOVABuybackReserve.sol --- set post-deploy
+    address        public matrixKeeper;            // MatrixKeeper (Chainlink) --- set post-deploy
 
-    // ─── Figure-8 partner ────────────────────────────────────────────────────
+    // --- Figure-8 partner ----------------------------------------------------
     FigureEightMatrixV8 public partner;
 
-    // ─── Circular chain (multi-pair within same tier) ────────────────────────
+    // --- Circular chain (multi-pair within same tier) ------------------------
     address public chainNext;
     mapping(address => bool) public chainAuthorized;
 
-    // ─── BFS State ───────────────────────────────────────────────────────────
+    // --- BFS State -----------------------------------------------------------
     mapping(address => uint256) public matrixPos;
     mapping(uint256 => address) public posToMember;
     uint256 public occupancy;
@@ -139,38 +139,38 @@ contract FigureEightMatrixV8 is Ownable2Step {
     uint256 public joinCountSinceRotation;
     uint256 public lastRotationTimestamp;
 
-    // ─── Cascade guard ────────────────────────────────────────────────────────
+    // --- Cascade guard --------------------------------------------------------
     bool    private _crossingInProgress;
     address public  pendingCross;
     address public  pendingCrossReferrer;
 
-    // ─── Parked member queue (keeper rescue) ─────────────────────────────────────────
+    // --- Parked member queue (keeper rescue) -----------------------------------------
     /// @notice Members that failed to cross (insufficient funds). Keeper rescues via forceCrossKeeper().
     address[] public parkedMembers;
     /// @notice Timestamp when each member was parked. Used by keeper for grace-period logic.
     mapping(address => uint256) public parkedAt;
 
-    // ─── V8.1: Equalization Pool ──────────────────────────────────────────────
+    // --- V8.1: Equalization Pool ----------------------------------------------
     /// @notice Accumulates SPLIT_POOL_BPS per entry. Distributed deficit-weighted
     ///         to all non-root members (pos 2..N) on every cycle-out.
     uint256 public poolAccumulator;
 
-    // ─── V8.1: Activity Tracking ─────────────────────────────────────────────
+    // --- V8.1: Activity Tracking ---------------------------------------------
     /// @notice Last timestamp a member received any credit or entered the matrix.
     ///         MatrixKeeper monitors this for idle slot reclaiming.
     mapping(address => uint256) public lastActivityTime;
 
-    // ─── V8.1: Governance parameters (DAO-votable, enumerated values only) ───
+    // --- V8.1: Governance parameters (DAO-votable, enumerated values only) ---
     /// @notice Withdrawal health fee in BPS. Default 150 (1.5%). Feeds L3.
     uint256 public withdrawalFeeBps    = 150;
     /// @notice Early exit penalty in BPS. Default 2000 (20%). Feeds L5.
     uint256 public earlyExitPenaltyBps = 2000;
 
-    // ─── Orphan fee health monitor (escrow replaced by community pool routing) ─
+    // --- Orphan fee health monitor (escrow replaced by community pool routing) -
     uint256 public noReferrerPoolRouted;     // renamed from noReferrerEscrowRouted
     uint256 public noReferrerFounderRouted;
 
-    // ─── Member data ─────────────────────────────────────────────────────────
+    // --- Member data ---------------------------------------------------------
     struct Member {
         uint256 id;
         address referrer;
@@ -185,7 +185,7 @@ contract FigureEightMatrixV8 is Ownable2Step {
     mapping(address => Member) public members;
     uint256 public totalJoined;
 
-    // ─── Events ───────────────────────────────────────────────────────────────
+    // --- Events ---------------------------------------------------------------
     event MemberEntered(address indexed member, uint256 bfsPosition, uint256 memberId, address matrix);
     event MemberCycledOut(address indexed member, uint256 cycles, uint256 rotations, address fromMatrix);
     event MemberCrossedToPartner(address indexed member, address fromMatrix, address toMatrix);
@@ -208,7 +208,7 @@ contract FigureEightMatrixV8 is Ownable2Step {
     event MemberParked(address indexed member, uint256 shortfall);
     event MemberEvicted(address indexed member, uint256 totalWithdrawn);  // V8.10: grace-period eviction
 
-    // ─── Constructor split config struct ──────────────────────────────────────
+    // --- Constructor split config struct --------------------------------------
     /// @notice V8.9: devOpsBps split into devBps + opsBps, communityBps added (9 fields total).
     struct SplitConfig {
         uint256 l1Bps;
@@ -236,7 +236,7 @@ contract FigureEightMatrixV8 is Ownable2Step {
         address admin;
     }
 
-    // ─── Constructor ──────────────────────────────────────────────────────────
+    // --- Constructor ----------------------------------------------------------
     constructor(
         DeployParams memory _p,
         uint256      _entryFee,
@@ -290,7 +290,7 @@ contract FigureEightMatrixV8 is Ownable2Step {
         }
     }
 
-    // ─── Admin setters ────────────────────────────────────────────────────────
+    // --- Admin setters --------------------------------------------------------
 
     function setPartner(address _partner) external onlyOwner {
         require(_partner != address(0),    "F8V8: zero partner");
@@ -357,7 +357,7 @@ contract FigureEightMatrixV8 is Ownable2Step {
         communityWallet = _cw;
     }
 
-    // ─── Governance setters (DAO-votable, enumerated menus only) ─────────────
+    // --- Governance setters (DAO-votable, enumerated menus only) -------------
 
     /// @notice Adjust withdrawal health fee. Allowed: 50, 100, 150, 200, 250.
     ///         Default 150 (1.5%). Callable by owner or TierRouter (DAO gateway).
@@ -381,7 +381,7 @@ contract FigureEightMatrixV8 is Ownable2Step {
         earlyExitPenaltyBps = _bps;
     }
 
-    // ─── TierRouter: fund extraction ─────────────────────────────────────────
+    // --- TierRouter: fund extraction -----------------------------------------
 
     /**
      * @notice Pull upgrade funds from member's escrow and/or withdrawable.
@@ -396,7 +396,7 @@ contract FigureEightMatrixV8 is Ownable2Step {
     ) external {
         require(msg.sender == tierRouter, "F8V8: not tierRouter");
 
-        // escrowAmt always 0 in V8.8 — escrow storage removed
+        // escrowAmt always 0 in V8.8 --- escrow storage removed
         if (withdrawableAmt > 0) {
             require(
                 members[member].withdrawable >= withdrawableAmt,
@@ -413,9 +413,9 @@ contract FigureEightMatrixV8 is Ownable2Step {
         emit UpgradeFundsDeducted(member, escrowAmt, withdrawableAmt);
     }
 
-    // ─── Registration ─────────────────────────────────────────────────────────
+    // --- Registration ---------------------------------------------------------
 
-    /// @notice Direct register (testnet convenience — bypasses TierRouter).
+    /// @notice Direct register (testnet convenience --- bypasses TierRouter).
     function register(address referrer) external {
         require(
             !members[msg.sender].hasEverJoined || !members[msg.sender].isInMatrix,
@@ -428,7 +428,7 @@ contract FigureEightMatrixV8 is Ownable2Step {
         entry._enterMatrix(msg.sender, referrer);
     }
 
-    /// @notice PairManager entry — called by PairManager.enterFor().
+    /// @notice PairManager entry --- called by PairManager.enterFor().
     function enterFor(address member, address referrer) external {
         require(msg.sender == pairManager, "F8V8: not pairManager");
         require(
@@ -494,7 +494,7 @@ contract FigureEightMatrixV8 is Ownable2Step {
         emit MemberEntered(member, matrixPos[member], members[member].id, address(this));
     }
 
-    // ─── Internal: Matrix Mechanics ───────────────────────────────────────────
+    // --- Internal: Matrix Mechanics -------------------------------------------
 
     function _placeInMatrix(address member, uint256 slot) internal {
         matrixPos[member]          = slot;
@@ -506,7 +506,7 @@ contract FigureEightMatrixV8 is Ownable2Step {
         address root = posToMember[1];
         require(root != address(0), "F8V8: no root");
 
-        // ── V8.1: Distribute equalization pool BEFORE shifting ────────────────
+        // -- V8.1: Distribute equalization pool BEFORE shifting ----------------
         // Pool distributes to positions 2..MATRIX_SIZE (non-root, all present members).
         // Must happen before renumbering so weights match current BFS depth order.
         _distributePool();
@@ -530,12 +530,12 @@ contract FigureEightMatrixV8 is Ownable2Step {
 
         emit MemberCycledOut(root, members[root].cyclesCompleted, rotationCount, address(this));
 
-        // ── V8: TierRouter handles Matrix B cycle-outs ────────────────────────
+        // -- V8: TierRouter handles Matrix B cycle-outs ------------------------
         if (!isMatrixA && tierRouter != address(0)) {
             try ITierRouter(tierRouter).handleCycleOut(
                 root,
                 tierIndex,
-                0,                       // escrow removed — crossing is withdrawable-only
+                0,                       // escrow removed --- crossing is withdrawable-only
                 members[root].withdrawable
             ) {} catch {}
         } else {
@@ -552,7 +552,7 @@ contract FigureEightMatrixV8 is Ownable2Step {
      *
      *         This gives deeper members (higher pos) a larger share, compensating for
      *         the fact that they earn less chain pay than shallow members. The root
-     *         (pos 1) is excluded entirely — they already earned the most chain pay.
+     *         (pos 1) is excluded entirely --- they already earned the most chain pay.
      *
      *         Dust (rounding remainder) goes to pos 2 (longest-waiting non-root).
      */
@@ -582,7 +582,7 @@ contract FigureEightMatrixV8 is Ownable2Step {
             emit PoolShareCredited(m, pos, share);
         }
 
-        // Dust → pos 2 member (or first non-null pos, or devOps)
+        // Dust --- pos 2 member (or first non-null pos, or devOps)
         uint256 dust = pool - distributed;
         if (dust > 0) {
             address dest = posToMember[2] != address(0)
@@ -622,11 +622,11 @@ contract FigureEightMatrixV8 is Ownable2Step {
 
         uint256 reentryFee = FigureEightMatrixV8(destination).ENTRY_FEE();
 
-        // V8.8: escrow removed — crossing funded entirely from withdrawable earnings.
+        // V8.8: escrow removed --- crossing funded entirely from withdrawable earnings.
         uint256 earnings = members[member].withdrawable;
 
         if (earnings < reentryFee) {
-            // Insufficient funds — park. Keeper rescues via forceCrossKeeper().
+            // Insufficient funds --- park. Keeper rescues via forceCrossKeeper().
             uint256 shortfall = reentryFee - earnings;
             parkedMembers.push(member);
             parkedAt[member] = block.timestamp;  // V8.10: start grace period clock
@@ -649,7 +649,7 @@ contract FigureEightMatrixV8 is Ownable2Step {
         _crossingInProgress = false;
     }
 
-    // ─── Internal: Payment Distribution ──────────────────────────────────────
+    // --- Internal: Payment Distribution --------------------------------------
 
     /**
      * @notice Distribute all BPS splits for a new member entry.
@@ -666,7 +666,7 @@ contract FigureEightMatrixV8 is Ownable2Step {
     function _distributePayments(address newMember) internal {
         Member storage m = members[newMember];
 
-        // ── L1 Referral ───────────────────────────────────────────────────────
+        // -- L1 Referral -------------------------------------------------------
         uint256 l1Amt = ENTRY_FEE * SPLIT_L1_BPS / BPS_DENOM;
         if (m.referrer != address(0)) {
             _credit(m.referrer, l1Amt);
@@ -674,45 +674,45 @@ contract FigureEightMatrixV8 is Ownable2Step {
             _routeOrphanFee(l1Amt, "L1");
         }
 
-        // ── Chain Pay (6 BFS levels) ──────────────────────────────────────────
+        // -- Chain Pay (6 BFS levels) ------------------------------------------
         _distributeChainPay(newMember);
 
-        // ── Treasury (SACRED — no change, no reduction, no V8.1 touch) ────────
+        // -- Treasury (SACRED --- no change, no reduction, no V8.1 touch) --------
         uint256 treasuryAmt = ENTRY_FEE * SPLIT_TREASURY_BPS / BPS_DENOM;
         SafeERC20.forceApprove(usdc, address(treasury), treasuryAmt);
         treasury.depositReserve(treasuryAmt);
 
-        // ── V8.1: Equalization Pool Accumulation ──────────────────────────────
+        // -- V8.1: Equalization Pool Accumulation ------------------------------
         // USDC for pool stays in this contract until cycle-out triggers _distributePool().
-        // No transfer out — just internal accounting. Backed 1:1 by USDC held here.
+        // No transfer out --- just internal accounting. Backed 1:1 by USDC held here.
         uint256 poolAmt = ENTRY_FEE * SPLIT_POOL_BPS / BPS_DENOM;
         poolAccumulator += poolAmt;
 
-        // ── V8.7: StabilityFund L1 carve ─────────────────────────────────────
+        // -- V8.7: StabilityFund L1 carve -------------------------------------
         uint256 stabilityAmt = ENTRY_FEE * SPLIT_STABILITY_BPS / BPS_DENOM;
         if (stabilityAmt > 0) {
             _forwardToStabilityFund(stabilityAmt, 1);
         }
 
-        // ── V8.7: BuybackReserve carve ────────────────────────────────────────
+        // -- V8.7: BuybackReserve carve ----------------------------------------
         uint256 buybackAmt = ENTRY_FEE * SPLIT_BUYBACK_BPS / BPS_DENOM;
         if (buybackAmt > 0) {
             _forwardToBuybackReserve(buybackAmt);
         }
 
-        // ── Dev (separate) ────────────────────────────────────────────────────
+        // -- Dev (separate) ----------------------------------------------------
         uint256 devAmt = ENTRY_FEE * SPLIT_DEV_BPS / BPS_DENOM;
         if (devAmt > 0 && devWallet != address(0)) {
             usdc.safeTransfer(devWallet, devAmt);
         }
 
-        // ── Ops (separate) ────────────────────────────────────────────────────
+        // -- Ops (separate) ----------------------------------------------------
         uint256 opsAmt = ENTRY_FEE * SPLIT_OPS_BPS / BPS_DENOM;
         if (opsAmt > 0 && opsWallet != address(0)) {
             usdc.safeTransfer(opsWallet, opsAmt);
         }
 
-        // ── Community wallet carve ────────────────────────────────────────────
+        // -- Community wallet carve --------------------------------------------
         uint256 communityAmt = ENTRY_FEE * SPLIT_COMMUNITY_BPS / BPS_DENOM;
         if (communityAmt > 0) {
             if (communityWallet != address(0)) {
@@ -770,7 +770,7 @@ contract FigureEightMatrixV8 is Ownable2Step {
         uint256 poolShare  = remaining * poolBps / denom;
         uint256 founderShare = remaining - poolShare;
 
-        // Route pool share → CommunityWallet (SF layer 6 fallback)
+        // Route pool share --- CommunityWallet (SF layer 6 fallback)
         if (poolShare > 0) {
             _forwardToCommunityPool(poolShare, source);
             noReferrerPoolRouted += poolShare;
@@ -799,7 +799,7 @@ contract FigureEightMatrixV8 is Ownable2Step {
                 emit OrphanFeePooled(amount, communityWallet, source);
                 return;
             } catch {
-                // CW reverted — fall through to SF
+                // CW reverted --- fall through to SF
             }
         }
         // SF fallback (layer 6 = orphan community pool carve)
@@ -848,12 +848,12 @@ contract FigureEightMatrixV8 is Ownable2Step {
         if (recipient == address(0) || amount == 0) return;
         members[recipient].withdrawable += amount;
         members[recipient].totalEarned  += amount;
-        // NOTE: lastActivityTime NOT updated here — passive credit != activity.
+        // NOTE: lastActivityTime NOT updated here --- passive credit != activity.
         // Updated only on explicit actions: _placeInMatrix, withdraw.
         // Avoids 63x cold SSTOREs during _distributePool.
     }
 
-    // ─── Withdraw ─────────────────────────────────────────────────────────────
+    // --- Withdraw -------------------------------------------------------------
 
     /**
      * @notice Withdraw all earned USDC.
@@ -861,7 +861,7 @@ contract FigureEightMatrixV8 is Ownable2Step {
      *         V8.1: A withdrawal health fee (default 1.5%) is deducted and
      *         forwarded to StabilityFund as Layer 3. This is counter-cyclical:
      *         the fee builds reserves during healthy bull runs and funds ghost
-     *         entries (via MatrixKeeper) during deflation — keeping every member
+     *         entries (via MatrixKeeper) during deflation --- keeping every member
      *         advancing without touching the treasury.
      */
     function withdraw() external {
@@ -870,7 +870,7 @@ contract FigureEightMatrixV8 is Ownable2Step {
 
         // V8.10: Reserve ENTRY_FEE while member is active in the matrix.
         // This ensures funds for the crossing are always present, preventing
-        // the drain-and-park exploit (withdraw all → get parked → SF pays crossing).
+        // the drain-and-park exploit (withdraw all --- get parked --- SF pays crossing).
         // Members who want a full withdrawal must wait until after they have cycled
         // out and crossed (isInMatrix = false).
         if (members[msg.sender].isInMatrix) {
@@ -882,7 +882,7 @@ contract FigureEightMatrixV8 is Ownable2Step {
         members[msg.sender].totalWithdrawn  += available;   // V8.10: track cumulative
         lastActivityTime[msg.sender] = block.timestamp;     // explicit action = activity
 
-        // ── V8.1: Withdrawal health fee → StabilityFund L3 ───────────────────
+        // -- V8.1: Withdrawal health fee --- StabilityFund L3 -------------------
         uint256 fee    = available * withdrawalFeeBps / BPS_DENOM;
         uint256 payout = available - fee;
 
@@ -895,26 +895,26 @@ contract FigureEightMatrixV8 is Ownable2Step {
         emit EarningsWithdrawn(msg.sender, payout);
     }
 
-    // ─── V8.8: earlyEscrowRelease() removed ─────────────────────────────────
+    // --- V8.8: earlyEscrowRelease() removed ---------------------------------
     // Escrow storage removed in V8.8. Orphan fees now route to CommunityWallet /
     // StabilityFund (layer 6) instead of per-member escrow slots. Members crossing
     // to their partner matrix use withdrawable earnings only.  The early-exit
-    // penalty path (→ SF L5) is preserved via the withdraw() withdrawal fee (L3).
+    // penalty path (--- SF L5) is preserved via the withdraw() withdrawal fee (L3).
 
-    // ─── V8.1: Keeper — Reclaim Idle Slot ────────────────────────────────────
+    // --- V8.1: Keeper --- Reclaim Idle Slot ------------------------------------
 
     /**
      * @notice Remove an idle member from the BFS tree.
      *         Only callable by matrixKeeper (MatrixKeeper.sol via Chainlink Automation).
      *
      *         The keeper verifies maxMemberWait exceeded before calling.
-     *         Member's earnings and escrow are NEVER touched — they retain full
+     *         Member's earnings and escrow are NEVER touched --- they retain full
      *         access to withdraw(). Only their BFS position is freed.
      *
      *         The freed slot creates a gap in the BFS tree. Chain pay silently
      *         skips address(0) positions (existing _distributeChainPay behavior).
      *         The keeper will fund a ghost entry via StabilityFund to keep the
-     *         queue moving — the ghost occupies the freed slot or next available.
+     *         queue moving --- the ghost occupies the freed slot or next available.
      *
      * @param member  The idle member to evict from the tree.
      */
@@ -937,7 +937,7 @@ contract FigureEightMatrixV8 is Ownable2Step {
         emit SlotReclaimed(member, pos, idleTime);
     }
 
-    // ─── Admin: forceCross ────────────────────────────────────────────────────
+    // --- Admin: forceCross ----------------------------------------------------
 
     /// @notice Emergency: manually fund and execute a stalled crossing.
     ///         Keeper bot calls this when a member is parked (insufficient funds at cycle-out).
@@ -956,7 +956,7 @@ contract FigureEightMatrixV8 is Ownable2Step {
         FigureEightMatrixV8(destination)._enterMatrix(member, members[member].referrer);
     }
 
-    // ─── Views ────────────────────────────────────────────────────────────────
+    // --- Views ----------------------------------------------------------------
 
     /// @notice True when member has ever joined but is NOT currently in the matrix.
     ///         Covers both freshly cycled-out members AND parked members.
@@ -968,7 +968,7 @@ contract FigureEightMatrixV8 is Ownable2Step {
 
     function getParkedMember(uint256 idx) external view returns (address) { return parkedMembers[idx]; }
 
-    // ─── Keeper: forceCrossKeeper ──────────────────────────────────────────────────────────────────────
+    // --- Keeper: forceCrossKeeper ----------------------------------------------------------------------
 
     /**
      * @notice Keeper-initiated forced crossing for a parked member.
@@ -976,16 +976,34 @@ contract FigureEightMatrixV8 is Ownable2Step {
      *         StabilityFund.payForceCross(tierIndex, address(this), ENTRY_FEE)
      *         so this contract holds the required ENTRY_FEE USDC before this call.
      */
-    function forceCrossKeeper(address member) external {
+    /**
+     * @notice V8.11: Keeper rescue --- SF sends sfContribution, member covers remainder.
+     * @param member         The parked member to rescue.
+     * @param sfContribution USDC already sent to this contract by StabilityFund (e.g. 25% of fee).
+     *                       Member's withdrawable covers the remaining (fee - sfContribution).
+     */
+    function forceCrossKeeper(address member, uint256 sfContribution) external {
         require(msg.sender == matrixKeeper,     "F8V8: not keeper");
         require(members[member].hasEverJoined,  "F8V8: not a member");
         require(!members[member].isInMatrix,    "F8V8: still in matrix");
         require(address(partner) != address(0), "F8V8: no partner");
+        require(sfContribution <= ENTRY_FEE,    "F8V8: sfContribution exceeds fee");
+
+        // Deduct member's share (fee - sfContribution) from their withdrawable balance
+        uint256 memberShare = ENTRY_FEE - sfContribution;
+        if (memberShare > 0) {
+            require(
+                members[member].withdrawable >= memberShare,
+                "F8V8: insufficient withdrawable for rescue"
+            );
+            members[member].withdrawable -= memberShare;
+        }
 
         _removeFromParkedQueue(member);
 
         address destination = (!isMatrixA && chainNext != address(0))
             ? chainNext : address(partner);
+        // Contract now holds full ENTRY_FEE: sfContribution (from SF) + memberShare (from withdrawable)
         SafeERC20.forceApprove(usdc, destination, ENTRY_FEE);
 
         emit MemberCrossedToPartner(member, address(this), destination);
@@ -1011,7 +1029,7 @@ contract FigureEightMatrixV8 is Ownable2Step {
      *
      *         Effect: member is removed from the parked queue. Their BFS slot was
      *         already freed when they cycled out. Their withdrawable balance is fully
-     *         preserved — they can call withdraw() at any time.
+     *         preserved --- they can call withdraw() at any time.
      *         They must re-enter fresh via TierRouter to participate again.
      */
     function evictParked(address member) external {
@@ -1052,7 +1070,9 @@ contract FigureEightMatrixV8 is Ownable2Step {
         return (pendingCross, pendingCrossReferrer);
     }
 
-    /// @notice V8.1: Pool distribution preview — how much a member at `pos` would receive
+    /// @notice V8.1: Pool distribution preview --- how much a member at `pos` would receive
+    ///         if cycle-out fired right now with current poolAccumulator.
+    /// @notice V8.1: Pool distribution preview -- how much a member at `pos` would receive
     ///         if cycle-out fired right now with current poolAccumulator.
     function poolSharePreview(uint256 pos) external view returns (uint256) {
         if (poolAccumulator == 0 || pos < 2 || pos > MATRIX_SIZE) return 0;

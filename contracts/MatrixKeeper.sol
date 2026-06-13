@@ -51,7 +51,7 @@ import "@openzeppelin/contracts/access/Ownable.sol";
  *         exceeding the gas limit.
  */
 
-// ── Minimal interfaces ────────────────────────────────────────────────────────
+// -- Minimal interfaces --------------------------------------------------------
 
 interface ITierRouterKeeper {
     function tierVelocityGreen(uint8 tier) external view returns (bool);
@@ -83,11 +83,12 @@ interface IFigureEightKeeper {
     function isParked(address member) external view returns (bool);
     function getParkedCount() external view returns (uint256);
     function getParkedMember(uint256 idx) external view returns (address);
-    function forceCrossKeeper(address member) external;
+    function forceCrossKeeper(address member, uint256 sfContribution) external;  // V8.11: sfContribution split
     // V8.10 additions
     function parkedAt(address member) external view returns (uint256);
     function evictParked(address member) external;
     function getMemberTotalWithdrawn(address member) external view returns (uint256);
+    function withdrawableOf(address member) external view returns (uint256);      // V8.11: for ratio check
     function isMatrixA() external view returns (bool);
     function ENTRY_FEE() external view returns (uint256);
 }
@@ -100,16 +101,16 @@ interface IPairManagerKeeper {
     function entryFee() external view returns (uint256);
 }
 
-// ── MatrixKeeper ─────────────────────────────────────────────────────────────
+// -- MatrixKeeper -------------------------------------------------------------
 
 contract MatrixKeeper is Ownable {
 
-    // ── Deflation states ──────────────────────────────────────────────────────
+    // -- Deflation states ------------------------------------------------------
     uint8 public constant STATE_NORMAL   = 0;
     uint8 public constant STATE_SLOW     = 1;
     uint8 public constant STATE_RECOVERY = 2;
 
-    // ── Work item types ───────────────────────────────────────────────────────
+    // -- Work item types -------------------------------------------------------
     uint8 public constant WORK_VELOCITY      = 0;
     uint8 public constant WORK_GHOST         = 1;
     uint8 public constant WORK_RECLAIM       = 2;
@@ -118,7 +119,7 @@ contract MatrixKeeper is Ownable {
     uint8 public constant WORK_VELOCITY_GATE = 5;
     uint8 public constant WORK_EVICT_PARKED  = 6;  // V8.10: grace-period eviction
 
-    // ── Config (DAO-adjustable via enumerated menus) ───────────────────────────
+    // -- Config (DAO-adjustable via enumerated menus) ---------------------------
     /// @notice Rolling window for velocity and deflation checks (seconds)
     uint256 public velocityWindow     = 3_600;   // 1 hour
     /// @notice Min entries per tier per window to keep velocity green
@@ -135,13 +136,17 @@ contract MatrixKeeper is Ownable {
     uint256 public maxItemsPerUpkeep  = 15;
     /// @notice V8.10: Grace period before evicting or rescuing a parked member (seconds).
     ///         Member has this window to self-fund re-entry. Default 10 days.
-    uint256 public parkedGracePeriod  = 10 days;
-    /// @notice V8.10: Max totalWithdrawn (in USDC 6-dec) for SF rescue eligibility.
-    ///         Members who have extracted more than N × entry fee are not rescue-eligible
-    ///         — they must self-fund. Default 3 × $10 = $30 (3_000_000 in 6-dec USDC).
-    uint256 public rescueEligibilityThreshold = 3_000_000;  // $30 USDC (6-dec)
+    uint256 public parkedGracePeriod     = 10 days;
+    /// @notice V8.11: Max withdrawal ratio (BPS) for SF rescue eligibility.
+    ///         If member withdrew more than this % of total earned --- evict, not rescue.
+    ///         Default 7000 = 70%. DAO-adjustable 0---9500.
+    uint256 public rescueRatioBps        = 7_000;
+    /// @notice V8.11: Fraction of upgrade fee the StabilityFund covers on rescue (BPS).
+    ///         Member's withdrawable must cover the remaining (10000 - rescueContributionBps)%.
+    ///         Default 2500 = 25%. DAO-adjustable 0---5000.
+    uint256 public rescueContributionBps = 2_500;
 
-    // ── Core state ────────────────────────────────────────────────────────────
+    // -- Core state ------------------------------------------------------------
     address public tierRouter;
     address public stabilityFund;
 
@@ -168,7 +173,7 @@ contract MatrixKeeper is Ownable {
     }
     PendingChainLink[] public pendingChainLinks;
 
-    // ── Events ────────────────────────────────────────────────────────────────
+    // -- Events ----------------------------------------------------------------
     event VelocityUpdated(uint8 indexed tier, bool green, uint256 entryCount);
     event DeflationStateChanged(uint8 from, uint8 to);
     event GhostEntryFunded(address indexed matrix, uint8 tierIndex);
@@ -178,13 +183,14 @@ contract MatrixKeeper is Ownable {
     event ParkedRescued(address indexed matrix, address indexed member, uint8 tierIndex);
     event VelocityGateOpened(uint8 indexed forTierIndex);
     event ParkedMemberEvicted(address indexed matrix, address indexed member, uint256 totalWithdrawn);  // V8.10
+    event ConfigUpdated(string indexed param, uint256 value);                                           // V8.11
 
-    // ── Custom errors ─────────────────────────────────────────────────────────
+    // -- Custom errors ---------------------------------------------------------
     error MK_NotKeeper();
     error MK_InvalidParam();
     error MK_ZeroAddress();
 
-    // ── Work item struct (ABI-encoded in performData) ─────────────────────────
+    // -- Work item struct (ABI-encoded in performData) -------------------------
     struct WorkItem {
         uint8   workType;
         uint8   tierIndex;
@@ -192,7 +198,7 @@ contract MatrixKeeper is Ownable {
         address addr2;       // member address for RECLAIM
     }
 
-    // ── Constructor ───────────────────────────────────────────────────────────
+    // -- Constructor -----------------------------------------------------------
 
     constructor(address _tierRouter, address _stabilityFund) Ownable(msg.sender) {
         if (_tierRouter    == address(0)) revert MK_ZeroAddress();
@@ -202,7 +208,7 @@ contract MatrixKeeper is Ownable {
         lastVelocityCheck = block.timestamp;
     }
 
-    // ── Admin setup ───────────────────────────────────────────────────────────
+    // -- Admin setup -----------------------------------------------------------
 
     function setPairManager(uint8 tierIndex, address pm) external onlyOwner {
         if (pm == address(0)) revert MK_ZeroAddress();
@@ -227,7 +233,7 @@ contract MatrixKeeper is Ownable {
         pendingChainLinks.push(PendingChainLink(newMatA, newMatB, prevMatB, tierIdx));
     }
 
-    // ── Governance setters (enumerated menus) ─────────────────────────────────
+    // -- Governance setters (enumerated menus) ---------------------------------
 
     function setVelocityWindow(uint256 v) external onlyOwner {
         require(v == 1800 || v == 3600 || v == 7200 || v == 14400,
@@ -266,14 +272,25 @@ contract MatrixKeeper is Ownable {
         parkedGracePeriod = v;
     }
 
-    /// @notice V8.10: Set rescue eligibility threshold (USDC 6-dec).
-    ///         Members with totalWithdrawn above this threshold are not SF-rescue-eligible.
-    function setRescueEligibilityThreshold(uint256 v) external onlyOwner {
-        require(v <= 100_000_000, "MK: threshold too high");  // max $100
-        rescueEligibilityThreshold = v;
+    /// @notice V8.11: Set the max withdrawal ratio for rescue eligibility (BPS).
+    ///         Members who withdrew more than this % of total earned will be evicted.
+    ///         Range: 0---9500. Default 7000 (70%). DAO-adjustable.
+    function setRescueRatioBps(uint256 v) external onlyOwner {
+        require(v <= 9_500, "MK: ratio too high");
+        rescueRatioBps = v;
+        emit ConfigUpdated("rescueRatioBps", v);
     }
 
-    // ── Chainlink Automation interface ─────────────────────────────────────────
+    /// @notice V8.11: Set the SF's contribution fraction on rescue (BPS).
+    ///         The member's withdrawable must cover (10000 - v)% of the upgrade fee.
+    ///         Range: 0---5000. Default 2500 (25%). DAO-adjustable.
+    function setRescueContributionBps(uint256 v) external onlyOwner {
+        require(v <= 5_000, "MK: contribution too high");
+        rescueContributionBps = v;
+        emit ConfigUpdated("rescueContributionBps", v);
+    }
+
+    // -- Chainlink Automation interface -----------------------------------------
 
     /**
      * @notice Called off-chain by Chainlink Automation every block.
@@ -318,7 +335,7 @@ contract MatrixKeeper is Ownable {
             }
         }
 
-        // 4. Parked wallet scan — V8.10 grace-period aware (helper avoids stack-too-deep)
+        // 4. Parked wallet scan --- V8.10 grace-period aware (helper avoids stack-too-deep)
         for (uint8 t = 0; t < configuredTierCount && count < maxItemsPerUpkeep; t++) {
             address pm = pairManagerForTier[t];
             if (pm == address(0)) continue;
@@ -347,7 +364,7 @@ contract MatrixKeeper is Ownable {
                 uint256 occ  = mat.occupancy();
                 uint256 size = mat.MATRIX_SIZE();
                 if (size > 0 && occ * 100 >= size * 80) {
-                    // MatB for tier t is >=80% full — queue gate open for tier t+1
+                    // MatB for tier t is >=80% full --- queue gate open for tier t+1
                     items[count++] = WorkItem(WORK_VELOCITY_GATE, t, address(0), address(0));
                     break;
                 }
@@ -398,7 +415,7 @@ contract MatrixKeeper is Ownable {
         }
     }
 
-    // ── Internal: parked wallet rescue ──────────────────────────────────────────
+    // -- Internal: parked wallet rescue ------------------------------------------
 
     function _doParkedRescue(address matrix, address member, uint8 tierIdx) internal {
         IFigureEightKeeper mat = IFigureEightKeeper(matrix);
@@ -408,18 +425,20 @@ contract MatrixKeeper is Ownable {
         if (pm == address(0)) return;
         uint256 fee = mat.ENTRY_FEE();
 
-        uint256 sfBal = IStabilityFundKeeper(stabilityFund).balanceByTier(tierIdx);
-        if (sfBal < fee) return;                  // SF does not have enough for this tier
+        // V8.11: SF pays rescueContributionBps% of fee; member covers the rest from withdrawable
+        uint256 sfShare  = fee * rescueContributionBps / 10_000;
+        uint256 sfBal    = IStabilityFundKeeper(stabilityFund).balanceByTier(tierIdx);
+        if (sfBal < sfShare) return;              // SF does not have enough for its share
 
-        // 1. Ask SF to send ENTRY_FEE USDC to the source matrix
-        IStabilityFundKeeper(stabilityFund).payForceCross(tierIdx, matrix, fee);
-        // 2. Tell source matrix to execute the crossing using those funds
-        mat.forceCrossKeeper(member);
+        // 1. Ask SF to send its share (e.g. 25%) to the source matrix
+        IStabilityFundKeeper(stabilityFund).payForceCross(tierIdx, matrix, sfShare);
+        // 2. Matrix deducts member's share from withdrawable, then executes crossing
+        mat.forceCrossKeeper(member, sfShare);
 
         emit ParkedRescued(matrix, member, tierIdx);
     }
 
-    // ── Internal: V8.10 evict parked member (grace expired, not rescue-eligible) ─────
+    // -- Internal: V8.10 evict parked member (grace expired, not rescue-eligible) -----
     function _doEvictParked(address matrix, address member) internal {
         IFigureEightKeeper mat = IFigureEightKeeper(matrix);
         if (mat.parkedAt(member) == 0) return;  // already rescued or cleared
@@ -429,7 +448,7 @@ contract MatrixKeeper is Ownable {
         emit ParkedMemberEvicted(matrix, member, withdrawn);
     }
 
-    // ── Internal: velocity gate opener ───────────────────────────────────────────
+    // -- Internal: velocity gate opener -------------------------------------------
 
     function _doVelocityGate(uint8 tierIdx) internal {
         uint8 nextTier = tierIdx + 1;
@@ -439,7 +458,7 @@ contract MatrixKeeper is Ownable {
         emit VelocityGateOpened(nextTier);
     }
 
-    // ── Manual trigger (keeper or admin) ─────────────────────────────────────
+    // -- Manual trigger (keeper or admin) -------------------------------------
 
     /// @notice Manually trigger a velocity check (e.g. for testing).
     function manualVelocityCheck() external onlyOwner {
@@ -456,7 +475,7 @@ contract MatrixKeeper is Ownable {
         _doReclaimSlot(matrix, member, tierIdx);
     }
 
-    // ── Internal: velocity + deflation ───────────────────────────────────────
+    // -- Internal: velocity + deflation ---------------------------------------
 
     function _doVelocityCheck() internal {
         uint256 windowStart = block.timestamp - velocityWindow;
@@ -511,7 +530,7 @@ contract MatrixKeeper is Ownable {
         IStabilityFundKeeper(stabilityFund).activateLayer(4, active);  // devOps carve
     }
 
-    // ── Internal: ghost entry ─────────────────────────────────────────────────
+    // -- Internal: ghost entry -------------------------------------------------
 
     function _doGhostEntry(address matrix, uint8 tierIdx) internal {
         address pm = pairManagerForTier[tierIdx];
@@ -527,7 +546,7 @@ contract MatrixKeeper is Ownable {
         emit GhostEntryFunded(matrix, tierIdx);
     }
 
-    // ── Internal: slot reclaim ────────────────────────────────────────────────
+    // -- Internal: slot reclaim ------------------------------------------------
 
     function _doReclaimSlot(address matrix, address member, uint8 /* tierIdx */) internal {
         IFigureEightKeeper mat = IFigureEightKeeper(matrix);
@@ -541,7 +560,7 @@ contract MatrixKeeper is Ownable {
         emit SlotReclaimed(matrix, member, idleTime);
     }
 
-    // ── Internal: chain-link wiring ───────────────────────────────────────────
+    // -- Internal: chain-link wiring -------------------------------------------
 
     function _doChainLink(address newMatA, address newMatB, uint256 idx) internal {
         if (idx >= pendingChainLinks.length) return;
@@ -575,7 +594,7 @@ contract MatrixKeeper is Ownable {
         }
     }
 
-    // ── Internal: parked member decision helper (V8.10) ─────────────────────────
+    // -- Internal: parked member decision helper (V8.10) -------------------------
     // Returns (member, workType). workType=type(uint8).max means no action.
     // Extracted to avoid stack-too-deep in checkUpkeep view function.
     function _checkParked(address matA, uint8 tierIdx)
@@ -590,16 +609,24 @@ contract MatrixKeeper is Ownable {
         if (ts == 0) return (address(0), type(uint8).max);
         if (block.timestamp - ts < parkedGracePeriod) return (address(0), type(uint8).max);
 
-        // Grace expired — rescue or evict
-        uint256 withdrawn = mat.getMemberTotalWithdrawn(parkedMember);
-        uint256 fee       = mat.ENTRY_FEE();
-        uint256 sfBal     = IStabilityFundKeeper(stabilityFund).balanceByTier(tierIdx);
-        bool eligible     = (withdrawn <= rescueEligibilityThreshold) && (sfBal >= fee);
+        // Grace expired --- rescue or evict (V8.11: ratio + shared-cost eligibility)
+        uint256 withdrawn    = mat.getMemberTotalWithdrawn(parkedMember);
+        uint256 withdrawable = mat.withdrawableOf(parkedMember);
+        uint256 fee          = mat.ENTRY_FEE();
+        uint256 totalEarned  = withdrawn + withdrawable;
+        // withdrawRatio: what fraction of total earned has been withdrawn (BPS, 0---10000)
+        uint256 withdrawRatio = totalEarned > 0 ? withdrawn * 10_000 / totalEarned : 0;
+        // SF covers rescueContributionBps%; member must have the rest in withdrawable
+        uint256 sfShare      = fee * rescueContributionBps / 10_000;
+        uint256 memberShare  = fee - sfShare;
+        uint256 sfBal        = IStabilityFundKeeper(stabilityFund).balanceByTier(tierIdx);
+        bool eligible        = (withdrawRatio  <= rescueRatioBps)  // didn't game the system
+                            && (withdrawable   >= memberShare)      // member covers their share
+                            && (sfBal          >= sfShare);         // SF can cover its share
         workType = eligible ? WORK_PARKED_RESCUE : WORK_EVICT_PARKED;
     }
 
-    // ── Internal: idle scan helper ────────────────────────────────────────────
-
+    // -- Internal: idle scan helper --------------
     function _scanMatrix(
         address matrix,
         uint8   tierIdx,
@@ -630,7 +657,7 @@ contract MatrixKeeper is Ownable {
         return count;
     }
 
-    // ── Views ─────────────────────────────────────────────────────────────────
+    // -- Views -----------------------------------------------------------------
 
     function pendingChainLinkCount() external view returns (uint256) {
         return pendingChainLinks.length;

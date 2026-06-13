@@ -180,7 +180,8 @@ describe("CycleOutDebug", function () {
     //   2. matA.forceCrossKeeper(member)                 — matA uses those funds to cross
     // Here we call both steps directly with owner acting as keeper.
     await sf.connect(owner).payForceCross(0, matAAddr, FEE);
-    await matA.connect(owner).forceCrossKeeper(W1.address);
+    // V8.11: sfContribution=FEE (SF covers 100% in this test scenario)
+    await matA.connect(owner).forceCrossKeeper(W1.address, FEE);
 
     const w1InB  = await matB.getMember(W1.address);
     const w1PosB = await matB.matrixPos(W1.address);

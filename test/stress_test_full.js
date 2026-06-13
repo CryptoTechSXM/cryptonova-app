@@ -293,7 +293,8 @@ describe("S2: Parked wallet rescue", function () {
 
     // forceCrossKeeper for already-crossed W1 → MatB._enterMatrix reverts "already in matrix"
     await expect(
-      matA.connect(keeper).forceCrossKeeper(w1.address)
+      // V8.11: sfContribution=T1_FEE so memberShare=0; revert comes from MatB._enterMatrix
+      matA.connect(keeper).forceCrossKeeper(w1.address, T1_FEE)
     ).to.be.revertedWith("F8V8: already in matrix");
 
     // Rescue queue stays empty (W1 was never pushed to parkedMembers[])
@@ -312,7 +313,7 @@ describe("S2: Parked wallet rescue", function () {
 
     // members[0] is not the keeper
     await expect(
-      matA.connect(members[0]).forceCrossKeeper(w1.address)
+      matA.connect(members[0]).forceCrossKeeper(w1.address, 0n)
     ).to.be.revertedWith("F8V8: not keeper");
   });
 });
