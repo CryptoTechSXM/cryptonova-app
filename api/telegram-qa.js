@@ -115,7 +115,8 @@ Chain ID: <code>84532</code> | RPC: <code>https://sepolia.base.org</code> | Expl
 <b>Transaction failed:</b> Approve USDC first (Step 1 before Step 2). Check you have ETH for gas.
 <b>Already registered:</b> Open Dashboard to see your account.
 <b>Wrong network:</b> Use site prompt or add Base Sepolia manually.
-<b>No USDC/ETH:</b> Use /faucet command with your address.
+<b>No USDC/ETH (testnet):</b> Use /faucet command with your address.
+<b>No USDC/ETH (mainnet):</b> Swap any crypto to USDC on Base using <a href="https://changenow.app.link/referral?link_id=c66940e36c06c9">ChangeNow</a> — works with most coins, no account required.
 <b>Wallet won't connect:</b> Refresh or switch to MetaMask/Rabby.
 <b>Dashboard shows 0:</b> Connect with same wallet you registered with.
 
@@ -125,6 +126,7 @@ USDC: <code>0x2D8B7b5eDec96bE441b6fb0D45D74a2BcE2C639a</code>
 
 ## Links
 <a href="https://crypto-nova.app">crypto-nova.app</a> | <a href="https://early.crypto-nova.app">early.crypto-nova.app</a> | <a href="https://crypto-nova.app/faq">FAQ</a>
+<a href="https://changenow.app.link/referral?link_id=c66940e36c06c9">ChangeNow</a> — swap any crypto to USDC on Base (no account needed)
 
 ## Escalate to @admin when
 - Missing payment or stuck transaction
@@ -417,4 +419,12 @@ export default async function handler(req, res) {
   await sendTyping(BOT_TOKEN, chatId);
   try {
     const answer = await askClaude(ANTHROPIC, question);
- 
+    if (answer) await sendReply(BOT_TOKEN, chatId, answer, msgId);
+    else throw new Error('Empty response');
+  } catch (e) {
+    console.error('[telegram-qa] Claude error:', e.message);
+    await sendReply(BOT_TOKEN, chatId, `Having trouble right now. Try again in a moment.\n<a href="https://crypto-nova.app/faq">FAQ</a> | Tag @admin for urgent help.`, msgId);
+  }
+
+  return ok();
+}
