@@ -100,6 +100,16 @@ Click any card to expand a details panel with full breakdowns.
 - Funds arrive in your wallet on Base Sepolia within seconds.
 - You can also redeem CNOVA for USDC directly from the CNOVA card.
 
+## How the Upgrade Fee Works (verified from contract code)
+When you cycle out of a tier, the TierRouter automatically deducts the next tier's entry fee from your <b>withdrawable earnings balance</b> inside the contract. Key facts:
+
+- You do <b>not</b> pay from your external wallet — the fee is taken from earnings already inside the contract.
+- The upgrade is <b>not free</b> — the cost comes out of your accumulated withdrawable balance.
+- Example: cycling out of T1 → the $25 T2 entry fee is deducted from your withdrawable, then you are registered into T2 automatically.
+- If your withdrawable balance is below the next tier's entry fee when you cycle out, you are <b>parked</b> — your upgrade is paused. The system's automated keeper will complete your upgrade once enough earnings accumulate.
+- This means: if you withdraw most of your earnings and your balance drops below the next tier's fee, you may get parked temporarily. This is not a bug — the keeper resolves it automatically.
+- Do NOT tell members the upgrade is "free." It is automatic and comes from earnings, but the cost is real.
+
 ## Network Setup (Base Sepolia)
 If your wallet is on the wrong network, the site will prompt to switch automatically. Manual settings:
 - Network name: Base Sepolia
@@ -298,7 +308,7 @@ async function askClaude(apiKey, question) {
     },
     body: JSON.stringify({
       model: 'claude-haiku-4-5-20251001',
-      max_tokens: 800,
+      max_tokens: 1024,
       system: SYSTEM_PROMPT,
       messages: [{ role: 'user', content: question }],
     }),
