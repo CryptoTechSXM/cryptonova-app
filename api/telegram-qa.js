@@ -5,12 +5,23 @@
 // ENV VARS (set in Vercel dashboard → Settings → Environment Variables):
 //   TELEGRAM_QA_BOT_TOKEN  — dedicated support bot token from @BotFather
 //   ANTHROPIC_API_KEY      — from console.anthropic.com → API Keys
+//   FAUCET_PRIVATE_KEY     — private key of the pre-funded faucet wallet
+//                            (NOT the deployer key — a separate wallet loaded
+//                             with testnet USDC via deployer transfer)
+//   BASE_SEPOLIA_RPC       — Alchemy Base Sepolia URL (optional, falls back to
+//                            public RPC if not set)
 //
 // Register webhook once after every deploy:
-//   https://api.telegram.org/bot{TELEGRAM_QA_BOT_TOKEN}/setWebhook?url=https://crypto-nova.app/api/telegram-qa
+//   .\setup-webhook.ps1
 // ═══════════════════════════════════════════════════════════════════════════════
 
-const BOT_USERNAME = 'cnova_support_bot';
+import { ethers } from 'ethers';
+
+const BOT_USERNAME  = 'cnova_support_bot';
+const USDC_ADDRESS  = '0x2D8B7b5eDec96bE441b6fb0D45D74a2BcE2C639a';
+const TIER_ROUTER   = '0x9bdb62Ac866F222c7062398F891eC860c1F89034';
+const BASESCAN      = 'https://sepolia.basescan.org';
+const FAUCET_AMOUNT = 20_000_000n; // $20 USDC (6 decimals)
 
 // ─── Knowledge base system prompt ─────────────────────────────────────────────
 const SYSTEM_PROMPT = `You are the CryptoNova Support Bot — the official AI helpdesk for the CryptoNova Matrix platform. You answer questions from members and prospective members in the CryptoNova Telegram community.
@@ -105,11 +116,18 @@ Mining stops when all 9 epochs are exhausted (21 million CNOVA hard cap). It is 
 1. Visit <a href="https://early.crypto-nova.app">early.crypto-nova.app</a> (testnet early access) or the main site.
 2. Connect your MetaMask or Rabby wallet.
 3. Switch to <b>Base Sepolia</b> network (the site will prompt you automatically).
-4. You need <b>$10 USDC</b> on Base Sepolia testnet. Contact the admin for test USDC.
+4. You need <b>$10 USDC</b> on Base Sepolia testnet. Use the /faucet command or ask the bot for test USDC.
 5. <b>Step 1:</b> Approve $10 USDC — this authorises the contract to take your entry fee.
 6. <b>Step 2:</b> Register — this places you in the matrix.
 7. If you have a referral link, use it — it auto-fills the referrer address.
 8. After registration, your member ID and referral link appear on screen.
+
+## Getting Test USDC
+The support bot can send you <b>$20 testnet USDC</b> automatically. Two ways:
+1. Use the /faucet command: <code>/faucet 0xYourWalletAddress</code>
+2. Post your wallet address in this group and mention needing USDC
+
+Limit: $20 per wallet address per 24 hours.
 
 ## Dashboard
 The Dashboard shows your live stats:
@@ -150,7 +168,7 @@ If your wallet is on the wrong network, the site will prompt to switch automatic
 <b>Transaction failed / reverted:</b> Make sure you approved USDC first (Step 1 before Step 2). Also check you have Base Sepolia ETH for gas.
 <b>Already registered:</b> Your wallet address is already in the matrix. Open the Dashboard to see your account.
 <b>Wrong network:</b> Switch to Base Sepolia using the prompt on the site, or add it manually using the settings above.
-<b>No USDC / insufficient balance:</b> You need testnet USDC. Contact an admin in the group and they'll send you test funds.
+<b>No USDC / insufficient balance:</b> Use /faucet command with your wallet address — the bot will send $20 testnet USDC automatically.
 <b>Wallet won't connect:</b> Try refreshing the page or switching to MetaMask or Rabby. Ensure your browser extension is unlocked.
 <b>Referral link not working:</b> The ref address is auto-filled from the URL (?ref=0x...). If missing, you can enter any existing member's address manually.
 <b>Dashboard shows 0:</b> Make sure you're connected with the same wallet address you registered with.
@@ -168,7 +186,6 @@ If your wallet is on the wrong network, the site will prompt to switch automatic
 ## When to Escalate
 If the member's issue is:
 - A missing payment or stuck transaction that can't be resolved by retrying
-- A request for testnet USDC or ETH
 - A bug or unexpected behaviour on the site
 - Anything requiring admin access
 
@@ -198,6 +215,7 @@ I can answer questions about:
 
 <b>Commands:</b>
 /register — how to get started
+/faucet 0xYourAddress — get $20 testnet USDC instantly
 /stats — live testnet stats
 /help — show this message
 
@@ -208,7 +226,7 @@ const REGISTER_TEXT = `📝 <b>How to Register on CryptoNova</b>
 1. Visit <a href="https://early.crypto-nova.app">early.crypto-nova.app</a>
 2. Connect MetaMask or Rabby wallet
 3. Switch to <b>Base Sepolia</b> network (auto-prompted)
-4. You need <b>$10 USDC</b> on Base Sepolia — ask an @admin for test funds
+4. Need testnet USDC? Use: <code>/faucet 0xYourWalletAddress</code>
 5. Click <b>Approve USDC</b> and confirm the transaction
 6. Click <b>Register</b> and confirm the second transaction
 7. Your <b>Member ID</b> and <b>referral link</b> appear instantly
@@ -217,20 +235,72 @@ Have a referral link? Use it — it pre-fills your referrer's address.
 
 ❓ Need help? Mention @cnova_support_bot with your question.`;
 
-// ─── Rate limiting (resets on Vercel cold start — fine for abuse prevention) ───
+// ─── Rate limiting — per userId (resets on cold start) ─────────────────────────
 const rateLimits = new Map();
-const RATE_WINDOW_MS = 60_000; // 1 minute
+const RATE_WINDOW_MS = 60_000;
 const RATE_MAX_MSGS  = 6;
 
 function checkRateLimit(userId) {
   const now = Date.now();
   let rec = rateLimits.get(userId);
-  if (!rec || now - rec.start > RATE_WINDOW_MS) {
-    rec = { count: 0, start: now };
-  }
+  if (!rec || now - rec.start > RATE_WINDOW_MS) rec = { count: 0, start: now };
   rec.count++;
   rateLimits.set(userId, rec);
   return rec.count <= RATE_MAX_MSGS;
+}
+
+// ─── Faucet rate limiting — per wallet address, 24h cooldown ──────────────────
+const faucetCooldowns = new Map(); // walletAddress.toLowerCase() → timestamp
+const FAUCET_COOLDOWN_MS = 24 * 60 * 60 * 1000;
+
+function checkFaucetCooldown(addr) {
+  const key = addr.toLowerCase();
+  const last = faucetCooldowns.get(key);
+  if (!last) return { allowed: true };
+  const remaining = FAUCET_COOLDOWN_MS - (Date.now() - last);
+  if (remaining <= 0) return { allowed: true };
+  return { allowed: false, hoursLeft: Math.ceil(remaining / 3_600_000) };
+}
+
+function markFaucetUsed(addr) {
+  faucetCooldowns.set(addr.toLowerCase(), Date.now());
+}
+
+// ─── USDC faucet transfer ──────────────────────────────────────────────────────
+async function sendFaucetUSDC(toAddress) {
+  const FAUCET_KEY = process.env.FAUCET_PRIVATE_KEY;
+  if (!FAUCET_KEY) {
+    console.warn('[faucet] FAUCET_PRIVATE_KEY not set');
+    return { ok: false, reason: 'Faucet is not configured yet — tag @admin for test USDC.' };
+  }
+
+  // Resolve RPC: prefer Alchemy (faster), fall back to public endpoint
+  const rpcUrl = process.env.BASE_SEPOLIA_RPC || 'https://sepolia.base.org';
+
+  try {
+    const provider = new ethers.JsonRpcProvider(rpcUrl);
+    const wallet   = new ethers.Wallet(FAUCET_KEY, provider);
+
+    const usdc = new ethers.Contract(USDC_ADDRESS, [
+      'function transfer(address to, uint256 amount) returns (bool)',
+      'function balanceOf(address account) view returns (uint256)',
+    ], wallet);
+
+    // Sanity-check faucet balance before sending
+    const balance = await usdc.balanceOf(wallet.address);
+    if (balance < FAUCET_AMOUNT) {
+      console.warn(`[faucet] Low balance: ${balance}`);
+      return { ok: false, reason: 'Faucet is low on USDC — tag @admin to refill.' };
+    }
+
+    const tx      = await usdc.transfer(toAddress, FAUCET_AMOUNT);
+    const receipt = await tx.wait(1);
+    console.log(`[faucet] Sent $20 USDC to ${toAddress} — tx ${receipt.hash}`);
+    return { ok: true, txHash: receipt.hash };
+  } catch (e) {
+    console.error('[faucet] Error:', e.message);
+    return { ok: false, reason: 'Transaction failed — tag @admin for help.' };
+  }
 }
 
 // ─── Telegram helpers ──────────────────────────────────────────────────────────
@@ -246,7 +316,7 @@ async function tgPost(method, token, body) {
 async function sendReply(token, chatId, text, replyToId) {
   return tgPost('sendMessage', token, {
     chat_id: chatId,
-    text: text.slice(0, 4096), // Telegram hard cap
+    text: text.slice(0, 4096),
     parse_mode: 'HTML',
     disable_web_page_preview: true,
     ...(replyToId ? { reply_to_message_id: replyToId } : {}),
@@ -254,41 +324,31 @@ async function sendReply(token, chatId, text, replyToId) {
 }
 
 async function sendTyping(token, chatId) {
-  return tgPost('sendChatAction', token, { chat_id: chatId, action: 'typing' })
-    .catch(() => {});
+  return tgPost('sendChatAction', token, { chat_id: chatId, action: 'typing' }).catch(() => {});
 }
 
 // ─── Live on-chain stats ───────────────────────────────────────────────────────
 async function fetchLiveStats() {
-  const RPC = 'https://sepolia.base.org';
-  const TIER_ROUTER = '0x9bdb62Ac866F222c7062398F891eC860c1F89034';
+  const RPC = process.env.BASE_SEPOLIA_RPC || 'https://sepolia.base.org';
 
-  // eth_call helper — calls a view function with 0 args returning uint256
   async function call(to, selector) {
-    const body = {
-      jsonrpc: '2.0', id: 1, method: 'eth_call',
-      params: [{ to, data: selector }, 'latest'],
-    };
     const r = await fetch(RPC, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
+      body: JSON.stringify({
+        jsonrpc: '2.0', id: 1, method: 'eth_call',
+        params: [{ to, data: selector }, 'latest'],
+      }),
     });
     const json = await r.json();
     if (json.error || !json.result || json.result === '0x') return null;
-    // Parse first uint256 from result
     return parseInt(json.result, 16);
   }
 
-  // Function selectors (keccak256 first 4 bytes):
-  // nextMemberId()    0x2b47da6f
-  // totalMembers()    0x753b5e99
-  // memberCount()     0x2d4d5ec3
-  // Try a few common names — V8.10 contract determines which exists
   const count =
-    await call(TIER_ROUTER, '0x2b47da6f') ||  // nextMemberId
-    await call(TIER_ROUTER, '0x753b5e99') ||  // totalMembers
-    await call(TIER_ROUTER, '0x2d4d5ec3');    // memberCount
+    await call(TIER_ROUTER, '0x2b47da6f') ||
+    await call(TIER_ROUTER, '0x753b5e99') ||
+    await call(TIER_ROUTER, '0x2d4d5ec3');
 
   const memberDisplay = count && count > 0
     ? `<b>${count.toLocaleString()}</b> members registered`
@@ -302,25 +362,16 @@ async function fetchLiveStats() {
 }
 
 // ─── Markdown → Telegram HTML converter ───────────────────────────────────────
-// Claude Haiku often returns Markdown despite instructions. Strip it to plain
-// Telegram-safe HTML so messages render correctly on mobile.
 function mdToTg(text) {
   return text
-    // Headers: ## Foo → <b>Foo</b>
     .replace(/^#{1,3}\s+(.+)$/gm, '<b>$1</b>')
-    // Bold: **foo** or __foo__ → <b>foo</b>
     .replace(/\*\*(.+?)\*\*/g, '<b>$1</b>')
     .replace(/__(.+?)__/g, '<b>$1</b>')
-    // Italic: *foo* or _foo_ → <i>foo</i>  (single star/underscore)
     .replace(/(?<!\*)\*(?!\*)(.+?)(?<!\*)\*(?!\*)/g, '<i>$1</i>')
     .replace(/(?<!_)_(?!_)(.+?)(?<!_)_(?!_)/g, '<i>$1</i>')
-    // Inline code: `foo` → <code>foo</code>
     .replace(/`([^`]+)`/g, '<code>$1</code>')
-    // Unordered list items: - item or * item → • item
     .replace(/^[ \t]*[-*]\s+/gm, '• ')
-    // Horizontal rules
     .replace(/^[-*_]{3,}$/gm, '')
-    // Collapse 3+ blank lines to 2
     .replace(/\n{3,}/g, '\n\n')
     .trim();
 }
@@ -351,11 +402,69 @@ async function askClaude(apiKey, question) {
   return mdToTg(raw);
 }
 
+// ─── Address extractor ─────────────────────────────────────────────────────────
+function extractAddress(text) {
+  const m = text.match(/0x[0-9a-fA-F]{40}/);
+  return m ? m[0] : null;
+}
+
+function faucetKeywordsPresent(text) {
+  return /\bfaucet\b|need\s+usdc|send\s+usdc|test\s+usdc|test\s+funds|need\s+test|want\s+usdc|get\s+usdc/i.test(text);
+}
+
+function shortAddr(addr) {
+  return `${addr.slice(0, 8)}...${addr.slice(-6)}`;
+}
+
+// ─── Faucet handler (shared between /faucet command and natural-language) ──────
+async function handleFaucetRequest(token, chatId, msgId, rawAddress) {
+  // Validate it looks like a real address
+  if (!rawAddress || !/^0x[0-9a-fA-F]{40}$/.test(rawAddress)) {
+    await sendReply(token, chatId,
+      `⚠️ Please include a valid wallet address.\n\nExample:\n<code>/faucet 0xYourWalletAddress</code>`,
+      msgId);
+    return;
+  }
+
+  // Checksum the address so ethers doesn't throw
+  let toAddress;
+  try {
+    toAddress = ethers.getAddress(rawAddress);
+  } catch {
+    await sendReply(token, chatId,
+      `⚠️ That doesn't look like a valid Ethereum address. Double-check it and try again.`, msgId);
+    return;
+  }
+
+  // Per-address rate limit
+  const cd = checkFaucetCooldown(toAddress);
+  if (!cd.allowed) {
+    await sendReply(token, chatId,
+      `⏳ Address <code>${shortAddr(toAddress)}</code> already received test USDC.\n` +
+      `Try again in <b>${cd.hoursLeft}h</b>.`,
+      msgId);
+    return;
+  }
+
+  await sendTyping(token, chatId);
+
+  const result = await sendFaucetUSDC(toAddress);
+
+  if (result.ok) {
+    markFaucetUsed(toAddress);
+    await sendReply(token, chatId,
+      `💰 Sent <b>$20 testnet USDC</b> to\n<code>${toAddress}</code>\n\n` +
+      `📋 <a href="${BASESCAN}/tx/${result.txHash}">View on Basescan</a>\n\n` +
+      `You now have enough to register! 🚀\n` +
+      `👉 <a href="https://early.crypto-nova.app">early.crypto-nova.app</a>`,
+      msgId);
+  } else {
+    await sendReply(token, chatId,
+      `⚠️ ${result.reason}`, msgId);
+  }
+}
+
 // ─── Main handler ──────────────────────────────────────────────────────────────
-// Synchronous: process fully before returning 200.
-// Vercel kills the process on res.end(), so all Telegram/Claude calls must
-// complete BEFORE we respond. Claude Haiku + Telegram API = ~3-6s, well within
-// the 30s maxDuration set in vercel.json.
 export default async function handler(req, res) {
   const ok = () => res.status(200).json({ ok: true });
 
@@ -373,21 +482,18 @@ export default async function handler(req, res) {
   try { body = typeof req.body === 'string' ? JSON.parse(req.body) : req.body; }
   catch (e) { console.error('[telegram-qa] Bad JSON:', e.message); return ok(); }
 
-  // Support both regular messages and channel posts
   const msg = body?.message || body?.channel_post;
   if (!msg) return ok();
 
   const chatId   = msg.chat?.id;
   const msgId    = msg.message_id;
   const userId   = msg.from?.id || 0;
-  const chatType = msg.chat?.type; // 'private' | 'group' | 'supergroup' | 'channel'
+  const chatType = msg.chat?.type;
   const rawText  = (msg.text || msg.caption || '').trim();
   const fromBot  = !!msg.from?.is_bot;
 
-  // Ignore bot messages and empty messages
   if (fromBot || !chatId || !rawText) return ok();
 
-  // In groups/supergroups: only respond when @mentioned or using /command
   const mentionPattern = new RegExp(`@${BOT_USERNAME}`, 'i');
   const isMentioned = mentionPattern.test(rawText);
   const isPrivate   = chatType === 'private';
@@ -395,7 +501,6 @@ export default async function handler(req, res) {
 
   if (!isPrivate && !isMentioned && !isCommand) return ok();
 
-  // Strip @mention from text
   const question = rawText.replace(mentionPattern, '').trim();
   if (!question) {
     await sendReply(BOT_TOKEN, chatId, HELP_TEXT);
@@ -404,7 +509,9 @@ export default async function handler(req, res) {
 
   // ── Commands ──────────────────────────────────────────────────────────────────
   if (isCommand) {
-    const cmd = question.split(/\s+/)[0].toLowerCase().replace(`@${BOT_USERNAME}`, '');
+    const parts  = question.split(/\s+/);
+    const cmd    = parts[0].toLowerCase().replace(`@${BOT_USERNAME}`, '');
+    const cmdArg = parts[1] || '';
 
     if (cmd === '/start' || cmd === '/help') {
       await sendReply(BOT_TOKEN, chatId, HELP_TEXT);
@@ -425,10 +532,37 @@ export default async function handler(req, res) {
       }
       return ok();
     }
+    if (cmd === '/faucet') {
+      if (!cmdArg) {
+        await sendReply(BOT_TOKEN, chatId,
+          `💧 <b>Testnet USDC Faucet</b>\n\n` +
+          `Sends <b>$20 testnet USDC</b> to your wallet instantly.\n\n` +
+          `Usage:\n<code>/faucet 0xYourWalletAddress</code>\n\n` +
+          `Limit: $20 per address per 24 hours.`,
+          msgId);
+        return ok();
+      }
+      await handleFaucetRequest(BOT_TOKEN, chatId, msgId, cmdArg);
+      return ok();
+    }
     // Unknown command — fall through to Claude
   }
 
-  // ── Rate limit ────────────────────────────────────────────────────────────────
+  // ── Natural-language faucet detection ─────────────────────────────────────────
+  // Trigger when the message contains a wallet address AND a "need USDC" keyword.
+  // This catches messages like "hey I need USDC, my address is 0x1234..."
+  const detectedAddr = extractAddress(question);
+  if (detectedAddr && faucetKeywordsPresent(question)) {
+    if (!checkRateLimit(userId)) {
+      await sendReply(BOT_TOKEN, chatId,
+        `⏳ Too many messages. Please wait a moment before trying again.`, msgId);
+      return ok();
+    }
+    await handleFaucetRequest(BOT_TOKEN, chatId, msgId, detectedAddr);
+    return ok();
+  }
+
+  // ── Rate limit (Claude queries) ───────────────────────────────────────────────
   if (!checkRateLimit(userId)) {
     await sendReply(BOT_TOKEN, chatId,
       `⏳ Too many messages. Please wait a moment before asking another question.`, msgId);
