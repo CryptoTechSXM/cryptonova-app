@@ -74,8 +74,8 @@ Mining stops after all 9 epochs (21M hard cap). Do NOT say "after your 8th cycle
 
 ## Community Pool
 1% of every entry fee. First 1,000 members eligible.
-Genesis (#1-500) = 65%, Pioneer (#501-1000) = 35%.
-50% distributes monthly, 50% rolls over. Begins at mainnet.
+Genesis (#1-500) = 60%, Pioneer (#501-1000) = 40%.
+50% distributes on the 25th of each month, 50% rolls over and compounds. Begins at mainnet.
 
 ## How to Register
 1. Visit <a href="https://early.crypto-nova.app">early.crypto-nova.app</a>
@@ -102,8 +102,11 @@ TierRouter deducts next tier fee from your <b>withdrawable balance</b> inside th
 - NOT from your external wallet.
 - NOT free - comes from earnings.
 - Example: T1 cycles out, $25 T2 fee deducted from withdrawable, registered at T2 automatically.
-- If withdrawable < next fee: <b>parked</b>. Automated keeper rescues when earnings build up.
-- Do NOT say upgrade is free.
+- If withdrawable < next fee: <b>parked</b> for up to 10 days. Keeper then applies the ratio check:
+  - If you withdrew ≤70% of total earned: StabilityFund covers 25% of fee, your withdrawable covers 75% → rescued automatically.
+  - If you withdrew >70% of total earned: evicted. Slot cleared, must re-enter fresh. Withdrawable balance preserved.
+- Both 70% threshold and 25% SF contribution are DAO-governed.
+- Do NOT say upgrade is free. Do NOT say rescue is guaranteed.
 
 ## Network Setup (Base Sepolia)
 Chain ID: <code>84532</code> | RPC: <code>https://sepolia.base.org</code> | Explorer: <code>https://sepolia.basescan.org</code>
@@ -414,12 +417,4 @@ export default async function handler(req, res) {
   await sendTyping(BOT_TOKEN, chatId);
   try {
     const answer = await askClaude(ANTHROPIC, question);
-    if (answer) await sendReply(BOT_TOKEN, chatId, answer, msgId);
-    else throw new Error('Empty response');
-  } catch (e) {
-    console.error('[telegram-qa] Claude error:', e.message);
-    await sendReply(BOT_TOKEN, chatId, `Having trouble right now. Try again in a moment.\n<a href="https://crypto-nova.app/faq">FAQ</a> | Tag @admin for urgent help.`, msgId);
-  }
-
-  return ok();
-}
+ 
