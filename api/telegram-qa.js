@@ -9,7 +9,7 @@ import { ethers } from 'ethers';
 
 const BOT_USERNAME      = 'cnova_support_bot';
 const USDC_ADDRESS      = '0x2D8B7b5eDec96bE441b6fb0D45D74a2BcE2C639a';
-const TIER_ROUTER       = '0x9bdb62Ac866F222c7062398F891eC860c1F89034';
+const TIER_ROUTER       = '0xEAf92580FffAdA9DFf7e67f84ebD706FF82f9915'; // V8.11 (update to V8.12 after deploy)
 const BASESCAN          = 'https://sepolia.basescan.org';
 const FAUCET_AMOUNT     = 20_000_000n;
 const FAUCET_ETH_AMOUNT = '0.002';
@@ -120,8 +120,17 @@ Chain ID: <code>84532</code> | RPC: <code>https://sepolia.base.org</code> | Expl
 <b>Wallet won't connect:</b> Refresh or switch to MetaMask/Rabby.
 <b>Dashboard shows 0:</b> Connect with same wallet you registered with.
 
+## Referral System
+The referral system is fully live in the smart contracts.
+- When you register using someone's referral link, their <b>wallet address</b> is recorded on-chain permanently and they earn the L1 direct fee (20% of your entry fee) instantly.
+- The referrer field always shows a <b>wallet address</b> (e.g. 0x1a2b...3c4d). There are no usernames or Member IDs — it is wallet-address based.
+- <b>"Direct"</b> means the member registered without a referral link (no referrer address passed). This happens on testnet AND mainnet — it is not a testnet limitation.
+- On testnet, most members show "Direct" because they were added via automated stress-testing with no referrer, not because referrals aren't working.
+- On mainnet, members who use a referral link will show the referrer's wallet address. Members who register directly will always show "Direct" — permanently.
+- Do NOT say referrer will show "Member ID" or "username" — those are not built. Do NOT say "Direct" is only a testnet thing.
+
 ## Contracts (Base Sepolia)
-TierRouter: <code>0x9bdb62Ac866F222c7062398F891eC860c1F89034</code>
+TierRouter: <code>0xEAf92580FffAdA9DFf7e67f84ebD706FF82f9915</code>
 USDC: <code>0x2D8B7b5eDec96bE441b6fb0D45D74a2BcE2C639a</code>
 
 ## Links
