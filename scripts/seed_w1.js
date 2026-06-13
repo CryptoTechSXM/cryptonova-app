@@ -11,7 +11,7 @@
  *   SEED_W1_KEY  — private key of the accountOne wallet (0x6512e9B5…)
  *
  * Env vars optional:
- *   ADDRESSES_FILE — path to deployed JSON (default: deployed_addresses_v8_11.json)
+ *   ADDRESSES_FILE — path to deployed JSON (default: deployed_addresses_v8_12.json)
  *
  * Run:
  *   $env:SEED_W1_KEY="0x<key>"; npx hardhat run scripts/seed_w1.js --network baseSepolia
@@ -24,7 +24,7 @@ require("dotenv").config();
 
 const ADDRESSES_FILE = path.join(
   __dirname,
-  process.env.ADDRESSES_FILE || "deployed_addresses_v8_11.json"
+  process.env.ADDRESSES_FILE || "deployed_addresses_v8_12.json"
 );
 const ETH_FOR_GAS = ethers.parseEther("0.02");  // 0.02 ETH covers approve + register
 
