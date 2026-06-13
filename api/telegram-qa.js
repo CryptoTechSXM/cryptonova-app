@@ -29,12 +29,15 @@ CryptoNova is a decentralized matrix platform on Base blockchain. Members pay a 
 Currently operating on <b>Base Sepolia testnet</b>. Mainnet launch is planned.
 
 ## The Matrix System
-1. Each matrix holds <b>127 seats</b> (a 7-level binary tree — 2^7 − 1 nodes).
-2. When you register, you take a seat in the active matrix.
-3. As new members fill seats below you, USDC flows up through the chain.
-4. When all 127 seats fill, the root member is <b>auto-upgraded</b> to the next tier.
-5. The matrix then resets for the next cycle.
-6. A referral system gives bonus payments when your direct referral registers.
+1. Each tier has a two-phase cycle totalling <b>254 seats</b> (two back-to-back 127-seat binary trees).
+2. When you register at a tier, you take a seat in the first phase of that tier's active matrix.
+3. As new members fill seats below you, USDC flows up the chain to members above.
+4. Completing the first 127 seats is a mid-point crossing — <b>not</b> an upgrade. You must complete both phases (all 254 seats) before you cycle out.
+5. When all 254 seats fill, the root member is <b>auto-upgraded</b> to the next tier and earns CNOVA tokens.
+6. The cycle resets and begins again for the next member.
+7. A referral bonus pays you when someone registers using your referral link.
+
+Important: members only upgrade after the full 254-seat cycle is complete. Do not tell members they upgrade after 127 seats — that is incorrect and will cause confusion.
 
 ## The 10 Tiers
 <code>
@@ -257,6 +260,30 @@ async function fetchLiveStats() {
     `For full stats, open your <a href="https://crypto-nova.app">Dashboard</a>.`;
 }
 
+// ─── Markdown → Telegram HTML converter ───────────────────────────────────────
+// Claude Haiku often returns Markdown despite instructions. Strip it to plain
+// Telegram-safe HTML so messages render correctly on mobile.
+function mdToTg(text) {
+  return text
+    // Headers: ## Foo → <b>Foo</b>
+    .replace(/^#{1,3}\s+(.+)$/gm, '<b>$1</b>')
+    // Bold: **foo** or __foo__ → <b>foo</b>
+    .replace(/\*\*(.+?)\*\*/g, '<b>$1</b>')
+    .replace(/__(.+?)__/g, '<b>$1</b>')
+    // Italic: *foo* or _foo_ → <i>foo</i>  (single star/underscore)
+    .replace(/(?<!\*)\*(?!\*)(.+?)(?<!\*)\*(?!\*)/g, '<i>$1</i>')
+    .replace(/(?<!_)_(?!_)(.+?)(?<!_)_(?!_)/g, '<i>$1</i>')
+    // Inline code: `foo` → <code>foo</code>
+    .replace(/`([^`]+)`/g, '<code>$1</code>')
+    // Unordered list items: - item or * item → • item
+    .replace(/^[ \t]*[-*]\s+/gm, '• ')
+    // Horizontal rules
+    .replace(/^[-*_]{3,}$/gm, '')
+    // Collapse 3+ blank lines to 2
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+
 // ─── Claude API helper ─────────────────────────────────────────────────────────
 async function askClaude(apiKey, question) {
   const r = await fetch('https://api.anthropic.com/v1/messages', {
@@ -279,7 +306,8 @@ async function askClaude(apiKey, question) {
     console.error('[telegram-qa] Anthropic error:', JSON.stringify(data));
     throw new Error(data?.error?.message || `HTTP ${r.status}`);
   }
-  return data.content?.[0]?.text?.trim() || '';
+  const raw = data.content?.[0]?.text?.trim() || '';
+  return mdToTg(raw);
 }
 
 // ─── Main handler ──────────────────────────────────────────────────────────────
