@@ -517,6 +517,55 @@ if (cnovaTxt) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// 17. V8.12 — TierRouter.sol communityWallet hook + MatrixKeeper distributeReady
+// ─────────────────────────────────────────────────────────────────────────────
+sep("V8.12 — CommunityWallet integration checks");
+
+const trText = read("contracts/TierRouter.sol");
+if (trText) {
+  if (trText.includes("setCommunityWallet") && trText.includes("enroll(msg.sender)")) {
+    ok("TierRouter.sol: setCommunityWallet() setter + enroll() hook in register() found");
+  } else {
+    fail("TierRouter.sol: setCommunityWallet/enroll hook missing — V8.12 community enrollment patch not applied");
+  }
+
+  if (trText.includes("globalJoinedCount")) {
+    ok("TierRouter.sol: globalJoinedCount counter found");
+  } else {
+    fail("TierRouter.sol: globalJoinedCount missing — needed for first-1000 Community Fund eligibility");
+  }
+}
+
+if (mkText) {
+  if (mkText.includes("WORK_DISTRIBUTE_CW") && mkText.includes("distributeReady")) {
+    ok("MatrixKeeper.sol: WORK_DISTRIBUTE_CW + distributeReady() check found in checkUpkeep()");
+  } else {
+    fail("MatrixKeeper.sol: WORK_DISTRIBUTE_CW/distributeReady missing — monthly CW distribution won't trigger via Chainlink");
+  }
+
+  if (mkText.includes("setCommunityWallet")) {
+    ok("MatrixKeeper.sol: setCommunityWallet() setter found");
+  } else {
+    fail("MatrixKeeper.sol: setCommunityWallet() setter missing — add V8.12 setter");
+  }
+}
+
+const deployTxt = read("scripts/deploy_v8.js");
+if (deployTxt) {
+  if (deployTxt.includes("tierRouter.setCommunityWallet(cwAddr)")) {
+    ok("deploy_v8.js: tierRouter.setCommunityWallet(cwAddr) call found — enroll hook will be active");
+  } else {
+    fail("deploy_v8.js: tierRouter.setCommunityWallet(cwAddr) MISSING — enroll() hook will stay dormant");
+  }
+
+  if (deployTxt.includes("keeper.setCommunityWallet(cwAddr)")) {
+    ok("deploy_v8.js: keeper.setCommunityWallet(cwAddr) call found — Chainlink CW trigger active");
+  } else {
+    fail("deploy_v8.js: keeper.setCommunityWallet(cwAddr) MISSING — monthly distribution won't auto-trigger");
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Summary
 // ─────────────────────────────────────────────────────────────────────────────
 console.log("\n" + "═".repeat(62));
