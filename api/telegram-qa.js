@@ -10,6 +10,12 @@ import { ethers } from 'ethers';
 const BOT_USERNAME      = 'cnova_support_bot';
 const USDC_ADDRESS      = '0x2D8B7b5eDec96bE441b6fb0D45D74a2BcE2C639a';
 const TIER_ROUTER       = '0xEAf92580FffAdA9DFf7e67f84ebD706FF82f9915'; // V8.11 (update to V8.12 after deploy)
+
+// Group moderation — set these in Vercel env vars after creating the groups
+// SUPPORT_GROUP_ID: the numeric chat ID of the support group (e.g. -1001234567890)
+// COMMUNITY_GROUP_LINK: invite link for the community group (e.g. https://t.me/+abc123)
+const SUPPORT_GROUP_ID    = process.env.SUPPORT_GROUP_ID    || '';
+const COMMUNITY_GROUP_URL = process.env.COMMUNITY_GROUP_LINK || 'https://t.me/CryptoNovaHQ';
 const BASESCAN          = 'https://sepolia.basescan.org';
 const FAUCET_AMOUNT     = 20_000_000n;
 const FAUCET_ETH_AMOUNT = '0.002';
@@ -181,6 +187,13 @@ const REGISTER_TEXT = `<b>How to Register on CryptoNova</b>
 Have a referral link? Use it to pre-fill your referrer.
 Questions? Mention @cnova_support_bot`;
 
+const OFFTOPIC_REDIRECT = `👋 This is the <b>CryptoNova Support Channel</b> — for technical help, bug reports, and platform questions.
+
+💬 For general chat, join the community here:
+<a href="${COMMUNITY_GROUP_URL}">CryptoNova Community →</a>
+
+Have a support question? Just ask it here and I'll answer right away! 🛠️`;
+
 const rateLimits = new Map();
 const RATE_WINDOW_MS = 60_000;
 const RATE_MAX_MSGS  = 6;
@@ -268,6 +281,41 @@ async function sendReply(token, chatId, text, replyToId) {
 
 async function sendTyping(token, chatId) {
   return tgPost('sendChatAction', token, { chat_id: chatId, action: 'typing' }).catch(() => {});
+}
+
+async function deleteMessage(token, chatId, messageId) {
+  return tgPost('deleteMessage', token, { chat_id: chatId, message_id: messageId }).catch(() => {});
+}
+
+async function isGroupAdmin(token, chatId, userId) {
+  try {
+    const r = await tgPost('getChatMember', token, { chat_id: chatId, user_id: userId });
+    return ['administrator', 'creator'].includes(r?.result?.status);
+  } catch { return false; }
+}
+
+// Classifies a group message as 'support', 'offtopic', or 'spam'.
+// Defaults to 'support' on any error so the bot never silently drops a real question.
+async function classifyMessage(apiKey, text) {
+  try {
+    const r = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' },
+      body: JSON.stringify({
+        model: 'claude-haiku-4-5-20251001',
+        max_tokens: 5,
+        system: `Classify this Telegram message into exactly one word — no punctuation, no explanation:
+"support" = help request, technical question about CryptoNova, faucet request, bug report, wallet issue, registration question
+"offtopic" = casual greetings (GM/GN/hi), general crypto chat, price talk, unrelated conversation, sharing wins
+"spam" = marketing links, promotional content, scam attempts, unrelated project shilling, gibberish
+Reply with only one word.`,
+        messages: [{ role: 'user', content: text }],
+      }),
+    });
+    const data = await r.json();
+    const result = data.content?.[0]?.text?.trim().toLowerCase().split(/\s/)[0];
+    return ['support', 'offtopic', 'spam'].includes(result) ? result : 'support';
+  } catch { return 'support'; }  // fail-safe: never drop a real question
 }
 
 async function fetchLiveStats() {
@@ -379,11 +427,31 @@ export default async function handler(req, res) {
   if (fromBot || !chatId || !rawText) return ok();
 
   const mentionPattern = new RegExp(`@${BOT_USERNAME}`, 'i');
-  const isMentioned = mentionPattern.test(rawText);
-  const isPrivate   = chatType === 'private';
-  const isCommand   = rawText.startsWith('/');
+  const isMentioned    = mentionPattern.test(rawText);
+  const isPrivate      = chatType === 'private';
+  const isCommand      = rawText.startsWith('/');
+  const isSupportGroup = SUPPORT_GROUP_ID && String(chatId) === String(SUPPORT_GROUP_ID);
 
-  if (!isPrivate && !isMentioned && !isCommand) return ok();
+  // ── Support group moderation ────────────────────────────────────────────────
+  // For plain text messages in the support group (not @mentions, not commands),
+  // classify before allowing them through. Spam and off-topic are intercepted here.
+  let passThroughForSupport = false;
+  if (isSupportGroup && !isCommand && !isMentioned && !fromBot) {
+    const verdict = await classifyMessage(ANTHROPIC, rawText);
+    if (verdict === 'spam') {
+      await deleteMessage(BOT_TOKEN, chatId, msgId);
+      return ok();
+    } else if (verdict === 'offtopic') {
+      await deleteMessage(BOT_TOKEN, chatId, msgId);
+      await sendReply(BOT_TOKEN, chatId, OFFTOPIC_REDIRECT);
+      return ok();
+    } else {
+      // 'support' — let it fall through to the QA pipeline below
+      passThroughForSupport = true;
+    }
+  }
+
+  if (!isPrivate && !isMentioned && !isCommand && !passThroughForSupport) return ok();
 
   const question = rawText.replace(mentionPattern, '').trim();
   if (!question) { await sendReply(BOT_TOKEN, chatId, HELP_TEXT); return ok(); }
@@ -409,6 +477,22 @@ export default async function handler(req, res) {
         return ok();
       }
       await handleFaucetRequest(BOT_TOKEN, chatId, msgId, cmdArg);
+      return ok();
+    }
+    if (cmd === '/del') {
+      // Admin-only: delete the replied-to message (+ the /del command itself)
+      const targetMsgId = msg.reply_to_message?.message_id;
+      if (!targetMsgId) {
+        await sendReply(BOT_TOKEN, chatId, `Reply to a message with /del to remove it.`, msgId);
+        return ok();
+      }
+      const adminOk = await isGroupAdmin(BOT_TOKEN, chatId, userId);
+      if (!adminOk) {
+        await sendReply(BOT_TOKEN, chatId, `Only group admins can delete messages.`, msgId);
+        return ok();
+      }
+      await deleteMessage(BOT_TOKEN, chatId, targetMsgId);
+      await deleteMessage(BOT_TOKEN, chatId, msgId);  // also remove the /del command itself
       return ok();
     }
   }
