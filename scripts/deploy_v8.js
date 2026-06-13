@@ -162,7 +162,7 @@ async function main() {
   const opsWallet   = process.env.OPS_WALLET_ADDRESS   || deployerAddr;
   const admin       = process.env.ADMIN_WALLET_ADDRESS || deployerAddr;
 
-  console.log("\n  V8.9 Elevator Deploy");
+  console.log("\n  V8.11 Elevator Deploy");
   sep();
   console.log(`  Deployer   : ${deployerAddr}`);
   console.log(`  AccountOne : ${accountOne}`);
@@ -445,6 +445,10 @@ async function main() {
   await (await cw.setEnrollor(trAddr)).wait();
   console.log(`  ↳  setEnrollor(TierRouter) OK — TierRouter can now enroll first-1000 members`);
 
+  // Wire CommunityWallet address into TierRouter (activates enroll() hook in register())
+  await (await tierRouter.setCommunityWallet(cwAddr)).wait();
+  console.log(`  ↳  TierRouter.setCommunityWallet OK — enroll() hook active on every register()`);
+
   // Wire CommunityWallet into StabilityFund (triggers 1% L1 carve)
   await (await stabilityFund.setCommunityWallet(cwAddr)).wait();
   console.log(`  ↳  StabilityFund.setCommunityWallet OK (communityCarveOutBps=0 in V8.9 -- carve is in SplitConfig)`);
@@ -541,7 +545,7 @@ async function main() {
   }
   sep();
   console.log(`  Addresses file: ${require("path").basename(ADDRESSES_FILE)}`);
-  console.log("  V8.9 Deploy complete.\n");
+  console.log("  V8.11 Deploy complete.\n");
 }
 
 main().catch(e => { console.error(e); process.exitCode = 1; });
