@@ -1,0 +1,97 @@
+{
+  "meta": {
+    "description": "CryptoNova Registro Anticipado — Asegura tu posición en la matriz antes del lanzamiento público.",
+    "title": "CryptoNova — Registro Anticipado"
+  },
+  "banner": {
+    "network": "⚡ Testnet Base Sepolia",
+    "subtitle": "· Acceso Anticipado · Contratos V8.11"
+  },
+  "hero": {
+    "pill": "🔐 Registro Anticipado Abierto",
+    "headline": "Asegura Tu<br><em>Posición en la Matriz</em>",
+    "subtitle": "Únete a CryptoNova antes del lanzamiento público. Comienza en T1 por $10 USDC y avanza automáticamente a través de 10 niveles a medida que la matriz se llena."
+  },
+  "connect": {
+    "title": "Conexión de Billetera",
+    "badge": "Requerido",
+    "prompt": "Conecta tu billetera MetaMask o Rabby en <strong style=\"color:var(--text1)\">Base Sepolia</strong> para registrarte.",
+    "btn_connect": "Conectar Billetera",
+    "btn_disconnect": "Desconectar"
+  },
+  "already": {
+    "heading": "✅ <strong>¡Ya registrado!</strong>",
+    "body": "Esta billetera ya es miembro de CryptoNova.",
+    "link": "→ Visita el sitio principal para ver tu panel de control"
+  },
+  "register": {
+    "title": "Registro — $10 USDC",
+    "badge": "Entrada T1",
+    "referral_label": "DIRECCIÓN DE REFERIDO (OPCIONAL)",
+    "referral_placeholder": "0x… pega la dirección de billetera del referido",
+    "referral_valid": "✓ Dirección de referido válida",
+    "no_ref_warn": "⚠️ No se ingresó dirección de referido. Continuar sin referido te coloca bajo la billetera patrocinadora predeterminada.",
+    "no_ref_ok": "OK, Continuar",
+    "balance_label": "Saldo USDC",
+    "approved_label": "Aprobado al PairManager",
+    "fee_label": "Tarifa de entrada",
+    "fee_value": "$10.00 USDC",
+    "low_bal": "⚠️ Tu saldo USDC es inferior a $10. Necesitas USDC de prueba para registrarte. Contacta al equipo en Telegram para una transferencia de prueba.",
+    "step1": "Paso 1: Aprobar $10 USDC 🔒",
+    "step2": "Paso 2: Registrarse ($10 USDC)",
+    "usdc_help": "¿Necesitas USDC de prueba?",
+    "add_wallet": "+ Agregar a billetera",
+    "usdc_addr_label": "Dirección USDC:"
+  },
+  "success": {
+    "title": "¡Bienvenido a CryptoNova!",
+    "subtitle": "Estás dentro. Tu asiento en la matriz está asegurado y las ganancias comienzan a fluir a medida que la red crece.",
+    "member_id": "ID de Miembro",
+    "matrix_pos": "Posición en la Matriz",
+    "ref_link_label": "Tu Enlace de Referido",
+    "ref_copy": "Copiar",
+    "ref_share": "Comparte tu enlace. Cada referido directo te gana un bono USDC instantáneo cuando se registran.",
+    "dashboard_link": "→ Ver panel completo en crypto-nova.app ↗"
+  },
+  "how": {
+    "title": "Cómo Funciona",
+    "step1": "<strong>Aprobar $10 USDC</strong> — un clic en MetaMask. El contrato solo puede retirar exactamente $10.",
+    "step2": "<strong>Registrarse</strong> — te colocan en la matriz Figure-8 T1 en el próximo asiento disponible.",
+    "step3": "<strong>Ganar</strong> — a medida que nuevos miembros se unen, USDC sube por la cadena. Retira en cualquier momento.",
+    "step4": "<strong>Actualización automática</strong> — cuando tu matriz se llena (127 asientos), avanzas automáticamente a T2 ($25)."
+  },
+  "footer": {
+    "tierrouter": "TierRouter ↗",
+    "faq": "Preguntas Frecuentes",
+    "tagline": "CryptoNova V8.11 · Testnet Base Sepolia · Las tarifas de entrada son solo USDC de prueba"
+  },
+  "js": {
+    "no_wallet": "No se detectó billetera. Instala MetaMask o Rabby.",
+    "no_wallet_short": "No se detectó billetera",
+    "connecting": "Conectando…",
+    "connect_wallet": "Conectar Billetera",
+    "approving": "Aprobando…",
+    "approve_status": "⏳ Aprobando $10 USDC al PairManager…",
+    "approve_done": "✅ ¡Aprobado! Ahora haz clic en Paso 2 para unirte.",
+    "approve_label": "✅ Paso 1 Completado — Aprobado",
+    "approved_val": "✅ $10 Aprobados",
+    "not_approved": "No aprobado",
+    "step1_reset": "Paso 1: Aprobar $10 USDC 🔒",
+    "joining": "Uniéndose a CryptoNova…",
+    "confirm_tx": "⏳ Confirmando transacción en Base Sepolia…",
+    "welcome_status": "🎉 ¡Bienvenido a CryptoNova!",
+    "welcome_toast": "¡Bienvenido a CryptoNova V8.11! 🎉",
+    "registered": "✅ ¡Registrado!",
+    "step2_reset": "Paso 2: Registrarse ($10 USDC)",
+    "copied": "¡Enlace de referido copiado!",
+    "connect_first": "Conecta primero la billetera",
+    "load_failed": "Error al cargar datos de la red",
+    "in_queue": "En Cola",
+    "loading": "Cargando…",
+    "cancelled": "Transacción cancelada.",
+    "no_eth": "ETH insuficiente para las tarifas de gas.",
+    "already_reg": "Esta billetera ya está registrada.",
+    "no_approval": "USDC no aprobado — completa primero el Paso 1.",
+    "tx_reverted": "Transacción revertida: "
+  }
+}

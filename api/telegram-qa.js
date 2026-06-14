@@ -9,7 +9,13 @@ import { ethers } from 'ethers';
 
 const BOT_USERNAME      = 'cnova_support_bot';
 const USDC_ADDRESS      = '0x2D8B7b5eDec96bE441b6fb0D45D74a2BcE2C639a';
-const TIER_ROUTER       = '0x9bdb62Ac866F222c7062398F891eC860c1F89034';
+const TIER_ROUTER       = '0xC729627996E968b5065399843FfFfCF5bfB5148b'; // V8.12
+
+// Group moderation — set these in Vercel env vars after creating the groups
+// SUPPORT_GROUP_ID: the numeric chat ID of the support group (e.g. -1001234567890)
+// COMMUNITY_GROUP_LINK: invite link for the community group (e.g. https://t.me/+abc123)
+const SUPPORT_GROUP_ID    = process.env.SUPPORT_GROUP_ID    || '';
+const COMMUNITY_GROUP_URL = process.env.COMMUNITY_GROUP_LINK || 'https://t.me/CryptoNovaHQ';
 const BASESCAN          = 'https://sepolia.basescan.org';
 const FAUCET_AMOUNT     = 20_000_000n;
 const FAUCET_ETH_AMOUNT = '0.002';
@@ -74,11 +80,11 @@ Mining stops after all 9 epochs (21M hard cap). Do NOT say "after your 8th cycle
 
 ## Community Pool
 1% of every entry fee. First 1,000 members eligible.
-Genesis (#1-500) = 65%, Pioneer (#501-1000) = 35%.
-50% distributes monthly, 50% rolls over. Begins at mainnet.
+Genesis (#1-500) = 60%, Pioneer (#501-1000) = 40%.
+50% distributes on the 25th of each month, 50% rolls over and compounds. Begins at mainnet.
 
 ## How to Register
-1. Visit <a href="https://early.crypto-nova.app">early.crypto-nova.app</a>
+1. Visit <a href="https://crypto-nova.app">crypto-nova.app</a>
 2. Connect MetaMask or Rabby wallet
 3. Switch to <b>Base Sepolia</b> (auto-prompted)
 4. Need funds? Use <code>/faucet 0xYourAddress</code> - bot sends $20 USDC + 0.002 ETH instantly
@@ -102,8 +108,11 @@ TierRouter deducts next tier fee from your <b>withdrawable balance</b> inside th
 - NOT from your external wallet.
 - NOT free - comes from earnings.
 - Example: T1 cycles out, $25 T2 fee deducted from withdrawable, registered at T2 automatically.
-- If withdrawable < next fee: <b>parked</b>. Automated keeper rescues when earnings build up.
-- Do NOT say upgrade is free.
+- If withdrawable < next fee: <b>parked</b> for up to 10 days. Keeper then applies the ratio check:
+  - If you withdrew ≤70% of total earned: StabilityFund covers 25% of fee, your withdrawable covers 75% → rescued automatically.
+  - If you withdrew >70% of total earned: evicted. Slot cleared, must re-enter fresh. Withdrawable balance preserved.
+- Both 70% threshold and 25% SF contribution are DAO-governed.
+- Do NOT say upgrade is free. Do NOT say rescue is guaranteed.
 
 ## Network Setup (Base Sepolia)
 Chain ID: <code>84532</code> | RPC: <code>https://sepolia.base.org</code> | Explorer: <code>https://sepolia.basescan.org</code>
@@ -112,16 +121,27 @@ Chain ID: <code>84532</code> | RPC: <code>https://sepolia.base.org</code> | Expl
 <b>Transaction failed:</b> Approve USDC first (Step 1 before Step 2). Check you have ETH for gas.
 <b>Already registered:</b> Open Dashboard to see your account.
 <b>Wrong network:</b> Use site prompt or add Base Sepolia manually.
-<b>No USDC/ETH:</b> Use /faucet command with your address.
+<b>No USDC/ETH (testnet):</b> Use /faucet command with your address.
+<b>No USDC/ETH (mainnet):</b> Swap any crypto to USDC on Base using <a href="https://changenow.app.link/referral?link_id=c66940e36c06c9">ChangeNow</a> — works with most coins, no account required.
 <b>Wallet won't connect:</b> Refresh or switch to MetaMask/Rabby.
 <b>Dashboard shows 0:</b> Connect with same wallet you registered with.
 
+## Referral System
+The referral system is fully live in the smart contracts.
+- When you register using someone's referral link, their <b>wallet address</b> is recorded on-chain permanently and they earn the L1 direct fee (20% of your entry fee) instantly.
+- The referrer field always shows a <b>wallet address</b> (e.g. 0x1a2b...3c4d). There are no usernames or Member IDs — it is wallet-address based.
+- <b>"Direct"</b> means the member registered without a referral link (no referrer address passed). This happens on testnet AND mainnet — it is not a testnet limitation.
+- On testnet, most members show "Direct" because they were added via automated stress-testing with no referrer, not because referrals aren't working.
+- On mainnet, members who use a referral link will show the referrer's wallet address. Members who register directly will always show "Direct" — permanently.
+- Do NOT say referrer will show "Member ID" or "username" — those are not built. Do NOT say "Direct" is only a testnet thing.
+
 ## Contracts (Base Sepolia)
-TierRouter: <code>0x9bdb62Ac866F222c7062398F891eC860c1F89034</code>
+TierRouter: <code>0xC729627996E968b5065399843FfFfCF5bfB5148b</code>
 USDC: <code>0x2D8B7b5eDec96bE441b6fb0D45D74a2BcE2C639a</code>
 
 ## Links
-<a href="https://crypto-nova.app">crypto-nova.app</a> | <a href="https://early.crypto-nova.app">early.crypto-nova.app</a> | <a href="https://crypto-nova.app/faq">FAQ</a>
+<a href="https://crypto-nova.app">crypto-nova.app</a> | <a href="https://crypto-nova.app/faq">FAQ</a>
+<a href="https://changenow.app.link/referral?link_id=c66940e36c06c9">ChangeNow</a> — swap any crypto to USDC on Base (no account needed)
 
 ## Escalate to @admin when
 - Missing payment or stuck transaction
@@ -155,7 +175,7 @@ I can answer questions about:
 
 const REGISTER_TEXT = `<b>How to Register on CryptoNova</b>
 
-1. Visit <a href="https://early.crypto-nova.app">early.crypto-nova.app</a>
+1. Visit <a href="https://crypto-nova.app">crypto-nova.app</a>
 2. Connect MetaMask or Rabby wallet
 3. Switch to <b>Base Sepolia</b> (auto-prompted)
 4. Need testnet funds? Use: <code>/faucet 0xYourWalletAddress</code>
@@ -166,6 +186,13 @@ const REGISTER_TEXT = `<b>How to Register on CryptoNova</b>
 
 Have a referral link? Use it to pre-fill your referrer.
 Questions? Mention @cnova_support_bot`;
+
+const OFFTOPIC_REDIRECT = `👋 This is the <b>CryptoNova Support Channel</b> — for technical help, bug reports, and platform questions.
+
+💬 For general chat, join the community here:
+<a href="${COMMUNITY_GROUP_URL}">CryptoNova Community →</a>
+
+Have a support question? Just ask it here and I'll answer right away! 🛠️`;
 
 const rateLimits = new Map();
 const RATE_WINDOW_MS = 60_000;
@@ -256,6 +283,41 @@ async function sendTyping(token, chatId) {
   return tgPost('sendChatAction', token, { chat_id: chatId, action: 'typing' }).catch(() => {});
 }
 
+async function deleteMessage(token, chatId, messageId) {
+  return tgPost('deleteMessage', token, { chat_id: chatId, message_id: messageId }).catch(() => {});
+}
+
+async function isGroupAdmin(token, chatId, userId) {
+  try {
+    const r = await tgPost('getChatMember', token, { chat_id: chatId, user_id: userId });
+    return ['administrator', 'creator'].includes(r?.result?.status);
+  } catch { return false; }
+}
+
+// Classifies a group message as 'support', 'offtopic', or 'spam'.
+// Defaults to 'support' on any error so the bot never silently drops a real question.
+async function classifyMessage(apiKey, text) {
+  try {
+    const r = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' },
+      body: JSON.stringify({
+        model: 'claude-haiku-4-5-20251001',
+        max_tokens: 5,
+        system: `Classify this Telegram message into exactly one word — no punctuation, no explanation:
+"support" = help request, technical question about CryptoNova, faucet request, bug report, wallet issue, registration question
+"offtopic" = casual greetings (GM/GN/hi), general crypto chat, price talk, unrelated conversation, sharing wins
+"spam" = marketing links, promotional content, scam attempts, unrelated project shilling, gibberish
+Reply with only one word.`,
+        messages: [{ role: 'user', content: text }],
+      }),
+    });
+    const data = await r.json();
+    const result = data.content?.[0]?.text?.trim().toLowerCase().split(/\s/)[0];
+    return ['support', 'offtopic', 'spam'].includes(result) ? result : 'support';
+  } catch { return 'support'; }  // fail-safe: never drop a real question
+}
+
 async function fetchLiveStats() {
   const RPC = process.env.BASE_SEPOLIA_RPC || 'https://sepolia.base.org';
   async function call(to, selector) {
@@ -333,7 +395,7 @@ async function handleFaucetRequest(token, chatId, msgId, rawAddress) {
       `Funds sent to\n<code>${toAddress}</code>\n\n` +
       `<b>$20 testnet USDC</b> - <a href="${BASESCAN}/tx/${result.usdcHash}">View tx</a>\n` +
       `<b>0.002 ETH</b> for gas - <a href="${BASESCAN}/tx/${result.ethHash}">View tx</a>\n\n` +
-      `You're ready to register!\n<a href="https://early.crypto-nova.app">early.crypto-nova.app</a>`,
+      `You're ready to register!\n<a href="https://crypto-nova.app">crypto-nova.app</a>`,
       msgId);
   } else {
     await sendReply(token, chatId, result.reason, msgId);
@@ -365,11 +427,31 @@ export default async function handler(req, res) {
   if (fromBot || !chatId || !rawText) return ok();
 
   const mentionPattern = new RegExp(`@${BOT_USERNAME}`, 'i');
-  const isMentioned = mentionPattern.test(rawText);
-  const isPrivate   = chatType === 'private';
-  const isCommand   = rawText.startsWith('/');
+  const isMentioned    = mentionPattern.test(rawText);
+  const isPrivate      = chatType === 'private';
+  const isCommand      = rawText.startsWith('/');
+  const isSupportGroup = SUPPORT_GROUP_ID && String(chatId) === String(SUPPORT_GROUP_ID);
 
-  if (!isPrivate && !isMentioned && !isCommand) return ok();
+  // ── Support group moderation ────────────────────────────────────────────────
+  // For plain text messages in the support group (not @mentions, not commands),
+  // classify before allowing them through. Spam and off-topic are intercepted here.
+  let passThroughForSupport = false;
+  if (isSupportGroup && !isCommand && !isMentioned && !fromBot) {
+    const verdict = await classifyMessage(ANTHROPIC, rawText);
+    if (verdict === 'spam') {
+      await deleteMessage(BOT_TOKEN, chatId, msgId);
+      return ok();
+    } else if (verdict === 'offtopic') {
+      await deleteMessage(BOT_TOKEN, chatId, msgId);
+      await sendReply(BOT_TOKEN, chatId, OFFTOPIC_REDIRECT);
+      return ok();
+    } else {
+      // 'support' — let it fall through to the QA pipeline below
+      passThroughForSupport = true;
+    }
+  }
+
+  if (!isPrivate && !isMentioned && !isCommand && !passThroughForSupport) return ok();
 
   const question = rawText.replace(mentionPattern, '').trim();
   if (!question) { await sendReply(BOT_TOKEN, chatId, HELP_TEXT); return ok(); }
@@ -395,6 +477,22 @@ export default async function handler(req, res) {
         return ok();
       }
       await handleFaucetRequest(BOT_TOKEN, chatId, msgId, cmdArg);
+      return ok();
+    }
+    if (cmd === '/del') {
+      // Admin-only: delete the replied-to message (+ the /del command itself)
+      const targetMsgId = msg.reply_to_message?.message_id;
+      if (!targetMsgId) {
+        await sendReply(BOT_TOKEN, chatId, `Reply to a message with /del to remove it.`, msgId);
+        return ok();
+      }
+      const adminOk = await isGroupAdmin(BOT_TOKEN, chatId, userId);
+      if (!adminOk) {
+        await sendReply(BOT_TOKEN, chatId, `Only group admins can delete messages.`, msgId);
+        return ok();
+      }
+      await deleteMessage(BOT_TOKEN, chatId, targetMsgId);
+      await deleteMessage(BOT_TOKEN, chatId, msgId);  // also remove the /del command itself
       return ok();
     }
   }

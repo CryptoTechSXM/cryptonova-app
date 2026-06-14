@@ -383,6 +383,48 @@
 </head>
 <body>
 
+<!-- ══ LAUNCH GATE ══════════════════════════════════════════════════════════
+     index.html: opens 10:00 AM EDT (14:00 UTC) June 14 2026
+═══════════════════════════════════════════════════════════════════════════ -->
+<div id="launch-gate" style="display:none;position:fixed;inset:0;z-index:99999;background:#0a0a1a;display:flex;flex-direction:column;align-items:center;justify-content:center;font-family:'Inter',sans-serif;color:#fff;">
+  <div style="text-align:center;max-width:480px;padding:2rem;">
+    <div style="font-size:2.5rem;font-weight:800;background:linear-gradient(135deg,#7c3aed,#2563eb);-webkit-background-clip:text;-webkit-text-fill-color:transparent;margin-bottom:0.5rem;">CryptoNova</div>
+    <div style="color:#a78bfa;font-size:1rem;margin-bottom:2.5rem;letter-spacing:0.05em;">TESTNET LAUNCH</div>
+    <div style="color:#94a3b8;font-size:0.95rem;margin-bottom:1rem;">Opens in</div>
+    <div id="gate-countdown" style="font-size:3rem;font-weight:700;font-variant-numeric:tabular-nums;color:#fff;letter-spacing:0.05em;margin-bottom:2rem;">--:--:--</div>
+    <div style="color:#64748b;font-size:0.85rem;">Launching at <strong style="color:#a78bfa;">10:00 AM EDT</strong> · June 14, 2026</div>
+  </div>
+</div>
+
+<script>
+(function() {
+  var OPEN_AT = new Date('2026-06-14T14:00:00Z').getTime(); // 10:00 AM EDT
+  var gate = document.getElementById('launch-gate');
+  var countdown = document.getElementById('gate-countdown');
+
+  function tick() {
+    var now = Date.now();
+    if (now >= OPEN_AT) {
+      gate.style.display = 'none';
+      return;
+    }
+    gate.style.display = 'flex';
+    var diff = OPEN_AT - now;
+    var h = Math.floor(diff / 3600000);
+    var m = Math.floor((diff % 3600000) / 60000);
+    var s = Math.floor((diff % 60000) / 1000);
+    countdown.textContent =
+      String(h).padStart(2,'0') + ':' +
+      String(m).padStart(2,'0') + ':' +
+      String(s).padStart(2,'0');
+  }
+
+  tick();
+  setInterval(tick, 1000);
+})();
+</script>
+<!-- ══ END LAUNCH GATE ═══════════════════════════════════════════════════ -->
+
   <!-- ══ LAUNCH ANNOUNCEMENT BANNER ══════════════════════════════════════ -->
   <div id="launch-banner">
     <div class="bn-title">&#x1F680; CryptoNova Tokens &mdash; Public Launch Friday June 12</div>
@@ -709,10 +751,18 @@
         <button class="btn-primary" onclick="showTab('register')">Join Now — $10 USDC</button>
         <button class="btn-outline" onclick="showTab('dashboard')">View Dashboard</button>
       </div>
-      <div style="margin-top:20px">
-        <a href="https://t.me/CryptoNovaMatrix" target="_blank" rel="noopener" style="text-decoration:none;display:inline-flex;align-items:center;gap:8px;background:rgba(59,130,246,.12);border:1px solid rgba(59,130,246,.35);border-radius:10px;padding:10px 18px;color:var(--blue);font-weight:700;font-size:14px;transition:background .2s" onmouseover="this.style.background='rgba(59,130,246,.22)'" onmouseout="this.style.background='rgba(59,130,246,.12)'">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.373 0 0 5.373 0 12s5.373 12 12 12 12-5.373 12-12S18.627 0 12 0zm5.894 8.221-1.97 9.28c-.145.658-.537.818-1.084.508l-3-2.21-1.447 1.394c-.16.16-.295.295-.605.295l.213-3.053 5.56-5.023c.242-.213-.054-.333-.373-.12L8.32 13.617l-2.96-.924c-.643-.204-.657-.643.136-.953l11.57-4.461c.537-.194 1.006.131.828.942z"/></svg>
-          Join CryptoNova Telegram Community
+      <div style="margin-top:20px;display:flex;flex-wrap:wrap;gap:10px;justify-content:center">
+        <a href="https://t.me/+0tmvkrDs20Q1M2My" target="_blank" rel="noopener" style="text-decoration:none;display:inline-flex;align-items:center;gap:6px;background:rgba(59,130,246,.12);border:1px solid rgba(59,130,246,.35);border-radius:10px;padding:9px 16px;color:var(--blue);font-weight:600;font-size:13px;transition:background .2s" onmouseover="this.style.background='rgba(59,130,246,.22)'" onmouseout="this.style.background='rgba(59,130,246,.12)'">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.373 0 0 5.373 0 12s5.373 12 12 12 12-5.373 12-12S18.627 0 12 0zm5.894 8.221-1.97 9.28c-.145.658-.537.818-1.084.508l-3-2.21-1.447 1.394c-.16.16-.295.295-.605.295l.213-3.053 5.56-5.023c.242-.213-.054-.333-.373-.12L8.32 13.617l-2.96-.924c-.643-.204-.657-.643.136-.953l11.57-4.461c.537-.194 1.006.131.828.942z"/></svg>
+          Announcements
+        </a>
+        <a href="https://t.me/+qyx0ubijx9JmYmVi" target="_blank" rel="noopener" style="text-decoration:none;display:inline-flex;align-items:center;gap:6px;background:rgba(59,130,246,.12);border:1px solid rgba(59,130,246,.35);border-radius:10px;padding:9px 16px;color:var(--blue);font-weight:600;font-size:13px;transition:background .2s" onmouseover="this.style.background='rgba(59,130,246,.22)'" onmouseout="this.style.background='rgba(59,130,246,.12)'">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.373 0 0 5.373 0 12s5.373 12 12 12 12-5.373 12-12S18.627 0 12 0zm5.894 8.221-1.97 9.28c-.145.658-.537.818-1.084.508l-3-2.21-1.447 1.394c-.16.16-.295.295-.605.295l.213-3.053 5.56-5.023c.242-.213-.054-.333-.373-.12L8.32 13.617l-2.96-.924c-.643-.204-.657-.643.136-.953l11.57-4.461c.537-.194 1.006.131.828.942z"/></svg>
+          Community Chat
+        </a>
+        <a href="https://t.me/+eBituWwdrtk5MmNi" target="_blank" rel="noopener" style="text-decoration:none;display:inline-flex;align-items:center;gap:6px;background:rgba(59,130,246,.12);border:1px solid rgba(59,130,246,.35);border-radius:10px;padding:9px 16px;color:var(--blue);font-weight:600;font-size:13px;transition:background .2s" onmouseover="this.style.background='rgba(59,130,246,.22)'" onmouseout="this.style.background='rgba(59,130,246,.12)'">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.373 0 0 5.373 0 12s5.373 12 12 12 12-5.373 12-12S18.627 0 12 0zm5.894 8.221-1.97 9.28c-.145.658-.537.818-1.084.508l-3-2.21-1.447 1.394c-.16.16-.295.295-.605.295l.213-3.053 5.56-5.023c.242-.213-.054-.333-.373-.12L8.32 13.617l-2.96-.924c-.643-.204-.657-.643.136-.953l11.57-4.461c.537-.194 1.006.131.828.942z"/></svg>
+          Support &amp; Q&amp;A
         </a>
       </div>
     </div>
@@ -738,7 +788,7 @@
         <div>
           <div class="token-name">Mock USDC <span class="pill" style="font-size:10px;vertical-align:middle;background:rgba(59,130,246,.15);color:#5b8dee;border:1px solid rgba(59,130,246,.3)">USDC · Base Sepolia</span></div>
           <div class="token-addr">0x2D8B7b5eDec96bE441b6fb0D45D74a2BcE2C639a · 6 decimals</div>
-          <div style="font-size:12px;color:var(--text2);margin-top:4px">Testnet Mock USDC — required to enter. Add to your wallet to see your test balance. $10 for T1, $25 for T2. Request test funds via Telegram.</div>
+          <div style="font-size:12px;color:var(--text2);margin-top:4px">Testnet Mock USDC — required to enter. Add to your wallet to see your test balance. $10 for T1, $25 for T2. Request test funds via <a href="https://t.me/+eBituWwdrtk5MmNi" target="_blank" rel="noopener" style="color:var(--blue)">Telegram Support</a>.</div>
         </div>
       </div>
       <button class="btn-metamask" style="background:#2775ca" onclick="addUSDCtoMetaMask()">
@@ -1034,7 +1084,7 @@
             <div class="info-row"><span class="info-key">USDC Balance</span><span class="info-val" id="reg-usdc-bal">—</span></div>
             <div class="info-row"><span class="info-key">USDC Approved</span><span class="info-val" id="reg-approved">—</span></div>
             <div id="usdc-low-warn" style="display:none;margin-top:10px;background:rgba(245,158,11,.08);border:1px solid rgba(245,158,11,.3);border-radius:8px;padding:12px;font-size:13px;color:var(--yellow)">
-              ⚠️ Your USDC balance is too low to register. Need test USDC? Contact the dev team on Telegram — we'll get you sorted. 💬
+              ⚠️ Your USDC balance is too low to register. Need test USDC? <a href="https://t.me/+eBituWwdrtk5MmNi" target="_blank" rel="noopener" style="color:var(--yellow)">Contact us on Telegram Support</a> — we'll get you sorted. 💬
             </div>
           </div>
 
@@ -1398,6 +1448,13 @@
             <option value="10">Tier 10 — SuperNova Apex ($10,000)</option>
           </select>
         </div>
+        <div style="display:flex;flex-direction:column;gap:5px">
+          <label style="display:block;font-size:12px;color:var(--text3);text-transform:uppercase;letter-spacing:.6px">Matrix</label>
+          <div style="display:flex;gap:6px">
+            <button id="btn-mat-a" class="btn btn-ghost matrix-active" onclick="selectMatrix('A')" style="padding:7px 16px;font-size:13px">MatA</button>
+            <button id="btn-mat-b" class="btn btn-ghost" onclick="selectMatrix('B')" style="padding:7px 16px;font-size:13px">MatB</button>
+          </div>
+        </div>
       </div>
       <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
         <button id="btn-load-tree"   class="btn btn-ghost" onclick="setActiveMatrixBtn('btn-load-tree');loadQueueView()">🔄 Load Queue</button>
@@ -1506,7 +1563,7 @@
               <li><span class="check-icon check-done">✅</span> Add FAQ page for common community questions</li>
               <li><span class="check-icon check-done">✅</span> Internal beta: community wallet testing underway</li>
               <li><span class="check-icon check-done">✅</span> Set permanent operational wallet addresses (ready for mainnet)</li>
-              <li><span class="check-icon check-done">✅</span> Telegram community group live — <a href="https://t.me/CryptoNovaMatrix" target="_blank" style="color:var(--green)">Join here</a></li>
+              <li><span class="check-icon check-done">✅</span> Telegram channels live — <a href="https://t.me/+qyx0ubijx9JmYmVi" target="_blank" rel="noopener" style="color:var(--green)">Community</a> · <a href="https://t.me/+0tmvkrDs20Q1M2My" target="_blank" rel="noopener" style="color:var(--green)">Announcements</a> · <a href="https://t.me/+eBituWwdrtk5MmNi" target="_blank" rel="noopener" style="color:var(--green)">Support</a></li>
               <li><span class="check-icon check-pending">⏳</span> Write simple one-pager: what is CryptoNova, how does it work</li>
             </ul>
           </div>
@@ -1667,10 +1724,14 @@
 <!-- Footer -->
 <footer style="background:var(--bg2);border-top:1px solid var(--border);padding:20px 24px;text-align:center;font-size:13px;color:var(--text3);margin-top:40px">
   <div style="display:flex;align-items:center;justify-content:center;gap:24px;flex-wrap:wrap">
-    <a href="https://t.me/CryptoNovaMatrix" target="_blank" rel="noopener" style="color:var(--text2);text-decoration:none;display:flex;align-items:center;gap:6px;transition:color .2s" onmouseover="this.style.color='var(--green)'" onmouseout="this.style.color='var(--text2)'">
+    <a href="https://t.me/+0tmvkrDs20Q1M2My" target="_blank" rel="noopener" style="color:var(--text2);text-decoration:none;display:flex;align-items:center;gap:6px;transition:color .2s" onmouseover="this.style.color='var(--green)'" onmouseout="this.style.color='var(--text2)'">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.373 0 0 5.373 0 12s5.373 12 12 12 12-5.373 12-12S18.627 0 12 0zm5.894 8.221-1.97 9.28c-.145.658-.537.818-1.084.508l-3-2.21-1.447 1.394c-.16.16-.295.295-.605.295l.213-3.053 5.56-5.023c.242-.213-.054-.333-.373-.12L8.32 13.617l-2.96-.924c-.643-.204-.657-.643.136-.953l11.57-4.461c.537-.194 1.006.131.828.942z"/></svg>
-      Telegram Community
+      Announcements
     </a>
+    <span style="color:var(--border)">·</span>
+    <a href="https://t.me/+qyx0ubijx9JmYmVi" target="_blank" rel="noopener" style="color:var(--text2);text-decoration:none;transition:color .2s" onmouseover="this.style.color='var(--green)'" onmouseout="this.style.color='var(--text2)'">Community Chat</a>
+    <span style="color:var(--border)">·</span>
+    <a href="https://t.me/+eBituWwdrtk5MmNi" target="_blank" rel="noopener" style="color:var(--text2);text-decoration:none;transition:color .2s" onmouseover="this.style.color='var(--green)'" onmouseout="this.style.color='var(--text2)'">Support &amp; Q&amp;A</a>
     <span style="color:var(--border)">|</span>
     <a href="terms.html" style="color:var(--text2);text-decoration:none;transition:color .2s" onmouseover="this.style.color='var(--green)'" onmouseout="this.style.color='var(--text2)'">Terms &amp; Risk Disclaimer</a>
     <span style="color:var(--border)">|</span>
@@ -1696,7 +1757,7 @@ const CHAIN_ID = 84532;
   // 12:00 PM EDT (noon Eastern) = 16:00 UTC on June 12 2026.
   // This is a FIXED UTC timestamp — same countdown for every viewer worldwide.
   // To reschedule: update this ISO string.
-  const LAUNCH_UTC = new Date('2020-01-01T00:00:00Z'); // gate off for beta // noon EDT = 16:00 UTC
+  const LAUNCH_UTC = new Date('2026-06-19T16:00:00Z'); // noon EDT = 16:00 UTC // noon EDT = 16:00 UTC
 
   // Major city local equivalents — shown below the countdown
   const CITY_ZONES = [
@@ -1781,63 +1842,63 @@ const RPC_FALLBACK = 'https://base-sepolia.public.blastapi.io';
 
 const ADDRS = {
   usdc:          '0x2D8B7b5eDec96bE441b6fb0D45D74a2BcE2C639a',
-  cnova:         '0xBa2592aef54225C1d77898740296b656227BDcbc',
-  treasury:      '0x79D308455969f5e943C7BBc52C87A4681Eec6052',
-  stabilityFund: '0x3fF7B59c8FFFc85F267131484dC1bF71DED9Ecd6',
-  buybackReserve:'0x5162e64344dcBe278E0013b60581b969Fb7A7522',
-  tierRouter:    '0x9bdb62Ac866F222c7062398F891eC860c1F89034',
-  matrixKeeper:  '0xEDAb96F480585b572c17dB612aBbA64830d3Dd85',
-  v8Governance:  '0x22e9322011AC786D3c584e029262e108c0eC8415',
-  communityWallet:'0x525D14dA6042cd0223388E922a8FA8E91eC2304D',
+  cnova:         '0x9A07EBfeed853b24683B199fd33A27f8d8851191',
+  treasury:      '0x332822be507690a92Da30Fd941bDDfD9eaAE78F7',
+  stabilityFund: '0x58Cc6E093703E0fD854D712E0F362cdbEF42C981',
+  buybackReserve:'0xcFA9526FB19497b8220f87952EAeB27C7b9D08f4',
+  tierRouter:    '0x6594Fa10cea0EC6a81082429F18d2786695c9308',
+  matrixKeeper:  '0x64f49334CDeA98165FccF7d0832D81b6FD541eb7',
+  v8Governance:  '0xF31A8e1E8dfc523D4699a15448370A31EE7454C0',
+  communityWallet:'0xb81467bBEB177500d3d87A65fCf3E98192059415',
   T1: {
-    pm:   '0x2638c81CE7a8541A125640f1Af5A23eA2C3e3180',
-    matA: '0x68f61839354f3FbceebD9662E5301B1EaeD5a862',
-    matB: '0x620be4FC94D70B109467eDE4A71176221b005497',
+    pm:   '0xBcb3de2F2F6a9518b7587554f645c8a1Fe14dAD4',
+    matA: '0xA505Dee141950fB241Dc905309f11e3eAb7823A6',
+    matB: '0x53fb9cD704c04B68F2007fa02f43261696481144',
   },
   T2: {
-    pm:   '0x570704D0C9Ec0DFf24dd0799ECdc2eaFa391EA4B',
-    matA: '0xdcb22C24B4383112dbE2f83b8A8C41941b24aE62',
-    matB: '0xC110aa8086fe2A3B46E52f44F564dA7849151275',
+    pm:   '0x748700a3A376b4c459b257257C9A8Cb40F8eE07D',
+    matA: '0xf90BFeF13D0426b65D8ad9D82EF5A511672AAcc5',
+    matB: '0xB293C5A406E672d7AC9c66da6f3769952dcbF546',
   },
   T3: {
-    pm:   '0x9893211DA58905eF61F1B243887080f328270e4d',
-    matA: '0xFA08b08B87a9BD1608acaE189b0Fc9F35B06828a',
-    matB: '0x85728Ac177f72EcD2E10dFc346b25Be08C79e48b',
+    pm:   '0x0bf18606f18c27d85612E2349EFA82Fd51Ae8C88',
+    matA: '0xcFf55EE6564Ce1e8f4697cD75b7C199b224Cb45e',
+    matB: '0x1d237F7A186742117BE29fEd24bca3Afcb721E04',
   },
   T4: {
-    pm:   '0x6C7EB801C62a643836f1315EEd3B5C08fa714d29',
-    matA: '0x71043205ed5F83c853E2089570112f300d702C75',
-    matB: '0x2aeBBEB17682b83271Ea683Ce5215AD59dAd95e2',
+    pm:   '0xcFaF625Ef77d62cd47abD8C3B46c1f8c352Bbfcb',
+    matA: '0xb4020dDc04C148ce826e37244873b8B3A4f7D947',
+    matB: '0x81accF4b9283Be875429D8157480a1e5DA5CB04c',
   },
   T5: {
-    pm:   '0x3ee03E1d846cB9709AE04d54a8f4804ed4c31F35',
-    matA: '0xF71014127bf5A752e5E69EDC129955358db38104',
-    matB: '0x8cbb563eC84cAb5A154d6943724f99bbdB80c9D5',
+    pm:   '0xbA0192bbd5F2b36D96c746AdDD2d39EeCAD2478c',
+    matA: '0xa8C5b0f4f6B81eCf943Fcd573230862d1435E1fA',
+    matB: '0x2A58ecE8DACb5b263B52359b3e593072870B0F3C',
   },
   T6: {
-    pm:   '0x0562D9A9F14c62Bb56f8Dda70cD7C2A7f6640E3e',
-    matA: '0x99459c720004890890947563DD3baFfFAc95EaEf',
-    matB: '0x7308b031d6DA4E3CAb3da46F31571c6E07003dF8',
+    pm:   '0xFDe4A35d72959f9532Dc5e1B118ce35633292A21',
+    matA: '0xc55A9456F4791A04A7904795d1D9f3d221e9c72b',
+    matB: '0xBd0D90EA17da2422d2eC1e6f9a7b6EC1797C8347',
   },
   T7: {
-    pm:   '0xfb0d50CF6d5C1b9C3CCb681162970bea613D3718',
-    matA: '0x59Bc01032167057736c1f8D2a548181a728bC850',
-    matB: '0xb8ee6604DeD74BAC555B6571fd913618C7ecD8Fa',
+    pm:   '0x456534E80551d6AC24a9509F6099dFA6A8305285',
+    matA: '0xA560F3325b8865f33973B0A93d880033992E1C54',
+    matB: '0xB2A6c5b1BB55784175E4Ead1B5790063E2614A05',
   },
   T8: {
-    pm:   '0xAA20A1050b6EF9bbD9B360036e5372f01FB3e063',
-    matA: '0x55D5b59Ceb2D40A6E523Dcc43b344E2A53811713',
-    matB: '0x19AB9E3D7795188c3c87476F2B4474846EfA87b5',
+    pm:   '0xF25dA41BFD412078DF3ea594479ee6497fA60bd8',
+    matA: '0xf6Aecf2a0285F68024cfd648df7D3FD5c75880E7',
+    matB: '0xDd6A26B8c4a5FBfbc4e74e8467AbE7005EB36713',
   },
   T9: {
-    pm:   '0x9687Cf356bD77428C6557086e0E618FbdBF63f43',
-    matA: '0x1343dB1E7dE3336b6a4A8bbc9Dd7A3476647aB99',
-    matB: '0x611a2cBa118d6e1E7De625df98D0257E99ADF66A',
+    pm:   '0x6AFF6AC7430A4f66723837F18EB72c7E32DC5fe6',
+    matA: '0x96A391458332451E682F33c9486f5707F4b1b901',
+    matB: '0xA2b6a7CE7BDA49B06aB31c7855a94216B8BEAda3',
   },
   T10: {
-    pm:   '0x285962D3C3c94f27b3fB6e6374a49F847b6ADb1e',
-    matA: '0xd9D370d0f29EE1777cf12F71bDD8c96F307E63D3',
-    matB: '0x425B1FAB4600C23163656A11eE6D402aD5a41fc0',
+    pm:   '0xbcc6ae585Fb31EDD70519995DCBA987004Da83Dd',
+    matA: '0x4A9901e0aCF56471804feFE8629219621D2332Ce',
+    matB: '0x6A0683765ce785494fcA513eB595C77641B26Ff3',
   },
 };
 
@@ -3216,18 +3277,39 @@ function setActiveMatrixBtn(id) {
 
 function onMatrixTierChange() { loadQueueView(); setActiveMatrixBtn('btn-load-tree'); }
 
+let _selectedMatrix = 'A'; // 'A' or 'B'
+
+function selectMatrix(ab) {
+  _selectedMatrix = ab;
+  document.getElementById('btn-mat-a').classList.toggle('matrix-active', ab === 'A');
+  document.getElementById('btn-mat-b').classList.toggle('matrix-active', ab === 'B');
+  loadQueueView();
+  setActiveMatrixBtn('btn-load-tree');
+}
+
 async function getMatrixForTier() {
   const tierSelect = document.getElementById('matrix-tier-select');
   const tierNum = tierSelect ? parseInt(tierSelect.value) || 1 : 1;
-  if (tierNum === 10 && ADDRS.T10.matA) return ADDRS.T10.matA;
-  if (tierNum === 9 && ADDRS.T9.matA)  return ADDRS.T9.matA;
-  if (tierNum === 8 && ADDRS.T8.matA)  return ADDRS.T8.matA;
-  if (tierNum === 7 && ADDRS.T7.matA)  return ADDRS.T7.matA;
-  if (tierNum === 6 && ADDRS.T6.matA)  return ADDRS.T6.matA;
-  if (tierNum === 5 && ADDRS.T5.matA)  return ADDRS.T5.matA;
-  if (tierNum === 4 && ADDRS.T4.matA)  return ADDRS.T4.matA;
-  if (tierNum === 3) return ADDRS.T3.matA;
-  return tierNum === 2 ? ADDRS.T2.matA : ADDRS.T1.matA;
+  const side = _selectedMatrix === 'B' ? 'matB' : 'matA';
+  const tiers = { 1: ADDRS.T1, 2: ADDRS.T2, 3: ADDRS.T3, 4: ADDRS.T4, 5: ADDRS.T5,
+                  6: ADDRS.T6, 7: ADDRS.T7, 8: ADDRS.T8, 9: ADDRS.T9, 10: ADDRS.T10 };
+  const tier = tiers[tierNum] || ADDRS.T1;
+  return tier[side] || tier.matA; // fall back to matA if matB not deployed yet
+}
+
+// Fetch posToMember in chunks to avoid RPC in-flight limit
+async function fetchNodes(mc, n) {
+  const CHUNK = 20;
+  const results = [];
+  for (let i = 0; i < n; i += CHUNK) {
+    const end = Math.min(i + CHUNK, n);
+    const chunk = await Promise.all(
+      Array.from({length: end - i}, (_, j) => mc.posToMember(i + j + 1).catch(() => ethers.ZeroAddress))
+    );
+    results.push(...chunk);
+    if (end < n) await new Promise(r => setTimeout(r, 150));
+  }
+  return results;
 }
 
 async function setDoubleReentryOption(enabled) {
@@ -3324,9 +3406,7 @@ async function loadQueueView() {
     const mc = new ethers.Contract(addrToLoad, MATRIX_ABI, rp);
     const [occ, mSize, cycles] = await Promise.all([mc.occupancy(), mc.MATRIX_SIZE(), mc.rotationCount().catch(()=>0n)]);
     const n = Number(occ);
-    const nodes = await Promise.all(
-      Array.from({length:n}, (_,i) => mc.posToMember(i+1).catch(()=>ethers.ZeroAddress))
-    );
+    const nodes = await fetchNodes(mc, n);
     setText('matrix-nodes', n.toString());
     setText('matrix-fill',  n + ' / ' + Number(mSize));
     setText('matrix-bfs',   Number(mSize) + ' seats');
@@ -3380,9 +3460,7 @@ async function loadMyTree() {
     const mc   = new ethers.Contract(activeMat, MATRIX_ABI, rp);
     const [occ, cycles] = await Promise.all([mc.occupancy(), mc.rotationCount().catch(()=>0n)]);
     const n = Number(occ);
-    const nodes = await Promise.all(
-      Array.from({length:n}, (_,i) => mc.posToMember(i+1).catch(()=>ethers.ZeroAddress))
-    );
+    const nodes = await fetchNodes(mc, n);
     setText('matrix-nodes', n.toString());
     setText('matrix-fill',  n + ' / ' + Number(activeMSize));
     setText('matrix-bfs',   Number(activeMSize) + ' seats');

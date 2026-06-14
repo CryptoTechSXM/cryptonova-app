@@ -1,0 +1,97 @@
+{
+  "meta": {
+    "description": "CryptoNova Frühanmeldung — Sichere dir deinen Platz in der Matrix vor dem öffentlichen Launch.",
+    "title": "CryptoNova — Frühanmeldung"
+  },
+  "banner": {
+    "network": "⚡ Base Sepolia Testnetz",
+    "subtitle": "· Früher Zugang · V8.11 Verträge"
+  },
+  "hero": {
+    "pill": "🔐 Frühanmeldung Offen",
+    "headline": "Sichere Deinen<br><em>Matrix-Platz</em>",
+    "subtitle": "Trete CryptoNova vor dem öffentlichen Launch bei. Starte bei T1 für $10 USDC und steige automatisch durch 10 Stufen auf, wenn die Matrix sich füllt."
+  },
+  "connect": {
+    "title": "Wallet Verbinden",
+    "badge": "Erforderlich",
+    "prompt": "Verbinde dein MetaMask oder Rabby Wallet mit <strong style=\"color:var(--text1)\">Base Sepolia</strong>, um dich zu registrieren.",
+    "btn_connect": "Wallet Verbinden",
+    "btn_disconnect": "Trennen"
+  },
+  "already": {
+    "heading": "✅ <strong>Bereits registriert!</strong>",
+    "body": "Dieses Wallet ist bereits Mitglied bei CryptoNova.",
+    "link": "→ Hauptseite besuchen, um dein Dashboard zu sehen"
+  },
+  "register": {
+    "title": "Registrierung — $10 USDC",
+    "badge": "T1 Eintritt",
+    "referral_label": "EMPFEHLUNGSADRESSE (OPTIONAL)",
+    "referral_placeholder": "0x… Wallet-Adresse des Empfehlenden einfügen",
+    "referral_valid": "✓ Gültige Empfehlungsadresse",
+    "no_ref_warn": "⚠️ Keine Empfehlungsadresse eingegeben. Ohne Empfehlung wirst du dem Standard-Sponsor-Wallet zugewiesen.",
+    "no_ref_ok": "OK, Weiter",
+    "balance_label": "USDC-Guthaben",
+    "approved_label": "Genehmigt für PairManager",
+    "fee_label": "Eintrittsgebühr",
+    "fee_value": "$10,00 USDC",
+    "low_bal": "⚠️ Dein USDC-Guthaben ist unter $10. Du benötigst Testnet-USDC zur Registrierung. Kontaktiere das Team auf Telegram für eine Test-Überweisung.",
+    "step1": "Schritt 1: $10 USDC genehmigen 🔒",
+    "step2": "Schritt 2: Registrieren ($10 USDC)",
+    "usdc_help": "Testnet-USDC benötigt?",
+    "add_wallet": "+ Zum Wallet hinzufügen",
+    "usdc_addr_label": "USDC-Adresse:"
+  },
+  "success": {
+    "title": "Willkommen bei CryptoNova!",
+    "subtitle": "Du bist dabei. Dein Matrix-Platz ist gesichert und Einnahmen fließen, sobald das Netzwerk wächst.",
+    "member_id": "Mitglied-ID",
+    "matrix_pos": "Matrix-Position",
+    "ref_link_label": "Dein Empfehlungslink",
+    "ref_copy": "Kopieren",
+    "ref_share": "Teile deinen Link. Jede direkte Empfehlung bringt dir einen sofortigen USDC-Bonus.",
+    "dashboard_link": "→ Vollständiges Dashboard auf crypto-nova.app ansehen ↗"
+  },
+  "how": {
+    "title": "So Funktioniert Es",
+    "step1": "<strong>$10 USDC genehmigen</strong> — ein MetaMask-Klick. Der Vertrag kann nur genau $10 abbuchen.",
+    "step2": "<strong>Registrieren</strong> — du wirst in die T1 Figure-8-Matrix auf dem nächsten freien Platz gesetzt.",
+    "step3": "<strong>Verdienen</strong> — wenn neue Mitglieder beitreten, fließt USDC aufwärts. Jederzeit auszahlen.",
+    "step4": "<strong>Automatisches Upgrade</strong> — sobald deine Matrix voll ist (127 Plätze), steigst du automatisch auf T2 ($25) auf."
+  },
+  "footer": {
+    "tierrouter": "TierRouter ↗",
+    "faq": "FAQ",
+    "tagline": "CryptoNova V8.11 · Base Sepolia Testnetz · Eintrittsgebühren nur in Testnet-USDC"
+  },
+  "js": {
+    "no_wallet": "Kein Wallet erkannt. Installiere MetaMask oder Rabby.",
+    "no_wallet_short": "Kein Wallet erkannt",
+    "connecting": "Verbinde…",
+    "connect_wallet": "Wallet Verbinden",
+    "approving": "Genehmige…",
+    "approve_status": "⏳ Genehmige $10 USDC für PairManager…",
+    "approve_done": "✅ Genehmigt! Klicke jetzt auf Schritt 2 zum Beitreten.",
+    "approve_label": "✅ Schritt 1 Abgeschlossen — Genehmigt",
+    "approved_val": "✅ $10 Genehmigt",
+    "not_approved": "Nicht genehmigt",
+    "step1_reset": "Schritt 1: $10 USDC genehmigen 🔒",
+    "joining": "CryptoNova beitreten…",
+    "confirm_tx": "⏳ Transaktion auf Base Sepolia bestätigen…",
+    "welcome_status": "🎉 Willkommen bei CryptoNova!",
+    "welcome_toast": "Willkommen bei CryptoNova V8.11! 🎉",
+    "registered": "✅ Registriert!",
+    "step2_reset": "Schritt 2: Registrieren ($10 USDC)",
+    "copied": "Empfehlungslink kopiert!",
+    "connect_first": "Zuerst Wallet verbinden",
+    "load_failed": "Fehler beim Laden der Netzwerkdaten",
+    "in_queue": "In der Warteschlange",
+    "loading": "Lädt…",
+    "cancelled": "Transaktion abgebrochen.",
+    "no_eth": "Nicht genug ETH für Gasgebühren.",
+    "already_reg": "Dieses Wallet ist bereits registriert.",
+    "no_approval": "USDC nicht genehmigt — schließe zuerst Schritt 1 ab.",
+    "tx_reverted": "Transaktion abgebrochen: "
+  }
+}

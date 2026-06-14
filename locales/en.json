@@ -1,0 +1,97 @@
+{
+  "meta": {
+    "description": "CryptoNova Early Registration — Secure your position in the matrix before the public launch.",
+    "title": "CryptoNova — Early Registration"
+  },
+  "banner": {
+    "network": "⚡ Base Sepolia Testnet",
+    "subtitle": "· Early Access · V8.11 Contracts"
+  },
+  "hero": {
+    "pill": "🔐 Early Registration Open",
+    "headline": "Secure Your<br><em>Matrix Position</em>",
+    "subtitle": "Join CryptoNova before the public launch. Start at T1 for $10 USDC and auto-upgrade through 10 tiers as the matrix fills."
+  },
+  "connect": {
+    "title": "Wallet Connection",
+    "badge": "Required",
+    "prompt": "Connect your MetaMask or Rabby wallet on <strong style=\"color:var(--text1)\">Base Sepolia</strong> to register.",
+    "btn_connect": "Connect Wallet",
+    "btn_disconnect": "Disconnect"
+  },
+  "already": {
+    "heading": "✅ <strong>Already registered!</strong>",
+    "body": "This wallet is already a CryptoNova member.",
+    "link": "→ Visit main site to view your dashboard"
+  },
+  "register": {
+    "title": "Register — $10 USDC",
+    "badge": "T1 Entry",
+    "referral_label": "REFERRAL ADDRESS (OPTIONAL)",
+    "referral_placeholder": "0x… paste referrer's wallet address",
+    "referral_valid": "✓ Valid referrer address",
+    "no_ref_warn": "⚠️ No referral address entered. Continuing without a referrer places you under the default sponsor wallet.",
+    "no_ref_ok": "OK, Continue",
+    "balance_label": "USDC Balance",
+    "approved_label": "Approved to PairManager",
+    "fee_label": "Entry Fee",
+    "fee_value": "$10.00 USDC",
+    "low_bal": "⚠️ Your USDC balance is below $10. You need testnet USDC to register. Contact the dev team on Telegram for a test transfer.",
+    "step1": "Step 1: Approve $10 USDC 🔒",
+    "step2": "Step 2: Register ($10 USDC)",
+    "usdc_help": "Need testnet USDC?",
+    "add_wallet": "+ Add to wallet",
+    "usdc_addr_label": "USDC address:"
+  },
+  "success": {
+    "title": "Welcome to CryptoNova!",
+    "subtitle": "You're in. Your matrix seat is secured and earnings start flowing as the network grows.",
+    "member_id": "Member ID",
+    "matrix_pos": "Matrix Position",
+    "ref_link_label": "Your Referral Link",
+    "ref_copy": "Copy",
+    "ref_share": "Share your link. Every direct referral earns you an instant USDC bonus when they register.",
+    "dashboard_link": "→ View full dashboard at crypto-nova.app ↗"
+  },
+  "how": {
+    "title": "How It Works",
+    "step1": "<strong>Approve $10 USDC</strong> — one MetaMask click. The contract can only ever pull exactly $10.",
+    "step2": "<strong>Register</strong> — you're placed into the T1 Figure-8 matrix at the next available seat.",
+    "step3": "<strong>Earn</strong> — as new members join, USDC flows up through the chain. Withdraw anytime.",
+    "step4": "<strong>Auto-upgrade</strong> — once your matrix fills (127 seats), you automatically advance to T2 ($25)."
+  },
+  "footer": {
+    "tierrouter": "TierRouter ↗",
+    "faq": "FAQ",
+    "tagline": "CryptoNova V8.11 · Base Sepolia Testnet · Entry fees are testnet USDC only"
+  },
+  "js": {
+    "no_wallet": "No wallet detected. Install MetaMask or Rabby.",
+    "no_wallet_short": "No wallet detected",
+    "connecting": "Connecting…",
+    "connect_wallet": "Connect Wallet",
+    "approving": "Approving…",
+    "approve_status": "⏳ Approving $10 USDC to PairManager…",
+    "approve_done": "✅ Approved! Now click Step 2 to join.",
+    "approve_label": "✅ Step 1 Done — Approved",
+    "approved_val": "✅ $10 Approved",
+    "not_approved": "Not approved",
+    "step1_reset": "Step 1: Approve $10 USDC 🔒",
+    "joining": "Joining CryptoNova…",
+    "confirm_tx": "⏳ Confirming transaction on Base Sepolia…",
+    "welcome_status": "🎉 Welcome to CryptoNova!",
+    "welcome_toast": "Welcome to CryptoNova V8.11! 🎉",
+    "registered": "✅ Registered!",
+    "step2_reset": "Step 2: Register ($10 USDC)",
+    "copied": "Referral link copied!",
+    "connect_first": "Connect wallet first",
+    "load_failed": "Failed to load chain data",
+    "in_queue": "In Queue",
+    "loading": "Loading…",
+    "cancelled": "Transaction cancelled.",
+    "no_eth": "Not enough ETH for gas fees.",
+    "already_reg": "This wallet is already registered.",
+    "no_approval": "USDC not approved — complete Step 1 first.",
+    "tx_reverted": "Transaction reverted: "
+  }
+}
