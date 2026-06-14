@@ -644,7 +644,10 @@ async function main() {
     const _fcRotCount = await matA1.rotationCount();
     const _fcMatBOcc  = await matB1.occupancy();
     const _fcMatAOcc  = await matA1.occupancy();
-    if (_fcRotCount === 0n && _fcMatAOcc > 0n) {
+    const _fcMatASize = await matA1.MATRIX_SIZE();
+    // Only skip forceCross if MatA is NOT yet full — once MatA is at capacity
+    // (even with rotationCount=0) we must run forceCross to push alumni to MatB.
+    if (_fcRotCount === 0n && _fcMatAOcc < _fcMatASize) {
       console.log(`  MatA at ${_fcMatAOcc}/${mSize}, rotationCount=0 — no cycle yet, skipping forceCross`);
     } else {
     const matBOcc = await matB1.occupancy();
@@ -665,7 +668,10 @@ async function main() {
     // Scan all historically used offset ranges so parked wallets from prior runs
     // are picked up even if their HDR_OFFSET differs from the current batch.
     // Keep this list up to date as new HDR_OFFSETs are used.
-    const SCAN_OFFSETS = [500, 1000, 1500, 1700, 1800, 2000, 2500, 3000]; // 3000 added June 9 (v8_6 fill)
+    // V8.12 fill used offsets 0,50,100,150,200,250,300,350… add here as new HDR_OFFSETs are used.
+    // Old SCAN_OFFSETS (500+) were for a different mnemonic era — kept for safety but unused in V8.12.
+    const SCAN_OFFSETS = [0, 50, 100, 150, 200, 250, 300, 350, 400, 450, 500, 550, 600,
+                          1000, 1500, 1700, 1800, 2000, 2500, 3000]; // extended June 13 V8.12
     if (MNEMO_SCAN) {
       for (const base of SCAN_OFFSETS) {
         for (let i = 0; i < 70; i++) {
