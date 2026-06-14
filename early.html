@@ -496,6 +496,57 @@
 </head>
 <body>
 
+<!-- ══ LAUNCH GATE ══════════════════════════════════════════════════════════
+     early.html: opens 9:45 AM EDT (13:45 UTC) June 14 2026
+     Redirects to main site at 10:00 AM EDT (14:00 UTC)
+═══════════════════════════════════════════════════════════════════════════ -->
+<div id="launch-gate" style="display:none;position:fixed;inset:0;z-index:99999;background:#0a0a1a;display:flex;flex-direction:column;align-items:center;justify-content:center;font-family:'Inter',sans-serif;color:#fff;">
+  <div style="text-align:center;max-width:480px;padding:2rem;">
+    <div style="font-size:2.5rem;font-weight:800;background:linear-gradient(135deg,#7c3aed,#2563eb);-webkit-background-clip:text;-webkit-text-fill-color:transparent;margin-bottom:0.5rem;">CryptoNova</div>
+    <div style="color:#a78bfa;font-size:1rem;margin-bottom:2.5rem;letter-spacing:0.05em;">EARLY REGISTRATION</div>
+    <div style="color:#94a3b8;font-size:0.95rem;margin-bottom:1rem;">Opens in</div>
+    <div id="gate-countdown" style="font-size:3rem;font-weight:700;font-variant-numeric:tabular-nums;color:#fff;letter-spacing:0.05em;margin-bottom:2rem;">--:--:--</div>
+    <div style="color:#64748b;font-size:0.85rem;">Early registration opens at <strong style="color:#a78bfa;">9:45 AM EDT</strong><br>Main launch at <strong style="color:#a78bfa;">10:00 AM EDT</strong> · June 14, 2026</div>
+  </div>
+</div>
+
+<script>
+(function() {
+  var EARLY_OPEN = new Date('2026-06-14T13:45:00Z').getTime(); // 9:45 AM EDT
+  var MAIN_OPEN  = new Date('2026-06-14T14:00:00Z').getTime(); // 10:00 AM EDT
+  var gate = document.getElementById('launch-gate');
+  var countdown = document.getElementById('gate-countdown');
+
+  function tick() {
+    var now = Date.now();
+    if (now >= MAIN_OPEN) {
+      // After 10 AM — redirect to main site
+      window.location.replace('https://crypto-nova.app');
+      return;
+    }
+    if (now >= EARLY_OPEN) {
+      // Between 9:45 and 10:00 — open early registration
+      gate.style.display = 'none';
+      return;
+    }
+    // Before 9:45 — show countdown
+    gate.style.display = 'flex';
+    var diff = EARLY_OPEN - now;
+    var h = Math.floor(diff / 3600000);
+    var m = Math.floor((diff % 3600000) / 60000);
+    var s = Math.floor((diff % 60000) / 1000);
+    countdown.textContent =
+      String(h).padStart(2,'0') + ':' +
+      String(m).padStart(2,'0') + ':' +
+      String(s).padStart(2,'0');
+  }
+
+  tick();
+  setInterval(tick, 1000);
+})();
+</script>
+<!-- ══ END LAUNCH GATE ═══════════════════════════════════════════════════ -->
+
 <!-- Testnet banner -->
 <div class="net-banner">
   <span data-i18n="banner.network">⚡ Base Sepolia Testnet</span>
