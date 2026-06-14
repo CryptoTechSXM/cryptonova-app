@@ -732,6 +732,11 @@ async function main() {
       //    NonceManager loses internal sync on any RPC rejection and causes a "gapped-nonce tx
       //    from delegated accounts" cascade for all subsequent calls.  Explicit nonce + re-sync
       //    on failure is the same pattern used for fNonce on the funder.
+      // Extra wait: the registration phase blasts 50+ txs from the deployer. Even after the
+      // 90s post-fund sleep those may still be in-flight. Give the RPC another 60s to drain
+      // before starting the approve → forceCross sequence.
+      console.log(`  ⏳ Waiting 60s for deployer in-flight queue to drain before forceCross…`);
+      await sleep(60);
       let dNonce = Number(await ethers.provider.getTransactionCount(deployerAddr, 'pending'));
       console.log(`  Deployer approving matA1 for ${fmt6(usdcNeededFC)} USDC (deployer nonce ${dNonce})…`);
       await (await usdc.connect(rawSigner).approve(matA1Addr, usdcNeededFC, { nonce: dNonce })).wait();
