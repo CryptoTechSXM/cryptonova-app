@@ -383,6 +383,47 @@
 </head>
 <body>
 
+<!-- ══ LAUNCH GATE ══════════════════════════════════════════════════════════
+     index.html: opens 10:00 AM EDT (14:00 UTC) June 14 2026
+═══════════════════════════════════════════════════════════════════════════ -->
+<div id="launch-gate" style="display:none;position:fixed;inset:0;z-index:99999;background:#0a0a1a;display:flex;flex-direction:column;align-items:center;justify-content:center;font-family:'Inter',sans-serif;color:#fff;">
+  <div style="text-align:center;max-width:480px;padding:2rem;">
+    <div style="font-size:2.5rem;font-weight:800;background:linear-gradient(135deg,#7c3aed,#2563eb);-webkit-background-clip:text;-webkit-text-fill-color:transparent;margin-bottom:0.5rem;">CryptoNova</div>
+    <div style="color:#a78bfa;font-size:1rem;margin-bottom:2.5rem;letter-spacing:0.05em;">TESTNET LAUNCH</div>
+    <div style="color:#94a3b8;font-size:0.95rem;margin-bottom:1rem;">Opens in</div>
+    <div id="gate-countdown" style="font-size:3rem;font-weight:700;font-variant-numeric:tabular-nums;color:#fff;letter-spacing:0.05em;margin-bottom:2rem;">--:--:--</div>
+    <div style="color:#64748b;font-size:0.85rem;">Launching at <strong style="color:#a78bfa;">10:00 AM EDT</strong> · June 14, 2026</div>
+  </div>
+</div>
+
+<script>
+(function() {
+  var OPEN_AT = new Date('2026-06-14T14:00:00Z').getTime(); // 10:00 AM EDT
+  var gate = document.getElementById('launch-gate');
+  var countdown = document.getElementById('gate-countdown');
+
+  function tick() {
+    var now = Date.now();
+    if (now >= OPEN_AT) {
+      gate.style.display = 'none';
+      return;
+    }
+    gate.style.display = 'flex';
+    var diff = OPEN_AT - now;
+    var h = Math.floor(diff / 3600000);
+    var m = Math.floor((diff % 3600000) / 60000);
+    var s = Math.floor((diff % 60000) / 1000);
+    countdown.textContent =
+      String(h).padStart(2,'0') + ':' +
+      String(m).padStart(2,'0') + ':' +
+      String(s).padStart(2,'0');
+  }
+
+  tick();
+  setInterval(tick, 1000);
+})();
+</script>
+<!-- ══ END LAUNCH GATE ═══════════════════════════════════════════════════ -->
 
   <!-- ══ LAUNCH ANNOUNCEMENT BANNER ══════════════════════════════════════ -->
   <div id="launch-banner">
@@ -1136,11 +1177,11 @@
         </ul>
 
         <div style="margin-top:20px;padding:14px;background:var(--bg3);border-radius:8px;font-size:13px">
-          <div style="color:var(--green);font-weight:700;margin-bottom:6px">💡 Tier 1 Earnings Potential (per 100-member cycle)</div>
-          <div style="color:var(--text2);line-height:1.6">Passive (0 referrals): <strong style="color:var(--text)">$3.20</strong> chain pay per cycle (32% ROI)<br>
-          Active (2 referrals): <strong style="color:var(--text)">$9.20</strong> per cycle (92% ROI)<br>
-          Power (5 referrals): <strong style="color:var(--text)">$18.20</strong> per cycle (182% ROI)<br>
-          <span style="font-size:11px;color:var(--text3)">Upgrade to higher tiers to earn more — same cycle mechanics, bigger fees = bigger chain pay.</span></div>
+          <div style="color:var(--green);font-weight:700;margin-bottom:6px">💡 Tier 1 Earnings Potential (per 127-seat cycle)</div>
+          <div style="color:var(--text2);line-height:1.6">Passive (0 referrals): <strong style="color:var(--text)">$3.60</strong> chain pay per cycle (36% ROI)<br>
+          Active (2 referrals): <strong style="color:var(--text)">$7.60</strong> per cycle (76% ROI)<br>
+          Power (5 referrals): <strong style="color:var(--text)">$13.60</strong> per cycle (136% ROI)<br>
+          <span style="font-size:11px;color:var(--text3)">Based on mid-level position. Chain pay BPS: L1 10% · L2 4% · L3 3% · L4 1.5% · L5-L6 0.75%. Upgrade tiers = bigger fees = bigger chain pay.</span></div>
         </div>
       </div>
     </div>
@@ -1380,7 +1421,7 @@
           <div class="chain-row" style="border-top:1px solid var(--green2)"><span style="font-weight:700">Total chain pay per T1 entry</span><span style="font-weight:700;color:var(--green)">$2.00 <span style="font-size:11px;color:var(--text3);font-weight:400">(20% of $10)</span></span></div>
         </div>
         <div style="margin-top:10px;font-size:12px;color:var(--text3);padding:8px 12px;background:var(--bg3);border-radius:8px">
-          💡 You also earn <strong style="color:var(--green)">$2.00 L1 referral</strong> for every direct you personally bring in, plus $0.30 L2 and $0.20 L3 from your network.
+          💡 You also earn <strong style="color:var(--green)">$2.00 L1 referral</strong> for every direct you personally bring in, plus $0.40 L2 and $0.30 L3 from your network.
         </div>
       </div>
     </div>
@@ -2553,7 +2594,7 @@ async function loadRegisterTab() {
           if (hint) hint.innerHTML = '<span style="color:var(--green)">&#x2705; ' + cycles + ' cycle' + (cycles !== 1 ? 's' : '') + ' complete &#8212; you qualify for T2 upgrade!</span>';
           if (btnApp) { btnApp.disabled = false; btnApp.textContent = 'Step 1: Approve USDC'; btnApp.className = 'btn btn-green'; btnApp.style.flex = '1'; }
         } else {
-          if (hint) hint.textContent = 'Locked until your first T1 cycle completes. A full cycle runs in two stages: MatA fills (64 members), then MatB fills (64 members). Once both stages complete for your position, this unlocks automatically.';
+          if (hint) hint.textContent = 'Locked until your first T1 cycle completes. A full cycle runs in two stages: MatA fills (126 members), then MatB fills (127 members). Once both stages complete for your position, this unlocks automatically.';
           if (btnApp) { btnApp.disabled = true; btnApp.textContent = 'Step 1: Approve USDC (locked until cycle complete)'; }
           if (btnUp)  { btnUp.disabled = true; }
         }
@@ -2661,6 +2702,13 @@ async function doRegister() {
     const tx = await tr.register(referrer);
     setStatus('reg-status', '⏳ Confirming transaction…', 'info');
     await tx.wait();
+    // Auto-enable default options (auto-reentry on; auto-upgrade is on by contract default)
+    try {
+      const optsTx = await tr.setMemberOptions(false, true, false, { gasLimit: 120_000 });
+      await optsTx.wait();
+      window._memberOptions = { disableUpgrade: false, enableReentry: true, enableDouble: false };
+      try { localStorage.setItem('cnova_opts_' + await signer.getAddress(), JSON.stringify(window._memberOptions)); } catch(_) {}
+    } catch(_) {} // non-critical — member can adjust from Dashboard
     setStatus('reg-status', '🎉 Welcome to CryptoNova! Your journey begins.', 'ok');
     btn.textContent = '✅ Joined!';
     toast('Welcome to CryptoNova V8!', 'success');
@@ -2875,12 +2923,28 @@ async function loadDashboardData() {
 
     // Member options toggles (double reentry, auto-upgrade, auto-reentry)
     try {
+      // Pre-populate from localStorage for instant display
+      try {
+        const _cached = localStorage.getItem('cnova_opts_' + userAddr);
+        if (_cached) {
+          const _co = JSON.parse(_cached);
+          window._memberOptions = _co;
+          const _dbl = document.getElementById('chk-double-reentry');
+          const _up  = document.getElementById('chk-auto-upgrade');
+          const _re  = document.getElementById('chk-auto-reentry');
+          if (_dbl) _dbl.checked = Boolean(_co.enableDouble);
+          if (_up)  _up.checked  = !Boolean(_co.disableUpgrade);
+          if (_re)  _re.checked  = Boolean(_co.enableReentry);
+        }
+      } catch(_) {}
       const info = await tr.getMemberInfo(userAddr);
       window._memberOptions = {
         disableUpgrade: !Boolean(info.autoUpgradeEnabled),
         enableReentry:  Boolean(info.autoReentryEnabled),
         enableDouble:   Boolean(info.doubleEntry),
       };
+      // Persist authoritative on-chain values to localStorage
+      try { localStorage.setItem('cnova_opts_' + userAddr, JSON.stringify(window._memberOptions)); } catch(_) {}
       // Double reentry
       const chkDbl = document.getElementById('chk-double-reentry');
       const lblDbl = document.getElementById('lbl-double-reentry');
@@ -3286,6 +3350,8 @@ async function setDoubleReentryOption(enabled) {
     const tx = await tr.setDoubleEntry(enabled, { gasLimit: 120_000 });
     if (lbl) lbl.textContent = 'Confirming…';
     await tx.wait();
+    if (window._memberOptions) window._memberOptions.enableDouble = enabled;
+    try { if (userAddr) localStorage.setItem('cnova_opts_' + userAddr, JSON.stringify(window._memberOptions)); } catch(_) {}
     if (lbl) lbl.textContent = enabled
       ? 'Enabled — second entry fires when surplus covers fee'
       : 'Disabled';
@@ -3316,6 +3382,7 @@ async function setAutoUpgradeOption(enabled) {
     await tx.wait();
     opts.disableUpgrade = !enabled;
     window._memberOptions = opts;
+    try { if (userAddr) localStorage.setItem('cnova_opts_' + userAddr, JSON.stringify(window._memberOptions)); } catch(_) {}
     if (lbl) lbl.textContent = enabled ? 'Enabled' : 'Disabled';
     toast(enabled ? '✅ Auto-upgrade enabled' : 'Auto-upgrade disabled', 'success');
   } catch(e) {
@@ -3343,6 +3410,7 @@ async function setAutoReentryOption(enabled) {
     if (lbl) lbl.textContent = 'Confirming…';
     await tx.wait();
     window._memberOptions = opts;
+    try { if (userAddr) localStorage.setItem('cnova_opts_' + userAddr, JSON.stringify(window._memberOptions)); } catch(_) {}
     if (lbl) lbl.textContent = enabled ? 'Enabled' : 'Disabled';
     toast(enabled ? '✅ Auto-reentry enabled' : 'Auto-reentry disabled', 'success');
   } catch(e) {
