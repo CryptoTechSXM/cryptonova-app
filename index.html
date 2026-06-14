@@ -1274,9 +1274,22 @@
             Sends to connected wallet — <span id="withdraw-dest-addr" style="font-family:monospace;color:var(--text2)">—</span>
           </div>
 
-          <button class="btn btn-green full-w" id="btn-withdraw" onclick="doWithdraw()" disabled>
-            Withdraw to Wallet
-          </button>
+          <!-- Partial withdraw amount input -->
+          <div style="display:flex;gap:8px;align-items:stretch;margin-bottom:12px">
+            <div style="position:relative;flex:1">
+              <span style="position:absolute;left:11px;top:50%;transform:translateY(-50%);color:var(--text3);font-size:13px;pointer-events:none">$</span>
+              <input type="number" id="withdraw-amount-input" min="0" step="0.01"
+                placeholder="0.00"
+                style="width:100%;box-sizing:border-box;padding:10px 12px 10px 22px;background:var(--bg3);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:14px;outline:none"
+                oninput="onWithdrawAmountInput()" />
+            </div>
+            <button onclick="setWithdrawMax()" style="background:var(--bg3);border:1px solid var(--green2);border-radius:8px;padding:0 14px;color:var(--green);font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap">MAX</button>
+          </div>
+          <div id="withdraw-partial-preview" style="font-size:12px;color:var(--text3);margin-bottom:10px;min-height:18px"></div>
+          <div style="display:flex;gap:8px;margin-bottom:4px">
+            <button class="btn btn-green" style="flex:1" id="btn-withdraw-partial" onclick="doWithdrawPartial()" disabled>Withdraw Amount</button>
+            <button class="btn btn-ghost" style="flex:1" id="btn-withdraw" onclick="doWithdraw()" disabled>Withdraw All</button>
+          </div>
           <div id="withdraw-status" style="margin-top:12px;font-size:13px;color:var(--text2)"></div>
 
           <!-- Redeem CNOVA for USDC at floor price -->
@@ -1944,6 +1957,7 @@ const MATRIX_ABI = [
   'function totalJoined() external view returns (uint256)',
   'function escrowOf(address) external view returns (uint256)',
   'function withdraw() external',
+  'function withdrawPartial(uint256 amount) external',
   'function withdrawalFeeBps() external view returns (uint256)',
 ];
 
@@ -2805,11 +2819,13 @@ async function loadDashboardData() {
     // Render
     setText('dash-withdrawable',   fmt6(totalW));
     setText('dash-withdraw-amount',fmt6(totalW));
+    window._maxWithdrawable = totalW; // used by partial withdraw UI
 
     // Withdrawal fee breakdown — read withdrawalFeeBps from T1A (same on all matrices)
     try {
       const matFee = new ethers.Contract(ADDRS.T1.matA, MATRIX_ABI, rp);
       const feeBps = await matFee.withdrawalFeeBps().catch(() => 150n);
+      window._withdrawFeeBps = feeBps;
       const feeAmt = totalW * feeBps / 10000n;
       const netAmt = totalW - feeAmt;
       const feePct = (Number(feeBps) / 100).toFixed(1);
@@ -2883,8 +2899,10 @@ async function loadDashboardData() {
     })();
 
     // Withdraw button
+    const btnP2 = document.getElementById('btn-withdraw-partial');
     const btnW = document.getElementById('btn-withdraw');
     if (btnW) btnW.disabled = totalW === 0n;
+    if (btnP2) btnP2.disabled = true; // enabled by onWithdrawAmountInput after user types
 
     // BaseScan link
     const bsLink = document.getElementById('basescan-tx-link');
@@ -3247,6 +3265,98 @@ async function renderCommunityDetail(el, rp) {
     <div class="detail-row"><span class="detail-key">Eligible</span><span class="detail-val red">No — first 1,000 members only</span></div>
     `}
     <div class="detail-note">🏛️ The Community Pool collects 1% of every entry fee (orphan fees). First 1,000 members split it monthly — Genesis (#1–500) receive 65%, Pioneer (#501–1,000) receive 35%. 50% distributes each month, 50% rolls over and compounds. Distributions begin at mainnet launch.</div>`;
+}
+
+function setWithdrawMax() {
+  const inp = document.getElementById('withdraw-amount-input');
+  if (!inp) return;
+  // _maxWithdrawable is set by loadDashboardData (USDC units, 6 decimals)
+  const maxUsd = window._maxWithdrawable || 0n;
+  inp.value = maxUsd > 0n ? (Number(maxUsd) / 1e6).toFixed(2) : '';
+  onWithdrawAmountInput();
+}
+
+function onWithdrawAmountInput() {
+  const inp = document.getElementById('withdraw-amount-input');
+  const preview = document.getElementById('withdraw-partial-preview');
+  const btnP = document.getElementById('btn-withdraw-partial');
+  if (!inp || !preview) return;
+  const val = parseFloat(inp.value);
+  const maxUsd = window._maxWithdrawable || 0n;
+  const maxNum = Number(maxUsd) / 1e6;
+  if (!val || val <= 0 || val > maxNum) {
+    preview.textContent = val > maxNum ? `⚠️ Max available: $${maxNum.toFixed(2)}` : '';
+    if (btnP) btnP.disabled = true;
+    return;
+  }
+  const feeBps = window._withdrawFeeBps || 150n;
+  const amtMicro = BigInt(Math.round(val * 1e6));
+  const fee = amtMicro * feeBps / 10000n;
+  const net = amtMicro - fee;
+  preview.textContent = `Fee: $${(Number(fee)/1e6).toFixed(4)} · You receive: $${(Number(net)/1e6).toFixed(4)}`;
+  if (btnP) btnP.disabled = false;
+}
+
+async function doWithdrawPartial() {
+  if (!signer) return;
+  const inp = document.getElementById('withdraw-amount-input');
+  const val = parseFloat(inp ? inp.value : '0');
+  if (!val || val <= 0) { toast('Enter an amount', 'error'); return; }
+  const amtMicro = BigInt(Math.round(val * 1e6));
+  const maxUsd = window._maxWithdrawable || 0n;
+  if (amtMicro > maxUsd) { toast('Amount exceeds available', 'error'); return; }
+
+  const btnP = document.getElementById('btn-withdraw-partial');
+  const btnA = document.getElementById('btn-withdraw');
+  if (btnP) { btnP.disabled = true; btnP.innerHTML = '<span class="spinner"></span>Withdrawing…'; }
+  if (btnA) btnA.disabled = true;
+  const rp = readProvider || new ethers.JsonRpcProvider(RPC_URL, 84532, { staticNetwork: true });
+  try {
+    const matrices = [
+      ADDRS.T1.matA, ADDRS.T1.matB,
+      ADDRS.T2.matA, ADDRS.T2.matB,
+      ADDRS.T3.matA, ADDRS.T3.matB,
+      ...(ADDRS.T4.matA ? [ADDRS.T4.matA, ADDRS.T4.matB] : []),
+      ...(ADDRS.T5.matA ? [ADDRS.T5.matA, ADDRS.T5.matB] : []),
+      ...(ADDRS.T6.matA ? [ADDRS.T6.matA, ADDRS.T6.matB] : []),
+      ...(ADDRS.T7.matA ? [ADDRS.T7.matA, ADDRS.T7.matB] : []),
+      ...(ADDRS.T8.matA ? [ADDRS.T8.matA, ADDRS.T8.matB] : []),
+      ...(ADDRS.T9.matA ? [ADDRS.T9.matA, ADDRS.T9.matB] : []),
+      ...(ADDRS.T10.matA ? [ADDRS.T10.matA, ADDRS.T10.matB] : []),
+    ];
+    let remaining = amtMicro;
+    let withdrawn = false;
+    for (const addr of matrices) {
+      if (remaining === 0n) break;
+      const mc = new ethers.Contract(addr, MATRIX_ABI, rp);
+      const member = await mc.getMember(userAddr).catch(() => null);
+      if (!member || BigInt(member.withdrawable) === 0n) continue;
+      const mcW = new ethers.Contract(addr, MATRIX_ABI, signer);
+      // How much can we pull from this matrix?
+      let avail = BigInt(member.withdrawable);
+      if (member.isInMatrix) {
+        const ENTRY_FEE = 10_000_000n; // $10 in 6-decimal USDC
+        if (avail <= ENTRY_FEE) continue;
+        avail = avail - ENTRY_FEE;
+      }
+      const pullAmt = remaining < avail ? remaining : avail;
+      const tx = await mcW.withdrawPartial(pullAmt, { gasLimit: 200_000 });
+      await tx.wait();
+      remaining -= pullAmt;
+      withdrawn = true;
+    }
+    const leftOver = remaining > 0n ? ` ($${(Number(remaining)/1e6).toFixed(2)} could not be sourced)` : '';
+    setStatus('withdraw-status', withdrawn ? `✅ Withdrew $${val.toFixed(2)}!${leftOver}` : 'Nothing withdrawn.', withdrawn ? 'ok' : 'info');
+    if (inp) inp.value = '';
+    onWithdrawAmountInput();
+    if (withdrawn) await new Promise(r => setTimeout(r, 3500));
+    await loadDashboardData();
+  } catch(e) {
+    setStatus('withdraw-status', '❌ ' + friendlyError(e), 'err');
+  } finally {
+    if (btnP) { btnP.disabled = false; btnP.textContent = 'Withdraw Amount'; }
+    if (btnA) btnA.disabled = false;
+  }
 }
 
 async function doWithdraw() {
