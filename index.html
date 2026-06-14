@@ -1269,9 +1269,23 @@
             <div class="info-row" style="border-top:1px solid var(--border);padding-top:6px;margin:0"><span class="info-key" style="font-weight:700">You Receive</span><span class="info-val green" style="font-weight:800;font-size:13px" id="wfee-net">—</span></div>
           </div>
 
-          <!-- Destination wallet note -->
-          <div style="font-size:11px;color:var(--text3);margin-bottom:12px;line-height:1.5">
-            Sends to connected wallet — <span id="withdraw-dest-addr" style="font-family:monospace;color:var(--text2)">—</span>
+          <!-- Destination wallet (expandable custom address) -->
+          <div style="margin-bottom:12px">
+            <div style="font-size:11px;color:var(--text3);line-height:1.5;display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+              <span>Sends to:</span>
+              <span id="withdraw-dest-addr" style="font-family:monospace;color:var(--text2);font-size:11px">—</span>
+              <button onclick="toggleWithdrawDestInput()" id="btn-change-dest"
+                style="background:none;border:none;color:#60a5fa;font-size:11px;cursor:pointer;padding:0;text-decoration:underline">change</button>
+            </div>
+            <div id="withdraw-dest-input-wrap" style="display:none;margin-top:8px">
+              <input type="text" id="withdraw-dest-input"
+                placeholder="0x… leave blank to use connected wallet"
+                style="width:100%;box-sizing:border-box;padding:9px 12px;background:var(--bg3);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:12px;font-family:monospace;outline:none"
+                oninput="onWithdrawDestInput()" />
+              <div id="withdraw-dest-warning" style="font-size:11px;color:#f59e0b;margin-top:4px;display:none">
+                ⚠️ Double-check this address — funds sent to the wrong wallet cannot be recovered.
+              </div>
+            </div>
           </div>
 
           <!-- Partial withdraw amount input -->
@@ -1958,6 +1972,8 @@ const MATRIX_ABI = [
   'function escrowOf(address) external view returns (uint256)',
   'function withdraw() external',
   'function withdrawPartial(uint256 amount) external',
+  'function withdrawTo(address recipient) external',
+  'function withdrawPartialTo(address recipient, uint256 amount) external',
   'function withdrawalFeeBps() external view returns (uint256)',
 ];
 
@@ -2903,6 +2919,9 @@ async function loadDashboardData() {
     const btnW = document.getElementById('btn-withdraw');
     if (btnW) btnW.disabled = totalW === 0n;
     if (btnP2) btnP2.disabled = true; // enabled by onWithdrawAmountInput after user types
+    // Show connected wallet as default withdraw destination
+    const destEl = document.getElementById('withdraw-dest-addr');
+    if (destEl && userAddr) destEl.textContent = userAddr.slice(0,6)+'…'+userAddr.slice(-4);
 
     // BaseScan link
     const bsLink = document.getElementById('basescan-tx-link');
@@ -3297,6 +3316,44 @@ function onWithdrawAmountInput() {
   if (btnP) btnP.disabled = false;
 }
 
+function toggleWithdrawDestInput() {
+  const wrap = document.getElementById('withdraw-dest-input-wrap');
+  if (!wrap) return;
+  const show = wrap.style.display === 'none';
+  wrap.style.display = show ? 'block' : 'none';
+  const btn = document.getElementById('btn-change-dest');
+  if (btn) btn.textContent = show ? 'cancel' : 'change';
+  if (!show) {
+    const inp = document.getElementById('withdraw-dest-input');
+    if (inp) inp.value = '';
+    onWithdrawDestInput();
+  }
+}
+
+function onWithdrawDestInput() {
+  const inp = document.getElementById('withdraw-dest-input');
+  const warning = document.getElementById('withdraw-dest-warning');
+  const addrEl = document.getElementById('withdraw-dest-addr');
+  const val = inp ? inp.value.trim() : '';
+  if (!val) {
+    if (warning) warning.style.display = 'none';
+    if (inp) inp.style.borderColor = 'var(--border)';
+    if (addrEl) addrEl.textContent = userAddr ? (userAddr.slice(0,6)+'…'+userAddr.slice(-4)) : '—';
+    return;
+  }
+  const valid = ethers.isAddress(val);
+  if (inp) inp.style.borderColor = valid ? 'var(--green2,#22c55e)' : '#ef4444';
+  if (warning) warning.style.display = valid ? 'block' : 'none';
+  if (addrEl && valid) addrEl.textContent = val.slice(0,6)+'…'+val.slice(-4)+' ✎';
+}
+
+function getWithdrawRecipient() {
+  const inp = document.getElementById('withdraw-dest-input');
+  const val = inp ? inp.value.trim() : '';
+  if (val && ethers.isAddress(val) && val.toLowerCase() !== userAddr.toLowerCase()) return val;
+  return null; // null = use connected wallet (regular withdraw function)
+}
+
 async function doWithdrawPartial() {
   if (!signer) return;
   const inp = document.getElementById('withdraw-amount-input');
@@ -3340,7 +3397,10 @@ async function doWithdrawPartial() {
         avail = avail - ENTRY_FEE;
       }
       const pullAmt = remaining < avail ? remaining : avail;
-      const tx = await mcW.withdrawPartial(pullAmt, { gasLimit: 200_000 });
+      const recipient = getWithdrawRecipient();
+      const tx = recipient
+        ? await mcW.withdrawPartialTo(recipient, pullAmt, { gasLimit: 200_000 })
+        : await mcW.withdrawPartial(pullAmt, { gasLimit: 200_000 });
       await tx.wait();
       remaining -= pullAmt;
       withdrawn = true;
@@ -3383,7 +3443,8 @@ async function doWithdraw() {
       const member = await mc.getMember(userAddr).catch(()=>null);
       if (member && BigInt(member.withdrawable) > 0n) {
         const mcW = new ethers.Contract(addr, MATRIX_ABI, signer);
-        const tx = await mcW.withdraw();
+        const recipient = getWithdrawRecipient();
+        const tx = recipient ? await mcW.withdrawTo(recipient) : await mcW.withdraw();
         await tx.wait();
         withdrawn = true;
       }

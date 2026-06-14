@@ -433,22 +433,63 @@ export default async function handler(req, res) {
   const isSupportGroup = SUPPORT_GROUP_ID && String(chatId) === String(SUPPORT_GROUP_ID);
 
   // ── Support group moderation ────────────────────────────────────────────────
-  // For plain text messages in the support group (not @mentions, not commands),
-  // classify before allowing them through. Spam and off-topic are intercepted here.
-  let passThroughForSupport = false;
+  // Any plain message in the support group (not a command, not an @mention):
+  //   spam    → delete silently
+  //   offtopic → delete + "please DM the bot" notice
+  //   support  → delete original, repost with @username attribution, answer below
+  //
+  // ⚠️  Bot must be a group ADMIN with "Delete messages" permission for this to work.
   if (isSupportGroup && !isCommand && !isMentioned && !fromBot) {
+    const senderName = msg.from?.username
+      ? `@${msg.from.username}`
+      : `<b>${msg.from?.first_name || 'Member'}</b>`;
+
     const verdict = await classifyMessage(ANTHROPIC, rawText);
+
     if (verdict === 'spam') {
+      // Silently delete — no notification to avoid drawing attention
       await deleteMessage(BOT_TOKEN, chatId, msgId);
       return ok();
-    } else if (verdict === 'offtopic') {
-      await deleteMessage(BOT_TOKEN, chatId, msgId);
-      await sendReply(BOT_TOKEN, chatId, OFFTOPIC_REDIRECT);
-      return ok();
-    } else {
-      // 'support' — let it fall through to the QA pipeline below
-      passThroughForSupport = true;
     }
+
+    if (verdict === 'offtopic') {
+      // Delete + polite redirect
+      await deleteMessage(BOT_TOKEN, chatId, msgId);
+      await tgPost('sendMessage', BOT_TOKEN, {
+        chat_id: chatId,
+        parse_mode: 'HTML',
+        disable_web_page_preview: true,
+        text:
+          `👋 Hey ${senderName} — this group is for <b>support questions only</b>.\n\n` +
+          `For general chat and community discussion:\n` +
+          `<a href="${COMMUNITY_GROUP_URL}">CryptoNova Community →</a>\n\n` +
+          `To ask a support question, DM me directly: @${BOT_USERNAME}\n` +
+          `Or just ask it in this group and tag me: <code>@${BOT_USERNAME} your question</code>`,
+      });
+      return ok();
+    }
+
+    // verdict === 'support': delete original, repost with attribution, then answer
+    await deleteMessage(BOT_TOKEN, chatId, msgId);
+
+    const repostResult = await tgPost('sendMessage', BOT_TOKEN, {
+      chat_id: chatId,
+      parse_mode: 'HTML',
+      text: `💬 ${senderName} asked:\n\n${rawText}`,
+    });
+
+    const repostMsgId = repostResult?.result?.message_id;
+    await sendTyping(BOT_TOKEN, chatId);
+    try {
+      const answer = await askClaude(ANTHROPIC, rawText);
+      if (answer) await sendReply(BOT_TOKEN, chatId, answer, repostMsgId);
+      else throw new Error('empty');
+    } catch (e) {
+      console.error('[group-qa] Claude error:', e.message);
+      await sendReply(BOT_TOKEN, chatId,
+        `Having trouble right now — try DM-ing me directly: @${BOT_USERNAME}`, repostMsgId);
+    }
+    return ok();
   }
 
   if (!isPrivate && !isMentioned && !isCommand && !passThroughForSupport) return ok();
