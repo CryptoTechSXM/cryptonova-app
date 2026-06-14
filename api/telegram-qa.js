@@ -530,7 +530,7 @@ export default async function handler(req, res) {
     return ok();
   }
 
-  if (!isPrivate && !isMentioned && !isCommand && !passThroughForSupport) return ok();
+  if (!isPrivate && !isMentioned && !isCommand) return ok();
 
   const question = rawText.replace(mentionPattern, '').trim();
   if (!question) { await sendReply(BOT_TOKEN, chatId, HELP_TEXT); return ok(); }
