@@ -1003,4 +1003,116 @@ async function loadSuccessState(rp, addr) {
 
 // ═══════════════════════════════════════════════════════════════
 // APPROVE USDC
-// ═══════════════════════════════════════�
+// ═══════════════════════════════════════════════════════════════
+async function approveUSDC() {
+  if (!signer) { toast(_('js.connect_first', 'Connect wallet first'), 'error'); return; }
+  const btn = document.getElementById('btn-approve');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span>' + _('js.approving', 'Approving…');
+  try {
+    const usdcW = new ethers.Contract(ADDRS.usdc, USDC_ABI, signer);
+    const tx = await usdcW.approve(ADDRS.T1.pm, T1_FEE);
+    setStatus(_('js.approve_status', '⏳ Approving $10 USDC to PairManager…'), 'info');
+    await tx.wait();
+    setStatus(_('js.approve_done', '✅ Approved! Now click Step 2 to join.'), 'ok');
+    btn.textContent = _('js.approve_label', '✅ Step 1 Done — Approved');
+    btn.className = 'btn btn-step1 done';
+    setText('usdc-approved', _('js.approved_val', '✅ $10 Approved'));
+    const btnReg = document.getElementById('btn-register');
+    if (btnReg) {
+      btnReg.disabled = false;
+      btnReg.className = 'btn btn-step2 active';
+    }
+  } catch (e) {
+    btn.disabled = false;
+    btn.className = 'btn btn-step1 active';
+    btn.textContent = _('js.step1_reset', 'Step 1: Approve $10 USDC 🔒');
+    setStatus('❌ ' + friendlyError(e), 'err');
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// REGISTER
+// ═══════════════════════════════════════════════════════════════
+async function doRegister() {
+  if (!signer) { toast(_('js.connect_first', 'Connect wallet first'), 'error'); return; }
+  const btn = document.getElementById('btn-register');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span>' + _('js.joining', 'Joining CryptoNova…');
+  try {
+    const refInput = document.getElementById('input-referrer');
+    const referrer = refInput && ethers.isAddress(refInput.value.trim())
+      ? refInput.value.trim()
+      : ethers.ZeroAddress;
+
+    const tr = new ethers.Contract(ADDRS.tierRouter, TIER_ROUTER_ABI, signer);
+    const tx = await tr.register(referrer);
+    setStatus(_('js.confirm_tx', '⏳ Confirming transaction on Base Sepolia…'), 'info');
+    await tx.wait();
+
+    setStatus(_('js.welcome_status', '🎉 Welcome to CryptoNova!'), 'ok');
+    btn.textContent = _('js.registered', '✅ Registered!');
+    toast(_('js.welcome_toast', 'Welcome to CryptoNova V8.11! 🎉'), 'success');
+
+    hideEl('register-card');
+    hideEl('already-alert');
+    const rp = new ethers.JsonRpcProvider(RPC_URL, CHAIN_ID, { staticNetwork: true });
+    await loadSuccessState(rp, userAddr);
+
+  } catch (e) {
+    btn.disabled = false;
+    btn.className = 'btn btn-step2 active';
+    btn.textContent = _('js.step2_reset', 'Step 2: Register ($10 USDC)');
+    setStatus('❌ ' + friendlyError(e), 'err');
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// COPY REFERRAL LINK
+// ═══════════════════════════════════════════════════════════════
+function copyRefLink() {
+  const urlEl = document.getElementById('ref-link-url');
+  if (!urlEl) return;
+  navigator.clipboard.writeText(urlEl.textContent).then(() => {
+    toast(_('js.copied', 'Referral link copied!'), 'success');
+  }).catch(() => {
+    const ta = document.createElement('textarea');
+    ta.value = urlEl.textContent;
+    document.body.appendChild(ta);
+    ta.select();
+    document.execCommand('copy');
+    document.body.removeChild(ta);
+    toast(_('js.copied', 'Referral link copied!'), 'success');
+  });
+}
+
+// ═══════════════════════════════════════════════════════════════
+// ADD USDC TO WALLET
+// ═══════════════════════════════════════════════════════════════
+async function addUSDCtoWallet() {
+  if (!window.ethereum) { toast(_('js.no_wallet_short', 'No wallet detected'), 'error'); return; }
+  try {
+    await window.ethereum.request({
+      method: 'wallet_watchAsset',
+      params: { type: 'ERC20', options: { address: ADDRS.usdc, symbol: 'USDC', decimals: 6 }},
+    });
+  } catch (e) { console.error(e); }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// INIT — auto-fill ?ref= from URL on load
+// ═══════════════════════════════════════════════════════════════
+(function init() {
+  const urlRef = new URLSearchParams(window.location.search).get('ref');
+  if (urlRef && ethers.isAddress(urlRef)) {
+    const inp = document.getElementById('input-referrer');
+    if (inp) {
+      inp.value = urlRef;
+      onReferrerInput();
+      noRefWarningDismissed = true;
+    }
+  }
+})();
+</script>
+</body>
+</html>
