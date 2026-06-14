@@ -12,6 +12,11 @@
       "has": [{ "type": "host", "value": "early.crypto-nova.app" }],
       "destination": "/early.html"
     },
+    {
+      "source": "/(.*)",
+      "has": [{ "type": "host", "value": "v8.crypto-nova.app" }],
+      "destination": "/v8.html"
+    },
     { "source": "/api/:path*", "destination": "/api/:path*" },
     { "source": "/terms",      "destination": "/terms.html" },
     { "source": "/terms.html", "destination": "/terms.html" },
