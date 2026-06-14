@@ -927,6 +927,72 @@ contract FigureEightMatrixV8 is Ownable2Step {
         emit EarningsWithdrawn(msg.sender, payout);
     }
 
+    /**
+     * @notice Withdraw a specific amount of earnings, sending the payout to a custom
+     *         recipient address. Useful for members who want earnings sent directly
+     *         to a hardware wallet, exchange, or different address.
+     * @dev    Same reserve and fee rules as withdrawPartial(). msg.sender is still
+     *         the member being debited; only the USDC destination changes.
+     */
+    function withdrawPartialTo(address recipient, uint256 amount) external {
+        require(recipient != address(0), "F8V8: zero recipient");
+        require(amount > 0, "F8V8: amount must be > 0");
+        uint256 available = members[msg.sender].withdrawable;
+        require(available > 0, "F8V8: nothing to withdraw");
+
+        if (members[msg.sender].isInMatrix) {
+            require(available > ENTRY_FEE, "F8V8: must keep entry fee reserve while active");
+            available = available - ENTRY_FEE;
+        }
+
+        require(amount <= available, "F8V8: amount exceeds withdrawable");
+
+        members[msg.sender].withdrawable   -= amount;
+        members[msg.sender].totalWithdrawn += amount;
+        lastActivityTime[msg.sender] = block.timestamp;
+
+        uint256 fee    = amount * withdrawalFeeBps / BPS_DENOM;
+        uint256 payout = amount - fee;
+
+        if (fee > 0) {
+            _forwardToStabilityFund(fee, 3);
+            emit WithdrawalFeeCharged(msg.sender, fee);
+        }
+
+        usdc.safeTransfer(recipient, payout);
+        emit EarningsWithdrawn(msg.sender, payout);
+    }
+
+    /**
+     * @notice Withdraw all available earnings to a custom recipient address.
+     *         Same anti-drain-exploit reserve rules as withdraw().
+     */
+    function withdrawTo(address recipient) external {
+        require(recipient != address(0), "F8V8: zero recipient");
+        uint256 available = members[msg.sender].withdrawable;
+        require(available > 0, "F8V8: nothing to withdraw");
+
+        if (members[msg.sender].isInMatrix) {
+            require(available > ENTRY_FEE, "F8V8: must keep entry fee reserve while active");
+            available = available - ENTRY_FEE;
+        }
+
+        members[msg.sender].withdrawable   -= available;
+        members[msg.sender].totalWithdrawn += available;
+        lastActivityTime[msg.sender] = block.timestamp;
+
+        uint256 fee    = available * withdrawalFeeBps / BPS_DENOM;
+        uint256 payout = available - fee;
+
+        if (fee > 0) {
+            _forwardToStabilityFund(fee, 3);
+            emit WithdrawalFeeCharged(msg.sender, fee);
+        }
+
+        usdc.safeTransfer(recipient, payout);
+        emit EarningsWithdrawn(msg.sender, payout);
+    }
+
     // --- V8.8: earlyEscrowRelease() removed ---------------------------------
     // Escrow storage removed in V8.8. Orphan fees now route to CommunityWallet /
     // StabilityFund (layer 6) instead of per-member escrow slots. Members crossing
