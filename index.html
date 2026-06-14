@@ -1398,6 +1398,13 @@
             <option value="10">Tier 10 — SuperNova Apex ($10,000)</option>
           </select>
         </div>
+        <div style="display:flex;flex-direction:column;gap:5px">
+          <label style="display:block;font-size:12px;color:var(--text3);text-transform:uppercase;letter-spacing:.6px">Matrix</label>
+          <div style="display:flex;gap:6px">
+            <button id="btn-mat-a" class="btn btn-ghost matrix-active" onclick="selectMatrix('A')" style="padding:7px 16px;font-size:13px">MatA</button>
+            <button id="btn-mat-b" class="btn btn-ghost" onclick="selectMatrix('B')" style="padding:7px 16px;font-size:13px">MatB</button>
+          </div>
+        </div>
       </div>
       <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
         <button id="btn-load-tree"   class="btn btn-ghost" onclick="setActiveMatrixBtn('btn-load-tree');loadQueueView()">🔄 Load Queue</button>
@@ -3216,18 +3223,39 @@ function setActiveMatrixBtn(id) {
 
 function onMatrixTierChange() { loadQueueView(); setActiveMatrixBtn('btn-load-tree'); }
 
+let _selectedMatrix = 'A'; // 'A' or 'B'
+
+function selectMatrix(ab) {
+  _selectedMatrix = ab;
+  document.getElementById('btn-mat-a').classList.toggle('matrix-active', ab === 'A');
+  document.getElementById('btn-mat-b').classList.toggle('matrix-active', ab === 'B');
+  loadQueueView();
+  setActiveMatrixBtn('btn-load-tree');
+}
+
 async function getMatrixForTier() {
   const tierSelect = document.getElementById('matrix-tier-select');
   const tierNum = tierSelect ? parseInt(tierSelect.value) || 1 : 1;
-  if (tierNum === 10 && ADDRS.T10.matA) return ADDRS.T10.matA;
-  if (tierNum === 9 && ADDRS.T9.matA)  return ADDRS.T9.matA;
-  if (tierNum === 8 && ADDRS.T8.matA)  return ADDRS.T8.matA;
-  if (tierNum === 7 && ADDRS.T7.matA)  return ADDRS.T7.matA;
-  if (tierNum === 6 && ADDRS.T6.matA)  return ADDRS.T6.matA;
-  if (tierNum === 5 && ADDRS.T5.matA)  return ADDRS.T5.matA;
-  if (tierNum === 4 && ADDRS.T4.matA)  return ADDRS.T4.matA;
-  if (tierNum === 3) return ADDRS.T3.matA;
-  return tierNum === 2 ? ADDRS.T2.matA : ADDRS.T1.matA;
+  const side = _selectedMatrix === 'B' ? 'matB' : 'matA';
+  const tiers = { 1: ADDRS.T1, 2: ADDRS.T2, 3: ADDRS.T3, 4: ADDRS.T4, 5: ADDRS.T5,
+                  6: ADDRS.T6, 7: ADDRS.T7, 8: ADDRS.T8, 9: ADDRS.T9, 10: ADDRS.T10 };
+  const tier = tiers[tierNum] || ADDRS.T1;
+  return tier[side] || tier.matA; // fall back to matA if matB not deployed yet
+}
+
+// Fetch posToMember in chunks to avoid RPC in-flight limit
+async function fetchNodes(mc, n) {
+  const CHUNK = 20;
+  const results = [];
+  for (let i = 0; i < n; i += CHUNK) {
+    const end = Math.min(i + CHUNK, n);
+    const chunk = await Promise.all(
+      Array.from({length: end - i}, (_, j) => mc.posToMember(i + j + 1).catch(() => ethers.ZeroAddress))
+    );
+    results.push(...chunk);
+    if (end < n) await new Promise(r => setTimeout(r, 150));
+  }
+  return results;
 }
 
 async function setDoubleReentryOption(enabled) {
@@ -3324,9 +3352,7 @@ async function loadQueueView() {
     const mc = new ethers.Contract(addrToLoad, MATRIX_ABI, rp);
     const [occ, mSize, cycles] = await Promise.all([mc.occupancy(), mc.MATRIX_SIZE(), mc.rotationCount().catch(()=>0n)]);
     const n = Number(occ);
-    const nodes = await Promise.all(
-      Array.from({length:n}, (_,i) => mc.posToMember(i+1).catch(()=>ethers.ZeroAddress))
-    );
+    const nodes = await fetchNodes(mc, n);
     setText('matrix-nodes', n.toString());
     setText('matrix-fill',  n + ' / ' + Number(mSize));
     setText('matrix-bfs',   Number(mSize) + ' seats');
@@ -3380,9 +3406,7 @@ async function loadMyTree() {
     const mc   = new ethers.Contract(activeMat, MATRIX_ABI, rp);
     const [occ, cycles] = await Promise.all([mc.occupancy(), mc.rotationCount().catch(()=>0n)]);
     const n = Number(occ);
-    const nodes = await Promise.all(
-      Array.from({length:n}, (_,i) => mc.posToMember(i+1).catch(()=>ethers.ZeroAddress))
-    );
+    const nodes = await fetchNodes(mc, n);
     setText('matrix-nodes', n.toString());
     setText('matrix-fill',  n + ' / ' + Number(activeMSize));
     setText('matrix-bfs',   Number(activeMSize) + ' seats');
