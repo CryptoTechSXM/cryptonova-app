@@ -895,6 +895,38 @@ contract FigureEightMatrixV8 is Ownable2Step {
         emit EarningsWithdrawn(msg.sender, payout);
     }
 
+    /// @notice V8.13: Partial withdrawal — caller specifies exact USDC amount (6 decimals).
+    ///         Same ENTRY_FEE reserve rule applies while in-matrix.
+    ///         Same 1.5% withdrawal fee applies to the requested amount.
+    function withdrawPartial(uint256 amount) external {
+        require(amount > 0, "F8V8: amount must be > 0");
+        uint256 available = members[msg.sender].withdrawable;
+        require(available > 0, "F8V8: nothing to withdraw");
+
+        // V8.10 anti-drain-exploit: keep ENTRY_FEE reserve while active in matrix
+        if (members[msg.sender].isInMatrix) {
+            require(available > ENTRY_FEE, "F8V8: must keep entry fee reserve while active");
+            available = available - ENTRY_FEE;
+        }
+
+        require(amount <= available, "F8V8: amount exceeds withdrawable");
+
+        members[msg.sender].withdrawable   -= amount;
+        members[msg.sender].totalWithdrawn += amount;
+        lastActivityTime[msg.sender] = block.timestamp;
+
+        uint256 fee    = amount * withdrawalFeeBps / BPS_DENOM;
+        uint256 payout = amount - fee;
+
+        if (fee > 0) {
+            _forwardToStabilityFund(fee, 3);
+            emit WithdrawalFeeCharged(msg.sender, fee);
+        }
+
+        usdc.safeTransfer(msg.sender, payout);
+        emit EarningsWithdrawn(msg.sender, payout);
+    }
+
     // --- V8.8: earlyEscrowRelease() removed ---------------------------------
     // Escrow storage removed in V8.8. Orphan fees now route to CommunityWallet /
     // StabilityFund (layer 6) instead of per-member escrow slots. Members crossing
