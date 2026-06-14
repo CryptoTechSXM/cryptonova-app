@@ -10,6 +10,7 @@ import { ethers } from 'ethers';
 const BOT_USERNAME      = 'cnova_support_bot';
 const USDC_ADDRESS      = '0x2D8B7b5eDec96bE441b6fb0D45D74a2BcE2C639a';
 const TIER_ROUTER       = '0xC729627996E968b5065399843FfFfCF5bfB5148b'; // V8.12
+const CNOVA_TOKEN       = '0x9A07EBfeed853b24683B199fd33A27f8d8851191'; // V8.12
 
 // Group moderation — set these in Vercel env vars after creating the groups
 // SUPPORT_GROUP_ID: the numeric chat ID of the support group (e.g. -1001234567890)
@@ -166,10 +167,12 @@ I can answer questions about:
 8. Troubleshooting
 
 <b>Commands:</b>
-/faucet 0xYourAddress - get $20 USDC + 0.002 ETH instantly
-/register - how to get started
-/stats - live testnet stats
-/help - this message
+/faucet 0xYourAddress — get $20 USDC + 0.002 ETH instantly
+/register — how to get started
+/price — live CNOVA floor price
+/tier — entry fees and earnings per tier
+/stats — live testnet stats
+/help — this message
 
 <a href="https://crypto-nova.app">crypto-nova.app</a> | <a href="https://crypto-nova.app/faq">FAQ</a>`;
 
@@ -424,6 +427,41 @@ export default async function handler(req, res) {
   const rawText  = (msg.text || msg.caption || '').trim();
   const fromBot  = !!msg.from?.is_bot;
 
+  // ── New member welcome ─────────────────────────────────────────────────────
+  // Fires when someone joins the support group (new_chat_members service message).
+  // No rawText on these, so we must check BEFORE the rawText guard below.
+  if (msg.new_chat_members && Array.isArray(msg.new_chat_members)) {
+    const isSupportGroupJoin = SUPPORT_GROUP_ID && String(chatId) === String(SUPPORT_GROUP_ID);
+    if (isSupportGroupJoin) {
+      const newcomers = msg.new_chat_members.filter(u => !u.is_bot);
+      if (newcomers.length > 0) {
+        const names = newcomers.map(u =>
+          u.username ? `@${u.username}` : `<b>${u.first_name}</b>`
+        ).join(', ');
+
+        await tgPost('sendMessage', BOT_TOKEN, {
+          chat_id: chatId,
+          parse_mode: 'HTML',
+          disable_web_page_preview: true,
+          text:
+            `👋 Welcome to the CryptoNova Support Group, ${names}!\n\n` +
+            `<b>How this group works:</b>\n` +
+            `• Type your question here and I'll answer it automatically\n` +
+            `• I'll repost your question cleanly and reply below it\n` +
+            `• For private questions, DM me directly: @${BOT_USERNAME}\n\n` +
+            `<b>Not for general chat</b> — join our community group for that:\n` +
+            `<a href="${COMMUNITY_GROUP_URL}">CryptoNova Community →</a>\n\n` +
+            `<b>Quick commands:</b>\n` +
+            `<code>/faucet 0x…</code> — get testnet USDC + ETH\n` +
+            `<code>/price</code> — current CNOVA floor price\n` +
+            `<code>/tier</code> — tier entry fees and earnings\n\n` +
+            `🚀 <b>Mainnet launches June 19</b> — <a href="https://crypto-nova.app">crypto-nova.app</a>`,
+        });
+      }
+    }
+    return ok();
+  }
+
   if (fromBot || !chatId || !rawText) return ok();
 
   const mentionPattern = new RegExp(`@${BOT_USERNAME}`, 'i');
@@ -508,6 +546,57 @@ export default async function handler(req, res) {
       await sendTyping(BOT_TOKEN, chatId);
       try { await sendReply(BOT_TOKEN, chatId, await fetchLiveStats(), msgId); }
       catch (e) { await sendReply(BOT_TOKEN, chatId, 'Unable to fetch live stats. Check the <a href="https://crypto-nova.app">Dashboard</a>.', msgId); }
+      return ok();
+    }
+    if (cmd === '/price') {
+      await sendTyping(BOT_TOKEN, chatId);
+      try {
+        const RPC = process.env.BASE_SEPOLIA_RPC || 'https://sepolia.base.org';
+        const eth = async (to, sel) => {
+          const r = await fetch(RPC, { method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ jsonrpc:'2.0', id:1, method:'eth_call', params:[{to, data:sel},'latest'] }) });
+          const j = await r.json();
+          return (j.error || !j.result || j.result==='0x') ? null : BigInt(j.result);
+        };
+        // floorPrice() — single uint256 in 6-decimal USDC
+        const raw = await eth(CNOVA_TOKEN, '0xd555254e');
+        if (raw !== null) {
+          const price = (Number(raw) / 1e6).toFixed(6);
+          await sendReply(BOT_TOKEN, chatId,
+            `💰 <b>CNOVA Floor Price</b>\n\n` +
+            `<b>$${price} USDC</b> per CNOVA\n\n` +
+            `<i>Floor price is backed by the Treasury and can only go up.</i>\n` +
+            `Redeem on the <a href="https://crypto-nova.app">Dashboard</a> → Withdraw Earnings → Redeem CNOVA.`,
+            msgId);
+        } else {
+          await sendReply(BOT_TOKEN, chatId, 'Unable to fetch CNOVA price right now — check the <a href="https://crypto-nova.app">Dashboard</a>.', msgId);
+        }
+      } catch(e) {
+        await sendReply(BOT_TOKEN, chatId, 'Price fetch error. Try the <a href="https://crypto-nova.app">Dashboard</a> instead.', msgId);
+      }
+      return ok();
+    }
+    if (cmd === '/tier') {
+      await sendReply(BOT_TOKEN, chatId,
+        `📊 <b>CryptoNova — 10 Tiers</b>\n\n` +
+        `<code>` +
+        `T1  Nova Seed         $10\n` +
+        `T2  Nova Rise         $25\n` +
+        `T3  Nova Star         $50\n` +
+        `T4  Nova Core        $100\n` +
+        `T5  Nova Prime       $250\n` +
+        `T6  Nova Apex        $500\n` +
+        `T7  Nova Pinnacle   $1,000\n` +
+        `T8  SuperNova Titan $2,500\n` +
+        `T9  SuperNova Legend$5,000\n` +
+        `T10 SuperNova Apex $10,000` +
+        `</code>\n\n` +
+        `<b>How earnings work:</b>\n` +
+        `• 127-seat binary tree fills → you advance\n` +
+        `• Full 254-seat cycle → auto-upgrade + CNOVA mined\n` +
+        `• Chain pay: 10%→4%→3%→1.5%→0.75%→0.75% up 6 levels\n\n` +
+        `Register at T1 and get your referral link: <a href="https://crypto-nova.app">crypto-nova.app</a>`,
+        msgId);
       return ok();
     }
     if (cmd === '/faucet') {
