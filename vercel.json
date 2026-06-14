@@ -9,6 +9,16 @@
   "rewrites": [
     {
       "source": "/(.*)",
+      "has": [{ "type": "host", "value": "cryptonova.ai" }],
+      "destination": "/mainnet.html"
+    },
+    {
+      "source": "/(.*)",
+      "has": [{ "type": "host", "value": "www.cryptonova.ai" }],
+      "destination": "/mainnet.html"
+    },
+    {
+      "source": "/(.*)",
       "has": [{ "type": "host", "value": "early.crypto-nova.app" }],
       "destination": "/early.html"
     },
