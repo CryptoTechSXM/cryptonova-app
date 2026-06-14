@@ -19,6 +19,16 @@
     },
     {
       "source": "/(.*)",
+      "has": [{ "type": "host", "value": "ea.cryptonova.ai" }],
+      "destination": "/ea.mainnet.html"
+    },
+    {
+      "source": "/(.*)",
+      "has": [{ "type": "host", "value": "admin.cryptonova.ai" }],
+      "destination": "/admin.mainnet.html"
+    },
+    {
+      "source": "/(.*)",
       "has": [{ "type": "host", "value": "early.crypto-nova.app" }],
       "destination": "/early.html"
     },

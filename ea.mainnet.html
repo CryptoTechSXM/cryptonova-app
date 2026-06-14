@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>CryptoNova — Mainnet</title>
+  <title>CryptoNova — Early Access</title>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/6.7.1/ethers.umd.min.js"></script>
   <style>
     :root {
@@ -395,11 +395,11 @@
   ">
     <div style="font-size:48px;margin-bottom:20px">🚀</div>
     <div style="font-size:28px;font-weight:800;background:linear-gradient(135deg,#22c55e,#3b82f6);-webkit-background-clip:text;-webkit-text-fill-color:transparent;margin-bottom:12px">
-      CryptoNova Mainnet
+      CryptoNova Early Access
     </div>
     <div style="font-size:16px;color:#94a3b8;margin-bottom:32px;max-width:400px;line-height:1.6">
-      Launching <strong style="color:#e2e8f0">Friday June 19, 2026 · 12:00 PM Eastern</strong><br>
-      The matrix is almost ready.
+      Early Access opens <strong style="color:#e2e8f0">Thursday June 18, 2026 · 12:00 PM Eastern</strong><br>
+      You're one day early. Get ready.
     </div>
     <a href="https://crypto-nova.app" style="
       background:linear-gradient(135deg,#22c55e,#16a34a);
@@ -1815,7 +1815,7 @@ const CHAIN_ID = 8453;
   // 12:00 PM EDT (noon Eastern) = 16:00 UTC on June 12 2026.
   // This is a FIXED UTC timestamp — same countdown for every viewer worldwide.
   // To reschedule: update this ISO string.
-  const LAUNCH_UTC = new Date('2026-06-19T16:00:00Z'); // noon EDT = 16:00 UTC // noon EDT = 16:00 UTC
+  const LAUNCH_UTC = new Date('2026-06-18T16:00:00Z'); // Early Access: noon EDT June 18 = 16:00 UTC
 
   // Major city local equivalents — shown below the countdown
   const CITY_ZONES = [
@@ -1887,7 +1887,7 @@ const CHAIN_ID = 8453;
 
 // ══ LAUNCH GATE ═══════════════════════════════════════════════════════════
 // Hostname-based: crypto-nova.app + www.crypto-nova.app = blocking gate; v8.* preview and localhost = gate off
-const _PROD_HOSTS = ['cryptonova.ai', 'www.cryptonova.ai'];
+const _PROD_HOSTS = ['ea.cryptonova.ai'];
 const LAUNCH_READY = !_PROD_HOSTS.includes(window.location.hostname);
 
 // Show the launch gate on production if launch date hasn't passed yet

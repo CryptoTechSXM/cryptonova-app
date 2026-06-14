@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>CryptoNova — Mainnet</title>
+  <title>CryptoNova — Admin Preview</title>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/6.7.1/ethers.umd.min.js"></script>
   <style>
     :root {
@@ -382,39 +382,7 @@
     </style>
 </head>
 <body>
-  <!-- ═══ MAINNET COMING SOON OVERLAY ═══════════════════════════════════════
-       Remove this entire block (or set display:none) once mainnet contracts
-       are deployed and ADDRS are filled in above.
-       ════════════════════════════════════════════════════════════════════ -->
-  <div id="mainnet-soon" style="
-    position:fixed;inset:0;z-index:9999;
-    background:linear-gradient(135deg,#0a0e1a 0%,#0d1225 100%);
-    display:flex;flex-direction:column;align-items:center;justify-content:center;
-    font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
-    color:#e2e8f0;text-align:center;padding:24px;
-  ">
-    <div style="font-size:48px;margin-bottom:20px">🚀</div>
-    <div style="font-size:28px;font-weight:800;background:linear-gradient(135deg,#22c55e,#3b82f6);-webkit-background-clip:text;-webkit-text-fill-color:transparent;margin-bottom:12px">
-      CryptoNova Mainnet
-    </div>
-    <div style="font-size:16px;color:#94a3b8;margin-bottom:32px;max-width:400px;line-height:1.6">
-      Launching <strong style="color:#e2e8f0">Friday June 19, 2026 · 12:00 PM Eastern</strong><br>
-      The matrix is almost ready.
-    </div>
-    <a href="https://crypto-nova.app" style="
-      background:linear-gradient(135deg,#22c55e,#16a34a);
-      color:#fff;text-decoration:none;padding:14px 32px;border-radius:12px;
-      font-weight:700;font-size:15px;
-    ">Try Testnet Now →</a>
-    <div style="margin-top:24px;font-size:13px;color:#64748b">
-      <a href="https://t.me/cnova_support_bot" style="color:#60a5fa;text-decoration:none">Telegram Support</a>
-      &nbsp;·&nbsp;
-      <a href="https://crypto-nova.app/faq" style="color:#60a5fa;text-decoration:none">FAQ</a>
-    </div>
-  </div>
-
-
-<!-- ══ LAUNCH GATE ══════════════════════════════════════════════════════════
+  <!-- ══ LAUNCH GATE ══════════════════════════════════════════════════════════
      index.html: opens 10:00 AM EDT (14:00 UTC) June 14 2026
 ═══════════════════════════════════════════════════════════════════════════ -->
 <div id="launch-gate" style="display:none;position:fixed;inset:0;z-index:99999;background:#0a0a1a;display:flex;flex-direction:column;align-items:center;justify-content:center;font-family:'Inter',sans-serif;color:#fff;">
@@ -1855,9 +1823,6 @@ const CHAIN_ID = 8453;
     if (diff <= 0) {
       // Auto-lift gate at launch time — no manual button needed
       document.getElementById('launch-gate').classList.remove('visible');
-      // Remove coming-soon overlay on mainnet
-      const soon = document.getElementById('mainnet-soon');
-      if (soon) soon.style.display = 'none';
       // Banner live state
       document.querySelector('#launch-banner .bn-cd').style.display = 'none';
       document.querySelector('#launch-banner .bn-sep').style.display = 'none';
@@ -1887,7 +1852,7 @@ const CHAIN_ID = 8453;
 
 // ══ LAUNCH GATE ═══════════════════════════════════════════════════════════
 // Hostname-based: crypto-nova.app + www.crypto-nova.app = blocking gate; v8.* preview and localhost = gate off
-const _PROD_HOSTS = ['cryptonova.ai', 'www.cryptonova.ai'];
+const _PROD_HOSTS = []; // admin — no gate, always open
 const LAUNCH_READY = !_PROD_HOSTS.includes(window.location.hostname);
 
 // Show the launch gate on production if launch date hasn't passed yet
