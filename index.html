@@ -2625,6 +2625,8 @@ async function loadRegisterTab() {
         const hiTier     = Number(await tr.memberHighestTier(userAddr).catch(() => 0));
         const t2matA     = new ethers.Contract(ADDRS.T2.matA, MATRIX_ABI, rp);
         const alreadyInT2 = await t2matA.isActiveInMatrix(userAddr).catch(() => false);
+        const t1matB     = new ethers.Contract(ADDRS.T1.matB, MATRIX_ABI, rp);
+        const inT1MatB   = await t1matB.isActiveInMatrix(userAddr).catch(() => false);
         const hint   = document.getElementById('upgrade-tier-hint');
         const btnApp = document.getElementById('btn-upgrade-approve');
         const btnUp  = document.getElementById('btn-upgrade');
@@ -2633,6 +2635,10 @@ async function loadRegisterTab() {
           if (upgradeCard) upgradeCard.style.display = 'none';
         } else if (cycles >= 1) {
           if (hint) hint.innerHTML = '<span style="color:var(--green)">&#x2705; ' + cycles + ' cycle' + (cycles !== 1 ? 's' : '') + ' complete &#8212; you qualify for T2 upgrade!</span>';
+          if (btnApp) { btnApp.disabled = false; btnApp.textContent = 'Step 1: Approve USDC'; btnApp.className = 'btn btn-green'; btnApp.style.flex = '1'; }
+        } else if (inT1MatB) {
+          // Crossed to MatB — early upgrade eligible (cycle still running)
+          if (hint) hint.innerHTML = '<span style="color:var(--green)">&#x2705; You\'ve crossed to Matrix B &mdash; you can upgrade to T2 now! Your MatB cycle will continue earning while you advance.</span>';
           if (btnApp) { btnApp.disabled = false; btnApp.textContent = 'Step 1: Approve USDC'; btnApp.className = 'btn btn-green'; btnApp.style.flex = '1'; }
         } else {
           if (hint) hint.textContent = 'Locked until your first T1 cycle completes. A full cycle runs in two stages: MatA fills (126 members), then MatB fills (127 members). Once both stages complete for your position, this unlocks automatically.';
@@ -2944,7 +2950,9 @@ async function loadDashboardData() {
       // Max deployed tier: 3 (T3 live). Increase when T4+ deployed.
       const MAX_DEPLOYED_TIER = 10; // v8.7: all 10 tiers live
       const curTierCycles = await tr.tierCycles(userAddr, Math.max(highestTier - 1, 0)).catch(() => 0n);
-      const canUpgrade = Number(curTierCycles) >= 1 && highestTier < MAX_DEPLOYED_TIER;
+      const _t1matBDash  = new ethers.Contract(ADDRS.T1.matB, MATRIX_ABI, rp);
+      const _inT1MatBDash = highestTier === 1 ? await _t1matBDash.isActiveInMatrix(userAddr).catch(() => false) : false;
+      const canUpgrade = (Number(curTierCycles) >= 1 || _inT1MatBDash) && highestTier < MAX_DEPLOYED_TIER;
       upgradeSection.style.display = canUpgrade ? 'block' : 'none';
       if (canUpgrade) {
         const UPGRADE_NAMES = ['--','T2 -- Nova Rise','T3 -- Nova Star','T4 -- Nova Prime','T5 -- SuperNova Genesis','T6 -- SuperNova Elite','T7 -- SuperNova Spark'];
