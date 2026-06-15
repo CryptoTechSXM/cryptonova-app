@@ -18,6 +18,7 @@
  *   HDR_OFFSET=500    BIP-44 index offset for wallet derivation (default 500)
  *                     Change to 1000+ if all wallets at default offset are already globalJoined
  *   REFERRER=0x...    override referrer (default = AccountOne from addresses file)
+ *   BURN_SIMULATE=false  skip the earlyUnlockAll() burn sweep (default = true/on)
  *
  * Run: npx hardhat run scripts/bigfill_v8.js --network baseSepolia
  * ─────────────────────────────────────────────────────────────────────────────
@@ -34,7 +35,7 @@ require("dotenv").config();
 //   v8_2 = size-64 pre-mainnet  ← default
 const ADDRESSES_FILE = path.join(
   __dirname,
-  process.env.ADDRESSES_FILE || "deployed_addresses_v8_11.json"
+  process.env.ADDRESSES_FILE || "deployed_addresses_v8_12.json"
 );
 
 // COUNT: for 127-seat matrices, 260 fills MatA + MatB (W1 seeds pos-1, 126 fill
@@ -56,8 +57,12 @@ const HDR_OFFSET  = Number(process.env.HDR_OFFSET  || 0); // BIP-44 index offset
 // Always includes W1_ADDR automatically.
 const WATCH_WALLETS_RAW = process.env.WATCH_WALLETS || '';
 // WATCH_EVERY: print watched wallet status every N batches (default 5, set to 1 for every batch)
-const WATCH_EVERY = Number(process.env.WATCH_EVERY || 5);
-const ETH_PER     = ethers.parseEther("0.02");   // gas budget per wallet — 0.02 ETH covers approve + register even at 10+ gwei on Base Sepolia
+const WATCH_EVERY  = Number(process.env.WATCH_EVERY  || 5);
+// RESCUE_SCAN: max parked slots to inspect per inline rescue call (avoids RPC slowdown)
+// RESCUE_CAP:  max members to rescue per call (keeps bigfill moving)
+const RESCUE_SCAN  = Number(process.env.RESCUE_SCAN  || 20);
+const RESCUE_CAP   = Number(process.env.RESCUE_CAP   || 5);
+const ETH_PER      = ethers.parseEther("0.02");   // gas budget per wallet — 0.02 ETH covers approve + register even at 10+ gwei on Base Sepolia
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 const sleep  = s  => new Promise(r => setTimeout(r, s * 1000));
@@ -120,6 +125,150 @@ async function reportWatchedWallets(watchList, { tierRouter, matA1, matB1, commu
     }
   }
   console.log('');
+}
+
+// ── Burn Sweep — simulate organic early-unlock sell pressure ─────────────────
+// After each matrix cycle, wallets that earned CNOVA (cliff-vested) call
+// earlyUnlockAll(). The contract deducts a sliding penalty (up to 50% at max)
+// which is burned (penaltyDestination=0) or sent to the buyback fund — either
+// way it strengthens the floor.  Released tokens are now freely transferable.
+// Set BURN_SIMULATE=false in .env to skip this step.
+async function burnSweep(walletList, cnova) {
+  if (process.env.BURN_SIMULATE === "false") return;
+
+  sep("Early Unlock Sweep — simulating member sell pressure");
+  let swept = 0, skipped = 0;
+  let totalPenalty = 0n;
+
+  for (const w of walletList) {
+    try {
+      // Only proceed if wallet has locked CNOVA to unlock
+      const locked = await cnova.lockedBalanceOf(w.address);
+      if (locked === 0n) { skipped++; continue; }
+
+      // Wallet needs ETH for gas
+      const ethBal = await ethers.provider.getBalance(w.address);
+      if (ethBal < 500_000_000_000n) { skipped++; continue; } // < 0.0005 ETH
+
+      const connected = w.connect(ethers.provider);
+      const supplyBefore = await cnova.totalSupply();
+      await (await cnova.connect(connected).earlyUnlockAll({ gasLimit: 500_000 })).wait();
+      const supplyAfter = await cnova.totalSupply();
+
+      // Supply drop = tokens burned as penalty
+      const burned = supplyBefore > supplyAfter ? supplyBefore - supplyAfter : 0n;
+      totalPenalty += burned;
+      swept++;
+    } catch {
+      skipped++; // wallet had no vest batches or failed — silent skip
+    }
+  }
+
+  const totalBurnedOnChain = await cnova.totalBurned().catch(() => 0n);
+  console.log(`  Swept: ${swept} wallets unlocked | ${skipped} skipped (no vest batches)`);
+  console.log(`  Penalty burned this sweep:  ${ethers.formatEther(totalPenalty)} CNOVA`);
+  console.log(`  Contract totalBurned:       ${ethers.formatEther(totalBurnedOnChain)} CNOVA`);
+}
+
+// ── Inline parked-wallet rescue ───────────────────────────────────────────────
+// Called after every registration batch. Scans up to RESCUE_SCAN parked members,
+// rescues up to RESCUE_CAP using the sliding-scale SF contribution (V8.13).
+// Uses SF balance only — no deployer top-up. Silent no-op when nothing to rescue.
+const _WORK_PARKED_RESCUE = 4;
+const _GAS_RESCUE_NORMAL   = 800_000;
+const _GAS_RESCUE_OVERFLOW = 15_000_000;
+const _rescueCoder = ethers.AbiCoder.defaultAbiCoder();
+
+function _sfRescueBpsInline(withdrawable, fee) {
+  const wBps = withdrawable * 10000n / fee;
+  if (wBps >= 10000n) return    0n;
+  if (wBps >=  9500n) return 1000n;
+  if (wBps >=  9000n) return 1500n;
+  if (wBps >=  8500n) return 2000n;
+  if (wBps >=  8000n) return 2500n;
+  if (wBps >=  7500n) return 3000n;
+  if (wBps >=  7000n) return 3500n;
+  if (wBps >=  6500n) return 4000n;
+  if (wBps >=  6000n) return 4500n;
+  if (wBps >=  5000n) return 5000n;
+  return null; // < 50% withdrawable — not keeper-eligible
+}
+
+async function inlineRescueParked({ matA1, matB1, stabilityFund, matrixKeeper, deployer, entryFee }) {
+  if (!stabilityFund || !matrixKeeper) return;
+
+  const parkedCount = await matA1.getParkedCount().catch(() => 0n);
+  if (parkedCount === 0n) return;
+
+  const sfBal = await stabilityFund.balanceByTier(0).catch(() => 0n);
+  // Minimum SF needed = 10% of entry fee (lowest possible sliding-scale share)
+  const minSfShare = entryFee * 1000n / 10000n;
+  if (sfBal < minSfShare) {
+    console.log(`  🏥 ${parkedCount} parked — SF ${(Number(sfBal)/1e6).toFixed(2)} < min ${(Number(minSfShare)/1e6).toFixed(2)}, skip`);
+    return;
+  }
+
+  const matA1Addr = await matA1.getAddress();
+  const matBSize  = await matB1.MATRIX_SIZE();
+  let   matBOcc   = await matB1.occupancy();
+
+  // Scan up to RESCUE_SCAN parked members, collect keeper-eligible ones
+  const scanCount = Number(parkedCount < BigInt(RESCUE_SCAN) ? parkedCount : BigInt(RESCUE_SCAN));
+  const eligible  = [];
+  const seen      = new Set();
+
+  for (let i = 0; i < scanCount && eligible.length < RESCUE_CAP; i++) {
+    const addr = await matA1.getParkedMember(i).catch(() => null);
+    if (!addr || addr === ethers.ZeroAddress) continue;
+    const addrLc = addr.toLowerCase();
+    if (seen.has(addrLc)) continue;
+    seen.add(addrLc);
+
+    // Skip stale slots — member already crossed to MatB
+    let inMatB = false;
+    try { const m = await matB1.getMember(addr); inMatB = m.isInMatrix; } catch {}
+    if (inMatB) continue;
+
+    const withdrawable = await matA1.withdrawableOf(addr).catch(() => 0n);
+    const bps = _sfRescueBpsInline(withdrawable, entryFee);
+    if (bps === null) continue; // < 50% withdrawable — skip
+
+    const sfShare = entryFee * bps / 10000n;
+    eligible.push({ addr, sfShare });
+  }
+
+  if (eligible.length === 0) return;
+
+  // Cap to what SF can currently cover
+  const toRescue = [];
+  let sfRunning = sfBal;
+  for (const e of eligible) {
+    if (sfRunning < e.sfShare) break;
+    sfRunning -= e.sfShare;
+    toRescue.push(e);
+  }
+  if (toRescue.length === 0) return;
+
+  process.stdout.write(`  🏥 Parked rescue: ${parkedCount} queued → rescuing ${toRescue.length}… `);
+  let rescued = 0;
+  for (const { addr } of toRescue) {
+    const item = [{ workType: _WORK_PARKED_RESCUE, tierIndex: 0, addr1: matA1Addr, addr2: addr }];
+    const performData = _rescueCoder.encode(
+      ['tuple(uint8 workType, uint8 tierIndex, address addr1, address addr2)[]'],
+      [item]
+    );
+    const gasLimit = (matBOcc >= matBSize) ? _GAS_RESCUE_OVERFLOW : _GAS_RESCUE_NORMAL;
+    try {
+      const tx = await matrixKeeper.performUpkeep(performData, { gasLimit });
+      const receipt = await tx.wait();
+      if (receipt.status === 1) {
+        rescued++;
+        if (gasLimit !== _GAS_RESCUE_OVERFLOW) matBOcc++;
+      }
+    } catch (_) { /* silent — don't halt bigfill */ }
+    if (gasLimit === _GAS_RESCUE_OVERFLOW) await new Promise(r => setTimeout(r, 1500));
+  }
+  console.log(`${rescued}/${toRescue.length} rescued ✅`);
 }
 
 // ── Snapshot helper (V8.1) ────────────────────────────────────────────────────
@@ -270,6 +419,8 @@ async function main() {
   const matA2        = T2.matA ? await ethers.getContractAt("FigureEightMatrixV8", T2.matA) : null;
   const matB2        = T2.matB ? await ethers.getContractAt("FigureEightMatrixV8", T2.matB) : null;
   const stabilityFund = SF_ADDR ? await ethers.getContractAt("StabilityFund", SF_ADDR) : null;
+  const MK_ADDR    = addrs.matrixKeeper || addrs.MatrixKeeper || null;
+  const matrixKeeper = MK_ADDR ? await ethers.getContractAt("MatrixKeeper", MK_ADDR, deployer) : null;
 
   // CommunityWallet for watched-wallet cohort queries (graceful fallback if not in addresses file)
   const CW_ADDR = addrs.communityWallet || addrs.CommunityWallet || null;
@@ -506,6 +657,7 @@ async function main() {
   let registered = 0;
   const failures = [];
   const upgradedAt = [];
+  let prevSysCyc = await tierRouter.totalSystemCycles(); // track cycle changes for burn sweep
 
   const batches = [];
   for (let i = 0; i < wallets.length; i += BATCH_SIZE) {
@@ -619,6 +771,16 @@ async function main() {
       break;
     }
 
+    // Burn sweep — runs whenever a new matrix cycle is detected
+    if (sysCyc > prevSysCyc) {
+      console.log(`\n  🔄 Cycle detected (${prevSysCyc} → ${sysCyc}) — running early-unlock burn sweep`);
+      await burnSweep(wallets, cnova);
+      prevSysCyc = sysCyc;
+    }
+
+    // Inline parked rescue — after every batch, rescue any eligible parked members
+    await inlineRescueParked({ matA1, matB1, stabilityFund, matrixKeeper, deployer: rawSigner, entryFee: T1_FEE });
+
     // Watched wallet report (every WATCH_EVERY batches, always on last batch)
     if (watchAddrs.length > 0 && (batchNum % WATCH_EVERY === 0 || b === batches.length - 1)) {
       await reportWatchedWallets(watchAddrs, { tierRouter, matA1, matB1, communityWallet, usdc: usdcContract });
@@ -630,6 +792,11 @@ async function main() {
   // ── Post-registration snapshot ────────────────────────────────────────────
   sep();
   await snapshot("POST-REGISTRATION SNAPSHOT", { tierRouter, pm1, matA1, matB1, matA2, matB2, cnova, treasury, stabilityFund, w1Addr: W1_ADDR });
+
+  // ── Final burn sweep — catch any remaining vest batches ───────────────────
+  sep("Final Burn Sweep");
+  console.log("  Running earlyUnlockAll() on all wallets with remaining vest batches…");
+  await burnSweep(wallets, cnova);
 
   // ── forceCross phase: push parked MatA alumni into MatB ───────────────────
   // Most wallets park after cycling out of MatA (not enough escrow to self-fund
