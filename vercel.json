@@ -25,7 +25,7 @@
     {
       "source": "/(.*)",
       "has": [{ "type": "host", "value": "early.crypto-nova.app" }],
-      "destination": "/index.html"
+      "destination": "/early.html"
     },
     {
       "source": "/(.*)",
