@@ -68,7 +68,7 @@
     rdLbl.textContent = 'Redirecting to the app in ' + secs + ' seconds…';
     var t = setInterval(function() {
       secs--;
-      if (secs <= 0) { clearInterval(t); window.location.href = 'https://crypto-nova.app'; }
+      if (secs <= 0) { clearInterval(t); window.location.href = '/'; }
       else { rdLbl.textContent = 'Redirecting to the app in ' + secs + ' seconds…'; }
     }, 1000);
   }

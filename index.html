@@ -405,11 +405,9 @@
 
 <script>
 (function() {
-  // early subdomain gets its own gate page — redirect if index.html was served instead
+  // v8, early, and localhost bypass the gate — always open
   var _host = window.location.hostname;
-  if (_host === 'early.crypto-nova.app') { window.location.replace('/early.html'); return; }
-  // v8 and localhost are always open — no gate
-  if (_host === 'v8.crypto-nova.app' || _host === 'localhost' || _host === '127.0.0.1') return;
+  if (_host === 'v8.crypto-nova.app' || _host === 'early.crypto-nova.app' || _host === 'localhost' || _host === '127.0.0.1') return;
   var FULL_AT = new Date('2026-06-15T20:00:00Z').getTime(); // 4:00 PM EDT
   var gate    = document.getElementById('maingatelive');
   var cd      = document.getElementById('maingate-countdown');
