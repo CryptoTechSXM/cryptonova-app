@@ -384,40 +384,53 @@
 </head>
 <body>
 
-<!-- ══ LAUNCH GATE ══════════════════════════════════════════════════════════
-     index.html: opens 10:00 AM EDT (14:00 UTC) June 14 2026
+<!-- ══ LAUNCH GATE — two-phase June 18 community launch ════════════════
+     Phase 1 (early):  3:30 PM EDT = 2026-06-18T19:30:00Z
+     Phase 2 (full):   4:00 PM EDT = 2026-06-18T20:00:00Z
 ═══════════════════════════════════════════════════════════════════════════ -->
-<div id="launch-gate" style="display:none;position:fixed;inset:0;z-index:99999;background:#0a0a1a;display:flex;flex-direction:column;align-items:center;justify-content:center;font-family:'Inter',sans-serif;color:#fff;">
-  <div style="text-align:center;max-width:480px;padding:2rem;">
+<div id="launch-gate" style="display:none;position:fixed;inset:0;z-index:99999;background:#0a0a1a;flex-direction:column;align-items:center;justify-content:center;font-family:'Inter',sans-serif;color:#fff;">
+  <div style="text-align:center;max-width:520px;padding:2rem;">
     <div style="font-size:2.5rem;font-weight:800;background:linear-gradient(135deg,#7c3aed,#2563eb);-webkit-background-clip:text;-webkit-text-fill-color:transparent;margin-bottom:0.5rem;">CryptoNova</div>
-    <div style="color:#a78bfa;font-size:1rem;margin-bottom:2.5rem;letter-spacing:0.05em;">TESTNET LAUNCH</div>
-    <div style="color:#94a3b8;font-size:0.95rem;margin-bottom:1rem;">Opens in</div>
-    <div id="gate-countdown" style="font-size:3rem;font-weight:700;font-variant-numeric:tabular-nums;color:#fff;letter-spacing:0.05em;margin-bottom:2rem;">--:--:--</div>
-    <div style="color:#64748b;font-size:0.85rem;">Launching at <strong style="color:#a78bfa;">10:00 AM EDT</strong> · June 14, 2026</div>
+    <div style="color:#a78bfa;font-size:1rem;margin-bottom:2rem;letter-spacing:0.05em;" id="gate-phase-label">COMMUNITY LAUNCH</div>
+    <div style="background:rgba(124,58,237,.12);border:1px solid rgba(124,58,237,.35);border-radius:12px;padding:16px 20px;margin-bottom:2rem;text-align:left;">
+      <div style="font-size:0.8rem;color:#a78bfa;font-weight:600;letter-spacing:0.08em;margin-bottom:8px;">SYSTEM UPDATE</div>
+      <div style="font-size:0.9rem;color:#cbd5e1;line-height:1.65;">We completed a fresh contract deployment to resolve issues caught during our last stress test. Clean contracts, better stability — everything is ready for launch.</div>
+    </div>
+    <div style="color:#94a3b8;font-size:0.9rem;margin-bottom:0.75rem;" id="gate-opens-label">Early access opens in</div>
+    <div id="gate-countdown" style="font-size:3rem;font-weight:700;font-variant-numeric:tabular-nums;color:#fff;letter-spacing:0.05em;margin-bottom:1.5rem;">--:--:--</div>
+    <div id="gate-schedule" style="color:#475569;font-size:0.82rem;line-height:1.8;">
+      <span style="color:#a78bfa;font-weight:600;">3:30 PM EDT</span> — Early community access<br>
+      <span style="color:#22d3ee;font-weight:600;">4:00 PM EDT</span> — Full public launch &middot; June 18, 2026
+    </div>
   </div>
 </div>
 
 <script>
 (function() {
-  var OPEN_AT = new Date('2026-06-14T14:00:00Z').getTime(); // 10:00 AM EDT
-  var gate = document.getElementById('launch-gate');
-  var countdown = document.getElementById('gate-countdown');
+  var EARLY_AT = new Date('2026-06-18T19:30:00Z').getTime(); // 3:30 PM EDT
+  var FULL_AT  = new Date('2026-06-18T20:00:00Z').getTime(); // 4:00 PM EDT
+  var gate     = document.getElementById('launch-gate');
+  var cd       = document.getElementById('gate-countdown');
+  var lbl      = document.getElementById('gate-opens-label');
+  var phase    = document.getElementById('gate-phase-label');
 
   function tick() {
     var now = Date.now();
-    if (now >= OPEN_AT) {
-      gate.style.display = 'none';
-      return;
-    }
+    if (now >= FULL_AT) { gate.style.display = 'none'; return; }
     gate.style.display = 'flex';
-    var diff = OPEN_AT - now;
+    var target = now < EARLY_AT ? EARLY_AT : FULL_AT;
+    if (now >= EARLY_AT) {
+      phase.textContent = 'EARLY ACCESS OPEN';
+      lbl.textContent   = 'Full public launch opens in';
+    } else {
+      phase.textContent = 'COMMUNITY LAUNCH';
+      lbl.textContent   = 'Early access opens in';
+    }
+    var diff = target - now;
     var h = Math.floor(diff / 3600000);
     var m = Math.floor((diff % 3600000) / 60000);
     var s = Math.floor((diff % 60000) / 1000);
-    countdown.textContent =
-      String(h).padStart(2,'0') + ':' +
-      String(m).padStart(2,'0') + ':' +
-      String(s).padStart(2,'0');
+    cd.textContent = String(h).padStart(2,'0') + ':' + String(m).padStart(2,'0') + ':' + String(s).padStart(2,'0');
   }
 
   tick();
@@ -700,7 +713,7 @@
   </div>
     <div class="logo-text">Crypto<span>Nova</span></div>
     <span class="logo-badge" id="network-badge">Base Sepolia</span>
-    <span style="background:rgba(0,229,160,.15);color:var(--green);border:1px solid var(--green2);border-radius:4px;padding:2px 8px;font-size:10px;font-weight:700;margin-left:6px">V8.10</span>
+    <span style="background:rgba(0,229,160,.15);color:var(--green);border:1px solid var(--green2);border-radius:4px;padding:2px 8px;font-size:10px;font-weight:700;margin-left:6px">V8.13</span>
   </div>
   <div style="display:flex;align-items:center;gap:8px">
     <button class="theme-toggle" id="theme-btn" onclick="toggleTheme()">☀️ Light</button>
@@ -773,8 +786,8 @@
       <div class="token-card-left">
         <div class="token-icon">CN</div>
         <div>
-          <div class="token-name" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><svg width="28" height="28" style="border-radius:50%;flex-shrink:0"><use href="#cnova-icon"/></svg><a href="https://sepolia.basescan.org/token/0xBa2592aef54225C1d77898740296b656227BDcbc" target="_blank" rel="noopener" style="color:inherit;text-decoration:none;font-weight:700">CryptoNOVA Matrix ↗</a> <span class="pill pill-green" style="font-size:10px;vertical-align:middle">CNOVA · ERC-20 · Base</span></div>
-          <div class="token-addr"><a href="https://sepolia.basescan.org/token/0xBa2592aef54225C1d77898740296b656227BDcbc" target="_blank" rel="noopener" style="color:var(--green);text-decoration:none;font-family:monospace">0xBa2592aef54225C1d77898740296b656227BDcbc</a> · 18 decimals</div>
+          <div class="token-name" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><svg width="28" height="28" style="border-radius:50%;flex-shrink:0"><use href="#cnova-icon"/></svg><a href="https://sepolia.basescan.org/token/0x361e7dcbb38da121EEa7b0A4f0793E4EAF7b4179" target="_blank" rel="noopener" style="color:inherit;text-decoration:none;font-weight:700">CryptoNOVA Matrix ↗</a> <span class="pill pill-green" style="font-size:10px;vertical-align:middle">CNOVA · ERC-20 · Base</span></div>
+          <div class="token-addr"><a href="https://sepolia.basescan.org/token/0x361e7dcbb38da121EEa7b0A4f0793E4EAF7b4179" target="_blank" rel="noopener" style="color:var(--green);text-decoration:none;font-family:monospace">0xBa2592aef54225C1d77898740296b656227BDcbc</a> · 18 decimals</div>
           <div style="font-size:12px;color:var(--text2);margin-top:4px">Earned on every registration. 50 CNOVA minted per T1 join. Add to your wallet to track your balance during testing.</div>
         </div>
       </div>
@@ -1890,63 +1903,63 @@ const RPC_EXTRA    = 'https://base-sepolia-rpc.publicnode.com';
 
 const ADDRS = {
   usdc:          '0x2D8B7b5eDec96bE441b6fb0D45D74a2BcE2C639a',
-  cnova:         '0x9A07EBfeed853b24683B199fd33A27f8d8851191',
-  treasury:      '0x332822be507690a92Da30Fd941bDDfD9eaAE78F7',
-  stabilityFund: '0x58Cc6E093703E0fD854D712E0F362cdbEF42C981',
-  buybackReserve:'0xcFA9526FB19497b8220f87952EAeB27C7b9D08f4',
-  tierRouter:    '0x6594Fa10cea0EC6a81082429F18d2786695c9308',
-  matrixKeeper:  '0x64f49334CDeA98165FccF7d0832D81b6FD541eb7',
-  v8Governance:  '0xF31A8e1E8dfc523D4699a15448370A31EE7454C0',
-  communityWallet:'0xb81467bBEB177500d3d87A65fCf3E98192059415',
+  cnova:         '0x361e7dcbb38da121EEa7b0A4f0793E4EAF7b4179',
+  treasury:      '0x39aF86c2Bc8641B732a66D7d1Be0F549578Da5a1',
+  stabilityFund: '0xb9f328933CF6CBB77314c68db05564E0797bfB80',
+  buybackReserve:'0xaEef1F0Be1918a11536a75d25a371E3e5236f8aF',
+  tierRouter:    '0x195B7b5Da2Bb60eBfcbcD77734a1D71C1bC84ccE',
+  matrixKeeper:  '0x028530f03CD11684e1b900689aD230eec87bb7bB',
+  v8Governance:  '0x586441Fc94F27763B7FE69017d874649bF9B5C17',
+  communityWallet:'0xB72D8eD9a6Fa835bcB762DE2A5CB0f17bDd227C5',
   T1: {
-    pm:   '0xBcb3de2F2F6a9518b7587554f645c8a1Fe14dAD4',
-    matA: '0xA505Dee141950fB241Dc905309f11e3eAb7823A6',
-    matB: '0x53fb9cD704c04B68F2007fa02f43261696481144',
+    pm:   '0x52C530Cd7a76C5CB77EDB30f7D90f6763bAcaed2',
+    matA: '0xC6cD35788E5932573b526a6413F0d7E571E3Dc89',
+    matB: '0x23f471411bc528ab876bE917a8413947F8695519',
   },
   T2: {
-    pm:   '0x748700a3A376b4c459b257257C9A8Cb40F8eE07D',
-    matA: '0xf90BFeF13D0426b65D8ad9D82EF5A511672AAcc5',
-    matB: '0xB293C5A406E672d7AC9c66da6f3769952dcbF546',
+    pm:   '0x5F78C00ADA0a85514a343ADEcDdb2C4a3a3C0DB8',
+    matA: '0x7c83f0B1168B9b77Ae71e821A1837af99F3C0d5F',
+    matB: '0x34c4aE17dAe16E2B2AEe07e7492A03fd2C30C12f',
   },
   T3: {
-    pm:   '0x0bf18606f18c27d85612E2349EFA82Fd51Ae8C88',
-    matA: '0xcFf55EE6564Ce1e8f4697cD75b7C199b224Cb45e',
-    matB: '0x1d237F7A186742117BE29fEd24bca3Afcb721E04',
+    pm:   '0xf1bD39786cFDD80227C0f33F4EA6d440901722DF',
+    matA: '0x3631ece57745F08452fcB9797aEa97E25C2e6EC5',
+    matB: '0x9c864e5EF104da05a0478dEc2B70cA0efF9bb887',
   },
   T4: {
-    pm:   '0xcFaF625Ef77d62cd47abD8C3B46c1f8c352Bbfcb',
-    matA: '0xb4020dDc04C148ce826e37244873b8B3A4f7D947',
-    matB: '0x81accF4b9283Be875429D8157480a1e5DA5CB04c',
+    pm:   '0x5E79F3dA48FFfAADe316290076b01453AB589597',
+    matA: '0x9c64C64314907C26Ab7c349b95942FA69ba40435',
+    matB: '0x8583D9D5e333cea834090d6699687529c0152391',
   },
   T5: {
-    pm:   '0xbA0192bbd5F2b36D96c746AdDD2d39EeCAD2478c',
-    matA: '0xa8C5b0f4f6B81eCf943Fcd573230862d1435E1fA',
-    matB: '0x2A58ecE8DACb5b263B52359b3e593072870B0F3C',
+    pm:   '0xb464E3CFc8fC9AEbd2Cd91106a20eC0cC7Ae8AFf',
+    matA: '0x9BfCA479983DF3603816680111E0FEFfE1E02f20',
+    matB: '0x10DdF43f62ecA17790F237B5b97C1241764609b3',
   },
   T6: {
-    pm:   '0xFDe4A35d72959f9532Dc5e1B118ce35633292A21',
-    matA: '0xc55A9456F4791A04A7904795d1D9f3d221e9c72b',
-    matB: '0xBd0D90EA17da2422d2eC1e6f9a7b6EC1797C8347',
+    pm:   '0xe1b76e2Da317585133Ad6C034EF5E77f0F5F3884',
+    matA: '0x1DEaf86360E31EBEd812cCD09D71221faAB62460',
+    matB: '0x72A553956215958a68bD3A7BeE788Be2601a6451',
   },
   T7: {
-    pm:   '0x456534E80551d6AC24a9509F6099dFA6A8305285',
-    matA: '0xA560F3325b8865f33973B0A93d880033992E1C54',
-    matB: '0xB2A6c5b1BB55784175E4Ead1B5790063E2614A05',
+    pm:   '0x2C868570EfED7CDb6B57123d526BE8fEAdB12Ab8',
+    matA: '0x358Ef6da6e9e38A9fE6E236Ee4217f174733E1c6',
+    matB: '0x513bc0DE7f017B45e5824FF48BEbCb8FA0442d7d',
   },
   T8: {
-    pm:   '0xF25dA41BFD412078DF3ea594479ee6497fA60bd8',
-    matA: '0xf6Aecf2a0285F68024cfd648df7D3FD5c75880E7',
-    matB: '0xDd6A26B8c4a5FBfbc4e74e8467AbE7005EB36713',
+    pm:   '0x221F3ae4BeD5aCaC1e92bd569B941945483b87Ff',
+    matA: '0x20C74b17BD91911e3aeEb0f6488283340989b4b1',
+    matB: '0xfac26A45760a943a39726EC1aE933c5ce03cBA3C',
   },
   T9: {
-    pm:   '0x6AFF6AC7430A4f66723837F18EB72c7E32DC5fe6',
-    matA: '0x96A391458332451E682F33c9486f5707F4b1b901',
-    matB: '0xA2b6a7CE7BDA49B06aB31c7855a94216B8BEAda3',
+    pm:   '0x065FC72D86A07e31A21351f93B30e5cEFE2cD5DD',
+    matA: '0x767BAAA404A2D9593BAfba853B96E041682A6cA3',
+    matB: '0xa255AB87147506D1eBC4bd4e2e31286e9a4b1E1D',
   },
   T10: {
-    pm:   '0xbcc6ae585Fb31EDD70519995DCBA987004Da83Dd',
-    matA: '0x4A9901e0aCF56471804feFE8629219621D2332Ce',
-    matB: '0x6A0683765ce785494fcA513eB595C77641B26Ff3',
+    pm:   '0xC45D21642AEbE3D9A95A0DD8A07767EF070ab75B',
+    matA: '0x144504516Eb9f4127249375a8cacc5F620b15bdf',
+    matB: '0x6C625Ec513Ab4990ccA1c5A127F98f8780c03B80',
   },
 };
 
