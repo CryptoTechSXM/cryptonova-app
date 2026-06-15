@@ -3029,10 +3029,31 @@ async function loadDashboardData() {
 async function loadUserBurnHistory(cnova, user) {
   try {
     setText('dash-cnova-burned', '…');
+    const provider   = cnova.runner?.provider ?? cnova.provider;
+    const latest     = await provider.getBlockNumber();
+    // V8.12 deployed June 14 2026 — all burns are recent.
+    // Scan last 50k blocks (~7h on Base Sepolia). Public RPCs reject block 0→latest.
+    // On mainnet an archive RPC removes this restriction entirely.
+    const fromBlock  = Math.max(0, latest - 50_000);
     const burnFilter = cnova.filters.Transfer(user, ethers.ZeroAddress);
-    const events     = await cnova.queryFilter(burnFilter, 0, 'latest');
+
+    // Try one call first; if RPC rejects the range, chunk into 2 000-block windows
+    let events;
+    try {
+      events = await cnova.queryFilter(burnFilter, fromBlock, 'latest');
+    } catch {
+      events = [];
+      const CHUNK = 2_000;
+      for (let f = fromBlock; f <= latest; f += CHUNK) {
+        const chunk = await cnova.queryFilter(burnFilter, f, Math.min(f + CHUNK - 1, latest));
+        events = events.concat(chunk);
+      }
+    }
+
     const totalBurned = events.reduce((acc, e) => acc + BigInt(e.args.value), 0n);
-    setText('dash-cnova-burned', Number(ethers.formatEther(totalBurned)).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
+    setText('dash-cnova-burned', Number(ethers.formatEther(totalBurned)).toLocaleString(
+      undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }
+    ));
   } catch(e) {
     console.warn('loadUserBurnHistory:', e.message);
     setText('dash-cnova-burned', '—');
