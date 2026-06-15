@@ -1864,8 +1864,9 @@ const LAUNCH_READY = !_PROD_HOSTS.includes(window.location.hostname);
   }
 })();
 
-const RPC_URL  = 'https://sepolia.base.org';
-const RPC_FALLBACK = 'https://base-sepolia.public.blastapi.io';
+const RPC_URL      = 'https://base-sepolia.public.blastapi.io';
+const RPC_FALLBACK = 'https://sepolia.base.org';
+const RPC_EXTRA    = 'https://base-sepolia-rpc.publicnode.com';
 
 const ADDRS = {
   usdc:          '0x2D8B7b5eDec96bE441b6fb0D45D74a2BcE2C639a',
@@ -2086,10 +2087,20 @@ async function reportEvent(type, details = {}) {
 // ═══════════════════════════════════════════════════════════════════════
 window.addEventListener('DOMContentLoaded', async () => {
   if (window.location.protocol==='file:') document.getElementById('file-protocol-banner').style.display='block';
-  // staticNetwork:true skips the async eth_chainId detection call in ethers v6
-  // — prevents page freeze when sepolia.base.org is slow to respond
+  // FallbackProvider across 3 public RPCs — eliminates single-provider rate-limit errors.
+  // quorum=1 means first healthy response wins; no majority vote needed for read calls.
   const _net84532 = ethers.Network.from(84532);
-  readProvider = new ethers.JsonRpcProvider(RPC_URL, _net84532, { staticNetwork: _net84532 });
+  const _mkRpc = url => new ethers.JsonRpcProvider(url, _net84532, { staticNetwork: _net84532 });
+  try {
+    readProvider = new ethers.FallbackProvider([
+      { provider: _mkRpc(RPC_URL),      priority: 1, weight: 1 },
+      { provider: _mkRpc(RPC_FALLBACK), priority: 2, weight: 1 },
+      { provider: _mkRpc(RPC_EXTRA),    priority: 3, weight: 1 },
+    ], _net84532, { quorum: 1 });
+  } catch(_) {
+    // ethers FallbackProvider constructor may vary — fall back to single provider
+    readProvider = _mkRpc(RPC_URL);
+  }
   loadHomeStats();
   setTimeout(loadTiersStats, 1500);  // stagger after loadHomeStats to avoid RPC rate-limiting
 
@@ -2205,7 +2216,7 @@ async function switchToBaseSepolia() {
         await window.ethereum.request({ method:'wallet_addEthereumChain', params:[{
           chainId:'0x14A34', chainName:'Base Sepolia',
           nativeCurrency:{name:'ETH',symbol:'ETH',decimals:18},
-          rpcUrls:['https://sepolia.base.org'],
+          rpcUrls:['https://base-sepolia.public.blastapi.io','https://sepolia.base.org','https://base-sepolia-rpc.publicnode.com'],
           blockExplorerUrls:['https://sepolia.basescan.org']
         }] });
         hideNetworkBanner(); if (!userAddr) await connectWallet();
