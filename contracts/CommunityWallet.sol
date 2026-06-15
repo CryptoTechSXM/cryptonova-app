@@ -455,6 +455,20 @@ contract CommunityWallet is Ownable2Step, AccessControl {
         distributeInterval = interval;
         emit DistributeIntervalSet(interval);
     }
+    // =========================================================================
+    // Testnet helpers (admin only - for QA before mainnet)
+    // =========================================================================
+
+    /**
+     * @notice Force a distribution immediately, bypassing the interval guard.
+     *         Admin-only. Use on testnet to verify the distribute->claim flow
+     *         without waiting 30 days. Should NOT be called on mainnet.
+     */
+    function forceDistribute() external onlyRole(DEFAULT_ADMIN_ROLE) {
+        lastDistributionTime = 0; // reset so distribute() time check passes
+        this.distribute();
+    }
+
 
     // =========================================================================
     // Owner emergency
