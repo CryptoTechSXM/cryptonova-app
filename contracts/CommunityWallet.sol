@@ -465,6 +465,7 @@ contract CommunityWallet is Ownable2Step, AccessControl {
      *         without waiting 30 days. Should NOT be called on mainnet.
      */
     function forceDistribute() external onlyRole(DEFAULT_ADMIN_ROLE) {
+        require(block.chainid == 84532, "CW: testnet only");
         lastDistributionTime = 0; // reset so distribute() time check passes
         this.distribute();
     }
