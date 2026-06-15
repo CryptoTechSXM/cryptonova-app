@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>CryptoNova — The Matrix</title>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/6.7.1/ethers.umd.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
   <style>
     :root {
       --bg:        #0a0e1a;
@@ -807,6 +808,25 @@
       <div class="card-sm" style="border-color:rgba(245,158,11,.4)"><div class="stat-label">System Cycles</div><div class="stat-value" id="stat-cycles" style="color:var(--yellow)"><span class="spinner" style="color:var(--yellow)"></span></div></div>
     </div>
 
+
+    <!-- CNOVA Price History Sparkline -->
+    <div class="card" style="margin-bottom:24px;padding:16px 20px">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+        <div class="section-title" style="margin:0"><div class="dot" style="background:var(--green)"></div> CNOVA Floor Price — Live Trend</div>
+        <span style="font-size:12px;color:var(--text3)" id="price-chart-subtitle">Sampled each visit · stored locally</span>
+      </div>
+      <div style="position:relative;height:90px">
+        <canvas id="cnova-price-chart" style="width:100%;height:90px"></canvas>
+        <div id="price-chart-placeholder" style="display:flex;align-items:center;justify-content:center;height:90px;font-size:13px;color:var(--text3)">
+          Loading price history…
+        </div>
+      </div>
+      <div style="display:flex;justify-content:space-between;margin-top:6px;font-size:11px;color:var(--text3)">
+        <span id="price-chart-low">—</span>
+        <span id="price-chart-current" style="color:var(--green);font-weight:600">—</span>
+        <span id="price-chart-high">—</span>
+      </div>
+    </div>
 
     <!-- CNOVA Mining Stats -->
     <div class="grid-4" style="margin-bottom:24px">
@@ -2017,6 +2037,17 @@ const TREASURY_ABI = [
   'function redeemAtFloor(uint256 cnovaAmount) external',
 ];
 
+const CW_ABI = [
+  'function cohort(address) external view returns (uint8)',
+  'function claimable(address) external view returns (uint256)',
+  'function claim() external returns (uint256)',
+  'function totalEnrolled() external view returns (uint256)',
+  'function lastDistributionTime() external view returns (uint256)',
+  'function distributeInterval() external view returns (uint256)',
+  'function distributeReady() external view returns (bool)',
+  'event MemberEnrolled(address indexed member, uint8 cohort, uint256 enrollmentNumber)',
+];
+
 // ═══════════════════════════════════════════════════════════════════════
 // STATE
 // ═══════════════════════════════════════════════════════════════════════
@@ -2236,6 +2267,222 @@ function rpc(p) {
   ]);
 }
 
+// ─── CNOVA Price Sparkline ────────────────────────────────────────────────────
+let _priceChart = null;
+function _renderPriceSparkline(history, currentPrice) {
+  const canvas = document.getElementById('cnova-price-chart');
+  const placeholder = document.getElementById('price-chart-placeholder');
+  if (!canvas) return;
+
+  if (!history || history.length < 2) {
+    // Not enough data yet — show placeholder with current price
+    if (placeholder) placeholder.textContent = currentPrice > 0
+      ? `Current floor: $${currentPrice.toFixed(6)} — chart builds as you visit`
+      : 'Loading price history…';
+    canvas.style.display = 'none';
+    return;
+  }
+
+  if (placeholder) placeholder.style.display = 'none';
+  canvas.style.display = 'block';
+
+  const labels = history.map(h => {
+    const d = new Date(h.t);
+    return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) + ' ' +
+           d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
+  });
+  const prices = history.map(h => h.p);
+  const minP = Math.min(...prices);
+  const maxP = Math.max(...prices);
+
+  // Low / High / Current labels
+  setText('price-chart-low',     'Low: $' + minP.toFixed(6));
+  setText('price-chart-current', 'Now: $' + currentPrice.toFixed(6));
+  setText('price-chart-high',    'High: $' + maxP.toFixed(6));
+  setText('price-chart-subtitle', `${history.length} sample${history.length !== 1 ? 's' : ''} · stored locally`);
+
+  const cfg = {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [{
+        data: prices,
+        borderColor: '#00e5a0',
+        borderWidth: 2,
+        pointRadius: prices.length > 20 ? 0 : 3,
+        pointBackgroundColor: '#00e5a0',
+        fill: true,
+        backgroundColor: (ctx) => {
+          const chart = ctx.chart;
+          const { ctx: c, chartArea } = chart;
+          if (!chartArea) return 'transparent';
+          const gradient = c.createLinearGradient(0, chartArea.top, 0, chartArea.bottom);
+          gradient.addColorStop(0, 'rgba(0,229,160,0.25)');
+          gradient.addColorStop(1, 'rgba(0,229,160,0.01)');
+          return gradient;
+        },
+        tension: 0.4,
+      }],
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      animation: false,
+      plugins: { legend: { display: false }, tooltip: {
+        callbacks: { label: ctx => '$' + ctx.parsed.y.toFixed(6) },
+        backgroundColor: '#1a2236',
+        borderColor: '#00e5a0',
+        borderWidth: 1,
+        titleColor: '#a0aec0',
+        bodyColor: '#00e5a0',
+      }},
+      scales: {
+        x: { display: false },
+        y: {
+          display: false,
+          min: minP * 0.999,
+          max: maxP * 1.001 + (maxP === minP ? 0.0000001 : 0),
+        },
+      },
+    },
+  };
+
+  if (_priceChart) {
+    _priceChart.data.labels = labels;
+    _priceChart.data.datasets[0].data = prices;
+    _priceChart.options.scales.y.min = minP * 0.999;
+    _priceChart.options.scales.y.max = maxP * 1.001 + (maxP === minP ? 0.0000001 : 0);
+    _priceChart.update('none');
+  } else {
+    _priceChart = new Chart(canvas, cfg);
+  }
+}
+
+// ─── Community Wallet ─────────────────────────────────────────────────────────
+async function loadCWData(userAddr, signer, rp) {
+  const cwAddr = ADDRS.communityWallet;
+  if (!cwAddr || cwAddr === ethers.ZeroAddress) return;
+
+  const loadingEl   = document.getElementById('cw-loading');
+  const notFounder  = document.getElementById('cw-not-founder');
+  const founderPanel = document.getElementById('cw-founder-panel');
+
+  try {
+    const cw = new ethers.Contract(cwAddr, CW_ABI, rp);
+    const [cohortVal, claimableVal, totalEnrolled, lastDist, interval] = await Promise.all([
+      cw.cohort(userAddr).catch(() => 0n),
+      cw.claimable(userAddr).catch(() => 0n),
+      cw.totalEnrolled().catch(() => 0n),
+      cw.lastDistributionTime().catch(() => 0n),
+      cw.distributeInterval().catch(() => 2592000n),  // 30 days default
+    ]);
+
+    if (loadingEl) loadingEl.style.display = 'none';
+    const cohortNum = Number(cohortVal);
+
+    if (cohortNum === 0) {
+      if (notFounder)   notFounder.style.display   = 'block';
+      if (founderPanel) founderPanel.style.display = 'none';
+      return;
+    }
+
+    if (notFounder)   notFounder.style.display   = 'none';
+    if (founderPanel) founderPanel.style.display = 'block';
+
+    const isGenesis = cohortNum === 1;
+    setText('cw-tranche', isGenesis ? '🌟 Genesis Member' : '🚀 Pioneer Member');
+
+    // Try to get specific enrollment number from events (best-effort)
+    try {
+      const filter = cw.filters.MemberEnrolled(userAddr);
+      const events  = await cw.queryFilter(filter, -200000);
+      if (events.length > 0) {
+        const num = Number(events[0].args.enrollmentNumber);
+        setText('cw-founder-id', `Member #${num.toLocaleString()} of 1,000`);
+      } else {
+        setText('cw-founder-id', isGenesis ? 'Genesis cohort (#1–500)' : 'Pioneer cohort (#501–1,000)');
+      }
+    } catch(_) {
+      setText('cw-founder-id', isGenesis ? 'Genesis cohort (#1–500)' : 'Pioneer cohort (#501–1,000)');
+    }
+
+    // Claimable USDC
+    const claimUsd = Number(claimableVal) / 1e6;
+    setText('cw-claimable', claimUsd > 0 ? '$' + claimUsd.toFixed(4) : '$0.00');
+
+    // Pool balance
+    const usdc2  = new ethers.Contract(ADDRS.usdc, USDC_ABI, rp);
+    const cwBal  = await usdc2.balanceOf(cwAddr).catch(() => 0n);
+    setText('cw-pending', fmt6(cwBal));
+
+    // Cohort slot counts
+    const enrolled  = Number(totalEnrolled);
+    setText('cw-tranche-a', Math.min(enrolled, 500) + ' / 500');
+    setText('cw-tranche-b', Math.max(0, enrolled - 500) + ' / 500');
+
+    // Next distribution countdown
+    const lastDistN   = Number(lastDist);
+    const intervalN   = Number(interval);
+    if (lastDistN === 0) {
+      setText('cw-epoch', 'Pending first distribution');
+    } else {
+      const nextMs = (lastDistN + intervalN) * 1000;
+      const nowMs  = Date.now();
+      if (nowMs >= nextMs) {
+        setText('cw-epoch', '🟢 Distribution ready to trigger');
+      } else {
+        const days  = Math.ceil((nextMs - nowMs) / 86400000);
+        const hours = Math.ceil((nextMs - nowMs) / 3600000);
+        setText('cw-epoch', days >= 2 ? `~${days} days until next distribution` : `~${hours} hour${hours !== 1 ? 's' : ''} until next distribution`);
+      }
+    }
+
+    // Claim button state
+    const claimBtn = document.getElementById('btn-cw-claim');
+    if (claimBtn) {
+      if (claimUsd > 0) {
+        claimBtn.disabled     = false;
+        claimBtn.textContent  = `Claim $${claimUsd.toFixed(4)} USDC`;
+        claimBtn.className    = 'btn btn-green full-w';
+      } else {
+        claimBtn.disabled     = true;
+        claimBtn.textContent  = 'Nothing to claim yet';
+        claimBtn.className    = 'btn btn-ghost full-w';
+      }
+    }
+
+  } catch(e) {
+    console.error('loadCWData:', e.message);
+    if (loadingEl) loadingEl.innerHTML = '<span style="color:var(--text3)">Community wallet data unavailable — ' + e.message + '</span>';
+  }
+}
+
+async function doCWClaimAll() {
+  const statusEl = document.getElementById('cw-claim-status');
+  const btn      = document.getElementById('btn-cw-claim');
+  if (!signer || !userAddr) {
+    if (statusEl) statusEl.textContent = 'Please connect your wallet first.';
+    return;
+  }
+  if (btn) { btn.disabled = true; btn.textContent = 'Claiming…'; }
+  if (statusEl) statusEl.textContent = '⏳ Submitting transaction…';
+  try {
+    const cw     = new ethers.Contract(ADDRS.communityWallet, CW_ABI, signer);
+    const tx     = await cw.claim();
+    if (statusEl) statusEl.textContent = '⏳ Waiting for confirmation…';
+    const receipt = await tx.wait();
+    if (statusEl) statusEl.innerHTML =
+      `✅ Claimed! <a href="https://sepolia.basescan.org/tx/${receipt.hash}" target="_blank" style="color:var(--green)">View tx ↗</a>`;
+    // Refresh the panel after 2 seconds
+    setTimeout(() => loadCWData(userAddr, signer, readProvider || new ethers.JsonRpcProvider(RPC_URL, 84532, { staticNetwork: true })), 2000);
+  } catch(e) {
+    console.error('doCWClaimAll:', e.message);
+    const reason = e?.reason || e?.data?.message || e.message || 'Claim failed';
+    if (statusEl) statusEl.textContent = '❌ ' + reason;
+    if (btn) { btn.disabled = false; btn.textContent = 'Claim All Available'; }
+  }
+}
+
 async function loadHomeStats() {
   // Try primary RPC, fall back to blast if it hangs or errors
   let rp = readProvider || new ethers.JsonRpcProvider(RPC_URL, 84532, { staticNetwork: true });
@@ -2366,6 +2613,22 @@ async function loadHomeStats() {
                      : floorUsd < 1       ? '$' + floorUsd.toFixed(4)
                      :                      '$' + floorUsd.toFixed(2);
       setText('stat-floor-price', floorStr);
+      // ── Price sparkline — sample + render ─────────────────────────────
+      try {
+        const PRICE_KEY = 'cnova_price_history';
+        const MAX_SAMPLES = 60;
+        const now = Date.now();
+        let history = [];
+        try { history = JSON.parse(localStorage.getItem(PRICE_KEY) || '[]'); } catch(_) {}
+        // Only add a new sample if at least 5 minutes have passed since the last one
+        const lastSample = history[history.length - 1];
+        if (!lastSample || now - lastSample.t > 5 * 60 * 1000) {
+          history.push({ t: now, p: floorUsd });
+          if (history.length > MAX_SAMPLES) history = history.slice(-MAX_SAMPLES);
+          try { localStorage.setItem(PRICE_KEY, JSON.stringify(history)); } catch(_) {}
+        }
+        _renderPriceSparkline(history, floorUsd);
+      } catch(_) {}
     } else {
       setText('stat-floor-price', '—');
     }
@@ -3036,6 +3299,9 @@ async function loadDashboardData() {
         breakdownEl.style.display = 'none';
       }
     } catch(_) {}
+
+    // Community Wallet — load founder status + claimable
+    await loadCWData(userAddr, signer, rp).catch(e => console.error('CW load error:', e.message));
 
   } catch(e) { console.error('loadDashboardData:', e.message); }
 }
