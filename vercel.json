@@ -25,12 +25,12 @@
     {
       "source": "/(.*)",
       "has": [{ "type": "host", "value": "early.crypto-nova.app" }],
-      "destination": "/early.html"
+      "destination": "/index.html"
     },
     {
       "source": "/(.*)",
       "has": [{ "type": "host", "value": "v8.crypto-nova.app" }],
-      "destination": "/v8.html"
+      "destination": "/index.html"
     },
     { "source": "/api/:path*", "destination": "/api/:path*" },
     { "source": "/terms",      "destination": "/terms.html" },
