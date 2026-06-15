@@ -54,7 +54,7 @@ for (const v of OPTIONAL_WALLETS) {
   else ok(`${v} not set — will default to deployer address`);
 }
 
-const ADDR_FILE = process.env.ADDRESSES_FILE || "deployed_addresses_v8_11.json";
+const ADDR_FILE = process.env.ADDRESSES_FILE || "deployed_addresses_v8_13.json";
 console.log(`  ℹ  ADDRESSES_FILE = ${ADDR_FILE}`);
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -256,10 +256,10 @@ if (deployText) {
   }
 
   // Check ADDRESSES_FILE default is v8_10
-  if (deployText.includes("deployed_addresses_v8_11.json")) {
-    ok("deploy_v8.js output file: deployed_addresses_v8_11.json");
+  if (deployText.includes("deployed_addresses_v8_13.json")) {
+    ok("deploy_v8.js output file: deployed_addresses_v8_13.json");
   } else {
-    fail("deploy_v8.js does not output to deployed_addresses_v8_11.json");
+    fail("deploy_v8.js does not output to deployed_addresses_v8_13.json");
   }
 
   // Chainlink gas limit should be 6M+
@@ -382,19 +382,19 @@ if (bigfillText) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 13. deployed_addresses_v8_11.json — exists and has expected keys
+// 13. deployed_addresses_v8_13.json — exists and has expected keys
 // ─────────────────────────────────────────────────────────────────────────────
-sep("deployed_addresses_v8_11.json — presence check");
+sep("deployed_addresses_v8_13.json — presence check");
 {
-  const addrFile = path.join(ROOT, "deployed_addresses_v8_11.json");
+  const addrFile = path.join(ROOT, "deployed_addresses_v8_13.json");
   if (!fs.existsSync(addrFile)) {
-    console.log("  ℹ  deployed_addresses_v8_11.json not found — run deploy_v8.js first");
+    console.log("  ℹ  deployed_addresses_v8_13.json not found — run deploy_v8.js first");
   } else {
     const addrData = JSON.parse(fs.readFileSync(addrFile, "utf8"));
     const required = ["tierRouter", "stabilityFund", "matrixKeeper"];
     for (const key of required) {
       if (addrData[key]) ok(`addresses: ${key} = ${addrData[key]}`);
-      else               fail(`addresses: ${key} missing from deployed_addresses_v8_11.json`);
+      else               fail(`addresses: ${key} missing from deployed_addresses_v8_13.json`);
     }
     // Check tiers 1-7 present
     const tiers = addrData.tiers || {};
