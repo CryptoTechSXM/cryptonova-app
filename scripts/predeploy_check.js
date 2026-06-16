@@ -563,6 +563,13 @@ if (deployTxt) {
   } else {
     fail("deploy_v8.js: keeper.setCommunityWallet(cwAddr) MISSING — monthly distribution won't auto-trigger");
   }
+
+  // V8.15: setTierMatrices must be called after registerTier for manualUpgrade to work
+  if (deployTxt.includes("tierRouter.setTierMatrices(")) {
+    ok("deploy_v8.js: tierRouter.setTierMatrices() call found — tierMatrixAAddr/tierMatrixBAddr will be set (required by manualUpgrade)");
+  } else {
+    fail("deploy_v8.js: tierRouter.setTierMatrices() MISSING — manualUpgrade will always revert 'cross to MatB first' because tierMatrixBAddr stays address(0)");
+  }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

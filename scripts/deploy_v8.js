@@ -340,10 +340,12 @@ async function main() {
 
     // Register tier in TierRouter (tierIndex, pairManager, entryFee)
     await (await tierRouter.registerTier(tIdx, pmAddr, fee)).wait();
+    // Set tierMatrixAAddr / tierMatrixBAddr in TierRouter (required by manualUpgrade + onCrossToMatB)
+    await (await tierRouter.setTierMatrices(tIdx, matAAddr, matBAddr)).wait();
     // Authorize matrices with TierRouter (required for handleCycleOut)
     await (await tierRouter.registerMatrix(matAAddr, tIdx)).wait();
     await (await tierRouter.registerMatrix(matBAddr, tIdx)).wait();
-    console.log(`       TierRouter.registerTier + registerMatrix T${tierNum} OK`);
+    console.log(`       TierRouter.registerTier + setTierMatrices + registerMatrix T${tierNum} OK`);
 
     // v8.6: Close velocity gate for T2-T7. Keeper auto-opens each one
     // when the previous tier's MatB reaches 80% occupancy.
