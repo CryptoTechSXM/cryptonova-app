@@ -78,6 +78,9 @@ const AUTO_RESCUE  = process.env.AUTO_RESCUE  === 'true';
 const SF_AUTOFUND  = process.env.SF_AUTOFUND  === 'true';
 const W1_WITHDRAW  = process.env.W1_WITHDRAW  === 'true';
 const DRY_RUN      = process.env.DRY_RUN      === 'true';
+// T2_AUTO_GATE: open T2 velocity gate the moment T1 MatB gets its first member.
+// Fires once — after gate is open this becomes a no-op. Default ON.
+const T2_AUTO_GATE = process.env.T2_AUTO_GATE !== 'false';
 
 // Telegram
 const TG_TOKEN   = process.env.TELEGRAM_BOT_TOKEN;
@@ -154,6 +157,8 @@ const SF_ABI = [
 const TR_ABI = [
   'function totalSystemCycles() external view returns (uint256)',
   'function memberHighestTier(address) external view returns (uint8)',
+  'function getVelocityGates() external view returns (bool[10])',
+  'function setTierVelocityGreen(uint8 tierIndex, bool green) external',
 ];
 const MAT_ABI = [
   'function occupancy() external view returns (uint256)',
@@ -327,32 +332,39 @@ async function main() {
 
   // ── Section 4: System Health ──────────────────────────────────────────────
   log('  ── System Health ─────────────────────────────────────────────────');
-  const [sysCycles, w1Tier, deployerUsdc, w1WalletUsdc] = await Promise.all([
+  const [sysCycles, w1Tier, deployerUsdc, w1WalletUsdc, velocityGates] = await Promise.all([
     safeCall(() => tr.totalSystemCycles(), 0n),
     safeCall(() => tr.memberHighestTier(W1), 0n),
     safeCall(() => usdc.balanceOf(DEPLOYER_KEY
       ? new ethers.Wallet(DEPLOYER_KEY).address : ethers.ZeroAddress), 0n),
     safeCall(() => usdc.balanceOf(W1), 0n),
+    safeCall(() => tr.getVelocityGates(), Array(10).fill(false)),
   ]);
+  // gates[0]=T1 (always open), gates[1]=T2, gates[2]=T3, …
+  const t2GateOpen = Array.isArray(velocityGates) ? Boolean(velocityGates[1]) : false;
   const deployerAddr = DEPLOYER_KEY ? new ethers.Wallet(DEPLOYER_KEY).address : '(no key)';
 
   log(`  System cycles : ${sysCycles}`);
   log(`  W1 tier       : T${w1Tier}`);
   log(`  W1 wallet USD : ${fmt6(w1WalletUsdc)}`);
   log(`  Deployer USDC : ${fmt6(deployerUsdc)}  (${deployerAddr.slice(0,10)}…)`);
+  log(`  T2 gate       : ${t2GateOpen ? '🟢 OPEN' : '🔴 CLOSED'}`);
   log('');
 
   // ── Section 5: Decisions ──────────────────────────────────────────────────
   log('  ── Decisions ─────────────────────────────────────────────────────');
 
-  const needsRescue  = AUTO_RESCUE  && totalParked > RESCUE_THRESHOLD;
-  const needsFund    = SF_AUTOFUND  && sfTotalUSD < SF_MIN_USD;
-  const needsW1Draw  = W1_WITHDRAW  && Number(w1T2AW) > 0;
+  const needsRescue    = AUTO_RESCUE  && totalParked > RESCUE_THRESHOLD;
+  const needsFund      = SF_AUTOFUND  && sfTotalUSD < SF_MIN_USD;
+  const needsW1Draw    = W1_WITHDRAW  && Number(w1T2AW) > 0;
+  // Open T2 gate as soon as T1 MatB gets its first member — fires once, idempotent.
+  const needsOpenT2Gate = T2_AUTO_GATE && Number(t1bOcc) >= 1 && !t2GateOpen;
 
   const actions = [];
-  if (needsRescue) actions.push(`AUTO_RESCUE: ${Math.min(RESCUE_BATCH, totalParked)} parked wallets`);
-  if (needsFund)   actions.push(`SF_AUTOFUND: inject $${SF_TOPUP_AMOUNT_USD} into StabilityFund`);
-  if (needsW1Draw) actions.push(`W1_WITHDRAW: move ${fmt6(w1T2AW)} from T2 MatA to W1 wallet`);
+  if (needsRescue)     actions.push(`AUTO_RESCUE: ${Math.min(RESCUE_BATCH, totalParked)} parked wallets`);
+  if (needsFund)       actions.push(`SF_AUTOFUND: inject $${SF_TOPUP_AMOUNT_USD} into StabilityFund`);
+  if (needsW1Draw)     actions.push(`W1_WITHDRAW: move ${fmt6(w1T2AW)} from T2 MatA to W1 wallet`);
+  if (needsOpenT2Gate) actions.push('T2_AUTO_GATE: open T2 velocity gate (T1 MatB has members)');
 
   if (actions.length === 0) {
     log('  ✅ No actions required this cycle.');
@@ -430,6 +442,32 @@ async function main() {
         log(`  ❌ SF auto-fund failed: ${(e.reason || e.shortMessage || e.message || '').slice(0, 100)}`);
       }
     }
+  }
+
+  // ── Action: Open T2 velocity gate ──────────────────────────────────────────
+  if (needsOpenT2Gate && !DRY_RUN) {
+    if (!DEPLOYER_KEY) {
+      log('  ⚠️  T2_AUTO_GATE: DEPLOYER_PRIVATE_KEY not set — skipping');
+    } else {
+      try {
+        log('  ⚙️  Opening T2 velocity gate (T1 MatB now has members)…');
+        const signer = new ethers.Wallet(DEPLOYER_KEY, provider);
+        const trSig  = tr.connect(signer);
+        const tx     = await trSig.setTierVelocityGreen(1, true);
+        const receipt = await tx.wait();
+        log(`  ✅ T2 gate OPENED  tx=${tx.hash.slice(0,12)}…  gas=${receipt.gasUsed}`);
+        await sendTelegram(
+          '🚀 *T2 Velocity Gate Opened!*\n' +
+          'T1 MatB has its first members — T2 upgrade path is now live.\n' +
+          `tx: \`${tx.hash.slice(0,20)}…\``
+        );
+      } catch (e) {
+        log(`  ❌ T2_AUTO_GATE failed: ${e.shortMessage || e.message.slice(0, 120)}`);
+      }
+    }
+  }
+  if (needsOpenT2Gate && DRY_RUN) {
+    log('  [DRY_RUN] Would call setTierVelocityGreen(1, true)');
   }
 
   // ── Action: Auto rescue ───────────────────────────────────────────────────

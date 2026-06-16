@@ -170,6 +170,39 @@ async function burnSweep(walletList, cnova) {
   console.log(`  Contract totalBurned:       ${ethers.formatEther(totalBurnedOnChain)} CNOVA`);
 }
 
+// ── Withdraw sweep — simulate members cashing out earned USDC ───────────────
+// Called on every matrix cycle. Sweeps all wallets for withdrawable USDC in
+// MatA and MatB and calls withdraw() — simulates organic selling pressure /
+// members realising gains as the matrix cycles.
+async function withdrawSweep(walletList, matA1, matB1) {
+  let swept = 0;
+  let totalWithdrawn = 0n;
+  for (const w of walletList) {
+    try {
+      const conn    = w.connect(ethers.provider);
+      const ethBal  = await ethers.provider.getBalance(w.address);
+      if (ethBal < 500_000_000_000n) continue; // need ETH for gas
+      // Withdraw from MatA if earned
+      const mA = await matA1.getMember(w.address);
+      if (mA.hasEverJoined && mA.withdrawable > 0n) {
+        await (await matA1.connect(conn).withdraw({ gasLimit: 300_000 })).wait();
+        totalWithdrawn += mA.withdrawable;
+        swept++;
+      }
+      // Withdraw from MatB if earned
+      const mB = await matB1.getMember(w.address);
+      if (mB.hasEverJoined && mB.withdrawable > 0n) {
+        await (await matB1.connect(conn).withdraw({ gasLimit: 300_000 })).wait();
+        totalWithdrawn += mB.withdrawable;
+        swept++;
+      }
+    } catch {
+      // wallet had no withdrawable or failed — silent skip
+    }
+  }
+  console.log(`  Withdraw sweep: ${swept} withdrawals | ${fmt6(totalWithdrawn)} USDC total`);
+}
+
 // ── Inline parked-wallet rescue ───────────────────────────────────────────────
 // Called after every registration batch. Scans up to RESCUE_SCAN parked members,
 // rescues up to RESCUE_CAP using the sliding-scale SF contribution (V8.13).
@@ -657,7 +690,8 @@ async function main() {
   let registered = 0;
   const failures = [];
   const upgradedAt = [];
-  let prevSysCyc = await tierRouter.totalSystemCycles(); // track cycle changes for burn sweep
+  let prevSysCyc    = await tierRouter.totalSystemCycles(); // track cycle changes for burn sweep
+  let forceFCCheck  = false; // set true on cycle detection to trigger immediate forceCross
 
   const batches = [];
   for (let i = 0; i < wallets.length; i += BATCH_SIZE) {
@@ -771,15 +805,84 @@ async function main() {
       break;
     }
 
-    // Burn sweep — runs whenever a new matrix cycle is detected
+    // Burn + withdraw sweep + force forceCross — runs on every new matrix cycle
     if (sysCyc > prevSysCyc) {
-      console.log(`\n  🔄 Cycle detected (${prevSysCyc} → ${sysCyc}) — running early-unlock burn sweep`);
+      console.log(`\n  🔄 Cycle detected (${prevSysCyc} → ${sysCyc})`);
+      console.log(`  ↳ Running early-unlock burn sweep…`);
       await burnSweep(wallets, cnova);
+      console.log(`  ↳ Running withdraw sweep (simulate sell)…`);
+      await withdrawSweep(wallets, matA1, matB1);
+      forceFCCheck = true; // execute forceCross this batch regardless of batchNum
       prevSysCyc = sysCyc;
     }
 
     // Inline parked rescue — after every batch, rescue any eligible parked members
     await inlineRescueParked({ matA1, matB1, stabilityFund, matrixKeeper, deployer: rawSigner, entryFee: T1_FEE });
+
+    // Inline forceCross check — every 10 batches OR immediately after a cycle
+    if (batchNum % 10 === 0 || forceFCCheck) {
+      forceFCCheck = false; // reset — consumed
+      console.log(`\n  🔍 [forceCross check @ reg ${registered}/${COUNT}]`);
+      const _fcRot  = await matA1.rotationCount();
+      const _fcAOcc = await matA1.occupancy();
+      const _fcASz  = await matA1.MATRIX_SIZE();
+      if (_fcRot === 0n && _fcAOcc < _fcASz) {
+        console.log(`  ↳ MatA ${_fcAOcc}/${_fcASz}, rotationCount=0 — nothing to cross yet`);
+      } else {
+        // Scan current batch wallets + W1 for parked members
+        const _parked = [];
+        for (const _w of wallets) {
+          const _mA = await matA1.getMember(_w.address);
+          if (!_mA.hasEverJoined || _mA.isInMatrix) continue;
+          const _mB = await matB1.getMember(_w.address);
+          if (_mB.isInMatrix || _mB.hasEverJoined) continue;
+          _parked.push(_w.address);
+        }
+        const _w1mA = await matA1.getMember(W1_ADDR);
+        const _w1mB = await matB1.getMember(W1_ADDR);
+        if (_w1mA.hasEverJoined && !_w1mA.isInMatrix && !_w1mB.hasEverJoined && !_w1mB.isInMatrix) {
+          _parked.unshift(W1_ADDR);
+        }
+        console.log(`  ↳ Parked wallets found: ${_parked.length}`);
+        if (_parked.length > 0) {
+          const _matBOcc  = await matB1.occupancy();
+          const _matBSz   = await matB1.MATRIX_SIZE();
+          const _needed   = Number(_matBSz) - Number(_matBOcc) + 1;
+          const _toCross  = _parked.slice(0, _needed);
+          console.log(`  ↳ MatB ${_matBOcc}/${_matBSz} — crossing ${_toCross.length} wallets`);
+          const _usdcNeed  = T1_FEE * BigInt(_toCross.length);
+          const _matA1Addr = await matA1.getAddress();
+          // Re-sync funder nonce to avoid drift from registration txs
+          fNonce = Number(await ethers.provider.getTransactionCount(funderAddr, 'pending'));
+          console.log(`  ↳ Transferring ${fmt6(_usdcNeed)} USDC funder→deployer (fNonce ${fNonce})…`);
+          await (await usdcFunder.transfer(deployerAddr, _usdcNeed, { nonce: fNonce })).wait();
+          fNonce++;
+          await sleep(8);
+          let _dN = Number(await ethers.provider.getTransactionCount(deployerAddr, 'pending'));
+          console.log(`  ↳ Deployer approving matA1 (dNonce ${_dN})…`);
+          await (await usdc.connect(rawSigner).approve(_matA1Addr, _usdcNeed, { nonce: _dN })).wait();
+          _dN++;
+          await sleep(8);
+          const _matA1Raw = matA1.connect(rawSigner);
+          for (const _addr of _toCross) {
+            try {
+              const _tx = await _matA1Raw.forceCross(_addr, { nonce: _dN, gasLimit: 15_000_000 });
+              await _tx.wait();
+              _dN++;
+              console.log(`  ↳ ✓ forceCross(${_addr.slice(0,10)}…)`);
+            } catch (_e) {
+              console.warn(`  ↳ ⚠ forceCross(${_addr.slice(0,10)}…) failed: ${_e.shortMessage || _e.message.slice(0,80)}`);
+              _dN = Number(await ethers.provider.getTransactionCount(deployerAddr, 'pending'));
+            }
+          }
+        }
+      }
+    }
+
+    // Withdraw sweep every 10 batches — simulate ongoing sell pressure
+    if (batchNum % 10 === 0) {
+      await withdrawSweep(wallets, matA1, matB1);
+    }
 
     // Watched wallet report (every WATCH_EVERY batches, always on last batch)
     if (watchAddrs.length > 0 && (batchNum % WATCH_EVERY === 0 || b === batches.length - 1)) {
