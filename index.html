@@ -3224,15 +3224,27 @@ async function loadDashboardData() {
         const nextFeeRaw = await tr.tierEntryFees(nextIdx).catch(() => 25_000_000n);
         window._dashUpgradeFee       = nextFeeRaw;
         window._dashUpgradeTierIndex = nextIdx;
-        const usdc2  = new ethers.Contract(ADDRS.usdc, USDC_ABI, rp);
-        const uBal   = await usdc2.balanceOf(userAddr).catch(() => 0n);
+        const usdc2      = new ethers.Contract(ADDRS.usdc, USDC_ABI, rp);
+        const [uBal, uAllowance] = await Promise.all([
+          usdc2.balanceOf(userAddr).catch(() => 0n),
+          usdc2.allowance(userAddr, ADDRS.tierRouter).catch(() => 0n),
+        ]);
         setText('upgrade-target-name', UPGRADE_NAMES[nextIdx] || 'Next Tier');
         setText('upgrade-fee',         fmt6(nextFeeRaw));
         setText('upgrade-usdc-bal',    fmt6(uBal));
         const c = Number(curTierCycles);
         setText('upgrade-desc', `You have completed ${c} T${highestTier} cycle${c !== 1 ? 's' : ''} and qualify for a manual tier upgrade. Pay ${fmt6(nextFeeRaw)} USDC from your wallet to enter the next tier.`);
-        const approveBtn = document.getElementById('btn-dash-approve');
+        const approveBtn  = document.getElementById('btn-dash-approve');
+        const upgradeBtn  = document.getElementById('btn-manual-upgrade');
         if (approveBtn) { approveBtn.disabled = false; approveBtn.classList.remove('btn-ghost'); approveBtn.classList.add('btn-green'); }
+        // Pre-enable Step 2 if allowance already covers fee (e.g. after page reload)
+        if (upgradeBtn && uAllowance >= nextFeeRaw) {
+          upgradeBtn.disabled = false;
+          upgradeBtn.classList.remove('btn-ghost');
+          upgradeBtn.classList.add('btn-green');
+          const stDash = document.getElementById('upgrade-status-dash');
+          if (stDash && !stDash.textContent) stDash.textContent = '✅ USDC already approved — click Step 2 to upgrade.';
+        }
       }
     }
 
