@@ -1063,7 +1063,11 @@
             <div class="info-row"><span class="info-key">USDC Balance</span><span class="info-val" id="reg-usdc-bal">—</span></div>
             <div class="info-row"><span class="info-key">USDC Approved</span><span class="info-val" id="reg-approved">—</span></div>
             <div id="usdc-low-warn" style="display:none;margin-top:10px;background:rgba(245,158,11,.08);border:1px solid rgba(245,158,11,.3);border-radius:8px;padding:12px;font-size:13px;color:var(--yellow)">
-              ⚠️ Your USDC balance is too low to register. Need test USDC? <a href="https://t.me/+eBituWwdrtk5MmNi" target="_blank" rel="noopener" style="color:var(--yellow)">Contact us on Telegram Support</a> — we'll get you sorted. 💬
+              ⚠️ You need test USDC to register on this testnet.
+              <button id="btn-faucet" onclick="claimTestUsdc()" style="display:block;width:100%;margin-top:10px;background:rgba(245,158,11,.2);border:1px solid var(--yellow);border-radius:8px;padding:10px;font-size:13px;font-weight:700;color:var(--yellow);cursor:pointer">
+                🚰 Get $50 Test USDC (Free — Testnet Only)
+              </button>
+              <div id="faucet-status" style="margin-top:8px;font-size:12px;color:var(--text2)"></div>
             </div>
           </div>
 
@@ -2960,9 +2964,46 @@ async function approveUSDC() {
   }
 }
 
+async function claimTestUsdc() {
+  if (!userAddr) { toast('Connect wallet first', 'error'); return; }
+  const btn = document.getElementById('btn-faucet');
+  const statusEl = document.getElementById('faucet-status');
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ Requesting USDC…'; }
+  if (statusEl) statusEl.textContent = '';
+  try {
+    const res = await fetch('/api/faucet', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ address: userAddr }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Faucet request failed');
+    if (btn) { btn.textContent = '✅ USDC Sent!'; }
+    if (statusEl) statusEl.innerHTML = `✅ ${data.message} — <a href="https://sepolia.basescan.org/tx/${data.tx}" target="_blank" rel="noopener" style="color:var(--green)">View TX</a>`;
+    toast('$50 Test USDC sent to your wallet!', 'success');
+    // Refresh balances after a short delay
+    setTimeout(() => loadRegisterTab(), 4000);
+  } catch(e) {
+    if (btn) { btn.disabled = false; btn.textContent = '🚰 Get $50 Test USDC (Free — Testnet Only)'; }
+    if (statusEl) statusEl.textContent = '❌ ' + (e.message || 'Failed — try again');
+    toast(e.message || 'Faucet failed', 'error');
+  }
+}
+
 async function doRegister() {
   if (!signer) { toast('Connect wallet first', 'error'); return; }
   const btn = document.getElementById('btn-register');
+  // Guard: check on-chain before wasting a TX
+  try {
+    const rp = readProvider || new ethers.JsonRpcProvider(RPC_URL, 84532, { staticNetwork: true });
+    const tr0 = new ethers.Contract(ADDRS.tierRouter, TIER_ROUTER_ABI, rp);
+    const alreadyJoined = await tr0.globalJoined(userAddr).catch(()=>false);
+    if (alreadyJoined) {
+      setStatus('reg-status', '✅ Wallet already registered — <a href="#" onclick="showTab(\'dashboard\')" style="color:var(--green)">view Dashboard</a>', 'ok');
+      await loadUserData();
+      return;
+    }
+  } catch(_) {}
   btn.disabled = true; btn.innerHTML = '<span class="spinner"></span>Joining CryptoNova…';
   try {
     const refInput = document.getElementById('input-referrer');
@@ -4221,7 +4262,7 @@ function friendlyError(e) {
   const msg = e.reason || e.data?.message || e.message || String(e);
   if (msg.includes('user rejected') || e.code === 4001) return 'Transaction cancelled.';
   if (msg.includes('insufficient funds')) return 'Insufficient ETH for gas.';
-  if (msg.includes('already registered') || msg.includes('AlreadyJoined')) return 'This wallet is already registered.';
+  if (msg.includes('already registered') || msg.includes('AlreadyJoined') || msg.includes('already joined')) return 'This wallet is already registered — view your Dashboard.';
   if (msg.includes('USDC') && msg.includes('allowance')) return 'USDC not approved — complete Step 1 first.';
   if (msg.includes('execution reverted')) return 'Transaction reverted: ' + (msg.split('execution reverted:')[1]||'').trim().slice(0,80);
   return msg.slice(0, 120);
