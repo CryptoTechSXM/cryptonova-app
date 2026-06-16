@@ -147,10 +147,7 @@ contract MatrixKeeper is Ownable {
     ///         If member withdrew more than this % of total earned --- evict, not rescue.
     ///         Default 7000 = 70%. DAO-adjustable 0---9500.
     uint256 public rescueRatioBps        = 7_000;
-    /// @notice V8.11: Fraction of upgrade fee the StabilityFund covers on rescue (BPS).
-    ///         Member's withdrawable must cover the remaining (10000 - rescueContributionBps)%.
-    ///         Default 2500 = 25%. DAO-adjustable 0---5000.
-    uint256 public rescueContributionBps = 2_500;
+    // V8.13: rescueContributionBps removed — replaced by _sfRescueBps() sliding scale.
 
     // -- Core state ------------------------------------------------------------
     address public tierRouter;
@@ -273,11 +270,21 @@ contract MatrixKeeper is Ownable {
         maxItemsPerUpkeep = v;
     }
 
-    /// @notice V8.10: Set grace period for parked members (5, 10, or 15 days).
+    /// @notice V8.13: Set grace period for parked members.
+    ///         Testnet shortcuts: 0 (immediate), 1h, 6h.
+    ///         Mainnet values: 5d, 10d, 15d.
     function setParkedGracePeriod(uint256 v) external onlyOwner {
-        require(v == 5 days || v == 10 days || v == 15 days,
-            "MK: invalid grace period (allowed: 5,10,15 days)");
+        require(
+            v == 0 ||
+            v == 3_600 ||       // 1 hour  (testnet)
+            v == 21_600 ||      // 6 hours (testnet)
+            v == 5 days ||
+            v == 10 days ||
+            v == 15 days,
+            "MK: invalid grace period (allowed: 0, 1h, 6h, 5d, 10d, 15d)"
+        );
         parkedGracePeriod = v;
+        emit ConfigUpdated("parkedGracePeriod", v);
     }
 
     /// @notice V8.11: Set the max withdrawal ratio for rescue eligibility (BPS).
@@ -287,15 +294,6 @@ contract MatrixKeeper is Ownable {
         require(v <= 9_500, "MK: ratio too high");
         rescueRatioBps = v;
         emit ConfigUpdated("rescueRatioBps", v);
-    }
-
-    /// @notice V8.11: Set the SF's contribution fraction on rescue (BPS).
-    ///         The member's withdrawable must cover (10000 - v)% of the upgrade fee.
-    ///         Range: 0---5000. Default 2500 (25%). DAO-adjustable.
-    function setRescueContributionBps(uint256 v) external onlyOwner {
-        require(v <= 5_000, "MK: contribution too high");
-        rescueContributionBps = v;
-        emit ConfigUpdated("rescueContributionBps", v);
     }
 
     /// @notice V8.12: Set the CommunityWallet address for automated monthly distribution.
@@ -350,17 +348,32 @@ contract MatrixKeeper is Ownable {
             }
         }
 
-        // 4. Parked wallet scan --- V8.10 grace-period aware (helper avoids stack-too-deep)
+        // 4. Parked wallet scan — V8.13: both matrices + all parked members per matrix
         for (uint8 t = 0; t < configuredTierCount && count < maxItemsPerUpkeep; t++) {
             address pm = pairManagerForTier[t];
             if (pm == address(0)) continue;
             uint256 pairCount = IPairManagerKeeper(pm).activePairCount();
             for (uint256 p = 0; p < pairCount && count < maxItemsPerUpkeep; p++) {
-                (address matA,) = IPairManagerKeeper(pm).getPairAt(p);
-                if (matA == address(0)) continue;
-                (address parkedMember, uint8 workType) = _checkParked(matA, t);
-                if (workType != type(uint8).max) {
-                    items[count++] = WorkItem(workType, t, matA, parkedMember);
+                (address matA, address matB) = IPairManagerKeeper(pm).getPairAt(p);
+                // Scan matA parked list
+                if (matA != address(0)) {
+                    uint256 pc = IFigureEightKeeper(matA).getParkedCount();
+                    for (uint256 idx = 0; idx < pc && count < maxItemsPerUpkeep; idx++) {
+                        (address member, uint8 wt) = _checkParked(matA, t, idx);
+                        if (wt != type(uint8).max) {
+                            items[count++] = WorkItem(wt, t, matA, member);
+                        }
+                    }
+                }
+                // Scan matB parked list (V8.13 fix — previously matB was skipped)
+                if (matB != address(0)) {
+                    uint256 pc = IFigureEightKeeper(matB).getParkedCount();
+                    for (uint256 idx = 0; idx < pc && count < maxItemsPerUpkeep; idx++) {
+                        (address member, uint8 wt) = _checkParked(matB, t, idx);
+                        if (wt != type(uint8).max) {
+                            items[count++] = WorkItem(wt, t, matB, member);
+                        }
+                    }
                 }
             }
         }
@@ -445,17 +458,22 @@ contract MatrixKeeper is Ownable {
         IFigureEightKeeper mat = IFigureEightKeeper(matrix);
         if (!mat.isParked(member)) return;        // already rescued by another path
 
-        address pm = pairManagerForTier[tierIdx];
-        if (pm == address(0)) return;
-        uint256 fee = mat.ENTRY_FEE();
+        uint256 fee          = mat.ENTRY_FEE();
+        uint256 withdrawable = mat.withdrawableOf(member);
 
-        // V8.11: SF pays rescueContributionBps% of fee; member covers the rest from withdrawable
-        uint256 sfShare  = fee * rescueContributionBps / 10_000;
-        uint256 sfBal    = IStabilityFundKeeper(stabilityFund).balanceByTier(tierIdx);
-        if (sfBal < sfShare) return;              // SF does not have enough for its share
+        // V8.13: Sliding-scale SF contribution based on member's withdrawable.
+        // Higher withdrawable → less SF help. Max SF contribution = 50%.
+        uint256 sfBps = _sfRescueBps(withdrawable, fee);
+        if (sfBps == type(uint256).max) return;   // < 50% withdrawable — not eligible
 
-        // 1. Ask SF to send its share (e.g. 25%) to the source matrix
-        IStabilityFundKeeper(stabilityFund).payForceCross(tierIdx, matrix, sfShare);
+        uint256 sfShare = fee * sfBps / 10_000;
+        uint256 sfBal   = IStabilityFundKeeper(stabilityFund).balanceByTier(tierIdx);
+        if (sfBal < sfShare) return;              // SF cannot cover its share
+
+        // 1. Ask SF to send its share to the source matrix (skip if member self-funds)
+        if (sfShare > 0) {
+            IStabilityFundKeeper(stabilityFund).payForceCross(tierIdx, matrix, sfShare);
+        }
         // 2. Matrix deducts member's share from withdrawable, then executes crossing
         mat.forceCrossKeeper(member, sfShare);
 
@@ -626,36 +644,64 @@ contract MatrixKeeper is Ownable {
         }
     }
 
-    // -- Internal: parked member decision helper (V8.10) -------------------------
-    // Returns (member, workType). workType=type(uint8).max means no action.
-    // Extracted to avoid stack-too-deep in checkUpkeep view function.
-    function _checkParked(address matA, uint8 tierIdx)
+    // -- Internal: sliding-scale SF rescue BPS (V8.13) ---------------------------
+    // Higher member withdrawable → less SF help. Max SF = 50% (5000 BPS).
+    // Returns type(uint256).max if member is ineligible (< 50% withdrawable).
+    // Returns 0 if member can fully self-fund (>= 100% withdrawable).
+    function _sfRescueBps(uint256 withdrawable, uint256 entryFee)
+        internal pure returns (uint256)
+    {
+        uint256 wBps = withdrawable * 10_000 / entryFee;
+        if (wBps >= 10_000) return 0;           // >= 100%: member self-funds, SF pays nothing
+        if (wBps >=  9_500) return 1_000;       // SF 10%
+        if (wBps >=  9_000) return 1_500;       // SF 15%
+        if (wBps >=  8_500) return 2_000;       // SF 20%
+        if (wBps >=  8_000) return 2_500;       // SF 25%
+        if (wBps >=  7_500) return 3_000;       // SF 30%
+        if (wBps >=  7_000) return 3_500;       // SF 35%
+        if (wBps >=  6_500) return 4_000;       // SF 40%
+        if (wBps >=  6_000) return 4_500;       // SF 45%
+        if (wBps >=  5_000) return 5_000;       // SF 50% — maximum SF contribution
+        return type(uint256).max;                // < 50%: not eligible for SF rescue
+    }
+
+    // -- Internal: parked member decision helper (V8.13) -------------------------
+    // Returns (member, workType) for the parked member at `idx` in the given matrix.
+    // workType=type(uint8).max means no action needed.
+    function _checkParked(address matAddr, uint8 tierIdx, uint256 idx)
         internal view
         returns (address parkedMember, uint8 workType)
     {
-        IFigureEightKeeper mat = IFigureEightKeeper(matA);
-        if (mat.getParkedCount() == 0) return (address(0), type(uint8).max);
+        IFigureEightKeeper mat = IFigureEightKeeper(matAddr);
+        if (mat.getParkedCount() <= idx) return (address(0), type(uint8).max);
 
-        parkedMember = mat.getParkedMember(0);
+        parkedMember = mat.getParkedMember(idx);
         uint256 ts = mat.parkedAt(parkedMember);
         if (ts == 0) return (address(0), type(uint8).max);
         if (block.timestamp - ts < parkedGracePeriod) return (address(0), type(uint8).max);
 
-        // Grace expired --- rescue or evict (V8.11: ratio + shared-cost eligibility)
+        // Grace expired — check eligibility with sliding-scale SF rescue (V8.13)
         uint256 withdrawn    = mat.getMemberTotalWithdrawn(parkedMember);
         uint256 withdrawable = mat.withdrawableOf(parkedMember);
         uint256 fee          = mat.ENTRY_FEE();
         uint256 totalEarned  = withdrawn + withdrawable;
-        // withdrawRatio: what fraction of total earned has been withdrawn (BPS, 0---10000)
         uint256 withdrawRatio = totalEarned > 0 ? withdrawn * 10_000 / totalEarned : 0;
-        // SF covers rescueContributionBps%; member must have the rest in withdrawable
-        uint256 sfShare      = fee * rescueContributionBps / 10_000;
-        uint256 memberShare  = fee - sfShare;
-        uint256 sfBal        = IStabilityFundKeeper(stabilityFund).balanceByTier(tierIdx);
-        bool eligible        = (withdrawRatio  <= rescueRatioBps)  // didn't game the system
-                            && (withdrawable   >= memberShare)      // member covers their share
-                            && (sfBal          >= sfShare);         // SF can cover its share
-        workType = eligible ? WORK_PARKED_RESCUE : WORK_EVICT_PARKED;
+
+        // Gamers (withdrew too much of their earnings) are always evicted
+        if (withdrawRatio > rescueRatioBps) {
+            return (parkedMember, WORK_EVICT_PARKED);
+        }
+
+        uint256 sfBps = _sfRescueBps(withdrawable, fee);
+        if (sfBps == type(uint256).max) {
+            // < 50% withdrawable — member cannot cover their share, evict
+            return (parkedMember, WORK_EVICT_PARKED);
+        }
+
+        uint256 sfShare = fee * sfBps / 10_000;
+        uint256 sfBal   = IStabilityFundKeeper(stabilityFund).balanceByTier(tierIdx);
+        // SF balance gates rescue: if SF can't cover its share, wait (no action this block)
+        workType = (sfBal >= sfShare) ? WORK_PARKED_RESCUE : type(uint8).max;
     }
 
     // -- Internal: idle scan helper --------------

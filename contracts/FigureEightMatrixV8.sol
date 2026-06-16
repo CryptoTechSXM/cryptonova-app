@@ -75,6 +75,8 @@ interface ITierRouter {
         uint256 escrow,
         uint256 withdrawable
     ) external;
+    /// @notice V8.14: called by MatB._enterMatrix to signal a member has crossed in.
+    function onCrossToMatB(address member, uint8 tierIndex) external;
 }
 
 /// @notice Minimal interface for forwarding stability fund contributions.
@@ -492,6 +494,12 @@ contract FigureEightMatrixV8 is Ownable2Step {
         try cnova.mintReward(member, tierIndex) {} catch {}  // V8.1: pass tier for multiplier
 
         emit MemberEntered(member, matrixPos[member], members[member].id, address(this));
+
+        // V8.14: notify TierRouter when a member enters MatB — triggers upgrade eligibility.
+        // Covers all crossing paths: _crossToPartner, forceCross, forceCrossKeeper.
+        if (!isMatrixA && tierRouter != address(0)) {
+            try ITierRouter(tierRouter).onCrossToMatB(member, tierIndex) {} catch {}
+        }
     }
 
     // --- Internal: Matrix Mechanics -------------------------------------------

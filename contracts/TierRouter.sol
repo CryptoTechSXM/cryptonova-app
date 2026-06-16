@@ -5,6 +5,20 @@ pragma solidity ^0.8.24;
  * @title  TierRouter
  * @notice V8.1 "Elevator" — central hub that routes members across 7 tiers.
  *
+ * V8.14 ADDITIONS
+ * ─────────────────────────────────────────────────────────────────────────────
+ *  1. onCrossToMatB(address member, uint8 tierIndex)
+ *       Called by MatB's _enterMatrix hook whenever a member enters MatB via
+ *       any path (normal cross, forceCross, keeper rescue).
+ *       - Emits UpgradeEligibleAtCross so the frontend can light up the button.
+ *       - If autoUpgrade is enabled AND member holds sufficient USDC AND has
+ *         approved TierRouter, executes the upgrade immediately (AutoUpgradedAtCross).
+ *
+ *  2. manualUpgrade() eligibility relaxed
+ *       Old: requires tierCycles >= 1 AND !isActiveInMatrix(prevMatB).
+ *       New: requires tierCycles >= 1 OR isActiveInMatrix(prevMatB).
+ *       Members can upgrade the moment they cross into MatB.
+ *
  * V8.11 ADDITIONS
  * ─────────────────────────────────────────────────────────────────────────────
  *  1. communityWallet hook in register()
@@ -177,6 +191,9 @@ contract TierRouter is Ownable2Step {
     // V8.11 events
     event CommunityWalletSet(address indexed cw);
     event MemberEnrolled(address indexed member, uint256 joinedCount);
+    // V8.14: cross-upgrade events
+    event UpgradeEligibleAtCross(address indexed member, uint8 fromTierNum, uint8 toTierNum);
+    event AutoUpgradedAtCross(address indexed member, uint8 fromTierNum, uint8 toTierNum, uint256 fee);
 
     // ─── Constructor ──────────────────────────────────────────────────────────
 
@@ -395,18 +412,15 @@ contract TierRouter is Ownable2Step {
         require(tierPairManagers[targetTierIndex] != address(0),    "TR: tier not deployed");
 
         uint8 prevIndex = targetTierIndex - 1;
-        require(
-            tierCycles[msg.sender][prevIndex] >= 1,
-            "TR: complete 1 cycle in current tier first"
-        );
 
+        // V8.14: eligible when (a) completed >=1 cycle OR (b) currently in prev MatB
         address prevMatB = tierMatrixBAddr[prevIndex];
-        if (prevMatB != address(0)) {
-            require(
-                !IFigureEightMatrixV8(prevMatB).isActiveInMatrix(msg.sender),
-                "TR: seated in MatB, wait for cycle-out first"
-            );
-        }
+        bool inPrevMatB  = prevMatB != address(0) &&
+                           IFigureEightMatrixV8(prevMatB).isActiveInMatrix(msg.sender);
+        require(
+            tierCycles[msg.sender][prevIndex] >= 1 || inPrevMatB,
+            "TR: cross to MatB first to unlock upgrade"
+        );
 
         address destMatA = tierMatrixAAddr[targetTierIndex];
         if (destMatA != address(0)) {
@@ -433,6 +447,57 @@ contract TierRouter is Ownable2Step {
         _recordEntry(targetTierIndex);
 
         emit ManualUpgrade(msg.sender, prevIndex + 1, targetTierNum, fee);
+    }
+
+    // ─── V8.14: MatB entry hook — upgrade eligibility at first crossing ───────
+
+    /**
+     * @notice Called by FigureEightMatrixV8._enterMatrix when a member enters MatB.
+     *         Covers _crossToPartner, forceCross, and forceCrossKeeper paths.
+     *
+     *         1. Emits UpgradeEligibleAtCross — frontend listens and enables button.
+     *         2. If auto-upgrade ON + balance + allowance >= fee → auto-executes upgrade.
+     */
+    function onCrossToMatB(address member, uint8 tierIndex) external {
+        require(authorizedMatrices[msg.sender],            "TR: not authorized matrix");
+        require(matrixTierIndex[msg.sender] == tierIndex,  "TR: tier mismatch");
+
+        if (tierIndex >= MAX_TIERS - 1) return;
+        uint8 nextIndex = tierIndex + 1;
+
+        if (tierPairManagers[nextIndex] == address(0)) return;
+        if (!tierVelocityGreen[nextIndex])             return;
+
+        address nextMatA = tierMatrixAAddr[nextIndex];
+        if (nextMatA != address(0) &&
+            IFigureEightMatrixV8(nextMatA).isActiveInMatrix(member)) return;
+
+        uint8 fromTierNum = tierIndex + 1;
+        uint8 toTierNum   = nextIndex + 1;
+
+        emit UpgradeEligibleAtCross(member, fromTierNum, toTierNum);
+
+        if (memberOptions[member].autoUpgradeDisabled) return;
+
+        uint256 fee = tierEntryFees[nextIndex];
+        if (usdc.balanceOf(member)                < fee) return;
+        if (usdc.allowance(member, address(this)) < fee) return;
+
+        usdc.safeTransferFrom(member, address(this), fee);
+        usdc.forceApprove(tierPairManagers[nextIndex], fee);
+
+        address referrer = memberReferrer[member];
+        IPairManagerV8(tierPairManagers[nextIndex]).registerFor(member, referrer);
+
+        if (toTierNum > memberHighestTier[member]) {
+            memberHighestTier[member] = toTierNum;
+        }
+        lastActivityTimestamp    = block.timestamp;
+        cyclesAtLastRegistration = totalSystemCycles;
+        _checkT5FirstEntry(member, toTierNum);
+        _recordEntry(nextIndex);
+
+        emit AutoUpgradedAtCross(member, fromTierNum, toTierNum, fee);
     }
 
     // ─── Matrix B cycle-out callback ──────────────────────────────────────────
