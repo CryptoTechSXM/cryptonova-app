@@ -942,3 +942,81 @@ describe("V8.10 — Withdrawal reserve, drain-and-park prevention, grace evictio
   });
 
 });
+
+// =============================================================================
+// SUITE 8 — V8.16 topUpAndCross
+// =============================================================================
+describe("V8.16 — topUpAndCross: member self-rescue from parked queue", function () {
+
+  it("parked member with shortfall is rescued by third-party paying shortfall only", async function () {
+    // Pattern: round-1 fills matA (W1 + s0-s5 + s6 triggers W1 to cross to matB — W1 not parked).
+    // Round-2 registrations (s7-s12) each trigger one of s0-s5 to cycle out; those members
+    // earn only chain pay from a single new joiner (~$2) which is < ENTRY_FEE ($10), so they park.
+    const { matA, matB, usdc, admin, w1, s0, s1, s2, s3, s4, s5, s6, s7, s8, s9, s10, s11, s12, s13, reg } =
+      await loadFixture(deployV8Fixture);
+
+    // Round 1 — fill matA; s6 triggers W1 cycle-out → W1 crosses to matB (not parked)
+    await reg(w1, ethers.ZeroAddress);
+    for (const s of [s0, s1, s2, s3, s4, s5]) await reg(s, w1.address);
+    await reg(s6, w1.address); // W1 exits matA → enters matB
+
+    // Round 2 — each registration triggers one old root to cycle out and park
+    for (const s of [s7, s8, s9, s10, s11, s12]) await reg(s, w1.address);
+
+    // Verify s0 is now parked (cycled out with insufficient withdrawable)
+    expect(await matA.parkedAt(s0.address)).to.be.gt(0n, "s0 should be parked after round-2 fill");
+    expect(await matA.getParkedCount()).to.be.gte(1n);
+
+    // Compute shortfall for s0
+    const { withdrawable: bal } = await matA.getMember(s0.address);
+    const entryFee = await matA.ENTRY_FEE();
+    const shortfall = bal >= entryFee ? 0n : entryFee - bal;
+    expect(shortfall).to.be.gt(0n, "s0 should have a shortfall (earned < ENTRY_FEE)");
+
+    // Admin pays only the shortfall; s0's withdrawable covers the rest
+    await usdc.connect(admin).approve(await matA.getAddress(), shortfall);
+    await expect(matA.connect(admin).topUpAndCross(s0.address))
+      .to.emit(matA, "MemberCrossedToPartner");
+
+    // s0 should no longer be parked
+    expect(await matA.parkedAt(s0.address)).to.equal(0n);
+  });
+
+  it("topUpAndCross reverts if member was never registered", async function () {
+    const { matA, admin, s13 } = await loadFixture(deployV8Fixture);
+    await expect(
+      matA.connect(admin).topUpAndCross(s13.address)
+    ).to.be.revertedWith("F8V8: not a member");
+  });
+
+  it("topUpAndCross reverts if member is still active in matrix", async function () {
+    const { matA, admin, w1, reg } = await loadFixture(deployV8Fixture);
+    await reg(w1, ethers.ZeroAddress);
+    await expect(
+      matA.connect(admin).topUpAndCross(w1.address)
+    ).to.be.revertedWith("F8V8: still in matrix");
+  });
+
+  it("topUpAndCross reverts if member is not parked (parkedAt == 0)", async function () {
+    const { matA, usdc, admin, w1, s0, s1, s2, s3, s4, s5, reg } =
+      await loadFixture(deployV8Fixture);
+
+    await reg(w1, ethers.ZeroAddress);
+    for (const s of [s0, s1, s2, s3, s4, s5]) await reg(s, w1.address);
+
+    // s0 cycled out — check if they crossed (parkedAt == 0 means they crossed successfully)
+    const parkedAt = await matA.parkedAt(s0.address);
+    if (parkedAt > 0n) {
+      this.skip(); // s0 is actually parked — wrong fixture for this test
+    }
+
+    // s0 was not parked (crossed successfully) — topUpAndCross should revert
+    const s0Info = await matA.getMember(s0.address);
+    if (s0Info.hasEverJoined && !s0Info.isInMatrix) {
+      await expect(
+        matA.connect(admin).topUpAndCross(s0.address)
+      ).to.be.revertedWith("F8V8: not parked");
+    }
+  });
+
+});

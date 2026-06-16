@@ -255,11 +255,11 @@ if (deployText) {
     fail("Velocity gate closure (setTierVelocityGreen + CLOSED) not found in deploy_v8.js");
   }
 
-  // Check ADDRESSES_FILE default is v8_10
-  if (deployText.includes("deployed_addresses_v8_13.json")) {
-    ok("deploy_v8.js output file: deployed_addresses_v8_13.json");
+  // Check ADDRESSES_FILE default is v8_16
+  if (deployText.includes("deployed_addresses_v8_16.json")) {
+    ok("deploy_v8.js output file: deployed_addresses_v8_16.json");
   } else {
-    fail("deploy_v8.js does not output to deployed_addresses_v8_13.json");
+    fail("deploy_v8.js does not output to deployed_addresses_v8_16.json");
   }
 
   // Chainlink gas limit should be 6M+
@@ -386,9 +386,9 @@ if (bigfillText) {
 // ─────────────────────────────────────────────────────────────────────────────
 sep("deployed_addresses_v8_13.json — presence check");
 {
-  const addrFile = path.join(ROOT, "deployed_addresses_v8_13.json");
+  const addrFile = path.join(ROOT, "deployed_addresses_v8_16.json");
   if (!fs.existsSync(addrFile)) {
-    console.log("  ℹ  deployed_addresses_v8_13.json not found — run deploy_v8.js first");
+    console.log("  ℹ  deployed_addresses_v8_16.json not found — run deploy_v8.js first");
   } else {
     const addrData = JSON.parse(fs.readFileSync(addrFile, "utf8"));
     const required = ["tierRouter", "stabilityFund", "matrixKeeper"];
@@ -569,6 +569,21 @@ if (deployTxt) {
     ok("deploy_v8.js: tierRouter.setTierMatrices() call found — tierMatrixAAddr/tierMatrixBAddr will be set (required by manualUpgrade)");
   } else {
     fail("deploy_v8.js: tierRouter.setTierMatrices() MISSING — manualUpgrade will always revert 'cross to MatB first' because tierMatrixBAddr stays address(0)");
+  }
+
+  // V8.16: SF must be 800 BPS and pool must be 3000 BPS (T1-T3 group)
+  if (deployTxt.includes("3000,    1500,  800")) {
+    ok("deploy_v8.js: V8.16 BPS confirmed — pool=3000, SF=800 (T1-T3)");
+  } else {
+    fail("deploy_v8.js: V8.16 BPS NOT found — expected pool=3000, SF=800 in SPLITS_T1_T3");
+  }
+
+  // V8.16: topUpAndCross must be in contract
+  const matTxtV16 = read("contracts/FigureEightMatrixV8.sol");
+  if (matTxtV16 && matTxtV16.includes("function topUpAndCross(")) {
+    ok("FigureEightMatrixV8.sol: topUpAndCross() found — member self-rescue active (V8.16)");
+  } else {
+    fail("FigureEightMatrixV8.sol: topUpAndCross() MISSING — V8.16 self-rescue not deployed");
   }
 }
 

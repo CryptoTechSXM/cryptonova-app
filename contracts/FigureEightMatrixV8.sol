@@ -1116,6 +1116,46 @@ contract FigureEightMatrixV8 is Ownable2Step {
         FigureEightMatrixV8(destination)._enterMatrix(member, members[member].referrer);
     }
 
+    // --- V8.16: topUpAndCross ------------------------------------------------
+
+    /**
+     * @notice Member (or anyone) pays just the shortfall to self-rescue from the parked queue.
+     *         member.withdrawable covers their portion; caller tops up the remainder.
+     *         Removes deployer burden — deployer only needs to fund the delta, not the full fee.
+     *         For members with sufficient withdrawable (>= ENTRY_FEE), shortfall = 0 and
+     *         the caller pays nothing — this acts as a permissionless cross trigger.
+     * @param member  The parked member to rescue.
+     */
+    function topUpAndCross(address member) external {
+        require(members[member].hasEverJoined,  "F8V8: not a member");
+        require(!members[member].isInMatrix,    "F8V8: still in matrix");
+        require(parkedAt[member] > 0,           "F8V8: not parked");
+        require(address(partner) != address(0), "F8V8: no partner");
+
+        uint256 bal      = members[member].withdrawable;
+        uint256 shortfall = bal >= ENTRY_FEE ? 0 : ENTRY_FEE - bal;
+
+        // Pull caller's share (shortfall) into this contract
+        if (shortfall > 0) {
+            usdc.safeTransferFrom(msg.sender, address(this), shortfall);
+        }
+
+        // Deduct member's contribution from their withdrawable
+        uint256 memberContribution = ENTRY_FEE - shortfall;
+        if (memberContribution > 0) {
+            members[member].withdrawable -= memberContribution;
+        }
+
+        _removeFromParkedQueue(member);
+
+        address destination = (!isMatrixA && chainNext != address(0))
+            ? chainNext : address(partner);
+        SafeERC20.forceApprove(usdc, destination, ENTRY_FEE);
+
+        emit MemberCrossedToPartner(member, address(this), destination);
+        FigureEightMatrixV8(destination)._enterMatrix(member, members[member].referrer);
+    }
+
     function _removeFromParkedQueue(address member) internal {
         uint256 len = parkedMembers.length;
         for (uint256 i = 0; i < len; i++) {

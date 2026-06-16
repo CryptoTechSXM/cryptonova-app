@@ -63,7 +63,7 @@ require("dotenv").config();
 // v8_1 = size-15 testnet (retired).  v8_2 = size-64 pre-mainnet stress test.
 const ADDRESSES_FILE = path.join(
   __dirname,
-  process.env.ADDRESSES_FILE || "deployed_addresses_v8_13.json"
+  process.env.ADDRESSES_FILE || "deployed_addresses_v8_16.json"
 );
 
 // ── Config ────────────────────────────────────────────────────────────────────
@@ -93,17 +93,17 @@ const TIER_FEES = [
 // Field order MUST match Solidity SplitConfig struct (9 fields):
 //   l1Bps, chainBps, poolBps, treasuryBps, stabilityBps, devBps, opsBps, communityBps, buybackBps
 //
-// V8.9 changes from V8.8:
-//   T1-T3: sf 600→500, devOps 500 → dev 300 + ops 200, community 100 added
-//   T4-T5: sf stays 500, devOps 600 → dev 360 + ops 240, community 100 added, treasury 1700→1600
-//   T6-T7: sf stays 500, devOps 700 → dev 420 + ops 280, community 100 added, treasury 1900→1800
-//   T8-T10: sf stays 500, devOps 800 → dev 480 + ops 320, community 100 added, treasury 2000→1900
+// V8.16 changes from V8.9:
+//   All tiers: pool -300 BPS, stability +300 BPS (500→800)
+//   Rationale: extra SF funding auto-rescues parked members via keeper,
+//   serving ALL members vs a crossing reserve that only helped the first root.
+//   Pool reduction costs deepest member ~$0.60/cycle — negligible tradeoff.
 //
 //   [  l1,  chain,  pool, treasury,   sf,  dev,  ops, cw,  bbr] sum
-const SPLITS_T1_T3  = [2000,  2000,  3300,    1500,  500,  300,  200, 100,  100]; // 10000
-const SPLITS_T4_T5  = [2000,  2000,  3100,    1600,  500,  360,  240, 100,  100]; // 10000
-const SPLITS_T6_T7  = [2000,  1750,  2950,    1800,  500,  420,  280, 100,  200]; // 10000
-const SPLITS_T8_T10 = [2000,  1750,  2750,    1900,  500,  480,  320, 100,  200]; // 10000
+const SPLITS_T1_T3  = [2000,  2000,  3000,    1500,  800,  300,  200, 100,  100]; // 10000
+const SPLITS_T4_T5  = [2000,  2000,  2800,    1600,  800,  360,  240, 100,  100]; // 10000
+const SPLITS_T6_T7  = [2000,  1750,  2650,    1800,  800,  420,  280, 100,  200]; // 10000
+const SPLITS_T8_T10 = [2000,  1750,  2450,    1900,  800,  480,  320, 100,  200]; // 10000
 
 // ── Chain pay BPS per level (6 levels, must sum to chainBps) ─────────────────
 // T1-T5:  chain=2000  →  1000/400/300/150/75/75  = 2000
@@ -162,7 +162,7 @@ async function main() {
   const opsWallet   = process.env.OPS_WALLET_ADDRESS   || deployerAddr;
   const admin       = process.env.ADMIN_WALLET_ADDRESS || deployerAddr;
 
-  console.log("\n  V8.12 Elevator Deploy");
+  console.log("\n  V8.16 Elevator Deploy — SF rescue fund (800 BPS) + topUpAndCross");
   sep();
   console.log(`  Deployer   : ${deployerAddr}`);
   console.log(`  AccountOne : ${accountOne}`);

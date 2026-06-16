@@ -35,7 +35,7 @@ require("dotenv").config();
 //   v8_2 = size-64 pre-mainnet  ← default
 const ADDRESSES_FILE = path.join(
   __dirname,
-  process.env.ADDRESSES_FILE || "deployed_addresses_v8_13.json"
+  process.env.ADDRESSES_FILE || "deployed_addresses_v8_16.json"
 );
 
 // COUNT: for 127-seat matrices, 260 fills MatA + MatB (W1 seeds pos-1, 126 fill
@@ -432,8 +432,8 @@ async function main() {
   const TREAS_ADDR  = addrs.treasury    || addrs.CNOVATreasury;
   const TR_ADDR     = addrs.tierRouter  || addrs.TierRouter;
   const SF_ADDR     = addrs.stabilityFund;
-  const T1          = addrs.tiers?.T1   || { matA: addrs.T1?.MatrixA,  matB: addrs.T1?.MatrixB,  pm: addrs.T1?.PairManager };
-  const T2          = addrs.tiers?.T2   || { matA: addrs.T2?.MatrixA,  matB: addrs.T2?.MatrixB,  pm: addrs.T2?.PairManager };
+  const T1          = addrs.tiers?.T1   || { matA: addrs.T1?.matA || addrs.T1?.MatrixA,  matB: addrs.T1?.matB || addrs.T1?.MatrixB,  pm: addrs.T1?.pm || addrs.T1?.PairManager };
+  const T2          = addrs.tiers?.T2   || { matA: addrs.T2?.matA || addrs.T2?.MatrixA,  matB: addrs.T2?.matB || addrs.T2?.MatrixB,  pm: addrs.T2?.pm || addrs.T2?.PairManager };
 
   const usdc         = await ethers.getContractAt("MockUSDC",            USDC_ADDR, deployer);
   // usdcFunder: same contract, but signed by the fresh funder wallet.
