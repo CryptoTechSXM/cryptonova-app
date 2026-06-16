@@ -1,18 +1,61 @@
 {
   "version": 2,
-  "regions": ["iad1"],
+  "regions": [
+    "iad1"
+  ],
   "functions": {
     "api/telegram-qa.js": {
       "maxDuration": 30
     }
   },
   "rewrites": [
-    { "source": "/api/:path*",     "destination": "/api/:path*" },
-    { "source": "/terms",          "destination": "/terms.html" },
-    { "source": "/terms.html",     "destination": "/terms.html" },
-    { "source": "/faq",            "destination": "/faq.html" },
-    { "source": "/faq.html",       "destination": "/faq.html" },
-    { "source": "/(.*)\\.html",    "destination": "/$1.html" },
-    { "source": "/(.*)",           "destination": "/mainnet.html" }
+    {
+      "source": "/api/:path*",
+      "destination": "/api/:path*"
+    },
+    {
+      "source": "/(.*)",
+      "has": [
+        {
+          "type": "host",
+          "value": "ea.cryptonova.ai"
+        }
+      ],
+      "destination": "/ea.mainnet.html"
+    },
+    {
+      "source": "/(.*)",
+      "has": [
+        {
+          "type": "host",
+          "value": "admin.cryptonova.ai"
+        }
+      ],
+      "destination": "/admin.mainnet.html"
+    },
+    {
+      "source": "/terms",
+      "destination": "/terms.html"
+    },
+    {
+      "source": "/terms.html",
+      "destination": "/terms.html"
+    },
+    {
+      "source": "/faq",
+      "destination": "/faq.html"
+    },
+    {
+      "source": "/faq.html",
+      "destination": "/faq.html"
+    },
+    {
+      "source": "/(.*)\\.html",
+      "destination": "/$1.html"
+    },
+    {
+      "source": "/(.*)",
+      "destination": "/mainnet.html"
+    }
   ]
 }
