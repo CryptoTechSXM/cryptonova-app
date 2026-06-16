@@ -659,7 +659,7 @@
   </div>
     <div class="logo-text">Crypto<span>Nova</span></div>
     <span class="logo-badge" id="network-badge">Base Sepolia</span>
-    <span style="background:rgba(0,229,160,.15);color:var(--green);border:1px solid var(--green2);border-radius:4px;padding:2px 8px;font-size:10px;font-weight:700;margin-left:6px">V8.15</span>
+    <span style="background:rgba(0,229,160,.15);color:var(--green);border:1px solid var(--green2);border-radius:4px;padding:2px 8px;font-size:10px;font-weight:700;margin-left:6px">V8.16</span>
   </div>
   <div style="display:flex;align-items:center;gap:8px">
     <button class="theme-toggle" id="theme-btn" onclick="toggleTheme()">☀️ Light</button>
@@ -3100,39 +3100,52 @@ async function loadDashboardData() {
     let memberId = 0, memberReferrer = ethers.ZeroAddress;
     let parkedInfo = null; // { label, addr, withdrawable, fee, shortfall }
 
-    for (const m of matrices) {
-      const mc = new ethers.Contract(m.addr, MATRIX_ABI, rp);
-      const [member, escrow] = await Promise.all([
-        mc.getMember(userAddr).catch(()=>null),
-        mc.escrowOf(userAddr).catch(()=>0n),
-      ]);
+    // Show loading placeholders while fetching
+    ['dash-withdrawable','dash-total-earned','dash-cnova','dash-cnova-val','dash-cw-pool'].forEach(id => {
+      const el = document.getElementById(id); if (el) el.textContent = '…';
+    });
+
+    // Fetch all 20 matrices in parallel (one RPC batch) — ~10× faster than sequential
+    const matContracts = matrices.map(m => new ethers.Contract(m.addr, MATRIX_ABI, rp));
+    const matResults = await Promise.all(
+      matContracts.map(mc => mc.getMember(userAddr).catch(() => null))
+    );
+
+    // Process results; only follow-up calls on matrices where user exists
+    const followUps = [];
+    for (let i = 0; i < matrices.length; i++) {
+      const m      = matrices[i];
+      const mc     = matContracts[i];
+      const member = matResults[i];
       if (member && member.hasEverJoined) {
         totalW += BigInt(member.withdrawable);
         totalE += BigInt(member.totalEarned);
-        totalEscrow += BigInt(escrow);
         if (!memberId) { memberId = Number(member.id); memberReferrer = member.referrer; }
-        if (member.isInMatrix) {
-          activeMat = member; activeLabel = m.label;
-          activeBFS = await mc.matrixPos(userAddr).catch(()=>0n); // BFS pos is separate mapping
-          activeCycles = BigInt(member.cyclesCompleted);
-        } else if (!parkedInfo) {
-          // hasEverJoined but NOT in matrix — check if formally parked
-          const parkedAt = await mc.parkedAt(userAddr).catch(()=>0n);
-          if (BigInt(parkedAt) > 0n) {
-            const fee = await mc.ENTRY_FEE().catch(()=>0n);
-            const w   = BigInt(member.withdrawable);
-            parkedInfo = {
-              label: m.label, addr: m.addr,
-              withdrawable: w,
-              fee: BigInt(fee),
-              shortfall: BigInt(fee) > w ? BigInt(fee) - w : 0n,
-            };
-          }
-        }
         const tNum = parseInt(m.label.match(/^T(\d+)/)?.[1] || '1');
         highestTier = Math.max(highestTier, tNum);
+        if (member.isInMatrix) {
+          activeMat = member; activeLabel = m.label;
+          followUps.push(
+            mc.matrixPos(userAddr).catch(()=>0n).then(pos => { activeBFS = pos; activeCycles = BigInt(member.cyclesCompleted); })
+          );
+        } else if (!parkedInfo) {
+          followUps.push((async () => {
+            const parkedAt = await mc.parkedAt(userAddr).catch(()=>0n);
+            if (BigInt(parkedAt) > 0n) {
+              const fee = await mc.ENTRY_FEE().catch(()=>0n);
+              const w   = BigInt(member.withdrawable);
+              parkedInfo = {
+                label: m.label, addr: m.addr,
+                withdrawable: w,
+                fee: BigInt(fee),
+                shortfall: BigInt(fee) > w ? BigInt(fee) - w : 0n,
+              };
+            }
+          })());
+        }
       }
     }
+    if (followUps.length) await Promise.all(followUps);
 
     // CNOVA balance + floor price (treasuryUsdc / cnovaSupply)
     // v8.7: floor is backed by Treasury USDC (15% BPS), not SF
