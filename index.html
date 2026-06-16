@@ -2859,9 +2859,10 @@ async function loadRegisterTab() {
           if (hint) hint.innerHTML = '<span style="color:var(--green)">&#x2705; ' + cycles + ' cycle' + (cycles !== 1 ? 's' : '') + ' complete &#8212; you qualify for T2 upgrade!</span>';
           if (btnApp) { btnApp.disabled = false; btnApp.textContent = 'Step 1: Approve USDC'; btnApp.className = 'btn btn-green'; btnApp.style.flex = '1'; }
         } else if (inT1MatB) {
-          // Crossed to MatB — early upgrade eligible (cycle still running)
-          if (hint) hint.innerHTML = '<span style="color:var(--green)">&#x2705; You\'ve crossed to Matrix B &mdash; you can upgrade to T2 now! Your MatB cycle will continue earning while you advance.</span>';
-          if (btnApp) { btnApp.disabled = false; btnApp.textContent = 'Step 1: Approve USDC'; btnApp.className = 'btn btn-green'; btnApp.style.flex = '1'; }
+          // Crossed to MatB — cycle still running, upgrade unlocks when MatB completes
+          if (hint) hint.innerHTML = '<span style="color:#f59e0b">&#x23F3; You\'ve crossed to Matrix B &mdash; T2 upgrade unlocks once your MatB cycle completes. Keep earning!</span>';
+          if (btnApp) { btnApp.disabled = true; btnApp.textContent = 'Cycle in progress…'; btnApp.className = 'btn'; btnApp.style.flex = '1'; }
+          if (btnUp)  { btnUp.disabled = true; }
         } else {
           if (hint) hint.textContent = 'Locked until your first T1 cycle completes. A full cycle runs in two stages: MatA fills (126 members), then MatB fills (127 members). Once both stages complete for your position, this unlocks automatically.';
           if (btnApp) { btnApp.disabled = true; btnApp.textContent = 'Step 1: Approve USDC (locked until cycle complete)'; }
