@@ -1981,6 +1981,9 @@ const MATRIX_ABI = [
   'function withdrawTo(address recipient) external',
   'function withdrawPartialTo(address recipient, uint256 amount) external',
   'function withdrawalFeeBps() external view returns (uint256)',
+  'function parkedAt(address) external view returns (uint256)',
+  'function isParked(address) external view returns (bool)',
+  'function getParkedCount() external view returns (uint256)',
 ];
 
 const CNOVA_ABI = [
@@ -3145,7 +3148,7 @@ async function loadDashboardData() {
         }
       }
     }
-    if (followUps.length) await Promise.all(followUps);
+    if (followUps.length) await Promise.allSettled(followUps); // allSettled — never throws
 
     // CNOVA balance + floor price (treasuryUsdc / cnovaSupply)
     // v8.7: floor is backed by Treasury USDC (15% BPS), not SF
