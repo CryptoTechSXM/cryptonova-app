@@ -28,6 +28,11 @@
       "destination": "/early.html"
     },
     {
+      "source": "/api/:path*",
+      "has": [{ "type": "host", "value": "v8.crypto-nova.app" }],
+      "destination": "/api/:path*"
+    },
+    {
       "source": "/(.*)",
       "has": [{ "type": "host", "value": "v8.crypto-nova.app" }],
       "destination": "/index.html"
