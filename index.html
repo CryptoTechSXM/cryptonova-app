@@ -4483,7 +4483,7 @@ async function doManualUpgrade() {
     const tx = await tr.manualUpgrade(idx, { gasLimit: 3_000_000 });
     status.textContent = 'Transaction submitted. Waiting for confirmation...';
     await tx.wait();
-    status.textContent = '\U0001f389 Tier upgrade confirmed! Refreshing dashboard...';
+    status.textContent = '🎉 Tier upgrade confirmed! Refreshing dashboard...';
     setTimeout(() => loadDashboardData(), 2000);
   } catch(e) {
     status.textContent = '❌ ' + (e.reason || e.message);
@@ -4554,7 +4554,7 @@ async function doUpgrade() {
     const tx = await tr.manualUpgrade(idx, { gasLimit: 3_000_000 });
     if (status) status.textContent = 'Waiting for confirmation...';
     await tx.wait();
-    if (status) status.innerHTML = '<span style="color:var(--green)">\U0001f389 Upgraded to T' + (idx + 1) + '! Check your Dashboard.</span>';
+    if (status) status.innerHTML = '<span style="color:var(--green)">🎉 Upgraded to T' + (idx + 1) + '! Check your Dashboard.</span>';
     toast('Tier upgraded successfully!', 'success');
     setTimeout(() => loadDashboardData(), 2000);
   } catch(e) {
