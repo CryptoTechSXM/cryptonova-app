@@ -93,5 +93,32 @@
     "already_reg": "Bu cüzdan zaten kayıtlı.",
     "no_approval": "USDC onaylanmadı — önce Adım 1'i tamamlayın.",
     "tx_reverted": "İşlem geri alındı: "
+  },
+  "idx": {
+    "title": "CryptoNova — Matrix",
+    "nav_home": "🏠 Ana Sayfa",
+    "nav_register": "✅ Kayıt Ol",
+    "nav_dashboard": "📊 Kontrol Paneli",
+    "nav_matrix": "🌐 Matrix",
+    "nav_tiers": "🏆 Seviyeler",
+    "nav_roadmap": "🗺️ Yol Haritası",
+    "nav_status": "🛡️ Durum",
+    "hero_h1": "CryptoNova Matrix<br><span>Base Chain üzerinde</span>",
+    "hero_sub": "CryptoNova Matrix'e katılın. T1'den ($10 USDC) başlayın ve 10 seviye boyunca otomatik olarak yükselin. Tavsiye bonusları, zincir ödemeleri ve CNOVA token kazanın — hepsi Base Chain üzerinde.",
+    "hero_join": "Hemen Katıl — $10 USDC",
+    "hero_dashboard": "Kontrol Paneli'ni Gör",
+    "reg_tab_title": "CryptoNova V8'e Katıl",
+    "reg_title": "Kayıt Ol — $10 USDC",
+    "how_title": "Nasıl Kayıt Olunur",
+    "how_s1_h": "Cüzdanını Bağla",
+    "how_s1_b": "Sağ üst köşedeki «Cüzdanı Bağla» düğmesine tıkla. MetaMask ve Rabby desteklenir. Base Sepolia testnet'te olduğundan emin ol.",
+    "how_s2_h": "Test USDC Al",
+    "how_s2_b": "Testnet'te MockUSDC sözleşmesi deployer'a $10.000 bastırdı. Test transferi iste veya faucet düğmesini kullan.",
+    "how_s3_h": "USDC Onayla",
+    "how_s3_b": "Matrix sözleşmesinin adına $10 USDC harcamasına izin ver. Bir MetaMask onayı.",
+    "how_s4_h": "Kayıt Ol",
+    "how_s4_b": "Kayıt işlemini onayla. Bir sonraki boş koltuğa CryptoNova Matrix'e yerleştirileceksin.",
+    "how_s5_h": "Kazan ve Çek",
+    "how_s5_b": "Yeni üyeler kaydoldukça USDC zincir boyunca sana akar. Kontrol Paneli'nden istediğin zaman çek."
   }
 }

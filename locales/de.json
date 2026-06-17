@@ -93,5 +93,32 @@
     "already_reg": "Dieses Wallet ist bereits registriert.",
     "no_approval": "USDC nicht genehmigt — schließe zuerst Schritt 1 ab.",
     "tx_reverted": "Transaktion abgebrochen: "
+  },
+  "idx": {
+    "title": "CryptoNova — Die Matrix",
+    "nav_home": "🏠 Start",
+    "nav_register": "✅ Registrieren",
+    "nav_dashboard": "📊 Dashboard",
+    "nav_matrix": "🌐 Matrix",
+    "nav_tiers": "🏆 Stufen",
+    "nav_roadmap": "🗺️ Roadmap",
+    "nav_status": "🛡️ Status",
+    "hero_h1": "CryptoNova Matrix<br><span>auf Base Chain</span>",
+    "hero_sub": "Tritt der CryptoNova Matrix bei. Starte bei T1 (10 $ USDC) und steige automatisch durch 10 Stufen auf. Verdiene Empfehlungsboni, Chain-Zahlungen und CNOVA-Token — alles auf Base Chain.",
+    "hero_join": "Jetzt beitreten — 10 $ USDC",
+    "hero_dashboard": "Dashboard anzeigen",
+    "reg_tab_title": "CryptoNova V8 beitreten",
+    "reg_title": "Registrieren — 10 $ USDC",
+    "how_title": "So registrierst du dich",
+    "how_s1_h": "Verbinde dein Wallet",
+    "how_s1_b": "Klicke oben rechts auf «Wallet verbinden». MetaMask und Rabby werden unterstützt. Stelle sicher, dass du im Base Sepolia Testnetz bist.",
+    "how_s2_h": "Test-USDC erhalten",
+    "how_s2_b": "Im Testnetz hat der MockUSDC-Vertrag 10.000 $ an den Deployer geprägt. Bitte um einen Testtransfer oder nutze den Faucet-Button.",
+    "how_s3_h": "USDC genehmigen",
+    "how_s3_b": "Erlaube dem Matrix-Vertrag, 10 $ USDC in deinem Namen auszugeben. Eine MetaMask-Bestätigung.",
+    "how_s4_h": "Registrieren",
+    "how_s4_b": "Bestätige die Registrierungstransaktion. Du wirst beim nächsten freien Platz in der CryptoNova Matrix platziert.",
+    "how_s5_h": "Verdienen und abheben",
+    "how_s5_b": "Wenn neue Mitglieder beitreten, fließt USDC durch die Kette zu dir. Hebe jederzeit im Dashboard ab."
   }
 }

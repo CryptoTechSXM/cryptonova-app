@@ -93,5 +93,32 @@
     "already_reg": "Ce portefeuille est déjà inscrit.",
     "no_approval": "USDC non approuvé — complétez d'abord l'Étape 1.",
     "tx_reverted": "Transaction annulée : "
+  },
+  "idx": {
+    "title": "CryptoNova — La Matrice",
+    "nav_home": "🏠 Accueil",
+    "nav_register": "✅ S'inscrire",
+    "nav_dashboard": "📊 Tableau de bord",
+    "nav_matrix": "🌐 Matrice",
+    "nav_tiers": "🏆 Niveaux",
+    "nav_roadmap": "🗺️ Feuille de route",
+    "nav_status": "🛡️ Statut",
+    "hero_h1": "CryptoNova Matrix<br><span>sur Base Chain</span>",
+    "hero_sub": "Rejoignez la CryptoNova Matrix. Commencez au T1 (10 $ USDC) et montez automatiquement à travers 10 niveaux. Gagnez des bonus de parrainage, des paiements en chaîne et des tokens CNOVA — tout sur Base Chain.",
+    "hero_join": "Rejoindre — 10 $ USDC",
+    "hero_dashboard": "Voir le tableau de bord",
+    "reg_tab_title": "Rejoindre CryptoNova V8",
+    "reg_title": "S'inscrire — 10 $ USDC",
+    "how_title": "Comment s'inscrire",
+    "how_s1_h": "Connectez votre portefeuille",
+    "how_s1_b": "Cliquez sur « Connecter le portefeuille » en haut à droite. MetaMask et Rabby sont pris en charge. Assurez-vous d'être sur le testnet Base Sepolia.",
+    "how_s2_h": "Obtenez des USDC de test",
+    "how_s2_b": "Sur le testnet, le contrat MockUSDC a créé 10 000 $ pour le déployeur. Demandez un transfert de test ou utilisez le bouton faucet.",
+    "how_s3_h": "Approuver l'USDC",
+    "how_s3_b": "Autorisez le contrat Matrix à dépenser 10 $ USDC en votre nom. Une confirmation MetaMask.",
+    "how_s4_h": "S'inscrire",
+    "how_s4_b": "Confirmez la transaction d'inscription. Vous serez placé dans la CryptoNova Matrix au prochain siège disponible.",
+    "how_s5_h": "Gagner et retirer",
+    "how_s5_b": "Au fur et à mesure que de nouveaux membres s'inscrivent, l'USDC circule à travers la chaîne jusqu'à vous. Retirez à tout moment depuis le tableau de bord."
   }
 }

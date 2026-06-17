@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>CryptoNova — The Matrix</title>
+  <title data-i18n="idx.title">CryptoNova — The Matrix</title>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/6.7.1/ethers.umd.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
   <style>
@@ -39,6 +39,8 @@
     }
     .theme-toggle { background: var(--bg3); border: 1px solid var(--border); border-radius: 8px; padding: 6px 12px; font-size: 13px; color: var(--text2); cursor: pointer; transition: all .2s; }
     .theme-toggle:hover { color: var(--text); border-color: var(--green); }
+    .lang-select { background: var(--bg3); border: 1px solid var(--border); border-radius: 8px; padding: 6px 10px; font-size: 13px; color: var(--text); cursor: pointer; transition: border-color .2s; outline: none; }
+    .lang-select:hover, .lang-select:focus { border-color: var(--green); }
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body { background: var(--bg); color: var(--text); font-family: 'Segoe UI', system-ui, sans-serif; min-height: 100vh; }
 
@@ -662,6 +664,7 @@
     <span style="background:rgba(0,229,160,.15);color:var(--green);border:1px solid var(--green2);border-radius:4px;padding:2px 8px;font-size:10px;font-weight:700;margin-left:6px">V8.16</span>
   </div>
   <div style="display:flex;align-items:center;gap:8px">
+    <div id="lang-switcher"></div>
     <button class="theme-toggle" id="theme-btn" onclick="toggleTheme()">☀️ Light</button>
     <button id="btn-switch-network" onclick="switchToBaseSepolia()" style="display:none;background:var(--yellow);color:#000;border:none;border-radius:8px;padding:7px 12px;font-weight:700;font-size:12px;cursor:pointer;transition:opacity .2s">⚠️ Wrong Network</button>
     <button id="btn-connect" onclick="connectWallet()">Connect Wallet</button>
@@ -669,13 +672,13 @@
 </header>
 
 <nav>
-  <button class="active" onclick="showTab('home')">🏠 Home</button>
-  <button onclick="showTab('register')">✅ Register</button>
-  <button onclick="showTab('dashboard')">📊 Dashboard</button>
-  <button onclick="showTab('matrix')">🌐 Matrix</button>
-  <button onclick="showTab('tiers')">🏆 Tiers</button>
-  <button onclick="showTab('roadmap')">🗺️ Roadmap</button>
-  <button onclick="window.location.href='status.html'">🛡️ Status</button>
+  <button class="active" onclick="showTab('home')" data-i18n="idx.nav_home">🏠 Home</button>
+  <button onclick="showTab('register')" data-i18n="idx.nav_register">✅ Register</button>
+  <button onclick="showTab('dashboard')" data-i18n="idx.nav_dashboard">📊 Dashboard</button>
+  <button onclick="showTab('matrix')" data-i18n="idx.nav_matrix">🌐 Matrix</button>
+  <button onclick="showTab('tiers')" data-i18n="idx.nav_tiers">🏆 Tiers</button>
+  <button onclick="showTab('roadmap')" data-i18n="idx.nav_roadmap">🗺️ Roadmap</button>
+  <button onclick="window.location.href='status.html'" data-i18n="idx.nav_status">🛡️ Status</button>
 </nav>
 
 <main>
@@ -706,11 +709,11 @@
   <!-- ══ HOME TAB ══════════════════════════════════════════════════════ -->
   <div id="tab-home" class="tab-panel active">
     <div class="hero">
-      <h1>CryptoNova Matrix<br><span>on Base Chain</span></h1>
-      <p>Join the CryptoNova Matrix. Start at T1 ($10 USDC) and auto-upgrade through 10 tiers. Earn referral bonuses, chain pay, and CNOVA tokens — all on Base Chain.</p>
+      <h1 data-i18n="idx.hero_h1">CryptoNova Matrix<br><span>on Base Chain</span></h1>
+      <p data-i18n="idx.hero_sub">Join the CryptoNova Matrix. Start at T1 ($10 USDC) and auto-upgrade through 10 tiers. Earn referral bonuses, chain pay, and CNOVA tokens — all on Base Chain.</p>
       <div class="hero-actions">
-        <button class="btn-primary" onclick="showTab('register')">Join Now — $10 USDC</button>
-        <button class="btn-outline" onclick="showTab('dashboard')">View Dashboard</button>
+        <button class="btn-primary" onclick="showTab('register')" data-i18n="idx.hero_join">Join Now — $10 USDC</button>
+        <button class="btn-outline" onclick="showTab('dashboard')" data-i18n="idx.hero_dashboard">View Dashboard</button>
       </div>
       <div style="margin-top:20px;display:flex;flex-wrap:wrap;gap:10px;justify-content:center">
         <a href="https://t.me/+0tmvkrDs20Q1M2My" target="_blank" rel="noopener" style="text-decoration:none;display:inline-flex;align-items:center;gap:6px;background:rgba(59,130,246,.12);border:1px solid rgba(59,130,246,.35);border-radius:10px;padding:9px 16px;color:var(--blue);font-weight:600;font-size:13px;transition:background .2s" onmouseover="this.style.background='rgba(59,130,246,.22)'" onmouseout="this.style.background='rgba(59,130,246,.12)'">
@@ -1026,13 +1029,13 @@
 
   <!-- ══ REGISTER TAB ════════════════════════════════════════════════════ -->
   <div id="tab-register" class="tab-panel">
-    <div class="section-title"><div class="dot"></div> Join CryptoNova V8</div>
+    <div class="section-title"><div class="dot"></div> <span data-i18n="idx.reg_tab_title">Join CryptoNova V8</span></div>
 
     <div class="grid-2">
       <div>
         <!-- Registration flow -->
         <div class="card" style="margin-bottom:20px">
-          <div style="font-size:15px;font-weight:700;margin-bottom:16px">Register — $10 USDC</div>
+          <div style="font-size:15px;font-weight:700;margin-bottom:16px" data-i18n="idx.reg_title">Register — $10 USDC</div>
 
           <div id="register-wallet-warn" style="display:none;background:rgba(245,158,11,.1);border:1px solid rgba(245,158,11,.3);border-radius:8px;padding:14px;font-size:14px;color:var(--yellow);margin-bottom:16px">
             ⚠️ Connect your wallet first to register.
@@ -1126,36 +1129,36 @@
 
       <!-- How it works -->
       <div class="card">
-        <div style="font-size:15px;font-weight:700;margin-bottom:16px">How to Register</div>
+        <div style="font-size:15px;font-weight:700;margin-bottom:16px" data-i18n="idx.how_title">How to Register</div>
         <ul class="step-list">
           <li>
             <div class="step-content">
-              <strong>Connect Your Wallet</strong>
-              <span>Click "Connect Wallet" in the top-right. MetaMask and Rabby are both supported. Make sure you're on Base Sepolia testnet.</span>
+              <strong data-i18n="idx.how_s1_h">Connect Your Wallet</strong>
+              <span data-i18n="idx.how_s1_b">Click "Connect Wallet" in the top-right. MetaMask and Rabby are both supported. Make sure you're on Base Sepolia testnet.</span>
             </div>
           </li>
           <li>
             <div class="step-content">
-              <strong>Get Test USDC</strong>
-              <span>On testnet, the MockUSDC contract minted $10,000 to the deployer. Ask for a test transfer, or mint directly.</span>
+              <strong data-i18n="idx.how_s2_h">Get Test USDC</strong>
+              <span data-i18n="idx.how_s2_b">On testnet, the MockUSDC contract minted $10,000 to the deployer. Ask for a test transfer, or use the faucet button.</span>
             </div>
           </li>
           <li>
             <div class="step-content">
-              <strong>Approve USDC</strong>
-              <span>Allow the Matrix contract to spend $10 USDC on your behalf. One MetaMask confirmation.</span>
+              <strong data-i18n="idx.how_s3_h">Approve USDC</strong>
+              <span data-i18n="idx.how_s3_b">Allow the Matrix contract to spend $10 USDC on your behalf. One MetaMask confirmation.</span>
             </div>
           </li>
           <li>
             <div class="step-content">
-              <strong>Register</strong>
-              <span>Confirm the register transaction. You'll be placed into the CryptoNova Matrix at the next available seat.</span>
+              <strong data-i18n="idx.how_s4_h">Register</strong>
+              <span data-i18n="idx.how_s4_b">Confirm the register transaction. You'll be placed into the CryptoNova Matrix at the next available seat.</span>
             </div>
           </li>
           <li>
             <div class="step-content">
-              <strong>Earn &amp; Withdraw</strong>
-              <span>As new members register, USDC flows through the chain to you. Withdraw any time from the Dashboard.</span>
+              <strong data-i18n="idx.how_s5_h">Earn &amp; Withdraw</strong>
+              <span data-i18n="idx.how_s5_b">As new members register, USDC flows through the chain to you. Withdraw any time from the Dashboard.</span>
             </div>
           </li>
         </ul>

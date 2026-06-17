@@ -93,5 +93,32 @@
     "already_reg": "Esta billetera ya está registrada.",
     "no_approval": "USDC no aprobado — completa primero el Paso 1.",
     "tx_reverted": "Transacción revertida: "
+  },
+  "idx": {
+    "title": "CryptoNova — La Matriz",
+    "nav_home": "🏠 Inicio",
+    "nav_register": "✅ Registrarse",
+    "nav_dashboard": "📊 Panel",
+    "nav_matrix": "🌐 Matriz",
+    "nav_tiers": "🏆 Niveles",
+    "nav_roadmap": "🗺️ Hoja de ruta",
+    "nav_status": "🛡️ Estado",
+    "hero_h1": "CryptoNova Matrix<br><span>en Base Chain</span>",
+    "hero_sub": "Únete a la CryptoNova Matrix. Comienza en T1 (10 $ USDC) y avanza automáticamente por 10 niveles. Gana bonos de referencia, pagos en cadena y tokens CNOVA — todo en Base Chain.",
+    "hero_join": "Unirse — 10 $ USDC",
+    "hero_dashboard": "Ver panel",
+    "reg_tab_title": "Unirse a CryptoNova V8",
+    "reg_title": "Registrarse — 10 $ USDC",
+    "how_title": "Cómo registrarse",
+    "how_s1_h": "Conecta tu cartera",
+    "how_s1_b": "Haz clic en «Conectar cartera» en la esquina superior derecha. Se admiten MetaMask y Rabby. Asegúrate de estar en la testnet Base Sepolia.",
+    "how_s2_h": "Obtén USDC de prueba",
+    "how_s2_b": "En la testnet, el contrato MockUSDC acuñó 10 000 $ para el deployer. Solicita una transferencia de prueba o usa el botón faucet.",
+    "how_s3_h": "Aprobar USDC",
+    "how_s3_b": "Permite que el contrato Matrix gaste 10 $ USDC en tu nombre. Una confirmación de MetaMask.",
+    "how_s4_h": "Registrarse",
+    "how_s4_b": "Confirma la transacción de registro. Serás ubicado en la CryptoNova Matrix en el próximo asiento disponible.",
+    "how_s5_h": "Ganar y retirar",
+    "how_s5_b": "A medida que nuevos miembros se registran, el USDC fluye a través de la cadena hacia ti. Retira en cualquier momento desde el panel."
   }
 }

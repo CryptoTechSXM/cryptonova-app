@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>CryptoNova — System Status</title>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/6.7.1/ethers.umd.min.js"></script>
+  <script src="/i18n.js" defer></script>
   <style>
     :root {
       --bg:        #0a0e1a;
@@ -42,6 +43,8 @@
     .btn-home:hover{color:var(--green);border-color:var(--green2)}
     .theme-toggle{background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:6px 12px;font-size:13px;color:var(--text2);cursor:pointer;transition:all .2s}
     .theme-toggle:hover{color:var(--text);border-color:var(--green)}
+    .lang-select{background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:6px 10px;font-size:13px;color:var(--text);cursor:pointer;transition:border-color .2s;outline:none}
+    .lang-select:hover,.lang-select:focus{border-color:var(--green)}
 
     /* Main */
     main{max-width:1100px;margin:0 auto;padding:32px 24px}
@@ -157,6 +160,7 @@
     </div>
   </a>
   <div class="header-right">
+    <div id="lang-switcher"></div>
     <a href="index.html" class="btn-home">← Dashboard</a>
     <button class="theme-toggle" onclick="toggleTheme()">☀ Light</button>
   </div>
