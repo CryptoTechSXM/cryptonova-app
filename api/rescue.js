@@ -1,9 +1,9 @@
 /**
- * /api/rescue.js — CryptoNova V8.16 Member Self-Rescue (topUpAndCross)
+ * /api/rescue.js — CryptoNova V8.17 Member Self-Rescue (topUpAndCross)
  *
  * POST /api/rescue  { "address": "0x..." }
  *
- * V8.16: Uses topUpAndCross() — deployer pays only the SHORTFALL
+ * V8.17: Uses topUpAndCross() — deployer pays only the SHORTFALL
  * (ENTRY_FEE − member.withdrawable), not the full entry fee.
  * The member's own withdrawable covers their portion.
  *
@@ -15,7 +15,24 @@
  */
 
 import { ethers } from 'ethers';
-import ADDRS_RAW from '../scripts/deployed_addresses_v8_16.json' assert { type: 'json' };
+
+// V8.17 — deployed 2026-06-17 — Pool=45% Chain=17% SF=15%
+// Hardcoded to avoid JSON import (no addresses file in app repo)
+const ADDRS_RAW = {
+  usdc: '0x2D8B7b5eDec96bE441b6fb0D45D74a2BcE2C639a',
+  tiers: {
+    T1:  { matA: '0x88A3dcb7AE73b0B765036fa1F29753bcDA2Dbd66', matB: '0xCFE4E56f03B5c0041efFA21B14fCf0eF52Fd251C' },
+    T2:  { matA: '0xC1ac0a7d6b295569FbCa4a27E923A1f555D5BE0b', matB: '0x6b7e79beF7F5D96af7556D3a32bEbBa000931296' },
+    T3:  { matA: '0x99e25D5C05b3Df1F5d2D43776f21ae2426245Eb7', matB: '0x4F8Bce516Ad376bEBB56e69223eEB3625eD945AE' },
+    T4:  { matA: '0x12621f38C40AB4B5682e883abDCD41167a61980f', matB: '0xa1e5E4a35be643822938B19e90844FEbB754dB3c' },
+    T5:  { matA: '0xF2e91800C31588F17fCc99aBD1aA67d0f11B45a0', matB: '0x8834323E62B4BB37807CC403F3f6A384be52D535' },
+    T6:  { matA: '0xcce304011aB2d84900a1EB90FfA38B5d16368957', matB: '0x2Ebbf3f619bb4487D3ac7C5f183E4f36D1843f8e' },
+    T7:  { matA: '0x247d2fFa5873D0abf213A25dB43c5DbAcaa1eD3e', matB: '0x6E264c04C67f368f44b492b4A9A0106eA4e481e7' },
+    T8:  { matA: '0x827C2b7f7C9d2ecE3A245e0161885f1A0f71879D', matB: '0xa7C763232beE0103CE73CC54fd00BFb83f8508dC' },
+    T9:  { matA: '0xF6F74C28dea75299e9c2fa50a95969383B72F4e0', matB: '0x09aa9e0C568aa0743638eeAAdc097559EC77daCc' },
+    T10: { matA: '0x7b2B4785ec8f70186B7001816FBe1c7277D00af4', matB: '0xf6C3Fc62d5fD787271a124a0a5D44f9b54B1e6B2' },
+  },
+};
 
 const MATRIX_ABI = [
   'function hasEverJoined(address) view returns (bool)',
@@ -119,7 +136,7 @@ export default async function handler(req, res) {
 
     rescued.set(normalised, true);
     console.log(
-      `Rescue (V8.16): ${address} rescued from ${parkedMatrix.label} | ` +
+      `Rescue (V8.17): ${address} rescued from ${parkedMatrix.label} | ` +
       `shortfall=$${Number(shortfall)/1e6} member=$${Number(memberBal)/1e6} | tx: ${rescueTx.hash}`
     );
 
