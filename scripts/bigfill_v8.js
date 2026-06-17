@@ -35,7 +35,7 @@ require("dotenv").config();
 //   v8_2 = size-64 pre-mainnet  ← default
 const ADDRESSES_FILE = path.join(
   __dirname,
-  process.env.ADDRESSES_FILE || "deployed_addresses_v8_16.json"
+  process.env.ADDRESSES_FILE || "deployed_addresses_v8_17.json"
 );
 
 // COUNT: for 127-seat matrices, 260 fills MatA + MatB (W1 seeds pos-1, 126 fill
@@ -58,10 +58,14 @@ const HDR_OFFSET  = Number(process.env.HDR_OFFSET  || 0); // BIP-44 index offset
 const WATCH_WALLETS_RAW = process.env.WATCH_WALLETS || '';
 // WATCH_EVERY: print watched wallet status every N batches (default 5, set to 1 for every batch)
 const WATCH_EVERY  = Number(process.env.WATCH_EVERY  || 5);
-// RESCUE_SCAN: max parked slots to inspect per inline rescue call (avoids RPC slowdown)
-// RESCUE_CAP:  max members to rescue per call (keeps bigfill moving)
-const RESCUE_SCAN  = Number(process.env.RESCUE_SCAN  || 20);
-const RESCUE_CAP   = Number(process.env.RESCUE_CAP   || 5);
+// RESCUE_SCAN: max parked slots to inspect per inline rescue pass (0 = all)
+// RESCUE_CAP:  max members to rescue per pass (0 = all)
+// RESCUE_ALL:  when true (default), loop rescue passes until SF is dry or queue is empty.
+//              This simulates the keeper running at full capacity — "real life" mode.
+//              Set RESCUE_ALL=false to revert to the old single-pass capped behaviour.
+const RESCUE_SCAN  = Number(process.env.RESCUE_SCAN  || 0);  // 0 = no limit
+const RESCUE_CAP   = Number(process.env.RESCUE_CAP   || 0);  // 0 = no limit
+const RESCUE_ALL   = (process.env.RESCUE_ALL ?? "true") !== "false";
 const ETH_PER      = ethers.parseEther("0.02");   // gas budget per wallet — 0.02 ETH covers approve + register even at 10+ gwei on Base Sepolia
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -227,30 +231,30 @@ function _sfRescueBpsInline(withdrawable, fee) {
   return null; // < 50% withdrawable — not keeper-eligible
 }
 
-async function inlineRescueParked({ matA1, matB1, stabilityFund, matrixKeeper, deployer, entryFee }) {
-  if (!stabilityFund || !matrixKeeper) return;
-
+// _inlineRescuePass: one scan-and-rescue sweep over the parked queue.
+// Returns the number of wallets rescued this pass (0 = done / SF dry).
+async function _inlineRescuePass({ matA1, matB1, stabilityFund, matrixKeeper, rawDeployer, entryFee, scanLimit, capLimit }) {
   const parkedCount = await matA1.getParkedCount().catch(() => 0n);
-  if (parkedCount === 0n) return;
+  if (parkedCount === 0n) return 0;
 
   const sfBal = await stabilityFund.balanceByTier(0).catch(() => 0n);
-  // Minimum SF needed = 10% of entry fee (lowest possible sliding-scale share)
-  const minSfShare = entryFee * 1000n / 10000n;
-  if (sfBal < minSfShare) {
-    console.log(`  🏥 ${parkedCount} parked — SF ${(Number(sfBal)/1e6).toFixed(2)} < min ${(Number(minSfShare)/1e6).toFixed(2)}, skip`);
-    return;
-  }
+  const minSfShare = entryFee * 1000n / 10000n; // 10% of fee = lowest sliding-scale tier
+  if (sfBal < minSfShare) return 0;
 
   const matA1Addr = await matA1.getAddress();
   const matBSize  = await matB1.MATRIX_SIZE();
   let   matBOcc   = await matB1.occupancy();
 
-  // Scan up to RESCUE_SCAN parked members, collect keeper-eligible ones
-  const scanCount = Number(parkedCount < BigInt(RESCUE_SCAN) ? parkedCount : BigInt(RESCUE_SCAN));
+  // Scan up to scanLimit parked members (0 = all)
+  const scanCount = (scanLimit === 0)
+    ? Number(parkedCount)
+    : Math.min(Number(parkedCount), scanLimit);
   const eligible  = [];
   const seen      = new Set();
+  const capActive = capLimit > 0;
 
-  for (let i = 0; i < scanCount && eligible.length < RESCUE_CAP; i++) {
+  for (let i = 0; i < scanCount; i++) {
+    if (capActive && eligible.length >= capLimit) break;
     const addr = await matA1.getParkedMember(i).catch(() => null);
     if (!addr || addr === ethers.ZeroAddress) continue;
     const addrLc = addr.toLowerCase();
@@ -264,13 +268,18 @@ async function inlineRescueParked({ matA1, matB1, stabilityFund, matrixKeeper, d
 
     const withdrawable = await matA1.withdrawableOf(addr).catch(() => 0n);
     const bps = _sfRescueBpsInline(withdrawable, entryFee);
-    if (bps === null) continue; // < 50% withdrawable — skip
+    if (bps === null) {
+      // < 50% withdrawable — print shortfall so operator knows why it was skipped
+      const shortfall = entryFee - withdrawable;
+      process.stdout.write(`  🏥 skip ${addr.slice(0,10)} (only ${fmt6(withdrawable)}, shortfall ${fmt6(shortfall)} > 50%)\n`);
+      continue;
+    }
 
     const sfShare = entryFee * bps / 10000n;
-    eligible.push({ addr, sfShare });
+    eligible.push({ addr, sfShare, withdrawable });
   }
 
-  if (eligible.length === 0) return;
+  if (eligible.length === 0) return 0;
 
   // Cap to what SF can currently cover
   const toRescue = [];
@@ -280,11 +289,18 @@ async function inlineRescueParked({ matA1, matB1, stabilityFund, matrixKeeper, d
     sfRunning -= e.sfShare;
     toRescue.push(e);
   }
-  if (toRescue.length === 0) return;
+  if (toRescue.length === 0) return 0;
 
-  process.stdout.write(`  🏥 Parked rescue: ${parkedCount} queued → rescuing ${toRescue.length}… `);
+  process.stdout.write(`  🏥 Parked rescue: ${parkedCount} queued → rescuing ${toRescue.length} (SF ${fmt6(sfBal)})… `);
   let rescued = 0;
-  for (const { addr } of toRescue) {
+
+  // Use rawDeployer + explicit nonce to avoid the NonceManager "gapped-nonce tx from
+  // delegated accounts" cascade. Base Sepolia limits high-nonce wallets to 1 in-flight TX.
+  // On any failure the NonceManager loses sync; explicit nonce + re-sync-on-error is safe.
+  const mkRaw = matrixKeeper.connect(rawDeployer);
+  let dNonce = Number(await rawDeployer.provider.getTransactionCount(rawDeployer.address, 'pending'));
+
+  for (const { addr, withdrawable } of toRescue) {
     const item = [{ workType: _WORK_PARKED_RESCUE, tierIndex: 0, addr1: matA1Addr, addr2: addr }];
     const performData = _rescueCoder.encode(
       ['tuple(uint8 workType, uint8 tierIndex, address addr1, address addr2)[]'],
@@ -292,16 +308,65 @@ async function inlineRescueParked({ matA1, matB1, stabilityFund, matrixKeeper, d
     );
     const gasLimit = (matBOcc >= matBSize) ? _GAS_RESCUE_OVERFLOW : _GAS_RESCUE_NORMAL;
     try {
-      const tx = await matrixKeeper.performUpkeep(performData, { gasLimit });
+      const tx = await mkRaw.performUpkeep(performData, { gasLimit, nonce: dNonce });
       const receipt = await tx.wait();
       if (receipt.status === 1) {
         rescued++;
+        dNonce++;
         if (gasLimit !== _GAS_RESCUE_OVERFLOW) matBOcc++;
+      } else {
+        console.warn(`  ⚠  rescue ${addr.slice(0,10)} tx status=0 (gasUsed ${receipt.gasUsed})`);
+        // Re-sync nonce — the failed TX may have consumed the nonce slot
+        dNonce = Number(await rawDeployer.provider.getTransactionCount(rawDeployer.address, 'pending'));
       }
-    } catch (_) { /* silent — don't halt bigfill */ }
-    if (gasLimit === _GAS_RESCUE_OVERFLOW) await new Promise(r => setTimeout(r, 1500));
+    } catch (err) {
+      const msg = err.shortMessage || err.message?.slice(0, 100) || 'unknown';
+      console.warn(`  ⚠  rescue ${addr.slice(0,10)} failed: ${msg}`);
+      // Re-sync nonce after any RPC rejection — NonceManager would have incremented
+      // its counter on the failed call; rawDeployer does not but we resync to be safe.
+      dNonce = Number(await rawDeployer.provider.getTransactionCount(rawDeployer.address, 'pending'));
+    }
+    // Respect Base Sepolia's 1-in-flight limit for delegated accounts: wait 6s between rescues
+    await new Promise(r => setTimeout(r, (gasLimit === _GAS_RESCUE_OVERFLOW) ? 2000 : 6000));
   }
   console.log(`${rescued}/${toRescue.length} rescued ✅`);
+  return rescued;
+}
+
+// inlineRescueParked: outer driver.
+// In RESCUE_ALL mode (default = real-life simulation): loops rescue passes until
+// the parked queue is empty or SF is exhausted — same behaviour as the keeper bot
+// running continuously between fills.
+// In legacy mode (RESCUE_ALL=false): single pass capped at RESCUE_SCAN / RESCUE_CAP.
+async function inlineRescueParked({ matA1, matB1, stabilityFund, matrixKeeper, rawDeployer, deployer, entryFee }) {
+  if (!stabilityFund || !matrixKeeper) return;
+
+  if (!RESCUE_ALL) {
+    // Legacy single-pass mode
+    await _inlineRescuePass({ matA1, matB1, stabilityFund, matrixKeeper, rawDeployer, entryFee,
+                               scanLimit: RESCUE_SCAN, capLimit: RESCUE_CAP });
+    return;
+  }
+
+  // Real-life exhaustive mode: keep rescuing until queue is empty or SF dry.
+  // Each pass may trigger a MatB cascade that frees slots for the next pass.
+  let totalRescued = 0;
+  let passNo = 0;
+  while (true) {
+    passNo++;
+    const rescued = await _inlineRescuePass({
+      matA1, matB1, stabilityFund, matrixKeeper, rawDeployer, entryFee,
+      scanLimit: 0,   // scan all parked
+      capLimit:  0,   // rescue all eligible
+    });
+    totalRescued += rescued;
+    if (rescued === 0) break; // SF dry or queue empty
+    // Short pause between passes to let Base Sepolia process the previous batch of TXs
+    await new Promise(r => setTimeout(r, 2000));
+  }
+  if (totalRescued > 0) {
+    console.log(`  🏥 Total rescued this batch: ${totalRescued} wallet(s) across ${passNo - 1} pass(es)`);
+  }
 }
 
 // ── Snapshot helper (V8.1) ────────────────────────────────────────────────────
@@ -688,6 +753,7 @@ async function main() {
   // ── Register wallets in batches ────────────────────────────────────────────
   sep("Registering wallets via TierRouter");
   let registered = 0;
+  let skippedAlready = 0;  // wallets already registered from a prior run — not failures
   const failures = [];
   const upgradedAt = [];
   let prevSysCyc    = await tierRouter.totalSystemCycles(); // track cycle changes for burn sweep
@@ -709,10 +775,12 @@ async function main() {
         // Connect wallet to provider
         const connected = wallet.connect(ethers.provider);
 
-        // Skip wallets already registered (idempotent re-runs after partial failures)
+        // Skip wallets already registered (idempotent re-runs after partial failures).
+        // Use a special sentinel so the outer loop can count these separately from
+        // genuine failures — seeing "all wallets already registered" means wrong HDR_OFFSET.
         const alreadyJoined = await tierRouter.globalJoined(wallet.address);
         if (alreadyJoined) {
-          throw new Error(`wallet ${wallet.address.slice(0,10)} already registered — skip`);
+          throw Object.assign(new Error(`wallet ${wallet.address.slice(0,10)} already registered — skip`), { _alreadyJoined: true });
         }
 
         // Skip wallets that failed funding after all retries
@@ -772,7 +840,18 @@ async function main() {
       if (r.status === "fulfilled") {
         registered++;
       } else {
-        failures.push(r.reason?.message || "unknown");
+        const err = r.reason;
+        if (err?._alreadyJoined) {
+          skippedAlready++;  // prior-run wallet — not a real failure
+        } else {
+          const msg = err?.shortMessage || err?.message || "unknown";
+          failures.push(msg);
+          // Print the actual revert reason so we can diagnose mainnet issues
+          // (e.g. "already in matrix", "velocity gate", "OOG", etc.)
+          if (msg && !msg.includes("insufficient ETH") && !msg.includes("skip")) {
+            console.warn(`    ⚠ reg fail: ${msg.slice(0, 120)}`);
+          }
+        }
       }
     }
 
@@ -791,9 +870,11 @@ async function main() {
     const w1Cyc    = await tierRouter.tierCycles(W1_ADDR, 0);
     const paused   = await tierRouter.systemPaused();
 
+    const skipStr = skippedAlready > 0 ? ` skip(dup)=${skippedAlready}` : '';
+    const failStr = failures.length  > 0 ? ` fail=${failures.length}` : '';
     console.log(
       `  Batch ${String(batchNum).padStart(3)} | ` +
-      `reg ${String(registered).padStart(4)}/${COUNT} | ` +
+      `reg ${String(registered).padStart(4)}/${COUNT}${skipStr}${failStr} | ` +
       `T1A ${occ1A}/${mSize}  T1B ${occ1B}/${mSize} | ` +
       `cycles ${sysCyc} | ` +
       `W1→T${w1Tier}(cyc${w1Cyc}) | ` +
@@ -817,7 +898,7 @@ async function main() {
     }
 
     // Inline parked rescue — after every batch, rescue any eligible parked members
-    await inlineRescueParked({ matA1, matB1, stabilityFund, matrixKeeper, deployer: rawSigner, entryFee: T1_FEE });
+    await inlineRescueParked({ matA1, matB1, stabilityFund, matrixKeeper, rawDeployer: rawSigner, deployer: rawSigner, entryFee: T1_FEE });
 
     // Inline forceCross check — every 10 batches OR immediately after a cycle
     if (batchNum % 10 === 0 || forceFCCheck) {
@@ -890,6 +971,16 @@ async function main() {
     }
 
     if (b < batches.length - 1) await sleep(BATCH_DELAY);
+  }
+
+  // ── Registration summary ──────────────────────────────────────────────────
+  sep("Registration summary");
+  console.log(`  Registered:       ${registered} / ${COUNT}`);
+  if (skippedAlready > 0) {
+    console.log(`  Already joined:   ${skippedAlready}  ← wrong HDR_OFFSET, not real failures`);
+  }
+  if (failures.length > 0) {
+    console.log(`  Genuine failures: ${failures.length}`);
   }
 
   // ── Post-registration snapshot ────────────────────────────────────────────
@@ -991,7 +1082,10 @@ async function main() {
         process.exit(1);
       }
 
-      // 1. Move USDC funder → deployer so deployer can fund the crossings
+      // 1. Move USDC funder → deployer so deployer can fund the crossings.
+      //    Re-fetch fNonce here — it may have drifted during inline rescue attempts
+      //    which also use the funder wallet (performUpkeep calls).
+      fNonce = Number(await ethers.provider.getTransactionCount(funderAddr, 'pending'));
       const matA1Addr = await matA1.getAddress();
       console.log(`  Transferring ${fmt6(usdcNeededFC)} USDC: funder → deployer for forceCross (nonce ${fNonce})…`);
       await (await usdcFunder.transfer(deployerAddr, usdcNeededFC, { nonce: fNonce })).wait();
@@ -1056,14 +1150,20 @@ async function main() {
   // ── Next-run hint ─────────────────────────────────────────────────────────
   sep("NEXT RUN HINT");
   const nextOffset = HDR_OFFSET + wallets.length;
-  console.log(`    To continue with fresh wallets:`);
-  console.log(`    HDR_OFFSET=${nextOffset} COUNT=${COUNT} npx hardhat run scripts/bigfill_v8.js --network baseSepolia`);
-  if (wallets.filter(w => w._skip).length > 0) {
-    console.log(`    (Some wallets were skipped — check logs above)`);
-  }
-  if (wallets.length === wallets.filter((_, i) => i < wallets.length).length) {
-    console.log(`    3. All ${wallets.length} wallets already registered at offset ${HDR_OFFSET}`);
-    console.log(`       Try: HDR_OFFSET=${nextOffset} COUNT=6 npx hardhat run scripts/bigfill_v8.js --network baseSepolia`);
+  if (skippedAlready === wallets.length) {
+    console.log(`  ⚠  ALL ${wallets.length} wallets at HDR_OFFSET=${HDR_OFFSET} were already registered on a prior run.`);
+    console.log(`     This is why reg showed 0/${COUNT} — NOT a payment or cascade bug.`);
+    console.log(`     Use the next offset to get fresh wallets:`);
+    console.log(`     HDR_OFFSET=${nextOffset} COUNT=${COUNT} npx hardhat run scripts/bigfill_v8.js --network baseSepolia`);
+  } else {
+    console.log(`  To continue with fresh wallets:`);
+    console.log(`  HDR_OFFSET=${nextOffset} COUNT=${COUNT} npx hardhat run scripts/bigfill_v8.js --network baseSepolia`);
+    if (skippedAlready > 0) {
+      console.log(`  (${skippedAlready} wallets were already registered from a prior run — use HDR_OFFSET=${nextOffset} to avoid)`);
+    }
+    if (failures.length > 0) {
+      console.log(`  (${failures.length} genuine registration failures — check ⚠ lines above for revert reasons)`);
+    }
   }
   sep();
 }
