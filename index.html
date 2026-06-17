@@ -761,14 +761,14 @@
     </div>
 
     <!-- Live Stats -->
-    <div class="section-title"><div class="dot"></div> Live Stats <span id="stats-refresh" style="font-size:12px;color:var(--text3);font-weight:400;margin-left:8px;cursor:pointer" onclick="loadHomeStats(); setTimeout(loadTiersStats, 800);">↻ Refresh</span></div>
+    <div class="section-title"><div class="dot"></div> <span data-i18n="stats.live_title">Live Stats</span> <span id="stats-refresh" style="font-size:12px;color:var(--text3);font-weight:400;margin-left:8px;cursor:pointer" onclick="loadHomeStats(); setTimeout(loadTiersStats, 800);">↻ Refresh</span></div>
     <div class="grid-4" id="stats-grid">
-      <div class="card-sm"><div class="stat-label">Total Registered</div><div class="stat-value" id="stat-members"><span class="spinner" style="color:var(--text3)"></span></div><div class="stat-sub">all-time joins</div></div>
-      <div class="card-sm"><div class="stat-label">CNOVA Minted</div><div class="stat-value green" id="stat-minted"><span class="spinner" style="color:var(--green)"></span></div><div class="stat-sub">50 per T1 join</div></div>
-      <div class="card-sm" title="CNOVA Treasury holds 15% of all entry fees — it backs the CNOVA floor price. Floor price = Treasury USDC ÷ total CNOVA supply."><div class="stat-label">CNOVA USDC Treasury 🏦</div><div class="stat-value green" id="stat-treasury-usdc"><span class="spinner" style="color:var(--green)"></span></div><div class="stat-sub">backing the CNOVA value</div></div>
-      <div class="card-sm" title="Guaranteed minimum redemption price — Treasury USDC ÷ total CNOVA supply."><div class="stat-label">CNOVA Floor Price</div><div class="stat-value green" id="stat-floor-price"><span class="spinner" style="color:var(--green)"></span></div><div class="stat-sub">per CNOVA token</div></div>
-      <div class="card-sm"><div class="stat-label">CNOVA Total Supply</div><div class="stat-value" id="stat-supply"><span class="spinner" style="color:var(--text3)"></span></div><div class="stat-sub">circulating CNOVA</div></div>
-      <div class="card-sm" style="border-color:rgba(245,158,11,.4)"><div class="stat-label">System Cycles</div><div class="stat-value" id="stat-cycles" style="color:var(--yellow)"><span class="spinner" style="color:var(--yellow)"></span></div></div>
+      <div class="card-sm"><div class="stat-label" data-i18n="stats.total_registered">Total Registered</div><div class="stat-value" id="stat-members"><span class="spinner" style="color:var(--text3)"></span></div><div class="stat-sub" data-i18n="stats.all_time_joins">all-time joins</div></div>
+      <div class="card-sm"><div class="stat-label" data-i18n="stats.cnova_minted">CNOVA Minted</div><div class="stat-value green" id="stat-minted"><span class="spinner" style="color:var(--green)"></span></div><div class="stat-sub" data-i18n="stats.per_join">50 per T1 join</div></div>
+      <div class="card-sm" title="CNOVA Treasury holds 15% of all entry fees — it backs the CNOVA floor price. Floor price = Treasury USDC ÷ total CNOVA supply."><div class="stat-label" data-i18n="stats.cnova_treasury">CNOVA USDC Treasury 🏦</div><div class="stat-value green" id="stat-treasury-usdc"><span class="spinner" style="color:var(--green)"></span></div><div class="stat-sub" data-i18n="stats.backing_cnova">backing the CNOVA value</div></div>
+      <div class="card-sm" title="Guaranteed minimum redemption price — Treasury USDC ÷ total CNOVA supply."><div class="stat-label" data-i18n="stats.floor_price">CNOVA Floor Price</div><div class="stat-value green" id="stat-floor-price"><span class="spinner" style="color:var(--green)"></span></div><div class="stat-sub" data-i18n="stats.per_cnova">per CNOVA token</div></div>
+      <div class="card-sm"><div class="stat-label" data-i18n="stats.total_supply">CNOVA Total Supply</div><div class="stat-value" id="stat-supply"><span class="spinner" style="color:var(--text3)"></span></div><div class="stat-sub" data-i18n="stats.circulating">circulating CNOVA</div></div>
+      <div class="card-sm" style="border-color:rgba(245,158,11,.4)"><div class="stat-label" data-i18n="stats.system_cycles">System Cycles</div><div class="stat-value" id="stat-cycles" style="color:var(--yellow)"><span class="spinner" style="color:var(--yellow)"></span></div></div>
     </div>
 
 
@@ -793,42 +793,43 @@
 
     <!-- CNOVA Mining Stats -->
     <div class="grid-4" style="margin-bottom:24px">
-      <div class="card-sm"><div class="stat-label">Current Epoch</div><div class="stat-value" id="stat-epoch" style="color:var(--yellow)">—</div></div>
-      <div class="card-sm"><div class="stat-label">CNOVA Reward / Entry</div><div class="stat-value green" id="stat-reward">—</div></div>
-      <div class="card-sm"><div class="stat-label">Stability Rescue Fund</div><div class="stat-value" id="stat-reserve">—</div></div>
-      <div class="card-sm"><div class="stat-label">Community Wallet</div><div class="stat-value" id="stat-cw-balance" style="color:#a855f7">—</div></div>
+      <div class="card-sm"><div class="stat-label" data-i18n="stats.current_epoch">Current Epoch</div><div class="stat-value" id="stat-epoch" style="color:var(--yellow)">—</div></div>
+      <div class="card-sm"><div class="stat-label" data-i18n="stats.reward_per_entry">CNOVA Reward / Entry</div><div class="stat-value green" id="stat-reward">—</div></div>
+      <div class="card-sm"><div class="stat-label" data-i18n="stats.stability_fund">Stability Rescue Fund</div><div class="stat-value" id="stat-reserve">—</div></div>
+      <div class="card-sm"><div class="stat-label" data-i18n="stats.community_wallet">Community Wallet</div><div class="stat-value" id="stat-cw-balance" style="color:#a855f7">—</div></div>
+      <div class="card-sm" title="Accumulated USDC dedicated to buying back and burning CNOVA tokens — supports the floor price."><div class="stat-label" data-i18n="stats.buyback_reserve">Buyback Reserve</div><div class="stat-value" id="stat-buyback" style="color:var(--green)">—</div></div>
     </div>
 
     <!-- Entry split -->
     <div class="card">
-      <div class="section-title"><div class="dot"></div> Entry Fee Split — per $10 at T1</div>
-      <div class="split-row"><span class="split-label">🌀 Equalization Pool</span><span><span class="split-amount">33%</span> <span class="split-pct">$3.30</span></span></div>
-      <div class="split-row"><span class="split-label">⛓️ Chain Pay (6 upline levels)</span><span><span class="split-amount">20%</span> <span class="split-pct">$2.00</span></span></div>
-      <div class="split-row"><span class="split-label">🤝 L1 Direct Referrer</span><span><span class="split-amount">20%</span> <span class="split-pct">$2.00</span></span></div>
-      <div class="split-row"><span class="split-label">🏦 CNOVA Treasury <span style="font-size:10px;color:var(--text3)">(floor backing)</span></span><span><span class="split-amount">15%</span> <span class="split-pct">$1.50</span></span></div>
-      <div class="split-row"><span class="split-label">🌊 CNOVA Stability Fund <span style="font-size:10px;color:var(--text3)">(rescue reserve)</span></span><span><span class="split-amount">5%</span> <span class="split-pct">$0.50</span></span></div>
-      <div class="split-row"><span class="split-label">⚙️ Dev</span><span><span class="split-amount">3%</span> <span class="split-pct">$0.30</span></span></div>
-      <div class="split-row"><span class="split-label">⚙️ Ops</span><span><span class="split-amount">2%</span> <span class="split-pct">$0.20</span></span></div>
-      <div class="split-row"><span class="split-label">🏛️ Community</span><span><span class="split-amount">1%</span> <span class="split-pct">$0.10</span></span></div>
-      <div class="split-row"><span class="split-label">🔥 CNOVA Buyback Reserve</span><span><span class="split-amount">1%</span> <span class="split-pct">$0.10</span></span></div>
+      <div class="section-title"><div class="dot"></div> <span data-i18n="split.title">Entry Fee Split — per $10 at T1</span></div>
+      <div class="split-row"><span class="split-label" data-i18n="split.equalization">🌀 Equalization Pool</span><span><span class="split-amount">33%</span> <span class="split-pct">$3.30</span></span></div>
+      <div class="split-row"><span class="split-label" data-i18n="split.chain_pay">⛓️ Chain Pay (6 upline levels)</span><span><span class="split-amount">20%</span> <span class="split-pct">$2.00</span></span></div>
+      <div class="split-row"><span class="split-label" data-i18n="split.referrer">🤝 L1 Direct Referrer</span><span><span class="split-amount">20%</span> <span class="split-pct">$2.00</span></span></div>
+      <div class="split-row"><span class="split-label">🏦 CNOVA Treasury <span style="font-size:10px;color:var(--text3)" data-i18n="split.treasury_sub">(floor backing)</span></span><span><span class="split-amount">15%</span> <span class="split-pct">$1.50</span></span></div>
+      <div class="split-row"><span class="split-label">🌊 CNOVA Stability Fund <span style="font-size:10px;color:var(--text3)" data-i18n="split.stability_sub">(rescue reserve)</span></span><span><span class="split-amount">5%</span> <span class="split-pct">$0.50</span></span></div>
+      <div class="split-row"><span class="split-label" data-i18n="split.dev">⚙️ Dev</span><span><span class="split-amount">3%</span> <span class="split-pct">$0.30</span></span></div>
+      <div class="split-row"><span class="split-label" data-i18n="split.ops">⚙️ Ops</span><span><span class="split-amount">2%</span> <span class="split-pct">$0.20</span></span></div>
+      <div class="split-row"><span class="split-label" data-i18n="split.community">🏛️ Community</span><span><span class="split-amount">1%</span> <span class="split-pct">$0.10</span></span></div>
+      <div class="split-row"><span class="split-label" data-i18n="split.buyback">🔥 CNOVA Buyback Reserve</span><span><span class="split-amount">1%</span> <span class="split-pct">$0.10</span></span></div>
       <div style="margin-top:14px;padding:10px 14px;background:var(--green-dim);border:1px solid var(--green2);border-radius:8px;font-size:13px;color:var(--text2)">
-        💡 <strong style="color:var(--green)">CryptoNova Matrix mechanic:</strong> Fill Matrix A → root crosses to Matrix B → fill B → root auto-upgrades to T2. The loop repeats for each tier.
+        💡 <strong style="color:var(--green)" data-i18n="split.mechanic_label">CryptoNova Matrix mechanic:</strong> <span data-i18n="split.mechanic_body">Fill Matrix A → root crosses to Matrix B → fill B → root auto-upgrades to T2. The loop repeats for each tier.</span>
       </div>
     </div>
   </div>
 
   <!-- ══ TIERS TAB ═══════════════════════════════════════════════════════ -->
   <div id="tab-tiers" class="tab-panel">
-    <div class="section-title" style="margin-bottom:16px"><div class="dot"></div> 10-Tier CryptoNova Matrix &#8212; Live Stats</div>
+    <div class="section-title" style="margin-bottom:16px"><div class="dot"></div> <span data-i18n="tiers.title">10-Tier CryptoNova Matrix &#8212; Live Stats</span></div>
     <div class="card" style="margin-bottom:24px;overflow-x:auto">
       <table style="width:100%;border-collapse:collapse;font-size:13px">
         <thead><tr style="border-bottom:1px solid var(--border)">
-          <th style="text-align:left;padding:8px 10px;color:var(--text3)">Tier</th>
-          <th style="text-align:left;padding:8px 10px;color:var(--text3)">Name</th>
-          <th style="text-align:right;padding:8px 10px;color:var(--text3)">Entry</th>
-          <th style="text-align:right;padding:8px 10px;color:var(--text3)">MatA Fill</th>
-          <th style="text-align:right;padding:8px 10px;color:var(--text3)">MatB Fill</th>
-          <th style="text-align:left;padding:8px 10px;color:var(--text3)">Gate</th>
+          <th style="text-align:left;padding:8px 10px;color:var(--text3)" data-i18n="tiers.th_tier">Tier</th>
+          <th style="text-align:left;padding:8px 10px;color:var(--text3)" data-i18n="tiers.th_name">Name</th>
+          <th style="text-align:right;padding:8px 10px;color:var(--text3)" data-i18n="tiers.th_entry">Entry</th>
+          <th style="text-align:right;padding:8px 10px;color:var(--text3)" data-i18n="tiers.th_mata_fill">MatA Fill</th>
+          <th style="text-align:right;padding:8px 10px;color:var(--text3)" data-i18n="tiers.th_matb_fill">MatB Fill</th>
+          <th style="text-align:left;padding:8px 10px;color:var(--text3)" data-i18n="tiers.th_gate">Gate</th>
         </tr></thead>
         <tbody>
           <tr style="border-bottom:1px solid var(--border)"><td style="padding:8px 10px;font-weight:700;color:var(--green)">T1</td><td style="padding:8px 10px">Nova Seed</td><td style="padding:8px 10px;text-align:right;font-family:monospace">$10</td><td style="padding:8px 10px;text-align:right" id="tier-t1a-fill">&#8212;</td><td style="padding:8px 10px;text-align:right" id="tier-t1b-fill">&#8212;</td><td style="padding:8px 10px"><span id="tier-t1-gate" class="pill pill-green" style="font-size:10px">Open</span></td></tr>
@@ -1176,59 +1177,59 @@
 
   <!-- ══ DASHBOARD TAB ═══════════════════════════════════════════════════ -->
   <div id="tab-dashboard" class="tab-panel">
-    <div class="section-title"><div class="dot"></div> My Dashboard</div>
+    <div class="section-title"><div class="dot"></div> <span data-i18n="dash.title">My Dashboard</span></div>
 
     <div id="dash-no-wallet" class="card" style="text-align:center;padding:40px;display:none">
       <div style="font-size:32px;margin-bottom:12px"><span style="filter:sepia(1) saturate(3) hue-rotate(5deg) brightness(0.85)">👛</span></div>
-      <div style="font-size:16px;font-weight:600;margin-bottom:8px">Connect Your Wallet</div>
-      <div style="color:var(--text2);font-size:14px;margin-bottom:20px">Connect MetaMask to view your dashboard and earnings.</div>
-      <button class="btn btn-green" onclick="window.ethereum ? connectWallet() : showMetaMaskModal()">Connect Wallet</button>
+      <div style="font-size:16px;font-weight:600;margin-bottom:8px" data-i18n="dash.no_wallet_h">Connect Your Wallet</div>
+      <div style="color:var(--text2);font-size:14px;margin-bottom:20px" data-i18n="dash.no_wallet_body">Connect MetaMask to view your dashboard and earnings.</div>
+      <button class="btn btn-green" onclick="window.ethereum ? connectWallet() : showMetaMaskModal()" data-i18n="dash.no_wallet_btn">Connect Wallet</button>
     </div>
 
     <div id="dash-not-registered" class="card" style="text-align:center;padding:40px;display:none">
       <div style="font-size:32px;margin-bottom:12px">🚀</div>
-      <div style="font-size:16px;font-weight:600;margin-bottom:8px">Not Yet Registered</div>
-      <div style="color:var(--text2);font-size:14px;margin-bottom:20px">You haven't joined the matrix yet. Register with $10 USDC to get started.</div>
-      <button class="btn btn-green" onclick="showTab('register')">Register Now</button>
+      <div style="font-size:16px;font-weight:600;margin-bottom:8px" data-i18n="dash.not_reg_h">Not Yet Registered</div>
+      <div style="color:var(--text2);font-size:14px;margin-bottom:20px" data-i18n="dash.not_reg_body">You haven't joined the matrix yet. Register with $10 USDC to get started.</div>
+      <button class="btn btn-green" onclick="showTab('register')" data-i18n="dash.not_reg_btn">Register Now</button>
     </div>
 
     <div id="dash-content" style="display:none">
       <!-- Earnings cards -->
       <div class="grid-4" style="margin-bottom:24px">
         <div class="card-sm clickable" style="border-color:var(--green2)" onclick="openDashDetail('withdrawable',this)" title="Click for breakdown">
-          <div class="stat-label">Withdrawable</div>
+          <div class="stat-label" data-i18n="dash.withdrawable">Withdrawable</div>
           <div class="stat-value green" id="dash-withdrawable">—</div>
-          <div class="stat-sub">Ready to claim</div>
+          <div class="stat-sub" data-i18n="dash.ready_to_claim">Ready to claim</div>
           <div class="detail-hint">Details ↗</div>
         </div>
         <div class="card-sm clickable" onclick="openDashDetail('earned',this)" title="Click for tier breakdown">
-          <div class="stat-label">Total Earned</div>
+          <div class="stat-label" data-i18n="dash.total_earned">Total Earned</div>
           <div class="stat-value" id="dash-total-earned">—</div>
-<div class="stat-sub" id="dash-total-earned-sub" title="Total USDC ever credited to your account. Includes current balance, amounts auto-deducted for tier upgrades, and past withdrawals.">All tiers lifetime</div>
+          <div class="stat-sub" id="dash-total-earned-sub" data-i18n="dash.all_tiers_lifetime" title="Total USDC ever credited to your account. Includes current balance, amounts auto-deducted for tier upgrades, and past withdrawals.">All tiers lifetime</div>
           <div class="detail-hint">Details ↗</div>
         </div>
         <div class="card-sm clickable" onclick="openDashDetail('cnova',this)" title="Click for CNOVA breakdown">
-          <div class="stat-label"><svg width="14" height="14" style="vertical-align:middle;border-radius:50%;margin-right:3px"><use href="#cnova-icon"/></svg>CNOVA Balance</div>
+          <div class="stat-label"><svg width="14" height="14" style="vertical-align:middle;border-radius:50%;margin-right:3px"><use href="#cnova-icon"/></svg><span data-i18n="dash.cnova_balance">CNOVA Balance</span></div>
           <div class="stat-value green" id="dash-cnova">—</div>
-          <div class="stat-sub">Mined tokens</div>
+          <div class="stat-sub" data-i18n="dash.mined_tokens">Mined tokens</div>
           <div class="detail-hint">Details ↗</div>
         </div>
         <div class="card-sm clickable" onclick="openDashDetail('cnova',this)" title="Click for CNOVA breakdown">
-          <div class="stat-label">CNOVA Value</div>
+          <div class="stat-label" data-i18n="dash.cnova_value">CNOVA Value</div>
           <div class="stat-value" id="dash-cnova-val">—</div>
-          <div class="stat-sub">At current floor</div>
+          <div class="stat-sub" data-i18n="dash.at_current_floor">At current floor</div>
           <div class="detail-hint">Details ↗</div>
         </div>
         <div class="card-sm clickable" onclick="openDashDetail('burned',this)" title="Click for redemption history">
-          <div class="stat-label">🔥 CNOVA Burned</div>
+          <div class="stat-label" data-i18n="dash.cnova_burned">🔥 CNOVA Burned</div>
           <div class="stat-value" id="dash-cnova-burned" style="color:var(--red)">—</div>
-          <div class="stat-sub">Redeemed lifetime</div>
+          <div class="stat-sub" data-i18n="dash.redeemed_lifetime">Redeemed lifetime</div>
           <div class="detail-hint">Details ↗</div>
         </div>
         <div class="card-sm clickable" style="border-color:rgba(168,85,247,.4)" onclick="openDashDetail('community',this)" title="Click for eligibility details">
-          <div class="stat-label">🏛️ Community Pool</div>
+          <div class="stat-label" data-i18n="dash.community_pool">🏛️ Community Pool</div>
           <div class="stat-value" id="dash-cw-pool" style="color:#a855f7">—</div>
-          <div class="stat-sub">Orphan fees collected</div>
+          <div class="stat-sub" data-i18n="dash.orphan_fees">Orphan fees collected</div>
           <div class="detail-hint">Details ↗</div>
         </div>
       </div>
@@ -1245,15 +1246,15 @@
       <!-- Withdraw + member info -->
       <div class="grid-2" style="margin-bottom:24px">
         <div class="card">
-          <div class="section-title" style="margin-bottom:16px"><div class="dot"></div> Withdraw Earnings</div>
+          <div class="section-title" style="margin-bottom:16px"><div class="dot"></div> <span data-i18n="dash.withdraw_title">Withdraw Earnings</span></div>
           <div style="font-size:28px;font-weight:800;color:var(--green);margin-bottom:4px" id="dash-withdraw-amount">$0.00</div>
-          <div style="font-size:13px;color:var(--text3);margin-bottom:10px">Available USDC</div>
+          <div style="font-size:13px;color:var(--text3);margin-bottom:10px" data-i18n="dash.available_usdc">Available USDC</div>
 
           <!-- Withdrawal fee breakdown -->
           <div id="withdraw-fee-breakdown" style="background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:10px 12px;font-size:12px;margin-bottom:14px;display:none">
-            <div class="info-row" style="margin-bottom:4px"><span class="info-key">Gross Amount</span><span class="info-val" id="wfee-gross">—</span></div>
-            <div class="info-row" style="margin-bottom:6px"><span class="info-key" style="color:var(--yellow)">Health Fee (<span id="wfee-pct">1.5</span>%)</span><span class="info-val" style="color:var(--yellow)" id="wfee-fee">—</span></div>
-            <div class="info-row" style="border-top:1px solid var(--border);padding-top:6px;margin:0"><span class="info-key" style="font-weight:700">You Receive</span><span class="info-val green" style="font-weight:800;font-size:13px" id="wfee-net">—</span></div>
+            <div class="info-row" style="margin-bottom:4px"><span class="info-key" data-i18n="dash.gross_amount">Gross Amount</span><span class="info-val" id="wfee-gross">—</span></div>
+            <div class="info-row" style="margin-bottom:6px"><span class="info-key" style="color:var(--yellow)"><span data-i18n="dash.health_fee">Health Fee</span> (<span id="wfee-pct">1.5</span>%)</span><span class="info-val" style="color:var(--yellow)" id="wfee-fee">—</span></div>
+            <div class="info-row" style="border-top:1px solid var(--border);padding-top:6px;margin:0"><span class="info-key" style="font-weight:700" data-i18n="dash.you_receive">You Receive</span><span class="info-val green" style="font-weight:800;font-size:13px" id="wfee-net">—</span></div>
           </div>
 
           <!-- Destination wallet (expandable custom address) -->
@@ -1295,14 +1296,14 @@
 
           <!-- Redeem CNOVA for USDC at floor price -->
           <div style="margin-top:20px;padding-top:16px;border-top:1px solid var(--border)">
-            <div style="font-size:14px;font-weight:700;margin-bottom:4px">🔥 Redeem CNOVA → USDC</div>
-            <div style="font-size:12px;color:var(--text3);margin-bottom:8px">Burn CNOVA at the current floor price to receive USDC from the CNOVA Treasury.</div>
+            <div style="font-size:14px;font-weight:700;margin-bottom:4px" data-i18n="dash.redeem_title">🔥 Redeem CNOVA → USDC</div>
+            <div style="font-size:12px;color:var(--text3);margin-bottom:8px" data-i18n="dash.redeem_desc">Burn CNOVA at the current floor price to receive USDC from the CNOVA Treasury.</div>
             <div id="redeem-penalty-info" style="display:none;background:rgba(245,158,11,.08);border:1px solid rgba(245,158,11,.25);border-radius:8px;padding:10px 12px;font-size:12px;color:var(--text2);line-height:1.6;margin-bottom:12px"></div>
-            <div class="info-row"><span class="info-key">Your CNOVA</span><span class="info-val green" id="redeem-cnova-bal">—</span></div>
-            <div class="info-row"><span class="info-key">Floor Price</span><span class="info-val" id="redeem-floor">—</span></div>
-            <div class="info-row"><span class="info-key">Gross Value</span><span class="info-val" id="redeem-gross">—</span></div>
-            <div class="info-row" id="redeem-penalty-row"><span class="info-key" style="color:var(--yellow)">Early Unlock Penalty</span><span class="info-val" style="color:var(--yellow)" id="redeem-penalty-amt">—</span></div>
-            <div class="info-row" style="border-top:1px solid var(--border);padding-top:8px;margin-top:4px"><span class="info-key" style="font-weight:700">Est. Net Receive</span><span class="info-val green" style="font-weight:800;font-size:15px" id="redeem-out">—</span></div>
+            <div class="info-row"><span class="info-key" data-i18n="dash.your_cnova">Your CNOVA</span><span class="info-val green" id="redeem-cnova-bal">—</span></div>
+            <div class="info-row"><span class="info-key" data-i18n="dash.floor_price">Floor Price</span><span class="info-val" id="redeem-floor">—</span></div>
+            <div class="info-row"><span class="info-key" data-i18n="dash.gross_value">Gross Value</span><span class="info-val" id="redeem-gross">—</span></div>
+            <div class="info-row" id="redeem-penalty-row"><span class="info-key" style="color:var(--yellow)" data-i18n="dash.early_unlock_penalty">Early Unlock Penalty</span><span class="info-val" style="color:var(--yellow)" id="redeem-penalty-amt">—</span></div>
+            <div class="info-row" style="border-top:1px solid var(--border);padding-top:8px;margin-top:4px"><span class="info-key" style="font-weight:700" data-i18n="dash.est_net_receive">Est. Net Receive</span><span class="info-val green" style="font-weight:800;font-size:15px" id="redeem-out">—</span></div>
             <div style="display:flex;gap:8px;margin-top:12px">
               <input type="text" id="redeem-amount" placeholder="CNOVA to redeem"
                 style="flex:1;background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:9px 12px;color:var(--text);font-size:13px;outline:none"
@@ -1310,23 +1311,23 @@
               <button class="btn btn-ghost" onclick="setMaxRedeem()" style="padding:9px 14px;font-size:12px">Max</button>
             </div>
             <div style="display:flex;flex-direction:column;gap:8px;margin-top:10px">
-              <button class="btn btn-ghost full-w" id="btn-redeem-approve" onclick="approveCNOVAForRedeem()" disabled>Step 1: Approve CNOVA</button>
-              <button class="btn btn-ghost full-w" id="btn-redeem" onclick="doRedeemAtFloor()" disabled>Step 2: Redeem for USDC</button>
+              <button class="btn btn-ghost full-w" id="btn-redeem-approve" onclick="approveCNOVAForRedeem()" disabled data-i18n="dash.step1_approve_cnova">Step 1: Approve CNOVA</button>
+              <button class="btn btn-ghost full-w" id="btn-redeem" onclick="doRedeemAtFloor()" disabled data-i18n="dash.step2_redeem">Step 2: Redeem for USDC</button>
             </div>
             <div id="redeem-status" style="margin-top:10px;font-size:13px;color:var(--text2)"></div>
           </div>
         </div>
         <div class="card">
-          <div class="section-title" style="margin-bottom:12px"><div class="dot"></div> Member Info — <span id="dash-tier-name" style="color:var(--green);font-size:14px">—</span></div>
-          <div class="info-row"><span class="info-key">Member ID</span><span class="info-val" id="dash-id">—</span></div>
-          <div class="info-row"><span class="info-key">Active Matrix</span><span class="info-val" id="dash-matrix">—</span></div>
-          <div class="info-row"><span class="info-key">BFS Position</span><span class="info-val" id="dash-bfs">—</span></div>
-          
-          <div class="info-row"><span class="info-key">Tier Cycles</span><span class="info-val" id="dash-cycles">—</span></div>
+          <div class="section-title" style="margin-bottom:12px"><div class="dot"></div> <span data-i18n="dash.member_info">Member Info</span> — <span id="dash-tier-name" style="color:var(--green);font-size:14px">—</span></div>
+          <div class="info-row"><span class="info-key" data-i18n="dash.member_id">Member ID</span><span class="info-val" id="dash-id">—</span></div>
+          <div class="info-row"><span class="info-key" data-i18n="dash.active_matrix">Active Matrix</span><span class="info-val" id="dash-matrix">—</span></div>
+          <div class="info-row"><span class="info-key" data-i18n="dash.bfs_position">BFS Position</span><span class="info-val" id="dash-bfs">—</span></div>
+
+          <div class="info-row"><span class="info-key" data-i18n="dash.tier_cycles">Tier Cycles</span><span class="info-val" id="dash-cycles">—</span></div>
           <div id="dash-cycles-breakdown" style="font-size:12px;color:var(--text3);padding:4px 10px;background:var(--bg3);border-radius:6px;margin:-4px 0 6px 0;display:none"></div>
           
-          <div class="info-row"><span class="info-key">Referrer</span><span class="info-val addr" id="dash-orig-referrer">—</span></div>
-          <div class="info-row"><span class="info-key">Direct Referrals</span><span class="info-val" id="dash-directs">—</span></div>
+          <div class="info-row"><span class="info-key" data-i18n="dash.referrer">Referrer</span><span class="info-val addr" id="dash-orig-referrer">—</span></div>
+          <div class="info-row"><span class="info-key" data-i18n="dash.direct_referrals">Direct Referrals</span><span class="info-val" id="dash-directs">—</span></div>
           <div class="info-row" style="padding-top:10px;margin-top:6px;border-top:1px solid var(--border)">
             <span class="info-key" title="When enabled, if your cycle surplus covers the entry fee, a second registration fires automatically on your next cycle-out.">Double Reentry ⓘ</span>
             <span class="info-val" style="display:flex;align-items:center;gap:8px">
@@ -2503,7 +2504,7 @@ async function loadHomeStats() {
   const _net = ethers.Network.from(84532);
 
   const STAT_IDS = ['stat-members','stat-minted','stat-burned','stat-reserve','stat-cw-balance',
-                    'stat-cycles','stat-epoch','stat-supply','stat-treasury-usdc','stat-floor-price','stat-reward'];
+                    'stat-cycles','stat-epoch','stat-supply','stat-treasury-usdc','stat-floor-price','stat-reward','stat-buyback'];
 
   async function _fetchStats(provider) {
     const matA1 = new ethers.Contract(ADDRS.T1.matA, MATRIX_ABI, provider);
@@ -2527,7 +2528,7 @@ async function loadHomeStats() {
       occA2, cyclesA2, occB2, poolB2,
       sysCycles, supply, epoch, sfBal, treasUsdc,
       occA3, cyclesA3, occB3, poolB3,
-      cwPoolBal, allTimeMinted, allTimeBurned
+      cwPoolBal, allTimeMinted, allTimeBurned, buybackBal
     ] = await Promise.all([
       rpc(matA1.occupancy()).catch(()=>0n),
       rpc(matA1.rotationCount()).catch(()=>0n),
@@ -2550,6 +2551,7 @@ async function loadHomeStats() {
       rpc(usdc.balanceOf(ADDRS.communityWallet || ethers.ZeroAddress)).catch(()=>0n),
       rpc(cnova.totalMinted()).catch(()=>0n),
       rpc(cnova.totalBurned()).catch(()=>0n),
+      rpc(usdc.balanceOf(ADDRS.buybackReserve || ethers.ZeroAddress)).catch(()=>0n),
     ]);
 
     // Stat cards
@@ -2558,6 +2560,7 @@ async function loadHomeStats() {
     setText('stat-burned',   Number(ethers.formatEther(allTimeBurned)).toLocaleString(undefined,{maximumFractionDigits:0})); // V8.9 totalBurned()
     setText('stat-reserve',  fmt6(sfBal));
     setText('stat-cw-balance', fmt6(cwPoolBal));
+    setText('stat-buyback',  fmt6(buybackBal));
     setText('stat-cycles',   sysCycles.toString());
 
     // T1A progress
