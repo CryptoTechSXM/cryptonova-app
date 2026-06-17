@@ -3108,10 +3108,14 @@ async function loadDashboardData() {
       const el = document.getElementById(id); if (el) el.textContent = '…';
     });
 
-    // Fetch all 20 matrices in parallel (one RPC batch) — ~10× faster than sequential
+    // Fetch all 20 matrices in parallel with per-call timeout
+    // Public testnet RPC silently drops requests under load → promise hangs forever without this
+    const raceTimeout = (p, ms = 8000) =>
+      Promise.race([p, new Promise(res => setTimeout(() => res(null), ms))]);
+
     const matContracts = matrices.map(m => new ethers.Contract(m.addr, MATRIX_ABI, rp));
     const matResults = await Promise.all(
-      matContracts.map(mc => mc.getMember(userAddr).catch(() => null))
+      matContracts.map(mc => raceTimeout(mc.getMember(userAddr).catch(() => null)))
     );
 
     // Process results; only follow-up calls on matrices where user exists
@@ -3155,10 +3159,10 @@ async function loadDashboardData() {
     const cnova = new ethers.Contract(ADDRS.cnova, CNOVA_ABI, rp);
     const usdcT = new ethers.Contract(ADDRS.usdc,  USDC_ABI,  rp);
     const [cnovabal, treasuryUsdc, cnovaSupply, cwPoolDash] = await Promise.all([
-      cnova.balanceOf(userAddr).catch(()=>0n),
-      usdcT.balanceOf(ADDRS.treasury).catch(()=>0n),
-      cnova.totalSupply().catch(()=>0n),
-      usdcT.balanceOf(ADDRS.communityWallet || ethers.ZeroAddress).catch(()=>0n),
+      raceTimeout(cnova.balanceOf(userAddr).catch(()=>0n), 8000).then(v => v ?? 0n),
+      raceTimeout(usdcT.balanceOf(ADDRS.treasury).catch(()=>0n), 8000).then(v => v ?? 0n),
+      raceTimeout(cnova.totalSupply().catch(()=>0n), 8000).then(v => v ?? 0n),
+      raceTimeout(usdcT.balanceOf(ADDRS.communityWallet || ethers.ZeroAddress).catch(()=>0n), 8000).then(v => v ?? 0n),
     ]);
     // cnovabal=18dec, treasuryUsdc=6dec, cnovaSupply=18dec → result is 6dec USDC
     const cnovaValRaw = cnovaSupply > 0n ? (cnovabal * treasuryUsdc) / cnovaSupply : 0n;
