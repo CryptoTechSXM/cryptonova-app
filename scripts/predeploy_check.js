@@ -54,7 +54,7 @@ for (const v of OPTIONAL_WALLETS) {
   else ok(`${v} not set — will default to deployer address`);
 }
 
-const ADDR_FILE = process.env.ADDRESSES_FILE || "deployed_addresses_v8_13.json";
+const ADDR_FILE = process.env.ADDRESSES_FILE || "deployed_addresses_v8_17.json";
 console.log(`  ℹ  ADDRESSES_FILE = ${ADDR_FILE}`);
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -255,11 +255,11 @@ if (deployText) {
     fail("Velocity gate closure (setTierVelocityGreen + CLOSED) not found in deploy_v8.js");
   }
 
-  // Check ADDRESSES_FILE default is v8_16
-  if (deployText.includes("deployed_addresses_v8_16.json")) {
-    ok("deploy_v8.js output file: deployed_addresses_v8_16.json");
+  // Check ADDRESSES_FILE default is v8_17
+  if (deployText.includes("deployed_addresses_v8_17.json")) {
+    ok("deploy_v8.js output file: deployed_addresses_v8_17.json");
   } else {
-    fail("deploy_v8.js does not output to deployed_addresses_v8_16.json");
+    fail("deploy_v8.js does not output to deployed_addresses_v8_17.json");
   }
 
   // Chainlink gas limit should be 6M+
@@ -384,17 +384,17 @@ if (bigfillText) {
 // ─────────────────────────────────────────────────────────────────────────────
 // 13. deployed_addresses_v8_13.json — exists and has expected keys
 // ─────────────────────────────────────────────────────────────────────────────
-sep("deployed_addresses_v8_13.json — presence check");
+sep("deployed_addresses_v8_17.json — presence check");
 {
-  const addrFile = path.join(ROOT, "deployed_addresses_v8_16.json");
+  const addrFile = path.join(ROOT, "deployed_addresses_v8_17.json");
   if (!fs.existsSync(addrFile)) {
-    console.log("  ℹ  deployed_addresses_v8_16.json not found — run deploy_v8.js first");
+    console.log("  ℹ  deployed_addresses_v8_17.json not found — run deploy_v8.js first");
   } else {
     const addrData = JSON.parse(fs.readFileSync(addrFile, "utf8"));
     const required = ["tierRouter", "stabilityFund", "matrixKeeper"];
     for (const key of required) {
       if (addrData[key]) ok(`addresses: ${key} = ${addrData[key]}`);
-      else               fail(`addresses: ${key} missing from deployed_addresses_v8_13.json`);
+      else               fail(`addresses: ${key} missing from deployed_addresses_v8_17.json`);
     }
     // Check tiers 1-7 present
     const tiers = addrData.tiers || {};
@@ -467,12 +467,8 @@ if (mkText) {
     fail("parkedGracePeriod NOT found — add V8.10 grace period config to MatrixKeeper.sol");
   }
 
-  // V8.11: ratio-based rescue replaced flat threshold
-  if (mkText.includes("rescueRatioBps") && mkText.includes("rescueContributionBps")) {
-    ok("V8.11 rescueRatioBps + rescueContributionBps config variables found");
-  } else {
-    fail("rescueRatioBps/rescueContributionBps NOT found — V8.11 ratio-based rescue not patched into MatrixKeeper.sol");
-  }
+  // V8.11 ratio-based rescue removed in V8.12+ (SF covers rescues directly via payForceCross)
+  // rescueRatioBps / rescueContributionBps no longer in MatrixKeeper.sol — check removed
 
   if (mkText.includes("_doEvictParked") || mkText.includes("doEvictParked")) {
     ok("_doEvictParked() handler found");
@@ -571,11 +567,11 @@ if (deployTxt) {
     fail("deploy_v8.js: tierRouter.setTierMatrices() MISSING — manualUpgrade will always revert 'cross to MatB first' because tierMatrixBAddr stays address(0)");
   }
 
-  // V8.16: SF must be 800 BPS and pool must be 3000 BPS (T1-T3 group)
-  if (deployTxt.includes("3000,    1500,  800")) {
-    ok("deploy_v8.js: V8.16 BPS confirmed — pool=3000, SF=800 (T1-T3)");
+  // V8.17: pool=4500, SF=1500, chain=1700 (T1-T3 group) — confirmed June 17 2026
+  if (deployTxt.includes("4500,    1000, 1500,  150,   50,  50,   50")) {
+    ok("deploy_v8.js: V8.17 BPS confirmed — pool=4500, SF=1500, chain=1700 (T1-T3)");
   } else {
-    fail("deploy_v8.js: V8.16 BPS NOT found — expected pool=3000, SF=800 in SPLITS_T1_T3");
+    fail("deploy_v8.js: V8.17 BPS NOT found — expected pool=4500, SF=1500 in SPLITS_T1_T3. Array: [1000,1700,4500,1000,1500,150,50,50,50]");
   }
 
   // V8.16: topUpAndCross must be in contract

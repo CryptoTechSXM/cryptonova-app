@@ -1,6 +1,6 @@
 "use strict";
 /**
- * deploy_v8.js  --  V8.9 Full Deploy  (all 10 tiers, MATRIX_SIZE=127, auto-keeper)
+ * deploy_v8.js  --  V8.17 Full Deploy  (all 10 tiers, MATRIX_SIZE=127, auto-keeper)
  * ─────────────────────────────────────────────────────────────────────────────
  * Deploys the complete V8.8 stack:
  *
@@ -48,7 +48,7 @@
  *   USDC_ADDRESS           Reuse existing USDC; omit to deploy MockUSDC
  *   MATRIX_SIZE            127 (default) | 15 (quick dev cycle)
  *   DEPLOY_TIERS           Comma-separated list e.g. "1,2" (default: "1,2,3,4,5,6,7,8,9,10")
- *   ADDRESSES_FILE         Output filename (default: deployed_addresses_v8_13.json)
+ *   ADDRESSES_FILE         Output filename (default: deployed_addresses_v8_17.json)
  *
  * Run: npx hardhat run scripts/deploy_v8.js --network baseSepolia
  */
@@ -63,7 +63,7 @@ require("dotenv").config();
 // v8_1 = size-15 testnet (retired).  v8_2 = size-64 pre-mainnet stress test.
 const ADDRESSES_FILE = path.join(
   __dirname,
-  process.env.ADDRESSES_FILE || "deployed_addresses_v8_16.json"
+  process.env.ADDRESSES_FILE || "deployed_addresses_v8_17.json"
 );
 
 // ── Config ────────────────────────────────────────────────────────────────────
@@ -89,27 +89,31 @@ const TIER_FEES = [
   10_000_000_000n, // T10 $10,000
 ];
 
-// ── V8.9 BPS SplitConfigs ─────────────────────────────────────────────────────
+// ── V8.17 BPS SplitConfigs ────────────────────────────────────────────────────
 // Field order MUST match Solidity SplitConfig struct (9 fields):
 //   l1Bps, chainBps, poolBps, treasuryBps, stabilityBps, devBps, opsBps, communityBps, buybackBps
 //
-// V8.16 changes from V8.9:
-//   All tiers: pool -300 BPS, stability +300 BPS (500→800)
-//   Rationale: extra SF funding auto-rescues parked members via keeper,
-//   serving ALL members vs a crossing reserve that only helped the first root.
-//   Pool reduction costs deepest member ~$0.60/cycle — negligible tradeoff.
+// V8.17 changes from V8.16 (confirmed after exhaustive simulation June 17 2026):
+//   T1-T3: pool 3000→4500 (+1500), chain 2000→1700 (−300), l1 2000→1000 (−1000),
+//          treasury 1500→1000 (−500), sf 800→1500 (+700), dev 300→150 (−150),
+//          ops 200→50 (−150), community 100→50 (−50), buyback 100→50 (−50)
+//   Net deployer rescue cost: $78.96/fill (vs $272/fill in V8.16) — 71% reduction
+//   SF now auto-covers 70.6% of all rescue costs each cycle
+//   39/126 positions self-clear (vs 11 in V8.16); passive member T2 in 3 cycles
 //
-//   [  l1,  chain,  pool, treasury,   sf,  dev,  ops, cw,  bbr] sum
-const SPLITS_T1_T3  = [2000,  2000,  3000,    1500,  800,  300,  200, 100,  100]; // 10000
+//   [  l1,  chain,  pool, treasury,   sf,  dev,  ops,  cw,  bbr] sum
+const SPLITS_T1_T3  = [1000,  1700,  4500,    1000, 1500,  150,   50,  50,   50]; // 10000
 const SPLITS_T4_T5  = [2000,  2000,  2800,    1600,  800,  360,  240, 100,  100]; // 10000
 const SPLITS_T6_T7  = [2000,  1750,  2650,    1800,  800,  420,  280, 100,  200]; // 10000
 const SPLITS_T8_T10 = [2000,  1750,  2450,    1900,  800,  480,  320, 100,  200]; // 10000
 
-// ── Chain pay BPS per level (6 levels, must sum to chainBps) ─────────────────
-// T1-T5:  chain=2000  →  1000/400/300/150/75/75  = 2000
+// ── Chain pay BPS per level (6 levels, must sum to chainBps for that tier) ───
+// T1-T3:  chain=1700  →  850/340/255/127/64/64   = 1700
+// T4-T5:  chain=2000  →  1000/400/300/150/75/75  = 2000
 // T6-T10: chain=1750  →  875/350/262/131/66/66   = 1750
-const CHAIN_PAY_T1_T5  = [1000, 400, 300, 150, 75, 75];
-const CHAIN_PAY_T6_T10 = [875, 350, 262, 131, 66, 66];
+const CHAIN_PAY_T1_T3  = [850, 340, 255, 127, 64, 64];   // sum=1700 ✓
+const CHAIN_PAY_T4_T5  = [1000, 400, 300, 150, 75, 75];  // sum=2000 ✓
+const CHAIN_PAY_T6_T10 = [875, 350, 262, 131, 66, 66];   // sum=1750 ✓
 
 function tierSplits(tierNum) {
   if (tierNum <= 3) return SPLITS_T1_T3;
@@ -118,7 +122,9 @@ function tierSplits(tierNum) {
   return SPLITS_T8_T10;
 }
 function tierChainPay(tierNum) {
-  return tierNum <= 5 ? CHAIN_PAY_T1_T5 : CHAIN_PAY_T6_T10;
+  if (tierNum <= 3) return CHAIN_PAY_T1_T3;
+  if (tierNum <= 5) return CHAIN_PAY_T4_T5;
+  return CHAIN_PAY_T6_T10;
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -162,7 +168,7 @@ async function main() {
   const opsWallet   = process.env.OPS_WALLET_ADDRESS   || deployerAddr;
   const admin       = process.env.ADMIN_WALLET_ADDRESS || deployerAddr;
 
-  console.log("\n  V8.16 Elevator Deploy — SF rescue fund (800 BPS) + topUpAndCross");
+  console.log("\n  V8.17 Deploy — Pool=45% Chain=17% SF=15% (net $79 rescue/fill)");
   sep();
   console.log(`  Deployer   : ${deployerAddr}`);
   console.log(`  AccountOne : ${accountOne}`);
@@ -382,6 +388,12 @@ async function main() {
   await (await stabilityFund.setMatrixKeeper(keeperAddr)).wait();
   console.log("  ↳  StabilityFund.setMatrixKeeper OK");
 
+  // Wire keeper into TierRouter (required for setTierVelocityGreen + setDeflationState)
+  // CRITICAL: without this call, TierRouter.matrixKeeper = address(0) and every
+  // performUpkeep reverts with "TR: not keeper" — keeper is completely non-functional.
+  await (await tierRouter.setMatrixKeeper(keeperAddr)).wait();
+  console.log("  ↳  TierRouter.setMatrixKeeper OK");
+
   // Register tier PairManagers with keeper
   for (const tierNum of DEPLOY_TIERS) {
     await (await keeper.setPairManager(tierNum - 1, deployed[tierNum].pm)).wait();
@@ -551,7 +563,7 @@ async function main() {
   }
   sep();
   console.log(`  Addresses file: ${require("path").basename(ADDRESSES_FILE)}`);
-  console.log("  V8.12 Deploy complete.\n");
+  console.log("  V8.17 Deploy complete.\n");
 }
 
 main().catch(e => { console.error(e); process.exitCode = 1; });
