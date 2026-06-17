@@ -9,8 +9,8 @@ import { ethers } from 'ethers';
 
 const BOT_USERNAME      = 'cnova_support_bot';
 const USDC_ADDRESS      = '0x2D8B7b5eDec96bE441b6fb0D45D74a2BcE2C639a';
-const TIER_ROUTER       = '0xC729627996E968b5065399843FfFfCF5bfB5148b'; // V8.12
-const CNOVA_TOKEN       = '0x9A07EBfeed853b24683B199fd33A27f8d8851191'; // V8.12
+const TIER_ROUTER       = '0xABF827A9B3FaEc9C87D7714D5db6e6A4587A24FD'; // V8.16
+const CNOVA_TOKEN       = '0xEaebF5E96a67D08C8F85Da8645Bb78F69bCc3688'; // V8.16
 
 // Group moderation — set these in Vercel env vars after creating the groups
 // SUPPORT_GROUP_ID: the numeric chat ID of the support group (e.g. -1001234567890)

@@ -2042,6 +2042,28 @@ const CW_ABI = [
 let provider=null, signer=null, userAddr=null, readProvider=null, isConnecting=false;
 
 // ═══════════════════════════════════════════════════════════════════════
+// THEME TOGGLE
+// ═══════════════════════════════════════════════════════════════════════
+function toggleTheme() {
+  const isLight = document.body.classList.toggle('light');
+  const btn = document.getElementById('theme-btn');
+  if (btn) btn.textContent = isLight ? '🌙 Dark' : '☀️ Light';
+  try { localStorage.setItem('cnova_theme', isLight ? 'light' : 'dark'); } catch(_) {}
+}
+(function restoreTheme() {
+  try {
+    if (localStorage.getItem('cnova_theme') === 'light') {
+      document.body.classList.add('light');
+      // Button may not exist yet at parse time — use DOMContentLoaded
+      document.addEventListener('DOMContentLoaded', () => {
+        const btn = document.getElementById('theme-btn');
+        if (btn) btn.textContent = '🌙 Dark';
+      });
+    }
+  } catch(_) {}
+})();
+
+// ═══════════════════════════════════════════════════════════════════════
 // HELPERS
 // ═══════════════════════════════════════════════════════════════════════
 function setText(id, val) {
@@ -4547,4 +4569,5 @@ function updateAddrsFromDeployed(d) {
   console.log('[v8.8] ADDRS updated from deployed JSON');
 }
 </script>
+<script src="/i18n.js" defer></script>
 </b
