@@ -42,6 +42,8 @@
     { "source": "/terms.html", "destination": "/terms.html" },
     { "source": "/faq",        "destination": "/faq.html" },
     { "source": "/faq.html",   "destination": "/faq.html" },
+    { "source": "/status",      "destination": "/status.html" },
+    { "source": "/status.html", "destination": "/status.html" },
     { "source": "/early",      "destination": "/early.html" },
     { "source": "/early.html", "destination": "/early.html" },
     { "source": "/(.*)\\.html", "destination": "/$1.html" },

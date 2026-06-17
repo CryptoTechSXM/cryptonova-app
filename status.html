@@ -1,0 +1,796 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>CryptoNova — System Status</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/6.7.1/ethers.umd.min.js"></script>
+  <style>
+    :root {
+      --bg:        #0a0e1a;
+      --bg2:       #111827;
+      --bg3:       #1a2236;
+      --border:    #1f2d47;
+      --green:     #00e5a0;
+      --green2:    #00b37d;
+      --green-dim: rgba(0,229,160,0.12);
+      --blue:      #3b82f6;
+      --yellow:    #f59e0b;
+      --red:       #ef4444;
+      --text:      #e2e8f0;
+      --text2:     #94a3b8;
+      --text3:     #64748b;
+    }
+    body.light {
+      --bg:#f1f5f9; --bg2:#ffffff; --bg3:#e2e8f0; --border:#cbd5e1;
+      --green:#00966a; --green2:#007a56; --green-dim:rgba(0,150,106,.10);
+      --blue:#2563eb; --yellow:#d97706; --red:#dc2626;
+      --text:#0f172a; --text2:#475569; --text3:#94a3b8;
+    }
+    *{box-sizing:border-box;margin:0;padding:0}
+    body{background:var(--bg);color:var(--text);font-family:'Segoe UI',system-ui,sans-serif;min-height:100vh}
+
+    /* Header */
+    header{background:var(--bg2);border-bottom:1px solid var(--border);padding:14px 24px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:100}
+    .logo{display:flex;align-items:center;gap:10px;text-decoration:none;color:inherit}
+    .logo-icon{width:38px;height:38px;display:flex;align-items:center;justify-content:center}
+    .logo-text{font-size:18px;font-weight:700;letter-spacing:-.5px}
+    .logo-text span{color:var(--green)}
+    .logo-badge{font-size:10px;background:var(--green-dim);color:var(--green);border:1px solid var(--green2);border-radius:4px;padding:2px 6px;margin-left:8px}
+    .header-right{display:flex;align-items:center;gap:12px}
+    .btn-home{background:var(--bg3);border:1px solid var(--border);color:var(--text2);border-radius:8px;padding:7px 14px;font-size:13px;cursor:pointer;text-decoration:none;transition:all .2s}
+    .btn-home:hover{color:var(--green);border-color:var(--green2)}
+    .theme-toggle{background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:6px 12px;font-size:13px;color:var(--text2);cursor:pointer;transition:all .2s}
+    .theme-toggle:hover{color:var(--text);border-color:var(--green)}
+
+    /* Main */
+    main{max-width:1100px;margin:0 auto;padding:32px 24px}
+
+    /* Page title */
+    .page-title{display:flex;align-items:center;justify-content:space-between;margin-bottom:24px;flex-wrap:wrap;gap:12px}
+    .page-title h1{font-size:24px;font-weight:800;display:flex;align-items:center;gap:10px}
+    .page-title h1 .dot{width:10px;height:10px;border-radius:50%;background:var(--green);animation:pulse 2s infinite}
+    @keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+    .refresh-info{font-size:12px;color:var(--text3);display:flex;align-items:center;gap:8px}
+    .refresh-btn{background:var(--bg3);border:1px solid var(--border);color:var(--text2);border-radius:6px;padding:5px 10px;font-size:12px;cursor:pointer;transition:all .2s}
+    .refresh-btn:hover{color:var(--green);border-color:var(--green2)}
+
+    /* Summary banner */
+    .summary-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;margin-bottom:28px}
+    .summary-pill{background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:14px 18px;display:flex;align-items:center;gap:12px;cursor:pointer;transition:border-color .2s,transform .15s}
+    .summary-pill:hover{border-color:rgba(0,229,160,.4);transform:translateY(-1px)}
+    .pill-indicator{width:12px;height:12px;border-radius:50%;flex-shrink:0}
+    .pill-indicator.green{background:#00e5a0;box-shadow:0 0 6px rgba(0,229,160,.6)}
+    .pill-indicator.yellow{background:#f59e0b;box-shadow:0 0 6px rgba(245,158,11,.6)}
+    .pill-indicator.red{background:#ef4444;box-shadow:0 0 6px rgba(239,68,68,.6);animation:blink 1s infinite}
+    @keyframes blink{0%,100%{opacity:1}50%{opacity:.3}}
+    .pill-label{font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.7px;margin-bottom:3px}
+    .pill-value{font-size:16px;font-weight:700;color:var(--text)}
+    .pill-sub{font-size:11px;color:var(--text3);margin-top:2px}
+
+    /* Cards grid */
+    .cards-grid{display:grid;grid-template-columns:1fr 1fr;gap:20px}
+    @media(max-width:700px){.cards-grid{grid-template-columns:1fr}}
+
+    /* Expandable cards */
+    .status-card{background:var(--bg2);border:1px solid var(--border);border-radius:12px;overflow:hidden;transition:border-color .2s}
+    .status-card.has-issue{border-color:rgba(239,68,68,.4)}
+    .status-card.warning{border-color:rgba(245,158,11,.35)}
+    .card-header{padding:18px 20px;cursor:pointer;display:flex;align-items:center;justify-content:space-between;user-select:none}
+    .card-header:hover .chevron{color:var(--green)}
+    .card-header-left{display:flex;align-items:center;gap:10px}
+    .card-icon{font-size:20px;width:28px;text-align:center}
+    .card-title-text{font-size:15px;font-weight:700}
+    .card-badge{font-size:11px;border-radius:20px;padding:2px 9px;font-weight:700;margin-left:6px}
+    .badge-green{background:var(--green-dim);color:var(--green)}
+    .badge-yellow{background:rgba(245,158,11,.12);color:var(--yellow)}
+    .badge-red{background:rgba(239,68,68,.12);color:var(--red)}
+    .badge-blue{background:rgba(59,130,246,.12);color:var(--blue)}
+    .card-summary{font-size:12px;color:var(--text3);margin-top:2px}
+    .chevron{font-size:16px;color:var(--text3);transition:transform .25s,color .2s}
+    .card-body{padding:0 20px;max-height:0;overflow:hidden;transition:max-height .35s ease,padding .3s}
+    .card-body.open{padding:0 20px 20px;max-height:1200px}
+
+    /* Detail rows */
+    .detail-row{display:flex;justify-content:space-between;align-items:center;padding:9px 0;border-bottom:1px solid var(--border);font-size:13px}
+    .detail-row:last-child{border-bottom:none}
+    .detail-key{color:var(--text2)}
+    .detail-val{font-weight:600;color:var(--text)}
+    .detail-val.green{color:var(--green)}
+    .detail-val.yellow{color:var(--yellow)}
+    .detail-val.red{color:var(--red)}
+    .detail-val.blue{color:var(--blue)}
+    .detail-section{font-size:11px;font-weight:700;color:var(--text3);letter-spacing:.6px;text-transform:uppercase;margin:14px 0 6px}
+
+    /* Progress bar */
+    .prog-wrap{margin:12px 0}
+    .prog-label{display:flex;justify-content:space-between;font-size:12px;color:var(--text2);margin-bottom:5px}
+    .prog-track{background:var(--bg3);border-radius:6px;height:8px;overflow:hidden}
+    .prog-fill{height:100%;border-radius:6px;transition:width .6s ease}
+    .prog-fill.green{background:linear-gradient(90deg,var(--green2),var(--green))}
+    .prog-fill.yellow{background:linear-gradient(90deg,#d97706,#f59e0b)}
+    .prog-fill.red{background:linear-gradient(90deg,#dc2626,#ef4444)}
+
+    /* Parked table */
+    .parked-table{width:100%;border-collapse:collapse;font-size:12px;margin-top:12px}
+    .parked-table th{text-align:left;color:var(--text3);font-weight:600;font-size:11px;letter-spacing:.5px;text-transform:uppercase;padding:6px 0;border-bottom:1px solid var(--border)}
+    .parked-table td{padding:8px 0;border-bottom:1px solid rgba(31,45,71,.5);color:var(--text2);vertical-align:middle}
+    .parked-table td:first-child{font-family:monospace;font-size:11px;color:var(--text3)}
+    .parked-table td.amount{color:var(--yellow);font-weight:600}
+    .parked-table td.time{color:var(--text3)}
+    .addr-short{font-family:monospace;font-size:11px}
+    .copy-btn{background:none;border:none;color:var(--text3);cursor:pointer;padding:0 4px;font-size:12px;transition:color .2s}
+    .copy-btn:hover{color:var(--green)}
+
+    /* SF health bar */
+    .sf-health{display:flex;align-items:center;gap:10px;margin:12px 0}
+    .sf-capacity{font-size:12px;color:var(--text2)}
+
+    /* Info note */
+    .info-note{background:var(--bg3);border-radius:8px;padding:10px 14px;font-size:12px;color:var(--text2);line-height:1.6;margin-top:12px}
+    .info-note strong{color:var(--text)}
+
+    /* Loading / empty states */
+    .loading-row{text-align:center;padding:20px;color:var(--text3);font-size:13px}
+    .empty-state{text-align:center;padding:20px 0;color:var(--green);font-size:13px}
+
+    @media(max-width:600px){
+      main{padding:20px 16px}
+      .summary-row{grid-template-columns:1fr 1fr}
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <a class="logo" href="index.html">
+    <div class="logo-icon">
+      <svg width="36" height="36" viewBox="0 0 36 36" fill="none">
+        <circle cx="18" cy="18" r="17" stroke="#00e5a0" stroke-width="1.5" fill="none"/>
+        <path d="M9 12 Q18 6 27 12 Q18 18 9 12Z" fill="#00e5a0" opacity=".85"/>
+        <path d="M9 24 Q18 18 27 24 Q18 30 9 24Z" fill="#00e5a0" opacity=".55"/>
+        <circle cx="18" cy="18" r="3" fill="#00e5a0"/>
+      </svg>
+    </div>
+    <div>
+      <div class="logo-text">Crypto<span>Nova</span><span class="logo-badge">TESTNET</span></div>
+    </div>
+  </a>
+  <div class="header-right">
+    <a href="index.html" class="btn-home">← Dashboard</a>
+    <button class="theme-toggle" onclick="toggleTheme()">☀ Light</button>
+  </div>
+</header>
+
+<main>
+  <div class="page-title">
+    <h1><div class="dot"></div>System Status</h1>
+    <div class="refresh-info">
+      <span id="last-updated">Loading…</span>
+      <button class="refresh-btn" onclick="loadAll()">↻ Refresh</button>
+      <span id="countdown"></span>
+    </div>
+  </div>
+
+  <!-- Summary pills -->
+  <div class="summary-row">
+    <div class="summary-pill" onclick="toggleCard('card-keeper')">
+      <div class="pill-indicator" id="pill-keeper"></div>
+      <div>
+        <div class="pill-label">Keeper</div>
+        <div class="pill-value" id="pill-keeper-val">—</div>
+        <div class="pill-sub" id="pill-keeper-sub">Checking…</div>
+      </div>
+    </div>
+    <div class="summary-pill" onclick="toggleCard('card-parked')">
+      <div class="pill-indicator" id="pill-parked"></div>
+      <div>
+        <div class="pill-label">Parked Members</div>
+        <div class="pill-value" id="pill-parked-val">—</div>
+        <div class="pill-sub" id="pill-parked-sub">Checking…</div>
+      </div>
+    </div>
+    <div class="summary-pill" onclick="toggleCard('card-sf')">
+      <div class="pill-indicator" id="pill-sf"></div>
+      <div>
+        <div class="pill-label">Stability Fund</div>
+        <div class="pill-value" id="pill-sf-val">—</div>
+        <div class="pill-sub" id="pill-sf-sub">Rescue reserve</div>
+      </div>
+    </div>
+    <div class="summary-pill" onclick="toggleCard('card-matrix')">
+      <div class="pill-indicator" id="pill-matrix"></div>
+      <div>
+        <div class="pill-label">T1 Fill Progress</div>
+        <div class="pill-value" id="pill-matrix-val">—</div>
+        <div class="pill-sub" id="pill-matrix-sub">MatA / MatB</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Cards grid -->
+  <div class="cards-grid">
+
+    <!-- Keeper card -->
+    <div class="status-card" id="card-keeper">
+      <div class="card-header" onclick="toggleCard('card-keeper')">
+        <div class="card-header-left">
+          <div class="card-icon">⚙️</div>
+          <div>
+            <div class="card-title-text">Keeper Status <span class="card-badge" id="badge-keeper">—</span></div>
+            <div class="card-summary" id="summary-keeper">Checks and runs pending matrix work</div>
+          </div>
+        </div>
+        <div class="chevron" id="chev-card-keeper">▼</div>
+      </div>
+      <div class="card-body" id="body-card-keeper">
+        <div class="detail-section">Current Check</div>
+        <div class="detail-row">
+          <span class="detail-key">Work pending now</span>
+          <span class="detail-val" id="kp-work-needed">—</span>
+        </div>
+        <div class="detail-row">
+          <span class="detail-key">Work type</span>
+          <span class="detail-val" id="kp-work-type">—</span>
+        </div>
+        <div class="detail-section">Recent Activity</div>
+        <div class="detail-row">
+          <span class="detail-key">Last rescue</span>
+          <span class="detail-val" id="kp-last-rescue">—</span>
+        </div>
+        <div class="detail-row">
+          <span class="detail-key">Total rescues (last 50k blocks)</span>
+          <span class="detail-val blue" id="kp-rescue-count">—</span>
+        </div>
+        <div class="detail-section">Infrastructure</div>
+        <div class="detail-row">
+          <span class="detail-key">MatrixKeeper contract</span>
+          <span class="detail-val"><span class="addr-short">0x2fBF…EF0</span></span>
+        </div>
+        <div class="detail-row">
+          <span class="detail-key">Automation method</span>
+          <span class="detail-val blue" id="kp-method">Local keeper (2 min)</span>
+        </div>
+        <div class="detail-row">
+          <span class="detail-key">CRE migration</span>
+          <span class="detail-val yellow">Pending approval</span>
+        </div>
+        <div class="info-note">The keeper runs <strong>checkUpkeep → performUpkeep</strong> on a schedule. When it detects pending work (parked rescues, force crosses, distributions), it submits a transaction automatically.</div>
+      </div>
+    </div>
+
+    <!-- Parked Members card -->
+    <div class="status-card" id="card-parked">
+      <div class="card-header" onclick="toggleCard('card-parked')">
+        <div class="card-header-left">
+          <div class="card-icon">🅿️</div>
+          <div>
+            <div class="card-title-text">Parked Members <span class="card-badge" id="badge-parked">—</span></div>
+            <div class="card-summary" id="summary-parked">Members awaiting re-entry rescue</div>
+          </div>
+        </div>
+        <div class="chevron" id="chev-card-parked">▼</div>
+      </div>
+      <div class="card-body" id="body-card-parked">
+        <div class="detail-section">Overview</div>
+        <div class="detail-row">
+          <span class="detail-key">T1 MatB parked count</span>
+          <span class="detail-val" id="pk-count">—</span>
+        </div>
+        <div class="detail-row">
+          <span class="detail-key">SF rescue capacity</span>
+          <span class="detail-val green" id="pk-capacity">—</span>
+        </div>
+        <div class="detail-row">
+          <span class="detail-key">Avg shortfall per member</span>
+          <span class="detail-val" id="pk-shortfall">—</span>
+        </div>
+        <div class="detail-section">Parked Wallet List</div>
+        <div id="parked-list-wrap">
+          <div class="loading-row">Loading…</div>
+        </div>
+        <div class="info-note"><strong>Parked</strong> members have cycled out of MatB but lacked enough withdrawable balance to re-enter T1 ($10). The Stability Fund contributes to rescue them. The keeper processes rescues automatically.</div>
+      </div>
+    </div>
+
+    <!-- Matrix Progress card -->
+    <div class="status-card" id="card-matrix">
+      <div class="card-header" onclick="toggleCard('card-matrix')">
+        <div class="card-header-left">
+          <div class="card-icon">📊</div>
+          <div>
+            <div class="card-title-text">Matrix Fill Progress <span class="card-badge" id="badge-matrix">—</span></div>
+            <div class="card-summary" id="summary-matrix">T1 MatA → MatB progression</div>
+          </div>
+        </div>
+        <div class="chevron" id="chev-card-matrix">▼</div>
+      </div>
+      <div class="card-body" id="body-card-matrix">
+        <div class="detail-section">T1 Tier — Active Matrices</div>
+        <div id="matrix-progress-wrap">
+          <div class="loading-row">Loading…</div>
+        </div>
+        <div class="detail-section">Pool Accumulators</div>
+        <div class="detail-row">
+          <span class="detail-key">T1 MatA pool</span>
+          <span class="detail-val green" id="mx-pool-a">—</span>
+        </div>
+        <div class="detail-row">
+          <span class="detail-key">T1 MatB pool</span>
+          <span class="detail-val green" id="mx-pool-b">—</span>
+        </div>
+        <div class="detail-section">Totals</div>
+        <div class="detail-row">
+          <span class="detail-key">Total system cycles</span>
+          <span class="detail-val blue" id="mx-cycles">—</span>
+        </div>
+        <div class="detail-row">
+          <span class="detail-key">Total T1 registered</span>
+          <span class="detail-val" id="mx-total">—</span>
+        </div>
+        <div class="detail-row">
+          <span class="detail-key">T2 MatA occupancy</span>
+          <span class="detail-val" id="mx-t2a">—</span>
+        </div>
+        <div class="info-note"><strong>MatA fills first</strong> (127 members), then force-crosses to MatB. When MatB fills to 127, the pool distributes and members cycle back to MatA. The keeper drives the crossing.</div>
+      </div>
+    </div>
+
+    <!-- Stability Fund card -->
+    <div class="status-card" id="card-sf">
+      <div class="card-header" onclick="toggleCard('card-sf')">
+        <div class="card-header-left">
+          <div class="card-icon">🛡️</div>
+          <div>
+            <div class="card-title-text">Stability Fund <span class="card-badge" id="badge-sf">—</span></div>
+            <div class="card-summary" id="summary-sf">Reserve for rescuing parked members</div>
+          </div>
+        </div>
+        <div class="chevron" id="chev-card-sf">▼</div>
+      </div>
+      <div class="card-body" id="body-card-sf">
+        <div class="detail-section">Balance</div>
+        <div class="detail-row">
+          <span class="detail-key">SF total balance (USDC)</span>
+          <span class="detail-val green" id="sf-bal">—</span>
+        </div>
+        <div class="detail-row">
+          <span class="detail-key">Rescue capacity (est.)</span>
+          <span class="detail-val" id="sf-rescue-cap">—</span>
+        </div>
+        <div class="detail-section">Health</div>
+        <div class="sf-health">
+          <div style="flex:1">
+            <div class="prog-wrap" style="margin:0">
+              <div class="prog-label"><span>Fund Health</span><span id="sf-pct">—</span></div>
+              <div class="prog-track"><div class="prog-fill" id="sf-bar" style="width:0%"></div></div>
+            </div>
+          </div>
+        </div>
+        <div class="detail-row">
+          <span class="detail-key">Status</span>
+          <span class="detail-val" id="sf-status">—</span>
+        </div>
+        <div class="detail-section">Reserves</div>
+        <div class="detail-row">
+          <span class="detail-key">Treasury USDC</span>
+          <span class="detail-val" id="sf-treasury">—</span>
+        </div>
+        <div class="detail-row">
+          <span class="detail-key">Buyback Reserve</span>
+          <span class="detail-val" id="sf-buyback">—</span>
+        </div>
+        <div class="detail-row">
+          <span class="detail-key">CNOVA total supply</span>
+          <span class="detail-val blue" id="sf-cnova">—</span>
+        </div>
+        <div class="info-note">The Stability Fund receives 5% of every entry fee. It funds partial rescue contributions when parked members can't self-fund re-entry. A healthy SF &gt; $200 can rescue 20+ members.</div>
+      </div>
+    </div>
+
+  </div><!-- end grid -->
+</main>
+
+<script>
+  // ── Config ────────────────────────────────────────────────
+  const RPC      = 'https://sepolia.base.org';
+  const MATRIX_SIZE = 127n;
+  const T1_FEE   = 10_000_000n; // $10 USDC
+
+  const ADDRS = {
+    usdc:          '0x2D8B7b5eDec96bE441b6fb0D45D74a2BcE2C639a',
+    cnova:         '0xEaebF5E96a67D08C8F85Da8645Bb78F69bCc3688',
+    treasury:      '0x7c61979FbddF2AEE7D09F84e28A867718bB009F9',
+    stabilityFund: '0xF79fB9203b7dCb9949487dA855046D7848334cEd',
+    buybackReserve:'0x861B5Fec3d3fE3e5572baD18D4e4c824408aFf48',
+    tierRouter:    '0xABF827A9B3FaEc9C87D7714D5db6e6A4587A24FD',
+    matrixKeeper:  '0x2fBF319C7648185f4EACF2ba8b7f8418eedc2EF0',
+    T1matA:        '0xA086732e1A6117017C2F9C48d1a073c228DCFd12',
+    T1matB:        '0xaf6d93F065F620CA4F2a5BCB07e7256F82BC1457',
+    T2matA:        '0x9B90BA2d3f89A304FB1F301a9d46E987012591Be',
+  };
+
+  const MATRIX_ABI = [
+    'function occupancy() external view returns (uint256)',
+    'function poolAccumulator() external view returns (uint256)',
+    'function getParkedCount() external view returns (uint256)',
+    'function isParked(address) external view returns (bool)',
+    'function parkedAt(address) external view returns (uint256)',
+    'function totalJoined() external view returns (uint256)',
+    'event MemberParked(address indexed member, uint256 shortfall)',
+  ];
+  const KEEPER_ABI = [
+    'function checkUpkeep(bytes calldata checkData) external view returns (bool upkeepNeeded, bytes memory performData)',
+    'event ParkedRescued(address indexed matrix, address indexed member, uint8 tierIndex)',
+  ];
+  const SF_ABI    = ['function totalBalance() external view returns (uint256)'];
+  const USDC_ABI  = ['function balanceOf(address) external view returns (uint256)'];
+  const CNOVA_ABI = ['function totalSupply() external view returns (uint256)'];
+  const TR_ABI    = ['function totalSystemCycles() external view returns (uint256)', 'function totalJoined() external view returns (uint256)'];
+
+  // ── Helpers ───────────────────────────────────────────────
+  const fmt6  = v => '$' + (Number(BigInt(v)) / 1e6).toFixed(2);
+  const fmt18 = v => (Number(BigInt(v)) / 1e18).toLocaleString(undefined, {maximumFractionDigits: 0});
+  const elapsed = ts => {
+    const s = Math.floor(Date.now() / 1000) - Number(ts);
+    if (s < 60)   return `${s}s ago`;
+    if (s < 3600) return `${Math.floor(s/60)}m ago`;
+    if (s < 86400)return `${Math.floor(s/3600)}h ago`;
+    return `${Math.floor(s/86400)}d ago`;
+  };
+  const shortAddr = a => a.slice(0,6) + '…' + a.slice(-4);
+  function setText(id, v) { const el = document.getElementById(id); if (el) el.textContent = v; }
+  function setClass(id, cls) { const el = document.getElementById(id); if (el) el.className = el.className.replace(/\b(green|yellow|red|blue)\b/g,'').trim() + ' ' + cls; }
+
+  // ── Toggle cards ─────────────────────────────────────────
+  function toggleCard(id) {
+    const body = document.getElementById('body-' + id);
+    const chev = document.getElementById('chev-' + id);
+    if (!body) return;
+    body.classList.toggle('open');
+    if (chev) chev.style.transform = body.classList.contains('open') ? 'rotate(180deg)' : '';
+  }
+
+  // ── Main loader ───────────────────────────────────────────
+  let _timer, _countdown = 30;
+
+  async function loadAll() {
+    setText('last-updated', 'Refreshing…');
+    clearInterval(_timer);
+    _countdown = 30;
+    try {
+      const provider = new ethers.JsonRpcProvider(RPC);
+      const [blk] = await Promise.all([provider.getBlockNumber()]);
+
+      await Promise.all([
+        loadKeeper(provider, blk),
+        loadParked(provider, blk),
+        loadMatrix(provider),
+        loadSF(provider),
+      ]);
+
+      setText('last-updated', 'Updated ' + new Date().toLocaleTimeString());
+    } catch(e) {
+      setText('last-updated', 'Error — retrying in 30s');
+      console.error(e);
+    }
+    _timer = setInterval(() => {
+      _countdown--;
+      setText('countdown', `(auto-refresh in ${_countdown}s)`);
+      if (_countdown <= 0) loadAll();
+    }, 1000);
+  }
+
+  // ── Keeper ────────────────────────────────────────────────
+  async function loadKeeper(provider, blk) {
+    try {
+      const keeper = new ethers.Contract(ADDRS.matrixKeeper, KEEPER_ABI, provider);
+
+      // checkUpkeep — any work pending right now?
+      let upkeepNeeded = false, workType = 'None';
+      try {
+        const [needed, perfData] = await keeper.checkUpkeep('0x');
+        upkeepNeeded = needed;
+        if (needed && perfData && perfData.length >= 66) {
+          // performData encodes work type as first byte after selector
+          const wt = parseInt(perfData.slice(2, 4), 16);
+          const types = ['None','ForceCross','RescueParked','Distribute','VelocityGate','Reclaim','EvictParked','CommunityDist'];
+          workType = types[wt] || `Type ${wt}`;
+        }
+      } catch(e) {}
+
+      // Recent rescues
+      const fromBlock = Math.max(0, blk - 50000);
+      const rescueFilter = keeper.filters.ParkedRescued();
+      const rescueLogs = await keeper.queryFilter(rescueFilter, fromBlock, blk).catch(()=>[]);
+      const rescueCount = rescueLogs.length;
+      let lastRescueTime = null;
+      if (rescueCount > 0) {
+        const lastLog = rescueLogs[rescueLogs.length - 1];
+        const lastBlk = await provider.getBlock(lastLog.blockNumber);
+        lastRescueTime = lastBlk?.timestamp;
+      }
+
+      // Update UI
+      const pillInd = document.getElementById('pill-keeper');
+      if (upkeepNeeded) {
+        pillInd.className = 'pill-indicator yellow';
+        setText('pill-keeper-val', 'Work Pending');
+        setText('pill-keeper-sub', workType + ' queued');
+        document.getElementById('card-keeper').classList.add('warning');
+        document.getElementById('badge-keeper').className = 'card-badge badge-yellow';
+        setText('badge-keeper', 'PENDING');
+      } else {
+        pillInd.className = 'pill-indicator green';
+        setText('pill-keeper-val', 'Up to Date');
+        setText('pill-keeper-sub', 'No work queued');
+        document.getElementById('badge-keeper').className = 'card-badge badge-green';
+        setText('badge-keeper', 'OK');
+      }
+
+      setText('kp-work-needed', upkeepNeeded ? 'YES' : 'No');
+      setClass('kp-work-needed', upkeepNeeded ? 'yellow' : 'green');
+      setText('kp-work-type', upkeepNeeded ? workType : '—');
+      setText('kp-last-rescue', lastRescueTime ? elapsed(lastRescueTime) : rescueCount === 0 ? 'No rescues yet' : '—');
+      setText('kp-rescue-count', rescueCount.toString());
+
+    } catch(e) {
+      console.error('Keeper load error:', e);
+      setText('pill-keeper-val', 'Error');
+      setText('pill-keeper-sub', 'Could not read');
+    }
+  }
+
+  // ── Parked Members ────────────────────────────────────────
+  async function loadParked(provider, blk) {
+    try {
+      const matB = new ethers.Contract(ADDRS.T1matB, MATRIX_ABI, provider);
+      const parkedCount = await matB.getParkedCount().catch(()=>0n);
+      const count = Number(parkedCount);
+
+      // Summary pill
+      const pillInd = document.getElementById('pill-parked');
+      if (count === 0) {
+        pillInd.className = 'pill-indicator green';
+        setText('pill-parked-val', '0 parked');
+        setText('pill-parked-sub', 'All members active');
+        document.getElementById('badge-parked').className = 'card-badge badge-green';
+        setText('badge-parked', 'CLEAR');
+        setText('summary-parked', 'No members awaiting rescue');
+      } else if (count <= 5) {
+        pillInd.className = 'pill-indicator yellow';
+        setText('pill-parked-val', count + ' parked');
+        setText('pill-parked-sub', 'Rescue in progress');
+        document.getElementById('card-parked').classList.add('warning');
+        document.getElementById('badge-parked').className = 'card-badge badge-yellow';
+        setText('badge-parked', count + ' WAITING');
+      } else {
+        pillInd.className = 'pill-indicator red';
+        setText('pill-parked-val', count + ' parked');
+        setText('pill-parked-sub', 'Needs attention');
+        document.getElementById('card-parked').classList.add('has-issue');
+        document.getElementById('badge-parked').className = 'card-badge badge-red';
+        setText('badge-parked', count + ' WAITING');
+      }
+
+      setText('pk-count', count > 0 ? count + ' member' + (count>1?'s':'') : '0 — all clear');
+      setClass('pk-count', count === 0 ? 'green' : count <= 5 ? 'yellow' : 'red');
+
+      // Scan MemberParked events to get wallet list
+      const fromBlock = Math.max(0, blk - 100000);
+      const parkFilter = matB.filters.MemberParked();
+      const parkLogs = await matB.queryFilter(parkFilter, fromBlock, blk).catch(()=>[]);
+
+      // Deduplicate — keep latest per member, filter still-parked
+      const seen = new Map();
+      for (const log of parkLogs) {
+        seen.set(log.args[0].toLowerCase(), log);
+      }
+
+      // Check which are still parked
+      const candidates = [...seen.values()];
+      const stillParked = [];
+      let totalShortfall = 0n;
+
+      for (const log of candidates) {
+        const addr = log.args[0];
+        const shortfall = log.args[1] || 0n;
+        let parked = false;
+        try { parked = await matB.isParked(addr); } catch(e) {}
+        if (parked) {
+          let parkedTimestamp = null;
+          try {
+            const ts = await matB.parkedAt(addr);
+            parkedTimestamp = Number(ts);
+          } catch(e) {}
+          if (!parkedTimestamp) {
+            try {
+              const blkData = await provider.getBlock(log.blockNumber);
+              parkedTimestamp = blkData?.timestamp;
+            } catch(e) {}
+          }
+          stillParked.push({ addr, shortfall: BigInt(shortfall), ts: parkedTimestamp });
+          totalShortfall += BigInt(shortfall);
+        }
+      }
+
+      // Avg shortfall
+      const avgShortfall = stillParked.length > 0 ? totalShortfall / BigInt(stillParked.length) : 0n;
+      setText('pk-shortfall', stillParked.length > 0 ? fmt6(avgShortfall) : '—');
+
+      // SF rescue capacity
+      try {
+        const sfBal = await new ethers.Contract(ADDRS.stabilityFund, SF_ABI, provider).totalBalance();
+        const sfNum = Number(BigInt(sfBal)) / 1e6;
+        // Rough estimate: SF covers ~50% shortfall per member, rest from member's withdrawable
+        const estimatedCap = sfNum > 0 ? Math.floor(sfNum / 5) : 0; // ~$5 avg SF contribution
+        setText('pk-capacity', `~${estimatedCap} members can be rescued`);
+      } catch(e) {
+        setText('pk-capacity', '—');
+      }
+
+      // Render table
+      const wrap = document.getElementById('parked-list-wrap');
+      if (stillParked.length === 0) {
+        wrap.innerHTML = '<div class="empty-state">✅ No parked members — system is clear</div>';
+      } else {
+        const rows = stillParked.map(p => `
+          <tr>
+            <td>
+              <span class="addr-short">${shortAddr(p.addr)}</span>
+              <button class="copy-btn" onclick="navigator.clipboard.writeText('${p.addr}')" title="Copy address">⧉</button>
+            </td>
+            <td class="amount">${fmt6(p.shortfall)}</td>
+            <td class="time">${p.ts ? elapsed(p.ts) : '—'}</td>
+          </tr>
+        `).join('');
+        wrap.innerHTML = `
+          <table class="parked-table">
+            <thead><tr><th>Wallet</th><th>Shortfall</th><th>Parked</th></tr></thead>
+            <tbody>${rows}</tbody>
+          </table>
+          <div style="font-size:11px;color:var(--text3);margin-top:8px">
+            ${stillParked.length} of ${count} confirmed parked (${count - stillParked.length} resolved since last event scan)
+          </div>
+        `;
+      }
+
+    } catch(e) {
+      console.error('Parked load error:', e);
+      document.getElementById('parked-list-wrap').innerHTML = '<div class="loading-row">Error loading parked data</div>';
+    }
+  }
+
+  // ── Matrix Progress ───────────────────────────────────────
+  async function loadMatrix(provider) {
+    try {
+      const matA = new ethers.Contract(ADDRS.T1matA, MATRIX_ABI, provider);
+      const matB = new ethers.Contract(ADDRS.T1matB, MATRIX_ABI, provider);
+      const t2matA = new ethers.Contract(ADDRS.T2matA, MATRIX_ABI, provider);
+      const tr   = new ethers.Contract(ADDRS.tierRouter, TR_ABI, provider);
+
+      const [occA, occB, poolA, poolB, occT2A, cycles, totalJoined] = await Promise.all([
+        matA.occupancy().catch(()=>0n),
+        matB.occupancy().catch(()=>0n),
+        matA.poolAccumulator().catch(()=>0n),
+        matB.poolAccumulator().catch(()=>0n),
+        t2matA.occupancy().catch(()=>0n),
+        tr.totalSystemCycles().catch(()=>0n),
+        tr.totalJoined().catch(()=>0n),
+      ]);
+
+      const pctA = Math.round(Number(occA) * 100 / Number(MATRIX_SIZE));
+      const pctB = Math.round(Number(occB) * 100 / Number(MATRIX_SIZE));
+
+      // Summary pill
+      const pillInd = document.getElementById('pill-matrix');
+      const bothFull = occA >= MATRIX_SIZE && occB >= MATRIX_SIZE;
+      pillInd.className = bothFull ? 'pill-indicator yellow' : 'pill-indicator green';
+      setText('pill-matrix-val', `${occA}/${MATRIX_SIZE} · ${occB}/${MATRIX_SIZE}`);
+      setText('pill-matrix-sub', `MatA ${pctA}% · MatB ${pctB}%`);
+      document.getElementById('badge-matrix').className = 'card-badge badge-blue';
+      setText('badge-matrix', `${Number(cycles)} CYCLES`);
+
+      // Progress bars
+      const colorA = pctA >= 95 ? 'yellow' : 'green';
+      const colorB = pctB >= 95 ? 'yellow' : 'green';
+      const wrap = document.getElementById('matrix-progress-wrap');
+      wrap.innerHTML = `
+        <div class="prog-wrap">
+          <div class="prog-label">
+            <span>T1 MatA</span>
+            <span>${occA} / ${MATRIX_SIZE} (${pctA}%)</span>
+          </div>
+          <div class="prog-track"><div class="prog-fill ${colorA}" style="width:${pctA}%"></div></div>
+        </div>
+        <div class="prog-wrap">
+          <div class="prog-label">
+            <span>T1 MatB</span>
+            <span>${occB} / ${MATRIX_SIZE} (${pctB}%)</span>
+          </div>
+          <div class="prog-track"><div class="prog-fill ${colorB}" style="width:${pctB}%"></div></div>
+        </div>
+      `;
+
+      setText('mx-pool-a', fmt6(poolA));
+      setText('mx-pool-b', fmt6(poolB));
+      setText('mx-cycles', Number(cycles).toString());
+      setText('mx-total', Number(totalJoined).toString());
+      setText('mx-t2a', `${occT2A} / ${MATRIX_SIZE}`);
+      setText('summary-matrix', `MatA ${pctA}% · MatB ${pctB}% · ${cycles} cycles`);
+
+    } catch(e) {
+      console.error('Matrix load error:', e);
+    }
+  }
+
+  // ── Stability Fund ────────────────────────────────────────
+  async function loadSF(provider) {
+    try {
+      const sf       = new ethers.Contract(ADDRS.stabilityFund, SF_ABI, provider);
+      const treasury = new ethers.Contract(ADDRS.treasury, USDC_ABI, provider);
+      const buyback  = new ethers.Contract(ADDRS.buybackReserve, USDC_ABI, provider);
+      const cnova    = new ethers.Contract(ADDRS.cnova, CNOVA_ABI, provider);
+
+      const [sfBal, treaBal, bbBal, cnovaSup] = await Promise.all([
+        sf.totalBalance().catch(()=>0n),
+        treasury.balanceOf(ADDRS.treasury).catch(()=>0n),
+        buyback.balanceOf(ADDRS.buybackReserve).catch(()=>0n),
+        cnova.totalSupply().catch(()=>0n),
+      ]);
+
+      const sfNum = Number(BigInt(sfBal)) / 1e6;
+
+      // Health: >$500 = green, $100-500 = yellow, <$100 = red
+      const health = sfNum >= 500 ? 'green' : sfNum >= 100 ? 'yellow' : 'red';
+      const healthLabel = sfNum >= 500 ? 'Healthy' : sfNum >= 100 ? 'Low' : 'Critical';
+      const pct = Math.min(100, Math.round(sfNum / 10)); // 10% per $100
+
+      const pillInd = document.getElementById('pill-sf');
+      pillInd.className = `pill-indicator ${health}`;
+      setText('pill-sf-val', fmt6(sfBal));
+      setText('pill-sf-sub', healthLabel);
+
+      document.getElementById('badge-sf').className = `card-badge badge-${health}`;
+      setText('badge-sf', healthLabel.toUpperCase());
+      if (health !== 'green') document.getElementById('card-sf').classList.add(health === 'red' ? 'has-issue' : 'warning');
+
+      setText('sf-bal', fmt6(sfBal));
+      setClass('sf-bal', health);
+      const rescueCap = sfNum > 0 ? Math.floor(sfNum / 5) : 0;
+      setText('sf-rescue-cap', `~${rescueCap} member${rescueCap !== 1 ? 's' : ''}`);
+      setText('sf-pct', pct + '%');
+      const bar = document.getElementById('sf-bar');
+      if (bar) { bar.style.width = pct + '%'; bar.className = `prog-fill ${health}`; }
+      setText('sf-status', healthLabel);
+      setClass('sf-status', health);
+      setText('sf-treasury', fmt6(treaBal));
+      setText('sf-buyback', fmt6(bbBal));
+      setText('sf-cnova', fmt18(cnovaSup) + ' CNOVA');
+      setText('summary-sf', `${fmt6(sfBal)} · ${healthLabel} · ~${rescueCap} rescue capacity`);
+
+    } catch(e) {
+      console.error('SF load error:', e);
+    }
+  }
+
+  // ── Theme ─────────────────────────────────────────────────
+  function toggleTheme() {
+    const isLight = document.body.classList.toggle('light');
+    document.querySelector('.theme-toggle').textContent = isLight ? '🌙 Dark' : '☀ Light';
+    localStorage.setItem('theme', isLight ? 'light' : 'dark');
+  }
+  if (localStorage.getItem('theme') === 'light') {
+    document.body.classList.add('light');
+    document.querySelector('.theme-toggle').textContent = '🌙 Dark';
+  }
+
+  // ── Boot ──────────────────────────────────────────────────
+  // Open keeper card by default (most relevant)
+  window.addEventListener('DOMContentLoaded', () => {
+    toggleCard('card-keeper');
+    loadAll();
+  });
+</script>
+</body>
+</html>
