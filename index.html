@@ -661,7 +661,7 @@
   </div>
     <div class="logo-text">Crypto<span>Nova</span></div>
     <span class="logo-badge" id="network-badge">Base Sepolia</span>
-    <span style="background:rgba(0,229,160,.15);color:var(--green);border:1px solid var(--green2);border-radius:4px;padding:2px 8px;font-size:10px;font-weight:700;margin-left:6px">V8.17</span>
+    <span style="background:rgba(0,229,160,.15);color:var(--green);border:1px solid var(--green2);border-radius:4px;padding:2px 8px;font-size:10px;font-weight:700;margin-left:6px">V8.18</span>
   </div>
   <div style="display:flex;align-items:center;gap:8px">
     <div id="lang-switcher"></div>
@@ -1882,65 +1882,65 @@ const RPC_FALLBACK = 'https://sepolia.base.org';
 const RPC_EXTRA    = 'https://base-sepolia-rpc.publicnode.com';
 
 const ADDRS = {
-  // V8.17 — deployed 2026-06-17 — Pool=45% Chain=17% SF=15%
+  // V8.18 — deployed 2026-06-18 — Pool=45% Chain=17% SF=13%
   usdc:          '0x2D8B7b5eDec96bE441b6fb0D45D74a2BcE2C639a',
-  cnova:         '0x90d44FE6c9e6C1F8897d1303eA9A683aFf788293',
-  treasury:      '0x1E22A973321bc29A58d56f6376E5be6001E6F7F4',
-  stabilityFund: '0xC0713D66DA16F7aF844255EEDC0f71c39f8fd07D',
-  buybackReserve:'0xa6cb81e4987AE03DbDf24E8390d8A3Eae378C13d',
-  tierRouter:    '0x13f513Cd241BAd26f2E90790ef135Dd4acb861e5',
-  matrixKeeper:  '0x63198dD709933B6c6E02Fd533a44B0b0Cd9137BA',
-  v8Governance:  '0xEA4D766f0B2D044cB9807732568e8E42A7a54DB2',
-  communityWallet:'0xF681abEc82dC9CE06a1f4ea5aD997C4670287C0c',
+  cnova:         '0xEab971fAEc2D2c81EFF732f01E6bDe3eF563cD7c',
+  treasury:      '0x38d400F8CF449FBfc1A55455Bfe8F4cfaC46F710',
+  stabilityFund: '0x25201F12813878538AEBD03D6A0Fc34a749b10Bb',
+  buybackReserve:'0x7373cB028d057cc20463E0A643425c1A59aEeB9B',
+  tierRouter:    '0x3Bb68f3de0Cf007dFD37F08a188386394F33207e',
+  matrixKeeper:  '0xc85A54319ec73e51F9Ad3033068c373e773312fb',
+  v8Governance:  '0x239344c22947479C871998F8C3Ef04FDe8642Fb7',
+  communityWallet:'0xcD02DF66732F24c439252a756D147637eE5C3952',
   T1: {
-    pm:   '0x31935d8CA9F95Fa649D841C44f396A8392B7D941',
-    matA: '0x88A3dcb7AE73b0B765036fa1F29753bcDA2Dbd66',
-    matB: '0xCFE4E56f03B5c0041efFA21B14fCf0eF52Fd251C',
+    pm:   '0x554FBF4C7517b33627FE222E1fBF44C7E77a3F01',
+    matA: '0x5BF99dF9b104B1C2667d1329aB6105A96F7F4D2F',
+    matB: '0x37648874C532a3F00C4eAd8c5Fd2Ac28bbd69fa3',
   },
   T2: {
-    pm:   '0xf551E5d7e02f3145a49Feb96A4920bC73910aaD2',
-    matA: '0xC1ac0a7d6b295569FbCa4a27E923A1f555D5BE0b',
-    matB: '0x6b7e79beF7F5D96af7556D3a32bEbBa000931296',
+    pm:   '0x1D7B746F601F9b32a7aFAaCC9e03c574508731A3',
+    matA: '0xafDB80343f5a59FFdd48fe8FbFb63e059906b862',
+    matB: '0xE9347F0424f0f8f462494F131b864C36F75a3F71',
   },
   T3: {
-    pm:   '0x214E15630F407702dEA1EaC7FE52947eeb4C79E7',
-    matA: '0x99e25D5C05b3Df1F5d2D43776f21ae2426245Eb7',
-    matB: '0x4F8Bce516Ad376bEBB56e69223eEB3625eD945AE',
+    pm:   '0x1739Ad1E4480006726c8d3Ec23e46247510f1412',
+    matA: '0x302750EC0b7fE457B0Bc560D92656c6A7556c6b0',
+    matB: '0x5338E5aAac713FD378B7DEce69163352F327Cd4e6',
   },
   T4: {
-    pm:   '0x9e6b9e0352db7CD4b6b2C473771a65d9E3fc65b8',
-    matA: '0x12621f38C40AB4B5682e883abDCD41167a61980f',
-    matB: '0xa1e5E4a35be643822938B19e90844FEbB754dB3c',
+    pm:   '0x1C3Cc37218caa57978f2fD4FeC71CA9E7736388c',
+    matA: '0xe297265908ec6e4E2D63655935aB9d4EC0beB7ef',
+    matB: '0xaE9fA8991aAA54E46C302aeD07772Cfa13e64819',
   },
   T5: {
-    pm:   '0x9aee77EdD026f6A7EaA31Ab182407c660DcF33C4',
-    matA: '0xF2e91800C31588F17fCc99aBD1aA67d0f11B45a0',
-    matB: '0x8834323E62B4BB37807CC403F3f6A384be52D535',
+    pm:   '0x861705A1d1505AA5e7272EBB3081FBfD94541818',
+    matA: '0xB141bF474a098de238D937209939332140F76a6A',
+    matB: '0x059945e3900c825E97324f915941D304B2e2a1C9',
   },
   T6: {
-    pm:   '0xE1B62f77FB7D80233634c68eB6CdCb40Bd3Ac473',
-    matA: '0xcce304011aB2d84900a1EB90FfA38B5d16368957',
-    matB: '0x2Ebbf3f619bb4487D3ac7C5f183E4f36D1843f8e',
+    pm:   '0xE8c1baa0947eb10775775A11AC75f55C345260ce',
+    matA: '0x9fE86D87Bae2498b7785336D0816536B878A7FD5',
+    matB: '0x4a677799587bCFaC264d6fa17008B2aE06414b60',
   },
   T7: {
-    pm:   '0x9Db390A337069006088d1Fa00962556304917A75',
-    matA: '0x247d2fFa5873D0abf213A25dB43c5DbAcaa1eD3e',
-    matB: '0x6E264c04C67f368f44b492b4A9A0106eA4e481e7',
+    pm:   '0x0ad9D477c6d81AAE6861399413eF9846d8A28c9F',
+    matA: '0x7ef635348025D353c79664CAEBC5684F71a9A1f3',
+    matB: '0xaa9B7ad754eb94895e3820Fca3669A6aF27b2570',
   },
   T8: {
-    pm:   '0x066162c80ed0F13dD579058EC04Ca39A17Db396F',
-    matA: '0x827C2b7f7C9d2ecE3A245e0161885f1A0f71879D',
-    matB: '0xa7C763232beE0103CE73CC54fd00BFb83f8508dC',
+    pm:   '0x20c66C14e46383bcD896fFaf4F88492c3Bc89E37',
+    matA: '0x420B9779863F281e14dF095840937CB14495440A',
+    matB: '0x62238e24b6de4dfb4660505B02913Eaaa621B869',
   },
   T9: {
-    pm:   '0x56B8C951c37A2fA98FA921A8DFc24cf1A6f6C633',
-    matA: '0xF6F74C28dea75299e9c2fa50a95969383B72F4e0',
-    matB: '0x09aa9e0C568aa0743638eeAAdc097559EC77daCc',
+    pm:   '0x0cb68bFe8cc22883f20e9d094F0EA475Dd6247f0',
+    matA: '0xC910cC90Ce21F28eE0695C07BD0395033768563c',
+    matB: '0x742E727b038D803043AA475D59B0d18b399FB60b',
   },
   T10: {
-    pm:   '0xE462d97f3C5b0483237386f80Bad0819123d7617',
-    matA: '0x7b2B4785ec8f70186B7001816FBe1c7277D00af4',
-    matB: '0xf6C3Fc62d5fD787271a124a0a5D44f9b54B1e6B2',
+    pm:   '0x1d4a4e0ed9Cff26F2284E2D27195C0991517a427',
+    matA: '0x7A4d7d9d5E6856aA46091d9D75e48E0e574784fb',
+    matB: '0x3fBeAB162A20252bE8456D4252b3257fbC099768',
   },
 };
 

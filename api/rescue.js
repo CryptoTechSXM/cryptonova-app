@@ -1,9 +1,9 @@
 /**
- * /api/rescue.js — CryptoNova V8.17 Member Self-Rescue (topUpAndCross)
+ * /api/rescue.js — CryptoNova V8.18 Member Self-Rescue (topUpAndCross)
  *
  * POST /api/rescue  { "address": "0x..." }
  *
- * V8.17: Uses topUpAndCross() — deployer pays only the SHORTFALL
+ * V8.18: Uses topUpAndCross() — deployer pays only the SHORTFALL
  * (ENTRY_FEE − member.withdrawable), not the full entry fee.
  * The member's own withdrawable covers their portion.
  *
@@ -16,21 +16,21 @@
 
 import { ethers } from 'ethers';
 
-// V8.17 — deployed 2026-06-17 — Pool=45% Chain=17% SF=15%
+// V8.18 — deployed 2026-06-18 — Pool=45% Chain=17% SF=13%
 // Hardcoded to avoid JSON import (no addresses file in app repo)
 const ADDRS_RAW = {
   usdc: '0x2D8B7b5eDec96bE441b6fb0D45D74a2BcE2C639a',
   tiers: {
-    T1:  { matA: '0x88A3dcb7AE73b0B765036fa1F29753bcDA2Dbd66', matB: '0xCFE4E56f03B5c0041efFA21B14fCf0eF52Fd251C' },
-    T2:  { matA: '0xC1ac0a7d6b295569FbCa4a27E923A1f555D5BE0b', matB: '0x6b7e79beF7F5D96af7556D3a32bEbBa000931296' },
-    T3:  { matA: '0x99e25D5C05b3Df1F5d2D43776f21ae2426245Eb7', matB: '0x4F8Bce516Ad376bEBB56e69223eEB3625eD945AE' },
-    T4:  { matA: '0x12621f38C40AB4B5682e883abDCD41167a61980f', matB: '0xa1e5E4a35be643822938B19e90844FEbB754dB3c' },
-    T5:  { matA: '0xF2e91800C31588F17fCc99aBD1aA67d0f11B45a0', matB: '0x8834323E62B4BB37807CC403F3f6A384be52D535' },
-    T6:  { matA: '0xcce304011aB2d84900a1EB90FfA38B5d16368957', matB: '0x2Ebbf3f619bb4487D3ac7C5f183E4f36D1843f8e' },
-    T7:  { matA: '0x247d2fFa5873D0abf213A25dB43c5DbAcaa1eD3e', matB: '0x6E264c04C67f368f44b492b4A9A0106eA4e481e7' },
-    T8:  { matA: '0x827C2b7f7C9d2ecE3A245e0161885f1A0f71879D', matB: '0xa7C763232beE0103CE73CC54fd00BFb83f8508dC' },
-    T9:  { matA: '0xF6F74C28dea75299e9c2fa50a95969383B72F4e0', matB: '0x09aa9e0C568aa0743638eeAAdc097559EC77daCc' },
-    T10: { matA: '0x7b2B4785ec8f70186B7001816FBe1c7277D00af4', matB: '0xf6C3Fc62d5fD787271a124a0a5D44f9b54B1e6B2' },
+    T1:  { matA: '0x5BF99dF9b104B1C2667d1329aB6105A96F7F4D2F', matB: '0x37648874C532a3F00C4eAd8c5Fd2Ac28bbd69fa3' },
+    T2:  { matA: '0xafDB80343f5a59FFdd48fe8FbFb63e059906b862', matB: '0xE9347F0424f0f8f462494F131b864C36F75a3F71' },
+    T3:  { matA: '0x302750EC0b7fE457B0Bc560D92656c6A7556c6b0', matB: '0x5338E5aAac713FD378B7DEce69163352F327Cd4e6' },
+    T4:  { matA: '0xe297265908ec6e4E2D63655935aB9d4EC0beB7ef', matB: '0xaE9fA8991aAA54E46C302aeD07772Cfa13e64819' },
+    T5:  { matA: '0xB141bF474a098de238D937209939332140F76a6A', matB: '0x059945e3900c825E97324f915941D304B2e2a1C9' },
+    T6:  { matA: '0x9fE86D87Bae2498b7785336D0816536B878A7FD5', matB: '0x4a677799587bCFaC264d6fa17008B2aE06414b60' },
+    T7:  { matA: '0x7ef635348025D353c79664CAEBC5684F71a9A1f3', matB: '0xaa9B7ad754eb94895e3820Fca3669A6aF27b2570' },
+    T8:  { matA: '0x420B9779863F281e14dF095840937CB14495440A', matB: '0x62238e24b6de4dfb4660505B02913Eaaa621B869' },
+    T9:  { matA: '0xC910cC90Ce21F28eE0695C07BD0395033768563c', matB: '0x742E727b038D803043AA475D59B0d18b399FB60b' },
+    T10: { matA: '0x7A4d7d9d5E6856aA46091d9D75e48E0e574784fb', matB: '0x3fBeAB162A20252bE8456D4252b3257fbC099768' },
   },
 };
 
@@ -136,7 +136,7 @@ export default async function handler(req, res) {
 
     rescued.set(normalised, true);
     console.log(
-      `Rescue (V8.17): ${address} rescued from ${parkedMatrix.label} | ` +
+      `Rescue (V8.18): ${address} rescued from ${parkedMatrix.label} | ` +
       `shortfall=$${Number(shortfall)/1e6} member=$${Number(memberBal)/1e6} | tx: ${rescueTx.hash}`
     );
 
