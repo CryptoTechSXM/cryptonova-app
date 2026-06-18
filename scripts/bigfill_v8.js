@@ -228,7 +228,8 @@ function _sfRescueBpsInline(withdrawable, fee) {
   if (wBps >=  6500n) return 4000n;
   if (wBps >=  6000n) return 4500n;
   if (wBps >=  5000n) return 5000n;
-  return null; // < 50% withdrawable — not keeper-eligible
+  if (wBps >=  4000n) return 6000n;  // 40–49% → SF covers 60% (script-side; contract needs V8.18 patch)
+  return null; // < 40% withdrawable — not keeper-eligible
 }
 
 // _inlineRescuePass: one scan-and-rescue sweep over the parked queue.
@@ -269,9 +270,9 @@ async function _inlineRescuePass({ matA1, matB1, stabilityFund, matrixKeeper, ra
     const withdrawable = await matA1.withdrawableOf(addr).catch(() => 0n);
     const bps = _sfRescueBpsInline(withdrawable, entryFee);
     if (bps === null) {
-      // < 50% withdrawable — print shortfall so operator knows why it was skipped
+      // < 40% withdrawable — print shortfall so operator knows why it was skipped
       const shortfall = entryFee - withdrawable;
-      process.stdout.write(`  🏥 skip ${addr.slice(0,10)} (only ${fmt6(withdrawable)}, shortfall ${fmt6(shortfall)} > 50%)\n`);
+      process.stdout.write(`  🏥 skip ${addr.slice(0,10)} (only ${fmt6(withdrawable)}, shortfall ${fmt6(shortfall)} > 60%)\n`);
       continue;
     }
 
@@ -354,13 +355,31 @@ async function inlineRescueParked({ matA1, matB1, stabilityFund, matrixKeeper, r
   let passNo = 0;
   while (true) {
     passNo++;
+
+    // Ghost-loop guard: read parked count BEFORE the pass.
+    // MatrixKeeper.performUpkeep wraps everything in try/catch — if a wallet is already
+    // active, the inner call reverts silently and the TX returns status=1 with no state
+    // change. This means `rescued > 0` can be true even when nothing actually happened.
+    // Comparing parked count before/after detects this and exits cleanly.
+    const parkedBefore = Number(await matA1.getParkedCount().catch(() => 0n));
+    if (parkedBefore === 0) break; // truly empty — fast exit without a full pass
+
     const rescued = await _inlineRescuePass({
       matA1, matB1, stabilityFund, matrixKeeper, rawDeployer, entryFee,
       scanLimit: 0,   // scan all parked
       capLimit:  0,   // rescue all eligible
     });
     totalRescued += rescued;
-    if (rescued === 0) break; // SF dry or queue empty
+    if (rescued === 0) break; // SF dry or no eligible wallets
+
+    // Check whether the parked count actually decreased.
+    // If it didn't, performUpkeep is no-oping on ghost entries → break to avoid infinite loop.
+    const parkedAfter = Number(await matA1.getParkedCount().catch(() => 0n));
+    if (parkedAfter >= parkedBefore) {
+      console.log(`  🏥 Ghost-loop guard: parked count unchanged (${parkedBefore}→${parkedAfter}) — breaking`);
+      break;
+    }
+
     // Short pause between passes to let Base Sepolia process the previous batch of TXs
     await new Promise(r => setTimeout(r, 2000));
   }
@@ -996,8 +1015,15 @@ async function main() {
   // Most wallets park after cycling out of MatA (not enough escrow to self-fund
   // the crossing).  The keeper-bot / admin calls forceCross() to manually fund
   // and execute the crossing.  We do it here to complete the full figure-8 test.
+  //
+  // Set SKIP_ADMIN_CROSS=1 to run in SF-only rescue mode (no deployer-funded forceCross).
+  // Useful for testing how many wallets the SF can handle without admin intervention.
   sep("ForceCross — filling MatB");
-  {
+  if (process.env.SKIP_ADMIN_CROSS) {
+    console.log(`  SKIP_ADMIN_CROSS=1 — SF-only rescue mode. Admin forceCross disabled.`);
+    console.log(`  Any remaining parked wallets below the SF floor will stay parked.`);
+    console.log(`  Run push_parked.js with FORCE_ADMIN=1 afterward to manually handle them.`);
+  } else {
     // Guard: only run forceCross after at least one MatA rotation has completed.
     // Use matA1.rotationCount() — this increments on every _cycleOutRoot().
     // NOTE: tierRouter.totalSystemCycles() counts T1→T2 upgrades (0 until MatB cycles),
@@ -1136,6 +1162,7 @@ async function main() {
       console.log(`  Crossed ${crossed} / ${toCross.length} wallets`);
 
     } // end else (forceCross — cycles have happened)
+  } // end else (SKIP_ADMIN_CROSS not set)
   } // end outer forceCross block
 
   // ── Post-fill snapshot ────────────────────────────────────────────────────
