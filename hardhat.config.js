@@ -40,8 +40,7 @@ module.exports = {
         enabled: true,
         runs: 200,
       },
-      // V8.18 NOTE: contract is ~24856 bytes. Enable viaIR locally before deploy:
-      //   viaIR: true,
+      viaIR: true,  // V8.18: IR pipeline keeps FigureEightMatrixV8 under 24576-byte limit
     },
   },
 

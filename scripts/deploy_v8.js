@@ -148,10 +148,16 @@ async function main() {
   // NonceManager tracks nonces locally — prevents "nonce too low" on slow public RPCs
   // that return stale eth_getTransactionCount after a tx is mined.
   const nonceMgr = new NonceManager(rawSigner);
-  // Base Sepolia throttle: inject a 3s pause before every TX submission so the
-  // per-account "in-flight" window always clears between consecutive transactions.
+  // Base Sepolia throttle: 3s pause before every TX + re-sync nonce from chain each time.
+  // Re-syncing guards against external nonce consumers (keeper, scheduler) that may fire
+  // during the 30-45 min deploy window and cause "nonce too low" errors.
   const _origSend = nonceMgr.sendTransaction.bind(nonceMgr);
-  nonceMgr.sendTransaction = async (tx) => { await sleep(3000); return _origSend(tx); };
+  nonceMgr.sendTransaction = async (tx) => {
+    await sleep(3000);
+    const chainNonce = await rawSigner.provider.getTransactionCount(rawSigner.address, "pending");
+    nonceMgr.reset(chainNonce);
+    return _origSend(tx);
+  };
   const deployer    = nonceMgr;
   const deployerAddr = rawSigner.address;
 
