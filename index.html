@@ -1971,6 +1971,7 @@ const TIER_ROUTER_ABI = [
   'function setDoubleEntry(bool enabled) external',
   'function setMemberOptions(bool disableUpgrade, bool enableReentry, bool enableDouble) external',
   'function tierVelocityGreen(uint8 tierIdx) external view returns (bool)',
+  'function globalJoinedCount() external view returns (uint256)',
 ];
 
 const MATRIX_ABI = [
@@ -2538,7 +2539,7 @@ async function loadHomeStats() {
       rpc(matA1.rotationCount()).catch(()=>0n),
       rpc(matB1.occupancy()).catch(()=>0n),
       rpc(matB1.poolAccumulator()).catch(()=>0n),
-      rpc(matA1.totalJoined()).catch(()=>0n),
+      rpc(tr.globalJoinedCount()).catch(()=>0n),
       rpc(matA2.occupancy()).catch(()=>0n),
       rpc(matA2.rotationCount()).catch(()=>0n),
       rpc(matB2.occupancy()).catch(()=>0n),
