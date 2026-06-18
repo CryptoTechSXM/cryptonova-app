@@ -466,7 +466,14 @@ contract TierRouter is Ownable2Step {
         uint8 nextIndex = tierIndex + 1;
 
         if (tierPairManagers[nextIndex] == address(0)) return;
-        if (!tierVelocityGreen[nextIndex])             return;
+
+        // V8.15: MatB crossing IS the gate-open signal — open next tier gate if not already open.
+        // The old velocity-gate guard here was defeating the entire V8.14 purpose: members who
+        // cross to MatB should be able to auto-upgrade immediately, generating SF funds early.
+        if (!tierVelocityGreen[nextIndex]) {
+            tierVelocityGreen[nextIndex] = true;
+            emit VelocityGateSet(nextIndex, true);
+        }
 
         address nextMatA = tierMatrixAAddr[nextIndex];
         if (nextMatA != address(0) &&

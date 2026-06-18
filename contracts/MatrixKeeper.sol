@@ -56,14 +56,14 @@ import "@openzeppelin/contracts/access/Ownable.sol";
 interface ITierRouterKeeper {
     function tierVelocityGreen(uint8 tier) external view returns (bool);
     function setTierVelocityGreen(uint8 tier, bool green) external;
-    function setDeflationState(uint8 state) external;    // 0=NORMAL 1=SLOW 2=RECOVERY
+    function setDeflationState(uint8 state) external;
     function getSystemEntryCount(uint256 fromTimestamp) external view returns (uint256);
     function getTierEntryCount(uint8 tier, uint256 fromTimestamp) external view returns (uint256);
 }
 
 interface IStabilityFundKeeper {
     function payGhostEntry(uint8 tierIndex, address pairManager) external;
-    function activateLayer(uint8 layer, bool active) external;  // layers 2 and 4
+    function activateLayer(uint8 layer, bool active) external;
     function balanceByTier(uint8 tier) external view returns (uint256);
     function payForceCross(uint8 tierIdx, address sourceMatrix, uint256 fee) external;
 }
@@ -71,7 +71,7 @@ interface IStabilityFundKeeper {
 interface IFigureEightKeeper {
     function reclaimIdleSlot(address member) external;
     function lastActivityTime(address member) external view returns (uint256);
-    function isInMatrix(address member) external view returns (bool);      // members[].isInMatrix
+    function isInMatrix(address member) external view returns (bool);
     function matrixPos(address member) external view returns (uint256);
     function posToMember(uint256 pos) external view returns (address);
     function occupancy() external view returns (uint256);
@@ -79,16 +79,14 @@ interface IFigureEightKeeper {
     function tierIndex() external view returns (uint8);
     function setChainNext(address next) external;
     function owner() external view returns (address);
-    // Parked rescue additions
     function isParked(address member) external view returns (bool);
     function getParkedCount() external view returns (uint256);
     function getParkedMember(uint256 idx) external view returns (address);
-    function forceCrossKeeper(address member, uint256 sfContribution) external;  // V8.11: sfContribution split
-    // V8.10 additions
+    function forceCrossKeeper(address member, uint256 sfContribution) external;
     function parkedAt(address member) external view returns (uint256);
     function evictParked(address member) external;
     function getMemberTotalWithdrawn(address member) external view returns (uint256);
-    function withdrawableOf(address member) external view returns (uint256);      // V8.11: for ratio check
+    function withdrawableOf(address member) external view returns (uint256);
     function isMatrixA() external view returns (bool);
     function ENTRY_FEE() external view returns (uint256);
 }
@@ -110,74 +108,52 @@ interface IPairManagerKeeper {
 
 contract MatrixKeeper is Ownable {
 
-    // -- Deflation states ------------------------------------------------------
     uint8 public constant STATE_NORMAL   = 0;
     uint8 public constant STATE_SLOW     = 1;
     uint8 public constant STATE_RECOVERY = 2;
 
-    // -- Work item types -------------------------------------------------------
     uint8 public constant WORK_VELOCITY      = 0;
     uint8 public constant WORK_GHOST         = 1;
     uint8 public constant WORK_RECLAIM       = 2;
     uint8 public constant WORK_CHAIN_LINK    = 3;
     uint8 public constant WORK_PARKED_RESCUE = 4;
     uint8 public constant WORK_VELOCITY_GATE = 5;
-    uint8 public constant WORK_EVICT_PARKED  = 6;  // V8.10: grace-period eviction
-    uint8 public constant WORK_DISTRIBUTE_CW = 7;  // V8.12: monthly CommunityWallet distribution
+    uint8 public constant WORK_EVICT_PARKED  = 6;
+    uint8 public constant WORK_DISTRIBUTE_CW = 7;
 
-    // -- Config (DAO-adjustable via enumerated menus) ---------------------------
-    /// @notice Rolling window for velocity and deflation checks (seconds)
-    uint256 public velocityWindow     = 3_600;   // 1 hour
-    /// @notice Min entries per tier per window to keep velocity green
-    uint256 public velocityThreshold  = 3;
-    /// @notice Min system entries per window above which we stay NORMAL
-    uint256 public deflationThreshold = 10;
-    /// @notice Consecutive green windows needed to leave RECOVERY
-    uint256 public recoveryThreshold  = 3;
-    /// @notice Seconds of inactivity before ghost entry is triggered
-    uint256 public idleSlotTimeout    = 43_200;  // 12 hours
-    /// @notice Seconds after ghost before slot is reclaimed
-    uint256 public extendedIdleTimeout = 86_400; // 24 hours
-    /// @notice Max work items processed per upkeep to stay under gas limit
-    uint256 public maxItemsPerUpkeep  = 15;
-    /// @notice V8.10: Grace period before evicting or rescuing a parked member (seconds).
-    ///         Member has this window to self-fund re-entry. Default 10 days.
-    uint256 public parkedGracePeriod     = 10 days;
-    /// @notice V8.11: Max withdrawal ratio (BPS) for SF rescue eligibility.
-    ///         If member withdrew more than this % of total earned --- evict, not rescue.
-    ///         Default 7000 = 70%. DAO-adjustable 0---9500.
-    uint256 public rescueRatioBps        = 7_000;
-    // V8.13: rescueContributionBps removed — replaced by _sfRescueBps() sliding scale.
+    uint256 public velocityWindow      = 3_600;
+    uint256 public velocityThreshold   = 3;
+    uint256 public deflationThreshold  = 10;
+    uint256 public recoveryThreshold   = 3;
+    uint256 public idleSlotTimeout     = 43_200;
+    uint256 public extendedIdleTimeout = 86_400;
+    uint256 public maxItemsPerUpkeep   = 15;
+    uint256 public parkedGracePeriod   = 10 days;
+    uint256 public rescueRatioBps      = 7_000;
 
-    // -- Core state ------------------------------------------------------------
     address public tierRouter;
     address public stabilityFund;
-    address public communityWallet;   // V8.12: monthly distribution target (optional, set post-deploy)
+    address public communityWallet;
 
     uint8   public deflationState;
     uint256 public lastVelocityCheck;
     uint256 public consecutiveGreenWindows;
     uint256 public consecutiveRedWindows;
 
-    // Per-tier PairManager registry (set by admin)
-    mapping(uint8 => address) public pairManagerForTier;  // tierIndex => PairManager
+    mapping(uint8 => address) public pairManagerForTier;
     uint8 public configuredTierCount;
 
-    // Ghost entry tracking: matrix addr => last ghost timestamp
     mapping(address => uint256) public lastGhostTime;
-    // Reclaim tracking: (matrix, member) => last reclaim attempt
     mapping(address => mapping(address => uint256)) public reclaimAttemptTime;
 
-    // Pending chain-link queue: new pairs that need setChainNext() wiring
     struct PendingChainLink {
         address newMatA;
         address newMatB;
-        address prevMatB;   // previous active matB (chainNext target)
+        address prevMatB;
         uint8   tierIndex;
     }
     PendingChainLink[] public pendingChainLinks;
 
-    // -- Events ----------------------------------------------------------------
     event VelocityUpdated(uint8 indexed tier, bool green, uint256 entryCount);
     event DeflationStateChanged(uint8 from, uint8 to);
     event GhostEntryFunded(address indexed matrix, uint8 tierIndex);
@@ -186,24 +162,21 @@ contract MatrixKeeper is Ownable {
     event PairManagerSet(uint8 indexed tierIndex, address pairManager);
     event ParkedRescued(address indexed matrix, address indexed member, uint8 tierIndex);
     event VelocityGateOpened(uint8 indexed forTierIndex);
-    event ParkedMemberEvicted(address indexed matrix, address indexed member, uint256 totalWithdrawn);  // V8.10
-    event ConfigUpdated(string indexed param, uint256 value);                                           // V8.11
-    event CommunityDistributed(address indexed cw);                                                     // V8.12
+    event ParkedMemberEvicted(address indexed matrix, address indexed member, uint256 totalWithdrawn);
+    event ConfigUpdated(string indexed param, uint256 value);
+    event CommunityDistributed(address indexed cw);
+    event WorkItemFailed(uint8 indexed workType, uint8 tierIndex, address addr1, address addr2);
 
-    // -- Custom errors ---------------------------------------------------------
     error MK_NotKeeper();
     error MK_InvalidParam();
     error MK_ZeroAddress();
 
-    // -- Work item struct (ABI-encoded in performData) -------------------------
     struct WorkItem {
         uint8   workType;
         uint8   tierIndex;
-        address addr1;       // matrix address for GHOST/RECLAIM; unused for VELOCITY
-        address addr2;       // member address for RECLAIM
+        address addr1;
+        address addr2;
     }
-
-    // -- Constructor -----------------------------------------------------------
 
     constructor(address _tierRouter, address _stabilityFund) Ownable(msg.sender) {
         if (_tierRouter    == address(0)) revert MK_ZeroAddress();
@@ -213,119 +186,70 @@ contract MatrixKeeper is Ownable {
         lastVelocityCheck = block.timestamp;
     }
 
-    // -- Admin setup -----------------------------------------------------------
-
     function setPairManager(uint8 tierIndex, address pm) external onlyOwner {
         if (pm == address(0)) revert MK_ZeroAddress();
-        if (pairManagerForTier[tierIndex] == address(0)) {
-            configuredTierCount++;
-        }
+        if (pairManagerForTier[tierIndex] == address(0)) configuredTierCount++;
         pairManagerForTier[tierIndex] = pm;
         emit PairManagerSet(tierIndex, pm);
     }
 
-    /**
-     * @notice Queue a new matA/matB pair for chain-link wiring.
-     *         Call this after MatrixFactory.registerPair() returns.
-     * @param prevMatB  The matB that was previously the "tail" in this tier's chain
-     */
-    function queueChainLink(
-        address newMatA,
-        address newMatB,
-        address prevMatB,
-        uint8   tierIdx
-    ) external onlyOwner {
+    function queueChainLink(address newMatA, address newMatB, address prevMatB, uint8 tierIdx)
+        external onlyOwner
+    {
         pendingChainLinks.push(PendingChainLink(newMatA, newMatB, prevMatB, tierIdx));
     }
 
-    // -- Governance setters (enumerated menus) ---------------------------------
-
     function setVelocityWindow(uint256 v) external onlyOwner {
-        require(v == 1800 || v == 3600 || v == 7200 || v == 14400,
-            "MK: invalid window (allowed: 1800,3600,7200,14400)");
+        require(v == 1800 || v == 3600 || v == 7200 || v == 14400, "MK: invalid window");
         velocityWindow = v;
     }
-
     function setVelocityThreshold(uint256 v) external onlyOwner {
-        require(v == 1 || v == 2 || v == 3 || v == 5,
-            "MK: invalid threshold (allowed: 1,2,3,5)");
+        require(v == 1 || v == 2 || v == 3 || v == 5, "MK: invalid threshold");
         velocityThreshold = v;
     }
-
     function setDeflationThreshold(uint256 v) external onlyOwner {
-        require(v == 5 || v == 10 || v == 15 || v == 20,
-            "MK: invalid deflation threshold (allowed: 5,10,15,20)");
+        require(v == 5 || v == 10 || v == 15 || v == 20, "MK: invalid deflation threshold");
         deflationThreshold = v;
     }
-
     function setIdleSlotTimeout(uint256 v) external onlyOwner {
-        require(v == 21600 || v == 43200 || v == 86400,
-            "MK: invalid idle timeout (allowed: 21600,43200,86400)");
+        require(v == 21600 || v == 43200 || v == 86400, "MK: invalid idle timeout");
         idleSlotTimeout = v;
     }
-
     function setMaxItemsPerUpkeep(uint256 v) external onlyOwner {
-        require(v == 5 || v == 10 || v == 15 || v == 20,
-            "MK: invalid max items (allowed: 5,10,15,20)");
+        require(v == 5 || v == 10 || v == 15 || v == 20, "MK: invalid max items");
         maxItemsPerUpkeep = v;
     }
-
-    /// @notice V8.13: Set grace period for parked members.
-    ///         Testnet shortcuts: 0 (immediate), 1h, 6h.
-    ///         Mainnet values: 5d, 10d, 15d.
     function setParkedGracePeriod(uint256 v) external onlyOwner {
         require(
-            v == 0 ||
-            v == 3_600 ||       // 1 hour  (testnet)
-            v == 21_600 ||      // 6 hours (testnet)
-            v == 5 days ||
-            v == 10 days ||
-            v == 15 days,
-            "MK: invalid grace period (allowed: 0, 1h, 6h, 5d, 10d, 15d)"
+            v == 0 || v == 3_600 || v == 21_600 ||
+            v == 5 days || v == 10 days || v == 15 days,
+            "MK: invalid grace period"
         );
         parkedGracePeriod = v;
         emit ConfigUpdated("parkedGracePeriod", v);
     }
-
-    /// @notice V8.11: Set the max withdrawal ratio for rescue eligibility (BPS).
-    ///         Members who withdrew more than this % of total earned will be evicted.
-    ///         Range: 0---9500. Default 7000 (70%). DAO-adjustable.
     function setRescueRatioBps(uint256 v) external onlyOwner {
         require(v <= 9_500, "MK: ratio too high");
         rescueRatioBps = v;
         emit ConfigUpdated("rescueRatioBps", v);
     }
-
-    /// @notice V8.12: Set the CommunityWallet address for automated monthly distribution.
-    ///         Set to address(0) to disable. Called by deploy_v8.js after CW deploy.
     function setCommunityWallet(address _cw) external onlyOwner {
         communityWallet = _cw;
         emit ConfigUpdated("communityWallet", uint256(uint160(_cw)));
     }
 
-    // -- Chainlink Automation interface -----------------------------------------
-
-    /**
-     * @notice Called off-chain by Chainlink Automation every block.
-     * @return upkeepNeeded  true if there is work to do
-     * @return performData   ABI-encoded WorkItem[] to pass to performUpkeep
-     */
-    function checkUpkeep(bytes calldata /* checkData */)
-        external
-        view
+    function checkUpkeep(bytes calldata)
+        external view
         returns (bool upkeepNeeded, bytes memory performData)
     {
         WorkItem[] memory items = new WorkItem[](maxItemsPerUpkeep);
         uint256 count = 0;
 
-        // 1. Velocity / deflation check (time-gated)
         if (block.timestamp >= lastVelocityCheck + velocityWindow) {
-            if (count < maxItemsPerUpkeep) {
+            if (count < maxItemsPerUpkeep)
                 items[count++] = WorkItem(WORK_VELOCITY, 0, address(0), address(0));
-            }
         }
 
-        // 2. Pending chain-link wiring
         for (uint256 i = 0; i < pendingChainLinks.length && count < maxItemsPerUpkeep; i++) {
             items[count++] = WorkItem(
                 WORK_CHAIN_LINK,
@@ -335,11 +259,9 @@ contract MatrixKeeper is Ownable {
             );
         }
 
-        // 3. Idle slots (ghost entry + reclaim scan)
         for (uint8 t = 0; t < configuredTierCount && count < maxItemsPerUpkeep; t++) {
             address pm = pairManagerForTier[t];
             if (pm == address(0)) continue;
-
             uint256 pairCount = IPairManagerKeeper(pm).activePairCount();
             for (uint256 p = 0; p < pairCount && count < maxItemsPerUpkeep; p++) {
                 (address matA, address matB) = IPairManagerKeeper(pm).getPairAt(p);
@@ -348,40 +270,32 @@ contract MatrixKeeper is Ownable {
             }
         }
 
-        // 4. Parked wallet scan — V8.13: both matrices + all parked members per matrix
         for (uint8 t = 0; t < configuredTierCount && count < maxItemsPerUpkeep; t++) {
             address pm = pairManagerForTier[t];
             if (pm == address(0)) continue;
             uint256 pairCount = IPairManagerKeeper(pm).activePairCount();
             for (uint256 p = 0; p < pairCount && count < maxItemsPerUpkeep; p++) {
                 (address matA, address matB) = IPairManagerKeeper(pm).getPairAt(p);
-                // Scan matA parked list
                 if (matA != address(0)) {
                     uint256 pc = IFigureEightKeeper(matA).getParkedCount();
                     for (uint256 idx = 0; idx < pc && count < maxItemsPerUpkeep; idx++) {
                         (address member, uint8 wt) = _checkParked(matA, t, idx);
-                        if (wt != type(uint8).max) {
-                            items[count++] = WorkItem(wt, t, matA, member);
-                        }
+                        if (wt != type(uint8).max) items[count++] = WorkItem(wt, t, matA, member);
                     }
                 }
-                // Scan matB parked list (V8.13 fix — previously matB was skipped)
                 if (matB != address(0)) {
                     uint256 pc = IFigureEightKeeper(matB).getParkedCount();
                     for (uint256 idx = 0; idx < pc && count < maxItemsPerUpkeep; idx++) {
                         (address member, uint8 wt) = _checkParked(matB, t, idx);
-                        if (wt != type(uint8).max) {
-                            items[count++] = WorkItem(wt, t, matB, member);
-                        }
+                        if (wt != type(uint8).max) items[count++] = WorkItem(wt, t, matB, member);
                     }
                 }
             }
         }
 
-        // 5. Velocity gate check: MatB at >=80% full -> open next tier
         for (uint8 t = 0; t < configuredTierCount && count < maxItemsPerUpkeep; t++) {
-            if (t + 1 >= 10) continue;                                   // no tier after T10
-            if (ITierRouterKeeper(tierRouter).tierVelocityGreen(t + 1)) continue;  // already open
+            if (t + 1 >= 10) continue;
+            if (ITierRouterKeeper(tierRouter).tierVelocityGreen(t + 1)) continue;
             address pm = pairManagerForTier[t];
             if (pm == address(0)) continue;
             uint256 pairCount = IPairManagerKeeper(pm).activePairCount();
@@ -392,161 +306,138 @@ contract MatrixKeeper is Ownable {
                 uint256 occ  = mat.occupancy();
                 uint256 size = mat.MATRIX_SIZE();
                 if (size > 0 && occ * 100 >= size * 80) {
-                    // MatB for tier t is >=80% full --- queue gate open for tier t+1
                     items[count++] = WorkItem(WORK_VELOCITY_GATE, t, address(0), address(0));
                     break;
                 }
             }
         }
 
-        // 6. CommunityWallet monthly distribution (V8.12)
         if (communityWallet != address(0) && count < maxItemsPerUpkeep) {
-            if (ICommunityWalletKeeper(communityWallet).distributeReady()) {
+            if (ICommunityWalletKeeper(communityWallet).distributeReady())
                 items[count++] = WorkItem(WORK_DISTRIBUTE_CW, 0, communityWallet, address(0));
-            }
         }
 
         if (count == 0) return (false, "");
-
-        // Trim array to actual count
         WorkItem[] memory trimmed = new WorkItem[](count);
         for (uint256 i = 0; i < count; i++) trimmed[i] = items[i];
-
         upkeepNeeded = true;
         performData  = abi.encode(trimmed);
     }
 
     /**
-     * @notice Called by Chainlink Automation when checkUpkeep returns true.
+     * @notice V8.17: try/catch per work item so one failure never blocks the loop.
      */
     function performUpkeep(bytes calldata performData) external {
         WorkItem[] memory items = abi.decode(performData, (WorkItem[]));
         uint256 chainLinkProcessed = 0;
-
         for (uint256 i = 0; i < items.length; i++) {
             WorkItem memory item = items[i];
-
             if (item.workType == WORK_VELOCITY) {
-                _doVelocityCheck();
+                try this._doVelocityCheckExternal() {}
+                catch { emit WorkItemFailed(WORK_VELOCITY, item.tierIndex, item.addr1, item.addr2); }
             } else if (item.workType == WORK_GHOST) {
-                _doGhostEntry(item.addr1, item.tierIndex);
+                try this._doGhostEntryExternal(item.addr1, item.tierIndex) {}
+                catch { emit WorkItemFailed(WORK_GHOST, item.tierIndex, item.addr1, item.addr2); }
             } else if (item.workType == WORK_RECLAIM) {
-                _doReclaimSlot(item.addr1, item.addr2, item.tierIndex);
+                try this._doReclaimSlotExternal(item.addr1, item.addr2, item.tierIndex) {}
+                catch { emit WorkItemFailed(WORK_RECLAIM, item.tierIndex, item.addr1, item.addr2); }
             } else if (item.workType == WORK_CHAIN_LINK) {
-                _doChainLink(item.addr1, item.addr2, chainLinkProcessed);
+                try this._doChainLinkExternal(item.addr1, item.addr2, chainLinkProcessed) {}
+                catch { emit WorkItemFailed(WORK_CHAIN_LINK, item.tierIndex, item.addr1, item.addr2); }
                 chainLinkProcessed++;
             } else if (item.workType == WORK_PARKED_RESCUE) {
-                _doParkedRescue(item.addr1, item.addr2, item.tierIndex);
+                // V8.18: only swallow expected "already done" strings; unexpected reverts bubble up
+                try this._doParkedRescueExternal(item.addr1, item.addr2, item.tierIndex) {}
+                catch Error(string memory reason) {
+                    bytes32 h = keccak256(bytes(reason));
+                    if (h == keccak256("F8V8: already in matrix") || h == keccak256("F8V8: not parked") ||
+                        h == keccak256("F8V8: still in matrix")) {
+                        emit WorkItemFailed(WORK_PARKED_RESCUE, item.tierIndex, item.addr1, item.addr2);
+                    } else {
+                        revert(reason);
+                    }
+                }
+                catch { emit WorkItemFailed(WORK_PARKED_RESCUE, item.tierIndex, item.addr1, item.addr2); }
             } else if (item.workType == WORK_EVICT_PARKED) {
-                _doEvictParked(item.addr1, item.addr2);
+                try this._doEvictParkedExternal(item.addr1, item.addr2) {}
+                catch { emit WorkItemFailed(WORK_EVICT_PARKED, item.tierIndex, item.addr1, item.addr2); }
             } else if (item.workType == WORK_VELOCITY_GATE) {
-                _doVelocityGate(item.tierIndex);
+                try this._doVelocityGateExternal(item.tierIndex) {}
+                catch { emit WorkItemFailed(WORK_VELOCITY_GATE, item.tierIndex, item.addr1, item.addr2); }
             } else if (item.workType == WORK_DISTRIBUTE_CW) {
                 _doDistributeCW(item.addr1);
             }
         }
-
-        // Remove processed chain-link items from pending queue
-        if (chainLinkProcessed > 0) {
-            _flushChainLinks(chainLinkProcessed);
-        }
+        if (chainLinkProcessed > 0) _flushChainLinks(chainLinkProcessed);
     }
 
-    // -- Internal: parked wallet rescue ------------------------------------------
+    modifier onlySelf() {
+        require(msg.sender == address(this), "MK: only self");
+        _;
+    }
+
+    function _doVelocityCheckExternal()                                        external onlySelf { _doVelocityCheck(); }
+    function _doGhostEntryExternal(address m, uint8 t)                        external onlySelf { _doGhostEntry(m, t); }
+    function _doReclaimSlotExternal(address m, address mb, uint8 t)           external onlySelf { _doReclaimSlot(m, mb, t); }
+    function _doChainLinkExternal(address a, address b, uint256 idx)          external onlySelf { _doChainLink(a, b, idx); }
+    function _doParkedRescueExternal(address matrix, address member, uint8 t) external onlySelf { _doParkedRescue(matrix, member, t); }
+    function _doEvictParkedExternal(address matrix, address member)           external onlySelf { _doEvictParked(matrix, member); }
+    function _doVelocityGateExternal(uint8 t)                                 external onlySelf { _doVelocityGate(t); }
 
     function _doParkedRescue(address matrix, address member, uint8 tierIdx) internal {
         IFigureEightKeeper mat = IFigureEightKeeper(matrix);
-        if (!mat.isParked(member)) return;        // already rescued by another path
-
+        if (!mat.isParked(member)) return;
         uint256 fee          = mat.ENTRY_FEE();
         uint256 withdrawable = mat.withdrawableOf(member);
-
-        // V8.13: Sliding-scale SF contribution based on member's withdrawable.
-        // Higher withdrawable → less SF help. Max SF contribution = 50%.
         uint256 sfBps = _sfRescueBps(withdrawable, fee);
-        if (sfBps == type(uint256).max) return;   // < 50% withdrawable — not eligible
-
+        if (sfBps == type(uint256).max) return;
         uint256 sfShare = fee * sfBps / 10_000;
         uint256 sfBal   = IStabilityFundKeeper(stabilityFund).balanceByTier(tierIdx);
-        if (sfBal < sfShare) return;              // SF cannot cover its share
-
-        // 1. Ask SF to send its share to the source matrix (skip if member self-funds)
-        if (sfShare > 0) {
-            IStabilityFundKeeper(stabilityFund).payForceCross(tierIdx, matrix, sfShare);
-        }
-        // 2. Matrix deducts member's share from withdrawable, then executes crossing
+        if (sfBal < sfShare) return;
+        if (sfShare > 0) IStabilityFundKeeper(stabilityFund).payForceCross(tierIdx, matrix, sfShare);
         mat.forceCrossKeeper(member, sfShare);
-
         emit ParkedRescued(matrix, member, tierIdx);
     }
 
-    // -- Internal: V8.10 evict parked member (grace expired, not rescue-eligible) -----
     function _doEvictParked(address matrix, address member) internal {
         IFigureEightKeeper mat = IFigureEightKeeper(matrix);
-        if (mat.parkedAt(member) == 0) return;  // already rescued or cleared
-
+        if (mat.parkedAt(member) == 0) return;
         uint256 withdrawn = mat.getMemberTotalWithdrawn(member);
         mat.evictParked(member);
         emit ParkedMemberEvicted(matrix, member, withdrawn);
     }
 
-    // -- Internal: CommunityWallet monthly distribution (V8.12) ------------------
-
     function _doDistributeCW(address cw) internal {
         try ICommunityWalletKeeper(cw).distribute() {
             emit CommunityDistributed(cw);
-        } catch {}  // guard: never let CW failure block upkeep
+        } catch {}
     }
-
-    // -- Internal: velocity gate opener -------------------------------------------
 
     function _doVelocityGate(uint8 tierIdx) internal {
         uint8 nextTier = tierIdx + 1;
-        if (nextTier >= 10) return;               // T10 is the last tier
-        if (ITierRouterKeeper(tierRouter).tierVelocityGreen(nextTier)) return; // already open
+        if (nextTier >= 10) return;
+        if (ITierRouterKeeper(tierRouter).tierVelocityGreen(nextTier)) return;
         ITierRouterKeeper(tierRouter).setTierVelocityGreen(nextTier, true);
         emit VelocityGateOpened(nextTier);
     }
 
-    // -- Manual trigger (keeper or admin) -------------------------------------
-
-    /// @notice Manually trigger a velocity check (e.g. for testing).
-    function manualVelocityCheck() external onlyOwner {
-        _doVelocityCheck();
-    }
-
-    /// @notice Manually fund a ghost entry for a specific matrix.
-    function manualGhostEntry(address matrix, uint8 tierIdx) external onlyOwner {
-        _doGhostEntry(matrix, tierIdx);
-    }
-
-    /// @notice Manually reclaim an idle slot.
-    function manualReclaimSlot(address matrix, address member, uint8 tierIdx) external onlyOwner {
-        _doReclaimSlot(matrix, member, tierIdx);
-    }
-
-    // -- Internal: velocity + deflation ---------------------------------------
+    function manualVelocityCheck() external onlyOwner { _doVelocityCheck(); }
+    function manualGhostEntry(address matrix, uint8 tierIdx) external onlyOwner { _doGhostEntry(matrix, tierIdx); }
+    function manualReclaimSlot(address matrix, address member, uint8 tierIdx) external onlyOwner { _doReclaimSlot(matrix, member, tierIdx); }
 
     function _doVelocityCheck() internal {
         uint256 windowStart = block.timestamp - velocityWindow;
         lastVelocityCheck   = block.timestamp;
-
-        // Per-tier velocity gates
         for (uint8 t = 0; t < configuredTierCount; t++) {
-            uint256 cnt = ITierRouterKeeper(tierRouter).getTierEntryCount(t, windowStart);
+            uint256 cnt   = ITierRouterKeeper(tierRouter).getTierEntryCount(t, windowStart);
             bool    green = cnt >= velocityThreshold;
-            if (ITierRouterKeeper(tierRouter).tierVelocityGreen(t) != green) {
+            if (ITierRouterKeeper(tierRouter).tierVelocityGreen(t) != green)
                 ITierRouterKeeper(tierRouter).setTierVelocityGreen(t, green);
-            }
             emit VelocityUpdated(t, green, cnt);
         }
-
-        // System-wide deflation state machine
         uint256 sysCount = ITierRouterKeeper(tierRouter).getSystemEntryCount(windowStart);
         uint8   prev     = deflationState;
-
         if (sysCount >= deflationThreshold) {
-            // Green window
             consecutiveRedWindows = 0;
             if (deflationState == STATE_SLOW) {
                 deflationState = STATE_RECOVERY;
@@ -554,21 +445,19 @@ contract MatrixKeeper is Ownable {
             } else if (deflationState == STATE_RECOVERY) {
                 consecutiveGreenWindows++;
                 if (consecutiveGreenWindows >= recoveryThreshold) {
-                    deflationState          = STATE_NORMAL;
+                    deflationState = STATE_NORMAL;
                     consecutiveGreenWindows = 0;
-                    _setStabilityLayers(false);  // deactivate L2+L4
+                    _setStabilityLayers(false);
                 }
             }
         } else {
-            // Red window
             consecutiveGreenWindows = 0;
             consecutiveRedWindows++;
             if (deflationState == STATE_NORMAL && consecutiveRedWindows >= 2) {
                 deflationState = STATE_SLOW;
-                _setStabilityLayers(true);   // activate L2+L4
+                _setStabilityLayers(true);
             }
         }
-
         if (deflationState != prev) {
             ITierRouterKeeper(tierRouter).setDeflationState(deflationState);
             emit DeflationStateChanged(prev, deflationState);
@@ -576,57 +465,35 @@ contract MatrixKeeper is Ownable {
     }
 
     function _setStabilityLayers(bool active) internal {
-        IStabilityFundKeeper(stabilityFund).activateLayer(2, active);  // referral carve
-        IStabilityFundKeeper(stabilityFund).activateLayer(4, active);  // devOps carve
+        IStabilityFundKeeper(stabilityFund).activateLayer(2, active);
+        IStabilityFundKeeper(stabilityFund).activateLayer(4, active);
     }
-
-    // -- Internal: ghost entry -------------------------------------------------
 
     function _doGhostEntry(address matrix, uint8 tierIdx) internal {
         address pm = pairManagerForTier[tierIdx];
         if (pm == address(0)) return;
-
-        // Check StabilityFund has sufficient balance for this tier
-        uint256 fee    = IPairManagerKeeper(pm).entryFee();
-        uint256 sfBal  = IStabilityFundKeeper(stabilityFund).balanceByTier(tierIdx);
+        uint256 fee   = IPairManagerKeeper(pm).entryFee();
+        uint256 sfBal = IStabilityFundKeeper(stabilityFund).balanceByTier(tierIdx);
         if (sfBal < fee) return;
-
         lastGhostTime[matrix] = block.timestamp;
         IStabilityFundKeeper(stabilityFund).payGhostEntry(tierIdx, pm);
         emit GhostEntryFunded(matrix, tierIdx);
     }
 
-    // -- Internal: slot reclaim ------------------------------------------------
-
-    function _doReclaimSlot(address matrix, address member, uint8 /* tierIdx */) internal {
+    function _doReclaimSlot(address matrix, address member, uint8) internal {
         IFigureEightKeeper mat = IFigureEightKeeper(matrix);
         if (!mat.isInMatrix(member)) return;
-
         uint256 idleTime = block.timestamp - mat.lastActivityTime(member);
         if (idleTime < extendedIdleTimeout) return;
-
         reclaimAttemptTime[matrix][member] = block.timestamp;
         mat.reclaimIdleSlot(member);
         emit SlotReclaimed(matrix, member, idleTime);
     }
 
-    // -- Internal: chain-link wiring -------------------------------------------
-
     function _doChainLink(address newMatA, address newMatB, uint256 idx) internal {
         if (idx >= pendingChainLinks.length) return;
         PendingChainLink memory link = pendingChainLinks[idx];
         if (link.newMatA != newMatA || link.newMatB != newMatB) return;
-
-        // Wire: prevMatB -> newMatA -> newMatB -> (prevMatB's old next)
-        // prevMatB.chainNext was previously pointing to some earlier matA;
-        // we insert the new pair between prevMatB and that earlier matA.
-        // The exact wiring depends on the current chain state. The keeper
-        // only sets setChainNext on the new pair; the previous tail already
-        // pointed to the existing head (circular). We update prevMatB to
-        // point to newMatA, and newMatB to point to prevMatB's OLD next.
-        // For simplicity in V8.1: the deploy script calls setChainNext directly
-        // and uses queueChainLink only for keeper-initiated expansions.
-        // Here we just emit the event and let the deploy script handle it.
         emit ChainLinked(newMatA, newMatB, link.prevMatB);
     }
 
@@ -635,107 +502,73 @@ contract MatrixKeeper is Ownable {
             delete pendingChainLinks;
         } else {
             uint256 remaining = pendingChainLinks.length - count;
-            for (uint256 i = 0; i < remaining; i++) {
+            for (uint256 i = 0; i < remaining; i++)
                 pendingChainLinks[i] = pendingChainLinks[count + i];
-            }
-            for (uint256 i = 0; i < count; i++) {
+            for (uint256 i = 0; i < count; i++)
                 pendingChainLinks.pop();
-            }
         }
     }
 
-    // -- Internal: sliding-scale SF rescue BPS (V8.13) ---------------------------
-    // Higher member withdrawable → less SF help. Max SF = 50% (5000 BPS).
-    // Returns type(uint256).max if member is ineligible (< 50% withdrawable).
-    // Returns 0 if member can fully self-fund (>= 100% withdrawable).
     function _sfRescueBps(uint256 withdrawable, uint256 entryFee)
         internal pure returns (uint256)
     {
         uint256 wBps = withdrawable * 10_000 / entryFee;
-        if (wBps >= 10_000) return 0;           // >= 100%: member self-funds, SF pays nothing
-        if (wBps >=  9_500) return 1_000;       // SF 10%
-        if (wBps >=  9_000) return 1_500;       // SF 15%
-        if (wBps >=  8_500) return 2_000;       // SF 20%
-        if (wBps >=  8_000) return 2_500;       // SF 25%
-        if (wBps >=  7_500) return 3_000;       // SF 30%
-        if (wBps >=  7_000) return 3_500;       // SF 35%
-        if (wBps >=  6_500) return 4_000;       // SF 40%
-        if (wBps >=  6_000) return 4_500;       // SF 45%
-        if (wBps >=  5_000) return 5_000;       // SF 50% — maximum SF contribution
-        return type(uint256).max;                // < 50%: not eligible for SF rescue
+        if (wBps >= 10_000) return 0;
+        if (wBps >=  9_500) return 1_000;
+        if (wBps >=  9_000) return 1_500;
+        if (wBps >=  8_500) return 2_000;
+        if (wBps >=  8_000) return 2_500;
+        if (wBps >=  7_500) return 3_000;
+        if (wBps >=  7_000) return 3_500;
+        if (wBps >=  6_500) return 4_000;
+        if (wBps >=  6_000) return 4_500;
+        if (wBps >=  5_000) return 5_000;
+        if (wBps >=  4_000) return 6_000; // V8.18: 40-49% withdrawable → SF covers 60%
+        return type(uint256).max;
     }
 
-    // -- Internal: parked member decision helper (V8.13) -------------------------
-    // Returns (member, workType) for the parked member at `idx` in the given matrix.
-    // workType=type(uint8).max means no action needed.
     function _checkParked(address matAddr, uint8 tierIdx, uint256 idx)
         internal view
         returns (address parkedMember, uint8 workType)
     {
         IFigureEightKeeper mat = IFigureEightKeeper(matAddr);
         if (mat.getParkedCount() <= idx) return (address(0), type(uint8).max);
-
         parkedMember = mat.getParkedMember(idx);
         uint256 ts = mat.parkedAt(parkedMember);
         if (ts == 0) return (address(0), type(uint8).max);
         if (block.timestamp - ts < parkedGracePeriod) return (address(0), type(uint8).max);
-
-        // Grace expired — check eligibility with sliding-scale SF rescue (V8.13)
         uint256 withdrawn    = mat.getMemberTotalWithdrawn(parkedMember);
         uint256 withdrawable = mat.withdrawableOf(parkedMember);
         uint256 fee          = mat.ENTRY_FEE();
         uint256 totalEarned  = withdrawn + withdrawable;
         uint256 withdrawRatio = totalEarned > 0 ? withdrawn * 10_000 / totalEarned : 0;
-
-        // Gamers (withdrew too much of their earnings) are always evicted
-        if (withdrawRatio > rescueRatioBps) {
-            return (parkedMember, WORK_EVICT_PARKED);
-        }
-
+        if (withdrawRatio > rescueRatioBps) return (parkedMember, WORK_EVICT_PARKED);
         uint256 sfBps = _sfRescueBps(withdrawable, fee);
-        if (sfBps == type(uint256).max) {
-            // < 50% withdrawable — member cannot cover their share, evict
-            return (parkedMember, WORK_EVICT_PARKED);
-        }
-
+        if (sfBps == type(uint256).max) return (parkedMember, WORK_EVICT_PARKED);
         uint256 sfShare = fee * sfBps / 10_000;
         uint256 sfBal   = IStabilityFundKeeper(stabilityFund).balanceByTier(tierIdx);
-        // SF balance gates rescue: if SF can't cover its share, wait (no action this block)
         workType = (sfBal >= sfShare) ? WORK_PARKED_RESCUE : type(uint8).max;
     }
 
-    // -- Internal: idle scan helper --------------
-    function _scanMatrix(
-        address matrix,
-        uint8   tierIdx,
-        WorkItem[] memory items,
-        uint256 count
-    ) internal view returns (uint256) {
+    function _scanMatrix(address matrix, uint8 tierIdx, WorkItem[] memory items, uint256 count)
+        internal view returns (uint256)
+    {
         if (matrix == address(0)) return count;
         IFigureEightKeeper mat = IFigureEightKeeper(matrix);
         uint256 size = mat.MATRIX_SIZE();
-
         for (uint256 pos = 1; pos <= size && count < maxItemsPerUpkeep; pos++) {
             address member = mat.posToMember(pos);
             if (member == address(0)) continue;
-
-            uint256 lastAct = mat.lastActivityTime(member);
-            uint256 idle    = block.timestamp - lastAct;
-
+            uint256 idle = block.timestamp - mat.lastActivityTime(member);
             if (idle >= extendedIdleTimeout) {
-                // Ready for slot reclaim
                 items[count++] = WorkItem(WORK_RECLAIM, tierIdx, matrix, member);
             } else if (idle >= idleSlotTimeout) {
-                // Check if ghost was already funded recently
-                if (block.timestamp - lastGhostTime[matrix] >= idleSlotTimeout) {
+                if (block.timestamp - lastGhostTime[matrix] >= idleSlotTimeout)
                     items[count++] = WorkItem(WORK_GHOST, tierIdx, matrix, address(0));
-                }
             }
         }
         return count;
     }
-
-    // -- Views -----------------------------------------------------------------
 
     function pendingChainLinkCount() external view returns (uint256) {
         return pendingChainLinks.length;

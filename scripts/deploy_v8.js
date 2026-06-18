@@ -1,6 +1,6 @@
 "use strict";
 /**
- * deploy_v8.js  --  V8.17 Full Deploy  (all 10 tiers, MATRIX_SIZE=127, auto-keeper)
+ * deploy_v8.js  --  V8.18 Full Deploy  (all 10 tiers, MATRIX_SIZE=127, auto-keeper)
  * ─────────────────────────────────────────────────────────────────────────────
  * Deploys the complete V8.8 stack:
  *
@@ -63,7 +63,7 @@ require("dotenv").config();
 // v8_1 = size-15 testnet (retired).  v8_2 = size-64 pre-mainnet stress test.
 const ADDRESSES_FILE = path.join(
   __dirname,
-  process.env.ADDRESSES_FILE || "deployed_addresses_v8_17.json"
+  process.env.ADDRESSES_FILE || "deployed_addresses_v8_18.json"
 );
 
 // ── Config ────────────────────────────────────────────────────────────────────
@@ -89,20 +89,18 @@ const TIER_FEES = [
   10_000_000_000n, // T10 $10,000
 ];
 
-// ── V8.17 BPS SplitConfigs ────────────────────────────────────────────────────
+// ── V8.18 BPS SplitConfigs ────────────────────────────────────────────────────
 // Field order MUST match Solidity SplitConfig struct (9 fields):
 //   l1Bps, chainBps, poolBps, treasuryBps, stabilityBps, devBps, opsBps, communityBps, buybackBps
 //
-// V8.17 changes from V8.16 (confirmed after exhaustive simulation June 17 2026):
-//   T1-T3: pool 3000→4500 (+1500), chain 2000→1700 (−300), l1 2000→1000 (−1000),
-//          treasury 1500→1000 (−500), sf 800→1500 (+700), dev 300→150 (−150),
-//          ops 200→50 (−150), community 100→50 (−50), buyback 100→50 (−50)
-//   Net deployer rescue cost: $78.96/fill (vs $272/fill in V8.16) — 71% reduction
-//   SF now auto-covers 70.6% of all rescue costs each cycle
-//   39/126 positions self-clear (vs 11 in V8.16); passive member T2 in 3 cycles
+// V8.18 changes from V8.17 (confirmed June 18 2026):
+//   T1-T3: sf 1500→1300 (−200), dev 150→200 (+50), ops 50→100 (+50),
+//          community 50→100 (+50), buyback 50→100 (+50)
+//   SF proved sustainable at 13% — V8.17 stress test ended at $331 (grew from $202.75)
+//   Dev/Ops/Community/Buyback each raised to rounder percentages for cleaner UX display
 //
 //   [  l1,  chain,  pool, treasury,   sf,  dev,  ops,  cw,  bbr] sum
-const SPLITS_T1_T3  = [1000,  1700,  4500,    1000, 1500,  150,   50,  50,   50]; // 10000
+const SPLITS_T1_T3  = [1000,  1700,  4500,    1000, 1300,  200,  100, 100,  100]; // 10000
 const SPLITS_T4_T5  = [2000,  2000,  2800,    1600,  800,  360,  240, 100,  100]; // 10000
 const SPLITS_T6_T7  = [2000,  1750,  2650,    1800,  800,  420,  280, 100,  200]; // 10000
 const SPLITS_T8_T10 = [2000,  1750,  2450,    1900,  800,  480,  320, 100,  200]; // 10000
@@ -168,7 +166,7 @@ async function main() {
   const opsWallet   = process.env.OPS_WALLET_ADDRESS   || deployerAddr;
   const admin       = process.env.ADMIN_WALLET_ADDRESS || deployerAddr;
 
-  console.log("\n  V8.17 Deploy — Pool=45% Chain=17% SF=15% (net $79 rescue/fill)");
+  console.log("\n  V8.18 Deploy — Pool=45% Chain=17% SF=13% Dev=2% Ops/CW/BBR=1% each");
   sep();
   console.log(`  Deployer   : ${deployerAddr}`);
   console.log(`  AccountOne : ${accountOne}`);
@@ -563,7 +561,7 @@ async function main() {
   }
   sep();
   console.log(`  Addresses file: ${require("path").basename(ADDRESSES_FILE)}`);
-  console.log("  V8.17 Deploy complete.\n");
+  console.log("  V8.18 Deploy complete.\n");
 }
 
 main().catch(e => { console.error(e); process.exitCode = 1; });

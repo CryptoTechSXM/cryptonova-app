@@ -67,6 +67,9 @@ const RESCUE_SCAN  = Number(process.env.RESCUE_SCAN  || 0);  // 0 = no limit
 const RESCUE_CAP   = Number(process.env.RESCUE_CAP   || 0);  // 0 = no limit
 const RESCUE_ALL   = (process.env.RESCUE_ALL ?? "true") !== "false";
 const ETH_PER      = ethers.parseEther("0.02");   // gas budget per wallet — 0.02 ETH covers approve + register even at 10+ gwei on Base Sepolia
+// UPGRADE_RATE: fraction of T1-MatB-eligible wallets to manually upgrade each batch (0–1).
+// 0.75 = 75% of eligible wallets self-upgrade.  Set to 0 to disable.
+const UPGRADE_RATE = Number(process.env.UPGRADE_RATE ?? "0.75");
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 const sleep  = s  => new Promise(r => setTimeout(r, s * 1000));
@@ -388,6 +391,91 @@ async function inlineRescueParked({ matA1, matB1, stabilityFund, matrixKeeper, r
   }
 }
 
+// ── Manual upgrade simulation (V8.18) ────────────────────────────────────────
+// After each batch, finds mnemonic wallets currently sitting in T1 MatB (upgrade-eligible)
+// that haven't yet entered T2.  Randomly selects UPGRADE_RATE% of them, funds each
+// from the funder wallet, approves TierRouter, calls manualUpgrade(1).
+// Returns the updated fNonce so the caller can keep its state consistent.
+async function simulateManualUpgrades({
+  walletList, tierRouter, matB1, matA2, usdc, usdcFunder, rawFunder,
+  funderAddr, fNonce, tierRouterAddr, t2Fee,
+}) {
+  if (UPGRADE_RATE <= 0) return fNonce;
+  if (!matA2) return fNonce;            // T2 not deployed yet
+  if (t2Fee === 0n) return fNonce;
+
+  // Find eligible wallets: in T1 MatB AND NOT already in T2
+  const eligible = [];
+  for (const w of walletList) {
+    try {
+      const [inMatB, inT2A] = await Promise.all([
+        matB1.isActiveInMatrix(w.address).catch(() => false),
+        matA2.isActiveInMatrix(w.address).catch(() => false),
+      ]);
+      if (!inMatB) continue;      // not yet in T1 MatB — skip
+      if (inT2A)   continue;      // already in T2 MatA — skip
+      eligible.push(w);
+    } catch { /* skip on RPC error */ }
+  }
+
+  if (eligible.length === 0) return fNonce;
+
+  // Randomly select UPGRADE_RATE fraction
+  const shuffled = eligible.sort(() => Math.random() - 0.5);
+  const toUpgrade = shuffled.slice(0, Math.max(1, Math.round(shuffled.length * UPGRADE_RATE)));
+
+  sep(`Manual Upgrade Simulation — ${eligible.length} eligible → upgrading ${toUpgrade.length} (${Math.round(UPGRADE_RATE * 100)}%)`);
+  let upgraded = 0, skipped = 0;
+
+  for (const w of toUpgrade) {
+    try {
+      const conn = w.connect(ethers.provider);
+
+      // Fund wallet with ETH if needed
+      const ethBal = await ethers.provider.getBalance(w.address);
+      if (ethBal < 200_000_000_000n) {
+        const tx = await rawFunder.sendTransaction({ to: w.address, value: ethers.parseEther("0.02"), nonce: fNonce });
+        await tx.wait();
+        fNonce++;
+      }
+
+      // Fund wallet with T2 USDC if needed
+      const usdcBal = await usdc.balanceOf(w.address);
+      if (usdcBal < t2Fee) {
+        const tx = await usdcFunder.transfer(w.address, t2Fee, { nonce: fNonce });
+        await tx.wait();
+        fNonce++;
+      }
+
+      // Approve TierRouter to spend T2 fee
+      const allowance = await usdc.allowance(w.address, tierRouterAddr);
+      if (allowance < t2Fee) {
+        await (await usdc.connect(conn).approve(tierRouterAddr, t2Fee)).wait();
+      }
+
+      // manualUpgrade(1) = upgrade to T2 (targetTierIndex = 1)
+      await (await tierRouter.connect(conn).manualUpgrade(1, { gasLimit: 15_000_000 })).wait();
+      console.log(`  ✓ manualUpgrade T2  ${w.address.slice(0, 10)}…`);
+      upgraded++;
+    } catch (e) {
+      const msg = e.shortMessage || e.message?.slice(0, 100) || 'unknown';
+      // "TR: cross to MatB first" = not eligible yet — quiet skip
+      if (!msg.includes("cross to MatB")) {
+        console.warn(`  ⚠ upgrade ${w.address.slice(0, 10)}… failed: ${msg}`);
+      }
+      skipped++;
+      try { fNonce = Number(await ethers.provider.getTransactionCount(funderAddr, 'pending')); } catch {}
+    }
+    await new Promise(r => setTimeout(r, 3000)); // 3s between upgrades — avoid in-flight limit
+  }
+
+  if (upgraded > 0 || skipped > 0) {
+    const t2Occ = matA2 ? await matA2.occupancy().catch(() => 0n) : 0n;
+    console.log(`  Upgrades: ${upgraded} succeeded, ${skipped} skipped | T2 MatA occ: ${t2Occ}`);
+  }
+  return fNonce;
+}
+
 // ── Snapshot helper (V8.1) ────────────────────────────────────────────────────
 async function snapshot(label, { tierRouter, pm1, matA1, matB1, matA2, matB2,
                                    cnova, treasury, stabilityFund, w1Addr }) {
@@ -545,6 +633,7 @@ async function main() {
   const usdcContract = await ethers.getContractAt("MockUSDC", addrs.usdc || addrs.USDC);
 
   const T1_FEE  = await matA1.ENTRY_FEE();
+  const T2_FEE  = matA2 ? await matA2.ENTRY_FEE().catch(() => 0n) : 0n;
   const mSize   = await matA1.MATRIX_SIZE();
   const W1_ADDR = process.env.REFERRER || addrs.accountOne || addrs.AccountOne;
 
@@ -919,6 +1008,15 @@ async function main() {
     // Inline parked rescue — after every batch, rescue any eligible parked members
     await inlineRescueParked({ matA1, matB1, stabilityFund, matrixKeeper, rawDeployer: rawSigner, deployer: rawSigner, entryFee: T1_FEE });
 
+    // V8.18: Manual upgrade simulation — 75% of T1-MatB wallets self-upgrade to T2
+    fNonce = await simulateManualUpgrades({
+      walletList: wallets, tierRouter, matB1, matA2,
+      usdc, usdcFunder, rawFunder,
+      funderAddr, fNonce,
+      tierRouterAddr: addrs.tierRouter || addrs.TierRouter,
+      t2Fee: T2_FEE,
+    });
+
     // Inline forceCross check — every 10 batches OR immediately after a cycle
     if (batchNum % 10 === 0 || forceFCCheck) {
       forceFCCheck = false; // reset — consumed
@@ -1163,7 +1261,6 @@ async function main() {
 
     } // end else (forceCross — cycles have happened)
   } // end else (SKIP_ADMIN_CROSS not set)
-  } // end outer forceCross block
 
   // ── Post-fill snapshot ────────────────────────────────────────────────────
   sep();

@@ -16,7 +16,7 @@ require("dotenv").config();
  *   BSCSCAN_API_KEY        -- for BscScan verification (https://bscscan.com/apis)
  */
 
-const ZERO_KEY         = "0x" + "0".repeat(64); // placeholder — invalid key, never included in accounts
+const ZERO_KEY         = "0x" + "0".repeat(64); // placeholder -- invalid key, never included in accounts
 const DEPLOYER_KEY     = process.env.DEPLOYER_PRIVATE_KEY || ZERO_KEY;
 const FILL_FUNDER_KEY  = process.env.FILL_FUNDER_KEY      || ZERO_KEY;
 // Only include keys that are valid (not the zero placeholder)
@@ -40,6 +40,8 @@ module.exports = {
         enabled: true,
         runs: 200,
       },
+      // V8.18 NOTE: contract is ~24856 bytes. Enable viaIR locally before deploy:
+      //   viaIR: true,
     },
   },
 
@@ -47,6 +49,7 @@ module.exports = {
     hardhat: {
       chainId: 31337,
       accounts: { count: 300 },
+      allowUnlimitedContractSize: true,  // V8.18: contract ~24856 bytes; use viaIR before deploy
     },
 
     baseSepolia: {
@@ -118,7 +121,8 @@ module.exports = {
 
   paths: {
     sources:   "./contracts",
-    tests:     "./test",    cache:     "./cache",
+    tests:     "./test",
+    cache:     "./cache",
     artifacts: "./artifacts",
   },
 };

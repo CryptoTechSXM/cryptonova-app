@@ -85,6 +85,8 @@ interface IStabilityFund {
     /// @param amount   USDC amount (6 decimals)
     /// @param layer    1=pool-carve, 2=referral-carve, 3=withdrawal-fee, 4=devops, 5=exit-penalty
     function receiveLayer(uint8 tierIdx, uint256 amount, uint8 layer) external;
+    /// @notice V8.18: SF sends sfShare to caller (authorized matrix) for coPayRescue.
+    function payCoRescue(uint8 tierIdx, uint256 sfShare) external;
 }
 
 contract FigureEightMatrixV8 is Ownable2Step {
@@ -209,6 +211,7 @@ contract FigureEightMatrixV8 is Ownable2Step {
     event MatrixKeeperSet(address indexed addr);
     event MemberParked(address indexed member, uint256 shortfall);
     event MemberEvicted(address indexed member, uint256 totalWithdrawn);  // V8.10: grace-period eviction
+    event CoPayRescue(address indexed member, uint256 sfShare, uint256 memberWalletShare, uint256 withdrawableUsed); // V8.18
 
     // --- Constructor split config struct --------------------------------------
     /// @notice V8.9: devOpsBps split into devBps + opsBps, communityBps added (9 fields total).
@@ -1054,6 +1057,9 @@ contract FigureEightMatrixV8 is Ownable2Step {
 
         usdc.safeTransferFrom(msg.sender, address(this), ENTRY_FEE);
 
+        // V8.18: clear parked queue so getParkedCount() decrements correctly
+        if (parkedAt[member] > 0) _removeFromParkedQueue(member);
+
         address destination = (!isMatrixA && chainNext != address(0))
             ? chainNext : address(partner);
         SafeERC20.forceApprove(usdc, destination, ENTRY_FEE);
@@ -1156,6 +1162,58 @@ contract FigureEightMatrixV8 is Ownable2Step {
         FigureEightMatrixV8(destination)._enterMatrix(member, members[member].referrer);
     }
 
+    // --- V8.18: coPayRescue -----------------------------------------------
+
+    /**
+     * @notice Member co-pays to self-rescue from the parked queue.
+     *         SF covers 50% of the member's withdrawable balance; member's wallet
+     *         covers the remaining shortfall (fee - withdrawable - sfShare).
+     *
+     *         Example: fee=$10, withdrawable=$4.76
+     *           sfShare     = $4.76 / 2 = $2.38
+     *           shortfall   = $10 - $4.76 = $5.24
+     *           memberShare = $5.24 - $2.38 = $2.86
+     *           Contract collects: $4.76 (withdrawable) + $2.38 (SF) + $2.86 (member) = $10 ✓
+     *
+     * @param member  The parked member to rescue. msg.sender pays the wallet portion.
+     *                msg.sender must have approved USDC to this contract before calling.
+     */
+    function coPayRescue(address member) external {
+        require(members[member].hasEverJoined,  "F8V8: not a member");
+        require(!members[member].isInMatrix,    "F8V8: still in matrix");
+        require(parkedAt[member] > 0,           "F8V8: not parked");
+        require(address(partner) != address(0), "F8V8: no partner");
+        require(address(stabilityFund) != address(0), "F8V8: no stabilityFund");
+
+        uint256 withdrawable = members[member].withdrawable;
+        require(withdrawable > 0, "F8V8: no withdrawable for coPayRescue");
+
+        uint256 sfShare      = withdrawable / 2;
+        uint256 shortfall    = ENTRY_FEE > withdrawable ? ENTRY_FEE - withdrawable : 0;
+        uint256 memberShare  = shortfall > sfShare ? shortfall - sfShare : 0;
+
+        // Deduct member's withdrawable contribution
+        members[member].withdrawable = 0;
+
+        // Pull SF co-contribution
+        IStabilityFund(stabilityFund).payCoRescue(tierIndex, sfShare);
+
+        // Pull member wallet co-pay (if required)
+        if (memberShare > 0) {
+            usdc.safeTransferFrom(msg.sender, address(this), memberShare);
+        }
+
+        _removeFromParkedQueue(member);
+
+        address destination = (!isMatrixA && chainNext != address(0))
+            ? chainNext : address(partner);
+        SafeERC20.forceApprove(usdc, destination, ENTRY_FEE);
+
+        emit CoPayRescue(member, sfShare, memberShare, withdrawable);
+        emit MemberCrossedToPartner(member, address(this), destination);
+        FigureEightMatrixV8(destination)._enterMatrix(member, members[member].referrer);
+    }
+
     function _removeFromParkedQueue(address member) internal {
         uint256 len = parkedMembers.length;
         for (uint256 i = 0; i < len; i++) {
@@ -1189,7 +1247,7 @@ contract FigureEightMatrixV8 is Ownable2Step {
         emit MemberEvicted(member, withdrawn);
     }
 
-    function getMember(address member)        external view returns (Member memory) { return members[member]; }
+    function getMember(address member)         external view returns (Member memory)  { return members[member]; }
     function getCyclesCompleted(address m)    external view returns (uint256)       { return members[m].cyclesCompleted; }
     function withdrawableOf(address member)   external view returns (uint256)       { return members[member].withdrawable; }
     function getMemberTotalWithdrawn(address member) external view returns (uint256) { return members[member].totalWithdrawn; }  // V8.10: keeper reads for rescue eligibility

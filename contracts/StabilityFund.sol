@@ -374,6 +374,32 @@ contract StabilityFund is Ownable2Step {
         emit FundDeposit(tierIdx, fee, 0, address(this));
     }
 
+    // ── V8.18: Member co-pay rescue ───────────────────────────────────────────
+
+    /**
+     * @notice Authorized matrix pulls sfShare from SF to co-fund a coPayRescue.
+     *         SF covers 50% of the member's withdrawable; matrix calls this then
+     *         pulls the member's wallet share via safeTransferFrom in coPayRescue().
+     *         Only callable by an authorizedMatrix.
+     */
+    function payCoRescue(uint8 tierIdx, uint256 sfShare) external {
+        require(authorizedMatrices[msg.sender], "SF: not authorized matrix");
+        require(tierIdx < MAX_TIERS,            "SF: invalid tier");
+        require(sfShare > 0,                    "SF: zero share");
+        require(totalBalance >= sfShare + stabilityFloor, "SF: below floor");
+
+        if (balanceByTier[tierIdx] >= sfShare) {
+            balanceByTier[tierIdx] -= sfShare;
+        } else {
+            balanceByTier[tierIdx] = 0;
+        }
+        totalBalance -= sfShare;
+
+        usdc.safeTransfer(msg.sender, sfShare);
+
+        emit FundWithdrawn(msg.sender, sfShare, "coPayRescue");
+    }
+
     // ── Governance: emergency withdrawal ─────────────────────────────────────
 
     function withdraw(

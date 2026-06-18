@@ -567,11 +567,11 @@ if (deployTxt) {
     fail("deploy_v8.js: tierRouter.setTierMatrices() MISSING — manualUpgrade will always revert 'cross to MatB first' because tierMatrixBAddr stays address(0)");
   }
 
-  // V8.17: pool=4500, SF=1500, chain=1700 (T1-T3 group) — confirmed June 17 2026
-  if (deployTxt.includes("4500,    1000, 1500,  150,   50,  50,   50")) {
-    ok("deploy_v8.js: V8.17 BPS confirmed — pool=4500, SF=1500, chain=1700 (T1-T3)");
+  // V8.18: pool=4500, SF=1300, chain=1700, dev=200, ops=100, cw=100, bbr=100 (T1-T3) — June 18 2026
+  if (deployTxt.includes("4500,    1000, 1300,  200,  100, 100,  100")) {
+    ok("deploy_v8.js: V8.18 BPS confirmed — pool=4500, SF=1300, chain=1700 (T1-T3)");
   } else {
-    fail("deploy_v8.js: V8.17 BPS NOT found — expected pool=4500, SF=1500 in SPLITS_T1_T3. Array: [1000,1700,4500,1000,1500,150,50,50,50]");
+    fail("deploy_v8.js: V8.18 BPS NOT found — expected pool=4500, SF=1300 in SPLITS_T1_T3. Array: [1000,1700,4500,1000,1300,200,100,100,100]");
   }
 
   // V8.16: topUpAndCross must be in contract

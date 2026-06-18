@@ -25,7 +25,7 @@ const DEPLOYER_KEY = process.env.DEPLOYER_PRIVATE_KEY;
 const TIER_1IDX = Number(process.env.TIER || 2);
 const TIER_IDX  = TIER_1IDX - 1; // 0-indexed for contract
 
-const TIER_ROUTER = '0x16c34eE760868E54E2450d6B10c0C44B0f704856';
+const TIER_ROUTER = '0x36a1069432157007ECe1246A609d1d5c108293b3'; // V8.14
 
 const TIER_ROUTER_ABI = [
   // NOTE: getVelocityGates() has a bool[7] bug on 10-tier deploy — do not call it
