@@ -1450,18 +1450,18 @@
       <div class="card">
         <div class="section-title"><div class="dot"></div> Chain Pay Structure — Your Node Depth</div>
         <div style="font-size:13px;color:var(--text2);margin-bottom:16px">These amounts flow upward from each new member registration through your position.</div>
-        <div style="font-size:12px;color:var(--text3);margin-bottom:10px">20% of each entry fee flows up to 6 upline levels in your matrix chain</div>
+        <div style="font-size:12px;color:var(--text3);margin-bottom:10px">17% of each entry fee flows up to 6 upline levels in your matrix chain</div>
         <div id="chain-pay-table">
-          <div class="chain-row"><span style="color:var(--text2)">Level 1 (50% of chain pay — direct upline)</span><span><span style="font-weight:600;color:var(--green)">$1.00</span> <span style="font-size:11px;color:var(--text3)">per entry below you</span></span></div>
-          <div class="chain-row"><span style="color:var(--text2)">Level 2 (20% of chain pay)</span><span><span style="font-weight:600">$0.40</span></span></div>
-          <div class="chain-row"><span style="color:var(--text2)">Level 3 (15% of chain pay)</span><span><span style="font-weight:600">$0.30</span></span></div>
-          <div class="chain-row"><span style="color:var(--text2)">Level 4 (7.5% of chain pay)</span><span><span style="font-weight:600">$0.15</span></span></div>
-          <div class="chain-row"><span style="color:var(--text2)">Level 5 (3.75% of chain pay)</span><span><span style="font-weight:600">$0.08</span></span></div>
-          <div class="chain-row"><span style="color:var(--text2)">Level 6 (3.75% of chain pay)</span><span><span style="font-weight:600">$0.08</span></span></div>
-          <div class="chain-row" style="border-top:1px solid var(--green2)"><span style="font-weight:700">Total chain pay per T1 entry</span><span style="font-weight:700;color:var(--green)">$2.00 <span style="font-size:11px;color:var(--text3);font-weight:400">(20% of $10)</span></span></div>
+          <div class="chain-row"><span style="color:var(--text2)">Level 1 (50% of chain pay — direct upline)</span><span><span style="font-weight:600;color:var(--green)">$0.85</span> <span style="font-size:11px;color:var(--text3)">per entry below you</span></span></div>
+          <div class="chain-row"><span style="color:var(--text2)">Level 2 (20% of chain pay)</span><span><span style="font-weight:600">$0.34</span></span></div>
+          <div class="chain-row"><span style="color:var(--text2)">Level 3 (15% of chain pay)</span><span><span style="font-weight:600">$0.26</span></span></div>
+          <div class="chain-row"><span style="color:var(--text2)">Level 4 (7.5% of chain pay)</span><span><span style="font-weight:600">$0.13</span></span></div>
+          <div class="chain-row"><span style="color:var(--text2)">Level 5 (3.75% of chain pay)</span><span><span style="font-weight:600">$0.06</span></span></div>
+          <div class="chain-row"><span style="color:var(--text2)">Level 6 (3.75% of chain pay)</span><span><span style="font-weight:600">$0.06</span></span></div>
+          <div class="chain-row" style="border-top:1px solid var(--green2)"><span style="font-weight:700">Total chain pay per T1 entry</span><span style="font-weight:700;color:var(--green)">$1.70 <span style="font-size:11px;color:var(--text3);font-weight:400">(17% of $10)</span></span></div>
         </div>
         <div style="margin-top:10px;font-size:12px;color:var(--text3);padding:8px 12px;background:var(--bg3);border-radius:8px">
-          💡 You also earn <strong style="color:var(--green)">$2.00 L1 referral</strong> for every direct you personally bring in, plus $0.40 L2 and $0.30 L3 from your network.
+          💡 You also earn <strong style="color:var(--green)">$1.85 L1 referral</strong> for every direct you personally bring in, plus $0.34 L2 and $0.26 L3 from your network.
         </div>
       </div>
     </div>
@@ -4578,11 +4578,4 @@ function updateAddrsFromDeployed(d) {
     const tier = t[String(i)] || t[i];
     if (tier) {
       const key = 'T' + i;
-      ADDRS[key] = { pm: tier.pairManager || tier.pm || '', matA: tier.matA || '', matB: tier.matB || '' };
-    }
-  }
-  console.log('[v8.8] ADDRS updated from deployed JSON');
-}
-</script>
-<script src="/i18n.js" defer></script>
-</b
+      ADDRS[key] = { pm: tier.pair
