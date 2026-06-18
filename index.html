@@ -1905,7 +1905,7 @@ const ADDRS = {
   T3: {
     pm:   '0x1739Ad1E4480006726c8d3Ec23e46247510f1412',
     matA: '0x302750EC0b7fE457B0Bc560D92656c6A7556c6b0',
-    matB: '0x5338E5aAac713FD378B7DEce69163352F327Cd4e6',
+    matB: '0x5338E5aAc713FD378B7DEce69163352F327Cd4e6',
   },
   T4: {
     pm:   '0x1C3Cc37218caa57978f2fD4FeC71CA9E7736388c',
@@ -2638,7 +2638,7 @@ async function loadHomeStats() {
       // ── Price sparkline — sample + render ─────────────────────────────
       try {
         // Key is scoped to the TierRouter address so each fresh deploy starts with a clean chart
-        const DEPLOY_TAG = (CONTRACTS.tierRouter || '').slice(2, 10).toLowerCase();
+        const DEPLOY_TAG = (ADDRS.tierRouter || '').slice(2, 10).toLowerCase();
         const PRICE_KEY = 'cnova_price_history_' + DEPLOY_TAG;
         const MAX_SAMPLES = 60;
         const now = Date.now();
@@ -4578,4 +4578,11 @@ function updateAddrsFromDeployed(d) {
     const tier = t[String(i)] || t[i];
     if (tier) {
       const key = 'T' + i;
-      ADDRS[key] = { pm: tier.pair
+      ADDRS[key] = { pm: tier.pairManager || tier.pm || '', matA: tier.matA || '', matB: tier.matB || '' };
+    }
+  }
+  console.log('[v8.8] ADDRS updated from deployed JSON');
+}
+</script>
+<script src="/i18n.js" defer></script>
+</body></html>
