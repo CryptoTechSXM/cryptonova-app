@@ -1,0 +1,797 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Governance — CryptoNova</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/6.7.1/ethers.umd.min.js"></script>
+  <style>
+    :root {
+      --bg:        #0a0e1a;
+      --bg2:       #111827;
+      --bg3:       #1a2236;
+      --border:    #1f2d47;
+      --green:     #00e5a0;
+      --green2:    #00b37d;
+      --green-dim: rgba(0,229,160,0.12);
+      --blue:      #3b82f6;
+      --blue-dim:  rgba(59,130,246,0.12);
+      --yellow:    #f59e0b;
+      --yellow-dim:rgba(245,158,11,0.12);
+      --purple:    #a855f7;
+      --purple-dim:rgba(168,85,247,0.12);
+      --red:       #ef4444;
+      --red-dim:   rgba(239,68,68,0.12);
+      --text:      #e2e8f0;
+      --text2:     #94a3b8;
+      --text3:     #64748b;
+    }
+    body.light {
+      --bg:#f1f5f9; --bg2:#ffffff; --bg3:#e2e8f0; --border:#cbd5e1;
+      --green:#00966a; --green2:#007a56; --green-dim:rgba(0,150,106,0.10);
+      --blue:#2563eb; --blue-dim:rgba(37,99,235,0.10);
+      --yellow:#d97706; --yellow-dim:rgba(217,119,6,0.10);
+      --purple:#7c3aed; --purple-dim:rgba(124,58,237,0.10);
+      --red:#dc2626; --red-dim:rgba(220,38,38,0.10);
+      --text:#0f172a; --text2:#475569; --text3:#94a3b8;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { background: var(--bg); color: var(--text); font-family: 'Segoe UI', system-ui, sans-serif; min-height: 100vh; }
+
+    /* ── Header ─── */
+    header { background: var(--bg2); border-bottom: 1px solid var(--border); padding: 14px 24px; display: flex; align-items: center; justify-content: space-between; position: sticky; top: 0; z-index: 100; }
+    .logo { display: flex; align-items: center; gap: 10px; text-decoration: none; color: inherit; }
+    .logo-text { font-size: 18px; font-weight: 700; letter-spacing: -0.5px; }
+    .logo-text span { color: var(--green); }
+    .logo-badge { font-size: 10px; background: var(--green-dim); color: var(--green); border: 1px solid var(--green2); border-radius: 4px; padding: 2px 6px; margin-left: 8px; }
+    .header-right { display: flex; align-items: center; gap: 10px; }
+    .nav-link { color: var(--text2); font-size: 14px; text-decoration: none; padding: 6px 12px; border-radius: 7px; transition: all .2s; }
+    .nav-link:hover { color: var(--text); background: var(--bg3); }
+    .nav-link.active { color: var(--green); }
+    #btn-connect { background: var(--green); color: #000; border: none; border-radius: 8px; padding: 8px 18px; font-weight: 700; font-size: 14px; cursor: pointer; transition: opacity .2s; white-space: nowrap; }
+    #btn-connect:hover { opacity: .85; }
+    #btn-connect.connected { background: var(--bg3); color: var(--green); border: 1px solid var(--green2); }
+    .theme-toggle { background: var(--bg3); border: 1px solid var(--border); border-radius: 8px; padding: 6px 12px; font-size: 13px; color: var(--text2); cursor: pointer; }
+    .theme-toggle:hover { color: var(--text); border-color: var(--green); }
+
+    /* ── Layout ─── */
+    main { max-width: 900px; margin: 0 auto; padding: 40px 24px 80px; }
+
+    /* ── Hero ─── */
+    .hero { text-align: center; padding: 0 0 40px; }
+    .hero-badge { display: inline-flex; align-items: center; gap: 6px; background: var(--purple-dim); color: var(--purple); border: 1px solid rgba(168,85,247,.4); border-radius: 20px; padding: 5px 14px; font-size: 12px; font-weight: 600; margin-bottom: 18px; }
+    .hero h1 { font-size: 38px; font-weight: 800; letter-spacing: -1px; line-height: 1.15; margin-bottom: 12px; }
+    .hero h1 span { color: var(--purple); }
+    .hero p { font-size: 15px; color: var(--text2); max-width: 460px; margin: 0 auto; line-height: 1.6; }
+
+    /* ── Cards ─── */
+    .card { background: var(--bg2); border: 1px solid var(--border); border-radius: 14px; padding: 24px; margin-bottom: 20px; }
+    .card-title { font-size: 12px; font-weight: 700; color: var(--text2); text-transform: uppercase; letter-spacing: .8px; margin-bottom: 18px; display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+    .card-title-left { display: flex; align-items: center; gap: 8px; }
+    .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--purple); flex-shrink: 0; }
+    .dot-green { background: var(--green); }
+
+    /* ── Voting power bar ─── */
+    .power-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 14px; }
+    .power-stat { background: var(--bg3); border-radius: 10px; padding: 16px; }
+    .power-label { font-size: 11px; color: var(--text3); text-transform: uppercase; letter-spacing: .6px; margin-bottom: 5px; }
+    .power-value { font-size: 20px; font-weight: 700; color: var(--text); }
+    .power-value.purple { color: var(--purple); }
+    .power-value.green  { color: var(--green); }
+    .power-sub { font-size: 11px; color: var(--text3); margin-top: 3px; }
+
+    /* ── Proposal card ─── */
+    .proposal { background: var(--bg3); border: 1.5px solid var(--border); border-radius: 12px; padding: 20px; margin-bottom: 14px; transition: border-color .2s; }
+    .proposal:hover { border-color: rgba(168,85,247,.3); }
+    .proposal-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; margin-bottom: 12px; }
+    .proposal-id { font-size: 11px; color: var(--text3); font-weight: 600; }
+    .proposal-title { font-size: 15px; font-weight: 700; color: var(--text); margin: 4px 0 6px; line-height: 1.4; }
+    .proposal-meta { font-size: 12px; color: var(--text2); }
+    .proposal-meta span { color: var(--text3); }
+    .proposal-param { display: inline-block; background: var(--bg2); border: 1px solid var(--border); border-radius: 6px; padding: 3px 8px; font-size: 11px; color: var(--text2); margin-top: 6px; }
+
+    /* ── Vote bars ─── */
+    .vote-bars { margin: 14px 0 12px; }
+    .vote-row { display: flex; align-items: center; gap: 10px; margin-bottom: 7px; font-size: 12px; }
+    .vote-label { width: 42px; font-weight: 600; flex-shrink: 0; }
+    .vote-label.for   { color: var(--green); }
+    .vote-label.against { color: var(--red); }
+    .bar-track { flex: 1; height: 8px; background: var(--bg2); border-radius: 4px; overflow: hidden; }
+    .bar-fill  { height: 100%; border-radius: 4px; transition: width .5s; }
+    .bar-for     { background: var(--green); }
+    .bar-against { background: var(--red); }
+    .vote-pct { width: 40px; text-align: right; color: var(--text3); }
+    .quorum-row { font-size: 11px; color: var(--text3); margin-top: 4px; }
+    .quorum-bar-track { height: 3px; background: var(--bg2); border-radius: 2px; margin-top: 3px; overflow: hidden; }
+    .quorum-bar-fill  { height: 100%; background: var(--yellow); border-radius: 2px; transition: width .5s; }
+
+    /* ── Proposal footer ─── */
+    .proposal-footer { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--border); }
+    .btn-vote-for     { background: var(--green-dim); color: var(--green); border: 1px solid var(--green2); border-radius: 8px; padding: 8px 18px; font-size: 13px; font-weight: 700; cursor: pointer; transition: all .2s; }
+    .btn-vote-for:hover:not(:disabled) { background: var(--green); color: #000; }
+    .btn-vote-against { background: var(--red-dim);   color: var(--red);   border: 1px solid rgba(239,68,68,.4); border-radius: 8px; padding: 8px 18px; font-size: 13px; font-weight: 700; cursor: pointer; transition: all .2s; }
+    .btn-vote-against:hover:not(:disabled) { background: var(--red); color: #fff; }
+    .btn-action { background: var(--blue-dim); color: var(--blue); border: 1px solid rgba(59,130,246,.4); border-radius: 8px; padding: 8px 16px; font-size: 13px; font-weight: 700; cursor: pointer; transition: all .2s; }
+    .btn-action:hover:not(:disabled) { background: var(--blue); color: #fff; }
+    .btn-vote-for:disabled, .btn-vote-against:disabled, .btn-action:disabled { opacity: .4; cursor: not-allowed; }
+    .voted-badge { font-size: 12px; color: var(--text3); padding: 8px 4px; }
+
+    /* ── State pills ─── */
+    .pill { display: inline-flex; align-items: center; gap: 4px; border-radius: 20px; padding: 3px 10px; font-size: 11px; font-weight: 700; white-space: nowrap; }
+    .pill-active    { background: var(--green-dim);   color: var(--green);  border: 1px solid var(--green2); }
+    .pill-timelocked{ background: var(--yellow-dim);  color: var(--yellow); border: 1px solid rgba(245,158,11,.4); }
+    .pill-passed    { background: var(--blue-dim);    color: var(--blue);   border: 1px solid rgba(59,130,246,.4); }
+    .pill-executed  { background: var(--purple-dim);  color: var(--purple); border: 1px solid rgba(168,85,247,.4); }
+    .pill-defeated  { background: var(--red-dim);     color: var(--red);    border: 1px solid rgba(239,68,68,.3); }
+    .pill-expired   { background: var(--bg3);         color: var(--text3);  border: 1px solid var(--border); }
+    .pill-cancelled { background: var(--bg3);         color: var(--text3);  border: 1px solid var(--border); }
+
+    /* ── Create proposal form ─── */
+    .form-row { margin-bottom: 18px; }
+    .form-label { font-size: 12px; color: var(--text2); font-weight: 600; margin-bottom: 7px; display: block; }
+    .form-select, .form-input, .form-textarea {
+      width: 100%; background: var(--bg3); border: 1.5px solid var(--border); border-radius: 9px;
+      padding: 11px 14px; color: var(--text); font-size: 14px; outline: none;
+      transition: border-color .2s; font-family: inherit;
+    }
+    .form-select:focus, .form-input:focus, .form-textarea:focus { border-color: var(--purple); }
+    .form-select option { background: var(--bg2); }
+    .form-textarea { resize: vertical; min-height: 80px; }
+    .form-hint { font-size: 11px; color: var(--text3); margin-top: 5px; }
+    .allowed-vals { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
+    .av-chip { background: var(--bg2); border: 1px solid var(--border); border-radius: 6px; padding: 4px 10px; font-size: 12px; color: var(--text2); cursor: pointer; transition: all .2s; }
+    .av-chip:hover, .av-chip.selected { background: var(--purple-dim); color: var(--purple); border-color: rgba(168,85,247,.4); }
+    .btn-propose { background: var(--purple); color: #fff; border: none; border-radius: 10px; padding: 13px 28px; font-weight: 800; font-size: 15px; cursor: pointer; transition: opacity .2s; }
+    .btn-propose:hover:not(:disabled) { opacity: .88; }
+    .btn-propose:disabled { opacity: .4; cursor: not-allowed; }
+
+    /* ── Status ─── */
+    #prop-status { margin-top: 12px; padding: 11px 14px; border-radius: 8px; font-size: 13px; font-weight: 600; display: none; }
+    #prop-status.info    { background: var(--blue-dim);    color: var(--blue);   border: 1px solid rgba(59,130,246,.3);  display: block; }
+    #prop-status.success { background: var(--green-dim);   color: var(--green);  border: 1px solid var(--green2);        display: block; }
+    #prop-status.error   { background: var(--red-dim);     color: var(--red);    border: 1px solid rgba(239,68,68,.3);   display: block; }
+
+    /* ── How it works ─── */
+    .how-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 14px; }
+    .how-step { background: var(--bg3); border-radius: 10px; padding: 16px; }
+    .how-num { width: 26px; height: 26px; border-radius: 50%; background: var(--purple-dim); border: 1px solid rgba(168,85,247,.4); color: var(--purple); font-size: 12px; font-weight: 800; display: flex; align-items: center; justify-content: center; margin-bottom: 10px; }
+    .how-step h4 { font-size: 13px; font-weight: 700; color: var(--text); margin-bottom: 5px; }
+    .how-step p  { font-size: 12px; color: var(--text2); line-height: 1.5; }
+
+    /* ── Empty state ─── */
+    .empty { text-align: center; padding: 40px 20px; color: var(--text3); font-size: 14px; }
+    .empty-icon { font-size: 32px; margin-bottom: 12px; }
+
+    /* ── Loading ─── */
+    .loading-row { display: flex; align-items: center; gap: 10px; color: var(--text3); font-size: 13px; padding: 20px 0; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .spinner { width: 16px; height: 16px; border: 2px solid var(--border); border-top-color: var(--purple); border-radius: 50%; animation: spin .7s linear infinite; }
+
+    /* ── Countdown ─── */
+    .countdown { font-size: 12px; color: var(--text3); margin-left: auto; }
+    .countdown.urgent { color: var(--yellow); }
+
+    /* ── Tab strip for proposals ─── */
+    .tab-strip { display: flex; gap: 0; border-bottom: 1px solid var(--border); margin-bottom: 18px; }
+    .tab-btn { background: none; border: none; color: var(--text3); padding: 10px 18px; cursor: pointer; font-size: 13px; font-weight: 600; border-bottom: 2px solid transparent; transition: all .2s; }
+    .tab-btn:hover { color: var(--text); }
+    .tab-btn.active { color: var(--purple); border-bottom-color: var(--purple); }
+    .tab-count { display: inline-block; background: var(--bg3); border-radius: 10px; padding: 1px 7px; font-size: 11px; margin-left: 5px; }
+  </style>
+</head>
+<body>
+
+<header>
+  <a href="index.html" class="logo">
+    <svg width="32" height="32" viewBox="0 0 40 40" fill="none">
+      <circle cx="20" cy="20" r="19" stroke="#00e5a0" stroke-width="1.5"/>
+      <path d="M20 8 L20 32 M8 20 L32 20 M11.5 11.5 L28.5 28.5 M28.5 11.5 L11.5 28.5" stroke="#00e5a0" stroke-width="1.2" stroke-linecap="round"/>
+      <circle cx="20" cy="20" r="5" fill="none" stroke="#00e5a0" stroke-width="1.5"/>
+    </svg>
+    <span class="logo-text">Crypto<span>Nova</span></span>
+    <span class="logo-badge">DAO</span>
+  </a>
+  <div class="header-right">
+    <a href="index.html" class="nav-link">Dashboard</a>
+    <a href="buy.html" class="nav-link">Buy CNOVA</a>
+    <a href="governance.html" class="nav-link active">Governance</a>
+    <button class="theme-toggle" onclick="toggleTheme()">☀️</button>
+    <button id="btn-connect" onclick="connectWallet()">Connect Wallet</button>
+  </div>
+</header>
+
+<main>
+
+  <!-- Hero -->
+  <div class="hero">
+    <div class="hero-badge">⚖️ On-Chain DAO</div>
+    <h1>CryptoNova <span>Governance</span></h1>
+    <p>CNOVA holders vote on protocol parameters. Every vote is on-chain, transparent, and binding.</p>
+  </div>
+
+  <!-- Voting Power -->
+  <div class="card">
+    <div class="card-title">
+      <div class="card-title-left"><span class="dot"></span> Your Voting Power</div>
+      <span id="power-refresh" style="font-size:11px;color:var(--text3);font-weight:400;text-transform:none;letter-spacing:0;cursor:pointer;" onclick="refreshVotingPower()">↻ Refresh</span>
+    </div>
+    <div class="power-grid">
+      <div class="power-stat">
+        <div class="power-label">CNOVA Balance</div>
+        <div class="power-value purple" id="cnova-balance">—</div>
+        <div class="power-sub">= your votes on any proposal</div>
+      </div>
+      <div class="power-stat">
+        <div class="power-label">Total CNOVA Supply</div>
+        <div class="power-value" id="total-supply">—</div>
+        <div class="power-sub" id="power-share">Connect wallet to see share</div>
+      </div>
+      <div class="power-stat">
+        <div class="power-label">Quorum Required</div>
+        <div class="power-value green" id="quorum-req">—</div>
+        <div class="power-sub" id="quorum-bps-label">2% of supply</div>
+      </div>
+      <div class="power-stat">
+        <div class="power-label">Open Proposals</div>
+        <div class="power-value" id="active-count">—</div>
+        <div class="power-sub">Voting period: 72h + 48h timelock</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Proposals -->
+  <div class="card">
+    <div class="card-title">
+      <div class="card-title-left"><span class="dot dot-green"></span> Proposals</div>
+    </div>
+    <div class="tab-strip">
+      <button class="tab-btn active" onclick="switchTab('active',this)">Active <span class="tab-count" id="cnt-active">0</span></button>
+      <button class="tab-btn" onclick="switchTab('timelocked',this)">Timelocked <span class="tab-count" id="cnt-timelocked">0</span></button>
+      <button class="tab-btn" onclick="switchTab('history',this)">History <span class="tab-count" id="cnt-history">0</span></button>
+    </div>
+    <div id="proposals-loading" class="loading-row"><div class="spinner"></div> Loading proposals…</div>
+    <div id="tab-active"     style="display:none;"></div>
+    <div id="tab-timelocked" style="display:none;"></div>
+    <div id="tab-history"    style="display:none;"></div>
+  </div>
+
+  <!-- Create Proposal -->
+  <div class="card">
+    <div class="card-title"><div class="card-title-left"><span class="dot"></span> Create Proposal</div></div>
+
+    <div class="form-row">
+      <label class="form-label">Parameter to Change</label>
+      <select class="form-select" id="param-select" onchange="onParamChange()">
+        <option value="">— Select a parameter —</option>
+        <optgroup label="TierRouter">
+          <option value="1">Auto-Upgrade Cycle Threshold</option>
+          <option value="2">Re-entry Min Cycles</option>
+          <option value="3">Escrow Floor Multiplier</option>
+        </optgroup>
+        <optgroup label="MatrixKeeper">
+          <option value="4">Velocity Window (seconds)</option>
+          <option value="5">Velocity Threshold</option>
+          <option value="6">Deflation Threshold</option>
+          <option value="7">Idle Slot Timeout (seconds)</option>
+          <option value="8">Max Items Per Upkeep</option>
+        </optgroup>
+        <optgroup label="Matrix Fees">
+          <option value="9">Withdrawal Fee (BPS)</option>
+          <option value="10">Early Exit Penalty (BPS)</option>
+        </optgroup>
+        <optgroup label="Governance Self">
+          <option value="11">Voting Period (seconds)</option>
+          <option value="12">Timelock Period (seconds)</option>
+          <option value="13">Quorum (BPS)</option>
+        </optgroup>
+      </select>
+    </div>
+
+    <div class="form-row" id="allowed-row" style="display:none;">
+      <label class="form-label">Allowed Values <span style="font-weight:400;color:var(--text3);">(select one)</span></label>
+      <div class="allowed-vals" id="allowed-vals"></div>
+      <input type="hidden" id="selected-value" />
+      <div class="form-hint" id="param-hint"></div>
+    </div>
+
+    <div class="form-row" id="target-row" style="display:none;">
+      <label class="form-label">Target Contract</label>
+      <input class="form-input" id="target-input" readonly style="color:var(--text3);font-size:12px;font-family:monospace;" />
+      <div class="form-hint">Auto-filled based on parameter selected.</div>
+    </div>
+
+    <div class="form-row">
+      <label class="form-label">Description / Rationale</label>
+      <textarea class="form-textarea" id="prop-description" placeholder="Explain why this change improves the protocol…"></textarea>
+      <div class="form-hint">Stored on-chain. Be clear — voters need context.</div>
+    </div>
+
+    <div id="propose-gate" style="font-size:13px;color:var(--text3);margin-bottom:10px;"></div>
+    <button class="btn-propose" id="btn-propose" disabled onclick="createProposal()">Submit Proposal</button>
+    <div id="prop-status"></div>
+  </div>
+
+  <!-- How it works -->
+  <div class="card">
+    <div class="card-title"><div class="card-title-left"><span class="dot"></span> How Governance Works</div></div>
+    <div class="how-grid">
+      <div class="how-step">
+        <div class="how-num">1</div>
+        <h4>Hold CNOVA</h4>
+        <p>Your vote weight equals your CNOVA balance at the time you vote. No staking, no lockup.</p>
+      </div>
+      <div class="how-step">
+        <div class="how-num">2</div>
+        <h4>Propose</h4>
+        <p>Any holder of at least 0.01% of supply can submit a param-change proposal. Only allowlisted values accepted.</p>
+      </div>
+      <div class="how-step">
+        <div class="how-num">3</div>
+        <h4>Vote — 72 Hours</h4>
+        <p>For or Against. Quorum = 2% of supply. Simple majority (>50% of votes cast) to pass.</p>
+      </div>
+      <div class="how-step">
+        <div class="how-num">4</div>
+        <h4>Timelock — 48 Hours</h4>
+        <p>Passed proposals enter a 48-hour timelock before anyone can execute. Community can review and respond.</p>
+      </div>
+      <div class="how-step">
+        <div class="how-num">5</div>
+        <h4>Execute</h4>
+        <p>After timelock, anyone can call execute. The parameter changes on-chain immediately. Expires if uncalled in 72h.</p>
+      </div>
+    </div>
+  </div>
+
+</main>
+
+<script>
+// ─────────────────────────────────────────────────────────────────────────────
+// CONFIG
+// ─────────────────────────────────────────────────────────────────────────────
+const CHAIN_ID    = 84532;
+const RPC_URL     = 'https://sepolia.base.org';
+const GOV_ADDR    = '0x239344c22947479C871998F8C3Ef04FDe8642Fb7';
+const CNOVA_ADDR  = '0xEab971fAEc2D2c81EFF732f01E6bDe3eF563cD7c';
+const TIER_ROUTER = '0x3Bb68f3de0Cf007dFD37F08a188386394F33207e';
+const MK_ADDR     = '0xc85A54319ec73e51F9Ad3033068c373e773312fb';
+
+// Param → { label, target, hint, formatFn }
+const PARAM_META = {
+  1:  { label:'Auto-Upgrade Cycle Threshold', target: TIER_ROUTER,  hint:'Cycles W1 must complete before auto-upgrade triggers.' },
+  2:  { label:'Re-entry Min Cycles',          target: TIER_ROUTER,  hint:'Minimum cycles a wallet must complete before re-entering.' },
+  3:  { label:'Escrow Floor Multiplier',      target: TIER_ROUTER,  hint:'BPS multiplier on floor for escrow-funded cross (e.g. 120 = 1.2×).' },
+  4:  { label:'Velocity Window (s)',          target: MK_ADDR,      hint:'Time window for velocity checks (seconds). 3600 = 1 hour.' },
+  5:  { label:'Velocity Threshold',           target: MK_ADDR,      hint:'Minimum fills required within the velocity window to keep gate open.' },
+  6:  { label:'Deflation Threshold',          target: MK_ADDR,      hint:'Parked wallet % above which deflation mode activates.' },
+  7:  { label:'Idle Slot Timeout (s)',        target: MK_ADDR,      hint:'Seconds before an idle slot is eligible for reclamation.' },
+  8:  { label:'Max Items Per Upkeep',         target: MK_ADDR,      hint:'Max work items processed per keeper call.' },
+  9:  { label:'Withdrawal Fee BPS',           target: TIER_ROUTER,  hint:'Fee on withdrawals in BPS (150 = 1.5%).' },
+  10: { label:'Early Exit Penalty BPS',       target: TIER_ROUTER,  hint:'Penalty on early matrix exit in BPS (2000 = 20%).' },
+  11: { label:'Voting Period (s)',            target: GOV_ADDR,     hint:'Duration of the voting window in seconds.' },
+  12: { label:'Timelock Period (s)',          target: GOV_ADDR,     hint:'Delay between proposal passing and execution in seconds.' },
+  13: { label:'Quorum BPS',                  target: GOV_ADDR,     hint:'Minimum % of CNOVA supply that must vote (200 = 2%).' },
+};
+
+// Value formatters for display
+const VALUE_LABELS = {
+  4:  v => `${v}s (${(v/3600).toFixed(1)}h)`,
+  7:  v => `${v}s (${(v/3600).toFixed(1)}h)`,
+  11: v => `${v}s (${(v/3600).toFixed(0)}h)`,
+  12: v => `${v}s (${(v/3600).toFixed(0)}h)`,
+  9:  v => `${v} BPS (${(v/100).toFixed(2)}%)`,
+  10: v => `${v} BPS (${(v/100).toFixed(1)}%)`,
+  13: v => `${v} BPS (${(v/100).toFixed(1)}%)`,
+};
+function fmtValue(paramId, v) {
+  return VALUE_LABELS[paramId] ? VALUE_LABELS[paramId](v) : String(v);
+}
+
+const STATE_LABELS = ['Active','Passed','Defeated','Timelocked','Executed','Expired','Cancelled'];
+const STATE_PILLS  = ['pill-active','pill-passed','pill-defeated','pill-timelocked','pill-executed','pill-expired','pill-cancelled'];
+
+// ── ABIs ─────────────────────────────────────────────────────────────────────
+const GOV_ABI = [
+  'function proposalCount() external view returns (uint256)',
+  'function proposals(uint256) external view returns (uint256 id,address proposer,uint256 startTime,uint256 endTime,uint256 timelockEnd,uint8 state,uint8 paramId,address target,uint256 newValue,string description,uint256 votesFor,uint256 votesAgainst,uint256 quorumRequired)',
+  'function hasVoted(uint256,address) external view returns (bool)',
+  'function getAllowedValues(uint8) external view returns (uint256[])',
+  'function quorumBps() external view returns (uint256)',
+  'function votingPeriod() external view returns (uint256)',
+  'function timelockPeriod() external view returns (uint256)',
+  'function propose(uint8,address,uint256,string) external returns (uint256)',
+  'function castVote(uint256,bool) external',
+  'function finalizeVote(uint256) external',
+  'function execute(uint256) external',
+];
+const ERC20_ABI = [
+  'function balanceOf(address) external view returns (uint256)',
+  'function totalSupply() external view returns (uint256)',
+];
+
+// ── State ─────────────────────────────────────────────────────────────────────
+let provider, signer, userAddr;
+let ro; // read-only provider
+let allProposals = [];
+let cnovaBalance = 0n;
+let totalSupply  = 0n;
+let quorumBps    = 200n;
+let selectedParamValue = null;
+let currentTab = 'active';
+
+// ── Theme ─────────────────────────────────────────────────────────────────────
+function toggleTheme() {
+  document.body.classList.toggle('light');
+  localStorage.setItem('theme', document.body.classList.contains('light') ? 'light' : 'dark');
+}
+if (localStorage.getItem('theme') === 'light') document.body.classList.add('light');
+
+// ── Wallet ─────────────────────────────────────────────────────────────────────
+async function connectWallet() {
+  if (!window.ethereum) { alert('No wallet found. Install MetaMask.'); return; }
+  try {
+    provider = new ethers.BrowserProvider(window.ethereum);
+    await provider.send('eth_requestAccounts', []);
+    const net = await provider.getNetwork();
+    if (Number(net.chainId) !== CHAIN_ID) {
+      alert(`Wrong network. Switch to Base Sepolia (${CHAIN_ID}).`); return;
+    }
+    signer  = await provider.getSigner();
+    userAddr = await signer.getAddress();
+    const btn = document.getElementById('btn-connect');
+    btn.textContent = userAddr.slice(0,6) + '…' + userAddr.slice(-4);
+    btn.classList.add('connected');
+    await refreshVotingPower();
+    renderProposals(); // re-render to add vote buttons + voted state
+    updateProposeGate();
+  } catch(e) { alert('Connection failed: ' + e.message); }
+}
+
+// ── Voting power ─────────────────────────────────────────────────────────────
+async function refreshVotingPower() {
+  try {
+    const cnova = new ethers.Contract(CNOVA_ADDR, ERC20_ABI, ro || new ethers.JsonRpcProvider(RPC_URL, CHAIN_ID, { staticNetwork: true }));
+    const gov   = new ethers.Contract(GOV_ADDR,   GOV_ABI,   ro || new ethers.JsonRpcProvider(RPC_URL, CHAIN_ID, { staticNetwork: true }));
+
+    totalSupply = await cnova.totalSupply();
+    quorumBps   = await gov.quorumBps();
+    const quorumAmt = totalSupply * quorumBps / 10_000n;
+
+    const fmtC = n => (Number(n) / 1e18).toLocaleString('en-US', { maximumFractionDigits: 2 });
+    document.getElementById('total-supply').textContent   = fmtC(totalSupply);
+    document.getElementById('quorum-req').textContent     = fmtC(quorumAmt);
+    document.getElementById('quorum-bps-label').textContent = `${Number(quorumBps)/100}% of supply`;
+
+    if (userAddr) {
+      cnovaBalance = await cnova.balanceOf(userAddr);
+      document.getElementById('cnova-balance').textContent = fmtC(cnovaBalance);
+      const sharePct = totalSupply > 0n
+        ? (Number(cnovaBalance) / Number(totalSupply) * 100).toFixed(4)
+        : '0.0000';
+      document.getElementById('power-share').textContent = `${sharePct}% of supply`;
+    } else {
+      document.getElementById('cnova-balance').textContent = '—';
+    }
+  } catch(e) { console.warn('refreshVotingPower:', e); }
+}
+
+// ── Load proposals ────────────────────────────────────────────────────────────
+async function loadProposals() {
+  ro = new ethers.JsonRpcProvider(RPC_URL, CHAIN_ID, { staticNetwork: true });
+  const gov = new ethers.Contract(GOV_ADDR, GOV_ABI, ro);
+
+  await refreshVotingPower();
+
+  let count = 0n;
+  try { count = await gov.proposalCount(); } catch(e) { console.warn(e); }
+  document.getElementById('active-count').textContent = '—';
+
+  allProposals = [];
+  const fetches = [];
+  for (let i = 1n; i <= count; i++) {
+    fetches.push(gov.proposals(i).then(p => allProposals.push(p)).catch(() => {}));
+  }
+  await Promise.all(fetches);
+
+  // If wallet connected, fetch hasVoted for each
+  if (userAddr) {
+    await Promise.all(allProposals.map(async p => {
+      try { p._voted = await gov.hasVoted(p.id, userAddr); }
+      catch { p._voted = false; }
+    }));
+  }
+
+  document.getElementById('proposals-loading').style.display = 'none';
+  document.getElementById('active-count').textContent =
+    allProposals.filter(p => p.state === 0n).length;
+
+  renderProposals();
+  updateProposeGate();
+}
+
+// ── Render proposals ──────────────────────────────────────────────────────────
+function renderProposals() {
+  const active     = allProposals.filter(p => Number(p.state) === 0);
+  const timelocked = allProposals.filter(p => Number(p.state) === 3);
+  const history    = allProposals.filter(p => ![0,3].includes(Number(p.state)));
+
+  document.getElementById('cnt-active').textContent     = active.length;
+  document.getElementById('cnt-timelocked').textContent = timelocked.length;
+  document.getElementById('cnt-history').textContent    = history.length;
+
+  renderTab('tab-active',     active,     'No active proposals right now.');
+  renderTab('tab-timelocked', timelocked, 'No proposals in timelock.');
+  renderTab('tab-history',    history,    'No historical proposals yet.');
+
+  switchTabContent(currentTab);
+}
+
+function renderTab(divId, proposals, emptyMsg) {
+  const el = document.getElementById(divId);
+  if (proposals.length === 0) {
+    el.innerHTML = `<div class="empty"><div class="empty-icon">🗳️</div>${emptyMsg}</div>`;
+    return;
+  }
+  el.innerHTML = [...proposals].reverse().map(p => renderProposal(p)).join('');
+}
+
+function renderProposal(p) {
+  const stateN   = Number(p.state);
+  const paramId  = Number(p.paramId);
+  const meta     = PARAM_META[paramId] || { label: `Param #${paramId}`, target: p.target };
+  const now      = Math.floor(Date.now() / 1000);
+  const endTime  = Number(p.endTime);
+  const tlEnd    = Number(p.timelockEnd);
+  const isActive = stateN === 0;
+  const isTL     = stateN === 3;
+
+  // Vote bars
+  const vFor  = Number(p.votesFor)     / 1e18;
+  const vAgs  = Number(p.votesAgainst) / 1e18;
+  const total = vFor + vAgs;
+  const forPct = total > 0 ? (vFor  / total * 100) : 0;
+  const agsPct = total > 0 ? (vAgs / total * 100)  : 0;
+  const quorumNeeded = Number(p.quorumRequired) / 1e18;
+  const quorumPct = quorumNeeded > 0 ? Math.min(100, total / quorumNeeded * 100) : 0;
+
+  // Countdown
+  let countdown = '';
+  if (isActive && endTime > now) {
+    const rem = endTime - now;
+    const h = Math.floor(rem / 3600), m = Math.floor((rem % 3600) / 60);
+    countdown = `<span class="countdown${rem < 3600 ? ' urgent' : ''}">${h}h ${m}m left</span>`;
+  } else if (isTL && tlEnd > now) {
+    const rem = tlEnd - now;
+    const h = Math.floor(rem / 3600), m = Math.floor((rem % 3600) / 60);
+    countdown = `<span class="countdown">${h}h ${m}m until executable</span>`;
+  }
+
+  // Footer buttons
+  let footer = '';
+  const voted = p._voted;
+  const canVote = isActive && endTime > now && userAddr && !voted;
+  const canFinalize = isActive && endTime <= now && userAddr;
+  const canExecute  = isTL && tlEnd <= now && userAddr;
+
+  if (canVote) {
+    footer = `
+      <button class="btn-vote-for"     onclick="vote(${p.id}, true)">✓ Vote For</button>
+      <button class="btn-vote-against" onclick="vote(${p.id}, false)">✗ Vote Against</button>
+      ${countdown}`;
+  } else if (voted) {
+    footer = `<span class="voted-badge">✅ You voted</span>${countdown}`;
+  } else if (canFinalize) {
+    footer = `<button class="btn-action" onclick="finalize(${p.id})">Finalize Vote</button>${countdown}`;
+  } else if (canExecute) {
+    footer = `<button class="btn-action" onclick="executeProposal(${p.id})">Execute Now</button>${countdown}`;
+  } else if (isActive || isTL) {
+    footer = `<span style="font-size:12px;color:var(--text3);">Connect wallet to participate</span>${countdown}`;
+  }
+
+  return `
+  <div class="proposal">
+    <div class="proposal-header">
+      <div>
+        <div class="proposal-id">Proposal #${p.id}</div>
+        <div class="proposal-title">${escHtml(p.description || meta.label)}</div>
+        <div class="proposal-meta">
+          Proposer: <span>${String(p.proposer).slice(0,6)}…${String(p.proposer).slice(-4)}</span>
+        </div>
+        <span class="proposal-param">${meta.label} → ${fmtValue(paramId, Number(p.newValue))}</span>
+      </div>
+      <span class="pill ${STATE_PILLS[stateN] || 'pill-expired'}">${STATE_LABELS[stateN] || '?'}</span>
+    </div>
+    <div class="vote-bars">
+      <div class="vote-row">
+        <span class="vote-label for">For</span>
+        <div class="bar-track"><div class="bar-fill bar-for" style="width:${forPct.toFixed(1)}%"></div></div>
+        <span class="vote-pct">${forPct.toFixed(0)}%</span>
+      </div>
+      <div class="vote-row">
+        <span class="vote-label against">Against</span>
+        <div class="bar-track"><div class="bar-fill bar-against" style="width:${agsPct.toFixed(1)}%"></div></div>
+        <span class="vote-pct">${agsPct.toFixed(0)}%</span>
+      </div>
+      <div class="quorum-row">
+        Quorum: ${total.toFixed(2)} / ${quorumNeeded.toFixed(2)} CNOVA (${quorumPct.toFixed(0)}%)
+        <div class="quorum-bar-track"><div class="quorum-bar-fill" style="width:${quorumPct.toFixed(1)}%"></div></div>
+      </div>
+    </div>
+    ${footer ? `<div class="proposal-footer">${footer}</div>` : ''}
+  </div>`;
+}
+
+// ── Tab switching ─────────────────────────────────────────────────────────────
+function switchTab(tab, btn) {
+  currentTab = tab;
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  switchTabContent(tab);
+}
+function switchTabContent(tab) {
+  ['active','timelocked','history'].forEach(t => {
+    document.getElementById('tab-' + t).style.display = t === tab ? 'block' : 'none';
+  });
+}
+
+// ── Voting actions ────────────────────────────────────────────────────────────
+async function vote(proposalId, support) {
+  if (!signer) { alert('Connect wallet first.'); return; }
+  try {
+    setPropStatus(`Sending ${support ? 'For' : 'Against'} vote…`, 'info');
+    const gov = new ethers.Contract(GOV_ADDR, GOV_ABI, signer);
+    const tx  = await gov.castVote(BigInt(proposalId), support, { gasLimit: 200_000 });
+    setPropStatus('Waiting for confirmation…', 'info');
+    await tx.wait();
+    setPropStatus(`✅ Vote cast! TX: ${tx.hash.slice(0,18)}…`, 'success');
+    await loadProposals();
+  } catch(e) {
+    setPropStatus('Vote failed: ' + (e.reason || e.shortMessage || e.message || e), 'error');
+  }
+}
+
+async function finalize(proposalId) {
+  if (!signer) return;
+  try {
+    setPropStatus('Finalizing vote…', 'info');
+    const gov = new ethers.Contract(GOV_ADDR, GOV_ABI, signer);
+    const tx  = await gov.finalizeVote(BigInt(proposalId), { gasLimit: 150_000 });
+    await tx.wait();
+    setPropStatus('✅ Vote finalized!', 'success');
+    await loadProposals();
+  } catch(e) {
+    setPropStatus('Finalize failed: ' + (e.reason || e.shortMessage || e.message || e), 'error');
+  }
+}
+
+async function executeProposal(proposalId) {
+  if (!signer) return;
+  try {
+    setPropStatus('Executing proposal…', 'info');
+    const gov = new ethers.Contract(GOV_ADDR, GOV_ABI, signer);
+    const tx  = await gov.execute(BigInt(proposalId), { gasLimit: 300_000 });
+    await tx.wait();
+    setPropStatus('✅ Proposal executed! Parameter updated on-chain.', 'success');
+    await loadProposals();
+  } catch(e) {
+    setPropStatus('Execute failed: ' + (e.reason || e.shortMessage || e.message || e), 'error');
+  }
+}
+
+// ── Create proposal ───────────────────────────────────────────────────────────
+async function onParamChange() {
+  selectedParamValue = null;
+  const paramId = parseInt(document.getElementById('param-select').value);
+  if (!paramId) {
+    document.getElementById('allowed-row').style.display = 'none';
+    document.getElementById('target-row').style.display  = 'none';
+    updateProposeGate();
+    return;
+  }
+  const meta = PARAM_META[paramId];
+  document.getElementById('param-hint').textContent     = meta.hint;
+  document.getElementById('target-input').value         = meta.target;
+  document.getElementById('target-row').style.display   = 'block';
+  document.getElementById('allowed-row').style.display  = 'block';
+
+  // Fetch allowed values from contract
+  const avDiv = document.getElementById('allowed-vals');
+  avDiv.innerHTML = '<span style="color:var(--text3);font-size:12px;">Loading…</span>';
+  try {
+    const _ro  = ro || new ethers.JsonRpcProvider(RPC_URL, CHAIN_ID, { staticNetwork: true });
+    const gov  = new ethers.Contract(GOV_ADDR, GOV_ABI, _ro);
+    const vals = await gov.getAllowedValues(paramId);
+    avDiv.innerHTML = vals.map(v =>
+      `<div class="av-chip" onclick="selectValue(this, ${v})">${fmtValue(paramId, Number(v))}</div>`
+    ).join('');
+  } catch {
+    avDiv.innerHTML = '<span style="color:var(--red);font-size:12px;">Could not load allowed values.</span>';
+  }
+  updateProposeGate();
+}
+
+function selectValue(chip, val) {
+  document.querySelectorAll('.av-chip').forEach(c => c.classList.remove('selected'));
+  chip.classList.add('selected');
+  selectedParamValue = BigInt(val);
+  document.getElementById('selected-value').value = val;
+  updateProposeGate();
+}
+
+function updateProposeGate() {
+  const gate    = document.getElementById('propose-gate');
+  const btn     = document.getElementById('btn-propose');
+  const paramId = parseInt(document.getElementById('param-select').value);
+
+  if (!userAddr) {
+    gate.textContent = 'Connect wallet to submit a proposal.';
+    btn.disabled = true; return;
+  }
+  if (totalSupply === 0n) {
+    gate.textContent = 'Loading supply data…';
+    btn.disabled = true; return;
+  }
+  const minTokens = totalSupply / 10_000n;
+  if (cnovaBalance < minTokens) {
+    const minF = (Number(minTokens) / 1e18).toFixed(4);
+    gate.textContent = `You need at least ${minF} CNOVA (0.01% of supply) to propose.`;
+    btn.disabled = true; return;
+  }
+  if (!paramId) {
+    gate.textContent = 'Select a parameter to continue.';
+    btn.disabled = true; return;
+  }
+  if (selectedParamValue === null) {
+    gate.textContent = 'Select an allowed value above.';
+    btn.disabled = true; return;
+  }
+  gate.textContent = '✓ Ready to submit.';
+  btn.disabled = false;
+}
+
+async function createProposal() {
+  if (!signer || selectedParamValue === null) return;
+  const paramId     = parseInt(document.getElementById('param-select').value);
+  const target      = document.getElementById('target-input').value;
+  const description = document.getElementById('prop-description').value.trim();
+  if (!description) { setPropStatus('Please add a description.', 'error'); return; }
+  try {
+    setPropStatus('Submitting proposal… please confirm in wallet.', 'info');
+    const gov = new ethers.Contract(GOV_ADDR, GOV_ABI, signer);
+    const tx  = await gov.propose(paramId, target, selectedParamValue, description, { gasLimit: 400_000 });
+    setPropStatus('Waiting for confirmation…', 'info');
+    await tx.wait();
+    setPropStatus('✅ Proposal submitted! Voting opens now.', 'success');
+    document.getElementById('param-select').value = '';
+    document.getElementById('prop-description').value = '';
+    document.getElementById('allowed-row').style.display = 'none';
+    document.getElementById('target-row').style.display  = 'none';
+    selectedParamValue = null;
+    await loadProposals();
+  } catch(e) {
+    setPropStatus('Failed: ' + (e.reason || e.shortMessage || e.message || e), 'error');
+  }
+}
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+function setPropStatus(msg, type) {
+  const el = document.getElementById('prop-status');
+  el.textContent = msg;
+  el.className   = type;
+}
+function escHtml(str) {
+  return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// ── Init ─────────────────────────────────────────────────────────────────────
+loadProposals();
+setInterval(loadProposals, 60_000);
+
+if (window.ethereum) {
+  window.ethereum.request({ method: 'eth_accounts' }).then(a => { if (a.length) connectWallet(); });
+  window.ethereum.on('accountsChanged', () => connectWallet());
+  window.ethereum.on('chainChanged',    () => location.reload());
+}
+</script>
+</body>
+</html>
