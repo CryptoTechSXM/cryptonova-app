@@ -409,71 +409,97 @@ async function inlineRescueParked({ matA1, matB1, stabilityFund, matrixKeeper, r
   }
 }
 
-// ── Manual upgrade simulation (V8.18) ────────────────────────────────────────
-// After each batch, finds mnemonic wallets currently sitting in T1 MatB (upgrade-eligible)
-// that haven't yet entered T2.  Randomly selects UPGRADE_RATE% of them, funds each
-// from the funder wallet, approves TierRouter, calls manualUpgrade(1).
+// ── Manual upgrade simulation (V8.18, self-funded + multi-tier as of V8.19) ──
+// After each batch, finds wallets currently sitting in a tier's MatB (upgrade-
+// eligible) that haven't yet entered the next tier up. Eligibility requires
+// the member to ALREADY hold the next tier's fee in their OWN wallet —
+// simulating a real member who deliberately keeps extra USDC on hand (e.g.
+// $100 total in the wallet at registration: $10 signup + $25 reserved for T2
+// + enough left to also self-upgrade T2→T3) rather than depending on matrix
+// withdrawable earnings.
+// The funder tops up ETH for gas only (gas is an operational/testnet concern,
+// not part of the economic simulation) — it NEVER tops up the USDC upgrade fee.
+// A wallet that wasn't pre-funded with enough reserve (FUND_AMOUNT, see funding
+// loop above) simply isn't eligible and is silently excluded — it is NOT
+// charity-funded into eligibility.
+// Of the wallets that ARE self-funded-eligible, UPGRADE_RATE% are randomly
+// selected to actually submit the upgrade this batch (simulates members not
+// all clicking "upgrade" the instant they qualify).
+// Generic across tier hops — call once per hop (T1 MatB→T2, T2 MatB→T3, …).
 // Returns the updated fNonce so the caller can keep its state consistent.
 async function simulateManualUpgrades({
-  walletList, tierRouter, matB1, matA2, usdc, usdcFunder, rawFunder,
-  funderAddr, fNonce, tierRouterAddr, t2Fee,
+  walletList, tierRouter, fromMatB, toMatA, usdc, usdcFunder, rawFunder,
+  funderAddr, fNonce, tierRouterAddr, fee, targetTierIndex, tierLabel,
 }) {
   if (UPGRADE_RATE <= 0) return fNonce;
-  if (!matA2) return fNonce;            // T2 not deployed yet
-  if (t2Fee === 0n) return fNonce;
+  if (!fromMatB || !toMatA) return fNonce;   // this tier hop not deployed yet
+  if (fee === 0n) return fNonce;
 
-  // Find eligible wallets: in T1 MatB AND NOT already in T2
+  // Find eligible wallets: in the source tier's MatB, NOT already in the
+  // target tier's MatA, AND already holding the target tier's fee in their
+  // own wallet (self-funded — no funder top-up, ever).
   const eligible = [];
+  let notSelfFunded = 0;
   for (const w of walletList) {
     try {
-      const [inMatB, inT2A] = await Promise.all([
-        matB1.isActiveInMatrix(w.address).catch(() => false),
-        matA2.isActiveInMatrix(w.address).catch(() => false),
+      const [inMatB, inTargetA] = await Promise.all([
+        fromMatB.isActiveInMatrix(w.address).catch(() => false),
+        toMatA.isActiveInMatrix(w.address).catch(() => false),
       ]);
-      if (!inMatB) continue;      // not yet in T1 MatB — skip
-      if (inT2A)   continue;      // already in T2 MatA — skip
+      if (!inMatB)    continue;     // not yet in source tier's MatB — skip
+      if (inTargetA)  continue;     // already in target tier's MatA — skip
+
+      const ownUsdc = await usdc.balanceOf(w.address).catch(() => 0n);
+      if (ownUsdc < fee) { notSelfFunded++; continue; } // can't self-upgrade — not eligible
+
       eligible.push(w);
     } catch { /* skip on RPC error */ }
   }
 
-  if (eligible.length === 0) return fNonce;
+  if (eligible.length === 0) {
+    if (notSelfFunded > 0) {
+      console.log(`  Manual upgrade → ${tierLabel}: 0 eligible (${notSelfFunded} in prior MatB but lack own-wallet ${tierLabel} fee — not self-funded)`);
+    }
+    return fNonce;
+  }
 
   // Randomly select UPGRADE_RATE fraction
   const shuffled = eligible.sort(() => Math.random() - 0.5);
   const toUpgrade = shuffled.slice(0, Math.max(1, Math.round(shuffled.length * UPGRADE_RATE)));
 
-  sep(`Manual Upgrade Simulation — ${eligible.length} eligible → upgrading ${toUpgrade.length} (${Math.round(UPGRADE_RATE * 100)}%)`);
+  sep(`Manual Upgrade Simulation → ${tierLabel} — ${eligible.length} self-funded eligible (+${notSelfFunded} lacking own funds) → upgrading ${toUpgrade.length} (${Math.round(UPGRADE_RATE * 100)}%)`);
   let upgraded = 0, skipped = 0;
 
   for (const w of toUpgrade) {
     try {
       const conn = w.connect(ethers.provider);
 
-      // Fund wallet with ETH if needed
+      // Fund wallet with ETH if needed — gas only. The tier fee itself is
+      // NEVER funded here; eligibility above already guaranteed the member
+      // holds it from their own wallet.
       const ethBal = await ethers.provider.getBalance(w.address);
       if (ethBal < 200_000_000_000n) {
+        // Re-sync immediately before use, not just trust the value threaded in
+        // from the caller — other funder-wallet operations elsewhere in this
+        // same batch (registration funding, forceCross USDC transfers) can
+        // advance the on-chain nonce in between, leaving fNonce stale here.
+        // This mirrors the re-sync-before-use pattern used everywhere else
+        // in this file (see the catch block right below, and the funding/
+        // forceCross loops).
+        fNonce = Number(await ethers.provider.getTransactionCount(funderAddr, 'pending'));
         const tx = await rawFunder.sendTransaction({ to: w.address, value: ethers.parseEther("0.02"), nonce: fNonce });
         await tx.wait();
         fNonce++;
       }
 
-      // Fund wallet with T2 USDC if needed
-      const usdcBal = await usdc.balanceOf(w.address);
-      if (usdcBal < t2Fee) {
-        const tx = await usdcFunder.transfer(w.address, t2Fee, { nonce: fNonce });
-        await tx.wait();
-        fNonce++;
-      }
-
-      // Approve TierRouter to spend T2 fee
+      // Approve TierRouter to spend the target tier's fee
       const allowance = await usdc.allowance(w.address, tierRouterAddr);
-      if (allowance < t2Fee) {
-        await (await usdc.connect(conn).approve(tierRouterAddr, t2Fee)).wait();
+      if (allowance < fee) {
+        await (await usdc.connect(conn).approve(tierRouterAddr, fee)).wait();
       }
 
-      // manualUpgrade(1) = upgrade to T2 (targetTierIndex = 1)
-      await (await tierRouter.connect(conn).manualUpgrade(1, { gasLimit: 15_000_000 })).wait();
-      console.log(`  ✓ manualUpgrade T2  ${w.address.slice(0, 10)}…`);
+      await (await tierRouter.connect(conn).manualUpgrade(targetTierIndex, { gasLimit: 15_000_000 })).wait();
+      console.log(`  ✓ manualUpgrade ${tierLabel}  ${w.address.slice(0, 10)}…`);
       upgraded++;
     } catch (e) {
       const msg = e.shortMessage || e.message?.slice(0, 100) || 'unknown';
@@ -488,8 +514,8 @@ async function simulateManualUpgrades({
   }
 
   if (upgraded > 0 || skipped > 0) {
-    const t2Occ = matA2 ? await matA2.occupancy().catch(() => 0n) : 0n;
-    console.log(`  Upgrades: ${upgraded} succeeded, ${skipped} skipped | T2 MatA occ: ${t2Occ}`);
+    const occ = await toMatA.occupancy().catch(() => 0n);
+    console.log(`  Upgrades: ${upgraded} succeeded, ${skipped} skipped | ${tierLabel} MatA occ: ${occ}`);
   }
   return fNonce;
 }
@@ -624,6 +650,7 @@ async function main() {
   const SF_ADDR     = addrs.stabilityFund;
   const T1          = addrs.tiers?.T1   || { matA: addrs.T1?.matA || addrs.T1?.MatrixA,  matB: addrs.T1?.matB || addrs.T1?.MatrixB,  pm: addrs.T1?.pm || addrs.T1?.PairManager };
   const T2          = addrs.tiers?.T2   || { matA: addrs.T2?.matA || addrs.T2?.MatrixA,  matB: addrs.T2?.matB || addrs.T2?.MatrixB,  pm: addrs.T2?.pm || addrs.T2?.PairManager };
+  const T3          = addrs.tiers?.T3   || { matA: addrs.T3?.matA || addrs.T3?.MatrixA,  matB: addrs.T3?.matB || addrs.T3?.MatrixB,  pm: addrs.T3?.pm || addrs.T3?.PairManager };
 
   const usdc         = await ethers.getContractAt("MockUSDC",            USDC_ADDR, deployer);
   // usdcFunder: same contract, but signed by the fresh funder wallet.
@@ -641,6 +668,8 @@ async function main() {
   const pm1          = await ethers.getContractAt("PairManagerV8",       T1.pm);
   const matA2        = T2.matA ? await ethers.getContractAt("FigureEightMatrixV8", T2.matA) : null;
   const matB2        = T2.matB ? await ethers.getContractAt("FigureEightMatrixV8", T2.matB) : null;
+  const matA3        = T3.matA ? await ethers.getContractAt("FigureEightMatrixV8", T3.matA) : null;
+  const matB3        = T3.matB ? await ethers.getContractAt("FigureEightMatrixV8", T3.matB) : null;
   const stabilityFund = SF_ADDR ? await ethers.getContractAt("StabilityFund", SF_ADDR) : null;
   const MK_ADDR    = addrs.matrixKeeper || addrs.MatrixKeeper || null;
   const matrixKeeper = MK_ADDR ? await ethers.getContractAt("MatrixKeeper", MK_ADDR, deployer) : null;
@@ -652,6 +681,21 @@ async function main() {
 
   const T1_FEE  = await matA1.ENTRY_FEE();
   const T2_FEE  = matA2 ? await matA2.ENTRY_FEE().catch(() => 0n) : 0n;
+  const T3_FEE  = matA3 ? await matA3.ENTRY_FEE().catch(() => 0n) : 0n;
+  // V8.19: members are pre-funded well past the signup fee — a real member who
+  // wants to self-upgrade at every crossing deliberately keeps a cash reserve
+  // in their wallet (your example: $100 total = $10 signup + $25 for T2 + the
+  // rest earmarked for T3, instead of relying on matrix withdrawable earnings).
+  // Default reserve is a flat $100 USDC (covers T1+T2+T3 = $85 with headroom);
+  // override with FUND_AMOUNT_USDC env var if tiers/fees change. Manual upgrade
+  // never tops anyone up from the funder — see simulateManualUpgrades().
+  const TIER_FEE_SUM = T1_FEE + T2_FEE + T3_FEE;
+  const FUND_AMOUNT  = process.env.FUND_AMOUNT_USDC
+    ? ethers.parseUnits(process.env.FUND_AMOUNT_USDC, 6)
+    : ethers.parseUnits("100", 6);
+  if (FUND_AMOUNT < TIER_FEE_SUM) {
+    console.log(`  ⚠  FUND_AMOUNT (${fmt6(FUND_AMOUNT)}) is less than T1+T2+T3 fees (${fmt6(TIER_FEE_SUM)}) — some wallets won't be able to self-fund all the way to T3.`);
+  }
   const mSize   = await matA1.MATRIX_SIZE();
   const W1_ADDR = process.env.REFERRER || addrs.accountOne || addrs.AccountOne;
 
@@ -663,7 +707,8 @@ async function main() {
   sep(`bigfill_v8.js — ${COUNT} wallets · batch ${BATCH_SIZE} · delay ${BATCH_DELAY}s · offset ${HDR_OFFSET}`);
   console.log(`  Deployer:   ${deployerAddr}`);
   console.log(`  Referrer:   ${W1_ADDR}  (W1 / Account #1)`);
-  console.log(`  T1 fee:     ${fmt6(T1_FEE)}`);
+  console.log(`  T1 fee:     ${fmt6(T1_FEE)}  (T2: ${fmt6(T2_FEE)}  T3: ${fmt6(T3_FEE)})`);
+  console.log(`  Wallet reserve: ${fmt6(FUND_AMOUNT)} per member at registration (self-funds T1 signup + up to T2/T3 upgrades)`);
   console.log(`  Matrix sz:  ${mSize}  (testnet)`);
   console.log(`  TierRouter: ${addrs.tierRouter || addrs.TierRouter}`);
   console.log(`  Watching:   ${watchAddrs.length} wallet(s) — report every ${WATCH_EVERY} batches`);
@@ -752,12 +797,12 @@ async function main() {
   const SLICE = 20;
   let ok = 0;
 
-  // Skip already-funded wallets (idempotent: ETH ≥ ETH_PER/2 AND USDC ≥ T1_FEE)
+  // Skip already-funded wallets (idempotent: ETH ≥ ETH_PER/2 AND USDC ≥ FUND_AMOUNT)
   const walletsToFund = [];
   for (const w of wallets) {
     const ethBal  = await ethers.provider.getBalance(w.address);
     const usdcBal = await usdc.balanceOf(w.address);
-    if (ethBal < ETH_PER / 2n || usdcBal < T1_FEE) {
+    if (ethBal < ETH_PER / 2n || usdcBal < FUND_AMOUNT) {
       walletsToFund.push(w);
     }
   }
@@ -767,8 +812,8 @@ async function main() {
   // Run scripts/fund_funder.js first if either balance is too low.
   const funderBal2   = await ethers.provider.getBalance(funderAddr);
   const funderUsdc2  = await usdc.balanceOf(funderAddr);
-  const ethNeeded    = ETH_PER * BigInt(walletsToFund.length);
-  const usdcNeeded2  = T1_FEE  * BigInt(walletsToFund.length);
+  const ethNeeded    = ETH_PER     * BigInt(walletsToFund.length);
+  const usdcNeeded2  = FUND_AMOUNT * BigInt(walletsToFund.length);
   console.log(`  Deployer ETH:   ${ethers.formatEther(await ethers.provider.getBalance(deployerAddr))}`);
   console.log(`  Funder ETH:     ${ethers.formatEther(funderBal2)}  (need ${ethers.formatEther(ethNeeded)})`);
   console.log(`  Funder USDC:    ${fmt6(funderUsdc2)}  (need ${fmt6(usdcNeeded2)})`);
@@ -810,8 +855,11 @@ async function main() {
       }
       // USDC transfer — explicit nonce override on the contract call.
       // funder holds a pre-minted bulk balance from fund_funder.js (2M USDC).
+      // V8.19: send T1 fee + T2 reserve up front (FUND_AMOUNT) so the member's
+      // own wallet already holds enough to self-upgrade later — no funder
+      // top-up at upgrade time.
       try {
-        const tx = await usdcFunder.transfer(w.address, T1_FEE, { nonce: fNonce });
+        const tx = await usdcFunder.transfer(w.address, FUND_AMOUNT, { nonce: fNonce });
         await tx.wait();
         fNonce++; // only increment after confirmed
       } catch (e) {
@@ -1026,13 +1074,23 @@ async function main() {
     // Inline parked rescue — after every batch, rescue any eligible parked members
     await inlineRescueParked({ matA1, matB1, stabilityFund, matrixKeeper, rawDeployer: rawSigner, deployer: rawSigner, entryFee: T1_FEE });
 
-    // V8.18: Manual upgrade simulation — 75% of T1-MatB wallets self-upgrade to T2
+    // V8.19: Manual upgrade simulation — UPGRADE_RATE% of eligible, self-funded
+    // wallets upgrade each hop. Run T1→T2 first, then T2→T3 — a wallet can
+    // chain both in the same batch if it's already crossed T1 MatB AND holds
+    // enough of its own USDC reserve to cover both fees.
     fNonce = await simulateManualUpgrades({
-      walletList: wallets, tierRouter, matB1, matA2,
+      walletList: wallets, tierRouter, fromMatB: matB1, toMatA: matA2,
       usdc, usdcFunder, rawFunder,
       funderAddr, fNonce,
       tierRouterAddr: addrs.tierRouter || addrs.TierRouter,
-      t2Fee: T2_FEE,
+      fee: T2_FEE, targetTierIndex: 1, tierLabel: "T2",
+    });
+    fNonce = await simulateManualUpgrades({
+      walletList: wallets, tierRouter, fromMatB: matB2, toMatA: matA3,
+      usdc, usdcFunder, rawFunder,
+      funderAddr, fNonce,
+      tierRouterAddr: addrs.tierRouter || addrs.TierRouter,
+      fee: T3_FEE, targetTierIndex: 2, tierLabel: "T3",
     });
 
     // Inline forceCross check — every 10 batches OR immediately after a cycle
@@ -1277,6 +1335,7 @@ async function main() {
       console.log(`  MatB after forceCross: ${matBAfter} / ${matBSize}`);
       console.log(`  Crossed ${crossed} / ${toCross.length} wallets`);
 
+    } // end else (toCross.length === 0)
     } // end else (forceCross — cycles have happened)
   } // end else (SKIP_ADMIN_CROSS not set)
 
@@ -1308,7 +1367,6 @@ async function main() {
     }
   }
   sep();
-}
 }
 
 
