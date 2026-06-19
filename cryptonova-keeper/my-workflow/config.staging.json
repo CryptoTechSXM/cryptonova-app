@@ -1,0 +1,10 @@
+{
+  "schedule": "0 */5 * * * *",
+  "evms": [
+    {
+      "chainSelectorName": "ethereum-testnet-sepolia-base-1",
+      "matrixKeeperAddress": "0xc85A54319ec73e51F9Ad3033068c373e773312fb",
+      "receiverAddress": "0x2dEb3BCEBDB4d906356B400C098a9eE964bF1CBe"
+    }
+  ]
+}
