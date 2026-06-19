@@ -561,7 +561,7 @@ async function snapshot(label, { tierRouter, pm1, matA1, matB1, matA2, matB2,
       const w1T2 = await matA2.getMember(w1Addr);
       if (w1T2.hasEverJoined) {
         console.log(`  W1 T2 withdrawable:  ${fmt6(w1T2.withdrawable)}`);
-        console.log(`  W1 T2 BFS pos:       ${w1T2.bfsPosition}`);
+        console.log(`  W1 T2 member ID:     ${w1T2.id}  (join order in T2 MatA)`);
       }
     } catch {}
     const w1T2Cycles = await tierRouter.tierCycles(w1Addr, 1);
