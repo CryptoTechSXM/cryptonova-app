@@ -2112,6 +2112,32 @@ function setText(id, val) {
   if (el) el.innerHTML = val;
 }
 
+// Retry a flaky on-chain read a few times before giving up. Base Sepolia's public RPC
+// is load-balanced across nodes and individual reads occasionally fail/time out — without
+// this, callers doing `.catch(() => 0n)` or `.catch(() => ethers.ZeroAddress)` can't tell
+// a real zero/empty result apart from "the RPC call failed", which silently shows wrong
+// data (e.g. BFS Position or Direct Referrals flipping between page loads with no
+// indication anything went wrong). Returns { value, ok } so callers can render an
+// honest "unknown" state instead of a confident-looking but possibly-wrong default.
+async function retryRead(fn, attempts = 3, delayMs = 400) {
+  let lastErr;
+  for (let i = 0; i < attempts; i++) {
+    try {
+      return { value: await fn(), ok: true };
+    } catch (e) {
+      lastErr = e;
+      if (i < attempts - 1) await new Promise(r => setTimeout(r, delayMs * (i + 1)));
+    }
+  }
+  return { value: undefined, ok: false, error: lastErr };
+}
+
+// Small "read failed" badge with a tooltip explaining why — used wherever a retried
+// read still comes back unknown, so the UI never silently shows a wrong number.
+function unknownBadge(tooltip) {
+  return `<span title="${tooltip}" style="color:var(--yellow);cursor:help">⚠ retry</span>`;
+}
+
 function fmt6(raw) {
   // Format a raw 6-decimal USDC value (BigInt or number) as a dollar string
   const n = Number(typeof raw === 'bigint' ? raw : BigInt(raw || 0)) / 1e6;
@@ -3211,7 +3237,7 @@ async function loadDashboardData() {
     ];
 
     let totalW = 0n, totalE = 0n, totalEscrow = 0n;
-    let activeMat = null, activeLabel = '', activeBFS = 0n, activeCycles = 0n;
+    let activeMat = null, activeLabel = '', activeBFS = 0n, activeCycles = 0n, activeBFSUnknown = false;
     let highestTier = 0;
     let memberId = 0, memberReferrer = ethers.ZeroAddress;
     let parkedInfo = null; // { label, addr, withdrawable, fee, shortfall }
@@ -3246,7 +3272,11 @@ async function loadDashboardData() {
         if (member.isInMatrix) {
           activeMat = member; activeLabel = m.label;
           followUps.push(
-            mc.matrixPos(userAddr).catch(()=>0n).then(pos => { activeBFS = pos; activeCycles = BigInt(member.cyclesCompleted); })
+            retryRead(() => mc.matrixPos(userAddr)).then(({ value, ok }) => {
+              activeBFS = ok ? value : 0n;
+              activeBFSUnknown = !ok;
+              activeCycles = BigInt(member.cyclesCompleted);
+            })
           );
         } else if (!parkedInfo) {
           followUps.push((async () => {
@@ -3333,14 +3363,20 @@ async function loadDashboardData() {
     setText('dash-tier',           highestTier > 0 ? `T${highestTier}` : 'T1');
     setText('dash-tier-name',      TIER_NAMES[highestTier] || '—');
     setText('dash-matrix',         activeMat ? activeLabel : '—');
-    setText('dash-bfs',            activeBFS > 0n ? '#'+activeBFS.toString() : '—');
+    setText('dash-bfs',            activeBFSUnknown
+      ? unknownBadge('Could not read your matrix position after retries — likely a flaky RPC node. Refresh to try again.')
+      : (activeBFS > 0n ? '#'+activeBFS.toString() : '—'));
     setText('dash-cycles',         activeCycles.toString());
     setText('dash-id',             memberId > 0 ? '#' + memberId : '—');
     setText('dash-orig-referrer',  memberReferrer && memberReferrer !== ethers.ZeroAddress
       ? memberReferrer.slice(0,6)+'…'+memberReferrer.slice(-4) : 'Direct');
 
-    // Direct referrals count — scan memberReferrer mapping (event logs too stale on public RPC)
+    // Direct referrals count — scan memberReferrer mapping (event logs too stale on public RPC).
+    // Every read here is retried before giving up, and if any read still fails after
+    // retries we flag the count as incomplete instead of silently undercounting —
+    // a flaky RPC node should never look identical to "this member really has 0 referrals".
     (async () => {
+      let incomplete = false;
       try {
         const trD = new ethers.Contract(ADDRS.tierRouter, TIER_ROUTER_ABI, rp);
         const mats = [ADDRS.T1.matA, ADDRS.T1.matB,
@@ -3352,16 +3388,31 @@ async function loadDashboardData() {
         const seen = new Set();
         for (const m of mats) {
           const mc = new ethers.Contract(m, MATRIX_ABI, rp);
-          const occ = Number(await mc.occupancy().catch(()=>0n));
+          const occRes = await retryRead(() => mc.occupancy());
+          if (!occRes.ok) { incomplete = true; continue; }
+          const occ = Number(occRes.value);
           if (!occ) continue;
-          const addrs = await Promise.all(Array.from({length:occ},(_,i)=>mc.posToMember(i+1).catch(()=>ethers.ZeroAddress)));
-          for (const a of addrs) { if (a && a !== ethers.ZeroAddress) seen.add(a.toLowerCase()); }
+          const posResults = await Promise.all(
+            Array.from({length:occ}, (_,i) => retryRead(() => mc.posToMember(i+1)))
+          );
+          for (const r of posResults) {
+            if (!r.ok) { incomplete = true; continue; }
+            if (r.value && r.value !== ethers.ZeroAddress) seen.add(r.value.toLowerCase());
+          }
         }
         const uniq = [...seen];
-        const refs = await Promise.all(uniq.map(a=>trD.memberReferrer(a).catch(()=>ethers.ZeroAddress)));
-        const count = refs.filter(r=>r.toLowerCase()===userAddr.toLowerCase()).length;
-        setText('dash-directs', count.toString());
-      } catch(_) { setText('dash-directs', '0'); }
+        const refResults = await Promise.all(uniq.map(a => retryRead(() => trD.memberReferrer(a))));
+        let count = 0;
+        for (const r of refResults) {
+          if (!r.ok) { incomplete = true; continue; }
+          if (r.value.toLowerCase() === userAddr.toLowerCase()) count++;
+        }
+        setText('dash-directs', incomplete
+          ? `${count} ` + unknownBadge('Some reads failed after retries — this count may be missing referrals. Refresh to try again.')
+          : count.toString());
+      } catch(_) {
+        setText('dash-directs', unknownBadge('Could not load referral data — RPC error. Refresh to try again.'));
+      }
     })();
 
     // Withdraw button
@@ -4233,20 +4284,31 @@ async function loadMyTree() {
       ...(ADDRS.T9.matA ? [{addr:ADDRS.T9.matA,label:'T9 Matrix A'},{addr:ADDRS.T9.matB,label:'T9 Matrix B'}] : []),
       ...(ADDRS.T10.matA ? [{addr:ADDRS.T10.matA,label:'T10 Matrix A'},{addr:ADDRS.T10.matB,label:'T10 Matrix B'}] : []),
     ];
-    let activeMat = null, activeBFS = 0n, activeLabel = '', activeMSize = 64n;
+    let activeMat = null, activeBFS = 0n, activeLabel = '', activeMSize = 64n, activeBFSUnknown = false;
+    let anyReadFailed = false;
     for (const m of allMats) {
       const mc = new ethers.Contract(m.addr, MATRIX_ABI, rp);
-      const member = await mc.getMember(userAddr).catch(()=>null);
+      const memberRes = await retryRead(() => mc.getMember(userAddr));
+      if (!memberRes.ok) { anyReadFailed = true; continue; } // can't tell if this is the active matrix — don't assume "not a member"
+      const member = memberRes.value;
       if (member && member.isInMatrix) {
         activeMat = m.addr;
         activeLabel = m.label;
-        activeBFS = await mc.matrixPos(userAddr).catch(()=>0n);
-        activeMSize = await mc.MATRIX_SIZE().catch(()=>64n);
+        const bfsRes = await retryRead(() => mc.matrixPos(userAddr));
+        activeBFS = bfsRes.ok ? bfsRes.value : 0n;
+        activeBFSUnknown = !bfsRes.ok;
+        const sizeRes = await retryRead(() => mc.MATRIX_SIZE());
+        activeMSize = sizeRes.ok ? sizeRes.value : 64n;
         break;
       }
     }
     if (!activeMat) {
-      if (loadingEl) { loadingEl.style.display='block'; loadingEl.textContent='You are not currently active in any matrix. Check back after registration.'; }
+      if (loadingEl) {
+        loadingEl.style.display='block';
+        loadingEl.innerHTML = anyReadFailed
+          ? unknownBadge('Some reads failed after retries — could not confirm your matrix position. Refresh to try again.')
+          : 'You are not currently active in any matrix. Check back after registration.';
+      }
       return;
     }
     const mc   = new ethers.Contract(activeMat, MATRIX_ABI, rp);
@@ -4256,12 +4318,16 @@ async function loadMyTree() {
     setText('matrix-nodes', n.toString());
     setText('matrix-fill',  n + ' / ' + Number(activeMSize));
     setText('matrix-bfs',   Number(activeMSize) + ' seats');
-    setText('matrix-my-node', activeBFS > 0n ? '#'+activeBFS.toString() : '—');
+    setText('matrix-my-node', activeBFSUnknown
+      ? unknownBadge('Could not read your matrix position after retries. Refresh to try again.')
+      : (activeBFS > 0n ? '#'+activeBFS.toString() : '—'));
     const banner = document.getElementById('matrix-pos-banner');
     if (banner) {
       banner.style.display='block';
       setText('matrix-pos-level', activeLabel);
-      setText('matrix-pos-slots', 'Position #' + activeBFS.toString());
+      setText('matrix-pos-slots', activeBFSUnknown
+        ? unknownBadge('Could not read your matrix position after retries. Refresh to try again.')
+        : 'Position #' + activeBFS.toString());
       setText('matrix-pos-cycle', 'Cycle ' + cycles.toString());
     }
     if (loadingEl) loadingEl.style.display='none';
