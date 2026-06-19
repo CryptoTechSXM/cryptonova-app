@@ -22,7 +22,7 @@ const T1_FEE  = 10n  * UNIT;   // $10
 const T2_FEE  = 15n  * UNIT;   // $15  (V8.7: W1 earns $15.60 in matB; L1 from 6 force-crosses + chain pay > $15)
 const MSIZE   = 7n;             // smallest valid matrix for the test
 
-/** V8.7 T1-T3 splits  (sum = 10 000 BPS, 7 fields) */
+/** V8.19 T1-T3 splits  (sum = 10 000 BPS, 10 fields) */
 const SPLITS = {
   l1Bps:        2000,   // $2.00  L1 referral
   chainBps:     2000,   // $2.00  chain pay (6 levels)
@@ -33,6 +33,7 @@ const SPLITS = {
   opsBps:        200,   // $0.20  ops wallet
   communityBps:  100,   // $0.10  community wallet
   buybackBps:    100,   // $0.10  CNOVABuybackReserve
+  liquidityBps:    0,   // $0.00  LiquidityReserve (0 for test — no LQ wallet needed)
 };
 // Per-level chain pay BPS (must sum to chainBps = 2000)
 const CHAIN_BPS = [1000n, 400n, 300n, 150n, 75n, 75n];  // sum = 2000
@@ -702,7 +703,7 @@ describe("V8.10 — Withdrawal reserve, drain-and-park prevention, grace evictio
     });
 
     it("withdraw() while in-matrix succeeds and leaves exactly ENTRY_FEE in reserve", async function () {
-      const { matA, usdc, w1, s0, s1, s2, s3, s4, s5, reg } =
+      const { matA, usdc, tierRouter, w1, s0, s1, s2, s3, s4, s5, reg } =
         await loadFixture(deployV8Fixture);
 
       await reg(w1, ethers.ZeroAddress);
@@ -711,6 +712,9 @@ describe("V8.10 — Withdrawal reserve, drain-and-park prevention, grace evictio
       const { withdrawable: earnedBefore, isInMatrix } = await matA.getMember(w1.address);
       expect(isInMatrix).to.be.true;
       expect(earnedBefore).to.be.gt(T1_FEE, "W1 must earn > $10 for this test");
+
+      // V8.19: disable auto-upgrade so Protocol Reserve = 0 (this test is about ENTRY_FEE reserve only)
+      await tierRouter.connect(w1).setMemberOptions(true, false, false);
 
       const balBefore = await usdc.balanceOf(w1.address);
       await matA.connect(w1).withdraw();
@@ -737,7 +741,7 @@ describe("V8.10 — Withdrawal reserve, drain-and-park prevention, grace evictio
   describe("7b. Withdrawal reserve — inactive member (post cycle-out)", function () {
 
     it("withdraw() on matA after W1 cycled to matB allows full withdrawal (no reserve)", async function () {
-      const { matA, usdc, w1, s0, s1, s2, s3, s4, s5, s6, reg } =
+      const { matA, usdc, tierRouter, w1, s0, s1, s2, s3, s4, s5, s6, reg } =
         await loadFixture(deployV8Fixture);
 
       await reg(w1, ethers.ZeroAddress);
@@ -747,6 +751,9 @@ describe("V8.10 — Withdrawal reserve, drain-and-park prevention, grace evictio
       // W1 is now in matB, NOT in matA
       const matAMember = await matA.getMember(w1.address);
       expect(matAMember.isInMatrix).to.be.false;
+
+      // V8.19: disable auto-upgrade so Protocol Reserve = 0 (this test is about post-cycle-out free withdrawal)
+      await tierRouter.connect(w1).setMemberOptions(true, false, false);
 
       // Any residual in matA can be fully withdrawn (no ENTRY_FEE reserve when inactive)
       if (matAMember.withdrawable > 0n) {
@@ -767,7 +774,7 @@ describe("V8.10 — Withdrawal reserve, drain-and-park prevention, grace evictio
   describe("7c. totalWithdrawn tracking", function () {
 
     it("totalWithdrawn accumulates gross pre-fee amount per withdraw call", async function () {
-      const { matA, usdc, w1, s0, s1, s2, s3, s4, s5, s6, reg } =
+      const { matA, usdc, tierRouter, w1, s0, s1, s2, s3, s4, s5, s6, reg } =
         await loadFixture(deployV8Fixture);
 
       await reg(w1, ethers.ZeroAddress);
@@ -775,6 +782,9 @@ describe("V8.10 — Withdrawal reserve, drain-and-park prevention, grace evictio
 
       const { withdrawable: earned } = await matA.getMember(w1.address);
       expect(earned).to.be.gt(T1_FEE);
+
+      // V8.19: disable auto-upgrade so Protocol Reserve = 0 (this test is about totalWithdrawn tracking only)
+      await tierRouter.connect(w1).setMemberOptions(true, false, false);
 
       // First withdrawal while active — gross = earned - ENTRY_FEE
       await matA.connect(w1).withdraw();
@@ -921,7 +931,7 @@ describe("V8.10 — Withdrawal reserve, drain-and-park prevention, grace evictio
     });
 
     it("getMemberTotalWithdrawn returns correct value after withdrawals", async function () {
-      const { matA, w1, s0, s1, s2, s3, s4, s5, reg } =
+      const { matA, tierRouter, w1, s0, s1, s2, s3, s4, s5, reg } =
         await loadFixture(deployV8Fixture);
 
       await reg(w1, ethers.ZeroAddress);
@@ -929,6 +939,9 @@ describe("V8.10 — Withdrawal reserve, drain-and-park prevention, grace evictio
 
       const { withdrawable: earned } = await matA.getMember(w1.address);
       expect(earned).to.be.gt(T1_FEE);
+
+      // V8.19: disable auto-upgrade so Protocol Reserve = 0 (this test is about totalWithdrawn tracking only)
+      await tierRouter.connect(w1).setMemberOptions(true, false, false);
 
       // Before any withdrawal
       expect(await matA.getMemberTotalWithdrawn(w1.address)).to.equal(0n);
