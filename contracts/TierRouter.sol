@@ -834,6 +834,40 @@ contract TierRouter is Ownable2Step {
         return (tierPairManagers, tierEntryFees);
     }
 
+
+    /// @notice V8.19: Returns the USDC amount a member must keep as protocol reserve.
+    ///         Matrix withdraw() functions call this to prevent members from accidentally
+    ///         draining the funds needed for their own automation (reentry / upgrade).
+    /// @dev    Reserve is computed from the member's current options + tier fees.
+    ///         Double-entry stacks: one slot upgrades + one slot re-enters.
+    ///         Only the active highest-tier matrix enforces this (checked in the matrix).
+    function reservedFor(address member) external view returns (uint256) {
+        uint8 highest = memberHighestTier[member];
+        if (highest == 0) return 0;
+
+        MemberOptions storage opts = memberOptions[member];
+        bool autoUpgrade = !opts.autoUpgradeDisabled;
+        bool reentry     = opts.autoReentryEnabled;
+        bool doubleE     = opts.doubleReentryEnabled || doubleEntryEnabled[member];
+
+        if (!autoUpgrade && !reentry) return 0;
+
+        uint8 curIdx  = highest - 1;           // 0-based current tier
+        uint8 nextIdx = highest;               // 0-based next tier (upgrade target)
+
+        uint256 curFee  = tierEntryFees[curIdx];
+        uint256 nextFee = (nextIdx < MAX_TIERS) ? tierEntryFees[nextIdx] : 0;
+
+        if (doubleE) {
+            if (autoUpgrade && nextFee > 0) { return nextFee + curFee; }
+            else if (reentry) { return 2 * curFee; }
+        } else {
+            if (autoUpgrade && nextFee > 0) { return nextFee; }
+            else if (reentry) { return curFee; }
+        }
+        return 0;
+    }
+
     function inactivityStatus() external view returns (
         bool    paused,
         bool    guardEnabled,

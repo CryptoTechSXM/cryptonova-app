@@ -77,6 +77,11 @@ interface ITierRouter {
     ) external;
     /// @notice V8.14: called by MatB._enterMatrix to signal a member has crossed in.
     function onCrossToMatB(address member, uint8 tierIndex) external;
+    /// @notice V8.19: Returns the member's current highest tier (1-based; 0 = unregistered).
+    function memberHighestTier(address member) external view returns (uint8);
+    /// @notice V8.19: Returns USDC amount reserved for automation fees (reentry / upgrade).
+    ///         Only enforced in the member's current highest-tier matrix.
+    function reservedFor(address member) external view returns (uint256);
 }
 
 /// @notice Minimal interface for forwarding stability fund contributions.
@@ -889,6 +894,18 @@ contract FigureEightMatrixV8 is Ownable2Step {
             available = available - ENTRY_FEE;
         }
 
+        // V8.19: Protocol Reserve — protect automation fees (reentry / upgrade).
+        //        Only enforced in the member's current highest-tier matrix so that
+        //        residual earnings in lower-tier matrices are always freely withdrawable.
+        if (tierRouter != address(0)) {
+            uint8 highest = ITierRouter(tierRouter).memberHighestTier(msg.sender);
+            if (highest > 0 && (highest - 1) == tierIndex) {
+                uint256 res = ITierRouter(tierRouter).reservedFor(msg.sender);
+                require(res < available, "F8V8: balance fully reserved for automation");
+                available -= res;
+            }
+        }
+
         members[msg.sender].withdrawable    -= available;
         members[msg.sender].totalWithdrawn  += available;   // V8.10: track cumulative
         lastActivityTime[msg.sender] = block.timestamp;     // explicit action = activity
@@ -918,6 +935,16 @@ contract FigureEightMatrixV8 is Ownable2Step {
         if (members[msg.sender].isInMatrix) {
             require(available > ENTRY_FEE, "F8V8: must keep entry fee reserve while active");
             available = available - ENTRY_FEE;
+        }
+
+        // V8.19: Protocol Reserve
+        if (tierRouter != address(0)) {
+            uint8 highest = ITierRouter(tierRouter).memberHighestTier(msg.sender);
+            if (highest > 0 && (highest - 1) == tierIndex) {
+                uint256 res = ITierRouter(tierRouter).reservedFor(msg.sender);
+                require(res < available, "F8V8: balance fully reserved for automation");
+                available -= res;
+            }
         }
 
         require(amount <= available, "F8V8: amount exceeds withdrawable");
@@ -956,6 +983,16 @@ contract FigureEightMatrixV8 is Ownable2Step {
             available = available - ENTRY_FEE;
         }
 
+        // V8.19: Protocol Reserve
+        if (tierRouter != address(0)) {
+            uint8 highest = ITierRouter(tierRouter).memberHighestTier(msg.sender);
+            if (highest > 0 && (highest - 1) == tierIndex) {
+                uint256 res = ITierRouter(tierRouter).reservedFor(msg.sender);
+                require(res < available, "F8V8: balance fully reserved for automation");
+                available -= res;
+            }
+        }
+
         require(amount <= available, "F8V8: amount exceeds withdrawable");
 
         members[msg.sender].withdrawable   -= amount;
@@ -986,6 +1023,16 @@ contract FigureEightMatrixV8 is Ownable2Step {
         if (members[msg.sender].isInMatrix) {
             require(available > ENTRY_FEE, "F8V8: must keep entry fee reserve while active");
             available = available - ENTRY_FEE;
+        }
+
+        // V8.19: Protocol Reserve
+        if (tierRouter != address(0)) {
+            uint8 highest = ITierRouter(tierRouter).memberHighestTier(msg.sender);
+            if (highest > 0 && (highest - 1) == tierIndex) {
+                uint256 res = ITierRouter(tierRouter).reservedFor(msg.sender);
+                require(res < available, "F8V8: balance fully reserved for automation");
+                available -= res;
+            }
         }
 
         members[msg.sender].withdrawable   -= available;
@@ -1250,6 +1297,29 @@ contract FigureEightMatrixV8 is Ownable2Step {
     function getMember(address member)         external view returns (Member memory)  { return members[member]; }
     function getCyclesCompleted(address m)    external view returns (uint256)       { return members[m].cyclesCompleted; }
     function withdrawableOf(address member)   external view returns (uint256)       { return members[member].withdrawable; }
+
+    /// @notice V8.19: withdrawable minus Protocol Reserve and ENTRY_FEE lock.
+    ///         Mirrors what withdraw() would allow so the frontend can show the true claimable amount.
+    function freeWithdrawable(address member) external view returns (uint256) {
+        uint256 bal = members[member].withdrawable;
+        if (bal == 0) return 0;
+        // Deduct ENTRY_FEE lock while active in this matrix
+        if (members[member].isInMatrix) {
+            if (bal <= ENTRY_FEE) return 0;
+            bal -= ENTRY_FEE;
+        }
+        // Deduct Protocol Reserve (only in member's highest-tier matrix)
+        if (tierRouter != address(0)) {
+            uint8 highest = ITierRouter(tierRouter).memberHighestTier(member);
+            if (highest > 0 && (highest - 1) == tierIndex) {
+                uint256 res = ITierRouter(tierRouter).reservedFor(member);
+                if (res >= bal) return 0;
+                bal -= res;
+            }
+        }
+        return bal;
+    }
+
     function getMemberTotalWithdrawn(address member) external view returns (uint256) { return members[member].totalWithdrawn; }  // V8.10: keeper reads for rescue eligibility
     function escrowOf(address /* member */)   external pure  returns (uint256)       { return 0; } // V8.8: escrow removed
     function isFull()                         external view returns (bool)          { return occupancy == MATRIX_SIZE; }
