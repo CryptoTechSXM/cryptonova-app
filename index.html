@@ -1225,7 +1225,8 @@
         <div class="card-sm clickable" style="border-color:var(--green2)" onclick="openDashDetail('withdrawable',this)" title="Click for breakdown">
           <div class="stat-label" data-i18n="dash.withdrawable">Withdrawable</div>
           <div class="stat-value green" id="dash-withdrawable">—</div>
-          <div class="stat-sub" data-i18n="dash.ready_to_claim">Ready to claim</div>
+          <div id="dash-reserved-badge" style="display:none;color:var(--yellow);font-size:11px;font-weight:600;margin-top:2px"></div>
+          <div class="stat-sub" id="dash-ready-label" data-i18n="dash.ready_to_claim">Ready to claim</div>
           <div class="detail-hint">Details ↗</div>
         </div>
         <div class="card-sm clickable" onclick="openDashDetail('earned',this)" title="Click for tier breakdown">
@@ -1275,6 +1276,13 @@
           <div class="section-title" style="margin-bottom:16px"><div class="dot"></div> <span data-i18n="dash.withdraw_title">Withdraw Earnings</span></div>
           <div style="font-size:28px;font-weight:800;color:var(--green);margin-bottom:4px" id="dash-withdraw-amount">$0.00</div>
           <div style="font-size:13px;color:var(--text3);margin-bottom:10px" data-i18n="dash.available_usdc">Available USDC</div>
+
+          <!-- Protocol reserve notice -->
+          <div id="withdraw-reserve-notice" style="display:none;background:rgba(245,158,11,0.1);border:1px solid rgba(245,158,11,0.35);border-radius:8px;padding:10px 12px;font-size:12px;margin-bottom:10px">
+            <div style="font-weight:700;color:var(--yellow);margin-bottom:4px">⚙ Protocol Reserve Active</div>
+            <div id="reserve-detail-text" style="color:var(--text2);line-height:1.6"></div>
+            <div id="reserve-total-text" style="color:var(--yellow);font-weight:600;margin-top:6px;font-size:11px"></div>
+          </div>
 
           <!-- Withdrawal fee breakdown -->
           <div id="withdraw-fee-breakdown" style="background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:10px 12px;font-size:12px;margin-bottom:14px;display:none">
@@ -3473,6 +3481,81 @@ async function loadDashboardData() {
       if (lblRe) lblRe.textContent = info.autoReentryEnabled ? 'Enabled' : 'Disabled';
     } catch(_) {}
 
+    // ── Protocol Reserve — lock automation fees so members aren't surprised ──
+    try {
+      const opts       = window._memberOptions || {};
+      const autoUpgrade = !opts.disableUpgrade;   // disableUpgrade is INVERTED flag
+      const reentry    = Boolean(opts.enableReentry);
+      const doubleE    = Boolean(opts.enableDouble);
+
+      window._protocolReserved = 0n; // default: reset
+
+      if (autoUpgrade || reentry) {
+        const curFeeRaw  = await tr.tierEntryFees(Math.max(highestTier - 1, 0)).catch(() => 10_000_000n);
+        const nextFeeRaw = window._dashUpgradeFee || 25_000_000n;
+
+        let reserved = 0n;
+        const details = [];
+
+        if (doubleE) {
+          if (autoUpgrade) {
+            // Slot 1 upgrades (next fee) + Slot 2 re-enters (cur fee)
+            reserved = nextFeeRaw + curFeeRaw;
+            details.push(`Position 1 auto-upgrade: $${fmt6(nextFeeRaw)}`);
+            details.push(`Position 2 auto re-entry: $${fmt6(curFeeRaw)}`);
+          } else if (reentry) {
+            // Both slots re-enter
+            reserved = 2n * curFeeRaw;
+            details.push(`Double re-entry (×2): $${fmt6(curFeeRaw)} each`);
+          }
+        } else {
+          if (autoUpgrade) {
+            reserved = nextFeeRaw;
+            details.push(`Auto-upgrade to next tier: $${fmt6(nextFeeRaw)}`);
+          } else if (reentry) {
+            reserved = curFeeRaw;
+            details.push(`Auto re-entry: $${fmt6(curFeeRaw)}`);
+          }
+        }
+
+        if (reserved > 0n) {
+          const free = totalW > reserved ? totalW - reserved : 0n;
+          window._maxWithdrawable  = free;   // cap partial withdraw to free amount
+          window._protocolReserved = reserved;
+
+          // Withdrawable card — show free amount and reserved badge
+          setText('dash-withdrawable',   fmt6(free));
+          setText('dash-withdraw-amount', fmt6(free));
+          const badge = document.getElementById('dash-reserved-badge');
+          const lbl   = document.getElementById('dash-ready-label');
+          if (badge) { badge.textContent = `⚙ $${fmt6(reserved)} reserved`; badge.style.display = 'block'; }
+          if (lbl)   lbl.textContent = `$${fmt6(free)} free to claim`;
+
+          // Reserve notice banner in withdraw panel
+          const notice = document.getElementById('withdraw-reserve-notice');
+          const detEl  = document.getElementById('reserve-detail-text');
+          const totEl  = document.getElementById('reserve-total-text');
+          if (notice) notice.style.display = 'block';
+          if (detEl)  detEl.innerHTML = details.map(d => `• ${d}`).join('<br>');
+          if (totEl)  totEl.textContent = `Total reserved: $${fmt6(reserved)} — held for your automation settings`;
+
+          // Re-render fee breakdown against the free amount
+          try {
+            const feeBps = window._withdrawFeeBps || 150n;
+            const feeAmt = free * feeBps / 10000n;
+            const netAmt = free - feeAmt;
+            const breakdown = document.getElementById('withdraw-fee-breakdown');
+            if (breakdown) {
+              document.getElementById('wfee-gross').textContent = fmt6(free);
+              document.getElementById('wfee-fee').textContent   = '−' + fmt6(feeAmt);
+              document.getElementById('wfee-net').textContent   = fmt6(netAmt);
+              breakdown.style.display = free > 0n ? 'block' : 'none';
+            }
+          } catch(_) {}
+        }
+      }
+    } catch(e) { console.warn('reserve calc:', e.message); }
+
     // Tier cycles breakdown — use on-chain memberHighestTier (authoritative)
     try {
       const onChainTier = Number(await tr.memberHighestTier(userAddr).catch(() => 0));
@@ -3920,6 +4003,18 @@ async function doWithdrawPartial() {
 
 async function doWithdraw() {
   if (!signer) return;
+  // If a protocol reserve is active, cap withdraw to the free amount
+  if (window._protocolReserved && window._protocolReserved > 0n) {
+    const free = window._maxWithdrawable || 0n;
+    if (free === 0n) {
+      toast('All funds are currently reserved for your automation settings', 'info');
+      return;
+    }
+    const inp = document.getElementById('withdraw-amount-input');
+    if (inp) inp.value = (Number(free) / 1e6).toFixed(2);
+    await doWithdrawPartial();
+    return;
+  }
   const btn = document.getElementById('btn-withdraw');
   btn.disabled = true; btn.innerHTML = '<span class="spinner"></span>Withdrawing…';
   const rp = readProvider || new ethers.JsonRpcProvider(RPC_URL, 84532, { staticNetwork: true });
