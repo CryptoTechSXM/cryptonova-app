@@ -679,6 +679,8 @@
   <button onclick="showTab('tiers')" data-i18n="idx.nav_tiers">🏆 Tiers</button>
   <button onclick="showTab('roadmap')" data-i18n="idx.nav_roadmap">🗺️ Roadmap</button>
   <button onclick="window.location.href='status.html'" data-i18n="idx.nav_status">🛡️ Status</button>
+  <button onclick="window.location.href='buy.html'">💎 Buy CNOVA</button>
+  <button onclick="window.location.href='governance.html'">⚖️ Governance</button>
 </nav>
 
 <main>
@@ -761,7 +763,7 @@
     </div>
 
     <!-- Live Stats -->
-    <div class="section-title"><div class="dot"></div> <span data-i18n="stats.live_title">Live Stats</span> <span id="stats-refresh" style="font-size:12px;color:var(--text3);font-weight:400;margin-left:8px;cursor:pointer" onclick="loadHomeStats(); setTimeout(loadTiersStats, 800);">↻ Refresh</span></div>
+    <div class="section-title"><div class="dot"></div> <span data-i18n="stats.live_title">Live Stats</span> <span id="stats-refresh" style="font-size:12px;color:var(--text3);font-weight:400;margin-left:8px;cursor:pointer" onclick="loadHomeStats(); loadDaoWidget(); setTimeout(loadTiersStats, 800);">↻ Refresh</span></div>
     <div class="grid-4" id="stats-grid">
       <div class="card-sm"><div class="stat-label" data-i18n="stats.total_registered">Total Registered</div><div class="stat-value" id="stat-members"><span class="spinner" style="color:var(--text3)"></span></div><div class="stat-sub" data-i18n="stats.all_time_joins">all-time joins</div></div>
       <div class="card-sm"><div class="stat-label" data-i18n="stats.cnova_minted">CNOVA Minted</div><div class="stat-value green" id="stat-minted"><span class="spinner" style="color:var(--green)"></span></div><div class="stat-sub" data-i18n="stats.per_join">50 per T1 join</div></div>
@@ -798,14 +800,35 @@
       <div class="card-sm"><div class="stat-label" data-i18n="stats.stability_fund">Stability Rescue Fund</div><div class="stat-value" id="stat-reserve">—</div></div>
       <div class="card-sm"><div class="stat-label" data-i18n="stats.community_wallet">Community Wallet</div><div class="stat-value" id="stat-cw-balance" style="color:#a855f7">—</div></div>
       <div class="card-sm" title="Accumulated USDC dedicated to buying back and burning CNOVA tokens — supports the floor price."><div class="stat-label" data-i18n="stats.buyback_reserve">Buyback Reserve</div><div class="stat-value" id="stat-buyback" style="color:var(--green)">—</div></div>
+      <div class="card-sm" title="Protocol-owned USDC reserved for adding permanent liquidity to the CNOVA/USDC trading pair."><div class="stat-label">Liquidity Reserve</div><div class="stat-value" id="stat-lq-reserve" style="color:#3b82f6">—</div></div>
+    </div>
+
+    <!-- DAO widget -->
+    <div class="card" style="margin-bottom:24px">
+      <div class="section-title" style="margin-bottom:14px"><div class="dot"></div> ⚖️ DAO Governance</div>
+      <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap">
+        <div style="flex:1;min-width:160px">
+          <div style="font-size:13px;color:var(--text3);margin-bottom:4px">Active Proposals</div>
+          <div id="dao-active-count" style="font-size:28px;font-weight:700;color:var(--green)">—</div>
+        </div>
+        <div style="flex:1;min-width:160px">
+          <div style="font-size:13px;color:var(--text3);margin-bottom:4px">Pending Execution</div>
+          <div id="dao-timelocked-count" style="font-size:28px;font-weight:700;color:var(--yellow)">—</div>
+        </div>
+        <div style="flex:2;min-width:200px;text-align:right">
+          <div id="dao-latest-label" style="font-size:12px;color:var(--text3);margin-bottom:8px">—</div>
+          <button onclick="window.location.href='governance.html'" style="background:var(--green);color:#000;border:none;border-radius:8px;padding:10px 20px;font-weight:700;cursor:pointer;font-size:14px">View Proposals →</button>
+        </div>
+      </div>
     </div>
 
     <!-- Entry split -->
     <div class="card">
       <div class="section-title"><div class="dot"></div> <span data-i18n="split.title">Entry Fee Split — per $10 at T1</span></div>
-      <div class="split-row"><span class="split-label" data-i18n="split.equalization">🌀 Equalization Pool</span><span><span class="split-amount">45%</span> <span class="split-pct">$4.50</span></span></div>
+      <div class="split-row"><span class="split-label" data-i18n="split.equalization">🌀 Equalization Pool</span><span><span class="split-amount">44%</span> <span class="split-pct">$4.40</span></span></div>
       <div class="split-row"><span class="split-label" data-i18n="split.chain_pay">⛓️ Chain Pay (6 upline levels)</span><span><span class="split-amount">17%</span> <span class="split-pct">$1.70</span></span></div>
-      <div class="split-row"><span class="split-label">🌊 CNOVA Stability Fund <span style="font-size:10px;color:var(--text3)" data-i18n="split.stability_sub">(rescue reserve)</span></span><span><span class="split-amount">13%</span> <span class="split-pct">$1.30</span></span></div>
+      <div class="split-row"><span class="split-label">🌊 CNOVA Stability Fund <span style="font-size:10px;color:var(--text3)" data-i18n="split.stability_sub">(rescue reserve)</span></span><span><span class="split-amount">12%</span> <span class="split-pct">$1.20</span></span></div>
+      <div class="split-row"><span class="split-label">💧 Liquidity Reserve <span style="font-size:10px;color:var(--text3)">(CNOVA/USDC pool)</span></span><span><span class="split-amount">2%</span> <span class="split-pct">$0.20</span></span></div>
       <div class="split-row"><span class="split-label" data-i18n="split.referrer">🤝 L1 Direct Referrer</span><span><span class="split-amount">10%</span> <span class="split-pct">$1.00</span></span></div>
       <div class="split-row"><span class="split-label">🏦 CNOVA Treasury <span style="font-size:10px;color:var(--text3)" data-i18n="split.treasury_sub">(floor backing)</span></span><span><span class="split-amount">10%</span> <span class="split-pct">$1.00</span></span></div>
       <div class="split-row"><span class="split-label" data-i18n="split.dev">⚙️ Dev</span><span><span class="split-amount">2%</span> <span class="split-pct">$0.20</span></span></div>
@@ -2153,6 +2176,7 @@ window.addEventListener('DOMContentLoaded', async () => {
     readProvider = _mkRpc(RPC_URL);
   }
   loadHomeStats();
+  setTimeout(loadDaoWidget, 1200);   // DAO widget — lightweight, stagger after loadHomeStats
   setTimeout(loadTiersStats, 1500);  // stagger after loadHomeStats to avoid RPC rate-limiting
 
   // Auto-reconnect if wallet was previously connected (silent — no popup)
@@ -2688,6 +2712,51 @@ async function loadHomeStats() {
         console.log('loadHomeStats: fallback RPC succeeded');
       } catch(_) { /* fallback also failed — dashes already shown */ }
     }
+  }
+}
+
+
+// ═══════════════════════════════════════════════════════════════════════
+// DAO WIDGET — active / timelocked proposal counts
+// ═══════════════════════════════════════════════════════════════════════
+async function loadDaoWidget() {
+  if (!ADDRS.v8Governance) return;
+  const rp = readProvider || new ethers.JsonRpcProvider(RPC_URL, 84532, { staticNetwork: true });
+  try {
+    const GOV_MIN_ABI = [
+      'function proposalCount() view returns (uint256)',
+      'function proposals(uint256) view returns (uint256 id,address proposer,uint8 paramId,uint256 newValue,address target,uint256 votesFor,uint256 votesAgainst,uint256 startTime,uint8 state,bool executed)',
+    ];
+    const gov = new ethers.Contract(ADDRS.v8Governance, GOV_MIN_ABI, rp);
+    const count = await gov.proposalCount().catch(() => 0n);
+    const total = Number(count);
+    if (total === 0) {
+      setText('dao-active-count', '0');
+      setText('dao-timelocked-count', '0');
+      setText('dao-latest-label', 'No proposals yet');
+      return;
+    }
+    // Fetch last 20 proposals (or fewer)
+    const toFetch = Math.min(total, 20);
+    const ids = Array.from({ length: toFetch }, (_, i) => total - i);
+    const props = await Promise.all(ids.map(id => gov.proposals(id).catch(() => null)));
+    // state: 0=Active, 1=Timelocked, 2=Executed, 3=Rejected, 4=Expired
+    let active = 0, timelocked = 0;
+    let latestLabel = '';
+    for (const p of props) {
+      if (!p) continue;
+      if (p.state === 0n) active++;
+      if (p.state === 1n) timelocked++;
+      if (!latestLabel) latestLabel = `Latest: Proposal #${p.id} — ${['Active','Timelocked','Executed','Rejected','Expired'][Number(p.state)] || ''}`;
+    }
+    setText('dao-active-count', active.toString());
+    setText('dao-timelocked-count', timelocked.toString());
+    setText('dao-latest-label', latestLabel || `${total} proposal${total !== 1 ? 's' : ''} on-chain`);
+  } catch(e) {
+    console.warn('loadDaoWidget:', e.message);
+    setText('dao-active-count', '—');
+    setText('dao-timelocked-count', '—');
+    setText('dao-latest-label', '');
   }
 }
 
@@ -4346,7 +4415,7 @@ function showTab(name) {
   if (name === 'register') { if (userAddr) loadRegisterTab(); }
   if (name === 'dashboard') { loadDashboardData(); loadRedeemData(); }
   if (name === 'matrix') { loadQueueView(); setActiveMatrixBtn('btn-load-tree'); }
-  if (name === 'home') loadHomeStats();
+  if (name === 'home') { loadHomeStats(); loadDaoWidget(); }
   if (name === 'tiers') loadTiersStats();
 }
 
@@ -4485,77 +4554,6 @@ async function doManualUpgrade() {
     const tr = new ethers.Contract(ADDRS.tierRouter, TIER_ROUTER_ABI, signer);
     const tx = await tr.manualUpgrade(idx, { gasLimit: 3_000_000 });
     status.textContent = 'Transaction submitted. Waiting for confirmation...';
-    await tx.wait();
-    status.textContent = '🎉 Tier upgrade confirmed! Refreshing dashboard...';
-    setTimeout(() => loadDashboardData(), 2000);
-  } catch(e) {
-    status.textContent = '❌ ' + (e.reason || e.message);
-    btn.disabled = false;
-  }
-}
-
-function onUpgradeTierChange() {
-  const sel  = document.getElementById('upgrade-tier-select');
-  const hint = document.getElementById('upgrade-tier-hint');
-  if (!sel || !sel.value) { if (hint) hint.textContent = ''; return; }
-  const fees = { '1': 25_000_000n, '2': 50_000_000n, '3': 100_000_000n };
-  const fee  = fees[sel.value] || 25_000_000n;
-  window._upgradeCardFee     = fee;
-  window._upgradeCardTierIdx = Number(sel.value);
-  if (hint) hint.textContent = 'Entry fee: ' + (Number(fee) / 1_000_000) + ' USDC from your wallet';
-}
-
-async function checkUpgradeAllowance() {
-  if (!userAddr) { toast('Connect wallet first', 'error'); return; }
-  const rp   = readProvider || new ethers.JsonRpcProvider(RPC_URL, 84532, { staticNetwork: true });
-  const usdc = new ethers.Contract(ADDRS.usdc, USDC_ABI, rp);
-  const fee  = window._upgradeCardFee || 25_000_000n;
-  const al   = await usdc.allowance(userAddr, ADDRS.tierRouter).catch(() => 0n);
-  const btn  = document.getElementById('btn-upgrade');
-  if (btn) btn.disabled = al < fee;
-  toast(al >= fee ? '✅ Allowance confirmed — ready to upgrade' : '⏳ Not yet approved', al >= fee ? 'success' : 'info');
-}
-
-async function requestRescue() {
-  if (!userAddr) { toast('Connect wallet first', 'error'); return; }
-  const btn    = document.getElementById('btn-request-rescue');
-  const status = document.getElementById('rescue-status');
-  try {
-    if (btn)    { btn.disabled = true; btn.textContent = '⏳ Requesting rescue…'; }
-    if (status) status.textContent = 'Contacting rescue service…';
-
-    const res  = await fetch('/api/rescue', {
-      method:  'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body:    JSON.stringify({ address: userAddr }),
-    });
-    const data = await res.json();
-
-    if (!res.ok) throw new Error(data.error || 'Rescue request failed');
-
-    if (btn)    btn.textContent = '✅ Rescued!';
-    if (status) status.innerHTML =
-      `✅ ${data.message} — <a href="https://sepolia.basescan.org/tx/${data.tx}" target="_blank" rel="noopener" style="color:var(--green)">View TX</a>`;
-    toast('Rescue successful — you\'ve been re-entered!', 'success');
-    setTimeout(() => loadDashboardData(), 4000);
-  } catch(e) {
-    if (btn)    { btn.disabled = false; btn.textContent = '🚑 Request Rescue (Free)'; }
-    if (status) status.textContent = '❌ ' + (e.message || 'Rescue failed — try again');
-    toast(e.message || 'Rescue failed', 'error');
-  }
-}
-
-async function doUpgrade() {
-  if (!signer) { toast('Connect wallet first', 'error'); return; }
-  const btn    = document.getElementById('btn-upgrade');
-  const status = document.getElementById('upgrade-status');
-  const idx    = window._upgradeCardTierIdx ?? 1;
-  try {
-    if (btn) btn.disabled = true;
-    if (status) status.textContent = 'Submitting upgrade transaction...';
-    const tr = new ethers.Contract(ADDRS.tierRouter, TIER_ROUTER_ABI, signer);
-    const tx = await tr.manualUpgrade(idx, { gasLimit: 3_000_000 });
-    if (status) status.textContent = 'Waiting for confirmation...';
     await tx.wait();
     if (status) status.innerHTML = '<span style="color:var(--green)">🎉 Upgraded to T' + (idx + 1) + '! Check your Dashboard.</span>';
     toast('Tier upgraded successfully!', 'success');
