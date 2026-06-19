@@ -1,0 +1,745 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Buy CNOVA — CryptoNova</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/6.7.1/ethers.umd.min.js"></script>
+  <style>
+    :root {
+      --bg:        #0a0e1a;
+      --bg2:       #111827;
+      --bg3:       #1a2236;
+      --border:    #1f2d47;
+      --green:     #00e5a0;
+      --green2:    #00b37d;
+      --green-dim: rgba(0,229,160,0.12);
+      --blue:      #3b82f6;
+      --blue-dim:  rgba(59,130,246,0.12);
+      --yellow:    #f59e0b;
+      --yellow-dim:rgba(245,158,11,0.12);
+      --purple:    #a855f7;
+      --purple-dim:rgba(168,85,247,0.12);
+      --red:       #ef4444;
+      --text:      #e2e8f0;
+      --text2:     #94a3b8;
+      --text3:     #64748b;
+    }
+    body.light {
+      --bg:        #f1f5f9;
+      --bg2:       #ffffff;
+      --bg3:       #e2e8f0;
+      --border:    #cbd5e1;
+      --green:     #00966a;
+      --green2:    #007a56;
+      --green-dim: rgba(0,150,106,0.10);
+      --blue:      #2563eb;
+      --blue-dim:  rgba(37,99,235,0.10);
+      --yellow:    #d97706;
+      --yellow-dim:rgba(217,119,6,0.10);
+      --purple:    #7c3aed;
+      --purple-dim:rgba(124,58,237,0.10);
+      --red:       #dc2626;
+      --text:      #0f172a;
+      --text2:     #475569;
+      --text3:     #94a3b8;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { background: var(--bg); color: var(--text); font-family: 'Segoe UI', system-ui, sans-serif; min-height: 100vh; }
+
+    /* ── Header ─── */
+    header { background: var(--bg2); border-bottom: 1px solid var(--border); padding: 14px 24px; display: flex; align-items: center; justify-content: space-between; position: sticky; top: 0; z-index: 100; }
+    .logo { display: flex; align-items: center; gap: 10px; text-decoration: none; color: inherit; }
+    .logo-text { font-size: 18px; font-weight: 700; letter-spacing: -0.5px; }
+    .logo-text span { color: var(--green); }
+    .logo-badge { font-size: 10px; background: var(--green-dim); color: var(--green); border: 1px solid var(--green2); border-radius: 4px; padding: 2px 6px; margin-left: 8px; }
+    .header-right { display: flex; align-items: center; gap: 10px; }
+    .nav-link { color: var(--text2); font-size: 14px; text-decoration: none; padding: 6px 12px; border-radius: 7px; transition: all .2s; }
+    .nav-link:hover { color: var(--text); background: var(--bg3); }
+    .nav-link.active { color: var(--green); }
+    #btn-connect { background: var(--green); color: #000; border: none; border-radius: 8px; padding: 8px 18px; font-weight: 700; font-size: 14px; cursor: pointer; transition: opacity .2s; white-space: nowrap; }
+    #btn-connect:hover { opacity: .85; }
+    #btn-connect.connected { background: var(--bg3); color: var(--green); border: 1px solid var(--green2); }
+    .theme-toggle { background: var(--bg3); border: 1px solid var(--border); border-radius: 8px; padding: 6px 12px; font-size: 13px; color: var(--text2); cursor: pointer; transition: all .2s; }
+    .theme-toggle:hover { color: var(--text); border-color: var(--green); }
+
+    /* ── Layout ─── */
+    main { max-width: 1000px; margin: 0 auto; padding: 40px 24px 80px; }
+
+    /* ── Hero ─── */
+    .hero { text-align: center; padding: 0 0 48px; }
+    .hero-badge { display: inline-flex; align-items: center; gap: 6px; background: var(--green-dim); color: var(--green); border: 1px solid var(--green2); border-radius: 20px; padding: 5px 14px; font-size: 12px; font-weight: 600; margin-bottom: 20px; letter-spacing: .4px; }
+    .hero h1 { font-size: 42px; font-weight: 800; letter-spacing: -1.5px; line-height: 1.1; margin-bottom: 14px; }
+    .hero h1 span { color: var(--green); }
+    .hero p { font-size: 16px; color: var(--text2); max-width: 480px; margin: 0 auto; line-height: 1.65; }
+
+    /* ── Cards ─── */
+    .card { background: var(--bg2); border: 1px solid var(--border); border-radius: 14px; padding: 26px; }
+    .card + .card { margin-top: 20px; }
+    .card-title { font-size: 13px; font-weight: 700; color: var(--text2); text-transform: uppercase; letter-spacing: .8px; margin-bottom: 18px; display: flex; align-items: center; gap: 8px; }
+    .card-title .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--green); flex-shrink: 0; }
+
+    /* ── Floor price bar ─── */
+    .floor-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 16px; }
+    .floor-stat { background: var(--bg3); border: 1px solid var(--border); border-radius: 10px; padding: 16px; }
+    .floor-stat-label { font-size: 11px; color: var(--text3); text-transform: uppercase; letter-spacing: .7px; margin-bottom: 6px; }
+    .floor-stat-value { font-size: 22px; font-weight: 700; color: var(--text); }
+    .floor-stat-value.green { color: var(--green); }
+    .floor-stat-sub { font-size: 11px; color: var(--text3); margin-top: 3px; }
+
+    /* ── Bonding curve tiers ─── */
+    .tiers-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-top: 4px; }
+    @media (max-width: 600px) { .tiers-grid { grid-template-columns: repeat(2, 1fr); } }
+    .tier-card { border: 1.5px solid var(--border); border-radius: 10px; padding: 14px 12px; text-align: center; transition: all .2s; position: relative; overflow: hidden; }
+    .tier-card.active { border-color: var(--green); background: var(--green-dim); }
+    .tier-card.past { opacity: .45; }
+    .tier-card.future { opacity: .7; }
+    .tier-label { font-size: 11px; color: var(--text3); font-weight: 600; text-transform: uppercase; letter-spacing: .5px; margin-bottom: 6px; }
+    .tier-mult { font-size: 22px; font-weight: 800; color: var(--text); }
+    .tier-card.active .tier-mult { color: var(--green); }
+    .tier-price { font-size: 12px; color: var(--text2); margin-top: 4px; }
+    .tier-range { font-size: 10px; color: var(--text3); margin-top: 4px; }
+    .tier-badge { position: absolute; top: 6px; right: 6px; font-size: 9px; font-weight: 700; background: var(--green); color: #000; border-radius: 4px; padding: 2px 5px; }
+    .progress-bar-wrap { height: 4px; background: var(--bg3); border-radius: 2px; margin-top: 8px; overflow: hidden; }
+    .progress-bar-fill { height: 100%; background: var(--green); border-radius: 2px; transition: width .4s; }
+
+    /* ── Buy form ─── */
+    .buy-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+    @media (max-width: 680px) { .buy-grid { grid-template-columns: 1fr; } }
+
+    .input-wrap { position: relative; }
+    .input-wrap input { width: 100%; background: var(--bg3); border: 1.5px solid var(--border); border-radius: 10px; padding: 14px 70px 14px 16px; color: var(--text); font-size: 18px; font-weight: 700; outline: none; transition: border-color .2s; }
+    .input-wrap input:focus { border-color: var(--green2); }
+    .input-wrap input::placeholder { color: var(--text3); font-size: 16px; font-weight: 400; }
+    .input-token { position: absolute; right: 14px; top: 50%; transform: translateY(-50%); font-size: 13px; font-weight: 700; color: var(--text2); }
+    .input-label { font-size: 12px; color: var(--text3); margin-bottom: 7px; font-weight: 500; }
+    .input-hint { font-size: 11px; color: var(--text3); margin-top: 5px; }
+
+    .output-box { background: var(--bg3); border: 1.5px solid var(--border); border-radius: 10px; padding: 14px 16px; min-height: 56px; display: flex; align-items: center; justify-content: space-between; }
+    .output-value { font-size: 22px; font-weight: 800; color: var(--green); }
+    .output-token { font-size: 13px; font-weight: 700; color: var(--text2); }
+    .output-placeholder { font-size: 14px; color: var(--text3); }
+
+    /* ── Breakdown ─── */
+    .breakdown { margin-top: 16px; background: var(--bg3); border-radius: 10px; padding: 14px 16px; }
+    .breakdown-row { display: flex; justify-content: space-between; align-items: center; padding: 6px 0; font-size: 13px; border-bottom: 1px solid var(--border); }
+    .breakdown-row:last-child { border-bottom: none; font-weight: 700; font-size: 14px; }
+    .breakdown-key { color: var(--text2); display: flex; align-items: center; gap: 7px; }
+    .breakdown-val { color: var(--text); font-weight: 600; }
+    .breakdown-val.green { color: var(--green); }
+    .swatch { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+    .swatch-green { background: var(--green); }
+    .swatch-blue { background: var(--blue); }
+    .swatch-purple { background: var(--purple); }
+    .swatch-yellow { background: var(--yellow); }
+
+    /* ── Buttons ─── */
+    .btn-primary { width: 100%; background: var(--green); color: #000; border: none; border-radius: 10px; padding: 15px; font-weight: 800; font-size: 16px; cursor: pointer; margin-top: 18px; transition: opacity .2s, transform .1s; letter-spacing: .2px; }
+    .btn-primary:hover:not(:disabled) { opacity: .88; transform: translateY(-1px); }
+    .btn-primary:disabled { opacity: .4; cursor: not-allowed; transform: none; }
+    .btn-approve { width: 100%; background: var(--blue); color: #fff; border: none; border-radius: 10px; padding: 15px; font-weight: 800; font-size: 16px; cursor: pointer; margin-top: 18px; transition: opacity .2s; }
+    .btn-approve:hover:not(:disabled) { opacity: .88; }
+    .btn-approve:disabled { opacity: .4; cursor: not-allowed; }
+
+    /* ── Status ─── */
+    #tx-status { margin-top: 14px; padding: 12px 16px; border-radius: 8px; font-size: 13px; font-weight: 600; display: none; }
+    #tx-status.info    { background: var(--blue-dim);   color: var(--blue);   border: 1px solid rgba(59,130,246,.3);  display: block; }
+    #tx-status.success { background: var(--green-dim);  color: var(--green);  border: 1px solid var(--green2);       display: block; }
+    #tx-status.error   { background: rgba(239,68,68,.1); color: var(--red);   border: 1px solid rgba(239,68,68,.3);  display: block; }
+
+    /* ── How it works ─── */
+    .how-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; margin-top: 4px; }
+    .how-step { background: var(--bg3); border-radius: 10px; padding: 18px; }
+    .how-num { width: 28px; height: 28px; border-radius: 50%; background: var(--green-dim); border: 1px solid var(--green2); color: var(--green); font-size: 13px; font-weight: 800; display: flex; align-items: center; justify-content: center; margin-bottom: 12px; }
+    .how-step h4 { font-size: 14px; font-weight: 700; color: var(--text); margin-bottom: 5px; }
+    .how-step p { font-size: 13px; color: var(--text2); line-height: 1.5; }
+
+    /* ── Recent purchases ─── */
+    .activity-row { display: flex; justify-content: space-between; align-items: center; padding: 10px 0; border-bottom: 1px solid var(--border); font-size: 13px; }
+    .activity-row:last-child { border-bottom: none; }
+    .activity-addr { color: var(--text2); font-family: monospace; font-size: 12px; }
+    .activity-cnova { color: var(--green); font-weight: 700; }
+    .activity-usdc { color: var(--text3); font-size: 12px; }
+    .activity-time { color: var(--text3); font-size: 11px; }
+    .activity-empty { color: var(--text3); font-size: 13px; padding: 16px 0; text-align: center; }
+
+    /* ── Pill ─── */
+    .pill { display: inline-flex; align-items: center; gap: 5px; border-radius: 20px; padding: 3px 10px; font-size: 11px; font-weight: 600; }
+    .pill-green  { background: var(--green-dim);  color: var(--green);  border: 1px solid var(--green2); }
+    .pill-yellow { background: var(--yellow-dim); color: var(--yellow); border: 1px solid rgba(245,158,11,.4); }
+
+    /* ── Divider ─── */
+    .arrow-divider { text-align: center; padding: 8px 0; font-size: 20px; color: var(--text3); }
+
+    /* ── Coming soon overlay ─── */
+    .coming-soon-note { background: var(--yellow-dim); border: 1px solid rgba(245,158,11,.35); border-radius: 8px; padding: 10px 14px; font-size: 12px; color: var(--yellow); margin-top: 14px; text-align: center; }
+
+    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.4} }
+    .pulse { animation: pulse 2s infinite; }
+    .spin { animation: spin .8s linear infinite; display: inline-block; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+  </style>
+</head>
+<body>
+
+<!-- ── Header ──────────────────────────────────────────────────────────────── -->
+<header>
+  <a href="index.html" class="logo">
+    <svg width="32" height="32" viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <circle cx="20" cy="20" r="19" stroke="#00e5a0" stroke-width="1.5"/>
+      <path d="M20 8 L20 32 M8 20 L32 20 M11.5 11.5 L28.5 28.5 M28.5 11.5 L11.5 28.5" stroke="#00e5a0" stroke-width="1.2" stroke-linecap="round"/>
+      <circle cx="20" cy="20" r="5" fill="none" stroke="#00e5a0" stroke-width="1.5"/>
+    </svg>
+    <span class="logo-text">Crypto<span>Nova</span></span>
+    <span class="logo-badge">CNOVA</span>
+  </a>
+  <div class="header-right">
+    <a href="index.html" class="nav-link">Dashboard</a>
+    <a href="buy.html" class="nav-link active">Buy CNOVA</a>
+    <a href="governance.html" class="nav-link">Governance</a>
+    <button class="theme-toggle" onclick="toggleTheme()">☀️</button>
+    <button id="btn-connect" onclick="connectWallet()">Connect Wallet</button>
+  </div>
+</header>
+
+<!-- ── Main ────────────────────────────────────────────────────────────────── -->
+<main>
+
+  <!-- Hero -->
+  <div class="hero">
+    <div class="hero-badge">
+      <span class="pulse">●</span> Live Bonding Curve
+    </div>
+    <h1>Buy <span>CNOVA</span> Tokens</h1>
+    <p>Purchase CNOVA at a guaranteed price above floor. Every purchase strengthens the treasury and adds liquidity to the protocol.</p>
+  </div>
+
+  <!-- Live Price Stats -->
+  <div class="card" style="margin-bottom:20px;">
+    <div class="card-title"><span class="dot"></span> Live Price Data</div>
+    <div class="floor-grid">
+      <div class="floor-stat">
+        <div class="floor-stat-label">Floor Price</div>
+        <div class="floor-stat-value green" id="floor-price">—</div>
+        <div class="floor-stat-sub">Treasury USDC ÷ Supply</div>
+      </div>
+      <div class="floor-stat">
+        <div class="floor-stat-label">Current Tier Price</div>
+        <div class="floor-stat-value" id="current-price">—</div>
+        <div class="floor-stat-sub" id="current-mult-label">Bonding curve multiplier</div>
+      </div>
+      <div class="floor-stat">
+        <div class="floor-stat-label">Treasury USDC</div>
+        <div class="floor-stat-value" id="treasury-bal">—</div>
+        <div class="floor-stat-sub">Protocol backing</div>
+      </div>
+      <div class="floor-stat">
+        <div class="floor-stat-label">Circulating Supply</div>
+        <div class="floor-stat-value" id="circ-supply">—</div>
+        <div class="floor-stat-sub" id="supply-sub">CNOVA tokens</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Bonding Curve Tiers -->
+  <div class="card" style="margin-bottom:20px;">
+    <div class="card-title"><span class="dot"></span> Bonding Curve Tiers</div>
+    <div class="tiers-grid" id="tiers-grid">
+      <!-- injected by JS -->
+    </div>
+    <div style="margin-top:12px; font-size:12px; color:var(--text3); line-height:1.6;">
+      Price rises automatically as circulating supply grows. Each tier locks in higher minimum backing per token.
+      <span id="next-tier-hint"></span>
+    </div>
+  </div>
+
+  <!-- Buy Form -->
+  <div class="card">
+    <div class="card-title"><span class="dot"></span> Purchase CNOVA</div>
+
+    <div class="buy-grid">
+      <!-- Input side -->
+      <div>
+        <div class="input-label">You pay</div>
+        <div class="input-wrap">
+          <input type="number" id="usdc-input" placeholder="0.00" min="1" step="any" oninput="onAmountChange()" />
+          <span class="input-token">USDC</span>
+        </div>
+        <div class="input-hint" id="wallet-bal-hint">Connect wallet to see balance</div>
+      </div>
+
+      <!-- Output side -->
+      <div>
+        <div class="input-label">You receive</div>
+        <div class="output-box">
+          <span class="output-placeholder" id="cnova-out-placeholder">Enter USDC amount</span>
+          <span class="output-value" id="cnova-out" style="display:none;"></span>
+          <span class="output-token" id="cnova-token-label" style="display:none;">CNOVA</span>
+        </div>
+        <div class="input-hint" id="rate-hint"></div>
+      </div>
+    </div>
+
+    <!-- Premium breakdown -->
+    <div class="breakdown" id="breakdown" style="display:none;">
+      <div class="breakdown-row">
+        <span class="breakdown-key"><span class="swatch swatch-green"></span>Floor value → Treasury</span>
+        <span class="breakdown-val" id="bd-treasury">—</span>
+      </div>
+      <div class="breakdown-row">
+        <span class="breakdown-key"><span class="swatch swatch-blue"></span>Premium → Stability Fund</span>
+        <span class="breakdown-val" id="bd-sf">—</span>
+      </div>
+      <div class="breakdown-row">
+        <span class="breakdown-key"><span class="swatch swatch-purple"></span>Premium → Liquidity Reserve</span>
+        <span class="breakdown-val" id="bd-lq">—</span>
+      </div>
+      <div class="breakdown-row">
+        <span class="breakdown-key">Total paid</span>
+        <span class="breakdown-val green" id="bd-total">—</span>
+      </div>
+    </div>
+
+    <!-- Action area -->
+    <div id="action-area">
+      <!-- Injected by JS based on wallet + approval state -->
+    </div>
+
+    <div id="tx-status"></div>
+
+    <!-- Coming soon note — hidden once contract is live -->
+    <div class="coming-soon-note" id="coming-soon-note" style="display:none;">
+      ⏳ Direct sale contract deploying with V8.19 — check back at launch
+    </div>
+  </div>
+
+  <!-- How it works -->
+  <div class="card" style="margin-top:20px;">
+    <div class="card-title"><span class="dot"></span> How It Works</div>
+    <div class="how-grid">
+      <div class="how-step">
+        <div class="how-num">1</div>
+        <h4>Price Discovery</h4>
+        <p>Floor price = Treasury USDC ÷ circulating supply. You always buy above floor — treasury never loses backing.</p>
+      </div>
+      <div class="how-step">
+        <div class="how-num">2</div>
+        <h4>Bonding Curve</h4>
+        <p>Price tier rises with supply: 1.25× → 1.50× → 1.75× → 2.00× floor. Early buyers pay the lowest premium.</p>
+      </div>
+      <div class="how-step">
+        <div class="how-num">3</div>
+        <h4>Premium Split</h4>
+        <p>The amount above floor value is split dynamically between the Stability Fund and Liquidity Reserve based on each fund's deficit.</p>
+      </div>
+      <div class="how-step">
+        <div class="how-num">4</div>
+        <h4>You Own CNOVA</h4>
+        <p>No matrix participation required. Hold, trade, or use CNOVA for DAO governance. No lock-up period.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Recent Purchases -->
+  <div class="card" style="margin-top:20px;">
+    <div class="card-title" style="justify-content:space-between;">
+      <span style="display:flex;align-items:center;gap:8px;"><span class="dot"></span> Recent Purchases</span>
+      <span style="font-size:11px;color:var(--text3);font-weight:400;text-transform:none;letter-spacing:0;">Last 10 transactions</span>
+    </div>
+    <div id="activity-list">
+      <div class="activity-empty">No purchases yet — be the first buyer.</div>
+    </div>
+  </div>
+
+</main>
+
+<script>
+// ─────────────────────────────────────────────────────────────────────────────
+// CONFIG — swap addresses once V8.19 deploys
+// ─────────────────────────────────────────────────────────────────────────────
+const CHAIN_ID          = 84532;  // Base Sepolia (switch to 8453 for mainnet)
+const RPC_URL           = 'https://sepolia.base.org';
+
+// V8.18 live addresses
+const USDC_ADDR         = '0x2D8B7b5eDec96bE441b6fb0D45D74a2BcE2C639a';
+const CNOVA_ADDR        = '0xEab971fAEc2D2c81EFF732f01E6bDe3eF563cD7c';
+const TREASURY_ADDR     = '0x38d400F8CF449FBfc1A55455Bfe8F4cfaC46F710';
+
+// TODO V8.19: set once CNOVADirectSale.sol is deployed
+const DIRECT_SALE_ADDR  = '';   // '' = coming soon mode
+
+// ── Bonding curve tiers ─────────────────────────────────────────────────────
+// [label, multiplier (x1000), supply ceiling (CNOVA, 18 dec as string)]
+const CURVE_TIERS = [
+  { label: 'Tier 1', mult: 1.25, ceiling: 1_000_000,   display: '0 – 1M CNOVA'  },
+  { label: 'Tier 2', mult: 1.50, ceiling: 5_000_000,   display: '1M – 5M CNOVA' },
+  { label: 'Tier 3', mult: 1.75, ceiling: 20_000_000,  display: '5M – 20M CNOVA'},
+  { label: 'Tier 4', mult: 2.00, ceiling: Infinity,     display: '20M+ CNOVA'   },
+];
+
+// ── Dynamic SF/LQ split (targets — adjust once V8.19 sets them on-chain) ───
+const SF_TARGET_USD = 500;   // $500 SF target
+const LQ_TARGET_USD = 1000;  // $1000 LQ target (future: read from contract)
+
+// ── ABIs ─────────────────────────────────────────────────────────────────────
+const ERC20_ABI = [
+  'function balanceOf(address) external view returns (uint256)',
+  'function totalSupply() external view returns (uint256)',
+  'function allowance(address,address) external view returns (uint256)',
+  'function approve(address,uint256) external returns (bool)',
+];
+const TREASURY_ABI = [
+  'function usdcBalance() external view returns (uint256)',
+  'function balanceOf(address) external view returns (uint256)',
+];
+const DIRECT_SALE_ABI = [
+  'function buyCNOVA(uint256 usdcAmount) external',
+  'function sfBalance() external view returns (uint256)',
+  'function lqBalance() external view returns (uint256)',
+  'function previewPurchase(uint256 usdcAmount) external view returns (uint256 cnovaOut, uint256 toTreasury, uint256 toSF, uint256 toLQ)',
+];
+
+// ── State ────────────────────────────────────────────────────────────────────
+let provider, signer, userAddr;
+let floorPrice    = 0;   // USDC per CNOVA (floating point)
+let currentTierIdx = 0;
+let currentMult   = 1.25;
+let sfBalUSD      = 0;
+let lqBalUSD      = 0;
+let approvalNeeded = true;
+let usdcBalance   = 0;
+
+// ── Theme ─────────────────────────────────────────────────────────────────────
+function toggleTheme() {
+  document.body.classList.toggle('light');
+  localStorage.setItem('theme', document.body.classList.contains('light') ? 'light' : 'dark');
+}
+if (localStorage.getItem('theme') === 'light') document.body.classList.add('light');
+
+// ── Wallet ───────────────────────────────────────────────────────────────────
+async function connectWallet() {
+  if (!window.ethereum) { setStatus('No wallet detected. Please install MetaMask.', 'error'); return; }
+  try {
+    provider = new ethers.BrowserProvider(window.ethereum);
+    await provider.send('eth_requestAccounts', []);
+    const net = await provider.getNetwork();
+    if (Number(net.chainId) !== CHAIN_ID) {
+      setStatus(`Wrong network. Please switch to Base Sepolia (chainId ${CHAIN_ID}).`, 'error');
+      return;
+    }
+    signer  = await provider.getSigner();
+    userAddr = await signer.getAddress();
+    const btn = document.getElementById('btn-connect');
+    btn.textContent = userAddr.slice(0,6) + '…' + userAddr.slice(-4);
+    btn.classList.add('connected');
+    await refreshWalletState();
+    renderActionArea();
+  } catch(e) {
+    setStatus('Connection failed: ' + (e.message || e), 'error');
+  }
+}
+
+async function refreshWalletState() {
+  if (!signer || !userAddr) return;
+  try {
+    const usdc = new ethers.Contract(USDC_ADDR, ERC20_ABI, provider);
+    const bal  = await usdc.balanceOf(userAddr);
+    usdcBalance = Number(bal) / 1e6;
+    document.getElementById('wallet-bal-hint').textContent =
+      `Wallet balance: $${usdcBalance.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2})} USDC`;
+
+    if (DIRECT_SALE_ADDR) {
+      const allowance = await usdc.allowance(userAddr, DIRECT_SALE_ADDR);
+      const inputVal  = parseFloat(document.getElementById('usdc-input').value) || 0;
+      approvalNeeded  = Number(allowance) / 1e6 < inputVal;
+    }
+  } catch {}
+}
+
+// ── On-chain price data ───────────────────────────────────────────────────────
+async function loadPriceData() {
+  try {
+    const ro       = new ethers.JsonRpcProvider(RPC_URL, CHAIN_ID, { staticNetwork: true });
+    const cnova    = new ethers.Contract(CNOVA_ADDR, ERC20_ABI, ro);
+    const treasury = new ethers.Contract(TREASURY_ADDR, ERC20_ABI, ro); // USDC held by treasury
+    const usdc     = new ethers.Contract(USDC_ADDR, ERC20_ABI, ro);
+
+    const [totalSupply, treasuryUSDC] = await Promise.all([
+      cnova.totalSupply(),
+      usdc.balanceOf(TREASURY_ADDR),
+    ]);
+
+    const supplyF   = Number(totalSupply) / 1e18;
+    const treasuryF = Number(treasuryUSDC) / 1e6;
+
+    // Floor price: USDC per CNOVA
+    floorPrice = supplyF > 0 ? treasuryF / supplyF : 0;
+
+    // Determine active tier
+    currentTierIdx = CURVE_TIERS.findIndex(t => supplyF < t.ceiling);
+    if (currentTierIdx < 0) currentTierIdx = CURVE_TIERS.length - 1;
+    currentMult = CURVE_TIERS[currentTierIdx].mult;
+
+    // If direct sale live, read SF/LQ balances for dynamic split
+    if (DIRECT_SALE_ADDR) {
+      try {
+        const ds = new ethers.Contract(DIRECT_SALE_ADDR, DIRECT_SALE_ABI, ro);
+        const [sfB, lqB] = await Promise.all([ds.sfBalance(), ds.lqBalance()]);
+        sfBalUSD = Number(sfB) / 1e6;
+        lqBalUSD = Number(lqB) / 1e6;
+      } catch {}
+    }
+
+    // Render
+    const fmt = n => n > 0
+      ? '$' + n.toPrecision(4)
+      : '—';
+    const fmtK = n => n >= 1e6 ? (n/1e6).toFixed(2)+'M' : n >= 1e3 ? (n/1e3).toFixed(1)+'K' : n.toFixed(0);
+
+    document.getElementById('floor-price').textContent  = floorPrice > 0 ? fmt(floorPrice) : '—';
+    document.getElementById('current-price').textContent = floorPrice > 0 ? fmt(floorPrice * currentMult) : '—';
+    document.getElementById('current-mult-label').textContent = `${currentMult}× floor (Tier ${currentTierIdx+1})`;
+    document.getElementById('treasury-bal').textContent  = treasuryF > 0 ? '$' + treasuryF.toLocaleString('en-US', {maximumFractionDigits:0}) : '—';
+    document.getElementById('circ-supply').textContent   = supplyF > 0 ? fmtK(supplyF) : '—';
+    document.getElementById('supply-sub').textContent    = supplyF > 0 ? `${fmtK(supplyF)} / 20M at this tier` : 'CNOVA tokens';
+
+    renderTiers(supplyF);
+    onAmountChange(); // refresh preview if amount was pre-filled
+
+  } catch(e) {
+    console.error('loadPriceData:', e);
+  }
+}
+
+// ── Tier grid ─────────────────────────────────────────────────────────────────
+function renderTiers(supplyF) {
+  const grid = document.getElementById('tiers-grid');
+  grid.innerHTML = '';
+
+  CURVE_TIERS.forEach((t, i) => {
+    const isActive = i === currentTierIdx;
+    const isPast   = i < currentTierIdx;
+
+    // Progress within current tier
+    let progress = 0;
+    if (isActive) {
+      const prevCeiling = i === 0 ? 0 : CURVE_TIERS[i-1].ceiling;
+      const tierSize    = t.ceiling === Infinity ? supplyF + 1_000_000 : t.ceiling - prevCeiling;
+      progress = Math.min(100, ((supplyF - prevCeiling) / tierSize) * 100);
+    } else if (isPast) {
+      progress = 100;
+    }
+
+    const tierPrice = floorPrice > 0 ? '$' + (floorPrice * t.mult).toPrecision(4) : '—';
+
+    grid.innerHTML += `
+      <div class="tier-card ${isActive ? 'active' : isPast ? 'past' : 'future'}">
+        ${isActive ? '<span class="tier-badge">ACTIVE</span>' : ''}
+        <div class="tier-label">${t.label}</div>
+        <div class="tier-mult">${t.mult}×</div>
+        <div class="tier-price">${tierPrice} / CNOVA</div>
+        <div class="tier-range">${t.display}</div>
+        <div class="progress-bar-wrap">
+          <div class="progress-bar-fill" style="width:${progress}%"></div>
+        </div>
+      </div>`;
+  });
+
+  // Next tier hint
+  const next = CURVE_TIERS[currentTierIdx + 1];
+  if (next && supplyF > 0) {
+    const remaining = CURVE_TIERS[currentTierIdx].ceiling - supplyF;
+    document.getElementById('next-tier-hint').textContent =
+      ` Next tier (${next.mult}×) in ${remaining.toLocaleString('en-US', {maximumFractionDigits:0})} CNOVA.`;
+  }
+}
+
+// ── Amount calculator ─────────────────────────────────────────────────────────
+function onAmountChange() {
+  const raw = parseFloat(document.getElementById('usdc-input').value);
+  if (!raw || raw <= 0 || floorPrice <= 0) {
+    document.getElementById('cnova-out').style.display       = 'none';
+    document.getElementById('cnova-token-label').style.display = 'none';
+    document.getElementById('cnova-out-placeholder').style.display = 'block';
+    document.getElementById('breakdown').style.display = 'none';
+    document.getElementById('rate-hint').textContent = '';
+    renderActionArea();
+    return;
+  }
+
+  const usdcAmt   = raw;
+  const tierPrice = floorPrice * currentMult;
+  const cnovaOut  = usdcAmt / tierPrice;
+  const floorVal  = cnovaOut * floorPrice;        // what goes to treasury
+  const premium   = usdcAmt - floorVal;           // extra above floor value
+
+  // Dynamic SF/LQ split based on deficits
+  const sfDeficit = Math.max(0, SF_TARGET_USD - sfBalUSD);
+  const lqDeficit = Math.max(0, LQ_TARGET_USD - lqBalUSD);
+  const totalDeficit = sfDeficit + lqDeficit;
+  let sfShare, lqShare;
+  if (totalDeficit === 0) {
+    sfShare = lqShare = premium / 2;
+  } else {
+    sfShare = premium * (sfDeficit / totalDeficit);
+    lqShare = premium * (lqDeficit / totalDeficit);
+  }
+
+  // Render output
+  const fmtC = n => n.toLocaleString('en-US', { minimumFractionDigits:2, maximumFractionDigits:4 });
+  const fmtD = n => '$' + n.toLocaleString('en-US', { minimumFractionDigits:2, maximumFractionDigits:2 });
+
+  document.getElementById('cnova-out-placeholder').style.display = 'none';
+  document.getElementById('cnova-out').style.display       = 'inline';
+  document.getElementById('cnova-token-label').style.display = 'inline';
+  document.getElementById('cnova-out').textContent         = fmtC(cnovaOut);
+  document.getElementById('rate-hint').textContent         =
+    `Rate: 1 CNOVA = ${fmtD(tierPrice)}  (floor ${fmtD(floorPrice)} + ${((currentMult-1)*100).toFixed(0)}% premium)`;
+
+  document.getElementById('breakdown').style.display = 'block';
+  document.getElementById('bd-treasury').textContent = fmtD(floorVal);
+  document.getElementById('bd-sf').textContent       = fmtD(sfShare);
+  document.getElementById('bd-lq').textContent       = fmtD(lqShare);
+  document.getElementById('bd-total').textContent    = fmtD(usdcAmt);
+
+  // Check approval
+  if (signer) refreshWalletState().then(renderActionArea);
+  else renderActionArea();
+}
+
+// ── Action area ───────────────────────────────────────────────────────────────
+function renderActionArea() {
+  const area  = document.getElementById('action-area');
+  const csNote = document.getElementById('coming-soon-note');
+  const amount = parseFloat(document.getElementById('usdc-input').value) || 0;
+
+  if (!DIRECT_SALE_ADDR) {
+    area.innerHTML = '';
+    csNote.style.display = 'block';
+    return;
+  }
+  csNote.style.display = 'none';
+
+  if (!signer) {
+    area.innerHTML = `<button class="btn-primary" onclick="connectWallet()">Connect Wallet to Buy</button>`;
+    return;
+  }
+  if (amount <= 0) {
+    area.innerHTML = `<button class="btn-primary" disabled>Enter USDC Amount</button>`;
+    return;
+  }
+  if (amount > usdcBalance) {
+    area.innerHTML = `<button class="btn-primary" disabled>Insufficient USDC Balance</button>`;
+    return;
+  }
+  if (approvalNeeded) {
+    area.innerHTML = `<button class="btn-approve" onclick="approveUSDC()">Approve USDC</button>`;
+    return;
+  }
+  area.innerHTML = `<button class="btn-primary" onclick="executeBuy()">Buy CNOVA</button>`;
+}
+
+// ── Approve ───────────────────────────────────────────────────────────────────
+async function approveUSDC() {
+  const amount = parseFloat(document.getElementById('usdc-input').value);
+  if (!signer || !amount) return;
+  try {
+    setStatus('Approving USDC… please confirm in wallet.', 'info');
+    const usdc = new ethers.Contract(USDC_ADDR, ERC20_ABI, signer);
+    const rawAmt = ethers.parseUnits(amount.toString(), 6);
+    const tx   = await usdc.approve(DIRECT_SALE_ADDR, rawAmt);
+    setStatus('Waiting for confirmation…', 'info');
+    await tx.wait();
+    approvalNeeded = false;
+    setStatus('✅ Approved! Now click Buy CNOVA.', 'success');
+    renderActionArea();
+  } catch(e) {
+    setStatus('Approval failed: ' + (e.reason || e.message || e), 'error');
+  }
+}
+
+// ── Buy ───────────────────────────────────────────────────────────────────────
+async function executeBuy() {
+  const amount = parseFloat(document.getElementById('usdc-input').value);
+  if (!signer || !amount || !DIRECT_SALE_ADDR) return;
+  try {
+    setStatus('Sending purchase… please confirm in wallet.', 'info');
+    const ds   = new ethers.Contract(DIRECT_SALE_ADDR, DIRECT_SALE_ABI, signer);
+    const raw  = ethers.parseUnits(amount.toString(), 6);
+    const tx   = await ds.buyCNOVA(raw, { gasLimit: 300_000 });
+    setStatus(`TX submitted: ${tx.hash.slice(0,18)}…`, 'info');
+    await tx.wait();
+    setStatus(`✅ Success! CNOVA sent to your wallet. TX: ${tx.hash.slice(0,18)}…`, 'success');
+    document.getElementById('usdc-input').value = '';
+    onAmountChange();
+    await refreshWalletState();
+    loadActivity();
+    loadPriceData();
+  } catch(e) {
+    setStatus('Purchase failed: ' + (e.reason || e.shortMessage || e.message || e), 'error');
+  }
+}
+
+// ── Activity feed ─────────────────────────────────────────────────────────────
+async function loadActivity() {
+  const list = document.getElementById('activity-list');
+  if (!DIRECT_SALE_ADDR) {
+    list.innerHTML = '<div class="activity-empty">Activity feed available once sale contract is live.</div>';
+    return;
+  }
+  try {
+    const ro  = new ethers.JsonRpcProvider(RPC_URL, CHAIN_ID, { staticNetwork: true });
+    const ds  = new ethers.Contract(DIRECT_SALE_ADDR, [
+      'event CNOVAPurchased(address indexed buyer, uint256 usdcPaid, uint256 cnovaOut, uint256 tier)'
+    ], ro);
+    const filter = ds.filters.CNOVAPurchased();
+    const latest = await ro.getBlockNumber();
+    const events = await ds.queryFilter(filter, latest - 10000, latest);
+    const recent = [...events].reverse().slice(0, 10);
+
+    if (recent.length === 0) {
+      list.innerHTML = '<div class="activity-empty">No purchases yet — be the first buyer.</div>';
+      return;
+    }
+
+    list.innerHTML = recent.map(e => {
+      const buyer   = e.args[0];
+      const usdc    = (Number(e.args[1]) / 1e6).toFixed(2);
+      const cnova   = (Number(e.args[2]) / 1e18).toFixed(4);
+      const tierNum = Number(e.args[3]) + 1;
+      return `
+        <div class="activity-row">
+          <span class="activity-addr">${buyer.slice(0,6)}…${buyer.slice(-4)}</span>
+          <span class="activity-cnova">+${cnova} CNOVA</span>
+          <span class="activity-usdc">$${usdc}</span>
+          <span class="pill pill-green" style="font-size:10px;">T${tierNum}</span>
+        </div>`;
+    }).join('');
+  } catch(e) {
+    list.innerHTML = '<div class="activity-empty">Activity unavailable.</div>';
+  }
+}
+
+// ── Status helper ─────────────────────────────────────────────────────────────
+function setStatus(msg, type) {
+  const el = document.getElementById('tx-status');
+  el.textContent = msg;
+  el.className   = type;
+}
+
+// ── Init ──────────────────────────────────────────────────────────────────────
+loadPriceData();
+loadActivity();
+setInterval(loadPriceData, 30_000);  // refresh every 30s
+
+// Pre-wire wallet if already connected
+if (window.ethereum) {
+  window.ethereum.request({ method: 'eth_accounts' }).then(accounts => {
+    if (accounts.length) connectWallet();
+  });
+  window.ethereum.on('accountsChanged', () => connectWallet());
+  window.ethereum.on('chainChanged', () => location.reload());
+}
+</script>
+</body>
+</html>
