@@ -1,6 +1,6 @@
 "use strict";
 /**
- * system_keeper.js — Autonomous Health Monitor & Auto-Funder for V8.9
+ * system_keeper.js — Autonomous Health Monitor & Auto-Funder for V8.18
  *
  * Runs every hour (via Claude Scheduled Task or Windows Task Scheduler).
  * Checks, alerts, and acts — then exits cleanly.
@@ -59,10 +59,16 @@ require('dotenv').config({ path: path.resolve(__dirname, '../.env') });
 const RPC_URL        = process.env.BASE_SEPOLIA_RPC_URL || 'https://sepolia.base.org';
 const DEPLOYER_KEY   = process.env.DEPLOYER_PRIVATE_KEY;
 const W1_KEY         = process.env.W1_PRIVATE_KEY;          // optional — W1 separate key
-const ADDR_FILE      = path.join(__dirname, process.env.ADDRESSES_FILE || 'deployed_addresses_v8_17.json');
+const ADDR_FILE      = path.join(__dirname, process.env.ADDRESSES_FILE || 'deployed_addresses_v8_18.json');
 const LOG_FILE       = process.env.KEEPER_LOG
   ? path.resolve(process.env.KEEPER_LOG)
   : path.join(__dirname, '../logs/keeper.log');
+const STATE_FILE     = path.join(path.dirname(LOG_FILE), 'syskeeper_state.json');
+
+// Telegram throttle — send heartbeat every N quiet (healthy, no-action) runs
+const HEARTBEAT_EVERY    = Number(process.env.HEARTBEAT_EVERY    || 30);   // ~1 hr at 2-min tick
+// Rescue cooldown — don't re-run AUTO_RESCUE within N minutes of last attempt
+const RESCUE_COOLDOWN_MS = Number(process.env.RESCUE_COOLDOWN_MIN || 15) * 60_000;
 
 // Thresholds
 const SF_MIN_USD         = Number(process.env.SF_MIN_USD        || 100);
@@ -112,6 +118,18 @@ function flushLog() {
 async function safeCall(fn, defaultVal) {
   try { return await fn(); }
   catch { return defaultVal; }
+}
+
+// ── State persistence (throttle counters across runs) ─────────────────────────
+function loadSKState() {
+  try { return JSON.parse(fs.readFileSync(STATE_FILE, 'utf8')); }
+  catch { return { totalRuns: 0, quietRuns: 0, lastRescueAt: null }; }
+}
+function saveSKState(s) {
+  try {
+    fs.mkdirSync(path.dirname(STATE_FILE), { recursive: true });
+    fs.writeFileSync(STATE_FILE, JSON.stringify(s, null, 2));
+  } catch (_) {}
 }
 
 // ── Telegram alert ────────────────────────────────────────────────────────────
@@ -189,14 +207,18 @@ const USDC_ABI = [
 
 // ── Main ─────────────────────────────────────────────────────────────────────
 async function main() {
+  const skState    = loadSKState();
+  skState.totalRuns = (skState.totalRuns || 0) + 1;
+
   log('');
   log('╔═══════════════════════════════════════════════════════════════╗');
-  log('║        CryptoNova V8.9 — System Keeper                       ║');
+  log('║        CryptoNova V8.18 — System Keeper                      ║');
   log('╚═══════════════════════════════════════════════════════════════╝');
   log(`  Run at:    ${ts()}`);
   log(`  Log file:  ${LOG_FILE}`);
   log(`  Dry run:   ${DRY_RUN}`);
   log(`  Actions:   AUTO_RESCUE=${AUTO_RESCUE}  SF_AUTOFUND=${SF_AUTOFUND}  W1_WITHDRAW=${W1_WITHDRAW}`);
+  log(`  Run #${skState.totalRuns}  quiet_runs=${skState.quietRuns || 0}  last_rescue=${skState.lastRescueAt || 'never'}`);
   log('');
 
   if (!fs.existsSync(ADDR_FILE)) {
@@ -354,11 +376,18 @@ async function main() {
   // ── Section 5: Decisions ──────────────────────────────────────────────────
   log('  ── Decisions ─────────────────────────────────────────────────────');
 
-  const needsRescue    = AUTO_RESCUE  && totalParked > RESCUE_THRESHOLD;
+  const rescueCooldownOk = !skState.lastRescueAt ||
+    (Date.now() - new Date(skState.lastRescueAt).getTime() > RESCUE_COOLDOWN_MS);
+  const needsRescue    = AUTO_RESCUE  && totalParked > RESCUE_THRESHOLD && rescueCooldownOk;
   const needsFund      = SF_AUTOFUND  && sfTotalUSD < SF_MIN_USD;
   const needsW1Draw    = W1_WITHDRAW  && Number(w1T2AW) > 0;
   // Open T2 gate as soon as T1 MatB gets its first member — fires once, idempotent.
   const needsOpenT2Gate = T2_AUTO_GATE && Number(t1bOcc) >= 1 && !t2GateOpen;
+
+  if (AUTO_RESCUE && totalParked > RESCUE_THRESHOLD && !rescueCooldownOk) {
+    const minutesAgo = Math.round((Date.now() - new Date(skState.lastRescueAt).getTime()) / 60_000);
+    log(`  ℹ️  AUTO_RESCUE skipped — cooldown active (last rescue ${minutesAgo}m ago, cooldown=${RESCUE_COOLDOWN_MS/60_000}m)`);
+  }
 
   const actions = [];
   if (needsRescue)     actions.push(`AUTO_RESCUE: ${Math.min(RESCUE_BATCH, totalParked)} parked wallets`);
@@ -539,6 +568,7 @@ async function main() {
           if (isOverflow) await new Promise(r => setTimeout(r, 1500));
         }
         log(`  Rescue run complete: ${rescued} rescued`);
+        skState.lastRescueAt = new Date().toISOString();
       } catch (e) {
         log(`  ❌ Auto-rescue error: ${(e.reason || e.shortMessage || e.message || '').slice(0, 100)}`);
       }
@@ -555,10 +585,23 @@ async function main() {
   log('  SF: ' + fmt6(sfTotal) + ' (' + sfHealthPct.toFixed(0) + '% health)  |  Parked: ' + totalParked + '  |  Cycles: ' + sysCycles + '  |  W1: T' + w1Tier);
   log('');
 
-  if (TG_ENABLED) {
-    // Always send a status digest — alerts get a header, healthy runs get a heartbeat.
+  // ── TG throttle decision ──────────────────────────────────────────────────
+  // Send immediately on: critical/warning alert, any action taken.
+  // On healthy + no-action runs: only send every HEARTBEAT_EVERY runs (~1 hr).
+  const hasAlert    = isCritical || isWarning;
+  const hasActions  = actions.length > 0;
+  skState.quietRuns = hasAlert || hasActions ? 0 : (skState.quietRuns || 0) + 1;
+  const isHeartbeat = skState.quietRuns > 0 && skState.quietRuns % HEARTBEAT_EVERY === 0;
+  const shouldSendTG = hasAlert || hasActions || isHeartbeat;
+
+  if (TG_ENABLED && !shouldSendTG) {
+    log(`  📱 TG suppressed — quiet run ${skState.quietRuns}/${HEARTBEAT_EVERY} (next heartbeat in ${HEARTBEAT_EVERY - skState.quietRuns} runs)`);
+  }
+
+  if (TG_ENABLED && shouldSendTG) {
     const headerEmoji = isCritical ? '\u{1F534}' : isWarning ? '\u{1F7E1}' : '\u{1F7E2}';
-    const headerLabel = isCritical ? 'ALERT: CRITICAL' : isWarning ? 'ALERT: WARNING' : 'System Healthy';
+    const headerLabel = isCritical ? 'ALERT: CRITICAL' : isWarning ? 'ALERT: WARNING'
+                      : isHeartbeat ? `Heartbeat #${Math.floor(skState.quietRuns / HEARTBEAT_EVERY)}` : 'System Healthy';
 
     const sfEmoji     = sfTotalUSD < SF_CRITICAL_USD ? '\u{1F534}' : sfTotalUSD < SF_MIN_USD ? '\u{1F7E1}' : '\u{1F7E2}';
     const parkedEmoji = totalParked > PARKED_CRITICAL ? '\u{1F534}' : totalParked > PARKED_WARN ? '\u{1F7E1}' : '\u{1F7E2}';
@@ -597,11 +640,12 @@ async function main() {
 
     const msg  = lines.join('\n');
     const tgOk = await sendTelegram(msg);
-    log(tgOk ? '  Telegram report sent.' : '  Telegram send FAILED -- check BOT_TOKEN/CHAT_ID in .env.');
-  } else {
+    log(tgOk ? '  📱 Telegram report sent.' : '  📱 Telegram send FAILED -- check BOT_TOKEN/CHAT_ID in .env.');
+  } else if (!TG_ENABLED) {
     log('  Telegram: not configured (set TELEGRAM_BOT_TOKEN + TELEGRAM_CHAT_ID to enable).');
   }
 
+  saveSKState(skState);
   flushLog();
 }
 
