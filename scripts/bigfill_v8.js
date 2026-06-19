@@ -219,6 +219,12 @@ const _GAS_RESCUE_NORMAL   = 800_000;
 const _GAS_RESCUE_OVERFLOW = 15_000_000;
 const _rescueCoder = ethers.AbiCoder.defaultAbiCoder();
 
+// ── Give-up list: wallets skipped GIVE_UP_AFTER times are permanently abandoned ──
+// Prevents 28-line skip blocks every batch for wallets that can never be rescued.
+const GIVE_UP_AFTER = 3;          // consecutive skips before giving up
+const _skipCount    = new Map();  // addr (lc) → skip count this run
+const _giveUpSet    = new Set();  // addrs permanently abandoned
+
 function _sfRescueBpsInline(withdrawable, fee) {
   const wBps = withdrawable * 10000n / fee;
   if (wBps >= 10000n) return    0n;
@@ -265,6 +271,9 @@ async function _inlineRescuePass({ matA1, matB1, stabilityFund, matrixKeeper, ra
     if (seen.has(addrLc)) continue;
     seen.add(addrLc);
 
+    // Skip wallets permanently abandoned due to repeated un-rescuable shortfall
+    if (_giveUpSet.has(addrLc)) continue;
+
     // Skip stale slots — member already crossed to MatB
     let inMatB = false;
     try { const m = await matB1.getMember(addr); inMatB = m.isInMatrix; } catch {}
@@ -273,9 +282,15 @@ async function _inlineRescuePass({ matA1, matB1, stabilityFund, matrixKeeper, ra
     const withdrawable = await matA1.withdrawableOf(addr).catch(() => 0n);
     const bps = _sfRescueBpsInline(withdrawable, entryFee);
     if (bps === null) {
-      // < 40% withdrawable — print shortfall so operator knows why it was skipped
-      const shortfall = entryFee - withdrawable;
-      process.stdout.write(`  🏥 skip ${addr.slice(0,10)} (only ${fmt6(withdrawable)}, shortfall ${fmt6(shortfall)} > 60%)\n`);
+      // < 40% withdrawable — track and give up after GIVE_UP_AFTER skips
+      const cnt = (_skipCount.get(addrLc) || 0) + 1;
+      _skipCount.set(addrLc, cnt);
+      if (cnt >= GIVE_UP_AFTER) {
+        _giveUpSet.add(addrLc); // silent from now on
+      } else {
+        const shortfall = entryFee - withdrawable;
+        process.stdout.write(`  🏥 skip ${addr.slice(0,10)} (only ${fmt6(withdrawable)}, shortfall ${fmt6(shortfall)} > 60%)\n`);
+      }
       continue;
     }
 
@@ -334,6 +349,9 @@ async function _inlineRescuePass({ matA1, matB1, stabilityFund, matrixKeeper, ra
     await new Promise(r => setTimeout(r, (gasLimit === _GAS_RESCUE_OVERFLOW) ? 2000 : 6000));
   }
   console.log(`${rescued}/${toRescue.length} rescued ✅`);
+  if (_giveUpSet.size > 0) {
+    console.log(`  🏥 Give-up list: ${_giveUpSet.size} wallet(s) abandoned (shortfall always >60% — not rescuable)`);
+  }
   return rescued;
 }
 
