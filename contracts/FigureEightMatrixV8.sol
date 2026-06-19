@@ -110,9 +110,10 @@ contract FigureEightMatrixV8 is Ownable2Step {
     uint256 public immutable SPLIT_TREASURY_BPS;  // 1500/1700/1900/2000 per tier group
     uint256 public immutable SPLIT_DEV_BPS;       // dev portion (300/...) per tier group
     uint256 public immutable SPLIT_OPS_BPS;       // ops portion (200/...) per tier group
-    uint256 public immutable SPLIT_COMMUNITY_BPS; // community carve (100 all tiers)
-    uint256 public immutable SPLIT_STABILITY_BPS; // 600/500 per tier group -- L1 carve to SF
-    uint256 public immutable SPLIT_BUYBACK_BPS;   // 100/200 per tier group -- to BuybackReserve
+    uint256 public immutable SPLIT_COMMUNITY_BPS;  // community carve (100 all tiers)
+    uint256 public immutable SPLIT_STABILITY_BPS;  // per tier group -- L1 carve to SF
+    uint256 public immutable SPLIT_BUYBACK_BPS;    // per tier group -- to BuybackReserve
+    uint256 public immutable SPLIT_LIQUIDITY_BPS;  // V8.19: per-entry carve to liquidityReserve
     uint256 public constant  BPS_DENOM = 10_000;
 
     // --- Chain pay weights per BFS level (6 levels in V8) --------------------
@@ -130,6 +131,7 @@ contract FigureEightMatrixV8 is Ownable2Step {
     address        public stabilityFund;           // StabilityFund.sol --- set post-deploy
     address        public communityWallet;         // CommunityWallet.sol --- set post-deploy (deferred to mainnet)
     address        public buybackReserve;          // CNOVABuybackReserve.sol --- set post-deploy
+    address        public liquidityReserve;        // V8.19: LQ wallet/CNOVADirectSale --- set post-deploy
     address        public matrixKeeper;            // MatrixKeeper (Chainlink) --- set post-deploy
 
     // --- Figure-8 partner ----------------------------------------------------
@@ -230,6 +232,7 @@ contract FigureEightMatrixV8 is Ownable2Step {
         uint256 opsBps;         // ops wallet carve
         uint256 communityBps;   // community wallet carve (was SF-level carve in V8.8)
         uint256 buybackBps;     // per-entry carve to CNOVABuybackReserve
+        uint256 liquidityBps;   // V8.19: per-entry carve to liquidityReserve (CNOVA/USDC LP)
         // Sum must == 10,000
     }
 
@@ -266,11 +269,11 @@ contract FigureEightMatrixV8 is Ownable2Step {
         require(_matrixSize   >= 3 && _matrixSize <= 1023, "F8V8: invalid size");
         require(_tierIndex    < 10,            "F8V8: invalid tier");
 
-        // V8.9: validate new split fields (9 fields: dev+ops split, communityBps added)
+        // V8.19: validate split fields (10 fields: added liquidityBps)
         uint256 sum = _splits.l1Bps + _splits.chainBps + _splits.poolBps
             + _splits.treasuryBps + _splits.stabilityBps
             + _splits.devBps + _splits.opsBps + _splits.communityBps
-            + _splits.buybackBps;
+            + _splits.buybackBps + _splits.liquidityBps;
         require(sum == BPS_DENOM, "F8V8: splits != 10000");
 
         usdc         = IERC20(_p.usdc);
@@ -291,9 +294,10 @@ contract FigureEightMatrixV8 is Ownable2Step {
         SPLIT_TREASURY_BPS  = _splits.treasuryBps;
         SPLIT_DEV_BPS       = _splits.devBps;
         SPLIT_OPS_BPS       = _splits.opsBps;
-        SPLIT_COMMUNITY_BPS = _splits.communityBps;
-        SPLIT_STABILITY_BPS = _splits.stabilityBps;
-        SPLIT_BUYBACK_BPS   = _splits.buybackBps;
+        SPLIT_COMMUNITY_BPS  = _splits.communityBps;
+        SPLIT_STABILITY_BPS  = _splits.stabilityBps;
+        SPLIT_BUYBACK_BPS    = _splits.buybackBps;
+        SPLIT_LIQUIDITY_BPS  = _splits.liquidityBps;
 
         for (uint256 i = 0; i < 6; i++) {
             chainPayBps[i] = _chainPayBps[i];
@@ -352,6 +356,12 @@ contract FigureEightMatrixV8 is Ownable2Step {
     function setBuybackReserve(address _bbr) external onlyOwner {
         require(_bbr != address(0), "F8V8: zero bbr");
         buybackReserve = _bbr;
+    }
+
+    /// @notice V8.19: Set LiquidityReserve address (CNOVA/USDC LP wallet or CNOVADirectSale).
+    function setLiquidityReserve(address _lr) external onlyOwner {
+        require(_lr != address(0), "F8V8: zero liquidityReserve");
+        liquidityReserve = _lr;
     }
 
     /// @notice V8.1: Set MatrixKeeper (Chainlink Automation) address.
@@ -714,6 +724,14 @@ contract FigureEightMatrixV8 is Ownable2Step {
         uint256 buybackAmt = ENTRY_FEE * SPLIT_BUYBACK_BPS / BPS_DENOM;
         if (buybackAmt > 0) {
             _forwardToBuybackReserve(buybackAmt);
+        }
+
+        // -- V8.19: LiquidityReserve carve (CNOVA/USDC LP funding) -------------
+        uint256 liquidityAmt = ENTRY_FEE * SPLIT_LIQUIDITY_BPS / BPS_DENOM;
+        if (liquidityAmt > 0 && liquidityReserve != address(0)) {
+            usdc.safeTransfer(liquidityReserve, liquidityAmt);
+        } else if (liquidityAmt > 0 && devWallet != address(0)) {
+            usdc.safeTransfer(devWallet, liquidityAmt); // fallback until LR is wired
         }
 
         // -- Dev (separate) ----------------------------------------------------
@@ -1355,8 +1373,8 @@ contract FigureEightMatrixV8 is Ownable2Step {
         return poolAccumulator * pos / totalWeight;
     }
 
-    /// @notice V8.7: Return all BPS splits (7 fields -- l2/l3 removed, buyback added).
-    function getSplits()
+    /// @notice V8.19: Return all BPS splits (10 fields -- liquidityBps added).
+    function getSplitConfig()
         external view
         returns (
             uint256 l1Bps,
@@ -1367,7 +1385,8 @@ contract FigureEightMatrixV8 is Ownable2Step {
             uint256 devBps,
             uint256 opsBps,
             uint256 communityBps,
-            uint256 buybackBps
+            uint256 buybackBps,
+            uint256 liquidityBps
         )
     {
         return (
@@ -1379,7 +1398,8 @@ contract FigureEightMatrixV8 is Ownable2Step {
             SPLIT_DEV_BPS,
             SPLIT_OPS_BPS,
             SPLIT_COMMUNITY_BPS,
-            SPLIT_BUYBACK_BPS
+            SPLIT_BUYBACK_BPS,
+            SPLIT_LIQUIDITY_BPS
         );
     }
 }

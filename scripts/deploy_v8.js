@@ -63,7 +63,7 @@ require("dotenv").config();
 // v8_1 = size-15 testnet (retired).  v8_2 = size-64 pre-mainnet stress test.
 const ADDRESSES_FILE = path.join(
   __dirname,
-  process.env.ADDRESSES_FILE || "deployed_addresses_v8_18.json"
+  process.env.ADDRESSES_FILE || "deployed_addresses_v8_19.json"
 );
 
 // ── Config ────────────────────────────────────────────────────────────────────
@@ -89,21 +89,22 @@ const TIER_FEES = [
   10_000_000_000n, // T10 $10,000
 ];
 
-// ── V8.18 BPS SplitConfigs ────────────────────────────────────────────────────
-// Field order MUST match Solidity SplitConfig struct (9 fields):
-//   l1Bps, chainBps, poolBps, treasuryBps, stabilityBps, devBps, opsBps, communityBps, buybackBps
+// ── V8.19 BPS SplitConfigs ────────────────────────────────────────────────────
+// Field order MUST match Solidity SplitConfig struct (10 fields):
+//   l1Bps, chainBps, poolBps, treasuryBps, stabilityBps, devBps, opsBps, communityBps, buybackBps, liquidityBps
 //
-// V8.18 changes from V8.17 (confirmed June 18 2026):
-//   T1-T3: sf 1500→1300 (−200), dev 150→200 (+50), ops 50→100 (+50),
-//          community 50→100 (+50), buyback 50→100 (+50)
-//   SF proved sustainable at 13% — V8.17 stress test ended at $331 (grew from $202.75)
-//   Dev/Ops/Community/Buyback each raised to rounder percentages for cleaner UX display
+// V8.19 changes from V8.18 (June 2026):
+//   Added liquidityBps=200 (2%) per entry → liquidityReserve (CNOVA/USDC LP)
+//   T1-T3: pool 4500→4400 (−100), sf 1300→1200 (−100), lq 0→200 (+200), bbr 100→100
+//   The LQ reserve feeds Aerodrome CNOVA/USDC LP at mainnet. Testnet: held at lq wallet.
+//   Frontend display (index.html): Pool=44%, Chain=17%, SF=12%, LQ=2%, L1=10%, Treasury=10%,
+//                                   Dev=2%, Ops=1%, Community=1%, Buyback=1%
 //
-//   [  l1,  chain,  pool, treasury,   sf,  dev,  ops,  cw,  bbr] sum
-const SPLITS_T1_T3  = [1000,  1700,  4500,    1000, 1300,  200,  100, 100,  100]; // 10000
-const SPLITS_T4_T5  = [2000,  2000,  2800,    1600,  800,  360,  240, 100,  100]; // 10000
-const SPLITS_T6_T7  = [2000,  1750,  2650,    1800,  800,  420,  280, 100,  200]; // 10000
-const SPLITS_T8_T10 = [2000,  1750,  2450,    1900,  800,  480,  320, 100,  200]; // 10000
+//   [  l1,  chain,  pool, treasury,   sf,  dev,  ops,  cw,  bbr,   lq] sum
+const SPLITS_T1_T3  = [1000,  1700,  4400,    1000, 1200,  200,  100, 100,  100,  200]; // 10000 ✓  pool=44% sf=12%
+const SPLITS_T4_T5  = [2000,  2000,  2600,    1600,  800,  360,  240, 100,  100,  200]; // 10000 ✓
+const SPLITS_T6_T7  = [2000,  1750,  2450,    1800,  800,  420,  280, 100,  200,  200]; // 10000 ✓
+const SPLITS_T8_T10 = [2000,  1750,  2250,    1900,  800,  480,  320, 100,  200,  200]; // 10000 ✓
 
 // ── Chain pay BPS per level (6 levels, must sum to chainBps for that tier) ───
 // T1-T3:  chain=1700  →  850/340/255/127/64/64   = 1700
@@ -166,21 +167,24 @@ async function main() {
     process.exit(1);
   }
 
-  const w1          = new ethers.Wallet(process.env.W1_PRIVATE_KEY);
-  const accountOne  = w1.address;
-  const devWallet   = process.env.DEV_WALLET_ADDRESS   || deployerAddr;
-  const opsWallet   = process.env.OPS_WALLET_ADDRESS   || deployerAddr;
-  const admin       = process.env.ADMIN_WALLET_ADDRESS || deployerAddr;
+  const w1               = new ethers.Wallet(process.env.W1_PRIVATE_KEY);
+  const accountOne       = w1.address;
+  const devWallet        = process.env.DEV_WALLET_ADDRESS        || deployerAddr;
+  const opsWallet        = process.env.OPS_WALLET_ADDRESS        || deployerAddr;
+  const admin            = process.env.ADMIN_WALLET_ADDRESS      || deployerAddr;
+  // V8.19: liquidityReserve — CNOVA/USDC LP wallet. Defaults to opsWallet until mainnet LP deployed.
+  const liquidityReserve = process.env.LIQUIDITY_RESERVE_ADDRESS || opsWallet;
 
-  console.log("\n  V8.18 Deploy — Pool=45% Chain=17% SF=13% Dev=2% Ops/CW/BBR=1% each");
+  console.log("\n  V8.19 Deploy — Pool=44% Chain=17% SF=12% LQ=2% L1=10% Treasury=10% Dev=2% Ops/CW/BBR=1% each");
   sep();
-  console.log(`  Deployer   : ${deployerAddr}`);
-  console.log(`  AccountOne : ${accountOne}`);
-  console.log(`  Admin      : ${admin}`);
-  console.log(`  DevWallet  : ${devWallet}`);
-  console.log(`  OpsWallet  : ${opsWallet}`);
-  console.log(`  MatrixSize : ${MATRIX_SIZE}`);
-  console.log(`  Tiers      : T${DEPLOY_TIERS.join(", T")}`);
+  console.log(`  Deployer        : ${deployerAddr}`);
+  console.log(`  AccountOne      : ${accountOne}`);
+  console.log(`  Admin           : ${admin}`);
+  console.log(`  DevWallet       : ${devWallet}`);
+  console.log(`  OpsWallet       : ${opsWallet}`);
+  console.log(`  LiquidityReserve: ${liquidityReserve}`);
+  console.log(`  MatrixSize      : ${MATRIX_SIZE}`);
+  console.log(`  Tiers           : T${DEPLOY_TIERS.join(", T")}`);
   sep();
 
   // ── 1. USDC ────────────────────────────────────────────────────────────────
@@ -343,6 +347,9 @@ async function main() {
     // BuybackReserve
     await (await matA.setBuybackReserve(bbrAddr)).wait();
     await (await matB.setBuybackReserve(bbrAddr)).wait();
+    // V8.19: LiquidityReserve
+    await (await matA.setLiquidityReserve(liquidityReserve)).wait();
+    await (await matB.setLiquidityReserve(liquidityReserve)).wait();
     // Circular chain: matA.chainNext = matB, matB.chainNext = matA (single pair loop)
     await (await matA.setChainNext(matBAddr)).wait();
     await (await matB.setChainNext(matAAddr)).wait();

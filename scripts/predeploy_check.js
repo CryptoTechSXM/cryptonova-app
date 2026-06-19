@@ -567,11 +567,27 @@ if (deployTxt) {
     fail("deploy_v8.js: tierRouter.setTierMatrices() MISSING — manualUpgrade will always revert 'cross to MatB first' because tierMatrixBAddr stays address(0)");
   }
 
-  // V8.18: pool=4500, SF=1300, chain=1700, dev=200, ops=100, cw=100, bbr=100 (T1-T3) — June 18 2026
-  if (deployTxt.includes("4500,    1000, 1300,  200,  100, 100,  100")) {
-    ok("deploy_v8.js: V8.18 BPS confirmed — pool=4500, SF=1300, chain=1700 (T1-T3)");
+  // V8.19: 10-field SplitConfig — pool=4400, SF=1200, LQ=200 (T1-T3) — June 2026
+  // SPLITS_T1_T3 = [1000, 1700, 4400, 1000, 1200, 200, 100, 100, 100, 200] sum=10000
+  if (deployTxt.includes("4400,    1000, 1200,  200,  100, 100,  100,  200")) {
+    ok("deploy_v8.js: V8.19 BPS confirmed — pool=4400, SF=1200, LQ=200, chain=1700 (T1-T3), 10 fields");
   } else {
-    fail("deploy_v8.js: V8.18 BPS NOT found — expected pool=4500, SF=1300 in SPLITS_T1_T3. Array: [1000,1700,4500,1000,1300,200,100,100,100]");
+    fail("deploy_v8.js: V8.19 BPS NOT found — expected pool=4400 SF=1200 LQ=200 in SPLITS_T1_T3 (10-field). Array: [1000,1700,4400,1000,1200,200,100,100,100,200]");
+  }
+
+  // V8.19: liquidityReserve wiring in per-matrix loop
+  if (deployTxt.includes("setLiquidityReserve(liquidityReserve)")) {
+    ok("deploy_v8.js: setLiquidityReserve() wiring found — LQ carve will route to liquidityReserve");
+  } else {
+    fail("deploy_v8.js: setLiquidityReserve() MISSING from wiring loop — LQ USDC will fall back to devWallet");
+  }
+
+  // V8.19: CNOVADirectSale contract exists
+  const directSaleTxt = read("contracts/CNOVADirectSale.sol");
+  if (directSaleTxt && directSaleTxt.includes("function buyCNOVA(")) {
+    ok("CNOVADirectSale.sol: buyCNOVA() found — investor purchase contract present (V8.19)");
+  } else {
+    fail("CNOVADirectSale.sol: MISSING or buyCNOVA() not found — investor purchase contract not deployed");
   }
 
   // V8.16: topUpAndCross must be in contract
