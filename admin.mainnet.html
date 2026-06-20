@@ -383,7 +383,7 @@
 </head>
 <body>
   <!-- ══ LAUNCH GATE ══════════════════════════════════════════════════════════
-     index.html: opens 10:00 AM EDT (14:00 UTC) June 14 2026
+     index.html: admin — always open
 ═══════════════════════════════════════════════════════════════════════════ -->
 <div id="launch-gate" style="display:none;position:fixed;inset:0;z-index:99999;background:#0a0a1a;display:flex;flex-direction:column;align-items:center;justify-content:center;font-family:'Inter',sans-serif;color:#fff;">
   <div style="text-align:center;max-width:480px;padding:2rem;">
@@ -391,13 +391,13 @@
     <div style="color:#a78bfa;font-size:1rem;margin-bottom:2.5rem;letter-spacing:0.05em;">TESTNET LAUNCH</div>
     <div style="color:#94a3b8;font-size:0.95rem;margin-bottom:1rem;">Opens in</div>
     <div id="gate-countdown" style="font-size:3rem;font-weight:700;font-variant-numeric:tabular-nums;color:#fff;letter-spacing:0.05em;margin-bottom:2rem;">--:--:--</div>
-    <div style="color:#64748b;font-size:0.85rem;">Launching at <strong style="color:#a78bfa;">10:00 AM EDT</strong> · June 14, 2026</div>
+    <div style="color:#64748b;font-size:0.85rem;">Launching at <strong style="color:#a78bfa;">Admin Access</strong> · Always Open</div>
   </div>
 </div>
 
 <script>
 (function() {
-  var OPEN_AT = new Date('2026-06-14T14:00:00Z').getTime(); // 10:00 AM EDT
+  var OPEN_AT = new Date('2020-01-01T00:00:00Z').getTime(); // 10:00 AM EDT
   var gate = document.getElementById('launch-gate');
   var countdown = document.getElementById('gate-countdown');
 
@@ -426,14 +426,14 @@
 
   <!-- ══ LAUNCH ANNOUNCEMENT BANNER ══════════════════════════════════════ -->
   <div id="launch-banner">
-    <div class="bn-title">&#x1F680; CryptoNova &mdash; Mainnet Launch Friday June 19</div>
+    <div class="bn-title">&#x1F680; CryptoNova &mdash; Mainnet Launch Thursday June 25</div>
     <div class="bn-cd">
       <span id="bn-h">00</span>h
       <span id="bn-m">00</span>m
       <span id="bn-s">00</span>s
     </div>
     <div class="bn-sep">|</div>
-    <div class="bn-date">Friday June 19 &bull; 12:00 PM Eastern</div>
+    <div class="bn-date">Thursday June 25 &bull; 12:00 PM Eastern</div>
     <div class="bn-live" id="bn-live">&#x1F7E2; We&rsquo;re Live &mdash; Register Now!</div>
   </div>
 
@@ -441,7 +441,7 @@
   <div id="launch-gate">
     <h2>&#x1F680; CryptoNova Matrix</h2>
     <p style="font-size:15px;font-weight:600;color:var(--text);margin-bottom:4px">
-      Mainnet Launch &mdash; Friday, June 19 at 12 PM ET
+      Mainnet Launch &mdash; Thursday, June 25 at 12 PM ET
     </p>
     <p style="max-width:440px">
       Register, earn, and redeem <strong style="color:var(--green)">CryptoNova Tokens</strong> across 10 live tiers.<br><br>
@@ -455,7 +455,7 @@
       <div class="cd-box"><span class="cd-num" id="cd-m">00</span><div class="cd-lbl">Minutes</div></div>
       <div class="cd-box"><span class="cd-num" id="cd-s">00</span><div class="cd-lbl">Seconds</div></div>
     </div>
-    <div class="launch-sub" id="cd-date-label">12:00 PM Eastern &bull; Friday, June 19 2026</div>
+    <div class="launch-sub" id="cd-date-label">12:00 PM Eastern &bull; Thursday, June 25 2026</div>
 
     <!-- City timezone grid -->
     <div id="cd-cities-wrap" style="margin-top:14px;max-width:400px;width:100%;text-align:left">
@@ -1783,7 +1783,7 @@ const CHAIN_ID = 8453;
   // 12:00 PM EDT (noon Eastern) = 16:00 UTC on June 12 2026.
   // This is a FIXED UTC timestamp — same countdown for every viewer worldwide.
   // To reschedule: update this ISO string.
-  const LAUNCH_UTC = new Date('2026-06-19T16:00:00Z'); // noon EDT = 16:00 UTC // noon EDT = 16:00 UTC
+  const LAUNCH_UTC = new Date('2026-06-25T16:00:00Z'); // noon EDT = 16:00 UTC
 
   // Major city local equivalents — shown below the countdown
   const CITY_ZONES = [
