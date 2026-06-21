@@ -6,10 +6,11 @@ import "@openzeppelin/contracts/utils/Pausable.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 
-/// @dev Minimal interface for CNOVAToken — only the mint function this contract needs.
+/// @dev Minimal interface for CNOVAToken — only what this contract needs.
 interface ICNOVAMintable {
     function mintDirect(address to, uint256 amount) external;
     function totalSupply() external view returns (uint256);
+    function balanceOf(address account) external view returns (uint256);
 }
 
 /**
@@ -37,6 +38,16 @@ interface ICNOVAMintable {
  *
  *  After routing USDC, the contract mints cnovaOut CNOVA to the buyer.
  *  This contract must hold MINTER_ROLE on CNOVAToken.
+ *
+ *  Whale caps (owner-adjustable, BPS of CNOVA total supply)
+ *  ──────────────────────────────────────────────────────────
+ *    maxTxBps     — a single purchase cannot mint more than this % of the
+ *                   supply that exists right before the purchase. Stops one
+ *                   oversized buy in a single transaction. (0 = disabled)
+ *    maxWalletBps — after the purchase, the buyer's TOTAL CNOVA balance
+ *                   (not just what they bought here) cannot exceed this % of
+ *                   the resulting total supply. Catches accumulation across
+ *                   many smaller purchases, not just one big one. (0 = disabled)
  */
 contract CNOVADirectSale is Ownable2Step, Pausable {
     using SafeERC20 for IERC20;
@@ -58,6 +69,10 @@ contract CNOVADirectSale is Ownable2Step, Pausable {
     uint256 public sfTarget;   // default $500
     uint256 public lqTarget;   // default $1 000
 
+    // ── Whale caps (BPS of CNOVA total supply, 0 = disabled) ──────────────────
+    uint256 public maxTxBps     = 100; // default 1% of supply per single purchase
+    uint256 public maxWalletBps = 500; // default 5% of supply per wallet, cumulative
+
     // ── Bonding curve ─────────────────────────────────────────────────────────
     struct CurveTier {
         uint256 supplyCeiling;   // 18-dec CNOVA supply — this tier ends when supply exceeds this
@@ -78,6 +93,7 @@ contract CNOVADirectSale is Ownable2Step, Pausable {
     event TargetsUpdated(uint256 sfTarget, uint256 lqTarget);
     event AddressesUpdated(address stabilityFund, address liquidityReserve);
     event CurveUpdated(uint256 tierCount);
+    event CapsUpdated(uint256 maxTxBps, uint256 maxWalletBps);
 
     // ── Constructor ────────────────────────────────────────────────────────────
 
@@ -130,6 +146,8 @@ contract CNOVADirectSale is Ownable2Step, Pausable {
     function buyCNOVA(uint256 usdcAmount) external whenNotPaused {
         require(usdcAmount >= USDC_DEC, "DS: minimum $1 USDC");
 
+        uint256 supplyBefore = cnova.totalSupply();
+
         (
             uint256 cnovaOut,
             uint256 toTreasury,
@@ -138,6 +156,27 @@ contract CNOVADirectSale is Ownable2Step, Pausable {
         ) = _computePurchase(usdcAmount);
 
         require(cnovaOut > 0, "DS: zero CNOVA out");
+
+        // Per-tx cap: a single purchase can't mint more than maxTxBps of the
+        // supply that existed right before this purchase.
+        if (maxTxBps > 0) {
+            require(
+                cnovaOut <= supplyBefore * maxTxBps / BPS_BASE,
+                "DS: exceeds per-tx cap"
+            );
+        }
+
+        // Per-wallet cap: after this purchase, the buyer's TOTAL CNOVA balance
+        // (not just this purchase) can't exceed maxWalletBps of the resulting
+        // total supply. Catches accumulation across many smaller buys.
+        if (maxWalletBps > 0) {
+            uint256 supplyAfter  = supplyBefore + cnovaOut;
+            uint256 balanceAfter = cnova.balanceOf(msg.sender) + cnovaOut;
+            require(
+                balanceAfter <= supplyAfter * maxWalletBps / BPS_BASE,
+                "DS: exceeds per-wallet cap"
+            );
+        }
 
         // Pull USDC from buyer
         usdc.safeTransferFrom(msg.sender, address(this), usdcAmount);
@@ -329,6 +368,45 @@ contract CNOVADirectSale is Ownable2Step, Pausable {
             curveTiers.push(CurveTier({ supplyCeiling: ceilings[i], multBps: multBpsArr[i] }));
         }
         emit CurveUpdated(ceilings.length);
+    }
+
+    /**
+     * @notice Update whale-cap BPS values.
+     * @param  _maxTxBps     Max % of supply (BPS) a single purchase may mint. 0 = disabled.
+     * @param  _maxWalletBps Max % of resulting supply (BPS) a wallet may hold via this
+     *                       contract's purchases, cumulative. 0 = disabled.
+     */
+    function setCaps(uint256 _maxTxBps, uint256 _maxWalletBps) external onlyOwner {
+        require(_maxTxBps     <= BPS_BASE, "DS: maxTxBps > 100%");
+        require(_maxWalletBps <= BPS_BASE, "DS: maxWalletBps > 100%");
+        maxTxBps     = _maxTxBps;
+        maxWalletBps = _maxWalletBps;
+        emit CapsUpdated(_maxTxBps, _maxWalletBps);
+    }
+
+    /**
+     * @notice How much more CNOVA `buyer` could acquire through this contract right now
+     *         before hitting either cap, given current supply. Useful for the frontend
+     *         to show "you can buy up to X more" instead of letting the tx revert.
+     * @dev    This is a snapshot — both caps move as supply grows, so the real-time
+     *         allowance can change between this view call and the actual purchase.
+     */
+    function remainingAllowance(address buyer) external view returns (uint256 maxCnovaOut) {
+        uint256 supply = cnova.totalSupply();
+
+        uint256 txCap = maxTxBps > 0 ? supply * maxTxBps / BPS_BASE : type(uint256).max;
+
+        uint256 walletCap = type(uint256).max;
+        if (maxWalletBps > 0) {
+            uint256 bal = cnova.balanceOf(buyer);
+            // Solve approx headroom against current supply (ignores the buyer's own
+            // mint growing the denominator further — a conservative, slightly tighter
+            // estimate than the exact on-chain check, which is what we want for a UI hint).
+            uint256 capBal = supply * maxWalletBps / BPS_BASE;
+            walletCap = capBal > bal ? capBal - bal : 0;
+        }
+
+        maxCnovaOut = txCap < walletCap ? txCap : walletCap;
     }
 
     /// @notice Pause purchases (emergency).
