@@ -175,7 +175,7 @@ async function main() {
   // V8.19: liquidityReserve — CNOVA/USDC LP wallet. Defaults to opsWallet until mainnet LP deployed.
   const liquidityReserve = process.env.LIQUIDITY_RESERVE_ADDRESS || opsWallet;
 
-  console.log("\n  V8.19 Deploy — Pool=44% Chain=17% SF=12% LQ=2% L1=10% Treasury=10% Dev=2% Ops/CW/BBR=1% each");
+  console.log("\n  V8.20 Deploy — Pool=44% Chain=17% SF=12% LQ=2% L1=10% Treasury=10% Dev=2% Ops/CW/BBR=1% each");
   sep();
   console.log(`  Deployer        : ${deployerAddr}`);
   console.log(`  AccountOne      : ${accountOne}`);
@@ -633,7 +633,7 @@ async function main() {
   }
   sep();
   console.log(`  Addresses file: ${require("path").basename(ADDRESSES_FILE)}`);
-  console.log("  V8.18 Deploy complete.\n");
+  console.log("  V8.20 Deploy complete.\n");
 }
 
 main().catch(e => { console.error(e); process.exitCode = 1; });
