@@ -222,6 +222,11 @@ contract FigureEightMatrixV8 is Ownable2Step {
     event MemberEvicted(address indexed member, uint256 totalWithdrawn);  // V8.10: grace-period eviction
     event CoPayRescue(address indexed member, uint256 sfShare, uint256 memberWalletShare, uint256 withdrawableUsed); // V8.18
 
+    /// @dev V8.20: shared custom error for post-deploy wiring setters' zero-address
+    ///      checks -- saves bytecode size vs. a separate string literal per setter
+    ///      (this contract sits right at the 24576-byte EIP-170 limit).
+    error F8V8_ZeroAddress();
+
     // --- Constructor split config struct --------------------------------------
     /// @notice V8.9: devOpsBps split into devBps + opsBps, communityBps added (9 fields total).
     struct SplitConfig {
@@ -309,7 +314,7 @@ contract FigureEightMatrixV8 is Ownable2Step {
     // --- Admin setters --------------------------------------------------------
 
     function setPartner(address _partner) external onlyOwner {
-        require(_partner != address(0),    "F8V8: zero partner");
+        if (_partner == address(0))    revert F8V8_ZeroAddress();
         require(_partner != address(this), "F8V8: self partner");
         partner = FigureEightMatrixV8(_partner);
         emit PartnerSet(_partner, isMatrixA);
@@ -349,33 +354,33 @@ contract FigureEightMatrixV8 is Ownable2Step {
     /// @notice V8.1: Set StabilityFund address. Call once immediately after deploy.
     ///         Until set, stability contributions route to devWallet as escrow.
     function setStabilityFund(address _sf) external onlyOwner {
-        require(_sf != address(0), "F8V8: zero stabilityFund");
+        if (_sf == address(0)) revert F8V8_ZeroAddress();
         stabilityFund = _sf;
         emit StabilityFundSet(_sf);
     }
 
     /// @notice V8.7: Set BuybackReserve address.
     function setBuybackReserve(address _bbr) external onlyOwner {
-        require(_bbr != address(0), "F8V8: zero bbr");
+        if (_bbr == address(0)) revert F8V8_ZeroAddress();
         buybackReserve = _bbr;
     }
 
     /// @notice V8.19: Set LiquidityReserve address (CNOVA/USDC LP wallet or CNOVADirectSale).
     function setLiquidityReserve(address _lr) external onlyOwner {
-        require(_lr != address(0), "F8V8: zero liquidityReserve");
+        if (_lr == address(0)) revert F8V8_ZeroAddress();
         liquidityReserve = _lr;
     }
 
     /// @notice V8.20: Set V8Governance address so DAO-passed fee proposals can execute directly.
     function setGovernance(address _gov) external onlyOwner {
-        require(_gov != address(0), "F8V8: zero governance");
+        if (_gov == address(0)) revert F8V8_ZeroAddress();
         governance = _gov;
         emit GovernanceSet(_gov);
     }
 
     /// @notice V8.1: Set MatrixKeeper (Chainlink Automation) address.
     function setMatrixKeeper(address _keeper) external onlyOwner {
-        require(_keeper != address(0), "F8V8: zero keeper");
+        if (_keeper == address(0)) revert F8V8_ZeroAddress();
         matrixKeeper = _keeper;
         emit MatrixKeeperSet(_keeper);
     }
