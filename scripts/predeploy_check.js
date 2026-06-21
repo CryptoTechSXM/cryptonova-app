@@ -590,6 +590,20 @@ if (deployTxt) {
     fail("CNOVADirectSale.sol: MISSING or buyCNOVA() not found — investor purchase contract not deployed");
   }
 
+  // V8.19: deploy_v8.js must actually deploy CNOVADirectSale and grant it MINTER_ROLE
+  // (the check above only confirms the .sol file exists — it doesn't mean deploy_v8.js
+  // wires it up. This was missing entirely until 2026-06-20.)
+  if (deployTxt.includes('getContractFactory("CNOVADirectSale"')) {
+    ok("deploy_v8.js: CNOVADirectSale deploy step found");
+  } else {
+    fail("deploy_v8.js: CNOVADirectSale is never deployed — buy.html will have no contract to call");
+  }
+  if (deployTxt.includes("cnova.grantRole(MINTER_ROLE, dsAddr)")) {
+    ok("deploy_v8.js: MINTER_ROLE grant to CNOVADirectSale found");
+  } else {
+    fail("deploy_v8.js: MINTER_ROLE grant to CNOVADirectSale MISSING — buyCNOVA() will revert on every purchase");
+  }
+
   // V8.16: topUpAndCross must be in contract
   const matTxtV16 = read("contracts/FigureEightMatrixV8.sol");
   if (matTxtV16 && matTxtV16.includes("function topUpAndCross(")) {

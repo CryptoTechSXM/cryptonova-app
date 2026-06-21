@@ -492,6 +492,31 @@ async function main() {
   await (await keeper.setCommunityWallet(cwAddr)).wait();
   console.log(`  ↳  MatrixKeeper.setCommunityWallet OK — monthly distribution auto-trigger active`);
 
+  // ── 9d. CNOVADirectSale ──────────────────────────────────────────────────────
+  // Investor CNOVA purchase contract (bonding curve, no matrix participation
+  // required) — see buy.html. Routes USDC to Treasury (floor backing) / SF /
+  // liquidityReserve per-purchase, mints CNOVA to the buyer. Whale caps default
+  // on (maxTxBps=1%, maxWalletBps=5%) — see [[cnova_direct_sale]] memory note.
+  sep("CNOVADirectSale");
+  const DS_SF_TARGET_USD = Number(process.env.DS_SF_TARGET_USD || 500);
+  const DS_LQ_TARGET_USD = Number(process.env.DS_LQ_TARGET_USD || 1000);
+  const dsSfTarget = BigInt(DS_SF_TARGET_USD) * 1_000_000n;
+  const dsLqTarget = BigInt(DS_LQ_TARGET_USD) * 1_000_000n;
+
+  const CNOVADirectSale = await ethers.getContractFactory("CNOVADirectSale", deployer);
+  const directSale = await deploy(
+    CNOVADirectSale,
+    [usdcAddr, cnovaAddr, treasuryAddr, sfAddr, liquidityReserve, dsSfTarget, dsLqTarget],
+    "CNOVADirectSale"
+  );
+  const dsAddr = await directSale.getAddress();
+  console.log(`  ↳  SF target $${DS_SF_TARGET_USD} / LQ target $${DS_LQ_TARGET_USD}`);
+
+  // CNOVADirectSale.buyCNOVA() calls cnova.mintDirect() — needs MINTER_ROLE,
+  // same role already granted to every matrix above.
+  await (await cnova.grantRole(MINTER_ROLE, dsAddr)).wait();
+  console.log(`  ↳  MINTER_ROLE granted to CNOVADirectSale (${dsAddr})`);
+
   // ── 10a. Save addresses BEFORE W1 seed (so a seed failure doesn't lose addresses) ──
   {
     sep("Save Addresses");
@@ -505,7 +530,8 @@ async function main() {
       usdc: usdcAddr, cnova: cnovaAddr, treasury: treasuryAddr,
       stabilityFund: sfAddr, buybackReserve: bbrAddr, tierRouter: trAddr,
       matrixFactory: mfAddr, matrixKeeper: keeperAddr,
-      v8Governance: govAddr, communityWallet: cwAddr, tiers: tierAddresses,
+      v8Governance: govAddr, communityWallet: cwAddr,
+      liquidityReserve, directSale: dsAddr, tiers: tierAddresses,
     };
     fs.writeFileSync(ADDRESSES_FILE, JSON.stringify(out, null, 2));
     console.log(`  ✓  Addresses saved → ${path.basename(ADDRESSES_FILE)}`);
