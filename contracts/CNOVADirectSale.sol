@@ -65,6 +65,10 @@ contract CNOVADirectSale is Ownable2Step, Pausable {
     address         public stabilityFund;        // StabilityFund — operational rescue
     address         public liquidityReserve;     // LQ wallet/contract — future Aerodrome LP
 
+    /// @notice V8.20: DAO governance contract. Co-governs the params below
+    ///         alongside owner -- neither replaces the other (owner keeps emergency backstop).
+    address public governance;
+
     // ── SF / LQ targets (6-dec USDC) ─────────────────────────────────────────
     uint256 public sfTarget;   // default $500
     uint256 public lqTarget;   // default $1 000
@@ -94,6 +98,7 @@ contract CNOVADirectSale is Ownable2Step, Pausable {
     event AddressesUpdated(address stabilityFund, address liquidityReserve);
     event CurveUpdated(uint256 tierCount);
     event CapsUpdated(uint256 maxTxBps, uint256 maxWalletBps);
+    event GovernanceSet(address indexed governance);
 
     // ── Constructor ────────────────────────────────────────────────────────────
 
@@ -330,6 +335,19 @@ contract CNOVADirectSale is Ownable2Step, Pausable {
 
     // ── Admin ──────────────────────────────────────────────────────────────────
 
+    /// @notice V8.20: owner keeps emergency backstop, governance address co-governs.
+    modifier onlyOwnerOrGovernance() {
+        require(msg.sender == owner() || msg.sender == governance, "DS: not authorized");
+        _;
+    }
+
+    /// @notice V8.20: wire the V8Governance contract so DAO-passed proposals can execute.
+    function setGovernance(address _gov) external onlyOwner {
+        require(_gov != address(0), "DS: zero governance");
+        governance = _gov;
+        emit GovernanceSet(_gov);
+    }
+
     /**
      * @notice Update SF and LQ target balances.
      * @param  _sfTarget  New SF target (6-dec USDC, e.g. 500e6)
@@ -339,6 +357,31 @@ contract CNOVADirectSale is Ownable2Step, Pausable {
         sfTarget = _sfTarget;
         lqTarget = _lqTarget;
         emit TargetsUpdated(_sfTarget, _lqTarget);
+    }
+
+    /// @notice V8.20: DAO-governable single-value equivalent of setTargets above
+    ///         (which stays owner-only as the two-arg convenience setter).
+    ///         Allowed: 0,100,250,500,1000,2500 ($).
+    function setSfTargetDS(uint256 _sfTarget) external onlyOwnerOrGovernance {
+        require(
+            _sfTarget == 0 || _sfTarget == 100_000_000 || _sfTarget == 250_000_000 ||
+            _sfTarget == 500_000_000 || _sfTarget == 1_000_000_000 || _sfTarget == 2_500_000_000,
+            "DS: invalid sfTarget"
+        );
+        sfTarget = _sfTarget;
+        emit TargetsUpdated(_sfTarget, lqTarget);
+    }
+
+    /// @notice V8.20: DAO-governable single-value equivalent of setTargets above.
+    ///         Allowed: 0,250,500,1000,2500,5000 ($).
+    function setLqTargetDS(uint256 _lqTarget) external onlyOwnerOrGovernance {
+        require(
+            _lqTarget == 0 || _lqTarget == 250_000_000 || _lqTarget == 500_000_000 ||
+            _lqTarget == 1_000_000_000 || _lqTarget == 2_500_000_000 || _lqTarget == 5_000_000_000,
+            "DS: invalid lqTarget"
+        );
+        lqTarget = _lqTarget;
+        emit TargetsUpdated(sfTarget, _lqTarget);
     }
 
     /**
@@ -382,6 +425,31 @@ contract CNOVADirectSale is Ownable2Step, Pausable {
         maxTxBps     = _maxTxBps;
         maxWalletBps = _maxWalletBps;
         emit CapsUpdated(_maxTxBps, _maxWalletBps);
+    }
+
+    /// @notice V8.20: DAO-governable single-value equivalent of setCaps above
+    ///         (which stays owner-only as the two-arg convenience setter).
+    ///         Allowed: 0,50,100,200,300,500 BPS (0%-5%). 0 = disabled.
+    function setMaxTxBps(uint256 _maxTxBps) external onlyOwnerOrGovernance {
+        require(
+            _maxTxBps == 0 || _maxTxBps == 50 || _maxTxBps == 100 ||
+            _maxTxBps == 200 || _maxTxBps == 300 || _maxTxBps == 500,
+            "DS: invalid maxTxBps"
+        );
+        maxTxBps = _maxTxBps;
+        emit CapsUpdated(_maxTxBps, maxWalletBps);
+    }
+
+    /// @notice V8.20: DAO-governable single-value equivalent of setCaps above.
+    ///         Allowed: 0,250,500,1000,1500,2000 BPS (0%-20%). 0 = disabled.
+    function setMaxWalletBps(uint256 _maxWalletBps) external onlyOwnerOrGovernance {
+        require(
+            _maxWalletBps == 0 || _maxWalletBps == 250 || _maxWalletBps == 500 ||
+            _maxWalletBps == 1000 || _maxWalletBps == 1500 || _maxWalletBps == 2000,
+            "DS: invalid maxWalletBps"
+        );
+        maxWalletBps = _maxWalletBps;
+        emit CapsUpdated(maxTxBps, _maxWalletBps);
     }
 
     /**

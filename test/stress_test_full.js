@@ -24,11 +24,12 @@ const T1_FEE = 10n  * UNIT;   // $10
 const T2_FEE = 25n  * UNIT;   // $25
 const MSIZE  = 7n;             // smallest valid full BFS tree for tests
 
-/** V8.7 7-field SplitConfig (l2Bps/l3Bps removed, buybackBps added) */
+/** V8.19 10-field SplitConfig (liquidityBps added, default 0 -- no LQ wallet needed in these tests) */
 const SPLITS_T1 = {
   l1Bps: 2000, chainBps: 2000, poolBps: 3300,
   treasuryBps: 1500, stabilityBps: 500,
   devBps: 300, opsBps: 200, communityBps: 100, buybackBps: 100,
+  liquidityBps: 0,
 };  // sum = 10 000
 const CHAIN_BPS = [1000n, 400n, 300n, 150n, 75n, 75n];
 

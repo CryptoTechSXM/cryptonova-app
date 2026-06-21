@@ -81,6 +81,10 @@ contract StabilityFund is Ownable2Step {
     /// @notice Receives overflow from sliding withdrawal fee when SF is healthy.
     address public buybackReserve;
 
+    /// @notice V8.20: DAO governance contract. Co-governs the params below
+    ///         alongside owner -- neither replaces the other (owner keeps emergency backstop).
+    address public governance;
+
     // ── CommunityWallet carve-out ─────────────────────────────────────────────
     /// @notice CommunityWallet address. When set, 1% of L1 deposits route here.
     address public communityWallet;
@@ -129,6 +133,7 @@ contract StabilityFund is Ownable2Step {
     event CommunityWalletSet(address indexed cw);
     event CommunityCarveOutBpsSet(uint256 bps);
     event WithdrawalFeeRouted(uint8 indexed tier, uint256 toSF, uint256 toBuyback, uint256 healthBps);
+    event GovernanceSet(address indexed governance);
 
     // ── Constructor ──────────────────────────────────────────────────────────
 
@@ -139,6 +144,19 @@ contract StabilityFund is Ownable2Step {
     }
 
     // ── Admin setup ──────────────────────────────────────────────────────────
+
+    /// @notice V8.20: owner keeps emergency backstop, governance address co-governs.
+    modifier onlyOwnerOrGovernance() {
+        require(msg.sender == owner() || msg.sender == governance, "SF: not authorized");
+        _;
+    }
+
+    /// @notice V8.20: wire the V8Governance contract so DAO-passed proposals can execute.
+    function setGovernance(address _gov) external onlyOwner {
+        require(_gov != address(0), "SF: zero governance");
+        governance = _gov;
+        emit GovernanceSet(_gov);
+    }
 
     function setMatrixKeeper(address _keeper) external onlyOwner {
         require(_keeper != address(0), "SF: zero keeper");
@@ -165,7 +183,12 @@ contract StabilityFund is Ownable2Step {
         emit TierFeeSet(tierIndex, fee);
     }
 
-    function setStabilityFloor(uint256 floor) external onlyOwner {
+    /// @notice V8.20: DAO-governable. Was unbounded before -- now capped at sfTarget
+    ///         (the floor can never exceed the health target, or SF could never
+    ///         spend even once "fully funded"). sfTarget is itself bounded
+    ///         $100-$10,000, so this is bounded transitively.
+    function setStabilityFloor(uint256 floor) external onlyOwnerOrGovernance {
+        require(floor <= sfTarget, "SF: floor exceeds target");
         stabilityFloor = floor;
         emit StabilityFloorSet(floor);
     }
@@ -180,9 +203,12 @@ contract StabilityFund is Ownable2Step {
     /// @notice Set the SF health target (6-dec USDC).
     ///         When totalBalance >= sfTarget, 100% of withdrawal fees route to BBR.
     ///         Allowed: 100e6 ($100) to 10000e6 ($10,000).
-    function setSFTarget(uint256 _target) external onlyOwner {
+    ///         V8.20: DAO-governable. Cannot drop below stabilityFloor (same
+    ///         invariant enforced the other way in setStabilityFloor).
+    function setSFTarget(uint256 _target) external onlyOwnerOrGovernance {
         require(_target >= 100_000_000,   "SF: target too low");
         require(_target <= 10_000_000_000, "SF: target too high");
+        require(_target >= stabilityFloor, "SF: target below floor");
         sfTarget = _target;
         emit SFTargetSet(_target);
     }
@@ -196,8 +222,13 @@ contract StabilityFund is Ownable2Step {
 
     /// @notice Adjust the L1 community carve-out (0–500 BPS, default 100 = 1%).
     ///         Set to 0 to pause routing while keeping communityWallet configured.
-    function setCommunityCarveOutBps(uint256 bps) external onlyOwner {
-        require(bps <= 500, "SF: carve exceeds 5%");
+    ///         V8.20: DAO-governable. Allowed: 0,100,200,300,400,500.
+    function setCommunityCarveOutBps(uint256 bps) external onlyOwnerOrGovernance {
+        require(
+            bps == 0 || bps == 100 || bps == 200 ||
+            bps == 300 || bps == 400 || bps == 500,
+            "SF: invalid carve bps"
+        );
         communityCarveOutBps = bps;
         emit CommunityCarveOutBpsSet(bps);
     }

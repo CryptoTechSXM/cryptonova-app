@@ -611,6 +611,148 @@ if (deployTxt) {
   } else {
     fail("FigureEightMatrixV8.sol: topUpAndCross() MISSING — V8.16 self-rescue not deployed");
   }
+
+  // V8.20: governance co-control must exist on all three target contracts, or
+  // V8Governance.execute() reverts for every param except the 3 self-governed ones.
+  const keeperTxtV20 = read("contracts/MatrixKeeper.sol");
+  const trTxtV20      = read("contracts/TierRouter.sol");
+  const f8v8TxtV20    = matTxtV16; // already read above
+  const govTxtV20     = read("contracts/V8Governance.sol");
+
+  if (keeperTxtV20 && keeperTxtV20.includes("function setGovernance(")) {
+    ok("MatrixKeeper.sol: setGovernance() found — governance co-control wired (V8.20)");
+  } else {
+    fail("MatrixKeeper.sol: setGovernance() MISSING — governance proposals will revert on execute()");
+  }
+  if (trTxtV20 && trTxtV20.includes("function setGovernance(")) {
+    ok("TierRouter.sol: setGovernance() found — governance co-control wired (V8.20)");
+  } else {
+    fail("TierRouter.sol: setGovernance() MISSING — governance proposals will revert on execute()");
+  }
+  if (f8v8TxtV20 && f8v8TxtV20.includes("msg.sender == governance")) {
+    ok("FigureEightMatrixV8.sol: governance check found on fee setters (V8.20)");
+  } else {
+    fail("FigureEightMatrixV8.sol: governance check MISSING on setWithdrawalFeeBps/setEarlyExitPenaltyBps");
+  }
+
+  // V8.20: SF rescue ladder must be governable, not hardcoded
+  if (keeperTxtV20 && keeperTxtV20.includes("function setSfRescueLadder(")) {
+    ok("MatrixKeeper.sol: setSfRescueLadder() found — SF rescue ladder is governable (V8.20)");
+  } else {
+    fail("MatrixKeeper.sol: setSfRescueLadder() MISSING — SF rescue ladder still hardcoded");
+  }
+  if (govTxtV20 && govTxtV20.includes("PARAM_SF_RESCUE_LADDER") && govTxtV20.includes("function proposeLadder(")) {
+    ok("V8Governance.sol: PARAM_SF_RESCUE_LADDER + proposeLadder() found (V8.20)");
+  } else {
+    fail("V8Governance.sol: PARAM_SF_RESCUE_LADDER or proposeLadder() MISSING");
+  }
+
+  // V8.20: deploy_v8.js must actually wire setGovernance on all three contract types
+  // (the checks above only confirm the .sol functions exist, not that deploy_v8.js calls them)
+  if (deployTxt.includes("keeper.setGovernance(govAddr)")) {
+    ok("deploy_v8.js: keeper.setGovernance(govAddr) wiring found");
+  } else {
+    fail("deploy_v8.js: keeper.setGovernance(govAddr) MISSING — MatrixKeeper governance proposals will revert");
+  }
+  if (deployTxt.includes("tierRouter.setGovernance(govAddr)")) {
+    ok("deploy_v8.js: tierRouter.setGovernance(govAddr) wiring found");
+  } else {
+    fail("deploy_v8.js: tierRouter.setGovernance(govAddr) MISSING — TierRouter governance proposals will revert");
+  }
+  if (deployTxt.includes("mA.setGovernance(govAddr)") && deployTxt.includes("mB.setGovernance(govAddr)")) {
+    ok("deploy_v8.js: per-matrix setGovernance(govAddr) loop found");
+  } else {
+    fail("deploy_v8.js: per-matrix setGovernance(govAddr) loop MISSING — fee-param governance proposals will revert");
+  }
+
+  // ── V8.20 second wave ──────────────────────────────────────────────────────
+  // StabilityFund / CNOVABuybackReserve / CNOVADirectSale governance co-control,
+  // CNOVAToken / CommunityWallet GOVERNOR_ROLE call path, and the ~24 new
+  // V8Governance params + the second array-proposal path (boost table).
+  const sfTxtV20  = read("contracts/StabilityFund.sol");
+  const bbrTxtV20 = read("contracts/CNOVABuybackReserve.sol");
+  const dsTxtV20  = read("contracts/CNOVADirectSale.sol");
+  const cnovaTxtV20 = read("contracts/CNOVAToken.sol");
+  const cwTxtV20    = read("contracts/CommunityWallet.sol");
+
+  if (sfTxtV20 && sfTxtV20.includes("function setGovernance(")) {
+    ok("StabilityFund.sol: setGovernance() found — governance co-control wired (V8.20)");
+  } else {
+    fail("StabilityFund.sol: setGovernance() MISSING — SF governance proposals will revert on execute()");
+  }
+  if (sfTxtV20 && sfTxtV20.includes("require(floor <= sfTarget")) {
+    ok("StabilityFund.sol: setStabilityFloor() bounded to sfTarget (V8.20) — was unbounded before");
+  } else {
+    fail("StabilityFund.sol: setStabilityFloor() bound MISSING — floor could exceed target and brick all SF spends");
+  }
+  if (bbrTxtV20 && bbrTxtV20.includes("function setGovernance(")) {
+    ok("CNOVABuybackReserve.sol: setGovernance() found — governance co-control wired (V8.20)");
+  } else {
+    fail("CNOVABuybackReserve.sol: setGovernance() MISSING — BBR governance proposals will revert on execute()");
+  }
+  if (dsTxtV20 && dsTxtV20.includes("function setGovernance(") &&
+      dsTxtV20.includes("function setMaxTxBps(") && dsTxtV20.includes("function setMaxWalletBps(") &&
+      dsTxtV20.includes("function setSfTargetDS(") && dsTxtV20.includes("function setLqTargetDS(")) {
+    ok("CNOVADirectSale.sol: setGovernance() + granular cap/target setters found (V8.20)");
+  } else {
+    fail("CNOVADirectSale.sol: setGovernance() or granular setters MISSING — DS governance proposals will revert");
+  }
+
+  // V8Governance.sol: all 24 new scalar params + the boost-table array param
+  if (govTxtV20 && govTxtV20.includes("PARAM_CW_DISTRIBUTE_INTERVAL") &&
+      govTxtV20.includes("PARAM_CNOVA_BOOST_TABLE") && govTxtV20.includes("function proposeBoostTable(")) {
+    ok("V8Governance.sol: V8.20 second-wave params (15-39) + proposeBoostTable() found");
+  } else {
+    fail("V8Governance.sol: V8.20 second-wave params or proposeBoostTable() MISSING");
+  }
+  if (govTxtV20 && govTxtV20.includes("setAllowedValues(uint8 paramId") &&
+      govTxtV20.includes("paramId > PARAM_CW_DISTRIBUTE_INTERVAL")) {
+    ok("V8Governance.sol: setAllowedValues()/propose() upper bound updated to new max param (V8.20)");
+  } else {
+    fail("V8Governance.sol: setAllowedValues()/propose() upper bound NOT updated — new params would be unreachable or the old PARAM_QUORUM_BPS ceiling would reject them");
+  }
+
+  // CNOVAToken / CommunityWallet: GOVERNOR_ROLE was already role-gated on these
+  // setters since V8.8/V8.9, but V8Governance never had a call path or (for
+  // CommunityWallet) the role grant at all until V8.20.
+  if (cnovaTxtV20 && cnovaTxtV20.includes("function setBoostTable(")) {
+    ok("CNOVAToken.sol: setBoostTable() confirmed present (GOVERNOR_ROLE, pre-existing)");
+  } else {
+    fail("CNOVAToken.sol: setBoostTable() MISSING — PARAM_CNOVA_BOOST_TABLE has no target function");
+  }
+  if (cwTxtV20 && cwTxtV20.includes("function setGenesisBps(") && cwTxtV20.includes("function setDistributeRatio(") &&
+      cwTxtV20.includes("function setDistributeInterval(")) {
+    ok("CommunityWallet.sol: GOVERNOR_ROLE setters confirmed present (pre-existing)");
+  } else {
+    fail("CommunityWallet.sol: GOVERNOR_ROLE setters MISSING");
+  }
+
+  // deploy_v8.js: setGovernance wiring for the three new targets + the two new role grants
+  if (deployTxt.includes("stabilityFund.setGovernance(govAddr)")) {
+    ok("deploy_v8.js: stabilityFund.setGovernance(govAddr) wiring found");
+  } else {
+    fail("deploy_v8.js: stabilityFund.setGovernance(govAddr) MISSING — SF governance proposals will revert");
+  }
+  if (deployTxt.includes("buybackReserve.setGovernance(govAddr)")) {
+    ok("deploy_v8.js: buybackReserve.setGovernance(govAddr) wiring found");
+  } else {
+    fail("deploy_v8.js: buybackReserve.setGovernance(govAddr) MISSING — BBR governance proposals will revert");
+  }
+  if (deployTxt.includes("directSale.setGovernance(govAddr)")) {
+    ok("deploy_v8.js: directSale.setGovernance(govAddr) wiring found");
+  } else {
+    fail("deploy_v8.js: directSale.setGovernance(govAddr) MISSING — DS governance proposals will revert");
+  }
+  if (deployTxt.includes("cw.grantRole(CW_GOVERNOR_ROLE, govAddr)")) {
+    ok("deploy_v8.js: CommunityWallet GOVERNOR_ROLE grant to V8Governance found");
+  } else {
+    fail("deploy_v8.js: CommunityWallet GOVERNOR_ROLE grant MISSING — CW governance proposals will revert (role never granted)");
+  }
+  if (deployTxt.includes("cnova.grantRole(GOVERNOR_ROLE, govAddr)")) {
+    ok("deploy_v8.js: CNOVAToken GOVERNOR_ROLE grant to V8Governance found");
+  } else {
+    fail("deploy_v8.js: CNOVAToken GOVERNOR_ROLE grant MISSING — CNOVA governance proposals will revert (role never granted)");
+  }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

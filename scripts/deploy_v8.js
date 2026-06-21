@@ -430,10 +430,28 @@ async function main() {
   const gov      = await deploy(V8Gov, [cnovaAddr, trAddr, keeperAddr], "V8Governance");
   const govAddr  = await gov.getAddress();
 
-  // Transfer TierRouter ownership to governance (DAO controls param changes)
-  // For testnet: keep admin as owner, governance can co-govern via setters
-  // (TierRouter setters check owner() OR tierRouter, V8Governance calls setters directly)
-  console.log("  ↳  V8Governance deployed (testnet: owner retains control)");
+  // V8.20: owner keeps emergency backstop on every target (Ownable/Ownable2Step
+  // unchanged) -- this wires the SEPARATE co-governance address so V8Governance's
+  // execute() calls actually succeed instead of reverting with an ownership error.
+  // Previously (through V8.19) this wiring never happened: governance proposals
+  // could be created and voted on but execute() always reverted for every param
+  // except the 3 self-governed ones (votingPeriod/timelockPeriod/quorumBps).
+  await (await keeper.setGovernance(govAddr)).wait();
+  await (await tierRouter.setGovernance(govAddr)).wait();
+  for (const tierNum of DEPLOY_TIERS) {
+    const mA = await ethers.getContractAt("FigureEightMatrixV8", deployed[tierNum].matA, deployer);
+    const mB = await ethers.getContractAt("FigureEightMatrixV8", deployed[tierNum].matB, deployer);
+    await (await mA.setGovernance(govAddr)).wait();
+    await (await mB.setGovernance(govAddr)).wait();
+  }
+  // V8.20 second wave: StabilityFund and CNOVABuybackReserve are both already
+  // deployed by this point (steps 4/6 above) -- wire them in now alongside
+  // everything else. CNOVADirectSale and CommunityWallet deploy AFTER this
+  // section (9c/9d below), so their setGovernance/GOVERNOR_ROLE wiring happens
+  // right after each of those deploys instead.
+  await (await stabilityFund.setGovernance(govAddr)).wait();
+  await (await buybackReserve.setGovernance(govAddr)).wait();
+  console.log("  ↳  V8Governance deployed + wired (owner retains backstop, governance co-governs)");
 
   // ── 9b. Wire CNOVA roles ─────────────────────────────────────────────────
   // CRITICAL: Without MINTER_ROLE, every matrix cycle-out reverts on mintReward().
@@ -469,6 +487,15 @@ async function main() {
   // Grant ENROLLOR_ROLE to TierRouter via setEnrollor() (owner-gated wrapper)
   await (await cw.setEnrollor(trAddr)).wait();
   console.log(`  ↳  setEnrollor(TierRouter) OK — TierRouter can now enroll first-1000 members`);
+
+  // V8.20: grant GOVERNOR_ROLE to V8Governance. CommunityWallet's setGenesisBps/
+  // setDistributeRatio/setDistributeInterval are GOVERNOR_ROLE-gated and have
+  // existed since V8.8/V8.9 -- this grant never existed before V8.20, so the
+  // DAO had zero call path into CommunityWallet despite the role-gating already
+  // being in place.
+  const CW_GOVERNOR_ROLE = await cw.GOVERNOR_ROLE();
+  await (await cw.grantRole(CW_GOVERNOR_ROLE, govAddr)).wait();
+  console.log(`  ↳  GOVERNOR_ROLE granted to V8Governance on CommunityWallet (${govAddr})`);
 
   // Wire CommunityWallet address into TierRouter (activates enroll() hook in register())
   await (await tierRouter.setCommunityWallet(cwAddr)).wait();
@@ -516,6 +543,12 @@ async function main() {
   // same role already granted to every matrix above.
   await (await cnova.grantRole(MINTER_ROLE, dsAddr)).wait();
   console.log(`  ↳  MINTER_ROLE granted to CNOVADirectSale (${dsAddr})`);
+
+  // V8.20: wire governance co-control (setMaxTxBps/setMaxWalletBps/setSfTargetDS/
+  // setLqTargetDS). directSale deploys after V8Governance, so this couldn't be
+  // done in the main governance-wiring block above.
+  await (await directSale.setGovernance(govAddr)).wait();
+  console.log(`  ↳  CNOVADirectSale.setGovernance OK (${govAddr})`);
 
   // ── 10a. Save addresses BEFORE W1 seed (so a seed failure doesn't lose addresses) ──
   {

@@ -125,6 +125,11 @@ contract TierRouter is Ownable2Step {
     /// @notice MatrixKeeper (Chainlink Automation) — may set tierVelocityGreen.
     address public matrixKeeper;
 
+    // ─── V8.20: Governance co-control ──────────────────────────────────────────
+    /// @notice DAO governance contract. Co-governs params below alongside owner --
+    ///         neither replaces the other (owner keeps emergency backstop).
+    address public governance;
+
     // ─── V8.1: Velocity gate (keeper-maintained per tier) ─────────────────────
     mapping(uint8 => bool) public tierVelocityGreen;
 
@@ -194,6 +199,12 @@ contract TierRouter is Ownable2Step {
     // V8.14: cross-upgrade events
     event UpgradeEligibleAtCross(address indexed member, uint8 fromTierNum, uint8 toTierNum);
     event AutoUpgradedAtCross(address indexed member, uint8 fromTierNum, uint8 toTierNum, uint256 fee);
+    // V8.20
+    event GovernanceSet(address indexed governance);
+    event WhaleGateThresholdSet(uint256 threshold);
+    event InactivityDaysThresholdSet(uint256 days_);
+    event InactivityCyclesThresholdSet(uint256 cycles);
+    event InactivityGuardEnabledSet(bool enabled);
 
     // ─── Constructor ──────────────────────────────────────────────────────────
 
@@ -213,6 +224,19 @@ contract TierRouter is Ownable2Step {
     modifier whenNotPaused() {
         require(!systemPaused, "TR: system paused - inactivity");
         _;
+    }
+
+    /// @notice V8.20: owner keeps emergency backstop, governance address co-governs.
+    modifier onlyOwnerOrGovernance() {
+        require(msg.sender == owner() || msg.sender == governance, "TR: not authorized");
+        _;
+    }
+
+    /// @notice V8.20: wire the V8Governance contract so DAO-passed proposals can execute.
+    function setGovernance(address _gov) external onlyOwner {
+        require(_gov != address(0), "TR: zero governance");
+        governance = _gov;
+        emit GovernanceSet(_gov);
     }
 
     // ─── Admin: setup ─────────────────────────────────────────────────────────
@@ -254,9 +278,15 @@ contract TierRouter is Ownable2Step {
         authorizedMatrices[matrix] = false;
     }
 
-    function setWhaleGateThreshold(uint256 threshold) external onlyOwner {
-        require(threshold > 0, "TR: zero threshold");
+    /// @notice V8.20: DAO-governable. Allowed: 10, 15, 20, 25, 30, 50.
+    function setWhaleGateThreshold(uint256 threshold) external onlyOwnerOrGovernance {
+        require(
+            threshold == 10 || threshold == 15 || threshold == 20 ||
+            threshold == 25 || threshold == 30 || threshold == 50,
+            "TR: invalid threshold (allowed: 10,15,20,25,30,50)"
+        );
         whaleGateThreshold = threshold;
+        emit WhaleGateThresholdSet(threshold);
     }
 
     /// @notice V8.1: Set the MatrixKeeper address (Chainlink Automation).
@@ -286,7 +316,7 @@ contract TierRouter is Ownable2Step {
 
     // ─── V8.1: DAO governance setters (enumerated menus only) ────────────────
 
-    function setAutoUpgradeCycleThreshold(uint256 threshold) external onlyOwner {
+    function setAutoUpgradeCycleThreshold(uint256 threshold) external onlyOwnerOrGovernance {
         require(
             threshold == 1 || threshold == 3 || threshold == 5 || threshold == 10,
             "TR: invalid threshold (allowed: 1,3,5,10)"
@@ -295,7 +325,7 @@ contract TierRouter is Ownable2Step {
         emit AutoUpgradeThresholdSet(threshold);
     }
 
-    function setReentryMinCycles(uint256 minCycles) external onlyOwner {
+    function setReentryMinCycles(uint256 minCycles) external onlyOwnerOrGovernance {
         require(
             minCycles == 1 || minCycles == 2 || minCycles == 3 || minCycles == 5,
             "TR: invalid minCycles (allowed: 1,2,3,5)"
@@ -304,7 +334,7 @@ contract TierRouter is Ownable2Step {
         emit ReentryMinCyclesSet(minCycles);
     }
 
-    function setEscrowFloorMultiplier(uint256 multiplier) external onlyOwner {
+    function setEscrowFloorMultiplier(uint256 multiplier) external onlyOwnerOrGovernance {
         require(
             multiplier == 110 || multiplier == 120 || multiplier == 150 || multiplier == 200,
             "TR: invalid multiplier (allowed: 110,120,150,200)"
@@ -324,6 +354,38 @@ contract TierRouter is Ownable2Step {
         inactivityCyclesThreshold = cyclesThreshold;
         inactivityGuardEnabled    = enabled;
         emit InactivityConfigUpdated(daysThreshold, cyclesThreshold, enabled);
+    }
+
+    // V8.20: granular single-value governable equivalents of setInactivityConfig
+    // above. That function stays owner-only (it's the all-in-one emergency
+    // reset); these three let the DAO tune one knob at a time.
+
+    /// @notice DAO-governable. Allowed: 7, 14, 30, 60, 90 (days). 0 disables the days guard.
+    function setInactivityDaysThreshold(uint256 v) external onlyOwnerOrGovernance {
+        require(
+            v == 0 || v == 7 || v == 14 || v == 30 || v == 60 || v == 90,
+            "TR: invalid days threshold"
+        );
+        inactivityDaysThreshold = v;
+        emit InactivityDaysThresholdSet(v);
+    }
+
+    /// @notice DAO-governable. Allowed: 1, 2, 3, 5, 10 (cycles). 0 disables the cycles guard.
+    function setInactivityCyclesThreshold(uint256 v) external onlyOwnerOrGovernance {
+        require(
+            v == 0 || v == 1 || v == 2 || v == 3 || v == 5 || v == 10,
+            "TR: invalid cycles threshold"
+        );
+        inactivityCyclesThreshold = v;
+        emit InactivityCyclesThresholdSet(v);
+    }
+
+    /// @notice DAO-governable. v must be 0 (disabled) or 1 (enabled) -- V8Governance
+    ///         only deals in uint256, so bool is encoded this way.
+    function setInactivityGuardEnabled(uint256 v) external onlyOwnerOrGovernance {
+        require(v == 0 || v == 1, "TR: invalid bool value (0 or 1)");
+        inactivityGuardEnabled = (v == 1);
+        emit InactivityGuardEnabledSet(v == 1);
     }
 
     function checkInactivity() public {

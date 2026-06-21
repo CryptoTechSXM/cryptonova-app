@@ -134,6 +134,21 @@ contract MatrixKeeper is Ownable {
     address public tierRouter;
     address public stabilityFund;
     address public communityWallet;
+    /// @notice V8.20: DAO governance contract. Co-governs the params below
+    ///         alongside owner -- neither replaces the other (owner keeps emergency backstop).
+    address public governance;
+
+    /// @notice V8.20: SF parked-rescue coverage ladder, governable.
+    ///         thresholds[i] = withdrawable/entryFee bps breakpoint (descending).
+    ///         bpsLadder[i]  = SF coverage bps at that breakpoint (ascending).
+    ///         Below the lowest threshold => ineligible for rescue (evict instead).
+    ///         Defaults reproduce the exact V8.18 hardcoded ladder.
+    uint256[] public sfRescueThresholds = [
+        uint256(10_000), 9_500, 9_000, 8_500, 8_000, 7_500, 7_000, 6_500, 6_000, 5_000, 4_000
+    ];
+    uint256[] public sfRescueBpsLadder = [
+        uint256(0), 1_000, 1_500, 2_000, 2_500, 3_000, 3_500, 4_000, 4_500, 5_000, 6_000
+    ];
 
     uint8   public deflationState;
     uint256 public lastVelocityCheck;
@@ -166,6 +181,8 @@ contract MatrixKeeper is Ownable {
     event ConfigUpdated(string indexed param, uint256 value);
     event CommunityDistributed(address indexed cw);
     event WorkItemFailed(uint8 indexed workType, uint8 tierIndex, address addr1, address addr2);
+    event GovernanceSet(address indexed governance);
+    event SfRescueLadderUpdated(uint256 rungs, uint256 deepestBps);
 
     error MK_NotKeeper();
     error MK_InvalidParam();
@@ -186,6 +203,19 @@ contract MatrixKeeper is Ownable {
         lastVelocityCheck = block.timestamp;
     }
 
+    /// @notice V8.20: owner keeps emergency backstop, governance address co-governs.
+    modifier onlyOwnerOrGovernance() {
+        require(msg.sender == owner() || msg.sender == governance, "MK: not authorized");
+        _;
+    }
+
+    /// @notice V8.20: wire the V8Governance contract so DAO-passed proposals can execute.
+    function setGovernance(address _gov) external onlyOwner {
+        if (_gov == address(0)) revert MK_ZeroAddress();
+        governance = _gov;
+        emit GovernanceSet(_gov);
+    }
+
     function setPairManager(uint8 tierIndex, address pm) external onlyOwner {
         if (pm == address(0)) revert MK_ZeroAddress();
         if (pairManagerForTier[tierIndex] == address(0)) configuredTierCount++;
@@ -199,27 +229,28 @@ contract MatrixKeeper is Ownable {
         pendingChainLinks.push(PendingChainLink(newMatA, newMatB, prevMatB, tierIdx));
     }
 
-    function setVelocityWindow(uint256 v) external onlyOwner {
+    function setVelocityWindow(uint256 v) external onlyOwnerOrGovernance {
         require(v == 1800 || v == 3600 || v == 7200 || v == 14400, "MK: invalid window");
         velocityWindow = v;
     }
-    function setVelocityThreshold(uint256 v) external onlyOwner {
+    function setVelocityThreshold(uint256 v) external onlyOwnerOrGovernance {
         require(v == 1 || v == 2 || v == 3 || v == 5, "MK: invalid threshold");
         velocityThreshold = v;
     }
-    function setDeflationThreshold(uint256 v) external onlyOwner {
+    function setDeflationThreshold(uint256 v) external onlyOwnerOrGovernance {
         require(v == 5 || v == 10 || v == 15 || v == 20, "MK: invalid deflation threshold");
         deflationThreshold = v;
     }
-    function setIdleSlotTimeout(uint256 v) external onlyOwner {
+    function setIdleSlotTimeout(uint256 v) external onlyOwnerOrGovernance {
         require(v == 21600 || v == 43200 || v == 86400, "MK: invalid idle timeout");
         idleSlotTimeout = v;
     }
-    function setMaxItemsPerUpkeep(uint256 v) external onlyOwner {
+    function setMaxItemsPerUpkeep(uint256 v) external onlyOwnerOrGovernance {
         require(v == 5 || v == 10 || v == 15 || v == 20, "MK: invalid max items");
         maxItemsPerUpkeep = v;
     }
-    function setParkedGracePeriod(uint256 v) external onlyOwner {
+    /// @notice V8.20: DAO-governable.
+    function setParkedGracePeriod(uint256 v) external onlyOwnerOrGovernance {
         require(
             v == 0 || v == 3_600 || v == 21_600 ||
             v == 5 days || v == 10 days || v == 15 days,
@@ -228,14 +259,45 @@ contract MatrixKeeper is Ownable {
         parkedGracePeriod = v;
         emit ConfigUpdated("parkedGracePeriod", v);
     }
-    function setRescueRatioBps(uint256 v) external onlyOwner {
-        require(v <= 9_500, "MK: ratio too high");
+    /// @notice V8.20: DAO-governable. Allowed: 5000,6000,7000,8000,9000,9500.
+    function setRescueRatioBps(uint256 v) external onlyOwnerOrGovernance {
+        require(
+            v == 5_000 || v == 6_000 || v == 7_000 ||
+            v == 8_000 || v == 9_000 || v == 9_500,
+            "MK: invalid ratio"
+        );
         rescueRatioBps = v;
         emit ConfigUpdated("rescueRatioBps", v);
     }
     function setCommunityWallet(address _cw) external onlyOwner {
         communityWallet = _cw;
         emit ConfigUpdated("communityWallet", uint256(uint160(_cw)));
+    }
+
+    /// @notice V8.20: Replace the SF parked-rescue coverage ladder.
+    ///         thresholds must start at 10_000 (full withdrawable => 0 rescue) and
+    ///         strictly descend; bpsValues must start at 0 and strictly ascend, capped at 10_000.
+    ///         Below the lowest threshold a parked member is ineligible (evicted instead).
+    function setSfRescueLadder(uint256[] calldata thresholds, uint256[] calldata bpsValues)
+        external onlyOwnerOrGovernance
+    {
+        uint256 rungs = thresholds.length;
+        require(rungs >= 2 && rungs <= 20,        "MK: bad ladder length");
+        require(bpsValues.length == rungs,         "MK: length mismatch");
+        require(thresholds[0] == 10_000,           "MK: first threshold must be 10000");
+        require(bpsValues[0] == 0,                 "MK: first bps must be 0");
+        for (uint256 i = 1; i < rungs; i++) {
+            require(thresholds[i] < thresholds[i - 1], "MK: thresholds must descend");
+            require(bpsValues[i] > bpsValues[i - 1],   "MK: bps must ascend");
+            require(bpsValues[i] <= 10_000,            "MK: bps too high");
+        }
+        delete sfRescueThresholds;
+        delete sfRescueBpsLadder;
+        for (uint256 i = 0; i < rungs; i++) {
+            sfRescueThresholds.push(thresholds[i]);
+            sfRescueBpsLadder.push(bpsValues[i]);
+        }
+        emit SfRescueLadderUpdated(rungs, bpsValues[rungs - 1]);
     }
 
     function checkUpkeep(bytes calldata)
@@ -509,21 +571,16 @@ contract MatrixKeeper is Ownable {
         }
     }
 
+    /// @notice V8.20: ladder is now governable storage (see sfRescueThresholds/sfRescueBpsLadder)
+    ///         instead of hardcoded breakpoints. Behavior is identical to V8.18 by default.
     function _sfRescueBps(uint256 withdrawable, uint256 entryFee)
-        internal pure returns (uint256)
+        internal view returns (uint256)
     {
         uint256 wBps = withdrawable * 10_000 / entryFee;
-        if (wBps >= 10_000) return 0;
-        if (wBps >=  9_500) return 1_000;
-        if (wBps >=  9_000) return 1_500;
-        if (wBps >=  8_500) return 2_000;
-        if (wBps >=  8_000) return 2_500;
-        if (wBps >=  7_500) return 3_000;
-        if (wBps >=  7_000) return 3_500;
-        if (wBps >=  6_500) return 4_000;
-        if (wBps >=  6_000) return 4_500;
-        if (wBps >=  5_000) return 5_000;
-        if (wBps >=  4_000) return 6_000; // V8.18: 40-49% withdrawable → SF covers 60%
+        uint256 n = sfRescueThresholds.length;
+        for (uint256 i = 0; i < n; i++) {
+            if (wBps >= sfRescueThresholds[i]) return sfRescueBpsLadder[i];
+        }
         return type(uint256).max;
     }
 

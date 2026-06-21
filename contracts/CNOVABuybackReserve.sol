@@ -93,6 +93,10 @@ contract CNOVABuybackReserve is Ownable2Step, ReentrancyGuard {
     /// @notice Whether the contract is in testnet stub mode (no live DEX).
     bool public testnetMode;
 
+    /// @notice V8.20: DAO governance contract. Co-governs the params below
+    ///         alongside owner -- neither replaces the other (owner keeps emergency backstop).
+    address public governance;
+
     // ── Events ────────────────────────────────────────────────────────────────
     event ContributionReceived(address indexed from, uint256 amount, uint256 newTotal);
     event BuybackExecuted(uint256 usdcSpent, uint256 cnovaBurned, uint256 newSupply);
@@ -100,6 +104,7 @@ contract CNOVABuybackReserve is Ownable2Step, ReentrancyGuard {
     event ThresholdUpdated(uint256 oldThreshold, uint256 newThreshold);
     event RouterUpdated(address oldRouter, address newRouter);
     event EmergencyWithdrawal(address indexed to, uint256 amount, string reason);
+    event GovernanceSet(address indexed governance);
 
     // ── Constructor ───────────────────────────────────────────────────────────
 
@@ -213,12 +218,31 @@ contract CNOVABuybackReserve is Ownable2Step, ReentrancyGuard {
 
     // ── Governance ────────────────────────────────────────────────────────────
 
+    /// @notice V8.20: owner keeps emergency backstop, governance address co-governs.
+    modifier onlyOwnerOrGovernance() {
+        require(msg.sender == owner() || msg.sender == governance, "BBR: not authorized");
+        _;
+    }
+
+    /// @notice V8.20: wire the V8Governance contract so DAO-passed proposals can execute.
+    function setGovernance(address _gov) external onlyOwner {
+        require(_gov != address(0), "BBR: zero governance");
+        governance = _gov;
+        emit GovernanceSet(_gov);
+    }
+
     /**
      * @notice Update the USDC balance threshold required to trigger a buyback.
      * @param threshold New threshold in 6-dec USDC (e.g. 500e6 = $500).
+     *        V8.20: DAO-governable. Allowed: 100,250,500,1000,2500,5000 ($).
      */
-    function setTriggerThreshold(uint256 threshold) external onlyOwner {
-        require(threshold >= 100_000_000, "BBR: threshold too low ($100 min)");
+    function setTriggerThreshold(uint256 threshold) external onlyOwnerOrGovernance {
+        require(
+            threshold == 100_000_000  || threshold == 250_000_000  ||
+            threshold == 500_000_000  || threshold == 1_000_000_000 ||
+            threshold == 2_500_000_000 || threshold == 5_000_000_000,
+            "BBR: invalid threshold"
+        );
         emit ThresholdUpdated(triggerThreshold, threshold);
         triggerThreshold = threshold;
     }
@@ -236,10 +260,15 @@ contract CNOVABuybackReserve is Ownable2Step, ReentrancyGuard {
     }
 
     /**
-     * @notice Update max slippage (BPS). Allowed: 100-2000 (1%-20%).
+     * @notice Update max slippage (BPS). Allowed: 100,200,300,500,1000,1500,2000 (1%-20%).
+     *         V8.20: DAO-governable.
      */
-    function setMaxSlippageBps(uint256 bps) external onlyOwner {
-        require(bps >= 100 && bps <= 2000, "BBR: slippage out of range");
+    function setMaxSlippageBps(uint256 bps) external onlyOwnerOrGovernance {
+        require(
+            bps == 100 || bps == 200 || bps == 300 || bps == 500 ||
+            bps == 1000 || bps == 1500 || bps == 2000,
+            "BBR: slippage out of range"
+        );
         maxSlippageBps = bps;
     }
 

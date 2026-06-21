@@ -132,6 +132,7 @@ contract FigureEightMatrixV8 is Ownable2Step {
     address        public communityWallet;         // CommunityWallet.sol --- set post-deploy (deferred to mainnet)
     address        public buybackReserve;          // CNOVABuybackReserve.sol --- set post-deploy
     address        public liquidityReserve;        // V8.19: LQ wallet/CNOVADirectSale --- set post-deploy
+    address        public governance;              // V8.20: V8Governance.sol --- co-governs fee setters, set post-deploy
     address        public matrixKeeper;            // MatrixKeeper (Chainlink) --- set post-deploy
 
     // --- Figure-8 partner ----------------------------------------------------
@@ -216,6 +217,7 @@ contract FigureEightMatrixV8 is Ownable2Step {
     event WithdrawalFeeCharged(address indexed member, uint256 fee);
     event StabilityFundSet(address indexed addr);
     event MatrixKeeperSet(address indexed addr);
+    event GovernanceSet(address indexed addr);
     event MemberParked(address indexed member, uint256 shortfall);
     event MemberEvicted(address indexed member, uint256 totalWithdrawn);  // V8.10: grace-period eviction
     event CoPayRescue(address indexed member, uint256 sfShare, uint256 memberWalletShare, uint256 withdrawableUsed); // V8.18
@@ -364,6 +366,13 @@ contract FigureEightMatrixV8 is Ownable2Step {
         liquidityReserve = _lr;
     }
 
+    /// @notice V8.20: Set V8Governance address so DAO-passed fee proposals can execute directly.
+    function setGovernance(address _gov) external onlyOwner {
+        require(_gov != address(0), "F8V8: zero governance");
+        governance = _gov;
+        emit GovernanceSet(_gov);
+    }
+
     /// @notice V8.1: Set MatrixKeeper (Chainlink Automation) address.
     function setMatrixKeeper(address _keeper) external onlyOwner {
         require(_keeper != address(0), "F8V8: zero keeper");
@@ -382,7 +391,10 @@ contract FigureEightMatrixV8 is Ownable2Step {
     /// @notice Adjust withdrawal health fee. Allowed: 50, 100, 150, 200, 250.
     ///         Default 150 (1.5%). Callable by owner or TierRouter (DAO gateway).
     function setWithdrawalFeeBps(uint256 _bps) external {
-        require(msg.sender == owner() || msg.sender == tierRouter, "F8V8: not governance");
+        require(
+            msg.sender == owner() || msg.sender == tierRouter || msg.sender == governance,
+            "F8V8: not governance"
+        );
         require(
             _bps == 50 || _bps == 100 || _bps == 150 || _bps == 200 || _bps == 250,
             "F8V8: invalid fee (allowed: 50,100,150,200,250)"
@@ -393,7 +405,10 @@ contract FigureEightMatrixV8 is Ownable2Step {
     /// @notice Adjust early exit penalty. Allowed: 1000, 1500, 2000, 2500.
     ///         Default 2000 (20%). Callable by owner or TierRouter (DAO gateway).
     function setEarlyExitPenaltyBps(uint256 _bps) external {
-        require(msg.sender == owner() || msg.sender == tierRouter, "F8V8: not governance");
+        require(
+            msg.sender == owner() || msg.sender == tierRouter || msg.sender == governance,
+            "F8V8: not governance"
+        );
         require(
             _bps == 1000 || _bps == 1500 || _bps == 2000 || _bps == 2500,
             "F8V8: invalid penalty (allowed: 1000,1500,2000,2500)"

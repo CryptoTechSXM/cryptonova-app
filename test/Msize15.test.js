@@ -8,11 +8,12 @@ const T1_FEE  = 10n * UNIT;
 const T2_FEE  = 25n * UNIT;
 const MSIZE   = 15n;
 
-/** V8.7 7-field SplitConfig */
+/** V8.19 10-field SplitConfig (liquidityBps added, default 0) */
 const SPLITS = {
   l1Bps: 2000, chainBps: 2000, poolBps: 3300,
   treasuryBps: 1500, stabilityBps: 500,
   devBps: 300, opsBps: 200, communityBps: 100, buybackBps: 100,
+  liquidityBps: 0,
 };  // sum = 10 000
 const CHAIN_BPS = [1000n, 400n, 300n, 150n, 75n, 75n];  // sum = 2000 = chainBps
 
