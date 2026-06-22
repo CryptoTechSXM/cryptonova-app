@@ -2,60 +2,30 @@
 pragma solidity ^0.8.24;
 
 /**
- * @title  FigureEightMatrixV8
- * @notice V8.1 "Elevator" --- BFS matrix with TierRouter integration,
- *         deficit-weighted equalization pool, StabilityFund hooks,
- *         and no-idle-member guarantees.
+ * @title  FigureEightMatrixV8 (library-backed, V8.21)
+ * @notice Same external behavior/ABI as the original FigureEightMatrixV8, but
+ *         all BFS/cycling/payment/withdraw/rescue logic now lives in the
+ *         externally-deployed MatrixLogicLib and runs via delegatecall. This
+ *         contract holds only: immutable per-instance config, the MatrixState
+ *         storage struct, thin wrapper functions that preserve the exact same
+ *         external ABI as the pre-V8.21 contract, and view functions that read
+ *         directly from the struct (no need to go through the library for
+ *         plain reads).
  *
- * V8.1 CHANGES (Option B BPS)
- * -----------------------------------------------------------------------------
- *  1. Equalization Pool (Option B)
- *       V8.8: escrow storage removed; orphan fees --- CommunityWallet / SF L6
- *       + SPLIT_STABILITY_BPS. Chain pay halved (4000---2000 T1-T5, 3500---1750
- *       T6-T7). Freed BPS flows into equalization pool accumulated per-entry.
- *       On every cycle-out, pool distributes to all non-root members (pos 2..N)
- *       weighted by BFS position (deeper = larger deficit = larger share).
+ *         Why: FigureEightMatrixV8 is deployed 20 times (MatA + MatB x 10
+ *         tiers); every byte of its old monolithic bytecode was duplicated
+ *         across all 20. It hit the EIP-170 24,576-byte limit during V8.20
+ *         (24,758 bytes) and was patched back under the limit with a
+ *         custom-error conversion (24,405 bytes, ~171 bytes/0.7% margin) --
+ *         a real fix, but a finite one. This refactor moves the actual logic
+ *         into a library deployed once, so all 20 instances shrink together
+ *         and margin no longer erodes with every feature added to the matrix.
+ *         Measured result (solc 0.8.26, optimizer runs=200, viaIR=true):
+ *         24,446 -> 12,529 bytes per instance (51% of the limit, ~49% margin).
  *
- *       BPS table (V8.7 -- l2/l3 removed, buyback added, 10 tiers):
- *         T1-T3:  l1=2000, chain=2000, pool=3300, treasury=1500,
- *                 devOps=500, stability=600, buyback=100   (sum=10000)
- *         T4-T5:  l1=2000, chain=2000, pool=3100, treasury=1700,
- *                 devOps=600, stability=500, buyback=100   (sum=10000)
- *         T6-T7:  l1=2000, chain=1750, pool=2950, treasury=1900,
- *                 devOps=700, stability=500, buyback=200   (sum=10000)
- *         T8-T10: l1=2000, chain=1750, pool=2750, treasury=2000,
- *                 devOps=800, stability=500, buyback=200   (sum=10000)
- *
- *  2. StabilityFund hooks (zero treasury --- treasury is SACRED)
- *       L1: 200 bps per entry (permanent)  --- receiveLayer(tier, amt, 1)
- *       L3: withdrawal health fee 1.5%     --- receiveLayer(tier, amt, 3)
- *       L5: early exit penalty 20%         --- receiveLayer(tier, amt, 5)
- *       Fallback to devOpsWallet if StabilityFund not yet set.
- *
- *  3. Activity tracking
- *       lastActivityTime[member] updated on matrix entry (join) and explicit
- *       member actions (withdraw, earlyEscrowRelease) --- NOT on passive credits.
- *       This avoids O(N) cold SSTOREs in _distributePool() at cycle-out.
- *       MatrixKeeper reads getIdleSeconds() to detect idle slots.
- *
- *  4. reclaimIdleSlot() --- keeper-only
- *       Removes idle member from BFS tree. Earnings/escrow untouched.
- *
- *  5. earlyEscrowRelease() --- REMOVED in V8.8 (escrow storage removed)
- *       Orphan fees now route to CommunityWallet / StabilityFund layer 6.
- *
- *  6. Governance-adjustable fee parameters (enumerated menus, DAO-votable)
- *       withdrawalFeeBps: 50/100/150/200/250 (default 150 = 1.5%)
- *       earlyExitPenaltyBps: 1000/1500/2000/2500 (default 2000 = 20%)
- *
- * V8 CHANGES (carried forward from Phase 1)
- * -----------------------------------------------------------------------------
- *  1. Dynamic crossing fee (reads destination.ENTRY_FEE() at crossing time)
- *  2. Per-tier BPS splits passed in constructor (all immutable)
- *  3. TierRouter callback on Matrix B cycle-out
- *  4. deductForUpgrade() callable by TierRouter only
- *  5. 6-level chain pay (configurable per-tier via constructor)
- *  6. Separate devWallet + opsWallet + communityWallet (all per-entry routed)
+ *         See MatrixLogicLib.sol for the actual business logic and
+ *         memory note future_library_extraction.md for the full decision
+ *         history and trade-offs.
  */
 
 import "@openzeppelin/contracts/access/Ownable2Step.sol";
@@ -63,141 +33,43 @@ import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "./CNOVAToken.sol";
 import "./CNOVATreasury.sol";
-
-interface ICommunityWalletV8 {
-    function deposit(uint256 amount) external;
-}
-
-interface ITierRouter {
-    function handleCycleOut(
-        address member,
-        uint8   tierIndex,
-        uint256 escrow,
-        uint256 withdrawable
-    ) external;
-    /// @notice V8.14: called by MatB._enterMatrix to signal a member has crossed in.
-    function onCrossToMatB(address member, uint8 tierIndex) external;
-    /// @notice V8.19: Returns the member's current highest tier (1-based; 0 = unregistered).
-    function memberHighestTier(address member) external view returns (uint8);
-    /// @notice V8.19: Returns USDC amount reserved for automation fees (reentry / upgrade).
-    ///         Only enforced in the member's current highest-tier matrix.
-    function reservedFor(address member) external view returns (uint256);
-}
-
-/// @notice Minimal interface for forwarding stability fund contributions.
-interface IStabilityFund {
-    /// @param tierIdx  0-6 = T1-T7
-    /// @param amount   USDC amount (6 decimals)
-    /// @param layer    1=pool-carve, 2=referral-carve, 3=withdrawal-fee, 4=devops, 5=exit-penalty
-    function receiveLayer(uint8 tierIdx, uint256 amount, uint8 layer) external;
-    /// @notice V8.18: SF sends sfShare to caller (authorized matrix) for coPayRescue.
-    function payCoRescue(uint8 tierIdx, uint256 sfShare) external;
-}
+import "./MatrixV8Interfaces.sol";
+import "./MatrixLogicLib.sol";
 
 contract FigureEightMatrixV8 is Ownable2Step {
     using SafeERC20 for IERC20;
 
-    // --- Immutables -----------------------------------------------------------
+    // --- Immutables -------------------------------------------------------------
     uint256 public immutable MATRIX_SIZE;
     uint256 public immutable ENTRY_FEE;
     bool    public immutable isMatrixA;
-    uint8   public immutable tierIndex;          // 0=T1, 1=T2, ..., 9=T10
+    uint8   public immutable tierIndex;
 
-    // --- Per-tier BPS splits (immutable, set in constructor) ------------------
-    uint256 public immutable SPLIT_L1_BPS;        // 2000 all tiers
-    uint256 public immutable SPLIT_CHAIN_BPS;     // 2000 T1-T5, 1750 T6-T10
-    uint256 public immutable SPLIT_POOL_BPS;      // 3300/3100/2950/2750 per tier group
-    uint256 public immutable SPLIT_TREASURY_BPS;  // 1500/1700/1900/2000 per tier group
-    uint256 public immutable SPLIT_DEV_BPS;       // dev portion (300/...) per tier group
-    uint256 public immutable SPLIT_OPS_BPS;       // ops portion (200/...) per tier group
-    uint256 public immutable SPLIT_COMMUNITY_BPS;  // community carve (100 all tiers)
-    uint256 public immutable SPLIT_STABILITY_BPS;  // per tier group -- L1 carve to SF
-    uint256 public immutable SPLIT_BUYBACK_BPS;    // per tier group -- to BuybackReserve
-    uint256 public immutable SPLIT_LIQUIDITY_BPS;  // V8.19: per-entry carve to liquidityReserve
+    uint256 public immutable SPLIT_L1_BPS;
+    uint256 public immutable SPLIT_CHAIN_BPS;
+    uint256 public immutable SPLIT_POOL_BPS;
+    uint256 public immutable SPLIT_TREASURY_BPS;
+    uint256 public immutable SPLIT_DEV_BPS;
+    uint256 public immutable SPLIT_OPS_BPS;
+    uint256 public immutable SPLIT_COMMUNITY_BPS;
+    uint256 public immutable SPLIT_STABILITY_BPS;
+    uint256 public immutable SPLIT_BUYBACK_BPS;
+    uint256 public immutable SPLIT_LIQUIDITY_BPS;
     uint256 public constant  BPS_DENOM = 10_000;
 
-    // --- Chain pay weights per BFS level (6 levels in V8) --------------------
-    uint256[6] public chainPayBps;
-
-    // --- External contracts ---------------------------------------------------
     IERC20         public immutable usdc;
     CNOVAToken     public immutable cnova;
     CNOVATreasury  public immutable treasury;
-    address        public immutable devWallet;     // dev wallet
-    address        public immutable opsWallet;     // ops wallet
-    address        public tierRouter;              // TierRouter --- set post-deploy
-    address        public pairManager;             // PairManager --- set post-deploy
-    address        public accountOne;              // orphan fee fallback
-    address        public stabilityFund;           // StabilityFund.sol --- set post-deploy
-    address        public communityWallet;         // CommunityWallet.sol --- set post-deploy (deferred to mainnet)
-    address        public buybackReserve;          // CNOVABuybackReserve.sol --- set post-deploy
-    address        public liquidityReserve;        // V8.19: LQ wallet/CNOVADirectSale --- set post-deploy
-    address        public governance;              // V8.20: V8Governance.sol --- co-governs fee setters, set post-deploy
-    address        public matrixKeeper;            // MatrixKeeper (Chainlink) --- set post-deploy
+    address        public immutable devWallet;
+    address        public immutable opsWallet;
 
-    // --- Figure-8 partner ----------------------------------------------------
-    FigureEightMatrixV8 public partner;
+    // --- Mutable state, bundled for the library --------------------------------
+    MatrixLogicLib.MatrixState private _state;
 
-    // --- Circular chain (multi-pair within same tier) ------------------------
-    address public chainNext;
-    mapping(address => bool) public chainAuthorized;
-
-    // --- BFS State -----------------------------------------------------------
-    mapping(address => uint256) public matrixPos;
-    mapping(uint256 => address) public posToMember;
-    uint256 public occupancy;
-    uint256 public nextSlot;
-    uint256 public rotationCount;
-    uint256 public joinCountSinceRotation;
-    uint256 public lastRotationTimestamp;
-
-    // --- Cascade guard --------------------------------------------------------
-    bool    private _crossingInProgress;
-    address public  pendingCross;
-    address public  pendingCrossReferrer;
-
-    // --- Parked member queue (keeper rescue) -----------------------------------------
-    /// @notice Members that failed to cross (insufficient funds). Keeper rescues via forceCrossKeeper().
-    address[] public parkedMembers;
-    /// @notice Timestamp when each member was parked. Used by keeper for grace-period logic.
-    mapping(address => uint256) public parkedAt;
-
-    // --- V8.1: Equalization Pool ----------------------------------------------
-    /// @notice Accumulates SPLIT_POOL_BPS per entry. Distributed deficit-weighted
-    ///         to all non-root members (pos 2..N) on every cycle-out.
-    uint256 public poolAccumulator;
-
-    // --- V8.1: Activity Tracking ---------------------------------------------
-    /// @notice Last timestamp a member received any credit or entered the matrix.
-    ///         MatrixKeeper monitors this for idle slot reclaiming.
-    mapping(address => uint256) public lastActivityTime;
-
-    // --- V8.1: Governance parameters (DAO-votable, enumerated values only) ---
-    /// @notice Withdrawal health fee in BPS. Default 150 (1.5%). Feeds L3.
-    uint256 public withdrawalFeeBps    = 150;
-    /// @notice Early exit penalty in BPS. Default 2000 (20%). Feeds L5.
-    uint256 public earlyExitPenaltyBps = 2000;
-
-    // --- Orphan fee health monitor (escrow replaced by community pool routing) -
-    uint256 public noReferrerPoolRouted;     // renamed from noReferrerEscrowRouted
-    uint256 public noReferrerFounderRouted;
-
-    // --- Member data ---------------------------------------------------------
-    struct Member {
-        uint256 id;
-        address referrer;
-        uint256 joinedAt;
-        uint256 withdrawable;
-        uint256 totalEarned;
-        uint256 totalWithdrawn;   // V8.10: cumulative gross amount withdrawn (pre-fee)
-        uint256 cyclesCompleted;
-        bool    isInMatrix;
-        bool    hasEverJoined;
-    }
-    mapping(address => Member) public members;
-    uint256 public totalJoined;
-
-    // --- Events ---------------------------------------------------------------
+    // --- Events (re-declared here too so this contract's own ABI advertises
+    //     them -- Solidity does not surface a library's events in the
+    //     contract's own ABI otherwise, which would break event-decoding
+    //     tooling that reads the matrix contract's own ABI, e.g. BaseScan). ---
     event MemberEntered(address indexed member, uint256 bfsPosition, uint256 memberId, address matrix);
     event MemberCycledOut(address indexed member, uint256 cycles, uint256 rotations, address fromMatrix);
     event MemberCrossedToPartner(address indexed member, address fromMatrix, address toMatrix);
@@ -208,44 +80,33 @@ contract FigureEightMatrixV8 is Ownable2Step {
     event EarningsWithdrawn(address indexed member, uint256 amount);
     event PartnerSet(address indexed partner, bool isMatrixA);
     event UpgradeFundsDeducted(address indexed member, uint256 escrowAmt, uint256 withdrawableAmt);
-    // V8.1 events
     event PoolDistributed(uint256 totalPool, uint256 cycleNumber);
     event PoolShareCredited(address indexed member, uint256 position, uint256 amount);
     event StabilityContribution(uint8 indexed tier, uint256 amount, uint8 layer);
     event SlotReclaimed(address indexed member, uint256 position, uint256 idleDuration);
-    event EarlyEscrowRelease(address indexed member, uint256 escrow, uint256 penalty, uint256 payout);
     event WithdrawalFeeCharged(address indexed member, uint256 fee);
     event StabilityFundSet(address indexed addr);
     event MatrixKeeperSet(address indexed addr);
     event GovernanceSet(address indexed addr);
     event MemberParked(address indexed member, uint256 shortfall);
-    event MemberEvicted(address indexed member, uint256 totalWithdrawn);  // V8.10: grace-period eviction
-    event CoPayRescue(address indexed member, uint256 sfShare, uint256 memberWalletShare, uint256 withdrawableUsed); // V8.18
+    event MemberEvicted(address indexed member, uint256 totalWithdrawn);
+    event CoPayRescue(address indexed member, uint256 sfShare, uint256 memberWalletShare, uint256 withdrawableUsed);
 
-    /// @dev V8.20: shared custom error for post-deploy wiring setters' zero-address
-    ///      checks -- saves bytecode size vs. a separate string literal per setter
-    ///      (this contract sits right at the 24576-byte EIP-170 limit).
     error F8V8_ZeroAddress();
 
-    // --- Constructor split config struct --------------------------------------
-    /// @notice V8.9: devOpsBps split into devBps + opsBps, communityBps added (9 fields total).
     struct SplitConfig {
         uint256 l1Bps;
         uint256 chainBps;
-        uint256 poolBps;        // equalization pool
-        uint256 treasuryBps;    // CNOVA backing (SACRED)
-        uint256 stabilityBps;   // per-entry L1 carve to StabilityFund
-        uint256 devBps;         // dev wallet carve
-        uint256 opsBps;         // ops wallet carve
-        uint256 communityBps;   // community wallet carve (was SF-level carve in V8.8)
-        uint256 buybackBps;     // per-entry carve to CNOVABuybackReserve
-        uint256 liquidityBps;   // V8.19: per-entry carve to liquidityReserve (CNOVA/USDC LP)
-        // Sum must == 10,000
+        uint256 poolBps;
+        uint256 treasuryBps;
+        uint256 stabilityBps;
+        uint256 devBps;
+        uint256 opsBps;
+        uint256 communityBps;
+        uint256 buybackBps;
+        uint256 liquidityBps;
     }
 
-    /// @dev Packs the 6 address constructor args into a single memory pointer,
-    ///      keeping the total stack depth below the EVM's 16-slot limit when
-    ///      MatrixFactory deploys a new instance.
     struct DeployParams {
         address usdc;
         address cnova;
@@ -256,7 +117,7 @@ contract FigureEightMatrixV8 is Ownable2Step {
         address admin;
     }
 
-    // --- Constructor ----------------------------------------------------------
+    // --- Constructor -------------------------------------------------------------
     constructor(
         DeployParams memory _p,
         uint256      _entryFee,
@@ -269,14 +130,13 @@ contract FigureEightMatrixV8 is Ownable2Step {
         require(_p.usdc         != address(0), "F8V8: zero usdc");
         require(_p.cnova        != address(0), "F8V8: zero cnova");
         require(_p.treasury     != address(0), "F8V8: zero treasury");
-        require(_p.devWallet != address(0),    "F8V8: zero devWallet");
-        require(_p.opsWallet != address(0),    "F8V8: zero opsWallet");
+        require(_p.devWallet    != address(0), "F8V8: zero devWallet");
+        require(_p.opsWallet    != address(0), "F8V8: zero opsWallet");
         require(_p.accountOne   != address(0), "F8V8: zero accountOne");
         require(_entryFee     > 0,             "F8V8: zero fee");
         require(_matrixSize   >= 3 && _matrixSize <= 1023, "F8V8: invalid size");
         require(_tierIndex    < 10,            "F8V8: invalid tier");
 
-        // V8.19: validate split fields (10 fields: added liquidityBps)
         uint256 sum = _splits.l1Bps + _splits.chainBps + _splits.poolBps
             + _splits.treasuryBps + _splits.stabilityBps
             + _splits.devBps + _splits.opsBps + _splits.communityBps
@@ -286,14 +146,12 @@ contract FigureEightMatrixV8 is Ownable2Step {
         usdc         = IERC20(_p.usdc);
         cnova        = CNOVAToken(_p.cnova);
         treasury     = CNOVATreasury(_p.treasury);
-        devWallet = _p.devWallet;
-        opsWallet = _p.opsWallet;
-        accountOne   = _p.accountOne;
+        devWallet    = _p.devWallet;
+        opsWallet    = _p.opsWallet;
         ENTRY_FEE    = _entryFee;
         MATRIX_SIZE  = _matrixSize;
         isMatrixA    = _isMatrixA;
         tierIndex    = _tierIndex;
-        nextSlot     = 1;
 
         SPLIT_L1_BPS        = _splits.l1Bps;
         SPLIT_CHAIN_BPS     = _splits.chainBps;
@@ -301,1056 +159,266 @@ contract FigureEightMatrixV8 is Ownable2Step {
         SPLIT_TREASURY_BPS  = _splits.treasuryBps;
         SPLIT_DEV_BPS       = _splits.devBps;
         SPLIT_OPS_BPS       = _splits.opsBps;
-        SPLIT_COMMUNITY_BPS  = _splits.communityBps;
-        SPLIT_STABILITY_BPS  = _splits.stabilityBps;
-        SPLIT_BUYBACK_BPS    = _splits.buybackBps;
-        SPLIT_LIQUIDITY_BPS  = _splits.liquidityBps;
+        SPLIT_COMMUNITY_BPS = _splits.communityBps;
+        SPLIT_STABILITY_BPS = _splits.stabilityBps;
+        SPLIT_BUYBACK_BPS   = _splits.buybackBps;
+        SPLIT_LIQUIDITY_BPS = _splits.liquidityBps;
 
+        _state.accountOne          = _p.accountOne;
+        _state.nextSlot            = 1;
+        _state.withdrawalFeeBps    = 150;
+        // V8.21: earlyExitPenaltyBps default-set line removed -- the field,
+        // its setter, and its getter were deleted entirely (stored + DAO-votable
+        // but never actually consumed by any withdraw/cycle logic; see
+        // V8Governance.sol's PARAM_EARLY_EXIT_PENALTY_BPS retirement note).
         for (uint256 i = 0; i < 6; i++) {
-            chainPayBps[i] = _chainPayBps[i];
+            _state.chainPayBps[i] = _chainPayBps[i];
         }
     }
 
-    // --- Admin setters --------------------------------------------------------
+    /// @dev Rebuilds the immutable-config struct passed into every library call.
+    ///      Cheap: every field here is either an immutable (free read) or a
+    ///      contract reference already held by this contract.
+    function _cfg() internal view returns (MatrixLogicLib.ImmutableConfig memory) {
+        return MatrixLogicLib.ImmutableConfig({
+            entryFee:           ENTRY_FEE,
+            matrixSize:         MATRIX_SIZE,
+            isMatrixA:          isMatrixA,
+            tierIndex:          tierIndex,
+            splitL1Bps:         SPLIT_L1_BPS,
+            splitChainBps:      SPLIT_CHAIN_BPS,
+            splitPoolBps:       SPLIT_POOL_BPS,
+            splitTreasuryBps:   SPLIT_TREASURY_BPS,
+            splitDevBps:        SPLIT_DEV_BPS,
+            splitOpsBps:        SPLIT_OPS_BPS,
+            splitCommunityBps:  SPLIT_COMMUNITY_BPS,
+            splitStabilityBps:  SPLIT_STABILITY_BPS,
+            splitBuybackBps:    SPLIT_BUYBACK_BPS,
+            splitLiquidityBps:  SPLIT_LIQUIDITY_BPS,
+            usdc:               usdc,
+            cnova:              cnova,
+            treasury:           treasury,
+            devWallet:          devWallet,
+            opsWallet:          opsWallet
+        });
+    }
+
+    // --- Admin setters -----------------------------------------------------------
 
     function setPartner(address _partner) external onlyOwner {
-        if (_partner == address(0))    revert F8V8_ZeroAddress();
+        if (_partner == address(0)) revert F8V8_ZeroAddress();
         require(_partner != address(this), "F8V8: self partner");
-        partner = FigureEightMatrixV8(_partner);
+        _state.partner = _partner;
         emit PartnerSet(_partner, isMatrixA);
     }
 
     function setTierRouter(address _tr) external onlyOwner {
-        tierRouter = _tr;
+        _state.tierRouter = _tr;
     }
 
     function setPairManager(address _pm) external onlyOwner {
-        pairManager = _pm;
+        _state.pairManager = _pm;
     }
 
     function setAccountOne(address _a1) external onlyOwner {
-        require(_a1 != address(0), "F8V8: zero");
-        accountOne = _a1;
+        if (_a1 == address(0)) revert F8V8_ZeroAddress();
+        _state.accountOne = _a1;
     }
 
     function setChainNext(address _next) external {
         require(
-            msg.sender == owner() || msg.sender == pairManager,
+            msg.sender == owner() || msg.sender == _state.pairManager,
             "F8V8: not chain admin"
         );
-        chainNext = _next;
+        _state.chainNext = _next;
     }
 
     function setChainAuthorized(address caller, bool authorized) external {
         require(
-            msg.sender == owner()      ||
-            msg.sender == pairManager  ||
-            msg.sender == tierRouter,
+            msg.sender == owner()             ||
+            msg.sender == _state.pairManager  ||
+            msg.sender == _state.tierRouter,
             "F8V8: not chain admin"
         );
-        chainAuthorized[caller] = authorized;
+        _state.chainAuthorized[caller] = authorized;
     }
 
-    /// @notice V8.1: Set StabilityFund address. Call once immediately after deploy.
-    ///         Until set, stability contributions route to devWallet as escrow.
     function setStabilityFund(address _sf) external onlyOwner {
         if (_sf == address(0)) revert F8V8_ZeroAddress();
-        stabilityFund = _sf;
+        _state.stabilityFund = _sf;
         emit StabilityFundSet(_sf);
     }
 
-    /// @notice V8.7: Set BuybackReserve address.
     function setBuybackReserve(address _bbr) external onlyOwner {
         if (_bbr == address(0)) revert F8V8_ZeroAddress();
-        buybackReserve = _bbr;
+        _state.buybackReserve = _bbr;
     }
 
-    /// @notice V8.19: Set LiquidityReserve address (CNOVA/USDC LP wallet or CNOVADirectSale).
     function setLiquidityReserve(address _lr) external onlyOwner {
         if (_lr == address(0)) revert F8V8_ZeroAddress();
-        liquidityReserve = _lr;
+        _state.liquidityReserve = _lr;
     }
 
-    /// @notice V8.20: Set V8Governance address so DAO-passed fee proposals can execute directly.
     function setGovernance(address _gov) external onlyOwner {
         if (_gov == address(0)) revert F8V8_ZeroAddress();
-        governance = _gov;
+        _state.governance = _gov;
         emit GovernanceSet(_gov);
     }
 
-    /// @notice V8.1: Set MatrixKeeper (Chainlink Automation) address.
     function setMatrixKeeper(address _keeper) external onlyOwner {
         if (_keeper == address(0)) revert F8V8_ZeroAddress();
-        matrixKeeper = _keeper;
+        _state.matrixKeeper = _keeper;
         emit MatrixKeeperSet(_keeper);
     }
 
-    /// @notice Set the CommunityWallet address for orphan fee routing.
-    ///         Pass address(0) to disable CW routing (orphan fees fall back to SF layer 6).
     function setCommunityWallet(address _cw) external onlyOwner {
-        communityWallet = _cw;
+        _state.communityWallet = _cw;
     }
 
-    // --- Governance setters (DAO-votable, enumerated menus only) -------------
+    // --- Governance setters (DAO-votable, enumerated menus only) ---------------
 
-    /// @notice Adjust withdrawal health fee. Allowed: 50, 100, 150, 200, 250.
-    ///         Default 150 (1.5%). Callable by owner or TierRouter (DAO gateway).
+    /// @notice V8.21: added `_state.pairManager` to the allow-list. PairManagerV8
+    ///         broadcasts a single governance-voted fee change to every pair
+    ///         instance it has ever added (see PairManagerV8.setWithdrawalFeeBps),
+    ///         since each pair is a SEPARATE FigureEightMatrixV8 deployment with
+    ///         its own independent storage -- this is the actual governance
+    ///         target for param 9 now (one PairManagerV8 per tier), not TierRouter
+    ///         (which never implemented this setter) or a single matrix instance.
     function setWithdrawalFeeBps(uint256 _bps) external {
         require(
-            msg.sender == owner() || msg.sender == tierRouter || msg.sender == governance,
+            msg.sender == owner() || msg.sender == _state.tierRouter ||
+            msg.sender == _state.governance || msg.sender == _state.pairManager,
             "F8V8: not governance"
         );
         require(
             _bps == 50 || _bps == 100 || _bps == 150 || _bps == 200 || _bps == 250,
             "F8V8: invalid fee (allowed: 50,100,150,200,250)"
         );
-        withdrawalFeeBps = _bps;
+        _state.withdrawalFeeBps = _bps;
     }
 
-    /// @notice Adjust early exit penalty. Allowed: 1000, 1500, 2000, 2500.
-    ///         Default 2000 (20%). Callable by owner or TierRouter (DAO gateway).
-    function setEarlyExitPenaltyBps(uint256 _bps) external {
-        require(
-            msg.sender == owner() || msg.sender == tierRouter || msg.sender == governance,
-            "F8V8: not governance"
-        );
-        require(
-            _bps == 1000 || _bps == 1500 || _bps == 2000 || _bps == 2500,
-            "F8V8: invalid penalty (allowed: 1000,1500,2000,2500)"
-        );
-        earlyExitPenaltyBps = _bps;
-    }
+    // V8.21: setEarlyExitPenaltyBps() removed entirely -- the field, this
+    // setter, and the bare getter below were all deleted. The param it backed
+    // (PARAM_EARLY_EXIT_PENALTY_BPS, id 10 in V8Governance.sol) was stored and
+    // DAO-votable but never actually consumed by any withdraw/cycle logic --
+    // dead state, same situation as TierRouter's escrowFloorMultiplier. The
+    // real, working early-exit penalty is CNOVATreasury's hardcoded time-tiered
+    // redeemAtFloor() schedule, which is intentionally not governed by this param.
 
-    // --- TierRouter: fund extraction -----------------------------------------
+    // --- TierRouter: fund extraction --------------------------------------------
 
-    /**
-     * @notice Pull upgrade funds from member's escrow and/or withdrawable.
-     *         Called exclusively by TierRouter during handleCycleOut routing.
-     *         In V8.1, primary upgrade fuel is withdrawable (escrow is small,
-     *         funded only by orphan routing). TierRouter checks combined balance.
-     */
-    function deductForUpgrade(
-        address member,
-        uint256 escrowAmt,
-        uint256 withdrawableAmt
-    ) external {
-        require(msg.sender == tierRouter, "F8V8: not tierRouter");
-
-        // escrowAmt always 0 in V8.8 --- escrow storage removed
-        if (withdrawableAmt > 0) {
-            require(
-                members[member].withdrawable >= withdrawableAmt,
-                "F8V8: insufficient earnings"
-            );
-            members[member].withdrawable -= withdrawableAmt;
-        }
-
-        uint256 total = escrowAmt + withdrawableAmt;
-        if (total > 0) {
-            usdc.safeTransfer(tierRouter, total);
-        }
-
+    function deductForUpgrade(address member, uint256 escrowAmt, uint256 withdrawableAmt) external {
+        require(msg.sender == _state.tierRouter, "F8V8: not tierRouter");
+        MatrixLogicLib.deductForUpgrade(_state, _cfg(), member, escrowAmt, withdrawableAmt);
         emit UpgradeFundsDeducted(member, escrowAmt, withdrawableAmt);
     }
 
-    // --- Registration ---------------------------------------------------------
+    // --- Registration -------------------------------------------------------------
 
-    /// @notice Direct register (testnet convenience --- bypasses TierRouter).
     function register(address referrer) external {
         require(
-            !members[msg.sender].hasEverJoined || !members[msg.sender].isInMatrix,
+            !_state.members[msg.sender].hasEverJoined || !_state.members[msg.sender].isInMatrix,
             "F8V8: already in matrix"
         );
-        require(address(partner) != address(0), "F8V8: partner not set");
+        require(_state.partner != address(0), "F8V8: partner not set");
 
-        FigureEightMatrixV8 entry = isMatrixA ? this : partner;
-        usdc.safeTransferFrom(msg.sender, address(entry), ENTRY_FEE);
-        entry._enterMatrix(msg.sender, referrer);
+        address entry = isMatrixA ? address(this) : _state.partner;
+        usdc.safeTransferFrom(msg.sender, entry, ENTRY_FEE);
+        IFigureEightMatrixV8Cross(entry)._enterMatrix(msg.sender, referrer);
     }
 
-    /// @notice PairManager entry --- called by PairManager.enterFor().
     function enterFor(address member, address referrer) external {
-        require(msg.sender == pairManager, "F8V8: not pairManager");
+        require(msg.sender == _state.pairManager, "F8V8: not pairManager");
         require(
-            !members[member].hasEverJoined || !members[member].isInMatrix,
+            !_state.members[member].hasEverJoined || !_state.members[member].isInMatrix,
             "F8V8: already in matrix"
         );
-        require(address(partner) != address(0), "F8V8: partner not set");
+        require(_state.partner != address(0), "F8V8: partner not set");
         this._enterMatrix(member, referrer);
     }
 
-    /// @notice Internal entry point. Public so partner and chain-authorized matrices
-    ///         can call it for crossings.
+    /// @notice Public so partner and chain-authorized matrices can call it for crossings.
     function _enterMatrix(address member, address referrer) external {
-        require(
-            msg.sender == address(this)    ||
-            msg.sender == address(partner) ||
-            msg.sender == pairManager      ||
-            chainAuthorized[msg.sender],
-            "F8V8: not authorized"
-        );
-        require(!members[member].isInMatrix, "F8V8: already in matrix");
-
-        if (msg.sender == address(partner) || chainAuthorized[msg.sender]) {
-            usdc.safeTransferFrom(msg.sender, address(this), ENTRY_FEE);
-        }
-
-        joinCountSinceRotation   += 1;
-        lastActivityTime[member]  = block.timestamp;
-
-        if (!members[member].hasEverJoined) {
-            totalJoined += 1;
-            address l1 = (referrer != address(0) && members[referrer].hasEverJoined)
-                ? referrer : address(0);
-
-            members[member] = Member({
-                id:              totalJoined,
-                referrer:        l1,
-                joinedAt:        block.timestamp,
-                withdrawable:    0,
-                totalEarned:     0,
-                totalWithdrawn:  0,
-                cyclesCompleted: 0,
-                isInMatrix:      false,
-                hasEverJoined:   true
-            });
-        }
-
-        if (occupancy < MATRIX_SIZE) {
-            _placeInMatrix(member, nextSlot);
-            nextSlot  += 1;
-            occupancy += 1;
-        } else {
-            // Full matrix: distribute pool then cycle out root, place new member
-            _cycleOutRoot();
-            _placeInMatrix(member, nextSlot);
-            occupancy += 1;
-        }
-
-        _distributePayments(member);
-
-        try cnova.mintReward(member, tierIndex) {} catch {}  // V8.1: pass tier for multiplier
-
-        emit MemberEntered(member, matrixPos[member], members[member].id, address(this));
-
-        // V8.14: notify TierRouter when a member enters MatB — triggers upgrade eligibility.
-        // Covers all crossing paths: _crossToPartner, forceCross, forceCrossKeeper.
-        if (!isMatrixA && tierRouter != address(0)) {
-            try ITierRouter(tierRouter).onCrossToMatB(member, tierIndex) {} catch {}
-        }
-    }
-
-    // --- Internal: Matrix Mechanics -------------------------------------------
-
-    function _placeInMatrix(address member, uint256 slot) internal {
-        matrixPos[member]          = slot;
-        posToMember[slot]          = member;
-        members[member].isInMatrix = true;
-    }
-
-    function _cycleOutRoot() internal {
-        address root = posToMember[1];
-        require(root != address(0), "F8V8: no root");
-
-        // -- V8.1: Distribute equalization pool BEFORE shifting ----------------
-        // Pool distributes to positions 2..MATRIX_SIZE (non-root, all present members).
-        // Must happen before renumbering so weights match current BFS depth order.
-        _distributePool();
-
-        matrixPos[root]               = 0;
-        posToMember[1]                = address(0);
-        members[root].isInMatrix      = false;
-        members[root].cyclesCompleted += 1;
-        occupancy                -= 1;
-        rotationCount            += 1;
-        joinCountSinceRotation    = 0;
-        lastRotationTimestamp     = block.timestamp;
-
-        for (uint256 i = 1; i < MATRIX_SIZE; i++) {
-            address m          = posToMember[i + 1];
-            posToMember[i]     = m;
-            posToMember[i + 1] = address(0);
-            if (m != address(0)) matrixPos[m] = i;
-        }
-        nextSlot = MATRIX_SIZE;
-
-        emit MemberCycledOut(root, members[root].cyclesCompleted, rotationCount, address(this));
-
-        // -- V8: TierRouter handles Matrix B cycle-outs ------------------------
-        if (!isMatrixA && tierRouter != address(0)) {
-            try ITierRouter(tierRouter).handleCycleOut(
-                root,
-                tierIndex,
-                0,                       // escrow removed --- crossing is withdrawable-only
-                members[root].withdrawable
-            ) {} catch {}
-        } else {
-            _crossToPartner(root);
-        }
-    }
-
-    /**
-     * @notice V8.1: Distribute accumulated equalization pool to all non-root members.
-     *
-     *         Called at every cycle-out BEFORE the BFS position shift.
-     *         Weight formula: share[pos] = pool * pos / totalWeight
-     *         where totalWeight = sum(2..MATRIX_SIZE) = MATRIX_SIZE*(MATRIX_SIZE+1)/2 - 1
-     *
-     *         This gives deeper members (higher pos) a larger share, compensating for
-     *         the fact that they earn less chain pay than shallow members. The root
-     *         (pos 1) is excluded entirely --- they already earned the most chain pay.
-     *
-     *         Dust (rounding remainder) goes to pos 2 (longest-waiting non-root).
-     */
-    function _distributePool() internal {
-        if (poolAccumulator == 0) return;
-
-        // totalWeight = sum(2..N) = N*(N+1)/2 - 1
-        uint256 N           = MATRIX_SIZE;
-        uint256 totalWeight = N * (N + 1) / 2 - 1;
-
-        uint256 pool    = poolAccumulator;
-        poolAccumulator = 0;
-
-        uint256 distributed = 0;
-        address firstNonNull = address(0);
-
-        for (uint256 pos = 2; pos <= N; pos++) {
-            address m = posToMember[pos];
-            if (m == address(0)) continue;
-            if (firstNonNull == address(0)) firstNonNull = m;
-
-            uint256 share = pool * pos / totalWeight;
-            if (share == 0) continue;
-
-            distributed += share;
-            _credit(m, share);
-            emit PoolShareCredited(m, pos, share);
-        }
-
-        // Dust --- pos 2 member (or first non-null pos, or devOps)
-        uint256 dust = pool - distributed;
-        if (dust > 0) {
-            address dest = posToMember[2] != address(0)
-                ? posToMember[2]
-                : firstNonNull;
-            if (dest != address(0)) {
-                _credit(dest, dust);
-            } else if (devWallet != address(0)) {
-                usdc.safeTransfer(devWallet, dust);
-            }
-        }
-
-        emit PoolDistributed(pool, rotationCount);
-    }
-
-    /**
-     * @notice Fund and execute a crossing to the partner or chain-next matrix.
-     *         V8: reads destination.ENTRY_FEE() dynamically at crossing time.
-     *         V8.1: primary fuel is withdrawable (escrow is now small).
-     */
-    function _crossToPartner(address member) internal {
-        require(address(partner) != address(0), "F8V8: no partner");
-
-        // Cascade guard: both matrices full simultaneously
-        if (_crossingInProgress) {
-            pendingCross         = member;
-            pendingCrossReferrer = members[member].referrer;
-            return;
-        }
-
-        address destination;
-        if (!isMatrixA && chainNext != address(0)) {
-            destination = chainNext;
-        } else {
-            destination = address(partner);
-        }
-
-        uint256 reentryFee = FigureEightMatrixV8(destination).ENTRY_FEE();
-
-        // V8.8: escrow removed --- crossing funded entirely from withdrawable earnings.
-        uint256 earnings = members[member].withdrawable;
-
-        if (earnings < reentryFee) {
-            // Insufficient funds --- park. Keeper rescues via forceCrossKeeper().
-            uint256 shortfall = reentryFee - earnings;
-            parkedMembers.push(member);
-            parkedAt[member] = block.timestamp;  // V8.10: start grace period clock
-            emit MemberParked(member, shortfall);
-            return;
-        }
-
-        members[member].withdrawable -= reentryFee;
-
-        uint256 fromEscrow   = 0;    // kept for CrossingFunded event compat
-        uint256 fromEarnings = reentryFee;
-
-        emit CrossingFunded(member, fromEscrow, fromEarnings, reentryFee);
-
-        SafeERC20.forceApprove(usdc, destination, reentryFee);
-
-        _crossingInProgress = true;
-        emit MemberCrossedToPartner(member, address(this), destination);
-        FigureEightMatrixV8(destination)._enterMatrix(member, members[member].referrer);
-        _crossingInProgress = false;
-    }
-
-    // --- Internal: Payment Distribution --------------------------------------
-
-    /**
-     * @notice Distribute all BPS splits for a new member entry.
-     *
-     *         V8.1 changes vs V8:
-     *         - Removed: escrow accumulation for root (SPLIT_ESCROW_BPS)
-     *         - Removed: secondary escrow for root (SPLIT_SECONDARY_BPS)
-     *         - Added:   equalization pool accumulation (SPLIT_POOL_BPS)
-     *         - Added:   StabilityFund L1 carve (SPLIT_STABILITY_BPS)
-     *
-     *         Chain pay BPS is halved: 2000 (T1-T5), 1750 (T6-T7).
-     *         Pool BPS captures the freed chain + escrow + secondary BPS.
-     */
-    function _distributePayments(address newMember) internal {
-        Member storage m = members[newMember];
-
-        // -- L1 Referral -------------------------------------------------------
-        uint256 l1Amt = ENTRY_FEE * SPLIT_L1_BPS / BPS_DENOM;
-        if (m.referrer != address(0)) {
-            _credit(m.referrer, l1Amt);
-        } else {
-            _routeOrphanFee(l1Amt, "L1");
-        }
-
-        // -- Chain Pay (6 BFS levels) ------------------------------------------
-        _distributeChainPay(newMember);
-
-        // -- Treasury (SACRED --- no change, no reduction, no V8.1 touch) --------
-        uint256 treasuryAmt = ENTRY_FEE * SPLIT_TREASURY_BPS / BPS_DENOM;
-        SafeERC20.forceApprove(usdc, address(treasury), treasuryAmt);
-        treasury.depositReserve(treasuryAmt);
-
-        // -- V8.1: Equalization Pool Accumulation ------------------------------
-        // USDC for pool stays in this contract until cycle-out triggers _distributePool().
-        // No transfer out --- just internal accounting. Backed 1:1 by USDC held here.
-        uint256 poolAmt = ENTRY_FEE * SPLIT_POOL_BPS / BPS_DENOM;
-        poolAccumulator += poolAmt;
-
-        // -- V8.7: StabilityFund L1 carve -------------------------------------
-        uint256 stabilityAmt = ENTRY_FEE * SPLIT_STABILITY_BPS / BPS_DENOM;
-        if (stabilityAmt > 0) {
-            _forwardToStabilityFund(stabilityAmt, 1);
-        }
-
-        // -- V8.7: BuybackReserve carve ----------------------------------------
-        uint256 buybackAmt = ENTRY_FEE * SPLIT_BUYBACK_BPS / BPS_DENOM;
-        if (buybackAmt > 0) {
-            _forwardToBuybackReserve(buybackAmt);
-        }
-
-        // -- V8.19: LiquidityReserve carve (CNOVA/USDC LP funding) -------------
-        uint256 liquidityAmt = ENTRY_FEE * SPLIT_LIQUIDITY_BPS / BPS_DENOM;
-        if (liquidityAmt > 0 && liquidityReserve != address(0)) {
-            usdc.safeTransfer(liquidityReserve, liquidityAmt);
-        } else if (liquidityAmt > 0 && devWallet != address(0)) {
-            usdc.safeTransfer(devWallet, liquidityAmt); // fallback until LR is wired
-        }
-
-        // -- Dev (separate) ----------------------------------------------------
-        uint256 devAmt = ENTRY_FEE * SPLIT_DEV_BPS / BPS_DENOM;
-        if (devAmt > 0 && devWallet != address(0)) {
-            usdc.safeTransfer(devWallet, devAmt);
-        }
-
-        // -- Ops (separate) ----------------------------------------------------
-        uint256 opsAmt = ENTRY_FEE * SPLIT_OPS_BPS / BPS_DENOM;
-        if (opsAmt > 0 && opsWallet != address(0)) {
-            usdc.safeTransfer(opsWallet, opsAmt);
-        }
-
-        // -- Community wallet carve --------------------------------------------
-        uint256 communityAmt = ENTRY_FEE * SPLIT_COMMUNITY_BPS / BPS_DENOM;
-        if (communityAmt > 0) {
-            if (communityWallet != address(0)) {
-                SafeERC20.forceApprove(usdc, communityWallet, communityAmt);
-                try ICommunityWalletV8(communityWallet).deposit(communityAmt) {}
-                catch { usdc.safeTransfer(devWallet, communityAmt); }
-            } else if (devWallet != address(0)) {
-                usdc.safeTransfer(devWallet, communityAmt);
-            }
-        }
-    }
-
-    /// @dev Forward USDC to StabilityFund. Falls back to devWallet if SF not set.
-    function _forwardToStabilityFund(uint256 amount, uint8 layer) internal {
-        if (amount == 0) return;
-        if (stabilityFund != address(0)) {
-            SafeERC20.forceApprove(usdc, stabilityFund, amount);
-            try IStabilityFund(stabilityFund).receiveLayer(tierIndex, amount, layer) {}
-            catch { usdc.safeTransfer(devWallet, amount); }
-        } else {
-            // StabilityFund not yet deployed -- hold in devWallet as interim escrow
-            if (devWallet != address(0)) {
-                usdc.safeTransfer(devWallet, amount);
-            }
-        }
-        emit StabilityContribution(tierIndex, amount, layer);
-    }
-
-    /// @dev Forward USDC to CNOVABuybackReserve. Falls back to devWallet if BBR not set.
-    function _forwardToBuybackReserve(uint256 amount) internal {
-        if (amount == 0) return;
-        if (buybackReserve != address(0)) {
-            SafeERC20.forceApprove(usdc, buybackReserve, amount);
-            usdc.safeTransfer(buybackReserve, amount);
-        } else {
-            // BuybackReserve not yet set -- route to devWallet
-            if (devWallet != address(0)) {
-                usdc.safeTransfer(devWallet, amount);
-            }
-        }
-    }
-
-    function _routeOrphanFee(uint256 amount, string memory source) internal {
-        if (amount == 0) return;
-
-        uint256 acct1Share = amount * 20 / 100;
-        _credit(accountOne, acct1Share);
-
-        uint256 remaining = amount - acct1Share;
-
-        // Self-balancing: if pool is getting >65% of orphan fees, swing toward
-        // devOps; if <35%, swing toward pool.  Keeps the ratio self-correcting.
-        (uint256 poolBps, uint256 founderBps) = _getOrphanRoutingRatios();
-        uint256 denom      = poolBps + founderBps;
-        uint256 poolShare  = remaining * poolBps / denom;
-        uint256 founderShare = remaining - poolShare;
-
-        // Route pool share --- CommunityWallet (SF layer 6 fallback)
-        if (poolShare > 0) {
-            _forwardToCommunityPool(poolShare, source);
-            noReferrerPoolRouted += poolShare;
-        }
-
-        if (founderShare > 0) {
-            if (devWallet != address(0)) {
-                usdc.safeTransfer(devWallet, founderShare);
-                noReferrerFounderRouted += founderShare;
-            } else {
-                _credit(accountOne, founderShare);
-            }
-        }
-
-        emit OrphanFeeRouted(amount, acct1Share, poolShare, founderShare, source);
-    }
-
-    /// @notice Forward orphan pool share to CommunityWallet.
-    ///         Falls back to StabilityFund (layer 6 = orphan routing) if CW not yet set.
-    ///         try/catch on CW call so a bad CW contract can never brick the matrix.
-    function _forwardToCommunityPool(uint256 amount, string memory source) internal {
-        if (amount == 0) return;
-        if (communityWallet != address(0)) {
-            SafeERC20.forceApprove(usdc, communityWallet, amount);
-            try ICommunityWalletV8(communityWallet).deposit(amount) {
-                emit OrphanFeePooled(amount, communityWallet, source);
-                return;
-            } catch {
-                // CW reverted --- fall through to SF
-            }
-        }
-        // SF fallback (layer 6 = orphan community pool carve)
-        if (stabilityFund != address(0)) {
-            SafeERC20.forceApprove(usdc, stabilityFund, amount);
-            try IStabilityFund(stabilityFund).receiveLayer(tierIndex, amount, 6) {}
-                catch { _credit(accountOne, amount); }
-        } else {
-            _credit(accountOne, amount);
-        }
-        emit OrphanFeePooled(amount, communityWallet != address(0) ? communityWallet : stabilityFund, source);
-    }
-
-    function _getOrphanRoutingRatios()
-        internal view
-        returns (uint256 poolBps, uint256 founderBps)
-    {
-        uint256 total = noReferrerPoolRouted + noReferrerFounderRouted;
-        if (total == 0) return (4000, 4000);
-        uint256 poolPct = noReferrerPoolRouted * 100 / total;
-        if      (poolPct < 35) return (6000, 2000);
-        else if (poolPct > 65) return (2000, 6000);
-        return (4000, 4000);
-    }
-
-    /// @notice Chain pay up 6 BFS levels (V8.1: halved SPLIT_CHAIN_BPS, same weights).
-    function _distributeChainPay(address newMember) internal {
-        uint256 myPos = matrixPos[newMember];
-        if (myPos == 0) return;
-
-        uint256 parentPos = myPos / 2;
-        for (uint256 lvl = 0; lvl < 6 && parentPos >= 1; lvl++) {
-            address ancestor = posToMember[parentPos];
-            if (ancestor != address(0)) {
-                uint256 amt = ENTRY_FEE * chainPayBps[lvl] / BPS_DENOM;
-                _credit(ancestor, amt);
-                emit ChainPayDistributed(ancestor, newMember, lvl + 1, amt);
-            }
-            parentPos = parentPos / 2;
-        }
-    }
-
-    /// @dev Credit withdrawable earnings. Does NOT touch lastActivityTime
-    ///      (passive income != activity; see withdraw()).
-    function _credit(address recipient, uint256 amount) internal {
-        if (recipient == address(0) || amount == 0) return;
-        members[recipient].withdrawable += amount;
-        members[recipient].totalEarned  += amount;
-        // NOTE: lastActivityTime NOT updated here --- passive credit != activity.
-        // Updated only on explicit actions: _placeInMatrix, withdraw.
-        // Avoids 63x cold SSTOREs during _distributePool.
+        MatrixLogicLib.enterMatrix(_state, _cfg(), member, referrer);
     }
 
     // --- Withdraw -------------------------------------------------------------
 
-    /**
-     * @notice Withdraw all earned USDC.
-     *
-     *         V8.1: A withdrawal health fee (default 1.5%) is deducted and
-     *         forwarded to StabilityFund as Layer 3. This is counter-cyclical:
-     *         the fee builds reserves during healthy bull runs and funds ghost
-     *         entries (via MatrixKeeper) during deflation --- keeping every member
-     *         advancing without touching the treasury.
-     */
     function withdraw() external {
-        uint256 available = members[msg.sender].withdrawable;
-        require(available > 0, "F8V8: nothing to withdraw");
-
-        // V8.10: Reserve ENTRY_FEE while member is active in the matrix.
-        // This ensures funds for the crossing are always present, preventing
-        // the drain-and-park exploit (withdraw all --- get parked --- SF pays crossing).
-        // Members who want a full withdrawal must wait until after they have cycled
-        // out and crossed (isInMatrix = false).
-        if (members[msg.sender].isInMatrix) {
-            require(available > ENTRY_FEE, "F8V8: must keep entry fee reserve while active");
-            available = available - ENTRY_FEE;
-        }
-
-        // V8.19: Protocol Reserve — protect automation fees (reentry / upgrade).
-        //        Only enforced in the member's current highest-tier matrix so that
-        //        residual earnings in lower-tier matrices are always freely withdrawable.
-        if (tierRouter != address(0)) {
-            uint8 highest = ITierRouter(tierRouter).memberHighestTier(msg.sender);
-            if (highest > 0 && (highest - 1) == tierIndex) {
-                uint256 res = ITierRouter(tierRouter).reservedFor(msg.sender);
-                require(res < available, "F8V8: balance fully reserved for automation");
-                available -= res;
-            }
-        }
-
-        members[msg.sender].withdrawable    -= available;
-        members[msg.sender].totalWithdrawn  += available;   // V8.10: track cumulative
-        lastActivityTime[msg.sender] = block.timestamp;     // explicit action = activity
-
-        // -- V8.1: Withdrawal health fee --- StabilityFund L3 -------------------
-        uint256 fee    = available * withdrawalFeeBps / BPS_DENOM;
-        uint256 payout = available - fee;
-
-        if (fee > 0) {
-            _forwardToStabilityFund(fee, 3);
-            emit WithdrawalFeeCharged(msg.sender, fee);
-        }
-
-        usdc.safeTransfer(msg.sender, payout);
-        emit EarningsWithdrawn(msg.sender, payout);
+        MatrixLogicLib.withdrawCore(_state, _cfg(), msg.sender, 0, true);
     }
 
-    /// @notice V8.13: Partial withdrawal — caller specifies exact USDC amount (6 decimals).
-    ///         Same ENTRY_FEE reserve rule applies while in-matrix.
-    ///         Same 1.5% withdrawal fee applies to the requested amount.
     function withdrawPartial(uint256 amount) external {
         require(amount > 0, "F8V8: amount must be > 0");
-        uint256 available = members[msg.sender].withdrawable;
-        require(available > 0, "F8V8: nothing to withdraw");
-
-        // V8.10 anti-drain-exploit: keep ENTRY_FEE reserve while active in matrix
-        if (members[msg.sender].isInMatrix) {
-            require(available > ENTRY_FEE, "F8V8: must keep entry fee reserve while active");
-            available = available - ENTRY_FEE;
-        }
-
-        // V8.19: Protocol Reserve
-        if (tierRouter != address(0)) {
-            uint8 highest = ITierRouter(tierRouter).memberHighestTier(msg.sender);
-            if (highest > 0 && (highest - 1) == tierIndex) {
-                uint256 res = ITierRouter(tierRouter).reservedFor(msg.sender);
-                require(res < available, "F8V8: balance fully reserved for automation");
-                available -= res;
-            }
-        }
-
-        require(amount <= available, "F8V8: amount exceeds withdrawable");
-
-        members[msg.sender].withdrawable   -= amount;
-        members[msg.sender].totalWithdrawn += amount;
-        lastActivityTime[msg.sender] = block.timestamp;
-
-        uint256 fee    = amount * withdrawalFeeBps / BPS_DENOM;
-        uint256 payout = amount - fee;
-
-        if (fee > 0) {
-            _forwardToStabilityFund(fee, 3);
-            emit WithdrawalFeeCharged(msg.sender, fee);
-        }
-
-        usdc.safeTransfer(msg.sender, payout);
-        emit EarningsWithdrawn(msg.sender, payout);
+        MatrixLogicLib.withdrawCore(_state, _cfg(), msg.sender, amount, false);
     }
 
-    /**
-     * @notice Withdraw a specific amount of earnings, sending the payout to a custom
-     *         recipient address. Useful for members who want earnings sent directly
-     *         to a hardware wallet, exchange, or different address.
-     * @dev    Same reserve and fee rules as withdrawPartial(). msg.sender is still
-     *         the member being debited; only the USDC destination changes.
-     */
     function withdrawPartialTo(address recipient, uint256 amount) external {
         require(recipient != address(0), "F8V8: zero recipient");
         require(amount > 0, "F8V8: amount must be > 0");
-        uint256 available = members[msg.sender].withdrawable;
-        require(available > 0, "F8V8: nothing to withdraw");
-
-        if (members[msg.sender].isInMatrix) {
-            require(available > ENTRY_FEE, "F8V8: must keep entry fee reserve while active");
-            available = available - ENTRY_FEE;
-        }
-
-        // V8.19: Protocol Reserve
-        if (tierRouter != address(0)) {
-            uint8 highest = ITierRouter(tierRouter).memberHighestTier(msg.sender);
-            if (highest > 0 && (highest - 1) == tierIndex) {
-                uint256 res = ITierRouter(tierRouter).reservedFor(msg.sender);
-                require(res < available, "F8V8: balance fully reserved for automation");
-                available -= res;
-            }
-        }
-
-        require(amount <= available, "F8V8: amount exceeds withdrawable");
-
-        members[msg.sender].withdrawable   -= amount;
-        members[msg.sender].totalWithdrawn += amount;
-        lastActivityTime[msg.sender] = block.timestamp;
-
-        uint256 fee    = amount * withdrawalFeeBps / BPS_DENOM;
-        uint256 payout = amount - fee;
-
-        if (fee > 0) {
-            _forwardToStabilityFund(fee, 3);
-            emit WithdrawalFeeCharged(msg.sender, fee);
-        }
-
-        usdc.safeTransfer(recipient, payout);
-        emit EarningsWithdrawn(msg.sender, payout);
+        MatrixLogicLib.withdrawCore(_state, _cfg(), recipient, amount, false);
     }
 
-    /**
-     * @notice Withdraw all available earnings to a custom recipient address.
-     *         Same anti-drain-exploit reserve rules as withdraw().
-     */
     function withdrawTo(address recipient) external {
         require(recipient != address(0), "F8V8: zero recipient");
-        uint256 available = members[msg.sender].withdrawable;
-        require(available > 0, "F8V8: nothing to withdraw");
-
-        if (members[msg.sender].isInMatrix) {
-            require(available > ENTRY_FEE, "F8V8: must keep entry fee reserve while active");
-            available = available - ENTRY_FEE;
-        }
-
-        // V8.19: Protocol Reserve
-        if (tierRouter != address(0)) {
-            uint8 highest = ITierRouter(tierRouter).memberHighestTier(msg.sender);
-            if (highest > 0 && (highest - 1) == tierIndex) {
-                uint256 res = ITierRouter(tierRouter).reservedFor(msg.sender);
-                require(res < available, "F8V8: balance fully reserved for automation");
-                available -= res;
-            }
-        }
-
-        members[msg.sender].withdrawable   -= available;
-        members[msg.sender].totalWithdrawn += available;
-        lastActivityTime[msg.sender] = block.timestamp;
-
-        uint256 fee    = available * withdrawalFeeBps / BPS_DENOM;
-        uint256 payout = available - fee;
-
-        if (fee > 0) {
-            _forwardToStabilityFund(fee, 3);
-            emit WithdrawalFeeCharged(msg.sender, fee);
-        }
-
-        usdc.safeTransfer(recipient, payout);
-        emit EarningsWithdrawn(msg.sender, payout);
+        MatrixLogicLib.withdrawCore(_state, _cfg(), recipient, 0, true);
     }
 
-    // --- V8.8: earlyEscrowRelease() removed ---------------------------------
-    // Escrow storage removed in V8.8. Orphan fees now route to CommunityWallet /
-    // StabilityFund (layer 6) instead of per-member escrow slots. Members crossing
-    // to their partner matrix use withdrawable earnings only.  The early-exit
-    // penalty path (--- SF L5) is preserved via the withdraw() withdrawal fee (L3).
+    // --- Keeper: reclaim idle slot -----------------------------------------------
 
-    // --- V8.1: Keeper --- Reclaim Idle Slot ------------------------------------
-
-    /**
-     * @notice Remove an idle member from the BFS tree.
-     *         Only callable by matrixKeeper (MatrixKeeper.sol via Chainlink Automation).
-     *
-     *         The keeper verifies maxMemberWait exceeded before calling.
-     *         Member's earnings and escrow are NEVER touched --- they retain full
-     *         access to withdraw(). Only their BFS position is freed.
-     *
-     *         The freed slot creates a gap in the BFS tree. Chain pay silently
-     *         skips address(0) positions (existing _distributeChainPay behavior).
-     *         The keeper will fund a ghost entry via StabilityFund to keep the
-     *         queue moving --- the ghost occupies the freed slot or next available.
-     *
-     * @param member  The idle member to evict from the tree.
-     */
     function reclaimIdleSlot(address member) external {
-        require(msg.sender == matrixKeeper, "F8V8: not keeper");
-        require(members[member].isInMatrix,  "F8V8: not in matrix");
-        require(lastActivityTime[member] > 0, "F8V8: no activity record");
-
-        uint256 pos      = matrixPos[member];
-        uint256 idleTime = block.timestamp - lastActivityTime[member];
-
-        posToMember[pos]           = address(0);
-        matrixPos[member]          = 0;
-        members[member].isInMatrix = false;
-        occupancy                 -= 1;
-
-        // Member funds (withdrawable + escrow) are fully preserved.
-        // They can call withdraw() at any time after being reclaimed.
-
-        emit SlotReclaimed(member, pos, idleTime);
+        require(msg.sender == _state.matrixKeeper, "F8V8: not keeper");
+        MatrixLogicLib.reclaimIdleSlot(_state, member);
     }
 
-    // --- Admin: forceCross ----------------------------------------------------
+    // --- Admin: forceCross --------------------------------------------------------
 
-    /// @notice Emergency: manually fund and execute a stalled crossing.
-    ///         Keeper bot calls this when a member is parked (insufficient funds at cycle-out).
     function forceCross(address member) external onlyOwner {
-        require(members[member].hasEverJoined,  "F8V8: not a member");
-        require(!members[member].isInMatrix,    "F8V8: still in matrix");
-        require(address(partner) != address(0), "F8V8: no partner");
+        MatrixLogicLib.forceCross(_state, _cfg(), member);
+    }
 
-        usdc.safeTransferFrom(msg.sender, address(this), ENTRY_FEE);
+    function forceCrossKeeper(address member, uint256 sfContribution) external {
+        require(msg.sender == _state.matrixKeeper, "F8V8: not keeper");
+        MatrixLogicLib.forceCrossKeeper(_state, _cfg(), member, sfContribution);
+    }
 
-        // V8.18: clear parked queue so getParkedCount() decrements correctly
-        if (parkedAt[member] > 0) _removeFromParkedQueue(member);
+    function topUpAndCross(address member) external {
+        MatrixLogicLib.topUpAndCross(_state, _cfg(), member);
+    }
 
-        address destination = (!isMatrixA && chainNext != address(0))
-            ? chainNext : address(partner);
-        SafeERC20.forceApprove(usdc, destination, ENTRY_FEE);
+    function coPayRescue(address member) external {
+        MatrixLogicLib.coPayRescue(_state, _cfg(), member);
+    }
 
-        emit MemberCrossedToPartner(member, address(this), destination);
-        FigureEightMatrixV8(destination)._enterMatrix(member, members[member].referrer);
+    function evictParked(address member) external {
+        require(msg.sender == _state.matrixKeeper, "F8V8: not keeper");
+        MatrixLogicLib.evictParked(_state, member);
     }
 
     // --- Views ----------------------------------------------------------------
 
-    /// @notice True when member has ever joined but is NOT currently in the matrix.
-    ///         Covers both freshly cycled-out members AND parked members.
     function isParked(address member) external view returns (bool) {
-        return members[member].hasEverJoined && !members[member].isInMatrix;
+        return _state.members[member].hasEverJoined && !_state.members[member].isInMatrix;
     }
 
-    function getParkedCount() external view returns (uint256) { return parkedMembers.length; }
+    function getParkedCount() external view returns (uint256) { return _state.parkedMembers.length; }
+    function getParkedMember(uint256 idx) external view returns (address) { return _state.parkedMembers[idx]; }
 
-    function getParkedMember(uint256 idx) external view returns (address) { return parkedMembers[idx]; }
+    function getMember(address member) external view returns (MatrixLogicLib.Member memory) { return _state.members[member]; }
+    function getCyclesCompleted(address m) external view returns (uint256) { return _state.members[m].cyclesCompleted; }
+    function withdrawableOf(address member) external view returns (uint256) { return _state.members[member].withdrawable; }
 
-    // --- Keeper: forceCrossKeeper ----------------------------------------------------------------------
-
-    /**
-     * @notice Keeper-initiated forced crossing for a parked member.
-     *         Caller (MatrixKeeper) MUST have already called
-     *         StabilityFund.payForceCross(tierIndex, address(this), ENTRY_FEE)
-     *         so this contract holds the required ENTRY_FEE USDC before this call.
-     */
-    /**
-     * @notice V8.11: Keeper rescue --- SF sends sfContribution, member covers remainder.
-     * @param member         The parked member to rescue.
-     * @param sfContribution USDC already sent to this contract by StabilityFund (e.g. 25% of fee).
-     *                       Member's withdrawable covers the remaining (fee - sfContribution).
-     */
-    function forceCrossKeeper(address member, uint256 sfContribution) external {
-        require(msg.sender == matrixKeeper,     "F8V8: not keeper");
-        require(members[member].hasEverJoined,  "F8V8: not a member");
-        require(!members[member].isInMatrix,    "F8V8: still in matrix");
-        require(address(partner) != address(0), "F8V8: no partner");
-        require(sfContribution <= ENTRY_FEE,    "F8V8: sfContribution exceeds fee");
-
-        // Deduct member's share (fee - sfContribution) from their withdrawable balance
-        uint256 memberShare = ENTRY_FEE - sfContribution;
-        if (memberShare > 0) {
-            require(
-                members[member].withdrawable >= memberShare,
-                "F8V8: insufficient withdrawable for rescue"
-            );
-            members[member].withdrawable -= memberShare;
-        }
-
-        _removeFromParkedQueue(member);
-
-        address destination = (!isMatrixA && chainNext != address(0))
-            ? chainNext : address(partner);
-        // Contract now holds full ENTRY_FEE: sfContribution (from SF) + memberShare (from withdrawable)
-        SafeERC20.forceApprove(usdc, destination, ENTRY_FEE);
-
-        emit MemberCrossedToPartner(member, address(this), destination);
-        FigureEightMatrixV8(destination)._enterMatrix(member, members[member].referrer);
-    }
-
-    // --- V8.16: topUpAndCross ------------------------------------------------
-
-    /**
-     * @notice Member (or anyone) pays just the shortfall to self-rescue from the parked queue.
-     *         member.withdrawable covers their portion; caller tops up the remainder.
-     *         Removes deployer burden — deployer only needs to fund the delta, not the full fee.
-     *         For members with sufficient withdrawable (>= ENTRY_FEE), shortfall = 0 and
-     *         the caller pays nothing — this acts as a permissionless cross trigger.
-     * @param member  The parked member to rescue.
-     */
-    function topUpAndCross(address member) external {
-        require(members[member].hasEverJoined,  "F8V8: not a member");
-        require(!members[member].isInMatrix,    "F8V8: still in matrix");
-        require(parkedAt[member] > 0,           "F8V8: not parked");
-        require(address(partner) != address(0), "F8V8: no partner");
-
-        uint256 bal      = members[member].withdrawable;
-        uint256 shortfall = bal >= ENTRY_FEE ? 0 : ENTRY_FEE - bal;
-
-        // Pull caller's share (shortfall) into this contract
-        if (shortfall > 0) {
-            usdc.safeTransferFrom(msg.sender, address(this), shortfall);
-        }
-
-        // Deduct member's contribution from their withdrawable
-        uint256 memberContribution = ENTRY_FEE - shortfall;
-        if (memberContribution > 0) {
-            members[member].withdrawable -= memberContribution;
-        }
-
-        _removeFromParkedQueue(member);
-
-        address destination = (!isMatrixA && chainNext != address(0))
-            ? chainNext : address(partner);
-        SafeERC20.forceApprove(usdc, destination, ENTRY_FEE);
-
-        emit MemberCrossedToPartner(member, address(this), destination);
-        FigureEightMatrixV8(destination)._enterMatrix(member, members[member].referrer);
-    }
-
-    // --- V8.18: coPayRescue -----------------------------------------------
-
-    /**
-     * @notice Member co-pays to self-rescue from the parked queue.
-     *         SF covers 50% of the member's withdrawable balance; member's wallet
-     *         covers the remaining shortfall (fee - withdrawable - sfShare).
-     *
-     *         Example: fee=$10, withdrawable=$4.76
-     *           sfShare     = $4.76 / 2 = $2.38
-     *           shortfall   = $10 - $4.76 = $5.24
-     *           memberShare = $5.24 - $2.38 = $2.86
-     *           Contract collects: $4.76 (withdrawable) + $2.38 (SF) + $2.86 (member) = $10 ✓
-     *
-     * @param member  The parked member to rescue. msg.sender pays the wallet portion.
-     *                msg.sender must have approved USDC to this contract before calling.
-     */
-    function coPayRescue(address member) external {
-        require(members[member].hasEverJoined,  "F8V8: not a member");
-        require(!members[member].isInMatrix,    "F8V8: still in matrix");
-        require(parkedAt[member] > 0,           "F8V8: not parked");
-        require(address(partner) != address(0), "F8V8: no partner");
-        require(address(stabilityFund) != address(0), "F8V8: no stabilityFund");
-
-        uint256 withdrawable = members[member].withdrawable;
-        require(withdrawable > 0, "F8V8: no withdrawable for coPayRescue");
-
-        uint256 sfShare      = withdrawable / 2;
-        uint256 shortfall    = ENTRY_FEE > withdrawable ? ENTRY_FEE - withdrawable : 0;
-        uint256 memberShare  = shortfall > sfShare ? shortfall - sfShare : 0;
-
-        // Deduct member's withdrawable contribution
-        members[member].withdrawable = 0;
-
-        // Pull SF co-contribution
-        IStabilityFund(stabilityFund).payCoRescue(tierIndex, sfShare);
-
-        // Pull member wallet co-pay (if required)
-        if (memberShare > 0) {
-            usdc.safeTransferFrom(msg.sender, address(this), memberShare);
-        }
-
-        _removeFromParkedQueue(member);
-
-        address destination = (!isMatrixA && chainNext != address(0))
-            ? chainNext : address(partner);
-        SafeERC20.forceApprove(usdc, destination, ENTRY_FEE);
-
-        emit CoPayRescue(member, sfShare, memberShare, withdrawable);
-        emit MemberCrossedToPartner(member, address(this), destination);
-        FigureEightMatrixV8(destination)._enterMatrix(member, members[member].referrer);
-    }
-
-    function _removeFromParkedQueue(address member) internal {
-        uint256 len = parkedMembers.length;
-        for (uint256 i = 0; i < len; i++) {
-            if (parkedMembers[i] == member) {
-                parkedMembers[i] = parkedMembers[len - 1];
-                parkedMembers.pop();
-                parkedAt[member] = 0;  // V8.10: clear grace period clock on rescue
-                return;
-            }
-        }
-    }
-
-    /**
-     * @notice V8.10: Keeper-initiated eviction of a parked member after grace period expires.
-     *         Called when: grace period has passed AND member is not eligible for SF rescue
-     *         (i.e. they have extracted significant value via withdraw()).
-     *
-     *         Effect: member is removed from the parked queue. Their BFS slot was
-     *         already freed when they cycled out. Their withdrawable balance is fully
-     *         preserved --- they can call withdraw() at any time.
-     *         They must re-enter fresh via TierRouter to participate again.
-     */
-    function evictParked(address member) external {
-        require(msg.sender == matrixKeeper,    "F8V8: not keeper");
-        require(parkedAt[member] > 0,          "F8V8: member not parked");
-        require(!members[member].isInMatrix,   "F8V8: member is in matrix");
-
-        uint256 withdrawn = members[member].totalWithdrawn;
-        _removeFromParkedQueue(member);   // also clears parkedAt
-
-        emit MemberEvicted(member, withdrawn);
-    }
-
-    function getMember(address member)         external view returns (Member memory)  { return members[member]; }
-    function getCyclesCompleted(address m)    external view returns (uint256)       { return members[m].cyclesCompleted; }
-    function withdrawableOf(address member)   external view returns (uint256)       { return members[member].withdrawable; }
-
-    /// @notice V8.19: withdrawable minus Protocol Reserve and ENTRY_FEE lock.
-    ///         Mirrors what withdraw() would allow so the frontend can show the true claimable amount.
     function freeWithdrawable(address member) external view returns (uint256) {
-        uint256 bal = members[member].withdrawable;
+        uint256 bal = _state.members[member].withdrawable;
         if (bal == 0) return 0;
-        // Deduct ENTRY_FEE lock while active in this matrix
-        if (members[member].isInMatrix) {
+        if (_state.members[member].isInMatrix) {
             if (bal <= ENTRY_FEE) return 0;
             bal -= ENTRY_FEE;
         }
-        // Deduct Protocol Reserve (only in member's highest-tier matrix)
-        if (tierRouter != address(0)) {
-            uint8 highest = ITierRouter(tierRouter).memberHighestTier(member);
+        if (_state.tierRouter != address(0)) {
+            uint8 highest = ITierRouter(_state.tierRouter).memberHighestTier(member);
             if (highest > 0 && (highest - 1) == tierIndex) {
-                uint256 res = ITierRouter(tierRouter).reservedFor(member);
+                uint256 res = ITierRouter(_state.tierRouter).reservedFor(member);
                 if (res >= bal) return 0;
                 bal -= res;
             }
@@ -1358,42 +426,36 @@ contract FigureEightMatrixV8 is Ownable2Step {
         return bal;
     }
 
-    function getMemberTotalWithdrawn(address member) external view returns (uint256) { return members[member].totalWithdrawn; }  // V8.10: keeper reads for rescue eligibility
-    function escrowOf(address /* member */)   external pure  returns (uint256)       { return 0; } // V8.8: escrow removed
-    function isFull()                         external view returns (bool)          { return occupancy == MATRIX_SIZE; }
-    function isActiveInMatrix(address member) external view returns (bool)          { return members[member].isInMatrix; }
+    function getMemberTotalWithdrawn(address member) external view returns (uint256) { return _state.members[member].totalWithdrawn; }
+    function escrowOf(address /* member */) external pure returns (uint256) { return 0; }
+    function isFull() external view returns (bool) { return _state.occupancy == MATRIX_SIZE; }
+    function isActiveInMatrix(address member) external view returns (bool) { return _state.members[member].isInMatrix; }
 
-    /// @notice Seconds since member last received any credit or entered the matrix.
     function getIdleSeconds(address member) external view returns (uint256) {
-        if (lastActivityTime[member] == 0) return 0;
-        return block.timestamp - lastActivityTime[member];
+        if (_state.lastActivityTime[member] == 0) return 0;
+        return block.timestamp - _state.lastActivityTime[member];
     }
 
     function crossingFundsOf(address member)
         external view
         returns (uint256 total, uint256 fromEscrow, uint256 fromEarnings)
     {
-        fromEscrow   = 0;  // V8.8: escrow removed
-        fromEarnings = members[member].withdrawable;
+        fromEscrow   = 0;
+        fromEarnings = _state.members[member].withdrawable;
         total        = fromEarnings;
     }
 
     function getPendingCross() external view returns (address member, address referrer) {
-        return (pendingCross, pendingCrossReferrer);
+        return (_state.pendingCross, _state.pendingCrossReferrer);
     }
 
-    /// @notice V8.1: Pool distribution preview --- how much a member at `pos` would receive
-    ///         if cycle-out fired right now with current poolAccumulator.
-    /// @notice V8.1: Pool distribution preview -- how much a member at `pos` would receive
-    ///         if cycle-out fired right now with current poolAccumulator.
     function poolSharePreview(uint256 pos) external view returns (uint256) {
-        if (poolAccumulator == 0 || pos < 2 || pos > MATRIX_SIZE) return 0;
+        if (_state.poolAccumulator == 0 || pos < 2 || pos > MATRIX_SIZE) return 0;
         uint256 N           = MATRIX_SIZE;
         uint256 totalWeight = N * (N + 1) / 2 - 1;
-        return poolAccumulator * pos / totalWeight;
+        return _state.poolAccumulator * pos / totalWeight;
     }
 
-    /// @notice V8.19: Return all BPS splits (10 fields -- liquidityBps added).
     function getSplitConfig()
         external view
         returns (
@@ -1422,4 +484,39 @@ contract FigureEightMatrixV8 is Ownable2Step {
             SPLIT_LIQUIDITY_BPS
         );
     }
+
+    // --- Storage-struct field getters (preserve the original public-storage ABI) -
+
+    function partner() external view returns (address) { return _state.partner; }
+    function chainNext() external view returns (address) { return _state.chainNext; }
+    function chainAuthorized(address a) external view returns (bool) { return _state.chainAuthorized[a]; }
+    function matrixPos(address m) external view returns (uint256) { return _state.matrixPos[m]; }
+    function posToMember(uint256 p) external view returns (address) { return _state.posToMember[p]; }
+    function occupancy() external view returns (uint256) { return _state.occupancy; }
+    function nextSlot() external view returns (uint256) { return _state.nextSlot; }
+    function rotationCount() external view returns (uint256) { return _state.rotationCount; }
+    function joinCountSinceRotation() external view returns (uint256) { return _state.joinCountSinceRotation; }
+    function lastRotationTimestamp() external view returns (uint256) { return _state.lastRotationTimestamp; }
+    function pendingCross() external view returns (address) { return _state.pendingCross; }
+    function pendingCrossReferrer() external view returns (address) { return _state.pendingCrossReferrer; }
+    function parkedMembers(uint256 i) external view returns (address) { return _state.parkedMembers[i]; }
+    function parkedAt(address m) external view returns (uint256) { return _state.parkedAt[m]; }
+    function poolAccumulator() external view returns (uint256) { return _state.poolAccumulator; }
+    function lastActivityTime(address m) external view returns (uint256) { return _state.lastActivityTime[m]; }
+    function withdrawalFeeBps() external view returns (uint256) { return _state.withdrawalFeeBps; }
+    // V8.21: earlyExitPenaltyBps() getter removed -- field deleted entirely.
+    function noReferrerPoolRouted() external view returns (uint256) { return _state.noReferrerPoolRouted; }
+    function noReferrerFounderRouted() external view returns (uint256) { return _state.noReferrerFounderRouted; }
+    function members(address m) external view returns (MatrixLogicLib.Member memory) { return _state.members[m]; }
+    function totalJoined() external view returns (uint256) { return _state.totalJoined; }
+    function tierRouter() external view returns (address) { return _state.tierRouter; }
+    function pairManager() external view returns (address) { return _state.pairManager; }
+    function accountOne() external view returns (address) { return _state.accountOne; }
+    function stabilityFund() external view returns (address) { return _state.stabilityFund; }
+    function communityWallet() external view returns (address) { return _state.communityWallet; }
+    function buybackReserve() external view returns (address) { return _state.buybackReserve; }
+    function liquidityReserve() external view returns (address) { return _state.liquidityReserve; }
+    function governance() external view returns (address) { return _state.governance; }
+    function matrixKeeper() external view returns (address) { return _state.matrixKeeper; }
+    function chainPayBps(uint256 i) external view returns (uint256) { return _state.chainPayBps[i]; }
 }

@@ -59,7 +59,13 @@ async function deployFixture() {
   const tr         = await TierRouter.deploy(usdcAddr, admin.address);
   const trAddr     = await tr.getAddress();
 
-  const FM = await ethers.getContractFactory("FigureEightMatrixV8");
+  // V8.21: core logic now lives in MatrixLogicLib -- deploy + link first.
+  const MatrixLib0 = await ethers.getContractFactory("MatrixLogicLib");
+  const matrixLib0 = await MatrixLib0.deploy();
+  await matrixLib0.waitForDeployment();
+  const FM = await ethers.getContractFactory("FigureEightMatrixV8", {
+    libraries: { MatrixLogicLib: await matrixLib0.getAddress() },
+  });
 
   const mkMat = (isA, tierIdx, fee) => FM.deploy(
     { usdc: usdcAddr, cnova: cnovaAddr, treasury: treasuryAddr,
@@ -450,7 +456,13 @@ describe("S5: Gas estimate at MSIZE=15", function () {
     const tr = await TierRouter.deploy(usdcAddr, admin.address);
     const trAddr = await tr.getAddress();
 
-    const FM          = await ethers.getContractFactory("FigureEightMatrixV8");
+    // V8.21: core logic now lives in MatrixLogicLib -- deploy + link first.
+    const MatrixLib15 = await ethers.getContractFactory("MatrixLogicLib");
+    const matrixLib15 = await MatrixLib15.deploy();
+    await matrixLib15.waitForDeployment();
+    const FM          = await ethers.getContractFactory("FigureEightMatrixV8", {
+      libraries: { MatrixLogicLib: await matrixLib15.getAddress() },
+    });
     const cnovaAddr15 = await cnova.getAddress();
     const treasAddr15 = await treasury.getAddress();
     const mk = (isA) => FM.deploy(

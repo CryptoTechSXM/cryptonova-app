@@ -48,7 +48,7 @@
  *   USDC_ADDRESS           Reuse existing USDC; omit to deploy MockUSDC
  *   MATRIX_SIZE            127 (default) | 15 (quick dev cycle)
  *   DEPLOY_TIERS           Comma-separated list e.g. "1,2" (default: "1,2,3,4,5,6,7,8,9,10")
- *   ADDRESSES_FILE         Output filename (default: deployed_addresses_v8_20.json)
+ *   ADDRESSES_FILE         Output filename (default: deployed_addresses_v8_21.json)
  *
  * Run: npx hardhat run scripts/deploy_v8.js --network baseSepolia
  */
@@ -63,7 +63,7 @@ require("dotenv").config();
 // v8_1 = size-15 testnet (retired).  v8_2 = size-64 pre-mainnet stress test.
 const ADDRESSES_FILE = path.join(
   __dirname,
-  process.env.ADDRESSES_FILE || "deployed_addresses_v8_20.json"
+  process.env.ADDRESSES_FILE || "deployed_addresses_v8_21.json"
 );
 
 // ── Config ────────────────────────────────────────────────────────────────────
@@ -273,7 +273,20 @@ async function main() {
   // ── 7. PairManagers + Matrix pairs ───────────────────────────────────────
   sep("Tier Pairs");
 
-  const F8V8  = await ethers.getContractFactory("FigureEightMatrixV8", deployer);
+  // V8.21: FigureEightMatrixV8's core logic now lives in MatrixLogicLib,
+  // deployed ONCE and delegatecall-linked into every one of the 20 matrix
+  // instances below (was previously duplicated in full in each of the 20).
+  // Must deploy + link before getting the FigureEightMatrixV8 factory --
+  // Hardhat requires the library address at factory-creation time, not
+  // at individual deploy() calls.
+  const MatrixLib    = await ethers.getContractFactory("MatrixLogicLib", deployer);
+  const matrixLib     = await deploy(MatrixLib, [], "MatrixLogicLib");
+  const matrixLibAddr = await matrixLib.getAddress();
+
+  const F8V8  = await ethers.getContractFactory("FigureEightMatrixV8", {
+    libraries: { MatrixLogicLib: matrixLibAddr },
+    signer: deployer,
+  });
   const PMV8  = await ethers.getContractFactory("PairManagerV8", deployer);
 
   const deployed = {};  // t => { pm, matA, matB }
@@ -443,7 +456,14 @@ async function main() {
     const mB = await ethers.getContractAt("FigureEightMatrixV8", deployed[tierNum].matB, deployer);
     await (await mA.setGovernance(govAddr)).wait();
     await (await mB.setGovernance(govAddr)).wait();
+    // V8.21: PARAM_WITHDRAWAL_FEE_BPS (id 9) now targets PairManagerV8 (one per
+    // tier) instead of a single matrix instance -- PairManagerV8.setWithdrawalFeeBps()
+    // broadcasts to every pair the tier has ever added. Without this wiring,
+    // execute() on param 9 would revert with "PM8: not authorized" for every tier.
+    const pm = await ethers.getContractAt("PairManagerV8", deployed[tierNum].pm, deployer);
+    await (await pm.setGovernance(govAddr)).wait();
   }
+  console.log("  ↳  V8Governance wired onto all per-tier PairManagerV8 instances (param #9 target)");
   // V8.20 second wave: StabilityFund and CNOVABuybackReserve are both already
   // deployed by this point (steps 4/6 above) -- wire them in now alongside
   // everything else. CNOVADirectSale and CommunityWallet deploy AFTER this

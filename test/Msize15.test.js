@@ -42,7 +42,13 @@ async function deployFixture() {
   const tierRouter    = await TierRouter.deploy(usdcAddr, admin.address);
   const trAddr        = await tierRouter.getAddress();
 
-  const FM = await ethers.getContractFactory("FigureEightMatrixV8");
+  // V8.21: core logic now lives in MatrixLogicLib -- deploy + link first.
+  const MatrixLib  = await ethers.getContractFactory("MatrixLogicLib");
+  const matrixLib  = await MatrixLib.deploy();
+  await matrixLib.waitForDeployment();
+  const FM = await ethers.getContractFactory("FigureEightMatrixV8", {
+    libraries: { MatrixLogicLib: await matrixLib.getAddress() },
+  });
 
   const dp = { usdc: usdcAddr, cnova: cnovaAddr, treasury: treasuryAddr,
                 devWallet: devOps.address, opsWallet: devOps.address, accountOne: accountOne.address, admin: admin.address };

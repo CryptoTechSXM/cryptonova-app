@@ -19,22 +19,40 @@ import "@openzeppelin/contracts/access/Ownable.sol";
  *         GOVERNANCE SCOPE
  *         ----------------
  *         Governance can adjust params on:
- *           - TierRouter (autoUpgradeCycleThreshold, reentryMinCycles,
- *                         escrowFloorMultiplier)
+ *           - TierRouter (autoUpgradeCycleThreshold, reentryMinCycles)
  *           - MatrixKeeper (velocityWindow, velocityThreshold,
  *                           deflationThreshold, idleSlotTimeout,
  *                           maxItemsPerUpkeep, sfRescueLadder)
- *           - FigureEightMatrixV8 (withdrawalFeeBps, earlyExitPenaltyBps) --
- *             target the matrix contract directly (set as `target` on the
- *             proposal); checked there via owner()/tierRouter/governance
+ *           - FigureEightMatrixV8 (withdrawalFeeBps) -- target PairManagerV8
+ *             (one per tier; broadcasts to every pair instance in that tier),
+ *             checked there via onlyOwnerOrGovernance
  *           - V8Governance itself (votingPeriod, timelockPeriod, quorumBps)
  *
  *         V8.20: MatrixKeeper/TierRouter/FigureEightMatrixV8 must each have
  *         setGovernance(address(this)) called once post-deploy, or execute()
  *         reverts for every param above except the 3 self-governed ones.
- *         The SF rescue ladder is array-valued (not a single uint256), so it
- *         uses a separate entry point: proposeLadder() instead of propose(),
- *         still sharing the same vote/quorum/timelock/execute lifecycle.
+ *         V8.21: the SF rescue ladder is now a curated preset index (0-3, see
+ *         MatrixKeeper.setSfRescueLadderPreset) instead of a free-form array,
+ *         so it goes through the normal propose()/_applyParam() path like
+ *         every other scalar param. The CNOVA boost table is still genuinely
+ *         array-valued and still uses its own proposeBoostTable() entry point.
+ *         V8.21: PARAM_ESCROW_FLOOR_MULT (id 3) is retired -- TierRouter's
+ *         escrowFloorMultiplier and its setter were deleted entirely (the param
+ *         gated a guard that could never fire; see TierRouter.sol's removal
+ *         note). propose() permanently rejects this id; id 3 is never reused.
+ *         V8.21: PARAM_EARLY_EXIT_PENALTY_BPS (id 10) is ALSO retired, same
+ *         reasoning -- FigureEightMatrixV8.earlyExitPenaltyBps was stored and
+ *         DAO-votable but never actually consumed by any withdraw/cycle logic
+ *         (dead state). The real, working early-exit penalty is CNOVATreasury's
+ *         hardcoded time-tiered redeemAtFloor() schedule (45/30/15/5/0% by
+ *         days-since-join), which is intentionally NOT governed by this param.
+ *         id 10 is never reused. V8.21: PARAM_WITHDRAWAL_FEE_BPS (id 9)'s
+ *         target changed from a single FigureEightMatrixV8 instance to
+ *         PairManagerV8 (one per tier) -- a tier can have multiple matrix
+ *         pairs (PairManagerV8.addPair() during auto-expansion), and fees are
+ *         stored per-instance, so targeting a single matrix left every other
+ *         pair on a stale value. PairManagerV8.setWithdrawalFeeBps() broadcasts
+ *         to every pair the tier has ever added and auto-stamps future ones.
  *
  *         OUT OF SCOPE (always owner/multisig):
  *           - Deploy new contracts
@@ -52,18 +70,24 @@ interface IGovernanceTarget {
     // TierRouter
     function setAutoUpgradeCycleThreshold(uint256 v) external;
     function setReentryMinCycles(uint256 v) external;
-    function setEscrowFloorMultiplier(uint256 v) external;
+    // V8.21: setEscrowFloorMultiplier() removed -- TierRouter no longer has this
+    // function. PARAM_ESCROW_FLOOR_MULT (id 3) is retired below.
     // MatrixKeeper
     function setVelocityWindow(uint256 v) external;
     function setVelocityThreshold(uint256 v) external;
     function setDeflationThreshold(uint256 v) external;
     function setIdleSlotTimeout(uint256 v) external;
     function setMaxItemsPerUpkeep(uint256 v) external;
-    // Matrix fee params (via TierRouter or direct)
+    // Matrix fee params -- V8.21: target is PairManagerV8 (one per tier), which
+    // broadcasts to every pair instance it has ever added. See setWithdrawalFeeBps
+    // on PairManagerV8.sol for the actual implementation.
     function setWithdrawalFeeBps(uint256 v) external;
-    function setEarlyExitPenaltyBps(uint256 v) external;
-    // MatrixKeeper -- V8.20: SF parked-rescue coverage ladder (array-valued param)
-    function setSfRescueLadder(uint256[] calldata thresholds, uint256[] calldata bpsValues) external;
+    // V8.21: setEarlyExitPenaltyBps() removed -- the param it backed
+    // (PARAM_EARLY_EXIT_PENALTY_BPS, id 10) is retired below; FigureEightMatrixV8
+    // no longer has this function at all.
+    // MatrixKeeper -- V8.21: SF parked-rescue coverage ladder, now a curated
+    // preset index (0-3) instead of a free-form array -- scalar like everything else.
+    function setSfRescueLadderPreset(uint256 preset) external;
 
     // ── V8.20: second wave -- TierRouter ─────────────────────────────────────
     function setWhaleGateThreshold(uint256 v) external;
@@ -115,19 +139,32 @@ contract V8Governance is Ownable {
     // ── Param IDs (enumerated) ────────────────────────────────────────────────
     uint8 public constant PARAM_UPGRADE_CYCLE_THRESHOLD = 1;
     uint8 public constant PARAM_REENTRY_MIN_CYCLES      = 2;
+    /// @dev RETIRED in V8.21 -- TierRouter.escrowFloorMultiplier and its setter
+    ///      were deleted entirely (gated a guard that could never fire; escrow
+    ///      is hardcoded to 0 everywhere). propose() permanently rejects this
+    ///      id. Do not reuse id 3 for a new param -- it stays retired so no
+    ///      historical proposal/event ever gets reinterpreted as something else.
     uint8 public constant PARAM_ESCROW_FLOOR_MULT       = 3;
     uint8 public constant PARAM_VELOCITY_WINDOW         = 4;
     uint8 public constant PARAM_VELOCITY_THRESHOLD      = 5;
     uint8 public constant PARAM_DEFLATION_THRESHOLD     = 6;
     uint8 public constant PARAM_IDLE_SLOT_TIMEOUT       = 7;
     uint8 public constant PARAM_MAX_ITEMS_PER_UPKEEP    = 8;
+    /// @dev V8.21: target changed from a single FigureEightMatrixV8 instance to
+    ///      PairManagerV8 (one per tier) -- see PairManagerV8.setWithdrawalFeeBps
+    ///      and the class doc-comment above for the multi-pair broadcast fix.
     uint8 public constant PARAM_WITHDRAWAL_FEE_BPS      = 9;
+    /// @dev RETIRED in V8.21 -- FigureEightMatrixV8.earlyExitPenaltyBps and its
+    ///      setter were deleted entirely (stored + DAO-votable but never
+    ///      actually applied in any withdraw/cycle path; see V8Governance's
+    ///      class doc-comment above). propose() permanently rejects this id.
+    ///      Do not reuse id 10 for a new param.
     uint8 public constant PARAM_EARLY_EXIT_PENALTY_BPS  = 10;
     uint8 public constant PARAM_VOTING_PERIOD           = 11;
     uint8 public constant PARAM_TIMELOCK_PERIOD         = 12;
     uint8 public constant PARAM_QUORUM_BPS              = 13;
-    /// @dev V8.20: array-valued param, proposed/executed via proposeLadder()/execute(),
-    ///      not via propose()/_applyParam() -- has no allowed-values registry entry.
+    /// @dev V8.21: curated preset index (0-3) -- scalar, goes through the normal
+    ///      propose()/_applyParam() path with allowed values [0,1,2,3].
     uint8 public constant PARAM_SF_RESCUE_LADDER        = 14;
 
     // ── V8.20 second wave: TierRouter ─────────────────────────────────────────
@@ -205,13 +242,9 @@ contract V8Governance is Ownable {
     // Enforced both at proposal-creation time and at execution time
     mapping(uint8 => uint256[]) private _allowedValues;
 
-    // ── V8.20: array-valued proposal storage (paramId == PARAM_SF_RESCUE_LADDER only) ──
-    // Side storage keyed by proposalId, kept separate from the Proposal struct so the
-    // existing scalar-param ABI (newValue) is untouched.
-    mapping(uint256 => uint256[]) public proposalLadderThresholds;
-    mapping(uint256 => uint256[]) public proposalLadderBps;
-
-    // ── V8.20: second array-valued proposal storage (PARAM_CNOVA_BOOST_TABLE only) ──
+    // ── V8.20: array-valued proposal storage (PARAM_CNOVA_BOOST_TABLE only) ──
+    // V8.21: the SF rescue ladder's equivalent storage (proposalLadderThresholds/
+    // proposalLadderBps) was removed -- that param is scalar now, see PARAM_SF_RESCUE_LADDER.
     mapping(uint256 => uint256[]) public proposalBoostThresholds;
     mapping(uint256 => uint256[]) public proposalBoostRates;
 
@@ -230,7 +263,6 @@ contract V8Governance is Ownable {
     event ProposalExecuted(uint256 indexed id, uint8 paramId, uint256 newValue);
     event ProposalCancelled(uint256 indexed id);
     event AllowedValuesSet(uint8 indexed paramId, uint256[] values);
-    event LadderProposed(uint256 indexed id, uint256[] thresholds, uint256[] bpsValues);
     event BoostTableProposed(uint256 indexed id, uint256[] thresholds, uint256[] rates);
 
     // ── Custom errors ─────────────────────────────────────────────────────────
@@ -267,7 +299,8 @@ contract V8Governance is Ownable {
         // TierRouter params
         _allowedValues[PARAM_UPGRADE_CYCLE_THRESHOLD] = [1, 3, 5, 10];
         _allowedValues[PARAM_REENTRY_MIN_CYCLES]      = [1, 2, 3, 5];
-        _allowedValues[PARAM_ESCROW_FLOOR_MULT]       = [110, 120, 150, 200];
+        // V8.21: PARAM_ESCROW_FLOOR_MULT intentionally has no allowed-values
+        // entry -- it's retired and permanently blocked at propose() time below.
         // MatrixKeeper params
         _allowedValues[PARAM_VELOCITY_WINDOW]         = [1800, 3600, 7200, 14400];
         _allowedValues[PARAM_VELOCITY_THRESHOLD]      = [1, 2, 3, 5];
@@ -276,11 +309,15 @@ contract V8Governance is Ownable {
         _allowedValues[PARAM_MAX_ITEMS_PER_UPKEEP]    = [5, 10, 15, 20];
         // Matrix fee params
         _allowedValues[PARAM_WITHDRAWAL_FEE_BPS]      = [50, 100, 150, 200, 250];
-        _allowedValues[PARAM_EARLY_EXIT_PENALTY_BPS]  = [1000, 1500, 2000, 2500];
+        // V8.21: PARAM_EARLY_EXIT_PENALTY_BPS intentionally has no allowed-values
+        // entry -- it's retired and permanently blocked at propose() time below.
         // Governance self-params
         _allowedValues[PARAM_VOTING_PERIOD]           = [48 hours, 72 hours, 96 hours, 168 hours];
         _allowedValues[PARAM_TIMELOCK_PERIOD]         = [24 hours, 48 hours, 72 hours];
         _allowedValues[PARAM_QUORUM_BPS]              = [100, 200, 300, 500];
+        // V8.21: 0=Conservative, 1=Default, 2=Generous, 3=Maximum -- see
+        // MatrixKeeper.setSfRescueLadderPreset() for the exact numbers.
+        _allowedValues[PARAM_SF_RESCUE_LADDER]        = [0, 1, 2, 3];
 
         // ── V8.20 second wave: TierRouter ─────────────────────────────────────
         _allowedValues[PARAM_WHALE_GATE_THRESHOLD]        = [10, 15, 20, 25, 30, 50];
@@ -342,7 +379,19 @@ contract V8Governance is Ownable {
         string  calldata description
     ) external returns (uint256 proposalId) {
         if (paramId == 0 || paramId > PARAM_CW_DISTRIBUTE_INTERVAL) revert GOV_InvalidParam();
-        if (paramId == PARAM_SF_RESCUE_LADDER || paramId == PARAM_CNOVA_BOOST_TABLE) revert GOV_InvalidParam();
+        // V8.21: PARAM_SF_RESCUE_LADDER is no longer array-valued -- it goes
+        // through this normal propose() path now. Only the boost table is still
+        // genuinely array-valued and still blocked here (uses proposeBoostTable()).
+        if (paramId == PARAM_CNOVA_BOOST_TABLE) revert GOV_InvalidParam();
+        // V8.21: PARAM_ESCROW_FLOOR_MULT is retired -- TierRouter no longer has
+        // a setter for it. Block it permanently rather than letting it fall
+        // through to _isAllowed() (which would just always be false anyway,
+        // since _initAllowedValues() no longer populates an entry for it).
+        if (paramId == PARAM_ESCROW_FLOOR_MULT) revert GOV_InvalidParam();
+        // V8.21: PARAM_EARLY_EXIT_PENALTY_BPS is retired -- FigureEightMatrixV8
+        // no longer has a setter for it. Block it permanently, same reasoning
+        // as PARAM_ESCROW_FLOOR_MULT above.
+        if (paramId == PARAM_EARLY_EXIT_PENALTY_BPS) revert GOV_InvalidParam();
         bool isSelfParam = (paramId == PARAM_VOTING_PERIOD ||
                             paramId == PARAM_TIMELOCK_PERIOD ||
                             paramId == PARAM_QUORUM_BPS);
@@ -377,54 +426,12 @@ contract V8Governance is Ownable {
     }
 
     /**
-     * @notice V8.20: Create a governance proposal for the SF rescue ladder
-     *         (the one array-valued param). Separate entry point from propose()
-     *         because the ladder can't be expressed as a single uint256.
-     * @param target      Contract to call on execution (MatrixKeeper)
-     * @param thresholds  Descending withdrawable/entryFee bps breakpoints, must start at 10_000
-     * @param bpsValues   Ascending SF coverage bps per breakpoint, must start at 0, capped at 10_000
-     * @param description Human-readable rationale (stored for events only)
-     */
-    function proposeLadder(
-        address target,
-        uint256[] calldata thresholds,
-        uint256[] calldata bpsValues,
-        string  calldata description
-    ) external returns (uint256 proposalId) {
-        if (target == address(0)) revert GOV_ZeroAddress();
-        if (!_isValidLadder(thresholds, bpsValues)) revert GOV_ValueNotAllowed();
-
-        uint256 supply = ICNOVAToken(cnovaToken).totalSupply();
-        if (ICNOVAToken(cnovaToken).balanceOf(msg.sender) < supply / 10_000) revert GOV_NoVotingPower();
-
-        proposalId = ++proposalCount;
-
-        // Store the arrays first and drop them -- avoids keeping two calldata
-        // arrays "live" alongside the struct write below (Yul stack-too-deep).
-        proposalLadderThresholds[proposalId] = thresholds;
-        proposalLadderBps[proposalId]        = bpsValues;
-
-        // Field-by-field instead of one struct literal -- same reason: a
-        // 13-field literal needs every value live on the stack at once.
-        Proposal storage p = proposals[proposalId];
-        p.id             = proposalId;
-        p.proposer       = msg.sender;
-        p.startTime      = block.timestamp;
-        p.endTime        = block.timestamp + votingPeriod;
-        p.state          = STATE_ACTIVE;
-        p.paramId        = PARAM_SF_RESCUE_LADDER;
-        p.target         = target;
-        p.description    = description;
-        p.quorumRequired = supply * quorumBps / 10_000;
-
-        emit ProposalCreated(proposalId, msg.sender, PARAM_SF_RESCUE_LADDER, target, 0, description);
-        emit LadderProposed(proposalId, thresholds, bpsValues);
-    }
-
-    /**
      * @notice V8.20: Create a governance proposal for CNOVAToken's boost table
-     *         (the second array-valued param). Separate entry point from propose()
-     *         for the same reason as proposeLadder() -- can't be a single uint256.
+     *         (the array-valued param). Separate entry point from propose()
+     *         because the boost table can't be expressed as a single uint256.
+     *         (V8.21: the SF rescue ladder used to have an equivalent
+     *         proposeLadder() entry point here -- removed, it's a scalar
+     *         preset-index param now, see PARAM_SF_RESCUE_LADDER.)
      * @param target      CNOVAToken address (must hold GOVERNOR_ROLE for this contract)
      * @param thresholds  Strictly ascending breakpoints (mirrors CNOVAToken's own check)
      * @param rates       Boost rates in BPS, each <= 10_000 (mirrors CNOVAToken's own check)
@@ -522,13 +529,7 @@ contract V8Governance is Ownable {
 
         p.state = STATE_EXECUTED;
 
-        if (p.paramId == PARAM_SF_RESCUE_LADDER) {
-            // Array-valued param: no allowed-values registry, apply directly.
-            IGovernanceTarget(p.target).setSfRescueLadder(
-                proposalLadderThresholds[proposalId],
-                proposalLadderBps[proposalId]
-            );
-        } else if (p.paramId == PARAM_CNOVA_BOOST_TABLE) {
+        if (p.paramId == PARAM_CNOVA_BOOST_TABLE) {
             // Array-valued param: no allowed-values registry, apply directly.
             IGovernanceTarget(p.target).setBoostTable(
                 proposalBoostThresholds[proposalId],
@@ -563,8 +564,9 @@ contract V8Governance is Ownable {
             t.setAutoUpgradeCycleThreshold(value);
         } else if (paramId == PARAM_REENTRY_MIN_CYCLES) {
             t.setReentryMinCycles(value);
-        } else if (paramId == PARAM_ESCROW_FLOOR_MULT) {
-            t.setEscrowFloorMultiplier(value);
+        // V8.21: PARAM_ESCROW_FLOOR_MULT branch removed -- execute() never
+        // reaches here for this id (propose() rejects it first), and the
+        // target function no longer exists on TierRouter anyway.
         } else if (paramId == PARAM_VELOCITY_WINDOW) {
             t.setVelocityWindow(value);
         } else if (paramId == PARAM_VELOCITY_THRESHOLD) {
@@ -577,14 +579,17 @@ contract V8Governance is Ownable {
             t.setMaxItemsPerUpkeep(value);
         } else if (paramId == PARAM_WITHDRAWAL_FEE_BPS) {
             t.setWithdrawalFeeBps(value);
-        } else if (paramId == PARAM_EARLY_EXIT_PENALTY_BPS) {
-            t.setEarlyExitPenaltyBps(value);
+        // V8.21: PARAM_EARLY_EXIT_PENALTY_BPS branch removed -- execute() never
+        // reaches here for this id (propose() rejects it first), and the
+        // target function no longer exists on FigureEightMatrixV8 anyway.
         } else if (paramId == PARAM_VOTING_PERIOD) {
             votingPeriod = value;
         } else if (paramId == PARAM_TIMELOCK_PERIOD) {
             timelockPeriod = value;
         } else if (paramId == PARAM_QUORUM_BPS) {
             quorumBps = value;
+        } else if (paramId == PARAM_SF_RESCUE_LADDER) {
+            t.setSfRescueLadderPreset(value);
         // ── V8.20 second wave: TierRouter ─────────────────────────────────────
         } else if (paramId == PARAM_WHALE_GATE_THRESHOLD) {
             t.setWhaleGateThreshold(value);
@@ -651,25 +656,6 @@ contract V8Governance is Ownable {
             if (allowed[i] == value) return true;
         }
         return false;
-    }
-
-    /// @dev V8.20: structural validation for the SF rescue ladder (mirrors the
-    ///      same checks MatrixKeeper.setSfRescueLadder enforces on-chain, so a
-    ///      malformed proposal can't even be created).
-    function _isValidLadder(uint256[] calldata thresholds, uint256[] calldata bpsValues)
-        internal pure returns (bool)
-    {
-        uint256 n = thresholds.length;
-        if (n < 2 || n > 20)         return false;
-        if (bpsValues.length != n)   return false;
-        if (thresholds[0] != 10_000) return false;
-        if (bpsValues[0] != 0)       return false;
-        for (uint256 i = 1; i < n; i++) {
-            if (thresholds[i] >= thresholds[i - 1]) return false;
-            if (bpsValues[i] <= bpsValues[i - 1])   return false;
-            if (bpsValues[i] > 10_000)              return false;
-        }
-        return true;
     }
 
     /// @dev V8.20: structural validation for CNOVAToken's boost table (mirrors

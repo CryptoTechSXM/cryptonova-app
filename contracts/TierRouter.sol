@@ -136,7 +136,15 @@ contract TierRouter is Ownable2Step {
     // ─── V8.1: DAO-votable parameters (enumerated menus only) ────────────────
     uint256 public autoUpgradeCycleThreshold = 5;
     uint256 public reentryMinCycles = 2;
-    uint256 public escrowFloorMultiplier = 120;
+    // V8.21: escrowFloorMultiplier and its setter were removed entirely.
+    // It gated auto-upgrade via Guard f in _resolveDest() against a `escrow`
+    // value that's hardcoded to 0 at every call site (escrow tracking was
+    // removed system-wide in V8.8), so the guard could never pass past a
+    // member's 5th cycle at a tier -- silently and permanently blocking
+    // auto-upgrade with no funds actually at risk. Guard f itself was removed
+    // in V8.21 (see _resolveDest() below). PARAM_ESCROW_FLOOR_MULT (id 3) in
+    // V8Governance.sol is retired and permanently blocked at propose() time --
+    // do not reuse that id for a new param.
 
     // ─── Community Fund ───────────────────────────────────────────────────────
     /// @notice CommunityWallet contract — enrolled at registration.
@@ -148,8 +156,19 @@ contract TierRouter is Ownable2Step {
     uint256 public globalJoinedCount;
 
     // ─── Whale Gate ───────────────────────────────────────────────────────────
-    uint256 public t5FirstEntries;
-    bool    public whaleGateActive;
+    // V8.21 REDESIGN: was a single global T5-only counter that, once tripped,
+    // let funded members cycling out of T4 SKIP T5 entirely and land in T6 --
+    // i.e. they bypassed every member still waiting in T5's queue. User
+    // feedback: whales should never jump past a tier's existing members; they
+    // should just be able to enter that SAME tier. The skip-ahead behavior
+    // (former Guard c in _resolveDest) is removed entirely -- funded members
+    // now flow tier-by-tier through the normal queue like everyone else, no
+    // exceptions. What remains is purely a per-tier "first entries" tracker
+    // (one counter + one active flag per tier, all measured against the same
+    // shared DAO-governed threshold) for visibility/eligibility display --
+    // it no longer changes routing.
+    mapping(uint8 => uint256) public tierFirstEntries;   // keyed by tierNum (1-10)
+    mapping(uint8 => bool)    public tierWhaleGateActive; // keyed by tierNum (1-10)
     uint256 public whaleGateThreshold = 25;
 
     // ─── Inactivity Pause (dual-guard) ────────────────────────────────────────
@@ -176,7 +195,7 @@ contract TierRouter is Ownable2Step {
     event ManualUpgrade(address indexed member, uint8 fromTier, uint8 toTier, uint256 fee);
     event MemberReentered(address indexed member, uint8 tier);
     event DoubleEntryFired(address indexed member, uint8 primaryTier, uint8 secondaryTier);
-    event WhaleGateActivated(uint256 t5Count);
+    event WhaleGateActivated(uint8 indexed tierNum, uint256 count);
     event CycleRecorded(address indexed member, uint8 tierIndex, uint256 newCount);
     event TierRegistered(uint8 indexed tierIndex, address pairManager, uint256 entryFee);
     event MatrixRegistered(address indexed matrix, uint8 tierIndex);
@@ -191,7 +210,7 @@ contract TierRouter is Ownable2Step {
     event VelocityGateSet(uint8 indexed tier, bool green);
     event AutoUpgradeThresholdSet(uint256 threshold);
     event ReentryMinCyclesSet(uint256 minCycles);
-    event EscrowFloorMultiplierSet(uint256 multiplier);
+    // V8.21: EscrowFloorMultiplierSet removed along with the setter/storage var.
     event MatrixKeeperSet(address indexed keeper);
     // V8.11 events
     event CommunityWalletSet(address indexed cw);
@@ -334,14 +353,8 @@ contract TierRouter is Ownable2Step {
         emit ReentryMinCyclesSet(minCycles);
     }
 
-    function setEscrowFloorMultiplier(uint256 multiplier) external onlyOwnerOrGovernance {
-        require(
-            multiplier == 110 || multiplier == 120 || multiplier == 150 || multiplier == 200,
-            "TR: invalid multiplier (allowed: 110,120,150,200)"
-        );
-        escrowFloorMultiplier = multiplier;
-        emit EscrowFloorMultiplierSet(multiplier);
-    }
+    // V8.21: setEscrowFloorMultiplier() removed entirely -- see PARAM_ESCROW_FLOOR_MULT
+    // retirement note in V8Governance.sol and the storage-var removal note above.
 
     // ─── Inactivity guard ─────────────────────────────────────────────────────
 
@@ -425,6 +438,13 @@ contract TierRouter is Ownable2Step {
 
         memberReferrer[msg.sender]    = resolved;
         globalJoined[msg.sender]      = true;
+        // V8.21 bugfix: _checkTierFirstEntry() gates on memberHighestTier[member]
+        // < tierNum -- it must run BEFORE memberHighestTier is written to 1,
+        // otherwise the check always sees 1 < 1 (false) and the per-tier
+        // counter can never increment. This exact ordering bug existed in the
+        // original T5-only code too (silently dead since register() always
+        // called it with tierNum=1, which the old code ignored anyway).
+        _checkTierFirstEntry(msg.sender, 1);
         memberHighestTier[msg.sender] = 1;
         globalJoinedCount            += 1;
 
@@ -439,7 +459,6 @@ contract TierRouter is Ownable2Step {
             emit MemberEnrolled(msg.sender, globalJoinedCount);
         }
 
-        _checkT5FirstEntry(msg.sender, 1);
         _recordEntry(0);
         emit MemberRegistered(msg.sender, 1, resolved);
     }
@@ -500,12 +519,14 @@ contract TierRouter is Ownable2Step {
         IPairManagerV8(tierPairManagers[targetTierIndex]).registerFor(msg.sender, referrer);
 
         uint8 targetTierNum = targetTierIndex + 1;
+        // V8.21 bugfix: must run before the memberHighestTier write below --
+        // see the ordering note in register().
+        _checkTierFirstEntry(msg.sender, targetTierNum);
         if (targetTierNum > memberHighestTier[msg.sender]) {
             memberHighestTier[msg.sender] = targetTierNum;
         }
         lastActivityTimestamp    = block.timestamp;
         cyclesAtLastRegistration = totalSystemCycles;
-        _checkT5FirstEntry(msg.sender, targetTierNum);
         _recordEntry(targetTierIndex);
 
         emit ManualUpgrade(msg.sender, prevIndex + 1, targetTierNum, fee);
@@ -558,12 +579,14 @@ contract TierRouter is Ownable2Step {
         address referrer = memberReferrer[member];
         IPairManagerV8(tierPairManagers[nextIndex]).registerFor(member, referrer);
 
+        // V8.21 bugfix: must run before the memberHighestTier write below --
+        // see the ordering note in register().
+        _checkTierFirstEntry(member, toTierNum);
         if (toTierNum > memberHighestTier[member]) {
             memberHighestTier[member] = toTierNum;
         }
         lastActivityTimestamp    = block.timestamp;
         cyclesAtLastRegistration = totalSystemCycles;
-        _checkT5FirstEntry(member, toTierNum);
         _recordEntry(nextIndex);
 
         emit AutoUpgradedAtCross(member, fromTierNum, toTierNum, fee);
@@ -625,14 +648,13 @@ contract TierRouter is Ownable2Step {
             return (destTierIndex, primaryFee, false);
         }
 
-        // Guard c: Whale Gate (T4 -> T6 skip)
+        // Guard c (REMOVED V8.21): used to let a funded member cycling out of
+        // T4 skip T5 entirely and land in T6 once the (then-global) whale
+        // gate tripped -- bypassing every member still waiting in T5's
+        // queue. Removed per user feedback: whales must enter the same next
+        // tier through the normal queue, never jump past it. nextIndex is
+        // now always simply tierIndex + 1, same as every other member.
         uint8 nextIndex = tierIndex + 1;
-        if (whaleGateActive && tierIndex == 3) {
-            uint256 t6Fee = tierEntryFees[5];
-            if (tierPairManagers[5] != address(0) && escrow + withdrawable >= t6Fee) {
-                nextIndex = 5;
-            }
-        }
 
         // Guard d: destination tier deployed
         if (tierPairManagers[nextIndex] == address(0)) return (destTierIndex, primaryFee, false);
@@ -642,11 +664,18 @@ contract TierRouter is Ownable2Step {
         // Guard e: funds sufficient
         if (escrow + withdrawable < nextFee) return (destTierIndex, primaryFee, false);
 
-        // Guard f: escrow floor (skipped in early phase for bootstrap ease)
-        if (!earlyPhase) {
-            uint256 floor = nextFee * escrowFloorMultiplier / 100;
-            if (escrow < floor) return (destTierIndex, primaryFee, false);
-        }
+        // Guard f (REMOVED 2026-06-22, fully deleted in V8.21): used to require
+        // `escrow >= nextFee * escrowFloorMultiplier/100`. The `escrow` parameter
+        // passed into handleCycleOut() by MatrixLogicLib._distributePool()'s
+        // cycle-out callback is hardcoded to the literal 0 (escrow tracking was
+        // removed from the matrix contracts back in V8.8) -- so this guard could
+        // never pass once !earlyPhase, permanently blocking auto-upgrade after a
+        // member's 5th cycle at a tier. Members weren't put at risk (handleCycleOut
+        // still falls back to same-tier re-entry via _shouldFireReentry, which only
+        // needs escrow+withdrawable >= the CURRENT tier's fee), but the convenience
+        // auto-upgrade stopped firing silently. V8.21: escrowFloorMultiplier, its
+        // setter, and its event were deleted entirely (PARAM_ESCROW_FLOOR_MULT
+        // is retired in V8Governance.sol and permanently blocked at propose() time).
 
         // Guard g: velocity gate
         if (!tierVelocityGreen[nextIndex]) return (destTierIndex, primaryFee, false);
@@ -700,8 +729,10 @@ contract TierRouter is Ownable2Step {
         _recordEntry(destTierIndex);
         if (isUpgrade) {
             uint8 destTierNum = destTierIndex + 1;
+            // V8.21 bugfix: must run before the memberHighestTier write below
+            // -- see the ordering note in register().
+            _checkTierFirstEntry(member, destTierNum);
             if (destTierNum > memberHighestTier[member]) memberHighestTier[member] = destTierNum;
-            _checkT5FirstEntry(member, destTierNum);
             emit MemberUpgraded(member, tierIndex + 1, destTierNum, primaryFee);
         } else {
             emit MemberReentered(member, tierIndex + 1);
@@ -759,16 +790,28 @@ contract TierRouter is Ownable2Step {
         }
     }
 
-    function _checkT5FirstEntry(address member, uint8 tierNum) internal {
-        if (tierNum == 5 && !whaleGateActive) {
-            if (memberHighestTier[member] < 5) {
-                t5FirstEntries += 1;
-                if (t5FirstEntries >= whaleGateThreshold) {
-                    whaleGateActive = true;
-                    emit WhaleGateActivated(t5FirstEntries);
-                }
+    /// @dev V8.21: generalized from the old T5-only `_checkT5FirstEntry` to
+    /// track every tier independently against the same shared
+    /// `whaleGateThreshold`. No longer gates any routing behavior (see
+    /// removed Guard c above) -- purely a per-tier "how many members have
+    /// first reached this tier" counter, exposed for display/eligibility via
+    /// `isWhaleGateActiveForTier()` and `getMemberInfo()`.
+    function _checkTierFirstEntry(address member, uint8 tierNum) internal {
+        if (tierNum == 0 || tierNum > MAX_TIERS) return;
+        if (tierWhaleGateActive[tierNum]) return;
+        if (memberHighestTier[member] < tierNum) {
+            tierFirstEntries[tierNum] += 1;
+            if (tierFirstEntries[tierNum] >= whaleGateThreshold) {
+                tierWhaleGateActive[tierNum] = true;
+                emit WhaleGateActivated(tierNum, tierFirstEntries[tierNum]);
             }
         }
+    }
+
+    /// @notice View whether a given tier's whale-gate first-entry threshold
+    /// has been reached. Purely informational since V8.21 (no routing effect).
+    function isWhaleGateActiveForTier(uint8 tierNum) external view returns (bool) {
+        return tierWhaleGateActive[tierNum];
     }
 
     // ─── Entry tracking helper ───────────────────────────────────────────────
@@ -839,7 +882,10 @@ contract TierRouter is Ownable2Step {
         highestTier        = memberHighestTier[member];
         referrer           = memberReferrer[member];
         doubleEntry        = memberOptions[member].doubleReentryEnabled || doubleEntryEnabled[member];
-        whaleGateEligible  = whaleGateActive && highestTier == 4;
+        // V8.21: no longer means "eligible to skip a tier" (that behavior is
+        // removed) -- just reports whether the member's next tier already
+        // has its whale-gate first-entry threshold tripped.
+        whaleGateEligible  = highestTier < MAX_TIERS && tierWhaleGateActive[highestTier + 1];
         autoUpgradeEnabled = !memberOptions[member].autoUpgradeDisabled;
         autoReentryEnabled = memberOptions[member].autoReentryEnabled;
         for (uint8 i = 0; i < MAX_TIERS; i++) {
@@ -955,6 +1001,22 @@ contract TierRouter is Ownable2Step {
         for (uint8 i = 0; i < MAX_TIERS; i++) {
             green[i] = tierVelocityGreen[i];
         }
+    }
+
+    /// @notice V8.21: Highest tier number (1-10) the system has organically
+    /// opened so far -- deployed (tierPairManagers set) AND velocity-green.
+    /// Used by StabilityFund to scale its target with how far the system has
+    /// progressed. Returns 0 if no tier is both deployed and open yet (should
+    /// not happen post-launch, since T1 is always deployed+green at
+    /// construction, but guarded for safety during partial setup).
+    function highestOpenTier() external view returns (uint8 tierNum) {
+        for (uint8 i = MAX_TIERS; i > 0; i--) {
+            uint8 idx = i - 1;
+            if (tierPairManagers[idx] != address(0) && tierVelocityGreen[idx]) {
+                return idx + 1;
+            }
+        }
+        return 0;
     }
 
 }

@@ -154,6 +154,16 @@ Both positions earn chain pay, referral overrides, and escrow independently.
 
 ## 7. Whale Gate
 
+> **REDESIGNED in V8.21.** The skip-ahead behavior described below (T4 members
+> jumping straight to T6, bypassing everyone still in T5's queue) is removed
+> per user feedback: whales must never jump past a tier's existing members,
+> only enter the same next tier through the normal queue. The tracker is now
+> per-tier (`tierFirstEntries`/`tierWhaleGateActive` mappings keyed by tier
+> number, all measured against the same shared `whaleGateThreshold`) and is
+> purely informational/eligibility-display now -- it no longer changes
+> routing. See `TierRouter.sol`'s `_checkTierFirstEntry()` and
+> `isWhaleGateActiveForTier()`. Original design kept below for history.
+
 - **Tracker:** `t5MemberCount` in TierRouter — increments each time a member first
   enters T5 (not on re-entries, only first-time T5 entry).
 - **Activation threshold:** 25 T5 first-time members.
@@ -618,6 +628,24 @@ _resolveDest guard prevents double-registration conflict.
 
 ## V8.1-4. Escrow Safety System
 
+> **SUPERSEDED as of V8.8 / fully retired V8.21.** Escrow balance tracking was
+> removed system-wide in V8.8 -- `escrowBalance[member]` and `escrowFloor[tierIndex]`
+> below were never wired to real state after that point, and the on-chain guard
+> that used them was deleted in V8.21 along with `escrowFloorMultiplier` itself.
+> Governance param id 3 (Escrow Floor Multiplier) is permanently retired and
+> blocked at `propose()` time. This section is kept for historical context only.
+>
+> The "Early Escrow Release (Penalty)" subsection below describes a second
+> dead mechanism in the same family: `earlyExitPenaltyBps` on
+> FigureEightMatrixV8 was stored and DAO-votable but never actually consumed
+> by any withdraw/cycle logic, since the escrow system it penalized was
+> already gone. V8.21 removed the field/setter/getter entirely and
+> permanently retired governance param id 10 (Early Exit Penalty BPS) at
+> `propose()` time -- same treatment as param id 3. **The real, working
+> early-exit penalty is CNOVATreasury's hardcoded, non-governable time-tiered
+> `redeemAtFloor()` schedule** (see CNOVATreasury section) -- that mechanism
+> was intentionally left untouched by this removal.
+
 ### Escrow Floor Guard
 
 Auto-upgrade toggle only fires when:
@@ -744,6 +772,28 @@ Separate contract. Zero connection to Treasury. Zero shared logic.
 - CNOVA vesting penalties do NOT go here (stay in CNOVA ecosystem)
 - DAO-votable penalty: 15%, 20%, 25%, 30%
 
+> **REDESIGNED in V8.21:** the interface sketch below predates `sfTarget` /
+> `healthBps()` entirely and is kept only for the historical layer-routing
+> context above. As of V8.21, `sfTarget()` is no longer a flat DAO-set
+> scalar -- it's a derived view that auto-scales with how far the system has
+> organically progressed: `tierEntryFees[idx] * sfTargetMultiplier[idx]` for
+> the current highest tier that TierRouter reports as open (deployed AND
+> velocity-green), via a new `TierRouter.highestOpenTier()` view. Default
+> multiplier schedule is 10x/20x/30x/40x/50x/60x/70x/80x/90x/100x for T1-T10
+> (owner-tunable per tier via `setSfTargetMultiplier(tierIndex, multiplier)`,
+> NOT a DAO governance param -- consistent with tier entry fees and matrix
+> wiring, which are also owner-only). The old flat manual value (DAO-governed
+> via `setSFTarget()`, PARAM_SF_TARGET, unchanged numbering) still exists as
+> `_manualSfTarget` and is the fallback whenever auto-mode is off
+> (`setSfTargetAutoMode(false)`, owner-only kill switch), `tierRouter` isn't
+> wired, or the current tier has no entry fee registered on StabilityFund
+> itself via `setTierFee()`. The `sfTarget()` getter's external ABI shape
+> (`function sfTarget() view returns (uint256)`) is unchanged, so every
+> existing reader -- frontend, `system_keeper.js`, tests -- keeps working
+> without modification. See `StabilityFund.sol`'s `sfTarget()` function for
+> full semantics and `test/V8Governance.test.js`'s "V8.21 — sfTarget() auto-
+> scales with the highest open tier" suite for behavioral coverage.
+
 ### StabilityFund.sol Interface
 
 ```solidity
@@ -813,7 +863,7 @@ not in allowed set. No freeform values — prevents governance attacks.
 | slowModeThreshold      | 60, 85, 120 days                  | 85      |
 | deflationThreshold     | 120, 180, 240 days                | 180     |
 | expansionThreshold     | 14, 21, 30 days                   | 21      |
-| escrowFloorMultiplier  | 1.1×, 1.2×, 1.5×, 2.0×           | 1.2×   |
+| escrowFloorMultiplier  | RETIRED V8.21 -- see note above   | n/a     |
 | treasuryReserveFloor   | 10%, 25%, 40%                     | 25%     |
 | slowModeDiscountBPS    | 1000, 2000, 3000                  | 2000    |
 | deflationDiscountBPS   | 3000, 5000, 7000                  | 5000    |
@@ -821,7 +871,7 @@ not in allowed set. No freeform values — prevents governance attacks.
 | referralCarveBPS (L2)  | 25, 50, 75, 100                   | 50      |
 | withdrawalFeePct (L3)  | 0.5%, 1.0%, 1.5%, 3.0%           | 1.5%    |
 | devopsCarve (L4)       | 25, 50, 75, 100                   | 50      |
-| earlyExitPenaltyBPS    | 1500, 2000, 2500, 3000            | 2000    |
+| earlyExitPenaltyBPS    | RETIRED V8.21 -- see note above   | n/a     |
 
 ---
 

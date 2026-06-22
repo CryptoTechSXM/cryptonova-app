@@ -43,6 +43,15 @@ interface IFigureEightMatrixV8PM {
     function setChainNext(address next) external;
     function setChainAuthorized(address caller, bool authorized) external;
     function lastRotationTimestamp() external view returns (uint256);
+    /// @notice V8.21: governance fee broadcast target -- see setWithdrawalFeeBps
+    ///         below. FigureEightMatrixV8 already accepts calls from its own
+    ///         pairManager address for this setter.
+    ///         (Early Exit Penalty BPS was going to get an equivalent broadcast
+    ///         setter here too, but that param was retired entirely instead --
+    ///         it was stored and DAO-votable but never actually consumed by any
+    ///         withdraw/cycle logic. See FigureEightMatrixV8.sol/V8Governance.sol
+    ///         PARAM_EARLY_EXIT_PENALTY_BPS retirement notes.)
+    function setWithdrawalFeeBps(uint256 bps) external;
 }
 
 contract PairManagerV8 is Ownable2Step {
@@ -66,6 +75,22 @@ contract PairManagerV8 is Ownable2Step {
 
     address public tierRouter;      // set post-deploy via setTierRouter()
 
+    // ─── V8.21: Governance co-control ─────────────────────────────────────────
+    /// @notice DAO governance contract. Co-governs the broadcast fee setters
+    ///         below alongside owner -- neither replaces the other (owner
+    ///         keeps emergency backstop), same pattern as every other V8.20+
+    ///         governance-wired contract.
+    address public governance;
+
+    /// @notice V8.21: last value broadcast via setWithdrawalFeeBps. 0 means
+    ///         "never broadcast yet" (the allowed-value menu on
+    ///         FigureEightMatrixV8 starts at >0, so 0 is a safe sentinel) --
+    ///         addPair() uses this to auto-stamp newly added pairs with
+    ///         whatever the DAO most recently set, instead of leaving them on
+    ///         FigureEightMatrixV8's hardcoded constructor default while every
+    ///         other pair in the tier has moved on.
+    uint256 public lastWithdrawalFeeBps;
+
     // ─── Circular chain (intra-tier multi-pair) ───────────────────────────────
     address public chainHead;       // first pair's Matrix A
     address public lastChainB;      // most recent B-type matrix
@@ -78,6 +103,9 @@ contract PairManagerV8 is Ownable2Step {
     event PairActivated(uint256 indexed pairId);
     event MemberRouted(address indexed member, uint256 indexed pairId, address matrixA);
     event ExpansionRecommended(uint256 pairId, uint256 combinedPct);
+    // V8.21
+    event GovernanceSet(address indexed governance);
+    event WithdrawalFeeBpsBroadcast(uint256 bps, uint256 pairsUpdated);
 
     // ─── Constructor ──────────────────────────────────────────────────────────
 
@@ -97,6 +125,39 @@ contract PairManagerV8 is Ownable2Step {
     function setExpandThreshold(uint256 _bps) external onlyOwner {
         require(_bps > 0 && _bps <= BPS_DENOM, "PM8: invalid bps");
         expandThresholdBps = _bps;
+    }
+
+    /// @notice V8.21: owner keeps emergency backstop, governance address co-governs.
+    modifier onlyOwnerOrGovernance() {
+        require(msg.sender == owner() || msg.sender == governance, "PM8: not authorized");
+        _;
+    }
+
+    /// @notice V8.21: wire the V8Governance contract so DAO-passed proposals can execute.
+    function setGovernance(address _gov) external onlyOwner {
+        require(_gov != address(0), "PM8: zero governance");
+        governance = _gov;
+        emit GovernanceSet(_gov);
+    }
+
+    /// @notice V8.21: broadcast a withdrawal-fee change to EVERY pair this
+    ///         PairManager has ever added (not just the active one) -- fixes
+    ///         the bug where param 9 (Withdrawal Fee BPS) had no real
+    ///         multi-pair-aware target: a single FigureEightMatrixV8 instance
+    ///         only represents ONE pair within a tier, so updating just that
+    ///         one left every other pair (and any future ones, pre-fix) on
+    ///         a stale fee. This is the DAO-governance entry point for param
+    ///         9 -- governance.html targets THIS contract (one per tier), not
+    ///         TierRouter (which never implemented this setter at all) or a
+    ///         single matrix instance.
+    function setWithdrawalFeeBps(uint256 bps) external onlyOwnerOrGovernance {
+        lastWithdrawalFeeBps = bps;
+        uint256 n = pairs.length;
+        for (uint256 i = 0; i < n; i++) {
+            IFigureEightMatrixV8PM(pairs[i].matrixA).setWithdrawalFeeBps(bps);
+            IFigureEightMatrixV8PM(pairs[i].matrixB).setWithdrawalFeeBps(bps);
+        }
+        emit WithdrawalFeeBpsBroadcast(bps, n);
     }
 
     // ─── Registration ─────────────────────────────────────────────────────────
@@ -222,6 +283,17 @@ contract PairManagerV8 is Ownable2Step {
         }
 
         activePairIndex = pairId;
+
+        // V8.21: stamp the new pair with whatever fee values the DAO has most
+        // recently broadcast, so it doesn't silently sit on
+        // FigureEightMatrixV8's hardcoded constructor default while every
+        // other pair in this tier has already moved on. 0 means "never
+        // broadcast yet" -- leave the new pair on its own constructor default
+        // in that case (matches pre-V8.21 behavior exactly).
+        if (lastWithdrawalFeeBps > 0) {
+            IFigureEightMatrixV8PM(matrixA).setWithdrawalFeeBps(lastWithdrawalFeeBps);
+            IFigureEightMatrixV8PM(matrixB).setWithdrawalFeeBps(lastWithdrawalFeeBps);
+        }
 
         emit PairAdded(pairId, matrixA, matrixB);
         emit PairActivated(pairId);

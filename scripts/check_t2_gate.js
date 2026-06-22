@@ -34,7 +34,7 @@ const TIER_ROUTER_ABI = [
   'function getVelocityGates() external view returns (bool[7] memory green)',
   'function tierEntryFees(uint8) external view returns (uint256)',
   'function autoUpgradeCycleThreshold() external view returns (uint256)',
-  'function escrowFloorMultiplier() external view returns (uint256)',
+  // V8.21: escrowFloorMultiplier() removed -- Guard f was deleted, the param was inert.
   'function memberOptions(address) external view returns (bool autoUpgradeDisabled)',
   'function tierPairManagers(uint8) external view returns (address)',
   'function tierMatrixAAddr(uint8) external view returns (address)',
@@ -113,11 +113,10 @@ async function main() {
   }
 
   // ── 3. T2 velocity gate ───────────────────────────────────────────────────
-  const [gates, t2Fee, cycleThreshold, escrowFloor] = await Promise.all([
+  const [gates, t2Fee, cycleThreshold] = await Promise.all([
     tierRouter.getVelocityGates(),
     tierRouter.tierEntryFees(1),
     tierRouter.autoUpgradeCycleThreshold(),
-    tierRouter.escrowFloorMultiplier(),
   ]);
   const t2GateOpen = gates[1];
   console.log(`\n── Velocity Gates (all tiers) ────────────────`);
@@ -127,7 +126,8 @@ async function main() {
   console.log(`\n  T2 gate (gates[1])   : ${t2GateOpen ? '✅ OPEN' : '❌ CLOSED ← ROOT CAUSE'}`);
   console.log(`  T2 entry fee         : $${fmt6(t2Fee)} USDC`);
   console.log(`  autoUpgradeCycleThr  : ${cycleThreshold} (guard b early-phase boundary)`);
-  console.log(`  escrowFloorMult      : ${escrowFloor} (guard f: need ${escrowFloor}% of next fee in withdrawable)`);
+  // V8.21: Guard f (escrowFloorMultiplier) was deleted -- it never had a real
+  // on-chain effect (escrow is always 0), so there's nothing left to report here.
 
   // ── 4. T2 MatA occupancy ──────────────────────────────────────────────────
   const [t2Occ, t2Size] = await Promise.all([

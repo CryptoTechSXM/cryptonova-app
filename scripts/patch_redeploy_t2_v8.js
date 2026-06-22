@@ -75,7 +75,16 @@ async function main() {
   const treasury     = await ethers.getContractAt("CNOVATreasury",   treasuryAddr, deployer);
   const matFactory   = await ethers.getContractAt("MatrixFactory",   factoryAddr,  deployer);
 
-  const F8V8 = await ethers.getContractFactory("FigureEightMatrixV8", deployer);
+  // V8.21: core logic now lives in MatrixLogicLib -- deploy + link first.
+  const MatrixLib    = await ethers.getContractFactory("MatrixLogicLib", deployer);
+  const matrixLib    = await MatrixLib.deploy();
+  await matrixLib.waitForDeployment();
+  const matrixLibAddr = await matrixLib.getAddress();
+
+  const F8V8 = await ethers.getContractFactory("FigureEightMatrixV8", {
+    libraries: { MatrixLogicLib: matrixLibAddr },
+    signer: deployer,
+  });
   const PMV8 = await ethers.getContractFactory("PairManagerV8",       deployer);
 
   // DeployParams struct (mirrors Solidity struct field order)

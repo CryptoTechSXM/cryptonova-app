@@ -141,7 +141,17 @@ async function main() {
 
   // ── Deploy MatA + MatB ────────────────────────────────────────────────────
   sep(`T${ADD_TIER} Matrices`);
-  const F8V8    = await ethers.getContractFactory("FigureEightMatrixV8", deployer);
+  // V8.21: core logic now lives in MatrixLogicLib -- deploy + link first.
+  const MatrixLib    = await ethers.getContractFactory("MatrixLogicLib", deployer);
+  const matrixLib    = await MatrixLib.deploy();
+  await matrixLib.waitForDeployment();
+  const matrixLibAddr = await matrixLib.getAddress();
+  console.log(`  ✓  MatrixLogicLib                 ${matrixLibAddr}`);
+
+  const F8V8    = await ethers.getContractFactory("FigureEightMatrixV8", {
+    libraries: { MatrixLogicLib: matrixLibAddr },
+    signer: deployer,
+  });
   const splits  = tierSplits(ADD_TIER);
   const cpBps   = tierChainPay(ADD_TIER);
 

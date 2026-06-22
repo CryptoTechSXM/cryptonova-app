@@ -13,6 +13,12 @@
  *   6. lastActivityTime NOT in _credit() (gas regression guard)
  *   7. TierRouter ABI uses uint256 for tierEntryFees (not uint8)
  *
+ * NOTE: this header list is not exhaustive — many checks have been added since
+ * without updating the count above. Notably (V8.22): every SPLITS_T*_T* BPS
+ * array is now parsed and arithmetically verified to sum to 10000, and every
+ * CHAIN_PAY_T*_T* sub-split is verified to sum to its tier band's chainBps —
+ * not just string-matched against the T1-T3 array, as before.
+ *
  * Run: npx hardhat run scripts/predeploy_check.js
  *  (no network needed — reads files only)
  */
@@ -54,7 +60,7 @@ for (const v of OPTIONAL_WALLETS) {
   else ok(`${v} not set — will default to deployer address`);
 }
 
-const ADDR_FILE = process.env.ADDRESSES_FILE || "deployed_addresses_v8_20.json";
+const ADDR_FILE = process.env.ADDRESSES_FILE || "deployed_addresses_v8_21.json";
 console.log(`  ℹ  ADDRESSES_FILE = ${ADDR_FILE}`);
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -161,17 +167,22 @@ if (!emDashFound) ok("No em-dashes found in any .sol file");
 // ─────────────────────────────────────────────────────────────────────────────
 sep("FigureEightMatrixV8.sol — gas regression guard");
 const matTxt = read("contracts/FigureEightMatrixV8.sol");
-if (matTxt) {
+// V8.21: _credit() moved into MatrixLogicLib.sol along with the rest of the
+// core logic -- check there if it's not found inline in the matrix contract.
+const libTxt = read("contracts/MatrixLogicLib.sol");
+const creditSourceTxt = (matTxt && matTxt.includes("function _credit(")) ? matTxt : libTxt;
+const creditSourceLabel = (matTxt && matTxt.includes("function _credit(")) ? "FigureEightMatrixV8.sol" : "MatrixLogicLib.sol";
+if (creditSourceTxt) {
   // Find the _credit function body
-  const creditMatch = matTxt.match(/function _credit\b[\s\S]*?^    \}/m);
+  const creditMatch = creditSourceTxt.match(/function _credit\b[\s\S]*?^    \}/m);
   if (!creditMatch) {
     // Try a looser match
-    const idx = matTxt.indexOf("function _credit(");
+    const idx = creditSourceTxt.indexOf("function _credit(");
     if (idx === -1) {
-      fail("Could not find _credit() function in FigureEightMatrixV8.sol");
+      fail(`Could not find _credit() function in FigureEightMatrixV8.sol or MatrixLogicLib.sol`);
     } else {
       // Look at the next 30 lines after _credit
-      const snippet = matTxt.substring(idx, idx + 1500);
+      const snippet = creditSourceTxt.substring(idx, idx + 1500);
       // Only flag actual assignments (= block.timestamp), not comments
       const assignMatch = snippet.match(/lastActivityTime\s*\[\s*\w+\s*\]\s*=/);
       if (assignMatch) {
@@ -255,11 +266,11 @@ if (deployText) {
     fail("Velocity gate closure (setTierVelocityGreen + CLOSED) not found in deploy_v8.js");
   }
 
-  // Check ADDRESSES_FILE default is v8_20
-  if (deployText.includes("deployed_addresses_v8_20.json")) {
-    ok("deploy_v8.js output file: deployed_addresses_v8_20.json");
+  // Check ADDRESSES_FILE default is v8_21
+  if (deployText.includes("deployed_addresses_v8_21.json")) {
+    ok("deploy_v8.js output file: deployed_addresses_v8_21.json");
   } else {
-    fail("deploy_v8.js does not output to deployed_addresses_v8_20.json");
+    fail("deploy_v8.js does not output to deployed_addresses_v8_21.json");
   }
 
   // Chainlink gas limit should be 6M+
@@ -384,17 +395,17 @@ if (bigfillText) {
 // ─────────────────────────────────────────────────────────────────────────────
 // 13. deployed_addresses_v8_13.json — exists and has expected keys
 // ─────────────────────────────────────────────────────────────────────────────
-sep("deployed_addresses_v8_20.json — presence check");
+sep("deployed_addresses_v8_21.json — presence check");
 {
-  const addrFile = path.join(ROOT, "deployed_addresses_v8_20.json");
+  const addrFile = path.join(ROOT, "deployed_addresses_v8_21.json");
   if (!fs.existsSync(addrFile)) {
-    console.log("  ℹ  deployed_addresses_v8_20.json not found — run deploy_v8.js first");
+    console.log("  ℹ  deployed_addresses_v8_21.json not found — run deploy_v8.js first");
   } else {
     const addrData = JSON.parse(fs.readFileSync(addrFile, "utf8"));
     const required = ["tierRouter", "stabilityFund", "matrixKeeper"];
     for (const key of required) {
       if (addrData[key]) ok(`addresses: ${key} = ${addrData[key]}`);
-      else               fail(`addresses: ${key} missing from deployed_addresses_v8_20.json`);
+      else               fail(`addresses: ${key} missing from deployed_addresses_v8_21.json`);
     }
     // Check tiers 1-7 present
     const tiers = addrData.tiers || {};
@@ -428,25 +439,36 @@ if (matTxt) {
     fail("event MemberEvicted NOT found — add V8.10 event to FigureEightMatrixV8.sol");
   }
 
-  // parkedAt mapping
-  if (matTxt.includes("mapping(address => uint256) public parkedAt")) {
-    ok("parkedAt[] mapping found — grace-period clock storage present");
+  // parkedAt mapping -- V8.21: lives inside MatrixState in MatrixLogicLib.sol
+  // (no "public" keyword there since it's a struct field, not a top-level
+  // contract storage var; the matrix contract exposes it via an explicit
+  // parkedAt(address) getter instead). Accept either form.
+  if (
+    matTxt.includes("mapping(address => uint256) public parkedAt") ||
+    matTxt.includes("function parkedAt(address") ||
+    (libTxt && libTxt.includes("mapping(address => uint256) parkedAt"))
+  ) {
+    ok("parkedAt[] storage found — grace-period clock storage present");
   } else {
-    fail("parkedAt[] mapping NOT found — add V8.10 parkedAt storage to FigureEightMatrixV8.sol");
+    fail("parkedAt[] storage NOT found — add V8.10 parkedAt storage (FigureEightMatrixV8.sol or MatrixLogicLib.sol)");
   }
 
   // totalWithdrawn in Member struct
-  if (matTxt.includes("totalWithdrawn")) {
+  if (matTxt.includes("totalWithdrawn") || (libTxt && libTxt.includes("totalWithdrawn"))) {
     ok("totalWithdrawn field found in Member struct");
   } else {
     fail("totalWithdrawn NOT found — add V8.10 drain-tracking field to Member struct");
   }
 
-  // Withdrawal reserve check in withdraw()
-  if (matTxt.includes("must keep entry fee reserve while active")) {
-    ok("Withdrawal reserve guard found in withdraw()");
+  // Withdrawal reserve check in withdraw() -- V8.21: lives in
+  // MatrixLogicLib.withdrawCore() now, not inline in FigureEightMatrixV8.sol.
+  if (
+    matTxt.includes("must keep entry fee reserve while active") ||
+    (libTxt && libTxt.includes("must keep entry fee reserve while active"))
+  ) {
+    ok("Withdrawal reserve guard found (withdraw()/withdrawCore())");
   } else {
-    fail("Withdrawal reserve guard NOT found — add 'must keep entry fee reserve while active' check to withdraw()");
+    fail("Withdrawal reserve guard NOT found — add 'must keep entry fee reserve while active' check to withdraw()/withdrawCore()");
   }
 }
 
@@ -567,12 +589,65 @@ if (deployTxt) {
     fail("deploy_v8.js: tierRouter.setTierMatrices() MISSING — manualUpgrade will always revert 'cross to MatB first' because tierMatrixBAddr stays address(0)");
   }
 
-  // V8.19: 10-field SplitConfig — pool=4400, SF=1200, LQ=200 (T1-T3) — June 2026
-  // SPLITS_T1_T3 = [1000, 1700, 4400, 1000, 1200, 200, 100, 100, 100, 200] sum=10000
-  if (deployTxt.includes("4400,    1000, 1200,  200,  100, 100,  100,  200")) {
-    ok("deploy_v8.js: V8.19 BPS confirmed — pool=4400, SF=1200, LQ=200, chain=1700 (T1-T3), 10 fields");
-  } else {
-    fail("deploy_v8.js: V8.19 BPS NOT found — expected pool=4400 SF=1200 LQ=200 in SPLITS_T1_T3 (10-field). Array: [1000,1700,4400,1000,1200,200,100,100,100,200]");
+  // V8.19/V8.22: 10-field SplitConfig — verify ALL FOUR tier-band arrays actually
+  // sum to 10000 BPS, and that each CHAIN_PAY_* sub-split sums to its band's
+  // chainBps. (Previously this only string-matched the T1-T3 array literal — it
+  // never caught a bad edit to SPLITS_T4_T5/T6_T7/T8_T10. The on-chain
+  // constructor's require(sum == 10000) would still block a bad deploy, but only
+  // after spending gas and failing loudly mid-deploy — this catches it for free,
+  // before any transaction is sent.)
+  function parseBpsArray(label) {
+    const re = new RegExp(`const\\s+${label}\\s*=\\s*\\[([^\\]]+)\\]`);
+    const m = deployTxt.match(re);
+    if (!m) return null;
+    const nums = m[1].split(",").map(s => s.trim()).filter(Boolean).map(Number);
+    return nums.some(Number.isNaN) ? null : nums;
+  }
+
+  const SPLIT_BANDS = ["SPLITS_T1_T3", "SPLITS_T4_T5", "SPLITS_T6_T7", "SPLITS_T8_T10"];
+  const splitArrays = {};
+  for (const band of SPLIT_BANDS) {
+    const arr = parseBpsArray(band);
+    splitArrays[band] = arr;
+    if (!arr) {
+      fail(`deploy_v8.js: ${band} array not found or unparseable — cannot verify BPS sum`);
+      continue;
+    }
+    if (arr.length !== 10) {
+      fail(`deploy_v8.js: ${band} has ${arr.length} fields, expected 10 (l1,chain,pool,treasury,sf,dev,ops,cw,bbr,lq) — [${arr.join(",")}]`);
+      continue;
+    }
+    const sum = arr.reduce((a, b) => a + b, 0);
+    if (sum === 10000) ok(`deploy_v8.js: ${band} sums to 10000 BPS — [${arr.join(",")}]`);
+    else fail(`deploy_v8.js: ${band} sums to ${sum} BPS, NOT 10000 — [${arr.join(",")}]`);
+  }
+
+  // chainBps is field index 1 in the 10-field SplitConfig array order above.
+  const CHAIN_BANDS = [
+    { name: "CHAIN_PAY_T1_T3",  splitBands: ["SPLITS_T1_T3"] },
+    { name: "CHAIN_PAY_T4_T5",  splitBands: ["SPLITS_T4_T5"] },
+    // T6-T7 and T8-T10 are documented to share the same 17.5% chain rate, so
+    // CHAIN_PAY_T6_T10 must match the chainBps of BOTH split bands.
+    { name: "CHAIN_PAY_T6_T10", splitBands: ["SPLITS_T6_T7", "SPLITS_T8_T10"] },
+  ];
+  for (const { name, splitBands } of CHAIN_BANDS) {
+    const arr = parseBpsArray(name);
+    if (!arr) { fail(`deploy_v8.js: ${name} array not found or unparseable — cannot verify chain-pay sum`); continue; }
+    if (arr.length !== 6) {
+      fail(`deploy_v8.js: ${name} has ${arr.length} levels, expected 6 — [${arr.join(",")}]`);
+      continue;
+    }
+    const sum = arr.reduce((a, b) => a + b, 0);
+    for (const splitBand of splitBands) {
+      const expected = splitArrays[splitBand] ? splitArrays[splitBand][1] : null;
+      if (expected == null) {
+        fail(`deploy_v8.js: cannot verify ${name} against ${splitBand} — chainBps unknown`);
+      } else if (sum === expected) {
+        ok(`deploy_v8.js: ${name} sums to ${sum} BPS, matches ${splitBand} chainBps=${expected}`);
+      } else {
+        fail(`deploy_v8.js: ${name} sums to ${sum} BPS but ${splitBand} chainBps=${expected} — mismatch! [${arr.join(",")}]`);
+      }
+    }
   }
 
   // V8.19: liquidityReserve wiring in per-matrix loop
@@ -629,22 +704,70 @@ if (deployTxt) {
   } else {
     fail("TierRouter.sol: setGovernance() MISSING — governance proposals will revert on execute()");
   }
-  if (f8v8TxtV20 && f8v8TxtV20.includes("msg.sender == governance")) {
-    ok("FigureEightMatrixV8.sol: governance check found on fee setters (V8.20)");
+  // V8.21: governance field now lives inside the MatrixState struct
+  // (_state.governance), not a bare top-level `governance` storage var.
+  if (
+    f8v8TxtV20 && (
+      f8v8TxtV20.includes("msg.sender == governance") ||
+      f8v8TxtV20.includes("msg.sender == _state.governance")
+    )
+  ) {
+    ok("FigureEightMatrixV8.sol: governance check found on fee setter (V8.20)");
   } else {
-    fail("FigureEightMatrixV8.sol: governance check MISSING on setWithdrawalFeeBps/setEarlyExitPenaltyBps");
+    fail("FigureEightMatrixV8.sol: governance check MISSING on setWithdrawalFeeBps");
   }
 
-  // V8.20: SF rescue ladder must be governable, not hardcoded
-  if (keeperTxtV20 && keeperTxtV20.includes("function setSfRescueLadder(")) {
-    ok("MatrixKeeper.sol: setSfRescueLadder() found — SF rescue ladder is governable (V8.20)");
+  // V8.21: PARAM_EARLY_EXIT_PENALTY_BPS (id 10) was retired entirely -- the
+  // field, setter, and getter were all removed from FigureEightMatrixV8.sol
+  // because they were stored/DAO-votable but never consumed by any withdraw/
+  // cycle logic. Guard against ever shipping a deploy where the dead function
+  // somehow reappears (e.g. a bad merge) or where V8Governance still thinks
+  // id 10 is a live target.
+  if (f8v8TxtV20 && !f8v8TxtV20.includes("function setEarlyExitPenaltyBps(")) {
+    ok("FigureEightMatrixV8.sol: setEarlyExitPenaltyBps() confirmed absent — param #10 stays retired (V8.21)");
   } else {
-    fail("MatrixKeeper.sol: setSfRescueLadder() MISSING — SF rescue ladder still hardcoded");
+    fail("FigureEightMatrixV8.sol: setEarlyExitPenaltyBps() FOUND — param #10 was supposed to be retired in V8.21");
   }
-  if (govTxtV20 && govTxtV20.includes("PARAM_SF_RESCUE_LADDER") && govTxtV20.includes("function proposeLadder(")) {
-    ok("V8Governance.sol: PARAM_SF_RESCUE_LADDER + proposeLadder() found (V8.20)");
+  if (govTxtV20 && govTxtV20.includes("if (paramId == PARAM_EARLY_EXIT_PENALTY_BPS) revert")) {
+    ok("V8Governance.sol: propose() permanently rejects retired PARAM_EARLY_EXIT_PENALTY_BPS (id 10)");
   } else {
-    fail("V8Governance.sol: PARAM_SF_RESCUE_LADDER or proposeLadder() MISSING");
+    fail("V8Governance.sol: propose() does NOT reject PARAM_EARLY_EXIT_PENALTY_BPS — retired id 10 could still be proposed");
+  }
+
+  // V8.21: PARAM_WITHDRAWAL_FEE_BPS (id 9) targets PairManagerV8 (one per tier,
+  // broadcasts to every pair it has ever added) instead of a single matrix
+  // instance -- a tier can have multiple pairs via addPair() during
+  // auto-expansion, and fees are stored per-instance, so a single-matrix
+  // target would leave every other pair stale.
+  const pmv8TxtV21 = read("contracts/PairManagerV8.sol");
+  if (pmv8TxtV21 && pmv8TxtV21.includes("function setGovernance(") && pmv8TxtV21.includes("function setWithdrawalFeeBps(")) {
+    ok("PairManagerV8.sol: setGovernance() + broadcast setWithdrawalFeeBps() found (V8.21 param #9 target fix)");
+  } else {
+    fail("PairManagerV8.sol: setGovernance() or broadcast setWithdrawalFeeBps() MISSING — param #9 proposals will revert");
+  }
+  if (deployTxt.includes("pm.setGovernance(govAddr)")) {
+    ok("deploy_v8.js: per-tier PairManagerV8.setGovernance(govAddr) loop found (V8.21)");
+  } else {
+    fail("deploy_v8.js: per-tier PairManagerV8.setGovernance(govAddr) loop MISSING — param #9 proposals will revert with \"PM8: not authorized\"");
+  }
+
+  // V8.20: SF rescue ladder must be governable, not hardcoded.
+  // V8.21: free-form setSfRescueLadder(uint256[],uint256[]) + proposeLadder()
+  // were replaced by 4 curated presets -- setSfRescueLadderPreset(uint8) plus
+  // a normal scalar PARAM_SF_RESCUE_LADDER proposal (no more bespoke
+  // proposeLadder() path). This check was stale until now (still looking for
+  // the pre-V8.21 names, so it always false-failed even though the preset
+  // redesign — and its full governance lifecycle — was already shipped and
+  // tested in test/V8Governance.test.js).
+  if (keeperTxtV20 && keeperTxtV20.includes("function setSfRescueLadderPreset(")) {
+    ok("MatrixKeeper.sol: setSfRescueLadderPreset() found — SF rescue ladder is governable via curated presets (V8.21)");
+  } else {
+    fail("MatrixKeeper.sol: setSfRescueLadderPreset() MISSING — SF rescue ladder still hardcoded");
+  }
+  if (govTxtV20 && govTxtV20.includes("PARAM_SF_RESCUE_LADDER")) {
+    ok("V8Governance.sol: PARAM_SF_RESCUE_LADDER found (V8.21: normal scalar param, no bespoke proposeLadder())");
+  } else {
+    fail("V8Governance.sol: PARAM_SF_RESCUE_LADDER MISSING");
   }
 
   // V8.20: deploy_v8.js must actually wire setGovernance on all three contract types

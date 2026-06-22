@@ -71,7 +71,14 @@ async function deployV8Fixture() {
   );
 
   // ── 3. Deploy matrices  (V8.1: struct args) ────────────────────────────────
-  const FM = await ethers.getContractFactory("FigureEightMatrixV8");
+  // V8.21: core logic now lives in MatrixLogicLib -- deploy + link before
+  // getting the FigureEightMatrixV8 factory.
+  const MatrixLib  = await ethers.getContractFactory("MatrixLogicLib");
+  const matrixLib  = await MatrixLib.deploy();
+  await matrixLib.waitForDeployment();
+  const FM = await ethers.getContractFactory("FigureEightMatrixV8", {
+    libraries: { MatrixLogicLib: await matrixLib.getAddress() },
+  });
 
   const deployMatrix = async (isA, tierIdx, fee) => FM.deploy(
     // DeployParams struct
@@ -167,12 +174,49 @@ async function deployV8Fixture() {
   };
 
   return {
-    usdc, cnova, treasury, tierRouter,
+    usdc, cnova, treasury, tierRouter, matrixLib,
     matA, matB, matA2, matB2, pm1, pm2,
     deployer, devOps, accountOne, admin,
     w1, s0, s1, s2, s3, s4, s5, s6, s7, s8, s9, s10, s11, s12, s13,
     MINTER_ROLE, reg, fc,
   };
+}
+
+// ─── Helper: deploy a THIRD matrix pair for T1, for multi-pair broadcast tests ──
+// V8.21: PairManagerV8.setWithdrawalFeeBps/setEarlyExitPenaltyBps must reach
+// EVERY pair a tier has ever added, not just the first one -- this helper
+// builds a second T1 pair (distinct contracts, same tierIdx/fee as matA/matB)
+// so tests can add it to pm1 via addPair() and verify the broadcast actually
+// crosses pair boundaries.
+async function deployExtraT1Pair({ usdc, cnova, treasury, devOps, accountOne, admin, matrixLib, pm1, tierRouter }) {
+  const FM = await ethers.getContractFactory("FigureEightMatrixV8", {
+    libraries: { MatrixLogicLib: await matrixLib.getAddress() },
+  });
+  const deployParams = {
+    usdc:       await usdc.getAddress(),
+    cnova:      await cnova.getAddress(),
+    treasury:   await treasury.getAddress(),
+    devWallet:  devOps.address,
+    opsWallet:  devOps.address,
+    accountOne: accountOne.address,
+    admin:      admin.address,
+  };
+  const matA3 = await FM.deploy(deployParams, T1_FEE, MSIZE, true,  0, SPLITS, CHAIN_BPS);
+  const matB3 = await FM.deploy(deployParams, T1_FEE, MSIZE, false, 0, SPLITS, CHAIN_BPS);
+  await matA3.connect(admin).setPartner(await matB3.getAddress());
+  await matB3.connect(admin).setPartner(await matA3.getAddress());
+  // Wire pairManager + tierRouter exactly like the main fixture does for
+  // matA/matB before they're added to pm1 -- without this, PairManagerV8.
+  // addPair()'s internal setChainAuthorized() call on the new pair reverts
+  // with "F8V8: not chain admin" (pm1 isn't owner/pairManager/tierRouter on
+  // a matrix that's never been told pm1 IS its pairManager).
+  const pm1Addr = await pm1.getAddress();
+  const trAddr  = await tierRouter.getAddress();
+  await matA3.connect(admin).setPairManager(pm1Addr);
+  await matB3.connect(admin).setPairManager(pm1Addr);
+  await matA3.connect(admin).setTierRouter(trAddr);
+  await matB3.connect(admin).setTierRouter(trAddr);
+  return { matA3, matB3 };
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -1030,6 +1074,214 @@ describe("V8.16 — topUpAndCross: member self-rescue from parked queue", functi
         matA.connect(admin).topUpAndCross(s0.address)
       ).to.be.revertedWith("F8V8: not parked");
     }
+  });
+
+});
+
+// =============================================================================
+// SUITE 9 — V8.21 Whale Gate redesign: per-tier tracking, no skip-ahead
+// =============================================================================
+describe("V8.21 — Whale Gate: per-tier first-entry tracking (shared threshold)", function () {
+
+  it("isWhaleGateActiveForTier starts false for every tier before any registrations", async function () {
+    const { tierRouter } = await loadFixture(deployV8Fixture);
+    expect(await tierRouter.isWhaleGateActiveForTier(1)).to.be.false;
+    expect(await tierRouter.isWhaleGateActiveForTier(2)).to.be.false;
+    expect(await tierRouter.tierFirstEntries(1)).to.equal(0n);
+  });
+
+  it("tierFirstEntries(1) increments once per distinct first-time T1 registration", async function () {
+    const { tierRouter, w1, s0, s1, s2, reg } = await loadFixture(deployV8Fixture);
+
+    await reg(w1, ethers.ZeroAddress);
+    expect(await tierRouter.tierFirstEntries(1)).to.equal(1n);
+
+    await reg(s0, w1.address);
+    expect(await tierRouter.tierFirstEntries(1)).to.equal(2n);
+
+    await reg(s1, w1.address);
+    await reg(s2, w1.address);
+    expect(await tierRouter.tierFirstEntries(1)).to.equal(4n);
+  });
+
+  it("trips tierWhaleGateActive(1) exactly at the shared threshold, emits per-tier event, and leaves tier 2 untouched", async function () {
+    const {
+      tierRouter, admin,
+      w1, s0, s1, s2, s3, s4, s5, s6, s7, s8,
+      reg,
+    } = await loadFixture(deployV8Fixture);
+
+    // Lower the shared threshold to the minimum allowed value (10) so the test
+    // doesn't need 25 distinct wallets.
+    await tierRouter.connect(admin).setWhaleGateThreshold(10);
+
+    const first9 = [w1, s0, s1, s2, s3, s4, s5, s6, s7];
+
+    // First 9 distinct T1 registrations -- gate must still be closed.
+    await reg(first9[0], ethers.ZeroAddress);
+    for (let i = 1; i < first9.length; i++) {
+      await reg(first9[i], first9[0].address);
+    }
+    expect(await tierRouter.tierFirstEntries(1)).to.equal(9n);
+    expect(await tierRouter.isWhaleGateActiveForTier(1)).to.be.false;
+
+    // 10th distinct member trips it.
+    await expect(reg(s8, first9[0].address))
+      .to.emit(tierRouter, "WhaleGateActivated")
+      .withArgs(1, 10n);
+
+    expect(await tierRouter.tierFirstEntries(1)).to.equal(10n);
+    expect(await tierRouter.isWhaleGateActiveForTier(1)).to.be.true;
+
+    // Tier 2's gate must be completely independent -- nobody has reached T2 yet.
+    expect(await tierRouter.tierFirstEntries(2)).to.equal(0n);
+    expect(await tierRouter.isWhaleGateActiveForTier(2)).to.be.false;
+  });
+
+  it("re-registering the same member never double-counts toward tierFirstEntries", async function () {
+    const { tierRouter, w1, reg } = await loadFixture(deployV8Fixture);
+
+    await reg(w1, ethers.ZeroAddress);
+    expect(await tierRouter.tierFirstEntries(1)).to.equal(1n);
+    expect(await tierRouter.memberHighestTier(w1.address)).to.equal(1);
+
+    // Duplicate registration is blocked at the TR: already joined guard, which
+    // is the only path that would re-invoke _checkTierFirstEntry(w1, 1) --
+    // confirms the counter can't be inflated by replaying the same member.
+    await expect(
+      tierRouter.connect(w1).register(ethers.ZeroAddress)
+    ).to.be.revertedWith("TR: already joined");
+    expect(await tierRouter.tierFirstEntries(1)).to.equal(1n);
+  });
+
+  it("getMemberInfo.whaleGateEligible is keyed off the member's NEXT tier, not a skip-ahead flag", async function () {
+    const { tierRouter, w1, reg } = await loadFixture(deployV8Fixture);
+
+    await reg(w1, ethers.ZeroAddress);
+
+    // T2 (tierNum 2) gate is closed -- a fresh T1 member must read as not eligible.
+    let info = await tierRouter.getMemberInfo(w1.address);
+    expect(info.whaleGateEligible).to.be.false;
+    expect(info.whaleGateEligible).to.equal(await tierRouter.isWhaleGateActiveForTier(2));
+  });
+
+});
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// SUITE — V8.21: PairManagerV8 fee broadcast (param #9 target wiring fix)
+// ═══════════════════════════════════════════════════════════════════════════════
+//
+// BUG THIS FIXES: governance.html pointed param 9 (Withdrawal Fee BPS)
+// proposals at TierRouter's address, but TierRouter never implemented
+// setWithdrawalFeeBps -- any such proposal would revert at execute().
+// Separately, each tier can have MULTIPLE matrix pairs (PairManagerV8.addPair()
+// during auto-expansion), and fees are stored per FigureEightMatrixV8
+// instance, so even targeting one real matrix would leave every other pair
+// on a stale value. The fix: the DAO targets PairManagerV8 (one per tier)
+// directly, which broadcasts the change to every pair it has ever added and
+// auto-stamps future pairs too.
+//
+// (Param #10, Early Exit Penalty BPS, was going to get the same broadcast
+// treatment but was retired entirely instead -- it was stored and DAO-votable
+// on FigureEightMatrixV8 but never actually consumed by any withdraw/cycle
+// logic. See V8Governance.sol's PARAM_EARLY_EXIT_PENALTY_BPS retirement note.)
+describe("V8.21 — PairManagerV8 fee broadcast (param #9 target wiring fix)", function () {
+
+  it("setWithdrawalFeeBps broadcasts to every pair the tier has ever added, not just the first", async function () {
+    const fx = await loadFixture(deployV8Fixture);
+    const { pm1, matA, matB, admin } = fx;
+    const { matA3, matB3 } = await deployExtraT1Pair(fx);
+
+    await pm1.connect(admin).addPair(await matA3.getAddress(), await matB3.getAddress());
+
+    await pm1.connect(admin).setWithdrawalFeeBps(100);
+
+    expect(await matA.withdrawalFeeBps()).to.equal(100n);
+    expect(await matB.withdrawalFeeBps()).to.equal(100n);
+    expect(await matA3.withdrawalFeeBps()).to.equal(100n);
+    expect(await matB3.withdrawalFeeBps()).to.equal(100n);
+    expect(await pm1.lastWithdrawalFeeBps()).to.equal(100n);
+  });
+
+  it("emits WithdrawalFeeBpsBroadcast with the correct pair count", async function () {
+    const fx = await loadFixture(deployV8Fixture);
+    const { pm1, admin } = fx;
+    const { matA3, matB3 } = await deployExtraT1Pair(fx);
+    await pm1.connect(admin).addPair(await matA3.getAddress(), await matB3.getAddress());
+
+    await expect(pm1.connect(admin).setWithdrawalFeeBps(200))
+      .to.emit(pm1, "WithdrawalFeeBpsBroadcast").withArgs(200n, 2n); // 2 pairs now
+  });
+
+  it("a brand-new pair stays on FigureEightMatrixV8's constructor default (150) when nothing has been broadcast yet", async function () {
+    const fx = await loadFixture(deployV8Fixture);
+    const { pm1, admin } = fx;
+    const { matA3, matB3 } = await deployExtraT1Pair(fx);
+
+    expect(await pm1.lastWithdrawalFeeBps()).to.equal(0n);
+
+    await pm1.connect(admin).addPair(await matA3.getAddress(), await matB3.getAddress());
+
+    // Pre-V8.21 behavior preserved exactly: no broadcast yet means addPair()
+    // does not touch the new pair's fee at all.
+    expect(await matA3.withdrawalFeeBps()).to.equal(150n);
+  });
+
+  it("addPair() auto-stamps a pair added AFTER a broadcast with the last broadcast value -- no extra governance call needed", async function () {
+    const fx = await loadFixture(deployV8Fixture);
+    const { pm1, admin } = fx;
+
+    // Broadcast BEFORE the second pair exists.
+    await pm1.connect(admin).setWithdrawalFeeBps(200);
+
+    const { matA3, matB3 } = await deployExtraT1Pair(fx);
+    await pm1.connect(admin).addPair(await matA3.getAddress(), await matB3.getAddress());
+
+    // New pair picks up the DAO's most recent value immediately, without
+    // anyone having to re-broadcast after expansion.
+    expect(await matA3.withdrawalFeeBps()).to.equal(200n);
+    expect(await matB3.withdrawalFeeBps()).to.equal(200n);
+  });
+
+  it("setWithdrawalFeeBps: only owner or governance can call", async function () {
+    const { pm1, admin, w1 } = await loadFixture(deployV8Fixture);
+
+    await expect(pm1.connect(w1).setWithdrawalFeeBps(100))
+      .to.be.revertedWith("PM8: not authorized");
+
+    // Owner (admin) always works without governance wired.
+    await expect(pm1.connect(admin).setWithdrawalFeeBps(100)).to.not.be.reverted;
+  });
+
+  it("setGovernance: owner-only, zero-address guarded, emits GovernanceSet, and the governance address can then call the broadcast setter", async function () {
+    const { pm1, admin, w1, matA, matB } = await loadFixture(deployV8Fixture);
+
+    await expect(pm1.connect(w1).setGovernance(w1.address))
+      .to.be.revertedWithCustomError(pm1, "OwnableUnauthorizedAccount");
+    await expect(pm1.connect(admin).setGovernance(ethers.ZeroAddress))
+      .to.be.revertedWith("PM8: zero governance");
+
+    // Use w1 as a stand-in "governance" address (mirrors how V8Governance.test.js
+    // stands in a throwaway address to isolate the access-control check).
+    await expect(pm1.connect(admin).setGovernance(w1.address))
+      .to.emit(pm1, "GovernanceSet").withArgs(w1.address);
+
+    await pm1.connect(w1).setWithdrawalFeeBps(100);
+    expect(await matA.withdrawalFeeBps()).to.equal(100n);
+    expect(await matB.withdrawalFeeBps()).to.equal(100n);
+  });
+
+  it("REGRESSION: FigureEightMatrixV8 still rejects setWithdrawalFeeBps from a random address that is not owner/tierRouter/governance/pairManager", async function () {
+    const { matA, w1 } = await loadFixture(deployV8Fixture);
+
+    await expect(matA.connect(w1).setWithdrawalFeeBps(100))
+      .to.be.revertedWith("F8V8: not governance");
+  });
+
+  it("REGRESSION: setEarlyExitPenaltyBps no longer exists anywhere -- param #10 was retired entirely, not broadcast", async function () {
+    const { matA, pm1 } = await loadFixture(deployV8Fixture);
+    expect(matA.setEarlyExitPenaltyBps).to.equal(undefined);
+    expect(pm1.setEarlyExitPenaltyBps).to.equal(undefined);
   });
 
 });

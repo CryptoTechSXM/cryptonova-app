@@ -138,17 +138,24 @@ contract MatrixKeeper is Ownable {
     ///         alongside owner -- neither replaces the other (owner keeps emergency backstop).
     address public governance;
 
-    /// @notice V8.20: SF parked-rescue coverage ladder, governable.
+    /// @notice V8.20/V8.21: SF parked-rescue coverage ladder, governable.
     ///         thresholds[i] = withdrawable/entryFee bps breakpoint (descending).
     ///         bpsLadder[i]  = SF coverage bps at that breakpoint (ascending).
     ///         Below the lowest threshold => ineligible for rescue (evict instead).
-    ///         Defaults reproduce the exact V8.18 hardcoded ladder.
+    ///         V8.21: free-form custom arrays were removed -- the DAO now picks
+    ///         one of 4 curated presets via setSfRescueLadderPreset() instead of
+    ///         designing a ladder from scratch. Defaults reproduce the exact
+    ///         V8.18 hardcoded ladder (preset 1, "Default").
     uint256[] public sfRescueThresholds = [
         uint256(10_000), 9_500, 9_000, 8_500, 8_000, 7_500, 7_000, 6_500, 6_000, 5_000, 4_000
     ];
     uint256[] public sfRescueBpsLadder = [
         uint256(0), 1_000, 1_500, 2_000, 2_500, 3_000, 3_500, 4_000, 4_500, 5_000, 6_000
     ];
+    /// @notice Which preset is currently active. 0=Conservative, 1=Default,
+    ///         2=Generous, 3=Maximum. See setSfRescueLadderPreset() for the
+    ///         exact numbers in each.
+    uint8 public sfRescueLadderPreset = 1;
 
     uint8   public deflationState;
     uint256 public lastVelocityCheck;
@@ -182,7 +189,8 @@ contract MatrixKeeper is Ownable {
     event CommunityDistributed(address indexed cw);
     event WorkItemFailed(uint8 indexed workType, uint8 tierIndex, address addr1, address addr2);
     event GovernanceSet(address indexed governance);
-    event SfRescueLadderUpdated(uint256 rungs, uint256 deepestBps);
+    /// @dev V8.21: replaces SfRescueLadderUpdated -- presets, not free-form arrays.
+    event SfRescueLadderPresetSet(uint8 preset, uint256 rungs, uint256 deepestBps);
 
     error MK_NotKeeper();
     error MK_InvalidParam();
@@ -274,30 +282,50 @@ contract MatrixKeeper is Ownable {
         emit ConfigUpdated("communityWallet", uint256(uint160(_cw)));
     }
 
-    /// @notice V8.20: Replace the SF parked-rescue coverage ladder.
-    ///         thresholds must start at 10_000 (full withdrawable => 0 rescue) and
-    ///         strictly descend; bpsValues must start at 0 and strictly ascend, capped at 10_000.
-    ///         Below the lowest threshold a parked member is ineligible (evicted instead).
-    function setSfRescueLadder(uint256[] calldata thresholds, uint256[] calldata bpsValues)
-        external onlyOwnerOrGovernance
-    {
-        uint256 rungs = thresholds.length;
-        require(rungs >= 2 && rungs <= 20,        "MK: bad ladder length");
-        require(bpsValues.length == rungs,         "MK: length mismatch");
-        require(thresholds[0] == 10_000,           "MK: first threshold must be 10000");
-        require(bpsValues[0] == 0,                 "MK: first bps must be 0");
-        for (uint256 i = 1; i < rungs; i++) {
-            require(thresholds[i] < thresholds[i - 1], "MK: thresholds must descend");
-            require(bpsValues[i] > bpsValues[i - 1],   "MK: bps must ascend");
-            require(bpsValues[i] <= 10_000,            "MK: bps too high");
-        }
+    /// @notice V8.21: Pick one of 4 curated SF parked-rescue coverage ladders.
+    ///         Replaces the old free-form custom-array proposal -- the community
+    ///         picks a shape, it doesn't design one from scratch.
+    ///         0 = Conservative: floor at 50% withdrawn, coverage caps at 50%.
+    ///             [10000,9000,8000,7000,6000,5000] -> [0,1000,2000,3000,4000,5000]
+    ///         1 = Default: the original V8.18 ladder. Floor 40%, caps at 60%.
+    ///             [10000,9500,9000,8500,8000,7500,7000,6500,6000,5000,4000]
+    ///             -> [0,1000,1500,2000,2500,3000,3500,4000,4500,5000,6000]
+    ///         2 = Generous: floor at 30% withdrawn, coverage caps at 80%.
+    ///             [10000,9000,8000,7000,6000,5000,4000,3000] -> [0,1500,2500,3500,4500,5500,7000,8000]
+    ///         3 = Maximum: floor at 10% withdrawn, coverage can reach 100%.
+    ///             [10000,9000,8000,7000,6000,5000,4000,3000,2000,1000]
+    ///             -> [0,1500,2500,3500,5000,6000,7000,8000,9000,10000]
+    /// @dev Takes uint256 (not uint8) so it matches the generic uint256-value
+    ///      dispatch every other governance setter in this codebase uses.
+    function setSfRescueLadderPreset(uint256 preset) external onlyOwnerOrGovernance {
+        require(preset <= 3, "MK: invalid preset (0-3)");
+        sfRescueLadderPreset = uint8(preset);
+        _applyLadderPreset(uint8(preset));
+    }
+
+    function _applyLadderPreset(uint8 preset) internal {
         delete sfRescueThresholds;
         delete sfRescueBpsLadder;
-        for (uint256 i = 0; i < rungs; i++) {
-            sfRescueThresholds.push(thresholds[i]);
-            sfRescueBpsLadder.push(bpsValues[i]);
+
+        if (preset == 0) {
+            uint256[6] memory t = [uint256(10_000), 9_000, 8_000, 7_000, 6_000, 5_000];
+            uint256[6] memory b = [uint256(0), 1_000, 2_000, 3_000, 4_000, 5_000];
+            for (uint256 i = 0; i < t.length; i++) { sfRescueThresholds.push(t[i]); sfRescueBpsLadder.push(b[i]); }
+        } else if (preset == 1) {
+            uint256[11] memory t = [uint256(10_000), 9_500, 9_000, 8_500, 8_000, 7_500, 7_000, 6_500, 6_000, 5_000, 4_000];
+            uint256[11] memory b = [uint256(0), 1_000, 1_500, 2_000, 2_500, 3_000, 3_500, 4_000, 4_500, 5_000, 6_000];
+            for (uint256 i = 0; i < t.length; i++) { sfRescueThresholds.push(t[i]); sfRescueBpsLadder.push(b[i]); }
+        } else if (preset == 2) {
+            uint256[8] memory t = [uint256(10_000), 9_000, 8_000, 7_000, 6_000, 5_000, 4_000, 3_000];
+            uint256[8] memory b = [uint256(0), 1_500, 2_500, 3_500, 4_500, 5_500, 7_000, 8_000];
+            for (uint256 i = 0; i < t.length; i++) { sfRescueThresholds.push(t[i]); sfRescueBpsLadder.push(b[i]); }
+        } else {
+            uint256[10] memory t = [uint256(10_000), 9_000, 8_000, 7_000, 6_000, 5_000, 4_000, 3_000, 2_000, 1_000];
+            uint256[10] memory b = [uint256(0), 1_500, 2_500, 3_500, 5_000, 6_000, 7_000, 8_000, 9_000, 10_000];
+            for (uint256 i = 0; i < t.length; i++) { sfRescueThresholds.push(t[i]); sfRescueBpsLadder.push(b[i]); }
         }
-        emit SfRescueLadderUpdated(rungs, bpsValues[rungs - 1]);
+
+        emit SfRescueLadderPresetSet(preset, sfRescueThresholds.length, sfRescueBpsLadder[sfRescueBpsLadder.length - 1]);
     }
 
     function checkUpkeep(bytes calldata)

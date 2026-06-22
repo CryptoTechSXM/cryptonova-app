@@ -20,10 +20,14 @@ pragma solidity ^0.8.24;
  *
  *  L3: Withdrawal fee -- DYNAMIC SLIDING DESTINATION
  *      --> FigureEightMatrixV8.withdraw() calls receiveLayer(tier, amt, 3)
- *      --> SF health >= sfTarget: 100% goes to BuybackReserve
- *      --> SF health = 0%:        100% stays in SF
+ *      --> SF health >= sfTarget(): 100% goes to BuybackReserve
+ *      --> SF health = 0%:          100% stays in SF
  *      --> Linear slide between the two extremes
- *      --> healthBps() = min(totalBalance / sfTarget, 10000)
+ *      --> healthBps() = min(totalBalance / sfTarget(), 10000)
+ *      --> V8.21: sfTarget() auto-scales with the highest tier the system has
+ *          organically opened (tierEntryFees[tier] x sfTargetMultiplier[tier]),
+ *          falling back to a flat manual override pre-launch. See the
+ *          sfTarget() function below for full semantics.
  *
  *  L5: Early exit penalties
  *      --> FigureEightMatrixV8.earlyEscrowRelease() via receiveLayer(tier, amt, 5)
@@ -36,7 +40,7 @@ pragma solidity ^0.8.24;
  *
  * SLIDING WITHDRAWAL FEE FORMULA
  * ─────────────────────────────────────────────────────────────────────────────
- *  healthBps   = min(totalBalance * 10000 / sfTarget, 10000)
+ *  healthBps   = min(totalBalance * 10000 / sfTarget(), 10000)
  *  toBuyback   = feeAmount * healthBps / 10000
  *  toSF        = feeAmount - toBuyback
  *
@@ -62,6 +66,12 @@ interface IBuybackReserve {
 /// @dev Minimal interface for CommunityWallet deposit.
 interface ICommunityWallet {
     function deposit(uint256 amount) external;
+}
+
+/// @dev Minimal hook for V8.21 tier-dynamic SF target -- reads TierRouter's
+///      organic progress signal (highest tier both deployed and velocity-green).
+interface ITierRouterTierInfo {
+    function highestOpenTier() external view returns (uint8);
 }
 
 contract StabilityFund is Ownable2Step {
@@ -95,11 +105,41 @@ contract StabilityFund is Ownable2Step {
     uint256 public communityCarveOutBps = 0;
 
     // ── Sliding formula target ────────────────────────────────────────────────
-    /// @notice Target SF balance (6-dec USDC). Default $300.
-    ///         healthBps = min(totalBalance * 10000 / sfTarget, 10000)
-    ///         When totalBalance >= sfTarget, health = 100%, all withdrawal fees
-    ///         route to BuybackReserve. DAO-adjustable.
-    uint256 public sfTarget;
+    /// @notice V8.21: sfTarget is now a DERIVED view (see the `sfTarget()`
+    ///         function below), not a plain storage slot -- ABI shape is
+    ///         unchanged (`function sfTarget() view returns (uint256)`), so
+    ///         every existing reader (frontend, system_keeper.js, tests)
+    ///         keeps working without changes.
+    ///
+    ///         When `sfTargetAutoMode` is on AND `tierRouter` is wired AND the
+    ///         current highest open tier has a registered entryFee, the
+    ///         effective target auto-scales with how far the system has
+    ///         organically progressed: tierEntryFees[idx] * sfTargetMultiplier[idx]
+    ///         (e.g. T1 entry fee x10, T2 x20, T3 x30... by default). This is
+    ///         the "auto-increasing as tiers climb" behavior requested by the
+    ///         user, replacing the old flat $300 default that never moved on
+    ///         its own.
+    ///
+    ///         `_manualSfTarget` is the fallback used whenever auto-mode is
+    ///         off, tierRouter isn't wired yet, or the current tier has no
+    ///         entry fee registered on this contract (e.g. pre-launch). It is
+    ///         still set via the existing `setSFTarget()` DAO-governable path
+    ///         (PARAM_SF_TARGET, unchanged) -- so existing governance
+    ///         proposals/tests against that param keep working exactly as
+    ///         before whenever tierRouter is unset (e.g. in unit tests that
+    ///         never wire StabilityFund.tierRouter).
+    uint256 private _manualSfTarget;
+
+    /// @notice Per-tier multiplier applied to that tier's entry fee to derive
+    ///         the auto-computed sfTarget. Index 0 = T1. Owner-tunable (not a
+    ///         DAO governance param -- consistent with tier entry fees and
+    ///         matrix wiring, which are also owner-only).
+    uint256[MAX_TIERS] public sfTargetMultiplier;
+
+    /// @notice When true (default), `sfTarget()` auto-computes from the
+    ///         current highest open tier's entry fee x its multiplier.
+    ///         When false, `sfTarget()` always returns the manual override.
+    bool public sfTargetAutoMode = true;
 
     // ── Tier fee registry ─────────────────────────────────────────────────────
     uint256[MAX_TIERS] public tierEntryFees;
@@ -134,13 +174,24 @@ contract StabilityFund is Ownable2Step {
     event CommunityCarveOutBpsSet(uint256 bps);
     event WithdrawalFeeRouted(uint8 indexed tier, uint256 toSF, uint256 toBuyback, uint256 healthBps);
     event GovernanceSet(address indexed governance);
+    // V8.21
+    event SfTargetMultiplierSet(uint8 indexed tierIndex, uint256 multiplier);
+    event SfTargetAutoModeSet(bool enabled);
 
     // ── Constructor ──────────────────────────────────────────────────────────
 
     constructor(address _usdc, address _admin) Ownable(_admin) {
         require(_usdc != address(0), "SF: zero usdc");
-        usdc     = IERC20(_usdc);
-        sfTarget = 300_000_000; // $300 default
+        usdc             = IERC20(_usdc);
+        _manualSfTarget  = 300_000_000; // $300 default fallback (used pre-tierRouter-wiring)
+
+        // V8.21: default per-tier multiplier schedule -- 10x/20x/30x/.../100x
+        // the tier's own entry fee, matching the user's requested example
+        // (10x/20x/30x/40x/50x for T1-T5) extended naturally through T10.
+        // Owner-tunable afterward via setSfTargetMultiplier().
+        for (uint8 i = 0; i < MAX_TIERS; i++) {
+            sfTargetMultiplier[i] = (uint256(i) + 1) * 10;
+        }
     }
 
     // ── Admin setup ──────────────────────────────────────────────────────────
@@ -183,12 +234,14 @@ contract StabilityFund is Ownable2Step {
         emit TierFeeSet(tierIndex, fee);
     }
 
-    /// @notice V8.20: DAO-governable. Was unbounded before -- now capped at sfTarget
-    ///         (the floor can never exceed the health target, or SF could never
-    ///         spend even once "fully funded"). sfTarget is itself bounded
-    ///         $100-$10,000, so this is bounded transitively.
+    /// @notice V8.20: DAO-governable. Was unbounded before -- now capped at
+    ///         sfTarget() (the floor can never exceed the EFFECTIVE current
+    ///         health target -- whether auto-computed or manual -- or SF could
+    ///         never spend even once "fully funded"). sfTarget() is itself
+    ///         bounded $100-$10,000 when in manual mode; the auto-computed
+    ///         value is bounded by tierEntryFees x sfTargetMultiplier instead.
     function setStabilityFloor(uint256 floor) external onlyOwnerOrGovernance {
-        require(floor <= sfTarget, "SF: floor exceeds target");
+        require(floor <= sfTarget(), "SF: floor exceeds target");
         stabilityFloor = floor;
         emit StabilityFloorSet(floor);
     }
@@ -200,17 +253,44 @@ contract StabilityFund is Ownable2Step {
         emit BuybackReserveSet(_bbr);
     }
 
-    /// @notice Set the SF health target (6-dec USDC).
-    ///         When totalBalance >= sfTarget, 100% of withdrawal fees route to BBR.
+    /// @notice Set the manual SF health target fallback (6-dec USDC). This is
+    ///         the value `sfTarget()` returns when auto-mode is off, when
+    ///         `tierRouter` isn't wired, or when the current open tier has no
+    ///         entry fee registered here -- it is NOT the live effective
+    ///         target whenever auto-mode is active with tierRouter wired (see
+    ///         `sfTarget()` below and the V8.21 redesign note on
+    ///         `_manualSfTarget`).
     ///         Allowed: 100e6 ($100) to 10000e6 ($10,000).
-    ///         V8.20: DAO-governable. Cannot drop below stabilityFloor (same
-    ///         invariant enforced the other way in setStabilityFloor).
+    ///         V8.20: DAO-governable (PARAM_SF_TARGET, unchanged numbering).
+    ///         Cannot drop below stabilityFloor (same invariant enforced the
+    ///         other way in setStabilityFloor).
     function setSFTarget(uint256 _target) external onlyOwnerOrGovernance {
         require(_target >= 100_000_000,   "SF: target too low");
         require(_target <= 10_000_000_000, "SF: target too high");
         require(_target >= stabilityFloor, "SF: target below floor");
-        sfTarget = _target;
+        _manualSfTarget = _target;
         emit SFTargetSet(_target);
+    }
+
+    /// @notice V8.21: owner-only per-tier multiplier for the auto-computed
+    ///         target (sfTargetMultiplier[tierIndex] x tierEntryFees[tierIndex]).
+    ///         Not a DAO governance param -- consistent with tier entry fees
+    ///         and matrix wiring (also owner-only). Bounded 1-1000 (0.1x-100x
+    ///         conceptually if you think in whole multiples; practically this
+    ///         is a plain integer multiplier, e.g. 10 = 10x).
+    function setSfTargetMultiplier(uint8 tierIndex, uint256 multiplier) external onlyOwner {
+        require(tierIndex < MAX_TIERS,        "SF: invalid tier");
+        require(multiplier > 0 && multiplier <= 1000, "SF: invalid multiplier");
+        sfTargetMultiplier[tierIndex] = multiplier;
+        emit SfTargetMultiplierSet(tierIndex, multiplier);
+    }
+
+    /// @notice V8.21: owner-only kill switch for tier-dynamic auto-scaling.
+    ///         When disabled, sfTarget() always returns the manual override
+    ///         (set via setSFTarget()), regardless of tierRouter wiring.
+    function setSfTargetAutoMode(bool enabled) external onlyOwner {
+        sfTargetAutoMode = enabled;
+        emit SfTargetAutoModeSet(enabled);
     }
 
     /// @notice Set the CommunityWallet address for the 1% L1 carve.
@@ -235,6 +315,34 @@ contract StabilityFund is Ownable2Step {
 
     // ── Health formula ────────────────────────────────────────────────────────
 
+    /// @notice V8.21: the EFFECTIVE current SF health target (6-dec USDC).
+    ///         ABI-compatible drop-in for the old plain storage getter --
+    ///         every external reader (frontend, system_keeper.js, tests) that
+    ///         calls `sfTarget()` keeps working unchanged.
+    ///
+    ///         Auto-computed as tierEntryFees[idx] * sfTargetMultiplier[idx]
+    ///         for the current highest-open tier (read live from TierRouter)
+    ///         whenever: sfTargetAutoMode is true, tierRouter is wired, the
+    ///         router reports a tier > 0, AND this contract has a non-zero
+    ///         entry fee registered for that tier (via setTierFee()).
+    ///         Otherwise falls back to the manual override (_manualSfTarget,
+    ///         set via setSFTarget()) -- this is what keeps every existing
+    ///         test/deployment that never wires StabilityFund.tierRouter
+    ///         working exactly as before.
+    function sfTarget() public view returns (uint256) {
+        if (sfTargetAutoMode && tierRouter != address(0)) {
+            uint8 tierNum = ITierRouterTierInfo(tierRouter).highestOpenTier();
+            if (tierNum > 0) {
+                uint8 idx = tierNum - 1;
+                uint256 fee = tierEntryFees[idx];
+                if (fee > 0) {
+                    return fee * sfTargetMultiplier[idx];
+                }
+            }
+        }
+        return _manualSfTarget;
+    }
+
     /**
      * @notice SF health in BPS (0-10000).
      *         0    = empty, 100% of withdrawal fees route to SF
@@ -242,9 +350,10 @@ contract StabilityFund is Ownable2Step {
      *         10000 = at/above target, 100% of withdrawal fees route to BBR
      */
     function healthBps() public view returns (uint256) {
-        if (sfTarget == 0) return 10000; // no target set -- always healthy
-        if (totalBalance >= sfTarget)    return 10000;
-        return (totalBalance * 10000) / sfTarget;
+        uint256 target = sfTarget();
+        if (target == 0) return 10000; // no target set -- always healthy
+        if (totalBalance >= target)    return 10000;
+        return (totalBalance * 10000) / target;
     }
 
     // ── Funding entry point ───────────────────────────────────────────────────

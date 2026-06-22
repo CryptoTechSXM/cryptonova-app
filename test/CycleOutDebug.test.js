@@ -55,7 +55,13 @@ async function deploy(size = 4) {
     admin:        owner.address,
   };
 
-  const MX   = await ethers.getContractFactory("FigureEightMatrixV8");
+  // V8.21: core logic now lives in MatrixLogicLib -- deploy + link first.
+  const MatrixLib  = await ethers.getContractFactory("MatrixLogicLib");
+  const matrixLib  = await MatrixLib.deploy();
+  await matrixLib.waitForDeployment();
+  const MX   = await ethers.getContractFactory("FigureEightMatrixV8", {
+    libraries: { MatrixLogicLib: await matrixLib.getAddress() },
+  });
   const matA = await MX.deploy(dp, FEE, size, true,  0, SPLITS, CP_BPS);
   const matB = await MX.deploy(dp, FEE, size, false, 0, SPLITS, CP_BPS);
   const [matAAddr, matBAddr] = [await matA.getAddress(), await matB.getAddress()];

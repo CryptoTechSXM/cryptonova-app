@@ -15,7 +15,7 @@ const hre  = require("hardhat");
 const fs   = require("fs");
 const path = require("path");
 
-const MATRIX_KEEPER   = "0xc85A54319ec73e51F9Ad3033068c373e773312fb"; // V8.18
+const MATRIX_KEEPER   = "0x08Ae8cABEABA22348839BD2D1BD7A95dAe5920e8"; // V8.21 (library-extraction deploy)
 const GAS_LIMIT       = 6_000_000;
 const LOG_FILE        = path.join(__dirname, "..", "keeper.log");
 const STATE_FILE      = path.join(__dirname, "..", "keeper_state.json");

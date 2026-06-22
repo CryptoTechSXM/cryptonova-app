@@ -40,7 +40,15 @@ module.exports = {
         enabled: true,
         runs: 200,
       },
-      viaIR: true,  // V8.18: IR pipeline keeps FigureEightMatrixV8 under 24576-byte limit
+      // V8.21: viaIR no longer needed -- FigureEightMatrixV8's core logic now
+      // lives in MatrixLogicLib (deployed once), leaving the matrix contract
+      // itself at ~12.5KB / 49% margin under the 24576-byte limit even via
+      // the legacy (non-IR) codegen path. Turning this off restores normal
+      // solc compile speed (was previously the only thing forcing the much
+      // slower IR pipeline for every contract in this project, not just
+      // FigureEightMatrixV8). Verified: all contracts re-checked for size
+      // after this change (see predeploy_check.js + contract_sizes check).
+      viaIR: false,
     },
   },
 

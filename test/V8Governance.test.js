@@ -12,8 +12,10 @@
  *    silently fail at execute()).
  *  - FIX: execute() succeeds once setGovernance() is wired on both contracts.
  *  - SF rescue ladder: default values match the old V8.18 hardcoded ladder,
- *    direct setSfRescueLadder() validation, and the full proposeLadder() ->
- *    vote -> finalize -> timelock -> execute lifecycle.
+ *    direct setSfRescueLadderPreset() validation across all 4 curated presets
+ *    (V8.21 -- replaces the old free-form array setter), and the full
+ *    propose() -> vote -> finalize -> timelock -> execute lifecycle for the
+ *    preset index, which is now a normal scalar param.
  */
 
 const { expect }      = require("chai");
@@ -38,6 +40,7 @@ const TIMELOCK_PERIOD = 48n * 3600n;
 // V8Governance param IDs (BigInt -- ethers v6 decodes all uint event args as bigint)
 const PARAM_VELOCITY_WINDOW       = 4n;
 const PARAM_AUTO_UPGRADE_THRESH   = 1n;
+const PARAM_ESCROW_FLOOR_MULT     = 3n; // V8.21: retired, permanently blocked at propose()
 const PARAM_SF_RESCUE_LADDER      = 14n;
 const PARAM_WHALE_GATE_THRESHOLD  = 15n;
 const PARAM_PARKED_GRACE_PERIOD   = 19n;
@@ -70,7 +73,13 @@ async function deployFixture() {
 
   // One minimal matrix pair, just so the F8V8 governance-check fix has a real
   // deployed instance to assert against.
-  const FM = await ethers.getContractFactory("FigureEightMatrixV8");
+  // V8.21: core logic now lives in MatrixLogicLib -- deploy + link first.
+  const MatrixLib  = await ethers.getContractFactory("MatrixLogicLib");
+  const matrixLib  = await MatrixLib.deploy();
+  await matrixLib.waitForDeployment();
+  const FM = await ethers.getContractFactory("FigureEightMatrixV8", {
+    libraries: { MatrixLogicLib: await matrixLib.getAddress() },
+  });
   const deployMatrix = async (isA) => FM.deploy(
     {
       usdc: await usdc.getAddress(), cnova: await cnova.getAddress(),
@@ -134,16 +143,6 @@ async function deployFixture() {
     return id;
   }
 
-  async function proposeLadderAndQueue(target, thresholds, bpsValues, desc = "ladder test") {
-    await gov.connect(proposer).proposeLadder(target, thresholds, bpsValues, desc);
-    const id = await gov.proposalCount();
-    await gov.connect(voterA).castVote(id, true);
-    await time.increase(Number(VOTING_PERIOD) + 1);
-    await gov.finalizeVote(id);
-    await time.increase(Number(TIMELOCK_PERIOD) + 1);
-    return id;
-  }
-
   async function proposeBoostTableAndQueue(target, thresholds, rates, desc = "boost table test") {
     await gov.connect(proposer).proposeBoostTable(target, thresholds, rates, desc);
     const id = await gov.proposalCount();
@@ -159,7 +158,7 @@ async function deployFixture() {
     stabilityFund, buybackReserve, directSale, communityWallet,
     CW_GOVERNOR_ROLE, CNOVA_GOVERNOR_ROLE,
     deployer, admin, devOps, accountOne, proposer, voterA, voterB, other,
-    proposeVoteAndQueue, proposeLadderAndQueue, proposeBoostTableAndQueue,
+    proposeVoteAndQueue, proposeBoostTableAndQueue,
   };
 }
 
@@ -222,6 +221,15 @@ describe("V8Governance — wiring regression + SF rescue ladder", function () {
       // prove the require() now accepts the governance address by reading it back).
       expect(await matA.governance()).to.equal(govAddr);
     });
+
+    it("V8.21 REGRESSION: propose() permanently rejects the retired PARAM_ESCROW_FLOOR_MULT (id 3)", async function () {
+      const { gov, tierRouter, proposer } = await loadFixture(deployFixture);
+      await expect(
+        gov.connect(proposer).propose(
+          PARAM_ESCROW_FLOOR_MULT, await tierRouter.getAddress(), 120, "should never work"
+        )
+      ).to.be.revertedWithCustomError(gov, "GOV_InvalidParam");
+    });
   });
 
   // ── SF rescue ladder: defaults match V8.18 ────────────────────────────────
@@ -239,101 +247,86 @@ describe("V8Governance — wiring regression + SF rescue ladder", function () {
   });
 
   // ── SF rescue ladder: direct owner setter validation ──────────────────────
-  describe("setSfRescueLadder validation (direct owner call)", function () {
-    it("rejects mismatched array lengths", async function () {
+  // V8.21: free-form custom arrays were removed -- the DAO now picks one of
+  // 4 curated presets instead of designing a ladder from scratch.
+  describe("setSfRescueLadderPreset validation (direct owner call)", function () {
+    it("rejects a preset value above 3", async function () {
       const { deployer, matrixKeeper } = await loadFixture(deployFixture);
       await expect(
-        matrixKeeper.connect(deployer).setSfRescueLadder([10_000, 5_000], [0])
-      ).to.be.revertedWith("MK: length mismatch");
+        matrixKeeper.connect(deployer).setSfRescueLadderPreset(4)
+      ).to.be.revertedWith("MK: invalid preset (0-3)");
     });
 
-    it("rejects a first threshold that isn't 10000", async function () {
+    it("applies the Conservative preset (0) and emits SfRescueLadderPresetSet", async function () {
       const { deployer, matrixKeeper } = await loadFixture(deployFixture);
-      await expect(
-        matrixKeeper.connect(deployer).setSfRescueLadder([9_000, 5_000], [0, 5_000])
-      ).to.be.revertedWith("MK: first threshold must be 10000");
+      await expect(matrixKeeper.connect(deployer).setSfRescueLadderPreset(0))
+        .to.emit(matrixKeeper, "SfRescueLadderPresetSet").withArgs(0n, 6n, 5_000n);
+
+      expect(await matrixKeeper.sfRescueLadderPreset()).to.equal(0n);
+      // Conservative floors at 50% withdrawn, coverage caps at 50%.
+      expect(await matrixKeeper.sfRescueThresholds(5)).to.equal(5_000n);
+      expect(await matrixKeeper.sfRescueBpsLadder(5)).to.equal(5_000n);
+      // Old 11-rung Default ladder is gone -- index 6 no longer exists.
+      await expect(matrixKeeper.sfRescueThresholds(6)).to.be.reverted;
     });
 
-    it("rejects a first bps that isn't 0", async function () {
+    it("applies the Generous preset (2)", async function () {
       const { deployer, matrixKeeper } = await loadFixture(deployFixture);
-      await expect(
-        matrixKeeper.connect(deployer).setSfRescueLadder([10_000, 5_000], [100, 5_000])
-      ).to.be.revertedWith("MK: first bps must be 0");
+      await matrixKeeper.connect(deployer).setSfRescueLadderPreset(2);
+      // Generous floors at 30% withdrawn, coverage caps at 80%.
+      expect(await matrixKeeper.sfRescueThresholds(7)).to.equal(3_000n);
+      expect(await matrixKeeper.sfRescueBpsLadder(7)).to.equal(8_000n);
     });
 
-    it("rejects non-descending thresholds", async function () {
+    it("applies the Maximum preset (3)", async function () {
       const { deployer, matrixKeeper } = await loadFixture(deployFixture);
-      await expect(
-        matrixKeeper.connect(deployer).setSfRescueLadder([10_000, 10_000], [0, 5_000])
-      ).to.be.revertedWith("MK: thresholds must descend");
+      await matrixKeeper.connect(deployer).setSfRescueLadderPreset(3);
+      // Maximum floors at 10% withdrawn, coverage can reach 100%.
+      expect(await matrixKeeper.sfRescueThresholds(9)).to.equal(1_000n);
+      expect(await matrixKeeper.sfRescueBpsLadder(9)).to.equal(10_000n);
     });
 
-    it("rejects non-ascending bps", async function () {
-      const { deployer, matrixKeeper } = await loadFixture(deployFixture);
-      await expect(
-        matrixKeeper.connect(deployer).setSfRescueLadder([10_000, 5_000], [0, 0])
-      ).to.be.revertedWith("MK: bps must ascend");
-    });
-
-    it("rejects bps over 10000", async function () {
-      const { deployer, matrixKeeper } = await loadFixture(deployFixture);
-      await expect(
-        matrixKeeper.connect(deployer).setSfRescueLadder([10_000, 5_000], [0, 10_001])
-      ).to.be.revertedWith("MK: bps too high");
-    });
-
-    it("accepts and emits SfRescueLadderUpdated on a valid replacement ladder", async function () {
-      const { deployer, matrixKeeper } = await loadFixture(deployFixture);
-      await expect(
-        matrixKeeper.connect(deployer).setSfRescueLadder([10_000, 7_000, 4_000], [0, 3_000, 8_000])
-      ).to.emit(matrixKeeper, "SfRescueLadderUpdated").withArgs(3n, 8_000n);
-
-      expect(await matrixKeeper.sfRescueThresholds(2)).to.equal(4_000n);
-      expect(await matrixKeeper.sfRescueBpsLadder(2)).to.equal(8_000n);
-      // Old 11-rung ladder is gone -- index 3 no longer exists.
-      await expect(matrixKeeper.sfRescueThresholds(3)).to.be.reverted;
-    });
-
-    it("rejects ladder setter from a random address (not owner, not governance)", async function () {
+    it("rejects preset setter from a random address (not owner, not governance)", async function () {
       const { other, matrixKeeper } = await loadFixture(deployFixture);
       await expect(
-        matrixKeeper.connect(other).setSfRescueLadder([10_000, 5_000], [0, 5_000])
+        matrixKeeper.connect(other).setSfRescueLadderPreset(0)
       ).to.be.revertedWith("MK: not authorized");
     });
   });
 
   // ── SF rescue ladder: full governance lifecycle ───────────────────────────
-  describe("proposeLadder() -> vote -> execute lifecycle", function () {
-    it("rejects a malformed ladder at proposal-creation time (before any vote)", async function () {
+  // V8.21: the preset index is a normal scalar param now -- it goes through
+  // the exact same propose()/castVote()/execute() path as every other param.
+  describe("SF rescue ladder preset -> vote -> execute lifecycle", function () {
+    it("rejects a preset value not in the allowed list at proposal-creation time", async function () {
       const { gov, matrixKeeper, proposer } = await loadFixture(deployFixture);
       await expect(
-        gov.connect(proposer).proposeLadder(
-          await matrixKeeper.getAddress(), [9_000, 5_000], [0, 5_000], "bad ladder"
+        gov.connect(proposer).propose(
+          PARAM_SF_RESCUE_LADDER, await matrixKeeper.getAddress(), 4, "bad preset"
         )
       ).to.be.revertedWithCustomError(gov, "GOV_ValueNotAllowed");
     });
 
-    it("replaces the SF rescue ladder via a full DAO vote", async function () {
-      const { gov, govAddr, deployer, matrixKeeper, proposeLadderAndQueue } = await loadFixture(deployFixture);
+    it("switches the SF rescue ladder preset via a full DAO vote", async function () {
+      const { gov, govAddr, deployer, matrixKeeper, proposeVoteAndQueue } = await loadFixture(deployFixture);
       await matrixKeeper.connect(deployer).setGovernance(govAddr);
 
-      const newThresholds = [10_000, 7_000, 4_000];
-      const newBps        = [0, 3_000, 8_000];
-      const id = await proposeLadderAndQueue(
-        await matrixKeeper.getAddress(), newThresholds, newBps, "tighten SF rescue ladder"
+      const id = await proposeVoteAndQueue(
+        PARAM_SF_RESCUE_LADDER, await matrixKeeper.getAddress(), 2, "switch to Generous preset"
       );
 
       await expect(gov.execute(id))
-        .to.emit(gov, "ProposalExecuted").withArgs(id, PARAM_SF_RESCUE_LADDER, 0n);
+        .to.emit(gov, "ProposalExecuted").withArgs(id, PARAM_SF_RESCUE_LADDER, 2n);
 
-      expect(await matrixKeeper.sfRescueThresholds(2)).to.equal(4_000n);
-      expect(await matrixKeeper.sfRescueBpsLadder(2)).to.equal(8_000n);
+      expect(await matrixKeeper.sfRescueLadderPreset()).to.equal(2n);
+      expect(await matrixKeeper.sfRescueThresholds(7)).to.equal(3_000n);
+      expect(await matrixKeeper.sfRescueBpsLadder(7)).to.equal(8_000n);
     });
 
-    it("REGRESSION: ladder execute() also reverts without setGovernance wired", async function () {
-      const { gov, matrixKeeper, proposeLadderAndQueue } = await loadFixture(deployFixture);
-      const id = await proposeLadderAndQueue(
-        await matrixKeeper.getAddress(), [10_000, 5_000], [0, 5_000], "tighten ladder"
+    it("REGRESSION: preset execute() also reverts without setGovernance wired", async function () {
+      const { gov, matrixKeeper, proposeVoteAndQueue } = await loadFixture(deployFixture);
+      const id = await proposeVoteAndQueue(
+        PARAM_SF_RESCUE_LADDER, await matrixKeeper.getAddress(), 0, "switch to Conservative preset"
       );
       await expect(gov.execute(id)).to.be.revertedWith("MK: not authorized");
     });
@@ -389,6 +382,121 @@ describe("V8Governance — wiring regression + SF rescue ladder", function () {
       await expect(
         stabilityFund.connect(admin).setStabilityFloor(1_000_000_000)
       ).to.be.revertedWith("SF: floor exceeds target");
+    });
+
+    // ── V8.21: tier-dynamic sfTarget() ──────────────────────────────────────
+    // Design (confirmed via AskUserQuestion): StabilityFund reads TierRouter's
+    // highestOpenTier() live and multiplies that tier's entry fee by a
+    // per-tier owner-tunable multiplier (default 10x/20x/30x/.../100x). The
+    // manual setSFTarget() path (tested above) must keep working unchanged
+    // whenever tierRouter is unwired -- that's exactly the deployFixture
+    // default state, which is why the tests above never see auto-mode kick in.
+    describe("V8.21 — sfTarget() auto-scales with the highest open tier", function () {
+      it("defaults: auto-mode on, manual fallback $300, multiplier schedule is 10x per tier", async function () {
+        const { stabilityFund } = await loadFixture(deployFixture);
+        expect(await stabilityFund.sfTargetAutoMode()).to.equal(true);
+        // tierRouter never wired in this fixture -- falls back to manual default.
+        expect(await stabilityFund.sfTarget()).to.equal(300_000_000n);
+        expect(await stabilityFund.sfTargetMultiplier(0)).to.equal(10n);  // T1: 10x
+        expect(await stabilityFund.sfTargetMultiplier(4)).to.equal(50n);  // T5: 50x
+        expect(await stabilityFund.sfTargetMultiplier(9)).to.equal(100n); // T10: 100x
+      });
+
+      // NOTE: deployFixture never calls tierRouter.registerTier() for any tier
+      // (that's only done in V8Elevator.test.js's fixture) -- so out of the box
+      // TierRouter.highestOpenTier() returns 0 and sfTarget() always falls back
+      // to manual. Each test below that wants the auto path explicitly calls
+      // registerTier() first (using tierRouter's own address as a throwaway
+      // non-zero "pairManager" stand-in -- registerTier only requires non-zero,
+      // it doesn't validate the address is a real PairManagerV8).
+      it("falls back to the manual target when tierRouter is wired but no tier has been registered there yet", async function () {
+        const { admin, stabilityFund, tierRouter } = await loadFixture(deployFixture);
+        await stabilityFund.connect(admin).setTierRouter(await tierRouter.getAddress());
+        expect(await tierRouter.highestOpenTier()).to.equal(0n);
+        expect(await stabilityFund.sfTarget()).to.equal(300_000_000n);
+      });
+
+      it("falls back to the manual target when the tier is open on TierRouter but SF has no fee registered for it", async function () {
+        const { admin, stabilityFund, tierRouter } = await loadFixture(deployFixture);
+        await stabilityFund.connect(admin).setTierRouter(await tierRouter.getAddress());
+        await tierRouter.connect(admin).registerTier(0, await tierRouter.getAddress(), T1_FEE);
+        expect(await tierRouter.highestOpenTier()).to.equal(1n);
+        // StabilityFund itself was never told T1's entry fee via setTierFee().
+        expect(await stabilityFund.sfTarget()).to.equal(300_000_000n);
+      });
+
+      it("auto-computes tierEntryFees[idx] * sfTargetMultiplier[idx] once both are wired", async function () {
+        const { admin, stabilityFund, tierRouter } = await loadFixture(deployFixture);
+        await stabilityFund.connect(admin).setTierRouter(await tierRouter.getAddress());
+        await tierRouter.connect(admin).registerTier(0, await tierRouter.getAddress(), T1_FEE);
+        await stabilityFund.connect(admin).setTierFee(0, T1_FEE); // $10
+        // T1 default multiplier is 10x -> $100 target, overriding the $300 manual default.
+        expect(await stabilityFund.sfTarget()).to.equal(T1_FEE * 10n);
+        expect(await stabilityFund.sfTarget()).to.equal(100_000_000n);
+      });
+
+      it("re-scales automatically as TierRouter's highestOpenTier climbs -- no extra SF call needed", async function () {
+        const { admin, stabilityFund, tierRouter } = await loadFixture(deployFixture);
+        const T2_FEE_LOCAL = 15n * UNIT;
+        await stabilityFund.connect(admin).setTierRouter(await tierRouter.getAddress());
+        await tierRouter.connect(admin).registerTier(0, await tierRouter.getAddress(), T1_FEE);
+        await stabilityFund.connect(admin).setTierFee(0, T1_FEE);
+        await stabilityFund.connect(admin).setTierFee(1, T2_FEE_LOCAL);
+        expect(await stabilityFund.sfTarget()).to.equal(T1_FEE * 10n); // T1 open: $100
+
+        // Open T2 on TierRouter the same way the system would (registerTier +
+        // velocity-green, e.g. via the onCrossToMatB auto-open path in production).
+        await tierRouter.connect(admin).registerTier(1, await tierRouter.getAddress(), T2_FEE_LOCAL);
+        expect(await tierRouter.highestOpenTier()).to.equal(2n); // tier 2 defaults to velocity-green at construction
+        expect(await stabilityFund.sfTarget()).to.equal(T2_FEE_LOCAL * 20n); // T2 open: $300
+      });
+
+      it("setSfTargetMultiplier: owner-only, bounded 1-1000, emits SfTargetMultiplierSet", async function () {
+        const { admin, other, stabilityFund } = await loadFixture(deployFixture);
+        await expect(
+          stabilityFund.connect(other).setSfTargetMultiplier(0, 25)
+        ).to.be.revertedWithCustomError(stabilityFund, "OwnableUnauthorizedAccount");
+        await expect(
+          stabilityFund.connect(admin).setSfTargetMultiplier(0, 0)
+        ).to.be.revertedWith("SF: invalid multiplier");
+        await expect(
+          stabilityFund.connect(admin).setSfTargetMultiplier(0, 1001)
+        ).to.be.revertedWith("SF: invalid multiplier");
+        await expect(stabilityFund.connect(admin).setSfTargetMultiplier(0, 25))
+          .to.emit(stabilityFund, "SfTargetMultiplierSet").withArgs(0, 25n);
+        expect(await stabilityFund.sfTargetMultiplier(0)).to.equal(25n);
+      });
+
+      it("setSfTargetAutoMode: owner-only kill switch forces sfTarget() back to the manual value", async function () {
+        const { admin, other, stabilityFund, tierRouter } = await loadFixture(deployFixture);
+        await stabilityFund.connect(admin).setTierRouter(await tierRouter.getAddress());
+        await tierRouter.connect(admin).registerTier(0, await tierRouter.getAddress(), T1_FEE);
+        await stabilityFund.connect(admin).setTierFee(0, T1_FEE);
+        expect(await stabilityFund.sfTarget()).to.equal(T1_FEE * 10n); // auto: $100
+
+        await expect(
+          stabilityFund.connect(other).setSfTargetAutoMode(false)
+        ).to.be.revertedWithCustomError(stabilityFund, "OwnableUnauthorizedAccount");
+
+        await expect(stabilityFund.connect(admin).setSfTargetAutoMode(false))
+          .to.emit(stabilityFund, "SfTargetAutoModeSet").withArgs(false);
+        expect(await stabilityFund.sfTarget()).to.equal(300_000_000n); // back to manual default
+      });
+
+      it("setStabilityFloor's bound now checks the EFFECTIVE (auto-computed) target, not just the manual one", async function () {
+        const { admin, stabilityFund, tierRouter } = await loadFixture(deployFixture);
+        await stabilityFund.connect(admin).setTierRouter(await tierRouter.getAddress());
+        await tierRouter.connect(admin).registerTier(0, await tierRouter.getAddress(), T1_FEE);
+        await stabilityFund.connect(admin).setTierFee(0, T1_FEE);
+        // Auto target is now $100 (T1_FEE * 10), well below the $300 manual default.
+        expect(await stabilityFund.sfTarget()).to.equal(100_000_000n);
+        await expect(
+          stabilityFund.connect(admin).setStabilityFloor(150_000_000) // $150 > $100 auto target
+        ).to.be.revertedWith("SF: floor exceeds target");
+        // $50 floor is fine against the $100 auto target.
+        await stabilityFund.connect(admin).setStabilityFloor(50_000_000);
+        expect(await stabilityFund.stabilityFloor()).to.equal(50_000_000n);
+      });
     });
 
     it("CNOVABuybackReserve: setTriggerThreshold executes once setGovernance is wired", async function () {

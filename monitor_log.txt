@@ -264,3 +264,150 @@ SyntaxError: Unexpected end of input
 
 Node.js v22.18.0
 Wed 06/17/2026  8:00:02.05 — Monitor FAILED (exit code 1
+ 
+========================================== 
+Thu 06/18/2026  1:30:48.43 — Monitor starting 
+========================================== 
+C:\CryptoNite-Smart-Contracts\CryptoNova\scripts\monitor_v8.js:349
+    repor
+         
+
+SyntaxError: Unexpected end of input
+    at wrapSafe (node:internal/modules/cjs/loader:1620:18)
+    at Module._compile (node:internal/modules/cjs/loader:1662:20)
+    at Object..js (node:internal/modules/cjs/loader:1820:10)
+    at Module.load (node:internal/modules/cjs/loader:1423:32)
+    at Function._load (node:internal/modules/cjs/loader:1246:12)
+    at TracingChannel.traceSync (node:diagnostics_channel:322:14)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:235:24)
+    at Function.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:171:5)
+    at node:internal/main/run_main_module:36:49
+
+Node.js v22.18.0
+Thu 06/18/2026  1:30:48.71 — Monitor FAILED (exit code 1
+ 
+========================================== 
+Thu 06/18/2026  1:31:24.55 — Monitor starting 
+========================================== 
+C:\CryptoNite-Smart-Contracts\CryptoNova\scripts\monitor_v8.js:349
+    repor
+         
+
+SyntaxError: Unexpected end of input
+    at wrapSafe (node:internal/modules/cjs/loader:1620:18)
+    at Module._compile (node:internal/modules/cjs/loader:1662:20)
+    at Object..js (node:internal/modules/cjs/loader:1820:10)
+    at Module.load (node:internal/modules/cjs/loader:1423:32)
+    at Function._load (node:internal/modules/cjs/loader:1246:12)
+    at TracingChannel.traceSync (node:diagnostics_channel:322:14)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:235:24)
+    at Function.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:171:5)
+    at node:internal/main/run_main_module:36:49
+
+Node.js v22.18.0
+Thu 06/18/2026  1:31:24.63 — Monitor FAILED (exit code 1
+ 
+========================================== 
+Thu 06/18/2026  1:31:24.65 — Monitor starting 
+========================================== 
+C:\CryptoNite-Smart-Contracts\CryptoNova\scripts\monitor_v8.js:349
+    repor
+         
+
+SyntaxError: Unexpected end of input
+    at wrapSafe (node:internal/modules/cjs/loader:1620:18)
+    at Module._compile (node:internal/modules/cjs/loader:1662:20)
+    at Object..js (node:internal/modules/cjs/loader:1820:10)
+    at Module.load (node:internal/modules/cjs/loader:1423:32)
+    at Function._load (node:internal/modules/cjs/loader:1246:12)
+    at TracingChannel.traceSync (node:diagnostics_channel:322:14)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:235:24)
+    at Function.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:171:5)
+    at node:internal/main/run_main_module:36:49
+
+Node.js v22.18.0
+Thu 06/18/2026  1:31:24.73 — Monitor FAILED (exit code 1
+ 
+========================================== 
+Thu 06/18/2026  8:00:01.33 — Monitor starting 
+========================================== 
+C:\CryptoNite-Smart-Contracts\CryptoNova\scripts\monitor_v8.js:349
+    repor
+         
+
+SyntaxError: Unexpected end of input
+    at wrapSafe (node:internal/modules/cjs/loader:1620:18)
+    at Module._compile (node:internal/modules/cjs/loader:1662:20)
+    at Object..js (node:internal/modules/cjs/loader:1820:10)
+    at Module.load (node:internal/modules/cjs/loader:1423:32)
+    at Function._load (node:internal/modules/cjs/loader:1246:12)
+    at TracingChannel.traceSync (node:diagnostics_channel:322:14)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:235:24)
+    at Function.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:171:5)
+    at node:internal/main/run_main_module:36:49
+
+Node.js v22.18.0
+Thu 06/18/2026  8:00:01.41 — Monitor FAILED (exit code 1
+ 
+========================================== 
+Fri 06/19/2026  8:00:01.59 — Monitor starting 
+========================================== 
+C:\CryptoNite-Smart-Contracts\CryptoNova\scripts\monitor_v8.js:349
+    repor
+         
+
+SyntaxError: Unexpected end of input
+    at wrapSafe (node:internal/modules/cjs/loader:1620:18)
+    at Module._compile (node:internal/modules/cjs/loader:1662:20)
+    at Object..js (node:internal/modules/cjs/loader:1820:10)
+    at Module.load (node:internal/modules/cjs/loader:1423:32)
+    at Function._load (node:internal/modules/cjs/loader:1246:12)
+    at TracingChannel.traceSync (node:diagnostics_channel:322:14)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:235:24)
+    at Function.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:171:5)
+    at node:internal/main/run_main_module:36:49
+
+Node.js v22.18.0
+Fri 06/19/2026  8:00:02.11 — Monitor FAILED (exit code 1
+ 
+========================================== 
+Sun 06/21/2026  8:00:01.43 — Monitor starting 
+========================================== 
+C:\CryptoNite-Smart-Contracts\CryptoNova\scripts\monitor_v8.js:349
+    repor
+         
+
+SyntaxError: Unexpected end of input
+    at wrapSafe (node:internal/modules/cjs/loader:1620:18)
+    at Module._compile (node:internal/modules/cjs/loader:1662:20)
+    at Object..js (node:internal/modules/cjs/loader:1820:10)
+    at Module.load (node:internal/modules/cjs/loader:1423:32)
+    at Function._load (node:internal/modules/cjs/loader:1246:12)
+    at TracingChannel.traceSync (node:diagnostics_channel:322:14)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:235:24)
+    at Function.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:171:5)
+    at node:internal/main/run_main_module:36:49
+
+Node.js v22.18.0
+Sun 06/21/2026  8:00:01.69 — Monitor FAILED (exit code 1
+ 
+========================================== 
+Mon 06/22/2026  8:27:05.25 — Monitor starting 
+========================================== 
+C:\CryptoNite-Smart-Contracts\CryptoNova\scripts\monitor_v8.js:349
+    repor
+         
+
+SyntaxError: Unexpected end of input
+    at wrapSafe (node:internal/modules/cjs/loader:1620:18)
+    at Module._compile (node:internal/modules/cjs/loader:1662:20)
+    at Object..js (node:internal/modules/cjs/loader:1820:10)
+    at Module.load (node:internal/modules/cjs/loader:1423:32)
+    at Function._load (node:internal/modules/cjs/loader:1246:12)
+    at TracingChannel.traceSync (node:diagnostics_channel:322:14)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:235:24)
+    at Function.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:171:5)
+    at node:internal/main/run_main_module:36:49
+
+Node.js v22.18.0
+Mon 06/22/2026  8:27:09.81 — Monitor FAILED (exit code 1
