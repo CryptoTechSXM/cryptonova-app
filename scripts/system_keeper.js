@@ -1,6 +1,6 @@
 "use strict";
 /**
- * system_keeper.js — Autonomous Health Monitor & Auto-Funder for V8.18
+ * system_keeper.js — Autonomous Health Monitor & Auto-Funder for V8.22
  *
  * Runs every hour (via Claude Scheduled Task or Windows Task Scheduler).
  * Checks, alerts, and acts — then exits cleanly.
@@ -32,7 +32,8 @@
  *   BASE_SEPOLIA_RPC_URL     RPC endpoint  (default: https://sepolia.base.org)
  *   DEPLOYER_PRIVATE_KEY     Required for AUTO_RESCUE and SF_AUTOFUND
  *   W1_PRIVATE_KEY           Required for W1_WITHDRAW (separate from deployer on mainnet)
- *   ADDRESSES_FILE           Path to deployed addresses JSON  (default: deployed_addresses_v8_17.json)
+ *   ADDRESSES_FILE           Path to deployed addresses JSON  (default: deployed_addresses_v8_22.json)
+ *   HEARTBEAT_MINUTES        Min minutes between healthy-state heartbeats (default: 15)
  *   SF_MIN_USD               SF warning threshold in USD      (default: 100)
  *   SF_CRITICAL_USD          SF critical threshold in USD     (default: 30)
  *   PARKED_WARN              Parked queue warning threshold   (default: 50)
@@ -59,14 +60,16 @@ require('dotenv').config({ path: path.resolve(__dirname, '../.env') });
 const RPC_URL        = process.env.BASE_SEPOLIA_RPC_URL || 'https://sepolia.base.org';
 const DEPLOYER_KEY   = process.env.DEPLOYER_PRIVATE_KEY;
 const W1_KEY         = process.env.W1_PRIVATE_KEY;          // optional — W1 separate key
-const ADDR_FILE      = path.join(__dirname, process.env.ADDRESSES_FILE || 'deployed_addresses_v8_18.json');
+const ADDR_FILE      = path.join(__dirname, process.env.ADDRESSES_FILE || 'deployed_addresses_v8_22.json');
 const LOG_FILE       = process.env.KEEPER_LOG
   ? path.resolve(process.env.KEEPER_LOG)
   : path.join(__dirname, '../logs/keeper.log');
 const STATE_FILE     = path.join(path.dirname(LOG_FILE), 'syskeeper_state.json');
 
-// Telegram throttle — send heartbeat every N quiet (healthy, no-action) runs
-const HEARTBEAT_EVERY    = Number(process.env.HEARTBEAT_EVERY    || 30);   // ~1 hr at 2-min tick
+// Telegram throttle — always send immediately on alert/action; otherwise send a
+// heartbeat at least every HEARTBEAT_MINUTES. Time-based (not run-count-based)
+// so it stays correct no matter how often this script actually gets invoked.
+const HEARTBEAT_MINUTES  = Number(process.env.HEARTBEAT_MINUTES  || 15);
 // Rescue cooldown — don't re-run AUTO_RESCUE within N minutes of last attempt
 const RESCUE_COOLDOWN_MS = Number(process.env.RESCUE_COOLDOWN_MIN || 15) * 60_000;
 
@@ -123,7 +126,7 @@ async function safeCall(fn, defaultVal) {
 // ── State persistence (throttle counters across runs) ─────────────────────────
 function loadSKState() {
   try { return JSON.parse(fs.readFileSync(STATE_FILE, 'utf8')); }
-  catch { return { totalRuns: 0, quietRuns: 0, lastRescueAt: null }; }
+  catch { return { totalRuns: 0, quietRuns: 0, lastRescueAt: null, lastTgSentAt: null, heartbeatNo: 0 }; }
 }
 function saveSKState(s) {
   try {
@@ -587,21 +590,26 @@ async function main() {
 
   // ── TG throttle decision ──────────────────────────────────────────────────
   // Send immediately on: critical/warning alert, any action taken.
-  // On healthy + no-action runs: only send every HEARTBEAT_EVERY runs (~1 hr).
-  const hasAlert    = isCritical || isWarning;
-  const hasActions  = actions.length > 0;
-  skState.quietRuns = hasAlert || hasActions ? 0 : (skState.quietRuns || 0) + 1;
-  const isHeartbeat = skState.quietRuns > 0 && skState.quietRuns % HEARTBEAT_EVERY === 0;
-  const shouldSendTG = hasAlert || hasActions || isHeartbeat;
+  // Otherwise send a heartbeat at least every HEARTBEAT_MINUTES -- time-based,
+  // so it stays correct regardless of how often this script actually runs.
+  const hasAlert        = isCritical || isWarning;
+  const hasActions      = actions.length > 0;
+  skState.quietRuns     = hasAlert || hasActions ? 0 : (skState.quietRuns || 0) + 1;
+  skState.heartbeatNo   = skState.heartbeatNo || 0;
+  const msSinceLastTg   = skState.lastTgSentAt ? (Date.now() - skState.lastTgSentAt) : Infinity;
+  const minsSinceLastTg = msSinceLastTg === Infinity ? null : Math.floor(msSinceLastTg / 60_000);
+  const isHeartbeat     = !hasAlert && !hasActions && msSinceLastTg >= HEARTBEAT_MINUTES * 60_000;
+  const shouldSendTG    = hasAlert || hasActions || isHeartbeat;
 
   if (TG_ENABLED && !shouldSendTG) {
-    log(`  📱 TG suppressed — quiet run ${skState.quietRuns}/${HEARTBEAT_EVERY} (next heartbeat in ${HEARTBEAT_EVERY - skState.quietRuns} runs)`);
+    log(`  📱 TG suppressed — last sent ${minsSinceLastTg}m ago (heartbeat every ${HEARTBEAT_MINUTES}m)`);
   }
 
   if (TG_ENABLED && shouldSendTG) {
+    if (isHeartbeat) skState.heartbeatNo += 1;
     const headerEmoji = isCritical ? '\u{1F534}' : isWarning ? '\u{1F7E1}' : '\u{1F7E2}';
     const headerLabel = isCritical ? 'ALERT: CRITICAL' : isWarning ? 'ALERT: WARNING'
-                      : isHeartbeat ? `Heartbeat #${Math.floor(skState.quietRuns / HEARTBEAT_EVERY)}` : 'System Healthy';
+                      : isHeartbeat ? `Heartbeat #${skState.heartbeatNo}` : 'System Healthy';
 
     const sfEmoji     = sfTotalUSD < SF_CRITICAL_USD ? '\u{1F534}' : sfTotalUSD < SF_MIN_USD ? '\u{1F7E1}' : '\u{1F7E2}';
     const parkedEmoji = totalParked > PARKED_CRITICAL ? '\u{1F534}' : totalParked > PARKED_WARN ? '\u{1F7E1}' : '\u{1F7E2}';
@@ -640,6 +648,7 @@ async function main() {
 
     const msg  = lines.join('\n');
     const tgOk = await sendTelegram(msg);
+    skState.lastTgSentAt = Date.now();
     log(tgOk ? '  📱 Telegram report sent.' : '  📱 Telegram send FAILED -- check BOT_TOKEN/CHAT_ID in .env.');
   } else if (!TG_ENABLED) {
     log('  Telegram: not configured (set TELEGRAM_BOT_TOKEN + TELEGRAM_CHAT_ID to enable).');
