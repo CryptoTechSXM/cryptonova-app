@@ -48,7 +48,7 @@
  *   USDC_ADDRESS           Reuse existing USDC; omit to deploy MockUSDC
  *   MATRIX_SIZE            127 (default) | 15 (quick dev cycle)
  *   DEPLOY_TIERS           Comma-separated list e.g. "1,2" (default: "1,2,3,4,5,6,7,8,9,10")
- *   ADDRESSES_FILE         Output filename (default: deployed_addresses_v8_21.json)
+ *   ADDRESSES_FILE         Output filename (default: deployed_addresses_v8_22.json)
  *
  * Run: npx hardhat run scripts/deploy_v8.js --network baseSepolia
  */
@@ -63,7 +63,7 @@ require("dotenv").config();
 // v8_1 = size-15 testnet (retired).  v8_2 = size-64 pre-mainnet stress test.
 const ADDRESSES_FILE = path.join(
   __dirname,
-  process.env.ADDRESSES_FILE || "deployed_addresses_v8_21.json"
+  process.env.ADDRESSES_FILE || "deployed_addresses_v8_22.json"
 );
 
 // ── Config ────────────────────────────────────────────────────────────────────
@@ -175,7 +175,7 @@ async function main() {
   // V8.19: liquidityReserve — CNOVA/USDC LP wallet. Defaults to opsWallet until mainnet LP deployed.
   const liquidityReserve = process.env.LIQUIDITY_RESERVE_ADDRESS || opsWallet;
 
-  console.log("\n  V8.20 Deploy — Pool=44% Chain=17% SF=12% LQ=2% L1=10% Treasury=10% Dev=2% Ops/CW/BBR=1% each");
+  console.log("\n  V8.22 Deploy — Pool=44% Chain=17% SF=12% LQ=2% L1=10% Treasury=10% Dev=2% Ops/CW/BBR=1% each");
   sep();
   console.log(`  Deployer        : ${deployerAddr}`);
   console.log(`  AccountOne      : ${accountOne}`);
@@ -653,7 +653,7 @@ async function main() {
   }
   sep();
   console.log(`  Addresses file: ${require("path").basename(ADDRESSES_FILE)}`);
-  console.log("  V8.20 Deploy complete.\n");
+  console.log("  V8.22 Deploy complete.\n");
 }
 
 main().catch(e => { console.error(e); process.exitCode = 1; });
