@@ -1,5 +1,5 @@
 // direct_keeper.js
-// Local keeper bridge: polls checkUpkeep → calls performUpkeep on V8.18 MatrixKeeper.
+// Local keeper bridge: polls checkUpkeep → calls performUpkeep on V8.22 MatrixKeeper.
 // Replaces Chainlink Automation while CLA registrations are disabled / CRE access is pending.
 //
 // Run manually:  npx hardhat run scripts/direct_keeper.js --network baseSepolia
@@ -15,7 +15,7 @@ const hre  = require("hardhat");
 const fs   = require("fs");
 const path = require("path");
 
-const MATRIX_KEEPER   = "0x08Ae8cABEABA22348839BD2D1BD7A95dAe5920e8"; // V8.21 (library-extraction deploy)
+const MATRIX_KEEPER   = "0xEfA866A4546843Ad9E523507606c0Ed9718737a5"; // V8.22 (per-tier SF mult DAO voting deploy)
 const GAS_LIMIT       = 6_000_000;
 const LOG_FILE        = path.join(__dirname, "..", "keeper.log");
 const STATE_FILE      = path.join(__dirname, "..", "keeper_state.json");
