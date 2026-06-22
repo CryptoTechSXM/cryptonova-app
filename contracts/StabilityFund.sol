@@ -131,9 +131,10 @@ contract StabilityFund is Ownable2Step {
     uint256 private _manualSfTarget;
 
     /// @notice Per-tier multiplier applied to that tier's entry fee to derive
-    ///         the auto-computed sfTarget. Index 0 = T1. Owner-tunable (not a
-    ///         DAO governance param -- consistent with tier entry fees and
-    ///         matrix wiring, which are also owner-only).
+    ///         the auto-computed sfTarget. Index 0 = T1. V8.22: each tier is
+    ///         independently DAO-governable (PARAM_SF_MULT_T1..T10 in
+    ///         V8Governance.sol) as well as owner-tunable -- reversed from the
+    ///         V8.21 "owner-only array" decision after further user feedback.
     uint256[MAX_TIERS] public sfTargetMultiplier;
 
     /// @notice When true (default), `sfTarget()` auto-computes from the
@@ -272,13 +273,37 @@ contract StabilityFund is Ownable2Step {
         emit SFTargetSet(_target);
     }
 
-    /// @notice V8.21: owner-only per-tier multiplier for the auto-computed
-    ///         target (sfTargetMultiplier[tierIndex] x tierEntryFees[tierIndex]).
-    ///         Not a DAO governance param -- consistent with tier entry fees
-    ///         and matrix wiring (also owner-only). Bounded 1-1000 (0.1x-100x
-    ///         conceptually if you think in whole multiples; practically this
-    ///         is a plain integer multiplier, e.g. 10 = 10x).
+    /// @notice Owner-only convenience setter covering any tier in one call.
+    ///         V8.22: kept for emergency/bulk admin use, but each tier is ALSO
+    ///         independently DAO-governable now via the ten single-value
+    ///         siblings below (setSfTargetMultiplierT1..T10) -- reversing the
+    ///         V8.21 decision to keep this owner-only-array-only. Same
+    ///         pattern CNOVADirectSale uses for setTargets/setCaps (multi-arg
+    ///         convenience setter stays owner-only; single-value siblings are
+    ///         what governance proposals actually call, since propose() can
+    ///         only carry one uint256 value per proposal).
     function setSfTargetMultiplier(uint8 tierIndex, uint256 multiplier) external onlyOwner {
+        _setSfTargetMultiplier(tierIndex, multiplier);
+    }
+
+    /// @notice V8.22: per-tier DAO-governable siblings of setSfTargetMultiplier()
+    ///         above. One PARAM_SF_MULT_T{n} id per tier in V8Governance.sol --
+    ///         a real DAO vote can now move T7's multiplier without touching
+    ///         T1-T6/T8-T10. Same bound (1-1000) and event as the owner-only
+    ///         convenience setter; owner keeps the emergency backstop via
+    ///         onlyOwnerOrGovernance, neither path replaces the other.
+    function setSfTargetMultiplierT1(uint256 m)  external onlyOwnerOrGovernance { _setSfTargetMultiplier(0, m); }
+    function setSfTargetMultiplierT2(uint256 m)  external onlyOwnerOrGovernance { _setSfTargetMultiplier(1, m); }
+    function setSfTargetMultiplierT3(uint256 m)  external onlyOwnerOrGovernance { _setSfTargetMultiplier(2, m); }
+    function setSfTargetMultiplierT4(uint256 m)  external onlyOwnerOrGovernance { _setSfTargetMultiplier(3, m); }
+    function setSfTargetMultiplierT5(uint256 m)  external onlyOwnerOrGovernance { _setSfTargetMultiplier(4, m); }
+    function setSfTargetMultiplierT6(uint256 m)  external onlyOwnerOrGovernance { _setSfTargetMultiplier(5, m); }
+    function setSfTargetMultiplierT7(uint256 m)  external onlyOwnerOrGovernance { _setSfTargetMultiplier(6, m); }
+    function setSfTargetMultiplierT8(uint256 m)  external onlyOwnerOrGovernance { _setSfTargetMultiplier(7, m); }
+    function setSfTargetMultiplierT9(uint256 m)  external onlyOwnerOrGovernance { _setSfTargetMultiplier(8, m); }
+    function setSfTargetMultiplierT10(uint256 m) external onlyOwnerOrGovernance { _setSfTargetMultiplier(9, m); }
+
+    function _setSfTargetMultiplier(uint8 tierIndex, uint256 multiplier) internal {
         require(tierIndex < MAX_TIERS,        "SF: invalid tier");
         require(multiplier > 0 && multiplier <= 1000, "SF: invalid multiplier");
         sfTargetMultiplier[tierIndex] = multiplier;

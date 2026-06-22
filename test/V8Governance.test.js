@@ -50,6 +50,9 @@ const PARAM_DS_MAX_TX_BPS         = 26n;
 const PARAM_CNOVA_REWARD_PCT      = 30n;
 const PARAM_CNOVA_BOOST_TABLE     = 36n;
 const PARAM_CW_GENESIS_BPS        = 37n;
+const PARAM_SF_MULT_T1            = 40n; // V8.22: per-tier SF target multiplier
+const PARAM_SF_MULT_T7            = 46n;
+const PARAM_SF_MULT_T10           = 49n;
 
 async function deployFixture() {
   const [deployer, admin, devOps, accountOne, proposer, voterA, voterB, other] =
@@ -496,6 +499,71 @@ describe("V8Governance — wiring regression + SF rescue ladder", function () {
         // $50 floor is fine against the $100 auto target.
         await stabilityFund.connect(admin).setStabilityFloor(50_000_000);
         expect(await stabilityFund.stabilityFloor()).to.equal(50_000_000n);
+      });
+    });
+
+    // ── V8.22: per-tier SF target multiplier made DAO-governable ───────────
+    // Reverses the V8.21 decision (owner-tunable array only, no PARAM_* ids).
+    // One PARAM_SF_MULT_T{n} id per tier -- a vote on T7 must not touch T1 or
+    // T10. Picking T1, T7 (middle), and T10 (the two ends + one middle tier)
+    // covers the dispatch table without needing all 10 redundant happy-path
+    // tests for what is mechanically the identical branch each time.
+    describe("V8.22 — sfTargetMultiplier[tier] is independently DAO-governable per tier", function () {
+      it("PARAM_SF_MULT_T1 executes once setGovernance is wired, only moves T1", async function () {
+        const { gov, govAddr, admin, stabilityFund, proposeVoteAndQueue } = await loadFixture(deployFixture);
+        await stabilityFund.connect(admin).setGovernance(govAddr);
+        const id = await proposeVoteAndQueue(
+          PARAM_SF_MULT_T1, await stabilityFund.getAddress(), 30, "raise T1 multiplier"
+        );
+        await gov.execute(id);
+        expect(await stabilityFund.sfTargetMultiplier(0)).to.equal(30n);
+        // T2 (default 20x) must be untouched.
+        expect(await stabilityFund.sfTargetMultiplier(1)).to.equal(20n);
+      });
+
+      it("PARAM_SF_MULT_T7 executes once setGovernance is wired, only moves T7", async function () {
+        const { gov, govAddr, admin, stabilityFund, proposeVoteAndQueue } = await loadFixture(deployFixture);
+        await stabilityFund.connect(admin).setGovernance(govAddr);
+        const id = await proposeVoteAndQueue(
+          PARAM_SF_MULT_T7, await stabilityFund.getAddress(), 75, "raise T7 multiplier"
+        );
+        await gov.execute(id);
+        expect(await stabilityFund.sfTargetMultiplier(6)).to.equal(75n);
+        expect(await stabilityFund.sfTargetMultiplier(5)).to.equal(60n); // T6 default, untouched
+        expect(await stabilityFund.sfTargetMultiplier(7)).to.equal(80n); // T8 default, untouched
+      });
+
+      it("PARAM_SF_MULT_T10 executes once setGovernance is wired, only moves T10", async function () {
+        const { gov, govAddr, admin, stabilityFund, proposeVoteAndQueue } = await loadFixture(deployFixture);
+        await stabilityFund.connect(admin).setGovernance(govAddr);
+        const id = await proposeVoteAndQueue(
+          PARAM_SF_MULT_T10, await stabilityFund.getAddress(), 150, "raise T10 multiplier"
+        );
+        await gov.execute(id);
+        expect(await stabilityFund.sfTargetMultiplier(9)).to.equal(150n);
+        expect(await stabilityFund.sfTargetMultiplier(8)).to.equal(90n); // T9 default, untouched
+      });
+
+      it("REGRESSION: PARAM_SF_MULT_T1 execute() reverts without setGovernance wired", async function () {
+        const { gov, stabilityFund, proposeVoteAndQueue } = await loadFixture(deployFixture);
+        const id = await proposeVoteAndQueue(
+          PARAM_SF_MULT_T1, await stabilityFund.getAddress(), 30, "raise T1 multiplier"
+        );
+        await expect(gov.execute(id)).to.be.revertedWith("SF: not authorized");
+      });
+
+      it("owner-only setSfTargetMultiplier(tierIndex, m) convenience setter still works independently of governance", async function () {
+        const { admin, stabilityFund } = await loadFixture(deployFixture);
+        await stabilityFund.connect(admin).setSfTargetMultiplier(3, 35); // T4
+        expect(await stabilityFund.sfTargetMultiplier(3)).to.equal(35n);
+      });
+
+      it("rejects an out-of-menu value at propose() time (allowed menu is enumerated, not freeform)", async function () {
+        const { gov, admin, govAddr, stabilityFund } = await loadFixture(deployFixture);
+        await stabilityFund.connect(admin).setGovernance(govAddr);
+        await expect(
+          gov.propose(PARAM_SF_MULT_T1, await stabilityFund.getAddress(), 999, "bogus multiplier")
+        ).to.be.revertedWithCustomError(gov, "GOV_ValueNotAllowed");
       });
     });
 

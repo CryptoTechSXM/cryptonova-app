@@ -101,6 +101,19 @@ interface IGovernanceTarget {
     function setSFTarget(uint256 v) external;
     function setCommunityCarveOutBps(uint256 v) external;
     function setStabilityFloor(uint256 v) external;
+    // ── V8.22: per-tier SF target multiplier -- reverses the V8.21 decision to
+    //    keep this owner-only-array-only. One single-value setter per tier
+    //    since propose() can only carry one uint256 value per proposal.
+    function setSfTargetMultiplierT1(uint256 v) external;
+    function setSfTargetMultiplierT2(uint256 v) external;
+    function setSfTargetMultiplierT3(uint256 v) external;
+    function setSfTargetMultiplierT4(uint256 v) external;
+    function setSfTargetMultiplierT5(uint256 v) external;
+    function setSfTargetMultiplierT6(uint256 v) external;
+    function setSfTargetMultiplierT7(uint256 v) external;
+    function setSfTargetMultiplierT8(uint256 v) external;
+    function setSfTargetMultiplierT9(uint256 v) external;
+    function setSfTargetMultiplierT10(uint256 v) external;
     // ── V8.20: second wave -- CNOVABuybackReserve ────────────────────────────
     function setTriggerThreshold(uint256 v) external;
     function setMaxSlippageBps(uint256 v) external;
@@ -200,6 +213,24 @@ contract V8Governance is Ownable {
     uint8 public constant PARAM_CW_GENESIS_BPS             = 37;
     uint8 public constant PARAM_CW_DISTRIBUTE_RATIO_BPS    = 38;
     uint8 public constant PARAM_CW_DISTRIBUTE_INTERVAL     = 39;
+    // ── V8.22: StabilityFund per-tier SF target multiplier ────────────────────
+    /// @dev Reverses the V8.21 decision (sfTargetMultiplier was owner-only-array
+    ///      only). Each tier gets its own id so the DAO can move one tier's
+    ///      multiplier without touching the other nine. Target is always
+    ///      StabilityFund's address, same as PARAM_SF_TARGET/PARAM_SF_*.
+    uint8 public constant PARAM_SF_MULT_T1                 = 40;
+    uint8 public constant PARAM_SF_MULT_T2                 = 41;
+    uint8 public constant PARAM_SF_MULT_T3                 = 42;
+    uint8 public constant PARAM_SF_MULT_T4                 = 43;
+    uint8 public constant PARAM_SF_MULT_T5                 = 44;
+    uint8 public constant PARAM_SF_MULT_T6                 = 45;
+    uint8 public constant PARAM_SF_MULT_T7                 = 46;
+    uint8 public constant PARAM_SF_MULT_T8                 = 47;
+    uint8 public constant PARAM_SF_MULT_T9                 = 48;
+    uint8 public constant PARAM_SF_MULT_T10                = 49;
+    /// @dev Highest assigned param id -- update this (not PARAM_CW_DISTRIBUTE_INTERVAL)
+    ///      in setAllowedValues()/propose()'s bound checks whenever a new param is added.
+    uint8 public constant PARAM_MAX_ID                     = PARAM_SF_MULT_T10;
 
     // ── Governance config (self-governable) ───────────────────────────────────
     uint256 public votingPeriod   = 72 hours;
@@ -350,11 +381,24 @@ contract V8Governance is Ownable {
         _allowedValues[PARAM_CW_GENESIS_BPS]              = [5000, 6000, 7000, 8000, 9000];
         _allowedValues[PARAM_CW_DISTRIBUTE_RATIO_BPS]     = [1000, 2500, 5000, 7500, 9000];
         _allowedValues[PARAM_CW_DISTRIBUTE_INTERVAL]      = [7 days, 30 days, 90 days, 180 days, 365 days];
+        // ── V8.22: StabilityFund per-tier SF target multiplier ────────────────
+        // Same menu for all 10 -- the DAO picks whatever's appropriate for
+        // each tier independently; no enforced ordering between tiers.
+        _allowedValues[PARAM_SF_MULT_T1]  = [5, 10, 15, 20, 30, 40, 50, 75, 100, 150];
+        _allowedValues[PARAM_SF_MULT_T2]  = [5, 10, 15, 20, 30, 40, 50, 75, 100, 150];
+        _allowedValues[PARAM_SF_MULT_T3]  = [5, 10, 15, 20, 30, 40, 50, 75, 100, 150];
+        _allowedValues[PARAM_SF_MULT_T4]  = [5, 10, 15, 20, 30, 40, 50, 75, 100, 150];
+        _allowedValues[PARAM_SF_MULT_T5]  = [5, 10, 15, 20, 30, 40, 50, 75, 100, 150];
+        _allowedValues[PARAM_SF_MULT_T6]  = [5, 10, 15, 20, 30, 40, 50, 75, 100, 150];
+        _allowedValues[PARAM_SF_MULT_T7]  = [5, 10, 15, 20, 30, 40, 50, 75, 100, 150];
+        _allowedValues[PARAM_SF_MULT_T8]  = [5, 10, 15, 20, 30, 40, 50, 75, 100, 150];
+        _allowedValues[PARAM_SF_MULT_T9]  = [5, 10, 15, 20, 30, 40, 50, 75, 100, 150];
+        _allowedValues[PARAM_SF_MULT_T10] = [5, 10, 15, 20, 30, 40, 50, 75, 100, 150];
     }
 
     /// @notice Owner can add or replace the allowed-values list for any param.
     function setAllowedValues(uint8 paramId, uint256[] calldata values) external onlyOwner {
-        if (paramId == 0 || paramId > PARAM_CW_DISTRIBUTE_INTERVAL) revert GOV_InvalidParam();
+        if (paramId == 0 || paramId > PARAM_MAX_ID) revert GOV_InvalidParam();
         _allowedValues[paramId] = values;
         emit AllowedValuesSet(paramId, values);
     }
@@ -378,7 +422,7 @@ contract V8Governance is Ownable {
         uint256 newValue,
         string  calldata description
     ) external returns (uint256 proposalId) {
-        if (paramId == 0 || paramId > PARAM_CW_DISTRIBUTE_INTERVAL) revert GOV_InvalidParam();
+        if (paramId == 0 || paramId > PARAM_MAX_ID) revert GOV_InvalidParam();
         // V8.21: PARAM_SF_RESCUE_LADDER is no longer array-valued -- it goes
         // through this normal propose() path now. Only the boost table is still
         // genuinely array-valued and still blocked here (uses proposeBoostTable()).
@@ -645,6 +689,27 @@ contract V8Governance is Ownable {
             t.setDistributeRatio(value);
         } else if (paramId == PARAM_CW_DISTRIBUTE_INTERVAL) {
             t.setDistributeInterval(value);
+        // ── V8.22: StabilityFund per-tier SF target multiplier ────────────────
+        } else if (paramId == PARAM_SF_MULT_T1) {
+            t.setSfTargetMultiplierT1(value);
+        } else if (paramId == PARAM_SF_MULT_T2) {
+            t.setSfTargetMultiplierT2(value);
+        } else if (paramId == PARAM_SF_MULT_T3) {
+            t.setSfTargetMultiplierT3(value);
+        } else if (paramId == PARAM_SF_MULT_T4) {
+            t.setSfTargetMultiplierT4(value);
+        } else if (paramId == PARAM_SF_MULT_T5) {
+            t.setSfTargetMultiplierT5(value);
+        } else if (paramId == PARAM_SF_MULT_T6) {
+            t.setSfTargetMultiplierT6(value);
+        } else if (paramId == PARAM_SF_MULT_T7) {
+            t.setSfTargetMultiplierT7(value);
+        } else if (paramId == PARAM_SF_MULT_T8) {
+            t.setSfTargetMultiplierT8(value);
+        } else if (paramId == PARAM_SF_MULT_T9) {
+            t.setSfTargetMultiplierT9(value);
+        } else if (paramId == PARAM_SF_MULT_T10) {
+            t.setSfTargetMultiplierT10(value);
         }
     }
 

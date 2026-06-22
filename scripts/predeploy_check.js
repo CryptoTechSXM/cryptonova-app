@@ -829,10 +829,29 @@ if (deployTxt) {
     fail("V8Governance.sol: V8.20 second-wave params or proposeBoostTable() MISSING");
   }
   if (govTxtV20 && govTxtV20.includes("setAllowedValues(uint8 paramId") &&
-      govTxtV20.includes("paramId > PARAM_CW_DISTRIBUTE_INTERVAL")) {
-    ok("V8Governance.sol: setAllowedValues()/propose() upper bound updated to new max param (V8.20)");
+      govTxtV20.includes("paramId > PARAM_MAX_ID") &&
+      govTxtV20.includes("uint8 public constant PARAM_MAX_ID")) {
+    ok("V8Governance.sol: setAllowedValues()/propose() upper bound updated to new max param (V8.22: PARAM_MAX_ID)");
   } else {
-    fail("V8Governance.sol: setAllowedValues()/propose() upper bound NOT updated — new params would be unreachable or the old PARAM_QUORUM_BPS ceiling would reject them");
+    fail("V8Governance.sol: setAllowedValues()/propose() upper bound NOT updated — new params would be unreachable or the old ceiling would reject them");
+  }
+  // V8.22: StabilityFund per-tier SF target multiplier -- 10 new PARAM_SF_MULT_T{n}
+  // ids, each its own single-value governable setter (propose() can only carry
+  // one uint256, so this couldn't be a single multi-arg setter like the
+  // owner-only convenience function).
+  if (govTxtV20 && govTxtV20.includes("PARAM_SF_MULT_T1") && govTxtV20.includes("PARAM_SF_MULT_T10") &&
+      govTxtV20.includes("function setSfTargetMultiplierT1(uint256 v) external;") &&
+      govTxtV20.includes("function setSfTargetMultiplierT10(uint256 v) external;")) {
+    ok("V8Governance.sol: PARAM_SF_MULT_T1..T10 (V8.22 per-tier SF target multiplier) found");
+  } else {
+    fail("V8Governance.sol: PARAM_SF_MULT_T1..T10 MISSING — SF target multiplier governance proposals would revert");
+  }
+  if (sfTxtV20 && sfTxtV20.includes("function setSfTargetMultiplierT1(uint256 m)") &&
+      sfTxtV20.includes("function setSfTargetMultiplierT10(uint256 m)") &&
+      sfTxtV20.includes("onlyOwnerOrGovernance")) {
+    ok("StabilityFund.sol: setSfTargetMultiplierT1..T10 found, onlyOwnerOrGovernance (V8.22)");
+  } else {
+    fail("StabilityFund.sol: setSfTargetMultiplierT1..T10 MISSING or not governance-callable — V8.22 redesign incomplete");
   }
 
   // CNOVAToken / CommunityWallet: GOVERNOR_ROLE was already role-gated on these
