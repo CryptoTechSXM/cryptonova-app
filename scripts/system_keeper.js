@@ -2,7 +2,9 @@
 /**
  * system_keeper.js — Autonomous Health Monitor & Auto-Funder for V8.22
  *
- * Runs every hour (via Claude Scheduled Task or Windows Task Scheduler).
+ * Runs every 15 min (via Windows Task Scheduler -- see install_health_keeper_task.bat;
+ * Cowork's own scheduled-task mechanism can't reach Base Sepolia RPC from the
+ * sandbox, same root cause documented for direct_keeper.js).
  * Checks, alerts, and acts — then exits cleanly.
  *
  * MONITORS:
