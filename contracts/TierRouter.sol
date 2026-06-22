@@ -421,6 +421,34 @@ contract TierRouter is Ownable2Step {
 
     function resumeSystem() external onlyOwner {
         require(systemPaused, "TR: not paused");
+        _resume();
+    }
+
+    /// @notice V8.21: Owner-only manual kill switch. Immediately sets the
+    /// SAME systemPaused flag the automatic inactivity guard uses (and that
+    /// register()/manualUpgrade() already check via whenNotPaused) -- no new
+    /// gate, no separate flag, no risk of the two pause mechanisms disagreeing
+    /// about whether the system is open. Use for emergencies (e.g. a bug found
+    /// in a downstream contract) where new entries/upgrades need to stop NOW,
+    /// without waiting for the inactivity thresholds to trip on their own.
+    /// Does NOT block withdrawals -- members can still withdraw funds already
+    /// in the matrices while paused; this only stops NEW entries/upgrades.
+    function pauseSystem(string calldata reason) external onlyOwner {
+        require(!systemPaused, "TR: already paused");
+        systemPaused = true;
+        emit SystemPaused(reason, 0, 0);
+    }
+
+    /// @notice Alias of resumeSystem() with the paired name the
+    /// pauseSystem()/unpauseSystem() kill-switch API expects. Identical
+    /// effect -- both clear the same systemPaused flag and reset the
+    /// inactivity clocks so the automatic guard doesn't immediately re-trip.
+    function unpauseSystem() external onlyOwner {
+        require(systemPaused, "TR: not paused");
+        _resume();
+    }
+
+    function _resume() internal {
         systemPaused             = false;
         lastActivityTimestamp    = block.timestamp;
         cyclesAtLastRegistration = totalSystemCycles;

@@ -368,6 +368,96 @@ describe("V8Elevator — T1 → T2 upgrade cycle (MSIZE=7)", function () {
       expect(await tierRouter.systemPaused()).to.be.false;
     });
 
+    // ── V8.21: manual kill switch (pauseSystem/unpauseSystem) ───────────────
+    // Owner-only emergency stop, separate trigger but the SAME systemPaused
+    // flag/whenNotPaused gate the automatic inactivity guard above uses --
+    // see TierRouter.sol's pauseSystem()/unpauseSystem() doc comments.
+
+    it("owner can pauseSystem() immediately, blocking new register()", async function () {
+      const { tierRouter, admin, w1, reg } = await loadFixture(deployV8Fixture);
+
+      expect(await tierRouter.systemPaused()).to.be.false;
+
+      await expect(tierRouter.connect(admin).pauseSystem("emergency: bug found in matrix B"))
+        .to.emit(tierRouter, "SystemPaused")
+        .withArgs("emergency: bug found in matrix B", 0, 0);
+
+      expect(await tierRouter.systemPaused()).to.be.true;
+
+      await expect(reg(w1, ethers.ZeroAddress))
+        .to.be.revertedWith("TR: system paused - inactivity");
+    });
+
+    it("rejects pauseSystem() from a non-owner", async function () {
+      const { tierRouter, w1 } = await loadFixture(deployV8Fixture);
+
+      await expect(tierRouter.connect(w1).pauseSystem("not the owner"))
+        .to.be.revertedWithCustomError(tierRouter, "OwnableUnauthorizedAccount");
+    });
+
+    it("rejects pauseSystem() when already paused", async function () {
+      const { tierRouter, admin } = await loadFixture(deployV8Fixture);
+
+      await tierRouter.connect(admin).pauseSystem("first pause");
+      await expect(tierRouter.connect(admin).pauseSystem("second pause"))
+        .to.be.revertedWith("TR: already paused");
+    });
+
+    it("owner can unpauseSystem() after a manual pause, restoring register()", async function () {
+      const { tierRouter, admin, w1, reg } = await loadFixture(deployV8Fixture);
+
+      await tierRouter.connect(admin).pauseSystem("emergency");
+      expect(await tierRouter.systemPaused()).to.be.true;
+
+      await expect(tierRouter.connect(admin).unpauseSystem())
+        .to.emit(tierRouter, "SystemResumed")
+        .withArgs(admin.address);
+
+      expect(await tierRouter.systemPaused()).to.be.false;
+      await expect(reg(w1, ethers.ZeroAddress)).to.not.be.reverted;
+    });
+
+    it("rejects unpauseSystem() from a non-owner", async function () {
+      const { tierRouter, admin, w1 } = await loadFixture(deployV8Fixture);
+
+      await tierRouter.connect(admin).pauseSystem("emergency");
+      await expect(tierRouter.connect(w1).unpauseSystem())
+        .to.be.revertedWithCustomError(tierRouter, "OwnableUnauthorizedAccount");
+    });
+
+    it("rejects unpauseSystem() when not paused", async function () {
+      const { tierRouter, admin } = await loadFixture(deployV8Fixture);
+
+      await expect(tierRouter.connect(admin).unpauseSystem())
+        .to.be.revertedWith("TR: not paused");
+    });
+
+    it("unpauseSystem() also clears a pause that was triggered automatically by checkInactivity()", async function () {
+      const {
+        tierRouter, admin,
+        w1, s0, s1, s2, s3, s4, s5, s6, s7, s8, s9, s10, s11, s12, s13,
+        reg, fc,
+      } = await loadFixture(deployV8Fixture);
+
+      await tierRouter.connect(admin).setInactivityConfig(30, 1, true);
+
+      await reg(w1, ethers.ZeroAddress);
+      for (const s of [s0, s1, s2, s3, s4, s5]) await reg(s, w1.address);
+      await reg(s6, w1.address);
+      for (const s of [s7, s8, s9, s10, s11, s12]) await reg(s, w1.address);
+      await reg(s13, w1.address);
+      for (const s of [s0, s1, s2, s3, s4, s5]) await fc(s.address);
+      await fc(s6.address);
+
+      await tierRouter.checkInactivity();
+      expect(await tierRouter.systemPaused()).to.be.true;
+
+      // The kill-switch's unpauseSystem() is just a paired name for the same
+      // resume logic -- it must clear an automatically-triggered pause too.
+      await tierRouter.connect(admin).unpauseSystem();
+      expect(await tierRouter.systemPaused()).to.be.false;
+    });
+
   });
 
 // ═══════════════════════════════════════════════════════════════════════════════
