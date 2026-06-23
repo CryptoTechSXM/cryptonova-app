@@ -551,6 +551,14 @@ async function main() {
             scanSkipped++;
             continue;
           }
+          // Skip addresses that are no longer marked as parked in MatA
+          // (ghost queue entries left behind after a previous rescue).
+          const stillParked = await safeCall(() => matA1.isParked(addr), false);
+          if (!stillParked) {
+            log(`  [scan ${si}] ${addr.slice(0,10)}... ghost entry (not parked) -- skip`);
+            scanSkipped++;
+            continue;
+          }
           eligible.push(addr);
         }
         log(`  Found ${eligible.length} eligible (scanned ${SCAN_WINDOW}, skipped ${scanSkipped} dup/MatB)`);
