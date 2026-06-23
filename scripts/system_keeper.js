@@ -93,6 +93,15 @@ const DRY_RUN      = process.env.DRY_RUN      === 'true';
 // Fires once — after gate is open this becomes a no-op. Default ON.
 const T2_AUTO_GATE = process.env.T2_AUTO_GATE !== 'false';
 
+// ONRAMP_SIM: every ONRAMP_SIM_BATCH new T1 MatA members → sends ONRAMP_SIM_USD
+// test USDC from deployer to the distributor wallet, simulating a Transak partner fee.
+// The existing onramp_keeper.js picks it up within 15 min and distributes it to LP stakers.
+// Default ON for testnet — set ONRAMP_SIM=false to disable.
+const ONRAMP_SIM       = process.env.ONRAMP_SIM       !== 'false';
+const ONRAMP_SIM_BATCH = Number(process.env.ONRAMP_SIM_BATCH || 10);   // members per fee trigger
+const ONRAMP_SIM_USD   = Number(process.env.ONRAMP_SIM_USD   || 3);    // USD per batch
+const ONRAMP_POOL_FILE = path.join(__dirname, '..', 'deployed_addresses_onramp_pool.json');
+
 // Telegram
 const TG_TOKEN   = process.env.TELEGRAM_BOT_TOKEN;
 const TG_CHAT    = process.env.TELEGRAM_CHAT_ID;
@@ -128,7 +137,8 @@ async function safeCall(fn, defaultVal) {
 // ── State persistence (throttle counters across runs) ─────────────────────────
 function loadSKState() {
   try { return JSON.parse(fs.readFileSync(STATE_FILE, 'utf8')); }
-  catch { return { totalRuns: 0, quietRuns: 0, lastRescueAt: null, lastTgSentAt: null, heartbeatNo: 0 }; }
+  catch { return { totalRuns: 0, quietRuns: 0, lastRescueAt: null, lastTgSentAt: null, heartbeatNo: 0,
+                   lastSimMemberCount: 0, onrampSimTotalUSD: 0 }; }
 }
 function saveSKState(s) {
   try {
@@ -580,6 +590,68 @@ async function main() {
     }
   }
 
+  // ── Section 6: Onramp Fee Simulation (testnet) ───────────────────────────
+  // Every ONRAMP_SIM_BATCH new T1 MatA members → transfer ONRAMP_SIM_USD test USDC
+  // from deployer to the distributor wallet. The onramp_keeper picks it up within 15 min
+  // and calls distributeReward(), paying LP stakers pro-rata. This lets LP yield grow
+  // organically with the member base during testnet — no manual intervention needed.
+  if (ONRAMP_SIM && DEPLOYER_KEY && fs.existsSync(ONRAMP_POOL_FILE)) {
+    log('  ── Onramp Fee Simulation ─────────────────────────────────────────');
+    try {
+      const poolAddrs   = JSON.parse(fs.readFileSync(ONRAMP_POOL_FILE, 'utf8'));
+      const distAddr    = poolAddrs.distributorWallet;
+      const currentCount = Number(t1aOcc);
+      let   watermark    = skState.lastSimMemberCount || 0;
+
+      if (currentCount < watermark) {
+        // T1 MatA cycled — reset watermark so next fill triggers fresh batches
+        log(`  ℹ️  T1 MatA occupancy dropped (${watermark}→${currentCount}) — matrix cycled, resetting sim baseline.`);
+        watermark = 0;
+        skState.lastSimMemberCount = 0;
+      }
+
+      const delta   = currentCount - watermark;
+      const batches = Math.floor(delta / ONRAMP_SIM_BATCH);
+      const toNext  = ONRAMP_SIM_BATCH - (delta % ONRAMP_SIM_BATCH);
+      log(`  T1 MatA: ${currentCount}  watermark: ${watermark}  delta: +${delta}  batches ready: ${batches}  next in: ${toNext} members`);
+
+      if (batches > 0) {
+        const simAmt = BigInt(batches * ONRAMP_SIM_USD) * 1_000_000n;
+        log(`  Simulating ${batches} Transak batch(es) → ${fmt6(simAmt)} USDC to distributor (${distAddr.slice(0,10)}…)`);
+
+        if (!DRY_RUN) {
+          const deployer = new ethers.Wallet(DEPLOYER_KEY, provider);
+          const usdcSig  = usdc.connect(deployer);
+          const bal      = await safeCall(() => usdcSig.balanceOf(deployer.address), 0n);
+
+          if (bal < simAmt) {
+            log(`  ⚠️  Deployer USDC ${fmt6(bal)} < needed ${fmt6(simAmt)} — skipping sim this run`);
+          } else {
+            const tx  = await usdcSig.transfer(distAddr, simAmt, { gasLimit: 100_000 });
+            const rcp = await tx.wait();
+            if (rcp.status === 1) {
+              skState.lastSimMemberCount = watermark + batches * ONRAMP_SIM_BATCH;
+              skState.onrampSimTotalUSD  = (skState.onrampSimTotalUSD || 0) + batches * ONRAMP_SIM_USD;
+              log(`  ✅ Sent ${fmt6(simAmt)} to distributor  tx=${tx.hash.slice(0, 12)}…  gas=${rcp.gasUsed}`);
+              log(`  Cumulative sim fees: $${skState.onrampSimTotalUSD}`);
+              actions.push(`ONRAMP_SIM: ${fmt6(simAmt)} → distributor (${batches} batch × $${ONRAMP_SIM_USD})`);
+            } else {
+              log(`  ❌ Transfer tx reverted — distributor not funded this cycle`);
+            }
+          }
+        } else {
+          log(`  DRY_RUN: would send ${fmt6(BigInt(batches * ONRAMP_SIM_USD) * 1_000_000n)} to ${distAddr}`);
+          skState.lastSimMemberCount = watermark + batches * ONRAMP_SIM_BATCH;
+        }
+      } else {
+        log(`  No batch yet — need ${toNext} more member(s).`);
+      }
+    } catch (e) {
+      log(`  ⚠️  Onramp sim error: ${(e.message || '').slice(0, 100)}`);
+    }
+    log('');
+  }
+
   log('  -- Summary -------------------------------------------------------');
 
   const isCritical = sfTotalUSD < SF_CRITICAL_USD || totalParked > PARKED_CRITICAL;
@@ -637,6 +709,9 @@ async function main() {
     lines.push('\u{1F501} <b>System cycles:</b> ' + sysCycles + '  |  <b>W1 tier:</b> T' + w1Tier);
     lines.push('\u{1F4B0} <b>W1 withdrawable:</b> ' + fmt6(w1Total));
     lines.push('\u{1F4B3} <b>Deployer USDC:</b> ' + fmt6(deployerUsdc));
+    if (ONRAMP_SIM && (skState.onrampSimTotalUSD || 0) > 0) {
+      lines.push('\u{1F4A7} <b>Onramp sim total:</b> $' + (skState.onrampSimTotalUSD || 0) + ' distributed to LP pool');
+    }
 
     // Actions taken this cycle
     if (actions.length > 0) {
