@@ -1,0 +1,8 @@
+{
+  "network": "baseSepolia",
+  "deployedAt": "2026-06-23T00:00:00.000Z",
+  "onrampRewardPool": "0x387055f332C5558a2439D76FfFB4a5A3EbABc4EA",
+  "distributorWallet": "0x52BEA7CEfC8d6fF8B4621E3C2E320236F55cB476",
+  "usdc": "0x2D8B7b5eDec96bE441b6fb0D45D74a2BcE2C639a",
+  "owner": "0xCd0Af6a4116f2062c1594aDf34c1821D45175506"
+}
