@@ -35,7 +35,7 @@ require("dotenv").config();
 //   v8_2 = size-64 pre-mainnet  ← default
 const ADDRESSES_FILE = path.join(
   __dirname,
-  process.env.ADDRESSES_FILE || "deployed_addresses_v8_22.json"
+  process.env.ADDRESSES_FILE || "deployed_addresses_v8_23.json"
 );
 
 // COUNT: for 127-seat matrices, 260 fills MatA + MatB (W1 seeds pos-1, 126 fill
@@ -58,14 +58,14 @@ const HDR_OFFSET  = Number(process.env.HDR_OFFSET  || 0); // BIP-44 index offset
 const WATCH_WALLETS_RAW = process.env.WATCH_WALLETS || '';
 // WATCH_EVERY: print watched wallet status every N batches (default 5, set to 1 for every batch)
 const WATCH_EVERY  = Number(process.env.WATCH_EVERY  || 5);
-// RESCUE_SCAN: max parked slots to inspect per inline rescue pass (0 = all)
-// RESCUE_CAP:  max members to rescue per pass (0 = all)
-// RESCUE_ALL:  when true (default), loop rescue passes until SF is dry or queue is empty.
-//              This simulates the keeper running at full capacity — "real life" mode.
-//              Set RESCUE_ALL=false to revert to the old single-pass capped behaviour.
-const RESCUE_SCAN  = Number(process.env.RESCUE_SCAN  || 0);  // 0 = no limit
-const RESCUE_CAP   = Number(process.env.RESCUE_CAP   || 0);  // 0 = no limit
-const RESCUE_ALL   = (process.env.RESCUE_ALL ?? "true") !== "false";
+// CNOVA_BUY_RATE: fraction of registered wallets that buy CNOVA each cycle (0–1).
+// e.g. 0.25 = 25% of wallets buy CNOVA when a system cycle fires. Set to 0 to disable.
+const CNOVA_BUY_RATE = Number(process.env.CNOVA_BUY_RATE ?? "0.25");
+// CNOVA_BUY_MIN / CNOVA_BUY_MAX: random USDC spend range per wallet (6 decimals).
+const CNOVA_BUY_MIN  = Number(process.env.CNOVA_BUY_MIN  || 2_000_000);  // $2
+const CNOVA_BUY_MAX  = Number(process.env.CNOVA_BUY_MAX  || 8_000_000);  // $8
+// CNOVA_SELL_RATE: fraction of wallets that earlyUnlock (burn/sell) CNOVA each cycle.
+const CNOVA_SELL_RATE = Number(process.env.CNOVA_SELL_RATE ?? "0.15");  // 15% sell each cycle
 const ETH_PER      = ethers.parseEther("0.02");   // gas budget per wallet — 0.02 ETH covers approve + register even at 10+ gwei on Base Sepolia
 // UPGRADE_RATE: fraction of T1-MatB-eligible wallets to manually upgrade each batch (0–1).
 // 0.75 = 75% of eligible wallets self-upgrade.  Set to 0 to disable.
@@ -210,203 +210,62 @@ async function withdrawSweep(walletList, matA1, matB1) {
   console.log(`  Withdraw sweep: ${swept} withdrawals | ${fmt6(totalWithdrawn)} USDC total`);
 }
 
-// ── Inline parked-wallet rescue ───────────────────────────────────────────────
-// Called after every registration batch. Scans up to RESCUE_SCAN parked members,
-// rescues up to RESCUE_CAP using the sliding-scale SF contribution (V8.13).
-// Uses SF balance only — no deployer top-up. Silent no-op when nothing to rescue.
-const _WORK_PARKED_RESCUE = 4;
-const _GAS_RESCUE_NORMAL   = 800_000;
-const _GAS_RESCUE_OVERFLOW = 15_000_000;
-const _rescueCoder = ethers.AbiCoder.defaultAbiCoder();
+// ── CNOVA buy sweep — simulate members purchasing CNOVA via DirectSale ────────
+// Runs on every system cycle. A random CNOVA_BUY_RATE fraction of registered
+// wallets each spend a random $CNOVA_BUY_MIN–$CNOVA_BUY_MAX of their USDC on CNOVA.
+// Rescue is fully delegated to the keeper (direct_keeper.js / MatrixKeeper.performUpkeep).
+async function cnovaBuySweep(walletList, directSale, usdc) {
+  if (!directSale || CNOVA_BUY_RATE <= 0) return;
+  const dsAddr = await directSale.getAddress();
 
-// ── Give-up list: wallets skipped GIVE_UP_AFTER times are permanently abandoned ──
-// Prevents 28-line skip blocks every batch for wallets that can never be rescued.
-const GIVE_UP_AFTER = 3;          // consecutive skips before giving up
-const _skipCount    = new Map();  // addr (lc) → skip count this run
-const _giveUpSet    = new Set();  // addrs permanently abandoned
+  // Randomly sample CNOVA_BUY_RATE of registered wallets
+  const candidates = walletList.filter(() => Math.random() < CNOVA_BUY_RATE);
+  if (candidates.length === 0) { console.log(`  💰 CNOVA buy sweep: no wallets selected this cycle`); return; }
 
-function _sfRescueBpsInline(withdrawable, fee) {
-  const wBps = withdrawable * 10000n / fee;
-  if (wBps >= 10000n) return    0n;
-  if (wBps >=  9500n) return 1000n;
-  if (wBps >=  9000n) return 1500n;
-  if (wBps >=  8500n) return 2000n;
-  if (wBps >=  8000n) return 2500n;
-  if (wBps >=  7500n) return 3000n;
-  if (wBps >=  7000n) return 3500n;
-  if (wBps >=  6500n) return 4000n;
-  if (wBps >=  6000n) return 4500n;
-  if (wBps >=  5000n) return 5000n;
-  if (wBps >=  4000n) return 6000n;  // 40–49% → SF covers 60% (script-side; contract needs V8.18 patch)
-  return null; // < 40% withdrawable — not keeper-eligible
-}
+  let bought = 0, skipped = 0;
+  let totalUsdcSpent = 0n, totalCnovaReceived = 0n;
 
-// _inlineRescuePass: one scan-and-rescue sweep over the parked queue.
-// Returns the number of wallets rescued this pass (0 = done / SF dry).
-async function _inlineRescuePass({ matA1, matB1, stabilityFund, matrixKeeper, rawDeployer, entryFee, scanLimit, capLimit }) {
-  const parkedCount = await matA1.getParkedCount().catch(() => 0n);
-  if (parkedCount === 0n) return 0;
-
-  const sfBal = await stabilityFund.balanceByTier(0).catch(() => 0n);
-  const minSfShare = entryFee * 1000n / 10000n; // 10% of fee = lowest sliding-scale tier
-  if (sfBal < minSfShare) return 0;
-
-  const matA1Addr = await matA1.getAddress();
-  const matBSize  = await matB1.MATRIX_SIZE();
-  let   matBOcc   = await matB1.occupancy();
-
-  // Scan up to scanLimit parked members (0 = all)
-  const scanCount = (scanLimit === 0)
-    ? Number(parkedCount)
-    : Math.min(Number(parkedCount), scanLimit);
-  const eligible  = [];
-  const seen      = new Set();
-  const capActive = capLimit > 0;
-
-  for (let i = 0; i < scanCount; i++) {
-    if (capActive && eligible.length >= capLimit) break;
-    const addr = await matA1.getParkedMember(i).catch(() => null);
-    if (!addr || addr === ethers.ZeroAddress) continue;
-    const addrLc = addr.toLowerCase();
-    if (seen.has(addrLc)) continue;
-    seen.add(addrLc);
-
-    // Skip wallets permanently abandoned due to repeated un-rescuable shortfall
-    if (_giveUpSet.has(addrLc)) continue;
-
-    // Skip stale slots — member already crossed to MatB
-    let inMatB = false;
-    try { const m = await matB1.getMember(addr); inMatB = m.isInMatrix; } catch {}
-    if (inMatB) continue;
-
-    const withdrawable = await matA1.withdrawableOf(addr).catch(() => 0n);
-    const bps = _sfRescueBpsInline(withdrawable, entryFee);
-    if (bps === null) {
-      // < 40% withdrawable — track and give up after GIVE_UP_AFTER skips
-      const cnt = (_skipCount.get(addrLc) || 0) + 1;
-      _skipCount.set(addrLc, cnt);
-      if (cnt >= GIVE_UP_AFTER) {
-        _giveUpSet.add(addrLc); // silent from now on
-      } else {
-        const shortfall = entryFee - withdrawable;
-        process.stdout.write(`  🏥 skip ${addr.slice(0,10)} (only ${fmt6(withdrawable)}, shortfall ${fmt6(shortfall)} > 60%)\n`);
-      }
-      continue;
-    }
-
-    const sfShare = entryFee * bps / 10000n;
-    eligible.push({ addr, sfShare, withdrawable });
-  }
-
-  if (eligible.length === 0) return 0;
-
-  // Cap to what SF can currently cover
-  const toRescue = [];
-  let sfRunning = sfBal;
-  for (const e of eligible) {
-    if (sfRunning < e.sfShare) break;
-    sfRunning -= e.sfShare;
-    toRescue.push(e);
-  }
-  if (toRescue.length === 0) return 0;
-
-  process.stdout.write(`  🏥 Parked rescue: ${parkedCount} queued → rescuing ${toRescue.length} (SF ${fmt6(sfBal)})… `);
-  let rescued = 0;
-
-  // Use rawDeployer + explicit nonce to avoid the NonceManager "gapped-nonce tx from
-  // delegated accounts" cascade. Base Sepolia limits high-nonce wallets to 1 in-flight TX.
-  // On any failure the NonceManager loses sync; explicit nonce + re-sync-on-error is safe.
-  const mkRaw = matrixKeeper.connect(rawDeployer);
-  let dNonce = Number(await rawDeployer.provider.getTransactionCount(rawDeployer.address, 'pending'));
-
-  for (const { addr, withdrawable } of toRescue) {
-    const item = [{ workType: _WORK_PARKED_RESCUE, tierIndex: 0, addr1: matA1Addr, addr2: addr }];
-    const performData = _rescueCoder.encode(
-      ['tuple(uint8 workType, uint8 tierIndex, address addr1, address addr2)[]'],
-      [item]
-    );
-    const gasLimit = (matBOcc >= matBSize) ? _GAS_RESCUE_OVERFLOW : _GAS_RESCUE_NORMAL;
+  for (const w of candidates) {
     try {
-      const tx = await mkRaw.performUpkeep(performData, { gasLimit, nonce: dNonce });
+      const ethBal = await ethers.provider.getBalance(w.address);
+      if (ethBal < 500_000_000_000n) { skipped++; continue; } // need ETH for gas
+
+      // Random spend: $CNOVA_BUY_MIN to $CNOVA_BUY_MAX
+      const range  = CNOVA_BUY_MAX - CNOVA_BUY_MIN;
+      const spend  = BigInt(CNOVA_BUY_MIN + Math.floor(Math.random() * range));
+      const usdcBal = await usdc.balanceOf(w.address);
+      const RESERVE = 5_000_000n; // keep $5 USDC reserve — don't drain wallet
+      if (usdcBal < spend + RESERVE) { skipped++; continue; }
+
+      const conn = w.connect(ethers.provider);
+      // Approve exact spend (directSale pulls exact amount)
+      await (await usdc.connect(conn).approve(dsAddr, spend, { gasLimit: 80_000 })).wait();
+      const tx = await directSale.connect(conn).buyCNOVA(spend, { gasLimit: 300_000 });
       const receipt = await tx.wait();
       if (receipt.status === 1) {
-        rescued++;
-        dNonce++;
-        if (gasLimit !== _GAS_RESCUE_OVERFLOW) matBOcc++;
+        // Parse CNOVAPurchased event for actual CNOVA received
+        const iface = directSale.interface;
+        let cnovaOut = 0n;
+        for (const log of receipt.logs) {
+          try {
+            const parsed = iface.parseLog({ topics: [...log.topics], data: log.data });
+            if (parsed?.name === 'CNOVAPurchased') { cnovaOut = BigInt(parsed.args.cnovaOut); break; }
+          } catch {}
+        }
+        totalUsdcSpent    += spend;
+        totalCnovaReceived += cnovaOut;
+        bought++;
       } else {
-        console.warn(`  ⚠  rescue ${addr.slice(0,10)} tx status=0 (gasUsed ${receipt.gasUsed})`);
-        // Re-sync nonce — the failed TX may have consumed the nonce slot
-        dNonce = Number(await rawDeployer.provider.getTransactionCount(rawDeployer.address, 'pending'));
+        skipped++;
       }
-    } catch (err) {
-      const msg = err.shortMessage || err.message?.slice(0, 100) || 'unknown';
-      console.warn(`  ⚠  rescue ${addr.slice(0,10)} failed: ${msg}`);
-      // Re-sync nonce after any RPC rejection — NonceManager would have incremented
-      // its counter on the failed call; rawDeployer does not but we resync to be safe.
-      dNonce = Number(await rawDeployer.provider.getTransactionCount(rawDeployer.address, 'pending'));
+    } catch {
+      skipped++;
     }
-    // Respect Base Sepolia's 1-in-flight limit for delegated accounts: wait 6s between rescues
-    await new Promise(r => setTimeout(r, (gasLimit === _GAS_RESCUE_OVERFLOW) ? 2000 : 6000));
   }
-  console.log(`${rescued}/${toRescue.length} rescued ✅`);
-  if (_giveUpSet.size > 0) {
-    console.log(`  🏥 Give-up list: ${_giveUpSet.size} wallet(s) abandoned (shortfall always >60% — not rescuable)`);
-  }
-  return rescued;
-}
-
-// inlineRescueParked: outer driver.
-// In RESCUE_ALL mode (default = real-life simulation): loops rescue passes until
-// the parked queue is empty or SF is exhausted — same behaviour as the keeper bot
-// running continuously between fills.
-// In legacy mode (RESCUE_ALL=false): single pass capped at RESCUE_SCAN / RESCUE_CAP.
-async function inlineRescueParked({ matA1, matB1, stabilityFund, matrixKeeper, rawDeployer, deployer, entryFee }) {
-  if (!stabilityFund || !matrixKeeper) return;
-
-  if (!RESCUE_ALL) {
-    // Legacy single-pass mode
-    await _inlineRescuePass({ matA1, matB1, stabilityFund, matrixKeeper, rawDeployer, entryFee,
-                               scanLimit: RESCUE_SCAN, capLimit: RESCUE_CAP });
-    return;
-  }
-
-  // Real-life exhaustive mode: keep rescuing until queue is empty or SF dry.
-  // Each pass may trigger a MatB cascade that frees slots for the next pass.
-  let totalRescued = 0;
-  let passNo = 0;
-  while (true) {
-    passNo++;
-
-    // Ghost-loop guard: read parked count BEFORE the pass.
-    // MatrixKeeper.performUpkeep wraps everything in try/catch — if a wallet is already
-    // active, the inner call reverts silently and the TX returns status=1 with no state
-    // change. This means `rescued > 0` can be true even when nothing actually happened.
-    // Comparing parked count before/after detects this and exits cleanly.
-    const parkedBefore = Number(await matA1.getParkedCount().catch(() => 0n));
-    if (parkedBefore === 0) break; // truly empty — fast exit without a full pass
-
-    const rescued = await _inlineRescuePass({
-      matA1, matB1, stabilityFund, matrixKeeper, rawDeployer, entryFee,
-      scanLimit: 0,   // scan all parked
-      capLimit:  0,   // rescue all eligible
-    });
-    totalRescued += rescued;
-    if (rescued === 0) break; // SF dry or no eligible wallets
-
-    // Check whether the parked count actually decreased.
-    // If it didn't, performUpkeep is no-oping on ghost entries → break to avoid infinite loop.
-    const parkedAfter = Number(await matA1.getParkedCount().catch(() => 0n));
-    if (parkedAfter >= parkedBefore) {
-      console.log(`  🏥 Ghost-loop guard: parked count unchanged (${parkedBefore}→${parkedAfter}) — breaking`);
-      break;
-    }
-
-    // Short pause between passes to let Base Sepolia process the previous batch of TXs
-    await new Promise(r => setTimeout(r, 2000));
-  }
-  if (totalRescued > 0) {
-    console.log(`  🏥 Total rescued this batch: ${totalRescued} wallet(s) across ${passNo - 1} pass(es)`);
-  }
+  const cnovaFmt = totalCnovaReceived > 0n
+    ? (Number(totalCnovaReceived) / 1e18).toFixed(2) + ' CNOVA'
+    : '—';
+  console.log(`  💰 CNOVA buy sweep: ${bought}/${candidates.length} bought | ${fmt6(totalUsdcSpent)} USDC → ${cnovaFmt} (${skipped} skipped)`);
 }
 
 // ── Manual upgrade simulation (V8.18, self-funded + multi-tier as of V8.19) ──
@@ -673,6 +532,10 @@ async function main() {
   const stabilityFund = SF_ADDR ? await ethers.getContractAt("StabilityFund", SF_ADDR) : null;
   const MK_ADDR    = addrs.matrixKeeper || addrs.MatrixKeeper || null;
   const matrixKeeper = MK_ADDR ? await ethers.getContractAt("MatrixKeeper", MK_ADDR, deployer) : null;
+  const DS_ADDR    = addrs.directSale || addrs.CNOVADirectSale || null;
+  const directSale = DS_ADDR ? await ethers.getContractAt("CNOVADirectSale", DS_ADDR) : null;
+  if (DS_ADDR) console.log(`  📦 CNOVADirectSale: ${DS_ADDR}`);
+  else         console.log(`  ⚠  CNOVADirectSale not in addresses file — CNOVA buy sweep disabled`);
 
   // CommunityWallet for watched-wallet cohort queries (graceful fallback if not in addresses file)
   const CW_ADDR = addrs.communityWallet || addrs.CommunityWallet || null;
@@ -1060,19 +923,22 @@ async function main() {
       break;
     }
 
-    // Burn + withdraw sweep + force forceCross — runs on every new matrix cycle
+    // Burn + withdraw sweep + CNOVA buy sweep — runs on every new matrix cycle
     if (sysCyc > prevSysCyc) {
       console.log(`\n  🔄 Cycle detected (${prevSysCyc} → ${sysCyc})`);
-      console.log(`  ↳ Running early-unlock burn sweep…`);
+      console.log(`  ↳ Running early-unlock burn sweep (simulate CNOVA sell)…`);
       await burnSweep(wallets, cnova);
-      console.log(`  ↳ Running withdraw sweep (simulate sell)…`);
+      console.log(`  ↳ Running withdraw sweep (USDC exit simulation)…`);
       await withdrawSweep(wallets, matA1, matB1);
+      console.log(`  ↳ Running CNOVA buy sweep (simulate purchases via DirectSale)…`);
+      await cnovaBuySweep(wallets, directSale, usdc);
       forceFCCheck = true; // execute forceCross this batch regardless of batchNum
       prevSysCyc = sysCyc;
     }
-
-    // Inline parked rescue — after every batch, rescue any eligible parked members
-    await inlineRescueParked({ matA1, matB1, stabilityFund, matrixKeeper, rawDeployer: rawSigner, deployer: rawSigner, entryFee: T1_FEE });
+    // Rescue is handled exclusively by direct_keeper.js + MatrixKeeper.performUpkeep.
+    // bigfill no longer calls coPayRescue() or any rescue path directly — this prevents
+    // the race condition where keeper's performUpkeep reverts because bigfill rescued
+    // the member first (both reading the same deployer wallet, same nonce window).
 
     // V8.19: Manual upgrade simulation — UPGRADE_RATE% of eligible, self-funded
     // wallets upgrade each hop. Run T1→T2 first, then T2→T3 — a wallet can
@@ -1374,3 +1240,4 @@ main().catch(e => {
   console.error('\n  ❌  bigfill_v8.js fatal error:', e);
   process.exit(1);
 });
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       
