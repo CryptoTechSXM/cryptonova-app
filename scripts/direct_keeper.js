@@ -15,7 +15,7 @@ const hre  = require("hardhat");
 const fs   = require("fs");
 const path = require("path");
 
-const MATRIX_KEEPER   = "0xEfA866A4546843Ad9E523507606c0Ed9718737a5"; // V8.22 (per-tier SF mult DAO voting deploy)
+const MATRIX_KEEPER   = "0x6CF638431d8C4cAa735d6aBd23b5AdB322481A3e"; // V8.23 (mintForSale+DIRECT_SALE_ROLE, W1 default referrer)
 const GAS_LIMIT       = 6_000_000;
 const LOG_FILE        = path.join(__dirname, "..", "keeper.log");
 const STATE_FILE      = path.join(__dirname, "..", "keeper_state.json");
