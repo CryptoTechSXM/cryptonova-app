@@ -665,7 +665,7 @@ if (deployTxt) {
     fail("CNOVADirectSale.sol: MISSING or buyCNOVA() not found — investor purchase contract not deployed");
   }
 
-  // V8.19: deploy_v8.js must actually deploy CNOVADirectSale and grant it MINTER_ROLE
+  // V8.19: deploy_v8.js must actually deploy CNOVADirectSale and wire role grants
   // (the check above only confirms the .sol file exists — it doesn't mean deploy_v8.js
   // wires it up. This was missing entirely until 2026-06-20.)
   if (deployTxt.includes('getContractFactory("CNOVADirectSale"')) {
@@ -673,10 +673,11 @@ if (deployTxt) {
   } else {
     fail("deploy_v8.js: CNOVADirectSale is never deployed — buy.html will have no contract to call");
   }
-  if (deployTxt.includes("cnova.grantRole(MINTER_ROLE, dsAddr)")) {
-    ok("deploy_v8.js: MINTER_ROLE grant to CNOVADirectSale found");
+  // V8.23: mintDirect removed → mintForSale. directSale now needs DIRECT_SALE_ROLE, not MINTER_ROLE.
+  if (deployTxt.includes("cnova.grantRole(DIRECT_SALE_ROLE, dsAddr)")) {
+    ok("deploy_v8.js: DIRECT_SALE_ROLE grant to CNOVADirectSale found (V8.23)");
   } else {
-    fail("deploy_v8.js: MINTER_ROLE grant to CNOVADirectSale MISSING — buyCNOVA() will revert on every purchase");
+    fail("deploy_v8.js: DIRECT_SALE_ROLE grant to CNOVADirectSale MISSING — buyCNOVA()/mintForSale() will revert on every purchase");
   }
 
   // V8.16: topUpAndCross must be in contract

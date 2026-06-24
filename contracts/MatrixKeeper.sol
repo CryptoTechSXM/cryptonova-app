@@ -604,8 +604,11 @@ contract MatrixKeeper is Ownable {
     function _sfRescueBps(uint256 withdrawable, uint256 entryFee)
         internal view returns (uint256)
     {
-        uint256 wBps = withdrawable * 10_000 / entryFee;
         uint256 n = sfRescueThresholds.length;
+        // V8.23: if no ladder is configured yet (fresh deploy before governance seeds it),
+        // fall back to 100% SF coverage so the keeper still rescues parked members.
+        if (n == 0) return 10_000;
+        uint256 wBps = withdrawable * 10_000 / entryFee;
         for (uint256 i = 0; i < n; i++) {
             if (wBps >= sfRescueThresholds[i]) return sfRescueBpsLadder[i];
         }

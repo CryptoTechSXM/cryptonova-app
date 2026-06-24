@@ -73,9 +73,11 @@ contract CNOVAToken is ERC20, ERC20Burnable, AccessControl {
     // Roles
     // =========================================================================
 
-    bytes32 public constant MINTER_ROLE   = keccak256("MINTER_ROLE");
-    bytes32 public constant BURNER_ROLE   = keccak256("BURNER_ROLE");
-    bytes32 public constant GOVERNOR_ROLE = keccak256("GOVERNOR_ROLE");
+    bytes32 public constant MINTER_ROLE      = keccak256("MINTER_ROLE");
+    bytes32 public constant BURNER_ROLE      = keccak256("BURNER_ROLE");
+    bytes32 public constant GOVERNOR_ROLE    = keccak256("GOVERNOR_ROLE");
+    /// @notice Granted to CNOVADirectSale only. Mints purchased tokens with no vest.
+    bytes32 public constant DIRECT_SALE_ROLE = keccak256("DIRECT_SALE_ROLE");
 
     // =========================================================================
     // Supply cap
@@ -466,23 +468,28 @@ contract CNOVAToken is ERC20, ERC20Burnable, AccessControl {
         return amount;
     }
 
+    // mintDirectAdmin() intentionally removed.
+    // Free minting without a corresponding USDC deposit into the treasury
+    // dilutes the floor price (treasury / supply) for all holders.
+    // ALL CNOVA must be minted through mintReward() (matrix rewards) or
+    // mintForSale() via CNOVADirectSale (which deposits USDC to treasury first).
+
     /**
-     * @notice Mint exact amount WITHOUT vesting. DEFAULT_ADMIN_ROLE only.
-     *         Use for treasury seeding / testnet tooling. NOT for matrix rewards.
+     * @notice Mint CNOVA for a direct purchase. No vesting attached — tokens are
+     *         immediately transferable. Caller must have DIRECT_SALE_ROLE.
+     *         The sale contract is responsible for depositing USDC into the treasury
+     *         BEFORE calling this function so the floor price is preserved.
+     * @param to      Recipient address (the buyer).
+     * @param amount  Amount to mint (18-decimal CNOVA units).
      */
-    function mintDirectAdmin(address to, uint256 amount)
+    function mintForSale(address to, uint256 amount)
         external
-        onlyRole(DEFAULT_ADMIN_ROLE)
-        returns (uint256 minted)
+        onlyRole(DIRECT_SALE_ROLE)
     {
-        require(to != address(0), "CNOVA: zero recipient");
-        if (amount == 0) return 0;
-        if (totalMinted + amount > MAX_SUPPLY) amount = MAX_SUPPLY - totalMinted;
-        if (amount == 0) return 0;
+        require(to != address(0), "CNOVA: zero address");
+        require(totalMinted + amount <= MAX_SUPPLY, "CNOVA: hard cap");
         totalMinted += amount;
-        _mint(to, amount);
-        emit TokensMinted(to, amount, currentEpoch + 1, 0);
-        return amount;
+        _mint(to, amount);  // No vest batch — tokens immediately transferable
     }
 
     // =========================================================================

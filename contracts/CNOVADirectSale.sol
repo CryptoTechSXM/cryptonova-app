@@ -8,7 +8,8 @@ import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 
 /// @dev Minimal interface for CNOVAToken — only what this contract needs.
 interface ICNOVAMintable {
-    function mintDirect(address to, uint256 amount) external;
+    /// @notice V8.23: replaces mintDirect — requires DIRECT_SALE_ROLE (not MINTER_ROLE).
+    function mintForSale(address to, uint256 amount) external;
     function totalSupply() external view returns (uint256);
     function balanceOf(address account) external view returns (uint256);
 }
@@ -191,8 +192,8 @@ contract CNOVADirectSale is Ownable2Step, Pausable {
         if (toSF       > 0) usdc.safeTransfer(stabilityFund,    toSF);
         if (toLQ       > 0) usdc.safeTransfer(liquidityReserve, toLQ);
 
-        // Mint CNOVA to buyer (requires MINTER_ROLE)
-        cnova.mintDirect(msg.sender, cnovaOut);
+        // Mint CNOVA to buyer — no vesting (requires DIRECT_SALE_ROLE on CNOVAToken, V8.23)
+        cnova.mintForSale(msg.sender, cnovaOut);
 
         emit CNOVAPurchased(msg.sender, usdcAmount, cnovaOut, toTreasury, toSF, toLQ);
     }

@@ -63,7 +63,7 @@ require("dotenv").config();
 // v8_1 = size-15 testnet (retired).  v8_2 = size-64 pre-mainnet stress test.
 const ADDRESSES_FILE = path.join(
   __dirname,
-  process.env.ADDRESSES_FILE || "deployed_addresses_v8_22.json"
+  process.env.ADDRESSES_FILE || "deployed_addresses_v8_23.json"
 );
 
 // ── Config ────────────────────────────────────────────────────────────────────
@@ -175,7 +175,7 @@ async function main() {
   // V8.19: liquidityReserve — CNOVA/USDC LP wallet. Defaults to opsWallet until mainnet LP deployed.
   const liquidityReserve = process.env.LIQUIDITY_RESERVE_ADDRESS || opsWallet;
 
-  console.log("\n  V8.22 Deploy — Pool=44% Chain=17% SF=12% LQ=2% L1=10% Treasury=10% Dev=2% Ops/CW/BBR=1% each");
+  console.log("\n  V8.23 Deploy — mintDirectAdmin removed, mintForSale+DIRECT_SALE_ROLE added, _sfRescueBps empty-array guard");
   sep();
   console.log(`  Deployer        : ${deployerAddr}`);
   console.log(`  AccountOne      : ${accountOne}`);
@@ -559,10 +559,11 @@ async function main() {
   const dsAddr = await directSale.getAddress();
   console.log(`  ↳  SF target $${DS_SF_TARGET_USD} / LQ target $${DS_LQ_TARGET_USD}`);
 
-  // CNOVADirectSale.buyCNOVA() calls cnova.mintDirect() — needs MINTER_ROLE,
-  // same role already granted to every matrix above.
-  await (await cnova.grantRole(MINTER_ROLE, dsAddr)).wait();
-  console.log(`  ↳  MINTER_ROLE granted to CNOVADirectSale (${dsAddr})`);
+  // V8.23: CNOVADirectSale.buyCNOVA() calls cnova.mintForSale() — needs DIRECT_SALE_ROLE
+  // (not MINTER_ROLE). mintForSale mints with no vesting, replacing the removed mintDirect().
+  const DIRECT_SALE_ROLE = await cnova.DIRECT_SALE_ROLE();
+  await (await cnova.grantRole(DIRECT_SALE_ROLE, dsAddr)).wait();
+  console.log(`  ↳  DIRECT_SALE_ROLE granted to CNOVADirectSale (${dsAddr})`);
 
   // V8.20: wire governance co-control (setMaxTxBps/setMaxWalletBps/setSfTargetDS/
   // setLqTargetDS). directSale deploys after V8Governance, so this couldn't be
@@ -653,7 +654,7 @@ async function main() {
   }
   sep();
   console.log(`  Addresses file: ${require("path").basename(ADDRESSES_FILE)}`);
-  console.log("  V8.22 Deploy complete.\n");
+  console.log("  V8.23 Deploy complete.\n");
 }
 
 main().catch(e => { console.error(e); process.exitCode = 1; });

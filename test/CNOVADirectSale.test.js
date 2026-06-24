@@ -84,12 +84,14 @@ async function deployFixture() {
   // comfortably clears ordinary $50-$100 test purchases (~800-1,600 CNOVA out
   // at tier 1) -- the whale-cap tests below set their own tighter caps to
   // actually exercise the limits, rather than relying on this base size.
-  await cnovaToken.connect(admin).mintDirectAdmin(admin.address, cnova(500_000));
+  // mintDirectAdmin removed in V8.23 — use mintForSale with DIRECT_SALE_ROLE instead.
+  const DIRECT_SALE_ROLE = await cnovaToken.DIRECT_SALE_ROLE();
+  await cnovaToken.connect(admin).grantRole(DIRECT_SALE_ROLE, admin.address);
+  await cnovaToken.connect(admin).mintForSale(admin.address, cnova(500_000));
   await usdcToken.connect(deployer).mint(treasury.address, usdc(25_000));
 
-  // Direct sale needs MINTER_ROLE to mint purchased CNOVA.
-  const MINTER_ROLE = await cnovaToken.MINTER_ROLE();
-  await cnovaToken.connect(admin).grantRole(MINTER_ROLE, saleAddr);
+  // Direct sale needs DIRECT_SALE_ROLE to mint purchased CNOVA (V8.23: mintForSale).
+  await cnovaToken.connect(admin).grantRole(DIRECT_SALE_ROLE, saleAddr);
 
   // Fund buyers with plenty of test USDC and pre-approve the sale contract.
   for (const buyer of [buyerA, buyerB]) {
@@ -197,15 +199,16 @@ describe("CNOVADirectSale", function () {
 
       expect(await sale.currentMultBps()).to.equal(12_500n);
 
-      // Mint (admin, unvested) up to just under the 1M ceiling -- still tier 1.
+      // Push supply up to just under the 1M ceiling — still tier 1.
+      // Admin already has DIRECT_SALE_ROLE from the fixture.
       const current = await cnovaToken.totalSupply();
       const justUnder = cnova(1_000_000) - current - 1n;
-      await cnovaToken.connect(admin).mintDirectAdmin(admin.address, justUnder);
+      await cnovaToken.connect(admin).mintForSale(admin.address, justUnder);
       expect(await sale.currentTierIndex()).to.equal(0n);
       expect(await sale.currentMultBps()).to.equal(12_500n);
 
       // One more unit of supply crosses the ceiling -> tier 2.
-      await cnovaToken.connect(admin).mintDirectAdmin(admin.address, 2n);
+      await cnovaToken.connect(admin).mintForSale(admin.address, 2n);
       expect(await sale.currentTierIndex()).to.equal(1n);
       expect(await sale.currentMultBps()).to.equal(15_000n);
     });

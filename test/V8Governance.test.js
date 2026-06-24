@@ -130,9 +130,12 @@ async function deployFixture() {
 
   // Voting power: proposer needs >= 0.01% of supply, voterA needs to clear the
   // 2% quorum on its own to keep tests simple.
-  await cnova.connect(admin).mintDirectAdmin(proposer.address, ethers.parseEther("1000"));
-  await cnova.connect(admin).mintDirectAdmin(voterA.address,   ethers.parseEther("60000"));
-  await cnova.connect(admin).mintDirectAdmin(voterB.address,   ethers.parseEther("1000"));
+  // mintDirectAdmin removed in V8.23 — grant DIRECT_SALE_ROLE to admin and use mintForSale.
+  const DIRECT_SALE_ROLE = await cnova.DIRECT_SALE_ROLE();
+  await cnova.connect(admin).grantRole(DIRECT_SALE_ROLE, admin.address);
+  await cnova.connect(admin).mintForSale(proposer.address, ethers.parseEther("1000"));
+  await cnova.connect(admin).mintForSale(voterA.address,   ethers.parseEther("60000"));
+  await cnova.connect(admin).mintForSale(voterB.address,   ethers.parseEther("1000"));
 
   // Helper: full propose -> vote -> finalize -> timelock-elapsed lifecycle,
   // leaving the proposal ready for execute().
