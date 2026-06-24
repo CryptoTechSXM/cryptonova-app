@@ -155,6 +155,14 @@ contract TierRouter is Ownable2Step {
     ///         Increments on every register() call. Used by CommunityWallet eligibility.
     uint256 public globalJoinedCount;
 
+    // ─── Default Referrer (W1) ────────────────────────────────────────────────
+    /// @notice V8.23: Fallback referrer used when a new member provides no referrer
+    ///         or provides one that hasn't joined yet. Set to W1 after seed so all
+    ///         organic sign-ups credit W1 with the L1 chain-pay, strengthening its
+    ///         withdrawable balance and reducing the need for SF rescue.
+    ///         Zero = disabled (legacy behaviour: unmatched referrers → address(0)).
+    address public defaultReferrer;
+
     // ─── Whale Gate ───────────────────────────────────────────────────────────
     // V8.21 REDESIGN: was a single global T5-only counter that, once tripped,
     // let funded members cycling out of T4 SKIP T5 entirely and land in T6 --
@@ -224,6 +232,8 @@ contract TierRouter is Ownable2Step {
     event InactivityDaysThresholdSet(uint256 days_);
     event InactivityCyclesThresholdSet(uint256 cycles);
     event InactivityGuardEnabledSet(bool enabled);
+    // V8.23
+    event DefaultReferrerSet(address indexed ref);
 
     // ─── Constructor ──────────────────────────────────────────────────────────
 
@@ -319,6 +329,13 @@ contract TierRouter is Ownable2Step {
     function setCommunityWallet(address _cw) external onlyOwner {
         communityWallet = _cw;
         emit CommunityWalletSet(_cw);
+    }
+
+    /// @notice V8.23: Set the default referrer (W1). Called by deploy_v8.js after
+    ///         W1 seeds. Zero address re-disables the fallback.
+    function setDefaultReferrer(address _ref) external onlyOwner {
+        defaultReferrer = _ref;
+        emit DefaultReferrerSet(_ref);
     }
 
     // ─── V8.1: Velocity gate (keeper-only) ───────────────────────────────────
@@ -461,8 +478,14 @@ contract TierRouter is Ownable2Step {
         require(!globalJoined[msg.sender],         "TR: already joined");
         require(tierPairManagers[0] != address(0), "TR: T1 not configured");
 
+        // V8.23: fall back to defaultReferrer (W1) when no valid referrer is supplied.
+        // This credits W1 with L1 chain-pay on every organic sign-up, growing its
+        // withdrawable balance and reducing SF rescue pressure.
         address resolved = (referrer != address(0) && globalJoined[referrer])
-            ? referrer : address(0);
+            ? referrer
+            : (defaultReferrer != address(0) && globalJoined[defaultReferrer])
+                ? defaultReferrer
+                : address(0);
 
         memberReferrer[msg.sender]    = resolved;
         globalJoined[msg.sender]      = true;

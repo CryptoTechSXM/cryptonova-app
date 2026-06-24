@@ -547,6 +547,13 @@ if (trText) {
     fail("TierRouter.sol: setCommunityWallet/enroll hook missing — V8.12 community enrollment patch not applied");
   }
 
+  // V8.23: default referrer (W1 fallback)
+  if (trText.includes("setDefaultReferrer") && trText.includes("defaultReferrer")) {
+    ok("TierRouter.sol: setDefaultReferrer() + defaultReferrer fallback in register() found (V8.23)");
+  } else {
+    fail("TierRouter.sol: defaultReferrer feature missing — organic sign-ups won't credit W1 (V8.23 patch not applied)");
+  }
+
   if (trText.includes("globalJoinedCount")) {
     ok("TierRouter.sol: globalJoinedCount counter found");
   } else {
@@ -580,6 +587,13 @@ if (deployTxt) {
     ok("deploy_v8.js: keeper.setCommunityWallet(cwAddr) call found — Chainlink CW trigger active");
   } else {
     fail("deploy_v8.js: keeper.setCommunityWallet(cwAddr) MISSING — monthly distribution won't auto-trigger");
+  }
+
+  // V8.23: setDefaultReferrer must be called after W1 seeds
+  if (deployTxt.includes("tierRouter.setDefaultReferrer(W1_ADDR)")) {
+    ok("deploy_v8.js: tierRouter.setDefaultReferrer(W1_ADDR) call found (V8.23) — organic sign-ups will credit W1");
+  } else {
+    fail("deploy_v8.js: tierRouter.setDefaultReferrer(W1_ADDR) MISSING — sign-ups without referral link won't credit W1 (L1 chain-pay lost)");
   }
 
   // V8.15: setTierMatrices must be called after registerTier for manualUpgrade to work

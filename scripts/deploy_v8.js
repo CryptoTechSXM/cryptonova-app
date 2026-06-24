@@ -629,6 +629,11 @@ async function main() {
         await (await tierRouter.connect(w1Wallet).register(ethers.ZeroAddress, { gasLimit: 3_000_000 })).wait();
         console.log(`  ✓  W1 (${W1_ADDR}) registered as T1 MatA root (position-1)`);
       }
+
+      // V8.23: wire W1 as the default referrer so all organic sign-ups (no referral
+      // link) credit W1 with the L1 chain-pay, growing its withdrawable balance.
+      await (await tierRouter.setDefaultReferrer(W1_ADDR)).wait();
+      console.log(`  ✓  TierRouter.setDefaultReferrer → W1 (${W1_ADDR})`);
     } catch (e) {
       console.log(`  ⚠  W1 registration failed: ${e.reason || e.message}`);
       if (e.data) console.log(`     Revert data: ${e.data}`);
