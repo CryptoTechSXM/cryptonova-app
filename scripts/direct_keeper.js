@@ -18,7 +18,7 @@ const path = require("path");
 require("dotenv").config();
 
 const MATRIX_KEEPER   = "0x6CF638431d8C4cAa735d6aBd23b5AdB322481A3e"; // V8.23 (mintForSale+DIRECT_SALE_ROLE, W1 default referrer)
-const GAS_LIMIT       = 25_000_000; // 15 WORK_PARKED_RESCUE items × ~1.58M gas each = ~23.7M; raised from 15M (OOG with full batch)
+const GAS_LIMIT       = 20_000_000; // ~12 rescues × 1.58M = ~19M; 15M OOGs w/ full batch, 25M rejected by RPC ("gas limit too high")
 const LOG_FILE        = path.join(__dirname, "..", "keeper.log");
 const STATE_FILE      = path.join(__dirname, "..", "keeper_state.json");
 const HEARTBEAT_EVERY = 30; // quiet runs between heartbeat lines (~1 hr at 2-min interval)
