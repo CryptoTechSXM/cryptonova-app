@@ -398,14 +398,14 @@ describe("V8Governance — wiring regression + SF rescue ladder", function () {
     // whenever tierRouter is unwired -- that's exactly the deployFixture
     // default state, which is why the tests above never see auto-mode kick in.
     describe("V8.21 — sfTarget() auto-scales with the highest open tier", function () {
-      it("defaults: auto-mode on, manual fallback $300, multiplier schedule is 10x per tier", async function () {
+      it("defaults: auto-mode on, manual fallback $300, flat 20x multiplier across all tiers (V8.26)", async function () {
         const { stabilityFund } = await loadFixture(deployFixture);
         expect(await stabilityFund.sfTargetAutoMode()).to.equal(true);
         // tierRouter never wired in this fixture -- falls back to manual default.
         expect(await stabilityFund.sfTarget()).to.equal(300_000_000n);
-        expect(await stabilityFund.sfTargetMultiplier(0)).to.equal(10n);  // T1: 10x
-        expect(await stabilityFund.sfTargetMultiplier(4)).to.equal(50n);  // T5: 50x
-        expect(await stabilityFund.sfTargetMultiplier(9)).to.equal(100n); // T10: 100x
+        expect(await stabilityFund.sfTargetMultiplier(0)).to.equal(20n);  // T1: 20x (V8.26 flat)
+        expect(await stabilityFund.sfTargetMultiplier(4)).to.equal(20n);  // T5: 20x (V8.26 flat)
+        expect(await stabilityFund.sfTargetMultiplier(9)).to.equal(20n);  // T10: 20x (V8.26 flat)
       });
 
       // NOTE: deployFixture never calls tierRouter.registerTier() for any tier
@@ -436,9 +436,9 @@ describe("V8Governance — wiring regression + SF rescue ladder", function () {
         await stabilityFund.connect(admin).setTierRouter(await tierRouter.getAddress());
         await tierRouter.connect(admin).registerTier(0, await tierRouter.getAddress(), T1_FEE);
         await stabilityFund.connect(admin).setTierFee(0, T1_FEE); // $10
-        // T1 default multiplier is 10x -> $100 target, overriding the $300 manual default.
-        expect(await stabilityFund.sfTarget()).to.equal(T1_FEE * 10n);
-        expect(await stabilityFund.sfTarget()).to.equal(100_000_000n);
+        // T1 default multiplier is 20x (V8.26 flat) -> $200 target, overriding the $300 manual default.
+        expect(await stabilityFund.sfTarget()).to.equal(T1_FEE * 20n);
+        expect(await stabilityFund.sfTarget()).to.equal(200_000_000n);
       });
 
       it("re-scales automatically as TierRouter's highestOpenTier climbs -- no extra SF call needed", async function () {
@@ -448,13 +448,13 @@ describe("V8Governance — wiring regression + SF rescue ladder", function () {
         await tierRouter.connect(admin).registerTier(0, await tierRouter.getAddress(), T1_FEE);
         await stabilityFund.connect(admin).setTierFee(0, T1_FEE);
         await stabilityFund.connect(admin).setTierFee(1, T2_FEE_LOCAL);
-        expect(await stabilityFund.sfTarget()).to.equal(T1_FEE * 10n); // T1 open: $100
+        expect(await stabilityFund.sfTarget()).to.equal(T1_FEE * 20n); // T1 open: $200 (V8.26 flat 20x)
 
         // Open T2 on TierRouter the same way the system would (registerTier +
         // velocity-green, e.g. via the onCrossToMatB auto-open path in production).
         await tierRouter.connect(admin).registerTier(1, await tierRouter.getAddress(), T2_FEE_LOCAL);
         expect(await tierRouter.highestOpenTier()).to.equal(2n); // tier 2 defaults to velocity-green at construction
-        expect(await stabilityFund.sfTarget()).to.equal(T2_FEE_LOCAL * 20n); // T2 open: $300
+        expect(await stabilityFund.sfTarget()).to.equal(T2_FEE_LOCAL * 20n); // T2 open: $300 (15 * 20)
       });
 
       it("setSfTargetMultiplier: owner-only, bounded 1-1000, emits SfTargetMultiplierSet", async function () {
@@ -478,7 +478,7 @@ describe("V8Governance — wiring regression + SF rescue ladder", function () {
         await stabilityFund.connect(admin).setTierRouter(await tierRouter.getAddress());
         await tierRouter.connect(admin).registerTier(0, await tierRouter.getAddress(), T1_FEE);
         await stabilityFund.connect(admin).setTierFee(0, T1_FEE);
-        expect(await stabilityFund.sfTarget()).to.equal(T1_FEE * 10n); // auto: $100
+        expect(await stabilityFund.sfTarget()).to.equal(T1_FEE * 20n); // auto: $200 (V8.26 flat 20x)
 
         await expect(
           stabilityFund.connect(other).setSfTargetAutoMode(false)
@@ -494,14 +494,14 @@ describe("V8Governance — wiring regression + SF rescue ladder", function () {
         await stabilityFund.connect(admin).setTierRouter(await tierRouter.getAddress());
         await tierRouter.connect(admin).registerTier(0, await tierRouter.getAddress(), T1_FEE);
         await stabilityFund.connect(admin).setTierFee(0, T1_FEE);
-        // Auto target is now $100 (T1_FEE * 10), well below the $300 manual default.
-        expect(await stabilityFund.sfTarget()).to.equal(100_000_000n);
+        // Auto target is now $200 (T1_FEE * 20, V8.26 flat), well below the $300 manual default.
+        expect(await stabilityFund.sfTarget()).to.equal(200_000_000n);
         await expect(
-          stabilityFund.connect(admin).setStabilityFloor(150_000_000) // $150 > $100 auto target
+          stabilityFund.connect(admin).setStabilityFloor(250_000_000) // $250 > $200 auto target
         ).to.be.revertedWith("SF: floor exceeds target");
-        // $50 floor is fine against the $100 auto target.
-        await stabilityFund.connect(admin).setStabilityFloor(50_000_000);
-        expect(await stabilityFund.stabilityFloor()).to.equal(50_000_000n);
+        // $100 floor is fine against the $200 auto target.
+        await stabilityFund.connect(admin).setStabilityFloor(100_000_000);
+        expect(await stabilityFund.stabilityFloor()).to.equal(100_000_000n);
       });
     });
 
@@ -532,8 +532,8 @@ describe("V8Governance — wiring regression + SF rescue ladder", function () {
         );
         await gov.execute(id);
         expect(await stabilityFund.sfTargetMultiplier(6)).to.equal(75n);
-        expect(await stabilityFund.sfTargetMultiplier(5)).to.equal(60n); // T6 default, untouched
-        expect(await stabilityFund.sfTargetMultiplier(7)).to.equal(80n); // T8 default, untouched
+        expect(await stabilityFund.sfTargetMultiplier(5)).to.equal(20n); // T6 default 20x (V8.26 flat), untouched
+        expect(await stabilityFund.sfTargetMultiplier(7)).to.equal(20n); // T8 default 20x (V8.26 flat), untouched
       });
 
       it("PARAM_SF_MULT_T10 executes once setGovernance is wired, only moves T10", async function () {
@@ -544,7 +544,7 @@ describe("V8Governance — wiring regression + SF rescue ladder", function () {
         );
         await gov.execute(id);
         expect(await stabilityFund.sfTargetMultiplier(9)).to.equal(150n);
-        expect(await stabilityFund.sfTargetMultiplier(8)).to.equal(90n); // T9 default, untouched
+        expect(await stabilityFund.sfTargetMultiplier(8)).to.equal(20n); // T9 default 20x (V8.26 flat), untouched
       });
 
       it("REGRESSION: PARAM_SF_MULT_T1 execute() reverts without setGovernance wired", async function () {

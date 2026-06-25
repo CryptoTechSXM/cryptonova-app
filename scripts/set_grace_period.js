@@ -1,7 +1,7 @@
 // set_grace_period.js
 // One-off: sets parkedGracePeriod on the live MatrixKeeper contract.
 //
-// Allowed values: 0, 3600 (1hr), 21600 (6hrs), 432000 (5d), 864000 (10d), 1296000 (15d)
+// Allowed values (V8.26+): 0 (immediate) or any value between 300 (5min) and 2592000 (30d)
 //
 // Testnet: 0  (immediate rescue — no waiting period)
 // Mainnet: 3600 (1hr) or 21600 (6hrs) recommended
@@ -11,10 +11,10 @@
 const { ethers } = require("hardhat");
 require("dotenv").config();
 
-const MATRIX_KEEPER = "0x6CF638431d8C4cAa735d6aBd23b5AdB322481A3e"; // V8.23
+const MATRIX_KEEPER = "0x3de9c7bD20cC82238BC39c98D7A1aC15dd1280df"; // V8.26
 
 // ─── Set this before running ─────────────────────────────────────────────────
-const NEW_GRACE_PERIOD = 0; // seconds  (0 = immediate rescue)
+const NEW_GRACE_PERIOD = 300; // seconds  (300 = 5 minutes — testnet grace period testing)
 // ─────────────────────────────────────────────────────────────────────────────
 
 const ABI = [
@@ -49,6 +49,4 @@ async function main() {
 }
 
 main().catch(e => {
-  console.error("Fatal:", e.message);
-  process.exit(1);
-});
+  console.error("Fatal:", e.

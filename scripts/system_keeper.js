@@ -34,7 +34,7 @@
  *   BASE_SEPOLIA_RPC_URL     RPC endpoint  (default: https://sepolia.base.org)
  *   DEPLOYER_PRIVATE_KEY     Required for AUTO_RESCUE and SF_AUTOFUND
  *   W1_PRIVATE_KEY           Required for W1_WITHDRAW (separate from deployer on mainnet)
- *   ADDRESSES_FILE           Path to deployed addresses JSON  (default: deployed_addresses_v8_23.json)
+ *   ADDRESSES_FILE           Path to deployed addresses JSON  (default: deployed_addresses_v8_26.json)
  *   HEARTBEAT_MINUTES        Min minutes between healthy-state heartbeats (default: 15)
  *   SF_MIN_USD               SF warning threshold in USD      (default: 100)
  *   SF_CRITICAL_USD          SF critical threshold in USD     (default: 30)
@@ -62,7 +62,7 @@ require('dotenv').config({ path: path.resolve(__dirname, '../.env') });
 const RPC_URL        = process.env.BASE_SEPOLIA_RPC_URL || 'https://sepolia.base.org';
 const DEPLOYER_KEY   = process.env.DEPLOYER_PRIVATE_KEY;
 const W1_KEY         = process.env.W1_PRIVATE_KEY;          // optional — W1 separate key
-const ADDR_FILE      = path.join(__dirname, process.env.ADDRESSES_FILE || 'deployed_addresses_v8_23.json');
+const ADDR_FILE      = path.join(__dirname, process.env.ADDRESSES_FILE || 'deployed_addresses_v8_26.json');
 const LOG_FILE       = process.env.KEEPER_LOG
   ? path.resolve(process.env.KEEPER_LOG)
   : path.join(__dirname, '../logs/keeper.log');

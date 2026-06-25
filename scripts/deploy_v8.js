@@ -48,7 +48,7 @@
  *   USDC_ADDRESS           Reuse existing USDC; omit to deploy MockUSDC
  *   MATRIX_SIZE            127 (default) | 15 (quick dev cycle)
  *   DEPLOY_TIERS           Comma-separated list e.g. "1,2" (default: "1,2,3,4,5,6,7,8,9,10")
- *   ADDRESSES_FILE         Output filename (default: deployed_addresses_v8_24.json)
+ *   ADDRESSES_FILE         Output filename (default: deployed_addresses_v8_26.json)
  *
  * Run: npx hardhat run scripts/deploy_v8.js --network baseSepolia
  */
@@ -63,7 +63,7 @@ require("dotenv").config();
 // v8_1 = size-15 testnet (retired).  v8_2 = size-64 pre-mainnet stress test.
 const ADDRESSES_FILE = path.join(
   __dirname,
-  process.env.ADDRESSES_FILE || "deployed_addresses_v8_24.json"
+  process.env.ADDRESSES_FILE || "deployed_addresses_v8_26.json"
 );
 
 // ── Config ────────────────────────────────────────────────────────────────────
@@ -175,7 +175,7 @@ async function main() {
   // V8.19: liquidityReserve — CNOVA/USDC LP wallet. Defaults to opsWallet until mainnet LP deployed.
   const liquidityReserve = process.env.LIQUIDITY_RESERVE_ADDRESS || opsWallet;
 
-  console.log("\n  V8.24 Deploy — MatrixKeeper narrow catch: add 'insufficient withdrawable for rescue' so SF rescue ladder is safe to activate");
+  console.log("\n  V8.26 Deploy — MatrixKeeper narrow catch: add 'insufficient withdrawable for rescue' so SF rescue ladder is safe to activate");
   sep();
   console.log(`  Deployer        : ${deployerAddr}`);
   console.log(`  AccountOne      : ${accountOne}`);
@@ -659,8 +659,5 @@ async function main() {
   }
   sep();
   console.log(`  Addresses file: ${require("path").basename(ADDRESSES_FILE)}`);
-  console.log("  V8.24 Deploy complete.\n");
-  console.log("  NEXT STEP: run scripts/set_rescue_ladder.js to activate the SF rescue ladder.");
-}
-
-main().catch(e => { console.error(e); process.exitCode = 1; });
+  console.log("  V8.26 Deploy complete.\n");
+  console.log("  NEXT STEP: run scripts/set_rescu

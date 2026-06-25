@@ -187,12 +187,10 @@ contract StabilityFund is Ownable2Step {
         usdc             = IERC20(_usdc);
         _manualSfTarget  = 300_000_000; // $300 default fallback (used pre-tierRouter-wiring)
 
-        // V8.21: default per-tier multiplier schedule -- 10x/20x/30x/.../100x
-        // the tier's own entry fee, matching the user's requested example
-        // (10x/20x/30x/40x/50x for T1-T5) extended naturally through T10.
-        // Owner-tunable afterward via setSfTargetMultiplier().
+        // V8.26: flat 20x multiplier across all tiers by default.
+        // DAO can vote to change any tier independently via PARAM_SF_MULT_T1..T10.
         for (uint8 i = 0; i < MAX_TIERS; i++) {
-            sfTargetMultiplier[i] = (uint256(i) + 1) * 10;
+            sfTargetMultiplier[i] = 20;
         }
     }
 
