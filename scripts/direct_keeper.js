@@ -66,7 +66,13 @@ async function sendTelegram(msg) {
 // ── main ─────────────────────────────────────────────────────────────────────
 
 async function main() {
-  const [signer] = await hre.ethers.getSigners();
+  const signers = await hre.ethers.getSigners();
+  // Use funder (signers[1]=FILL_FUNDER_KEY) not deployer (signers[0]).
+  // direct_keeper.js and the CRE simulate task both use the deployer wallet;
+  // overlapping invocations cause nonce collisions → TX rejected before mining
+  // (ethers action="sendTransaction", reason=null, data=null, 3-in-a-row errors).
+  // performUpkeep has no access control so any wallet can call it.
+  const signer = signers[1] || signers[0];
   const keeper   = new hre.ethers.Contract(MATRIX_KEEPER, ABI, signer);
 
   const state      = loadState();
