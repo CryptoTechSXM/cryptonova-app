@@ -1,9 +1,9 @@
 // direct_keeper.js
-// Local keeper bridge: polls checkUpkeep → calls performUpkeep on V8.23 MatrixKeeper.
+// Local keeper bridge: polls checkUpkeep -> calls performUpkeep on V8.23 MatrixKeeper.
 // Replaces Chainlink Automation while CLA registrations are disabled / CRE access is pending.
 //
 // Run manually:  npx hardhat run scripts/direct_keeper.js --network baseSepolia
-// Scheduled:     Windows Task Scheduler — every 2 min, see keeper_task.bat
+// Scheduled:     Windows Task Scheduler -- every 2 min, see keeper_task.bat
 //
 // Logging behaviour:
 //   - Quiet runs (no work needed): suppressed. One heartbeat line every HEARTBEAT_EVERY runs (~1 hr).
@@ -17,8 +17,10 @@ const fs   = require("fs");
 const path = require("path");
 require("dotenv").config();
 
-const MATRIX_KEEPER   = "0x6CF638431d8C4cAa735d6aBd23b5AdB322481A3e"; // V8.23 (mintForSale+DIRECT_SALE_ROLE, W1 default referrer)
-const GAS_LIMIT       = 20_000_000; // ~12 rescues × 1.58M = ~19M; 15M OOGs w/ full batch, 25M rejected by RPC ("gas limit too high")
+const MATRIX_KEEPER        = "0x6CF638431d8C4cAa735d6aBd23b5AdB322481A3e"; // V8.23
+const GAS_LIMIT            = 15_000_000; // RPC hard cap is 15M (20M/25M rejected "gas limit too high")
+const MAX_RESCUE_PER_BATCH = 8;          // 8 x ~1.58M gas = ~12.6M -- safe under 15M cap with buffer
+const WORK_PARKED_RESCUE   = 4;          // workType constant from MatrixKeeper.sol
 const LOG_FILE        = path.join(__dirname, "..", "keeper.log");
 const STATE_FILE      = path.join(__dirname, "..", "keeper_state.json");
 const HEARTBEAT_EVERY = 30; // quiet runs between heartbeat lines (~1 hr at 2-min interval)
@@ -30,7 +32,7 @@ const ABI = [
   "event WorkItemFailed(uint8 workType, uint8 tierIndex, address addr1, address addr2)",
 ];
 
-// ── helpers ──────────────────────────────────────────────────────────────────
+// helpers
 
 function log(msg) {
   const line = `[${new Date().toISOString()}] ${msg}`;
@@ -63,23 +65,52 @@ async function sendTelegram(msg) {
   } catch {}
 }
 
-// ── main ─────────────────────────────────────────────────────────────────────
+// Cap rescue items in performData so the batch fits under the 15M gas cap.
+// checkUpkeep can return up to 15 WORK_PARKED_RESCUE items; each costs ~1.58M gas.
+// 10+ items OOGs. We decode the WorkItem[], limit rescue items, then re-encode.
+function capRescueBatch(performData, ethers) {
+  try {
+    const coder = ethers.AbiCoder.defaultAbiCoder();
+    const WI_TYPE = "tuple(uint8 workType, uint8 tierIndex, address addr1, address addr2)[]";
+    const [rawItems] = coder.decode([WI_TYPE], performData);
+
+    const rescueItems = [];
+    const otherItems  = [];
+    for (const item of rawItems) {
+      if (Number(item.workType) === WORK_PARKED_RESCUE) rescueItems.push(item);
+      else otherItems.push(item);
+    }
+
+    if (rescueItems.length <= MAX_RESCUE_PER_BATCH) return { performData, capped: false };
+
+    const limited = [...otherItems, ...rescueItems.slice(0, MAX_RESCUE_PER_BATCH)];
+    const encoded = coder.encode(
+      [WI_TYPE],
+      [limited.map(i => [Number(i.workType), Number(i.tierIndex), i.addr1, i.addr2])]
+    );
+    return { performData: encoded, capped: true, total: rescueItems.length, kept: MAX_RESCUE_PER_BATCH };
+  } catch (err) {
+    // If decode fails for any reason, send the original and let the contract handle it
+    return { performData, capped: false, decodeError: err.message };
+  }
+}
+
+// main
 
 async function main() {
   const signers = await hre.ethers.getSigners();
   // Use funder (signers[1]=FILL_FUNDER_KEY) not deployer (signers[0]).
-  // direct_keeper.js and the CRE simulate task both use the deployer wallet;
-  // overlapping invocations cause nonce collisions → TX rejected before mining
-  // (ethers action="sendTransaction", reason=null, data=null, 3-in-a-row errors).
-  // performUpkeep has no access control so any wallet can call it.
+  // direct_keeper.js and the CRE simulate task both ran on the deployer wallet;
+  // overlapping invocations caused nonce collisions. performUpkeep has no access
+  // control so any wallet can call it.
   const signer = signers[1] || signers[0];
-  const keeper   = new hre.ethers.Contract(MATRIX_KEEPER, ABI, signer);
+  const keeper = new hre.ethers.Contract(MATRIX_KEEPER, ABI, signer);
 
-  const state      = loadState();
-  state.totalRuns  = (state.totalRuns  || 0) + 1;
+  const state       = loadState();
+  state.totalRuns   = (state.totalRuns  || 0) + 1;
   state.noWorkCount = state.noWorkCount || 0;
 
-  // ── checkUpkeep (read-only) ───────────────────────────────────────────────
+  // checkUpkeep (read-only)
   let upkeepNeeded, performData;
   try {
     [upkeepNeeded, performData] = await keeper.checkUpkeep("0x");
@@ -89,21 +120,29 @@ async function main() {
     process.exit(1);
   }
 
-  // ── no work needed ───────────────────────────────────────────────────────
+  // no work needed
   if (!upkeepNeeded) {
     state.noWorkCount += 1;
     if (state.noWorkCount % HEARTBEAT_EVERY === 0) {
       const lastActive = state.lastActive
         ? `last_active=${state.lastActive}`
         : "never_active_this_session";
-      log(`♡ Heartbeat — quiet_runs=${state.noWorkCount}  total_runs=${state.totalRuns}  ${lastActive}`);
+      log(`Heartbeat -- quiet_runs=${state.noWorkCount}  total_runs=${state.totalRuns}  ${lastActive}`);
     }
     saveState(state);
     return;
   }
 
-  // ── work needed ──────────────────────────────────────────────────────────
-  log(`► Work needed — calling performUpkeep  (wallet=${signer.address})`);
+  // work needed -- cap rescue batch before sending
+  const cap = capRescueBatch(performData, hre.ethers);
+  if (cap.decodeError) {
+    log(`  WARN performData decode failed (using original): ${cap.decodeError.slice(0, 100)}`);
+  } else if (cap.capped) {
+    log(`  INFO Rescue batch capped: ${cap.total} items -> ${cap.kept} (gas budget)`);
+  }
+  performData = cap.performData;
+
+  log(`Work needed -- calling performUpkeep  (wallet=${signer.address})`);
   state.noWorkCount = 0;
 
   try {
@@ -118,14 +157,11 @@ async function main() {
       costStr = `  cost=${parseFloat(gasEth).toFixed(6)} ETH`;
     } catch {}
 
-    log(`  Confirmed — block=${receipt.blockNumber}  status=${ok ? "OK" : "FAILED"}  gasUsed=${receipt.gasUsed.toLocaleString()}${costStr}`);
+    log(`  Confirmed -- block=${receipt.blockNumber}  status=${ok ? "OK" : "FAILED"}  gasUsed=${receipt.gasUsed.toLocaleString()}${costStr}`);
 
     if (ok) {
-      // Count rescue events in this TX
-      const rescuedEvt  = keeper.interface.getEvent("ParkedRescued");
-      const failedEvt   = keeper.interface.getEvent("WorkItemFailed");
-      let rescueCount   = 0;
-      let failedItems   = [];
+      let rescueCount = 0;
+      let failedItems = [];
 
       for (const log_ of receipt.logs) {
         try {
@@ -137,18 +173,18 @@ async function main() {
       }
 
       if (rescueCount > 0) {
-        const msg = `✅ <b>Keeper rescued ${rescueCount} member${rescueCount > 1 ? "s" : ""}</b>\nBlock ${receipt.blockNumber}  gas ${receipt.gasUsed.toLocaleString()}${costStr}`;
-        log(`  ✅ ParkedRescued events: ${rescueCount}`);
-        await sendTelegram(msg);
+        const msg = `Keeper rescued ${rescueCount} member${rescueCount > 1 ? "s" : ""}\nBlock ${receipt.blockNumber}  gas ${receipt.gasUsed.toLocaleString()}${costStr}`;
+        log(`  ParkedRescued events: ${rescueCount}`);
+        await sendTelegram(`SUCCESS <b>Keeper rescued ${rescueCount} member${rescueCount > 1 ? "s" : ""}</b>\n${msg}`);
       }
 
       if (failedItems.length > 0) {
-        const msg = `⚠️ <b>Keeper: ${failedItems.length} work item(s) failed</b>\n${failedItems.join("\n")}\nBlock ${receipt.blockNumber}`;
-        log(`  ⚠  WorkItemFailed events: ${failedItems.length}`);
-        await sendTelegram(msg);
+        const msg = `Keeper: ${failedItems.length} work item(s) failed\n${failedItems.join("\n")}\nBlock ${receipt.blockNumber}`;
+        log(`  WorkItemFailed events: ${failedItems.length}`);
+        await sendTelegram(`WARNING <b>${msg}</b>`);
       }
 
-      state.lastActive   = new Date().toISOString();
+      state.lastActive      = new Date().toISOString();
       state.lastRescueCount = (state.lastRescueCount || 0) + rescueCount;
     } else {
       // TX confirmed but reverted (status=0)
@@ -156,8 +192,8 @@ async function main() {
       const reason = isOOG
         ? `Out of gas (used ${receipt.gasUsed.toLocaleString()} / ${GAS_LIMIT.toLocaleString()} limit)`
         : "Transaction reverted (status=0, no revert reason available)";
-      log(`  ❌ performUpkeep FAILED — ${reason}`);
-      await sendTelegram(`❌ <b>Keeper performUpkeep failed</b>\n${reason}\nTX: ${tx.hash}\nBlock: ${receipt.blockNumber}`);
+      log(`  performUpkeep FAILED -- ${reason}`);
+      await sendTelegram(`FAIL <b>Keeper performUpkeep failed</b>\n${reason}\nTX: ${tx.hash}\nBlock: ${receipt.blockNumber}`);
       saveState(state);
       process.exit(1);
     }
@@ -165,7 +201,7 @@ async function main() {
     // TX rejected before confirmation (RPC error, nonce issue, etc.)
     const msg = e.message?.slice(0, 200) || "unknown error";
     log(`ERROR performUpkeep: ${msg}`);
-    await sendTelegram(`❌ <b>Keeper performUpkeep error</b>\n${msg}`);
+    await sendTelegram(`FAIL <b>Keeper performUpkeep error</b>\n${msg}`);
     saveState(state);
     process.exit(1);
   }
