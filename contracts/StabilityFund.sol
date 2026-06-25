@@ -164,6 +164,7 @@ contract StabilityFund is Ownable2Step {
     event GhostEntryFunded(uint8 indexed tier, uint256 cost, uint256 remainingBalance);
     event DiscountPaid(address indexed member, uint256 discount, uint256 remainingBalance);
     event FundWithdrawn(address indexed to, uint256 amount, string reason);
+    event DebtRepaymentReceived(address indexed matrix, uint256 amount);
     event MatrixKeeperSet(address indexed keeper);
     event TierRouterSet(address indexed router);
     event MatrixAuthorized(address indexed matrix, bool authorized);
@@ -563,6 +564,22 @@ contract StabilityFund is Ownable2Step {
         usdc.safeTransfer(msg.sender, sfShare);
 
         emit FundWithdrawn(msg.sender, sfShare, "coPayRescue");
+    }
+
+    /**
+     * @notice Called by an authorized matrix to repay a member's SF rescue loan.
+     *         The matrix must have approved `amount` USDC to this contract before
+     *         calling. SF pulls the USDC and increments totalBalance.
+     *         Only callable by authorizedMatrices.
+     */
+    function receiveDebtRepayment(uint256 amount) external {
+        require(authorizedMatrices[msg.sender], "SF: not authorized matrix");
+        require(amount > 0,                     "SF: zero amount");
+
+        usdc.safeTransferFrom(msg.sender, address(this), amount);
+        totalBalance += amount;
+
+        emit DebtRepaymentReceived(msg.sender, amount);
     }
 
     // ── Governance: emergency withdrawal ─────────────────────────────────────

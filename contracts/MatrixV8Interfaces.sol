@@ -24,6 +24,9 @@ interface ITierRouter {
 interface IStabilityFund {
     function receiveLayer(uint8 tierIdx, uint256 amount, uint8 layer) external;
     function payCoRescue(uint8 tierIdx, uint256 sfShare) external;
+    /// @notice Called by an authorized matrix after approving `amount` USDC.
+    ///         SF pulls the USDC and increments totalBalance.
+    function receiveDebtRepayment(uint256 amount) external;
 }
 
 /// @notice Minimal cross-instance interface -- used when matrix A needs to call

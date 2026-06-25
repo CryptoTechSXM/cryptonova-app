@@ -1,5 +1,5 @@
 // direct_keeper.js
-// Local keeper bridge: polls checkUpkeep -> calls performUpkeep on V8.23 MatrixKeeper.
+// Local keeper bridge: polls checkUpkeep -> calls performUpkeep on V8.24 MatrixKeeper.
 // Replaces Chainlink Automation while CLA registrations are disabled / CRE access is pending.
 //
 // Run manually:  npx hardhat run scripts/direct_keeper.js --network baseSepolia
@@ -17,7 +17,7 @@ const fs   = require("fs");
 const path = require("path");
 require("dotenv").config();
 
-const MATRIX_KEEPER        = "0x6CF638431d8C4cAa735d6aBd23b5AdB322481A3e"; // V8.23
+const MATRIX_KEEPER        = "0xaA066A8686289C640D873AF66Da5C33062F55B80"; // V8.24
 const GAS_LIMIT            = 15_000_000; // RPC hard cap is 15M (20M/25M rejected "gas limit too high")
 const MAX_RESCUE_PER_BATCH = 8;          // 8 x ~1.58M gas = ~12.6M -- safe under 15M cap with buffer
 const WORK_PARKED_RESCUE   = 4;          // workType constant from MatrixKeeper.sol

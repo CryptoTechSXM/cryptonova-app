@@ -407,6 +407,7 @@ contract FigureEightMatrixV8 is Ownable2Step {
     function getMember(address member) external view returns (MatrixLogicLib.Member memory) { return _state.members[member]; }
     function getCyclesCompleted(address m) external view returns (uint256) { return _state.members[m].cyclesCompleted; }
     function withdrawableOf(address member) external view returns (uint256) { return _state.members[member].withdrawable; }
+    function rescueDebtOf(address member) external view returns (uint256) { return _state.rescueDebt[member]; }
 
     function freeWithdrawable(address member) external view returns (uint256) {
         uint256 bal = _state.members[member].withdrawable;

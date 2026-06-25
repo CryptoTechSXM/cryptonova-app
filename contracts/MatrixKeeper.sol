@@ -436,12 +436,16 @@ contract MatrixKeeper is Ownable {
                 catch { emit WorkItemFailed(WORK_CHAIN_LINK, item.tierIndex, item.addr1, item.addr2); }
                 chainLinkProcessed++;
             } else if (item.workType == WORK_PARKED_RESCUE) {
-                // V8.18: only swallow expected "already done" strings; unexpected reverts bubble up
+                // V8.18: only swallow expected "already done" strings; unexpected reverts bubble up.
+                // V8.24: added "insufficient withdrawable for rescue" — member cannot cover their
+                //        share under the SF rescue ladder; skip them so the rest of the batch runs.
+                //        This is what makes the ladder self-sustaining without SF top-ups.
                 try this._doParkedRescueExternal(item.addr1, item.addr2, item.tierIndex) {}
                 catch Error(string memory reason) {
                     bytes32 h = keccak256(bytes(reason));
                     if (h == keccak256("F8V8: already in matrix") || h == keccak256("F8V8: not parked") ||
-                        h == keccak256("F8V8: still in matrix")) {
+                        h == keccak256("F8V8: still in matrix") ||
+                        h == keccak256("F8V8: insufficient withdrawable for rescue")) {
                         emit WorkItemFailed(WORK_PARKED_RESCUE, item.tierIndex, item.addr1, item.addr2);
                     } else {
                         revert(reason);

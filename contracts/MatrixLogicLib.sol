@@ -87,6 +87,10 @@ library MatrixLogicLib {
         // -- Orphan fee health monitor --
         uint256 noReferrerPoolRouted;
         uint256 noReferrerFounderRouted;
+        // -- SF rescue debt tracking --
+        // Records USDC owed back to the SF per member after a coPayRescue.
+        // Repaid incrementally from remaining withdrawable on each natural cycle-out.
+        mapping(address => uint256) rescueDebt;
         // -- Members --
         mapping(address => Member) members;
         uint256 totalJoined;
@@ -148,6 +152,8 @@ library MatrixLogicLib {
     event MemberParked(address indexed member, uint256 shortfall);
     event MemberEvicted(address indexed member, uint256 totalWithdrawn);
     event CoPayRescue(address indexed member, uint256 sfShare, uint256 memberWalletShare, uint256 withdrawableUsed);
+    /// @notice Emitted when a member's SF rescue loan is (partially) repaid at cycle-out.
+    event RescueDebtRepaid(address indexed member, uint256 repaid, uint256 remaining);
 
     error F8V8_ZeroAddress();
 
@@ -342,6 +348,23 @@ library MatrixLogicLib {
         emit MemberCrossedToPartner(member, address(this), destination);
         IFigureEightMatrixV8Cross(destination)._enterMatrix(member, self.members[member].referrer);
         self.crossingInProgress = false;
+
+        // ── SF rescue loan repayment ──────────────────────────────────────────
+        // After paying the crossing fee, any remaining withdrawable is used to
+        // repay outstanding rescue debt to the SF (partial repayment is fine).
+        // This does NOT block or re-park the member — it's a soft recovery.
+        uint256 debt = self.rescueDebt[member];
+        if (debt > 0 && self.stabilityFund != address(0)) {
+            uint256 remaining = self.members[member].withdrawable;
+            if (remaining > 0) {
+                uint256 repay = remaining >= debt ? debt : remaining;
+                self.rescueDebt[member] -= repay;
+                self.members[member].withdrawable -= repay;
+                SafeERC20.forceApprove(cfg.usdc, self.stabilityFund, repay);
+                IStabilityFund(self.stabilityFund).receiveDebtRepayment(repay);
+                emit RescueDebtRepaid(member, repay, self.rescueDebt[member]);
+            }
+        }
     }
 
     /// @dev Shared tail for forceCross/forceCrossKeeper/topUpAndCross/coPayRescue.
@@ -683,6 +706,9 @@ library MatrixLogicLib {
         self.members[member].withdrawable = 0;
 
         IStabilityFund(self.stabilityFund).payCoRescue(cfg.tierIndex, sfShare);
+
+        // Record SF contribution as a soft loan — repaid from cycle-out earnings
+        self.rescueDebt[member] += sfShare;
 
         if (memberShare > 0) {
             cfg.usdc.safeTransferFrom(msg.sender, address(this), memberShare);
