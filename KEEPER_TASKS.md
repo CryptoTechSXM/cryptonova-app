@@ -29,7 +29,7 @@ Update this file every time you redeploy or change a keeper script.
 | Script     | `scripts/direct_keeper.js` |
 | Interval   | Every **2 minutes** |
 | Log        | none (stdout only via hardhat) |
-| Purpose    | **All on-chain rescue work.** Calls MatrixKeeper.checkUpkeep/performUpkeep. Handles: fill escalation, parked wallet rescue, SF ladder. Caps rescue batch at 8 per run (Base Sepolia 15M gas limit). Runs every 2 min for fast response. |
+| Purpose    | **All on-chain rescue work.** Calls MatrixKeeper.checkUpkeep/performUpkeep. Handles: fill escalation, parked wallet rescue, SF ladder. Caps rescue batch at **4** per run — V8.26 rescueDebt path costs ~3.5M gas/item (SF USDC transfer + debt write), confirmed via static-call binary search: 4 items passes, 5 OOGs. Runs every 2 min for fast response. |
 | On redeploy | Reads MATRIX_KEEPER from `deployed_addresses_*.json` via `.env` `ADDRESSES_FILE` — no script edit needed. |
 
 ---
