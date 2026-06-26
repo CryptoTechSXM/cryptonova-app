@@ -1,6 +1,6 @@
 "use strict";
 /**
- * system_keeper.js — Autonomous Health Monitor & Auto-Funder for V8.22
+ * system_keeper.js — Autonomous Health Monitor for V8.26
  *
  * Runs every 15 min (via Windows Task Scheduler -- see install_health_keeper_task.bat;
  * Cowork's own scheduled-task mechanism can't reach Base Sepolia RPC from the
@@ -227,7 +227,7 @@ async function main() {
 
   log('');
   log('╔═══════════════════════════════════════════════════════════════╗');
-  log('║        CryptoNova V8.18 — System Keeper                      ║');
+  log('║        CryptoNova V8.26 — Health Report                      ║');
   log('╚═══════════════════════════════════════════════════════════════╝');
   log(`  Run at:    ${ts()}`);
   log(`  Log file:  ${LOG_FILE}`);
