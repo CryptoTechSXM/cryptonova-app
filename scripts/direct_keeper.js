@@ -19,7 +19,7 @@ require("dotenv").config();
 
 const MATRIX_KEEPER        = "0x3de9c7bD20cC82238BC39c98D7A1aC15dd1280df"; // V8.26
 const GAS_LIMIT            = 15_000_000; // RPC hard cap is 15M (20M/25M rejected "gas limit too high")
-const MAX_RESCUE_PER_BATCH = 8;          // 8 x ~1.58M gas = ~12.6M -- safe under 15M cap with buffer
+const MAX_RESCUE_PER_BATCH = 6;          // 6 x ~2.0M gas = ~12M -- V8.26 rescueDebt adds SF→matrix USDC transfer per item, raising per-item cost vs V8.24
 const WORK_PARKED_RESCUE   = 4;          // workType constant from MatrixKeeper.sol
 const LOG_FILE        = path.join(__dirname, "..", "keeper.log");
 const STATE_FILE      = path.join(__dirname, "..", "keeper_state.json");
@@ -66,8 +66,9 @@ async function sendTelegram(msg) {
 }
 
 // Cap rescue items in performData so the batch fits under the 15M gas cap.
-// checkUpkeep can return up to 15 WORK_PARKED_RESCUE items; each costs ~1.58M gas.
-// 10+ items OOGs. We decode the WorkItem[], limit rescue items, then re-encode.
+// checkUpkeep can return up to 15 WORK_PARKED_RESCUE items.
+// V8.26 rescueDebt: each item now costs ~2.0M gas (was ~1.58M) due to SF→matrix USDC transfer.
+// 8 items = ~16M > 15M cap → OOG. 6 items = ~12M — safe.
 function capRescueBatch(performData, ethers) {
   try {
     const coder = ethers.AbiCoder.defaultAbiCoder();
