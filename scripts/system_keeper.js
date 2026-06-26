@@ -80,7 +80,7 @@ const SF_MIN_USD         = Number(process.env.SF_MIN_USD        || 100);
 const SF_CRITICAL_USD    = Number(process.env.SF_CRITICAL_USD   || 30);
 const PARKED_WARN        = Number(process.env.PARKED_WARN       || 50);
 const PARKED_CRITICAL    = Number(process.env.PARKED_CRITICAL   || 200);
-const RESCUE_THRESHOLD   = Number(process.env.RESCUE_THRESHOLD  || 20);
+const RESCUE_THRESHOLD   = Number(process.env.RESCUE_THRESHOLD  || 3);
 const RESCUE_BATCH       = Number(process.env.RESCUE_BATCH      || 10);
 const SF_TOPUP_AMOUNT_USD= Number(process.env.SF_TOPUP_AMOUNT_USD || 500);
 
@@ -699,7 +699,9 @@ async function main() {
     const lines = [
       headerEmoji + ' <b>CryptoNova Keeper — ' + headerLabel + '</b>',
       '',
-      sfEmoji + ' <b>StabilityFund:</b> ' + fmt6(sfTotal) + ' / ' + fmt6(sfTarget) + ' (' + sfHealthPct.toFixed(0) + '% health)',
+      // sfTarget() auto-scales to the highest open tier's fee × 20x.
+      // When T2 gate is open but T2 has 0 members, clamp display to T1 baseline ($200).
+      sfEmoji + ' <b>StabilityFund:</b> ' + fmt6(sfTotal) + ' / ' + (Number(t2aOcc) === 0 ? '$200.00' : fmt6(sfTarget)) + ' (' + sfHealthPct.toFixed(0) + '% health)',
     ];
 
     if (sfTotalUSD < SF_CRITICAL_USD) lines.push('   ⚠️ SF CRITICAL — below $' + SF_CRITICAL_USD + '!');
