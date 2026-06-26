@@ -1,5 +1,5 @@
 // direct_keeper.js
-// Local keeper bridge: polls checkUpkeep -> calls performUpkeep on V8.25 MatrixKeeper.
+// Local keeper bridge: polls checkUpkeep -> calls performUpkeep on V8.24 MatrixKeeper.
 // Replaces Chainlink Automation while CLA registrations are disabled / CRE access is pending.
 //
 // Run manually:  npx hardhat run scripts/direct_keeper.js --network baseSepolia
@@ -19,9 +19,8 @@ require("dotenv").config();
 
 const MATRIX_KEEPER        = "0x3de9c7bD20cC82238BC39c98D7A1aC15dd1280df"; // V8.26
 const GAS_LIMIT            = 15_000_000; // RPC hard cap is 15M (20M/25M rejected "gas limit too high")
-const MAX_RESCUE_PER_BATCH = 5;          // post-cycle rescues cost ~1.67M each; 5 x 1.67M = 8.35M + other items leaves ~6M headroom under 15M cap
+const MAX_RESCUE_PER_BATCH = 8;          // 8 x ~1.58M gas = ~12.6M -- safe under 15M cap with buffer
 const WORK_PARKED_RESCUE   = 4;          // workType constant from MatrixKeeper.sol
-const WORK_NONE            = 0;          // checkUpkeep returns this post-cycle; skip it from gas budget (otherItems)
 const LOG_FILE        = path.join(__dirname, "..", "keeper.log");
 const STATE_FILE      = path.join(__dirname, "..", "keeper_state.json");
 const HEARTBEAT_EVERY = 30; // quiet runs between heartbeat lines (~1 hr at 2-min interval)
@@ -79,7 +78,7 @@ function capRescueBatch(performData, ethers) {
     const otherItems  = [];
     for (const item of rawItems) {
       if (Number(item.workType) === WORK_PARKED_RESCUE) rescueItems.push(item);
-      else if (Number(item.workType) !== WORK_NONE) otherItems.push(item); // skip WORK_NONE — post-cycle sentinel, not a real gas cost
+      else otherItems.push(item);
     }
 
     if (rescueItems.length <= MAX_RESCUE_PER_BATCH) return { performData, capped: false };
@@ -189,4 +188,29 @@ async function main() {
       state.lastRescueCount = (state.lastRescueCount || 0) + rescueCount;
     } else {
       // TX confirmed but reverted (status=0)
-      const isOOG = BigInt(receipt.gasUsed.toString
+      const isOOG = BigInt(receipt.gasUsed.toString()) >= BigInt(GAS_LIMIT) * 95n / 100n;
+      const reason = isOOG
+        ? `Out of gas (used ${receipt.gasUsed.toLocaleString()} / ${GAS_LIMIT.toLocaleString()} limit)`
+        : "Transaction reverted (status=0, no revert reason available)";
+      log(`  performUpkeep FAILED -- ${reason}`);
+      await sendTelegram(`FAIL <b>Keeper performUpkeep failed</b>\n${reason}\nTX: ${tx.hash}\nBlock: ${receipt.blockNumber}`);
+      saveState(state);
+      process.exit(1);
+    }
+  } catch (e) {
+    // TX rejected before confirmation (RPC error, nonce issue, etc.)
+    const msg = e.message?.slice(0, 200) || "unknown error";
+    log(`ERROR performUpkeep: ${msg}`);
+    await sendTelegram(`FAIL <b>Keeper performUpkeep error</b>\n${msg}`);
+    saveState(state);
+    process.exit(1);
+  }
+
+  saveState(state);
+}
+
+main().catch(e => {
+  fs.appendFileSync(LOG_FILE, `[${new Date().toISOString()}] FATAL: ${e.message}\n`);
+  console.error(e);
+  process.exit(1);
+});
