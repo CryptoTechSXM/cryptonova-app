@@ -1,5 +1,5 @@
 // direct_keeper.js
-// Local keeper bridge: polls checkUpkeep -> calls performUpkeep on V8.24 MatrixKeeper.
+// Local keeper bridge: polls checkUpkeep -> calls performUpkeep on V8.29 MatrixKeeper.
 // Replaces Chainlink Automation while CLA registrations are disabled / CRE access is pending.
 //
 // Run manually:  npx hardhat run scripts/direct_keeper.js --network baseSepolia
@@ -17,13 +17,24 @@ const fs   = require("fs");
 const path = require("path");
 require("dotenv").config();
 
-const MATRIX_KEEPER        = "0x3de9c7bD20cC82238BC39c98D7A1aC15dd1280df"; // V8.26
+const MATRIX_KEEPER        = "0xFe7ADd5c62695F0E437835670Bc88223EaA51865"; // V8.29
 const GAS_LIMIT            = 15_000_000; // RPC hard cap is 15M (20M/25M rejected "gas limit too high")
-const MAX_RESCUE_PER_BATCH = 4;          // V8.26 rescueDebt: ~3.5M gas/item (SF USDC transfer + debt accounting). 4 x 3.5M = ~14M -- safe under 15M RPC cap
 const WORK_PARKED_RESCUE   = 4;          // workType constant from MatrixKeeper.sol
+const GAS_SAFE             = 14_000_000; // target ceiling — stay under 15M RPC hard cap
+const MIN_RESCUE_BATCH     = 1;          // floor: always attempt at least 1
+const MAX_RESCUE_BATCH     = 25;         // ceiling: keeper self-limits via gas learning
+const GAS_PER_ITEM_DEFAULT = 3_500_000;  // conservative starting estimate
+// Self-healing batch sizing (two-layer):
+//   gasPerItem  — EMA of actual gas/rescue, updated on SUCCESS only (alpha=0.3).
+//   currentCap  — working batch cap stored in keeper_state.json.
+//     On SUCCESS : currentCap = clamp(floor(GAS_SAFE/gasPerItem), MIN, MAX)  [grows as gas drops]
+//     On OOG     : currentCap = max(MIN, floor(currentCap/2))                [halves immediately]
+//     On non-gas : currentCap unchanged (might be transient RPC / logic error)
+// Net effect: starts aggressive (up to 25), backs off when it hits gas walls,
+// recovers automatically as costs fall (e.g. post-contract optimisation).
 const LOG_FILE        = path.join(__dirname, "..", "keeper.log");
 const STATE_FILE      = path.join(__dirname, "..", "keeper_state.json");
-const HEARTBEAT_EVERY = 30; // quiet runs between heartbeat lines (~1 hr at 2-min interval)
+const HEARTBEAT_EVERY = 5;  // quiet runs between heartbeat lines (~10 min at 2-min interval)
 
 const ABI = [
   "function checkUpkeep(bytes calldata checkData) external view returns (bool upkeepNeeded, bytes memory performData)",
@@ -65,11 +76,11 @@ async function sendTelegram(msg) {
   } catch {}
 }
 
-// Cap rescue items in performData so the batch fits under the 15M gas cap.
-// checkUpkeep can return up to 15 WORK_PARKED_RESCUE items.
-// V8.26 rescueDebt: each item costs ~3.5M gas (SF USDC transfer + debt storage write = ~2x previous cost).
-// Confirmed via static-call binary search: 4 items succeeds, 5 OOGs. 4 x 3.5M = ~14M -- safe.
-function capRescueBatch(performData, ethers) {
+// Adaptive rescue batch sizing.
+// Reads gasPerItem from keeper_state.json (updated after each successful rescue).
+// Calculates maxItems = clamp(floor(GAS_SAFE / gasPerItem), MIN, MAX).
+// When V8 gas costs drop (e.g. post-optimisation), the batch auto-grows.
+function adaptiveRescueBatch(performData, ethers, state) {
   try {
     const coder = ethers.AbiCoder.defaultAbiCoder();
     const WI_TYPE = "tuple(uint8 workType, uint8 tierIndex, address addr1, address addr2)[]";
@@ -82,16 +93,20 @@ function capRescueBatch(performData, ethers) {
       else otherItems.push(item);
     }
 
-    if (rescueItems.length <= MAX_RESCUE_PER_BATCH) return { performData, capped: false };
+    // Calculate adaptive cap from stored gas-per-item estimate
+    const gasPerItem = state.gasPerItem || GAS_PER_ITEM_DEFAULT;
+    const emaCap     = Math.max(MIN_RESCUE_BATCH, Math.min(MAX_RESCUE_BATCH, Math.floor(GAS_SAFE / gasPerItem)));
+    const adaptive   = state.currentCap != null ? state.currentCap : emaCap;
 
-    const limited = [...otherItems, ...rescueItems.slice(0, MAX_RESCUE_PER_BATCH)];
+    if (rescueItems.length <= adaptive) return { performData, capped: false, adaptive, gasPerItem };
+
+    const limited = [...otherItems, ...rescueItems.slice(0, adaptive)];
     const encoded = coder.encode(
       [WI_TYPE],
       [limited.map(i => [Number(i.workType), Number(i.tierIndex), i.addr1, i.addr2])]
     );
-    return { performData: encoded, capped: true, total: rescueItems.length, kept: MAX_RESCUE_PER_BATCH };
+    return { performData: encoded, capped: true, total: rescueItems.length, kept: adaptive, adaptive, gasPerItem };
   } catch (err) {
-    // If decode fails for any reason, send the original and let the contract handle it
     return { performData, capped: false, decodeError: err.message };
   }
 }
@@ -127,19 +142,23 @@ async function main() {
     if (state.noWorkCount % HEARTBEAT_EVERY === 0) {
       const lastActive = state.lastActive
         ? `last_active=${state.lastActive}`
-        : "never_active_this_session";
-      log(`Heartbeat -- quiet_runs=${state.noWorkCount}  total_runs=${state.totalRuns}  ${lastActive}`);
+        : "never_active";
+      const msg = `💓 Keeper alive — quiet_runs=${state.noWorkCount}  total=${state.totalRuns}  ${lastActive}`;
+      log(msg);
+      await sendTelegram(msg);
     }
     saveState(state);
     return;
   }
 
-  // work needed -- cap rescue batch before sending
-  const cap = capRescueBatch(performData, hre.ethers);
+  // work needed -- adaptive batch sizing before sending
+  const cap = adaptiveRescueBatch(performData, hre.ethers, state);
   if (cap.decodeError) {
     log(`  WARN performData decode failed (using original): ${cap.decodeError.slice(0, 100)}`);
   } else if (cap.capped) {
-    log(`  INFO Rescue batch capped: ${cap.total} items -> ${cap.kept} (gas budget)`);
+    log(`  INFO Adaptive batch: ${cap.total} items -> ${cap.kept} (gasPerItem=${(cap.gasPerItem/1e6).toFixed(2)}M → cap=${cap.adaptive})`);
+  } else {
+    log(`  INFO Batch size: ${cap.adaptive} max (gasPerItem=${((cap.gasPerItem||GAS_PER_ITEM_DEFAULT)/1e6).toFixed(2)}M)`);
   }
   performData = cap.performData;
 
@@ -174,7 +193,17 @@ async function main() {
       }
 
       if (rescueCount > 0) {
-        const msg = `Keeper rescued ${rescueCount} member${rescueCount > 1 ? "s" : ""}\nBlock ${receipt.blockNumber}  gas ${receipt.gasUsed.toLocaleString()}${costStr}`;
+        // Update adaptive gas-per-item estimate (EMA, alpha=0.3)
+        const actualGasPerItem = Number(receipt.gasUsed) / rescueCount;
+        const prevEst = state.gasPerItem || GAS_PER_ITEM_DEFAULT;
+        state.gasPerItem = Math.round(0.3 * actualGasPerItem + 0.7 * prevEst);
+        const newCap = Math.max(MIN_RESCUE_BATCH, Math.min(MAX_RESCUE_BATCH, Math.floor(GAS_SAFE / state.gasPerItem)));
+        const prevCap = state.currentCap != null ? state.currentCap : newCap;
+        state.currentCap = newCap;
+        const capChange = newCap !== prevCap ? ` (cap ${prevCap}->${newCap})` : "";
+        log(`  Gas/item: actual=${(actualGasPerItem/1e6).toFixed(2)}M  ema=${(state.gasPerItem/1e6).toFixed(2)}M  next_cap=${newCap}${capChange}`);
+
+        const msg = `Keeper rescued ${rescueCount} member${rescueCount > 1 ? "s" : ""}\nBlock ${receipt.blockNumber}  gas ${receipt.gasUsed.toLocaleString()}${costStr}\nNext batch cap: ${newCap}`;
         log(`  ParkedRescued events: ${rescueCount}`);
         await sendTelegram(`SUCCESS <b>Keeper rescued ${rescueCount} member${rescueCount > 1 ? "s" : ""}</b>\n${msg}`);
       }
@@ -190,19 +219,34 @@ async function main() {
     } else {
       // TX confirmed but reverted (status=0)
       const isOOG = BigInt(receipt.gasUsed.toString()) >= BigInt(GAS_LIMIT) * 95n / 100n;
-      const reason = isOOG
-        ? `Out of gas (used ${receipt.gasUsed.toLocaleString()} / ${GAS_LIMIT.toLocaleString()} limit)`
-        : "Transaction reverted (status=0, no revert reason available)";
-      log(`  performUpkeep FAILED -- ${reason}`);
-      await sendTelegram(`FAIL <b>Keeper performUpkeep failed</b>\n${reason}\nTX: ${tx.hash}\nBlock: ${receipt.blockNumber}`);
+      if (isOOG) {
+        const prevCap = state.currentCap != null ? state.currentCap : MAX_RESCUE_BATCH;
+        state.currentCap = Math.max(MIN_RESCUE_BATCH, Math.floor(prevCap / 2));
+        const reason = `Out of gas (used ${receipt.gasUsed.toLocaleString()} / ${GAS_LIMIT.toLocaleString()}) — cap: ${prevCap} -> ${state.currentCap}`;
+        log(`  OOG on-chain -- ${reason}`);
+        await sendTelegram(`⚠️ <b>Keeper OOG</b>\n${reason}\nTX: ${tx.hash}\nBlock: ${receipt.blockNumber}`);
+      } else {
+        const reason = "Transaction reverted (status=0, no revert reason available)";
+        log(`  performUpkeep FAILED -- ${reason}`);
+        await sendTelegram(`FAIL <b>Keeper performUpkeep failed</b>\n${reason}\nTX: ${tx.hash}\nBlock: ${receipt.blockNumber}`);
+      }
       saveState(state);
       process.exit(1);
     }
   } catch (e) {
     // TX rejected before confirmation (RPC error, nonce issue, etc.)
+    // Detect OOG: ethers v6 surfaces this as reason=null, data=null/0x
+    const looksLikeOOG = !e.reason && (!e.data || e.data === null || e.data === "0x" || e.data === "");
     const msg = e.message?.slice(0, 200) || "unknown error";
-    log(`ERROR performUpkeep: ${msg}`);
-    await sendTelegram(`FAIL <b>Keeper performUpkeep error</b>\n${msg}`);
+    if (looksLikeOOG) {
+      const prevCap = state.currentCap != null ? state.currentCap : MAX_RESCUE_BATCH;
+      state.currentCap = Math.max(MIN_RESCUE_BATCH, Math.floor(prevCap / 2));
+      log(`  OOG pre-flight -- cap halved: ${prevCap} -> ${state.currentCap}  (${msg})`);
+      await sendTelegram(`⚠️ <b>Keeper OOG pre-flight</b>\nCap: ${prevCap} → ${state.currentCap}\n${msg}`);
+    } else {
+      log(`ERROR performUpkeep: ${msg}`);
+      await sendTelegram(`FAIL <b>Keeper performUpkeep error</b>\n${msg}`);
+    }
     saveState(state);
     process.exit(1);
   }
@@ -211,7 +255,6 @@ async function main() {
 }
 
 main().catch(e => {
-  fs.appendFileSync(LOG_FILE, `[${new Date().toISOString()}] FATAL: ${e.message}\n`);
-  console.error(e);
+  console.error("Fatal:", e);
   process.exit(1);
 });
