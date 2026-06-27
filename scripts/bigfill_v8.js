@@ -35,7 +35,7 @@ require("dotenv").config();
 //   v8_2 = size-64 pre-mainnet  ← default
 const ADDRESSES_FILE = path.join(
   __dirname,
-  process.env.ADDRESSES_FILE || "deployed_addresses_v8_24.json"
+  process.env.ADDRESSES_FILE || "deployed_addresses_v8_28.json"
 );
 
 // COUNT: for 127-seat matrices, 260 fills MatA + MatB (W1 seeds pos-1, 126 fill
@@ -68,8 +68,17 @@ const CNOVA_BUY_MAX  = Number(process.env.CNOVA_BUY_MAX  || 8_000_000);  // $8
 const CNOVA_SELL_RATE = Number(process.env.CNOVA_SELL_RATE ?? "0.15");  // 15% sell each cycle
 const ETH_PER      = ethers.parseEther("0.02");   // gas budget per wallet — 0.02 ETH covers approve + register even at 10+ gwei on Base Sepolia
 // UPGRADE_RATE: fraction of T1-MatB-eligible wallets to manually upgrade each batch (0–1).
-// 0.75 = 75% of eligible wallets self-upgrade.  Set to 0 to disable.
+// 0.75 = 75% of eligible wallets self-upgrade.  Set to 0 to disable.  Set to 1 for 100%.
 const UPGRADE_RATE = Number(process.env.UPGRADE_RATE ?? "0.75");
+
+// ROUND_ROBIN: comma-separated list of pre-registered addresses to rotate as referrer.
+// If set, wallet[i] uses ROUND_ROBIN[i % len] as its sponsor instead of W1.
+// All addresses must already be registered or bigfill will abort.
+// Example: ROUND_ROBIN=0xABCD...,0x1234...,0x5678...
+const ROUND_ROBIN_RAW   = process.env.ROUND_ROBIN || "";
+const ROUND_ROBIN_ADDRS = ROUND_ROBIN_RAW
+  ? ROUND_ROBIN_RAW.split(",").map(a => a.trim()).filter(a => ethers.isAddress(a))
+  : [];
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 const sleep  = s  => new Promise(r => setTimeout(r, s * 1000));
@@ -486,7 +495,7 @@ async function main() {
   // accumulating a high nonce count.  Keep deployer for USDC mints (owner-only), use
   // funder for ETH transfers which have no special access requirements.
   const rawFunder    = signers[1] || rawSigner;  // falls back to deployer if no funder key set
-  const deployer     = new NonceManager(rawSigner); // forceCross approve + rare owner calls only
+  const deployer     = new NonceManager(rawSigner); // owner calls only (manualUpgrade, etc.)
   // DO NOT use NonceManager for the funder — it accumulates internal nonce drift on any TX
   // failure, causing "replacement transaction underpriced" cascades for all subsequent sends.
   // Instead we track fNonce explicitly (re-synced from chain after every error).
@@ -592,6 +601,20 @@ async function main() {
   if (await tierRouter.systemPaused()) {
     console.error("  ❌  TierRouter.systemPaused = true. Cannot register.");
     process.exit(1);
+  }
+
+  // ── Validate ROUND_ROBIN addresses (all must be registered) ───────────────
+  if (ROUND_ROBIN_ADDRS.length > 0) {
+    console.log(`\n  Round-robin referrers (${ROUND_ROBIN_ADDRS.length}):`);
+    for (const addr of ROUND_ROBIN_ADDRS) {
+      const tier = await tierRouter.memberHighestTier(addr);
+      if (tier === 0n) {
+        console.error(`  ❌  ROUND_ROBIN address ${addr} is NOT registered — aborting.`);
+        console.error(`     All round-robin accounts must be registered before bigfill starts.`);
+        process.exit(1);
+      }
+      console.log(`    ✓ ${addr}  (tier ${tier})`);
+    }
   }
 
   // ── Seed W1 as position-1 root (idempotent) ───────────────────────────────
@@ -785,6 +808,46 @@ async function main() {
   if (fundingFailed.length > 0) {
     console.log(`  Unfundable addresses (contract collision): ${fundingFailed.map(a => a.slice(0,10)).join(", ")}`);
   }
+
+  // ── USDC post-fund verification + retry (#157) ────────────────────────────
+  // ETH retry above is robust — match it for USDC: wallets with < FUND_AMOUNT
+  // get up to 3 transfer retries before being flagged as insufficientUsdc.
+  const insufficientUsdc = new Set();
+  let usdcOk = 0, usdcFail = 0;
+  for (const w of walletsToFund) {
+    const usdcBal = await usdc.balanceOf(w.address).catch(() => 0n);
+    if (usdcBal < FUND_AMOUNT) {
+      const deficit = FUND_AMOUNT - usdcBal;
+      console.warn(`  ⚠  ${w.address.slice(0,10)} only has ${fmt6(usdcBal)} USDC (need ${fmt6(FUND_AMOUNT)}) — retrying`);
+      let retried = false;
+      for (let attempt = 0; attempt < 3; attempt++) {
+        try {
+          const tx = await usdcFunder.transfer(w.address, deficit, { nonce: fNonce });
+          await tx.wait();
+          fNonce++;
+          await sleep(15);
+          const newBal = await usdc.balanceOf(w.address).catch(() => 0n);
+          if (newBal >= FUND_AMOUNT) {
+            usdcOk++;
+            retried = true;
+            break;
+          }
+          console.warn(`     attempt ${attempt+1}: still ${fmt6(newBal)} USDC — retrying`);
+        } catch(e) {
+          console.warn(`     attempt ${attempt+1} failed: ${e.message.slice(0,80)}`);
+          fNonce = Number(await ethers.provider.getTransactionCount(funderAddr, "pending"));
+        }
+      }
+      if (!retried) {
+        console.warn(`     ❌ ${w.address.slice(0,10)} could not receive USDC after 3 attempts — will skip registration`);
+        insufficientUsdc.add(w.address);
+        usdcFail++;
+      }
+    } else {
+      usdcOk++;
+    }
+  }
+  console.log(`  USDC post-fund check: ${usdcOk} OK, ${usdcFail} failed`);
   sep();
 
   // ── Register wallets in batches ────────────────────────────────────────────
@@ -794,7 +857,20 @@ async function main() {
   const failures = [];
   const upgradedAt = [];
   let prevSysCyc    = await tierRouter.totalSystemCycles(); // track cycle changes for burn sweep
-  let forceFCCheck  = false; // set true on cycle detection to trigger immediate forceCross
+
+  // ── Assign referrers (W1 or round-robin) ─────────────────────────────────
+  // referrerFor[wallet.address] = sponsor address to use for that wallet's register() call.
+  // Round-robin distributes L1 commissions across multiple seed accounts evenly.
+  const referrerFor = new Map();
+  for (let i = 0; i < wallets.length; i++) {
+    referrerFor.set(
+      wallets[i].address,
+      ROUND_ROBIN_ADDRS.length > 0 ? ROUND_ROBIN_ADDRS[i % ROUND_ROBIN_ADDRS.length] : W1_ADDR
+    );
+  }
+  if (ROUND_ROBIN_ADDRS.length > 0) {
+    console.log(`  Round-robin: ${wallets.length} wallets → ${ROUND_ROBIN_ADDRS.length} referrers (${Math.round(wallets.length / ROUND_ROBIN_ADDRS.length)} each avg)`);
+  }
 
   const batches = [];
   for (let i = 0; i < wallets.length; i += BATCH_SIZE) {
@@ -823,6 +899,9 @@ async function main() {
         // Skip wallets that failed funding after all retries
         if (insufficientEth.has(wallet.address)) {
           throw new Error(`wallet ${wallet.address.slice(0,10)} had insufficient ETH after all funding attempts — skipped`);
+        }
+        if (insufficientUsdc.has(wallet.address)) {
+          throw new Error(`wallet ${wallet.address.slice(0,10)} had insufficient USDC after all funding attempts — skipped`);
         }
 
         // Skip wallets with insufficient ETH for gas.
@@ -866,7 +945,7 @@ async function main() {
         //
         // At gasLimit=8M, gasUsed=7,571,404 with status=0, logs=[] confirms this.
         // 15M gives MatrixB ~7M forwarded gas, more than enough for the full path.
-        const regTx = await tierRouter.connect(connected).register(W1_ADDR, { gasLimit: 15_000_000 });
+        const regTx = await tierRouter.connect(connected).register(referrerFor.get(wallet.address) || W1_ADDR, { gasLimit: 15_000_000 });
         const receipt = await regTx.wait();
         return receipt;
       })
@@ -932,7 +1011,6 @@ async function main() {
       await withdrawSweep(wallets, matA1, matB1);
       console.log(`  ↳ Running CNOVA buy sweep (simulate purchases via DirectSale)…`);
       await cnovaBuySweep(wallets, directSale, usdc);
-      forceFCCheck = true; // execute forceCross this batch regardless of batchNum
       prevSysCyc = sysCyc;
     }
     // Rescue is handled exclusively by direct_keeper.js + MatrixKeeper.performUpkeep.
@@ -958,66 +1036,6 @@ async function main() {
       tierRouterAddr: addrs.tierRouter || addrs.TierRouter,
       fee: T3_FEE, targetTierIndex: 2, tierLabel: "T3",
     });
-
-    // Inline forceCross check — every 10 batches OR immediately after a cycle
-    if (batchNum % 10 === 0 || forceFCCheck) {
-      forceFCCheck = false; // reset — consumed
-      console.log(`\n  🔍 [forceCross check @ reg ${registered}/${COUNT}]`);
-      const _fcRot  = await matA1.rotationCount();
-      const _fcAOcc = await matA1.occupancy();
-      const _fcASz  = await matA1.MATRIX_SIZE();
-      if (_fcRot === 0n && _fcAOcc < _fcASz) {
-        console.log(`  ↳ MatA ${_fcAOcc}/${_fcASz}, rotationCount=0 — nothing to cross yet`);
-      } else {
-        // Scan current batch wallets + W1 for parked members
-        const _parked = [];
-        for (const _w of wallets) {
-          const _mA = await matA1.getMember(_w.address);
-          if (!_mA.hasEverJoined || _mA.isInMatrix) continue;
-          const _mB = await matB1.getMember(_w.address);
-          if (_mB.isInMatrix || _mB.hasEverJoined) continue;
-          _parked.push(_w.address);
-        }
-        const _w1mA = await matA1.getMember(W1_ADDR);
-        const _w1mB = await matB1.getMember(W1_ADDR);
-        if (_w1mA.hasEverJoined && !_w1mA.isInMatrix && !_w1mB.hasEverJoined && !_w1mB.isInMatrix) {
-          _parked.unshift(W1_ADDR);
-        }
-        console.log(`  ↳ Parked wallets found: ${_parked.length}`);
-        if (_parked.length > 0) {
-          const _matBOcc  = await matB1.occupancy();
-          const _matBSz   = await matB1.MATRIX_SIZE();
-          const _needed   = Number(_matBSz) - Number(_matBOcc) + 1;
-          const _toCross  = _parked.slice(0, _needed);
-          console.log(`  ↳ MatB ${_matBOcc}/${_matBSz} — crossing ${_toCross.length} wallets`);
-          const _usdcNeed  = T1_FEE * BigInt(_toCross.length);
-          const _matA1Addr = await matA1.getAddress();
-          // Re-sync funder nonce to avoid drift from registration txs
-          fNonce = Number(await ethers.provider.getTransactionCount(funderAddr, 'pending'));
-          console.log(`  ↳ Transferring ${fmt6(_usdcNeed)} USDC funder→deployer (fNonce ${fNonce})…`);
-          await (await usdcFunder.transfer(deployerAddr, _usdcNeed, { nonce: fNonce })).wait();
-          fNonce++;
-          await sleep(8);
-          let _dN = Number(await ethers.provider.getTransactionCount(deployerAddr, 'pending'));
-          console.log(`  ↳ Deployer approving matA1 (dNonce ${_dN})…`);
-          await (await usdc.connect(rawSigner).approve(_matA1Addr, _usdcNeed, { nonce: _dN })).wait();
-          _dN++;
-          await sleep(8);
-          const _matA1Raw = matA1.connect(rawSigner);
-          for (const _addr of _toCross) {
-            try {
-              const _tx = await _matA1Raw.forceCross(_addr, { nonce: _dN, gasLimit: 15_000_000 });
-              await _tx.wait();
-              _dN++;
-              console.log(`  ↳ ✓ forceCross(${_addr.slice(0,10)}…)`);
-            } catch (_e) {
-              console.warn(`  ↳ ⚠ forceCross(${_addr.slice(0,10)}…) failed: ${_e.shortMessage || _e.message.slice(0,80)}`);
-              _dN = Number(await ethers.provider.getTransactionCount(deployerAddr, 'pending'));
-            }
-          }
-        }
-      }
-    }
 
     // Withdraw sweep every 10 batches — simulate ongoing sell pressure
     if (batchNum % 10 === 0) {
@@ -1051,161 +1069,11 @@ async function main() {
   console.log("  Running earlyUnlockAll() on all wallets with remaining vest batches…");
   await burnSweep(wallets, cnova);
 
-  // ── forceCross phase: push parked MatA alumni into MatB ───────────────────
-  // Most wallets park after cycling out of MatA (not enough escrow to self-fund
-  // the crossing).  The keeper-bot / admin calls forceCross() to manually fund
-  // and execute the crossing.  We do it here to complete the full figure-8 test.
-  //
-  // Set SKIP_ADMIN_CROSS=1 to run in SF-only rescue mode (no deployer-funded forceCross).
-  // Useful for testing how many wallets the SF can handle without admin intervention.
-  sep("ForceCross — filling MatB");
-  if (process.env.SKIP_ADMIN_CROSS) {
-    console.log(`  SKIP_ADMIN_CROSS=1 — SF-only rescue mode. Admin forceCross disabled.`);
-    console.log(`  Any remaining parked wallets below the SF floor will stay parked.`);
-    console.log(`  Run push_parked.js with FORCE_ADMIN=1 afterward to manually handle them.`);
-  } else {
-    // Guard: only run forceCross after at least one MatA rotation has completed.
-    // Use matA1.rotationCount() — this increments on every _cycleOutRoot().
-    // NOTE: tierRouter.totalSystemCycles() counts T1→T2 upgrades (0 until MatB cycles),
-    //       NOT MatA rotations — using it as the guard skips forceCross incorrectly.
-    const _fcRotCount = await matA1.rotationCount();
-    const _fcMatBOcc  = await matB1.occupancy();
-    const _fcMatAOcc  = await matA1.occupancy();
-    const _fcMatASize = await matA1.MATRIX_SIZE();
-    // Only skip forceCross if MatA is NOT yet full — once MatA is at capacity
-    // (even with rotationCount=0) we must run forceCross to push alumni to MatB.
-    if (_fcRotCount === 0n && _fcMatAOcc < _fcMatASize) {
-      console.log(`  MatA at ${_fcMatAOcc}/${mSize}, rotationCount=0 — no cycle yet, skipping forceCross`);
-    } else {
-    const matBOcc = await matB1.occupancy();
-    const matBSize = await matB1.MATRIX_SIZE();
-    console.log(`  MatB before forceCross: ${matBOcc} / ${matBSize}`);
-
-    // Build a comprehensive scan list covering ALL wallet offsets ever used.
-    // When HDR_OFFSET != 500 (e.g. 1000), new registrations cycle out wallets
-    // from the ORIGINAL offset-500 batch — those parked wallets won't appear
-    // in the current `wallets` array unless we explicitly scan the old range too.
-    // IMPORTANT: use FILL_MNEMONIC — the public "test junk" mnemonic wallets
-    // are EIP-7702 drained on Base Sepolia and cannot hold ETH/USDC.
-    const MNEMO_SCAN = process.env.FILL_MNEMONIC;
-    if (!MNEMO_SCAN) {
-      console.warn("  ⚠  FILL_MNEMONIC not set — forceCross scan will only cover current batch");
-    }
-    const scanSet = new Map(); // address → wallet (dedup)
-    // Scan all historically used offset ranges so parked wallets from prior runs
-    // are picked up even if their HDR_OFFSET differs from the current batch.
-    // Keep this list up to date as new HDR_OFFSETs are used.
-    // V8.12 fill used offsets 0,50,100,150,200,250,300,350… add here as new HDR_OFFSETs are used.
-    // Old SCAN_OFFSETS (500+) were for a different mnemonic era — kept for safety but unused in V8.12.
-    const SCAN_OFFSETS = [0, 50, 100, 150, 200, 250, 300, 350, 400, 450, 500, 550, 600,
-                          1000, 1500, 1700, 1800, 2000, 2500, 3000]; // extended June 13 V8.12
-    if (MNEMO_SCAN) {
-      for (const base of SCAN_OFFSETS) {
-        for (let i = 0; i < 70; i++) {
-          const w = ethers.HDNodeWallet.fromPhrase(MNEMO_SCAN, undefined, `m/44'/60'/0'/0/${base + i}`);
-          scanSet.set(w.address, w);
-        }
-      }
-    }
-    // Also scan the current batch in case HDR_OFFSET isn't in the static list above
-    for (const w of wallets) scanSet.set(w.address, w);
-
-    // Collect wallets that cycled out of MatA but haven't entered MatB yet
-    // hasEverJoined=true in MatA AND isInMatrix=false in MatA AND hasEverJoined=false in MatB
-    const parked = [];
-    for (const [, w] of scanSet) {
-      const mA = await matA1.getMember(w.address);
-      if (!mA.hasEverJoined) continue;          // never joined MatA
-      if (mA.isInMatrix)     continue;          // still in MatA
-      const mB = await matB1.getMember(w.address);
-      if (mB.isInMatrix || mB.hasEverJoined) continue; // already in / done MatB
-      parked.push(w.address);
-    }
-    // Also check W1 (not in wallets array)
-    const w1mA = await matA1.getMember(W1_ADDR);
-    const w1mB = await matB1.getMember(W1_ADDR);
-    if (w1mA.hasEverJoined && !w1mA.isInMatrix && !w1mB.hasEverJoined && !w1mB.isInMatrix) {
-      parked.unshift(W1_ADDR); // W1 first if parked (should have already crossed but check anyway)
-    }
-
-    console.log(`  Parked wallets found: ${parked.length}`);
-
-    // How many more slots does MatB need (include +1 to trigger W1's cycle-out)
-    const needed = Number(matBSize) - Number(matBOcc) + 1; // +1 for the cycle-out trigger
-    const toCross = parked.slice(0, needed);
-    console.log(`  Will forceCross ${toCross.length} (${Number(matBSize) - Number(matBOcc)} to fill + 1 trigger)`);
-
-    if (toCross.length === 0) {
-      console.log("  Nothing to forceCross — MatB already handled");
-    } else {
-      // forceCross is onlyOwner — must be called from deployer (owner).
-      // Strategy: transfer USDC funder→deployer, deployer approves matA1, deployer calls forceCross.
-      const usdcNeededFC  = T1_FEE * BigInt(toCross.length);
-      const funderUsdcBal = await usdc.balanceOf(funderAddr);
-      if (funderUsdcBal < usdcNeededFC) {
-        console.error(`  ❌  Funder has insufficient USDC for forceCross (${fmt6(funderUsdcBal)} < ${fmt6(usdcNeededFC)}).`);
-        console.error(`      Run: npx hardhat run scripts/fund_funder.js --network baseSepolia`);
-        process.exit(1);
-      }
-
-      // 1. Move USDC funder → deployer so deployer can fund the crossings.
-      //    Re-fetch fNonce here — it may have drifted during inline rescue attempts
-      //    which also use the funder wallet (performUpkeep calls).
-      fNonce = Number(await ethers.provider.getTransactionCount(funderAddr, 'pending'));
-      const matA1Addr = await matA1.getAddress();
-      console.log(`  Transferring ${fmt6(usdcNeededFC)} USDC: funder → deployer for forceCross (nonce ${fNonce})…`);
-      await (await usdcFunder.transfer(deployerAddr, usdcNeededFC, { nonce: fNonce })).wait();
-      fNonce++;
-
-      // 2. Deployer approves matA1 — use rawSigner with EXPLICIT nonce (not NonceManager).
-      //    The deployer is a "delegated account" on Base Sepolia, rate-limited to 1 in-flight TX.
-      //    NonceManager loses internal sync on any RPC rejection and causes a "gapped-nonce tx
-      //    from delegated accounts" cascade for all subsequent calls.  Explicit nonce + re-sync
-      //    on failure is the same pattern used for fNonce on the funder.
-      // Extra wait: the registration phase blasts 50+ txs from the deployer. Even after the
-      // 90s post-fund sleep those may still be in-flight. Give the RPC another 60s to drain
-      // before starting the approve → forceCross sequence.
-      console.log(`  ⏳ Waiting 60s for deployer in-flight queue to drain before forceCross…`);
-      await sleep(60);
-      let dNonce = Number(await ethers.provider.getTransactionCount(deployerAddr, 'pending'));
-      console.log(`  Deployer approving matA1 for ${fmt6(usdcNeededFC)} USDC (deployer nonce ${dNonce})…`);
-      await (await usdc.connect(rawSigner).approve(matA1Addr, usdcNeededFC, { nonce: dNonce })).wait();
-      dNonce++;
-      // Wait after the approve — Base Sepolia's "delegated account" rate limiter rejects
-      // the very first forceCross if it arrives too soon after the preceding approve TX.
-      // The sleep here prevents the first-call failure that otherwise always hits nonce N+1.
-      await sleep(8);
-
-      // 3. Connect matA1 to rawSigner (owner) — forceCross is onlyOwner.
-      //    rawSigner + explicit dNonce avoids the NonceManager nonce-drift problem.
-      const matA1Raw = matA1.connect(rawSigner);
-
-      let crossed = 0;
-      for (const addr of toCross) {
-        const occNow = await matB1.occupancy();
-        console.log(`  forceCross ${addr.slice(0,10)}… (MatB ${occNow}/${matBSize}, nonce ${dNonce})`);
-        try {
-          await (await matA1Raw.forceCross(addr, { gasLimit: 12_000_000, nonce: dNonce })).wait();
-          dNonce++;
-          crossed++;
-   
-          await sleep(6); // pause between crossings — Base Sepolia in-flight limit for delegated accounts
-        } catch (e) {
-          console.warn(`    ⚠ forceCross failed for ${addr.slice(0,10)}: ${e.message.slice(0,120)}`);
-          await sleep(10);
-          dNonce = Number(await ethers.provider.getTransactionCount(deployerAddr, 'pending'));
-        }
-      }
-
-      const matBAfter = await matB1.occupancy();
-      console.log(`  MatB after forceCross: ${matBAfter} / ${matBSize}`);
-      console.log(`  Crossed ${crossed} / ${toCross.length} wallets`);
-
-    } // end else (toCross.length === 0)
-    } // end else (forceCross — cycles have happened)
-  } // end else (SKIP_ADMIN_CROSS not set)
-
   // ── Post-fill snapshot ────────────────────────────────────────────────────
+  // NOTE: forceCross has been removed from bigfill. Parked members are crossed
+  // exclusively by direct_keeper.js → MatrixKeeper.forceCrossKeeper(). This
+  // lets the V8.27 rescue loan system (SF crossing buffer + 15% gradual repay)
+  // operate without any admin interference.
   sep();
   await snapshot("POST-FILL SNAPSHOT", { tierRouter, pm1, matA1, matB1, matA2, matB2, cnova, treasury, stabilityFund, w1Addr: W1_ADDR });
 
