@@ -17,7 +17,8 @@ const fs   = require("fs");
 const path = require("path");
 require("dotenv").config();
 
-const MATRIX_KEEPER        = "0xFe7ADd5c62695F0E437835670Bc88223EaA51865"; // V8.29
+// MatrixKeeper address — read from deployed_addresses file so no manual edit needed on redeploy
+const MATRIX_KEEPER = JSON.parse(fs.readFileSync(path.join(__dirname, process.env.ADDRESSES_FILE || 'deployed_addresses_v8_30.json'), 'utf8')).matrixKeeper; // V8.30: 0x49462597Ce4F58AeE94202a296810Aa458f357Bb
 const GAS_LIMIT            = 15_000_000; // RPC hard cap is 15M (20M/25M rejected "gas limit too high")
 const WORK_PARKED_RESCUE   = 4;          // workType constant from MatrixKeeper.sol
 const GAS_SAFE             = 14_000_000; // target ceiling — stay under 15M RPC hard cap
@@ -55,7 +56,7 @@ function loadState() {
   try {
     return JSON.parse(fs.readFileSync(STATE_FILE, "utf8"));
   } catch {
-    return { noWorkCount: 0, totalRuns: 0, lastActive: null };
+    return { noWorkCount: 0, totalRuns: 0, lastActive: null, activeWorkCount: 0 };
   }
 }
 
@@ -216,6 +217,17 @@ async function main() {
 
       state.lastActive      = new Date().toISOString();
       state.lastRescueCount = (state.lastRescueCount || 0) + rescueCount;
+
+      // Active-work heartbeat: force-crosses / distributions produce no ParkedRescued events.
+      // Without this, the keeper goes completely silent on Telegram for hours during busy periods.
+      if (rescueCount === 0 && failedItems.length === 0) {
+        state.activeWorkCount = (state.activeWorkCount || 0) + 1;
+        if (state.activeWorkCount % HEARTBEAT_EVERY === 0) {
+          const awMsg = `⚡ Keeper active — non-rescue work (force-cross / distribution)\nactive_cycles=${state.activeWorkCount}  total=${state.totalRuns}\nBlock ${receipt.blockNumber}  gas ${receipt.gasUsed.toLocaleString()}${costStr}`;
+          log(awMsg);
+          await sendTelegram(awMsg);
+        }
+      }
     } else {
       // TX confirmed but reverted (status=0)
       const isOOG = BigInt(receipt.gasUsed.toString()) >= BigInt(GAS_LIMIT) * 95n / 100n;
@@ -245,16 +257,4 @@ async function main() {
       await sendTelegram(`⚠️ <b>Keeper OOG pre-flight</b>\nCap: ${prevCap} → ${state.currentCap}\n${msg}`);
     } else {
       log(`ERROR performUpkeep: ${msg}`);
-      await sendTelegram(`FAIL <b>Keeper performUpkeep error</b>\n${msg}`);
-    }
-    saveState(state);
-    process.exit(1);
-  }
-
-  saveState(state);
-}
-
-main().catch(e => {
-  console.error("Fatal:", e);
-  process.exit(1);
-});
+ 
