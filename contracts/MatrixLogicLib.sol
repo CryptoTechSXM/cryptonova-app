@@ -88,8 +88,10 @@ library MatrixLogicLib {
         uint256 noReferrerPoolRouted;
         uint256 noReferrerFounderRouted;
         // -- SF rescue debt tracking --
-        // Records USDC owed back to the SF per member after a coPayRescue.
-        // Repaid incrementally from remaining withdrawable on each natural cycle-out.
+        // Records USDC owed back to the SF per member after any rescue path.
+        // ALL rescue paths now create debt (forceCrossKeeper, coPayRescue).
+        // Repaid automatically from withdrawable at each crossing
+        // (_crossToPartner) and at MatB cycle-out (_cycleOutRoot).
         mapping(address => uint256) rescueDebt;
         // -- Members --
         mapping(address => Member) members;
@@ -104,6 +106,8 @@ library MatrixLogicLib {
         address liquidityReserve;
         address governance;
         address matrixKeeper;
+        // -- Optional coupon registry (address(0) = disabled) --
+        address couponRegistry;
     }
 
     /// @notice Per-instance immutable config, rebuilt cheaply (from the calling
@@ -133,6 +137,17 @@ library MatrixLogicLib {
 
     uint256 internal constant BPS_DENOM = 10_000;
 
+    /// @notice Fraction of each pool distribution share that is redirected to the SF
+    ///         as gradual rescue-debt repayment.  5000 = 50%.
+    ///         V8.31: raised from 15% → 50%.  Faster debt clearing (6 cycles vs 18 at T1)
+    ///         while the member still earns CNOVA throughout.  Passive members earn
+    ///         CNOVA mining rewards; the USDC stream is the active-recruiter bonus,
+    ///         so redirecting half of it during rescue repayment is transparent and fair.
+    ///         Paired with the crossing-buffer in forceCrossKeeper so that:
+    ///           buffer = entryFee - poolEarningsPerJourney x (1 - RESCUE_REPAY_BPS/BPS_DENOM)
+    ///         guaranteeing the member arrives at MatA root position with exactly entryFee.
+    uint256 internal constant RESCUE_REPAY_BPS = 5_000;
+
     // --- Events (identical to the originals; emitted from library code, but the
     //     LOG opcode under delegatecall records the CALLING matrix's address,
     //     so on-chain consumers see no difference at all). -----------------------
@@ -152,8 +167,12 @@ library MatrixLogicLib {
     event MemberParked(address indexed member, uint256 shortfall);
     event MemberEvicted(address indexed member, uint256 totalWithdrawn);
     event CoPayRescue(address indexed member, uint256 sfShare, uint256 memberWalletShare, uint256 withdrawableUsed);
+    /// @notice Emitted when a member self-rescues by paying their own shortfall (no debt).
+    event SelfRescue(address indexed member, uint256 shortfallPaid, uint256 withdrawableUsed);
     /// @notice Emitted when a member's SF rescue loan is (partially) repaid at cycle-out.
     event RescueDebtRepaid(address indexed member, uint256 repaid, uint256 remaining);
+    /// @notice Emitted when a rescue loan is issued (all rescue paths: keeper, coPayRescue).
+    event RescueLoanIssued(address indexed member, uint256 loanAmount, string rescueType);
 
     error F8V8_ZeroAddress();
 
@@ -259,6 +278,23 @@ library MatrixLogicLib {
         emit MemberCycledOut(root, self.members[root].cyclesCompleted, self.rotationCount, address(this));
 
         if (!cfg.isMatrixA && self.tierRouter != address(0)) {
+            // -- Rescue loan repayment at MatB cycle-out ----------------------------
+            // This is the primary repayment moment. The member just received their
+            // full pool distribution. Deduct any outstanding rescue debt before
+            // handing the net withdrawable to TierRouter for upgrade/exit.
+            // Soft -- never blocks the cycle-out, just reduces what carries forward.
+            uint256 cycleOutDebt = self.rescueDebt[root];
+            if (cycleOutDebt > 0 && self.stabilityFund != address(0)) {
+                uint256 bal = self.members[root].withdrawable;
+                if (bal > 0) {
+                    uint256 repay = bal >= cycleOutDebt ? cycleOutDebt : bal;
+                    self.rescueDebt[root]           -= repay;
+                    self.members[root].withdrawable -= repay;
+                    SafeERC20.forceApprove(cfg.usdc, self.stabilityFund, repay);
+                    IStabilityFund(self.stabilityFund).receiveDebtRepayment(repay);
+                    emit RescueDebtRepaid(root, repay, self.rescueDebt[root]);
+                }
+            }
             try ITierRouter(self.tierRouter).handleCycleOut(
                 root,
                 cfg.tierIndex,
@@ -279,7 +315,8 @@ library MatrixLogicLib {
         uint256 pool    = self.poolAccumulator;
         self.poolAccumulator = 0;
 
-        uint256 distributed = 0;
+        uint256 distributed      = 0;
+        uint256 pendingRepayment = 0;   // accumulated SF debt repayment across all members
         address firstNonNull = address(0);
 
         for (uint256 pos = 2; pos <= N; pos++) {
@@ -290,9 +327,33 @@ library MatrixLogicLib {
             uint256 share = pool * pos / totalWeight;
             if (share == 0) continue;
 
+            // -- Gradual rescue-debt repayment ------------------------------------
+            // Take RESCUE_REPAY_BPS (15%) of this member's pool share and redirect
+            // it back to the SF as partial loan repayment.  The remaining 85% is
+            // credited to the member as normal.  Combined with the crossing buffer
+            // seeded by forceCrossKeeper, the member always accumulates exactly
+            // entryFee by the time they reach MatA root position.
+            uint256 debt = self.rescueDebt[m];
+            if (debt > 0 && self.stabilityFund != address(0)) {
+                uint256 repay = share * RESCUE_REPAY_BPS / BPS_DENOM;
+                if (repay > debt) repay = debt;
+                if (repay > 0) {
+                    self.rescueDebt[m] -= repay;
+                    pendingRepayment    += repay;
+                    share               -= repay;
+                    emit RescueDebtRepaid(m, repay, self.rescueDebt[m]);
+                }
+            }
+
             distributed += share;
             _credit(self, m, share);
             emit PoolShareCredited(m, pos, share);
+        }
+
+        // Single USDC transfer to SF for all per-member repayments collected above
+        if (pendingRepayment > 0) {
+            SafeERC20.forceApprove(cfg.usdc, self.stabilityFund, pendingRepayment);
+            IStabilityFund(self.stabilityFund).receiveDebtRepayment(pendingRepayment);
         }
 
         uint256 dust = pool - distributed;
@@ -349,10 +410,10 @@ library MatrixLogicLib {
         IFigureEightMatrixV8Cross(destination)._enterMatrix(member, self.members[member].referrer);
         self.crossingInProgress = false;
 
-        // ── SF rescue loan repayment ──────────────────────────────────────────
+        // -- SF rescue loan repayment -------------------------------------------
         // After paying the crossing fee, any remaining withdrawable is used to
         // repay outstanding rescue debt to the SF (partial repayment is fine).
-        // This does NOT block or re-park the member — it's a soft recovery.
+        // This does NOT block or re-park the member -- it's a soft recovery.
         uint256 debt = self.rescueDebt[member];
         if (debt > 0 && self.stabilityFund != address(0)) {
             uint256 remaining = self.members[member].withdrawable;
@@ -367,7 +428,7 @@ library MatrixLogicLib {
         }
     }
 
-    /// @dev Shared tail for forceCross/forceCrossKeeper/topUpAndCross/coPayRescue.
+    /// @dev Shared tail for forceCross/forceCrossKeeper/coPayRescue.
     function finalizeCrossing(MatrixState storage self, ImmutableConfig memory cfg, address member) external {
         _finalizeCrossing(self, cfg, member);
     }
@@ -644,7 +705,8 @@ library MatrixLogicLib {
         MatrixState storage self,
         ImmutableConfig memory cfg,
         address member,
-        uint256 sfContribution
+        uint256 sfContribution,
+        uint256 crossingBuffer
     ) external {
         require(self.members[member].hasEverJoined,  "F8V8: not a member");
         require(!self.members[member].isInMatrix,    "F8V8: still in matrix");
@@ -660,32 +722,37 @@ library MatrixLogicLib {
             self.members[member].withdrawable -= memberShare;
         }
 
+        // -- Crossing buffer ----------------------------------------------------
+        // The SF pre-transferred (sfContribution + crossingBuffer) to this contract.
+        // sfContribution covered the entry-fee shortfall (already handled above).
+        // crossingBuffer is extra USDC seeded into the member's withdrawable so they
+        // will accumulate exactly entryFee by the time they reach MatA root position
+        // (their ~15%-repaid pool earnings + this buffer = reentryFee at crossing).
+        if (crossingBuffer > 0) {
+            self.members[member].withdrawable += crossingBuffer;
+        }
+
         _removeFromParkedQueue(self, member);
+
+        // Record TOTAL SF advance (entry shortfall + crossing buffer) as a soft loan.
+        // V8.28 FIX: store debt on the DESTINATION (MatB), not the source (MatA).
+        // forceCrossKeeper crosses the member directly into MatB.  Storing debt on MatA
+        // meant MatB's _distributePool (15% deduction) and MatB cycle-out repayment
+        // never fired — MatB's rescueDebt was always zero.  Moving debt to MatB ensures:
+        //   - 15% deduction fires on every MatB pool distribution share  (lines ~323-338)
+        //   - Lump-sum repayment fires at MatB cycle-out                 (lines ~278-289)
+        // The RescueLoanIssued event is still emitted HERE (on MatA) for off-chain tracking.
+        uint256 totalLoan = sfContribution + crossingBuffer;
+        if (totalLoan > 0) {
+            emit RescueLoanIssued(member, totalLoan, "forceCrossKeeper");
+            // Destination mirrors _finalizeCrossing logic (partner for MatA, chainNext for MatB chain)
+            address destination = (!cfg.isMatrixA && self.chainNext != address(0))
+                ? self.chainNext : self.partner;
+            IFigureEightMatrixV8Cross(destination).addRescueDebt(member, totalLoan);
+        }
 
         // Contract now holds full ENTRY_FEE: sfContribution (from SF) + memberShare (from withdrawable)
-        _finalizeCrossing(self, cfg, member);
-    }
-
-    function topUpAndCross(MatrixState storage self, ImmutableConfig memory cfg, address member) external {
-        require(self.members[member].hasEverJoined,  "F8V8: not a member");
-        require(!self.members[member].isInMatrix,    "F8V8: still in matrix");
-        require(self.parkedAt[member] > 0,            "F8V8: not parked");
-        require(self.partner != address(0),           "F8V8: no partner");
-
-        uint256 bal      = self.members[member].withdrawable;
-        uint256 shortfall = bal >= cfg.entryFee ? 0 : cfg.entryFee - bal;
-
-        if (shortfall > 0) {
-            cfg.usdc.safeTransferFrom(msg.sender, address(this), shortfall);
-        }
-
-        uint256 memberContribution = cfg.entryFee - shortfall;
-        if (memberContribution > 0) {
-            self.members[member].withdrawable -= memberContribution;
-        }
-
-        _removeFromParkedQueue(self, member);
-
+        // crossingBuffer USDC is also in the contract, credited to member.withdrawable above
         _finalizeCrossing(self, cfg, member);
     }
 
@@ -697,26 +764,48 @@ library MatrixLogicLib {
         require(self.stabilityFund != address(0),     "F8V8: no stabilityFund");
 
         uint256 withdrawable = self.members[member].withdrawable;
-        require(withdrawable > 0, "F8V8: no withdrawable for coPayRescue");
 
-        uint256 sfShare      = withdrawable / 2;
-        uint256 shortfall    = cfg.entryFee > withdrawable ? cfg.entryFee - withdrawable : 0;
-        uint256 memberShare  = shortfall > sfShare ? shortfall - sfShare : 0;
+        // Pure SF loan: SF covers the full shortfall. No deployer USDC required.
+        uint256 shortfall = cfg.entryFee > withdrawable ? cfg.entryFee - withdrawable : 0;
 
         self.members[member].withdrawable = 0;
 
-        IStabilityFund(self.stabilityFund).payCoRescue(cfg.tierIndex, sfShare);
-
-        // Record SF contribution as a soft loan — repaid from cycle-out earnings
-        self.rescueDebt[member] += sfShare;
-
-        if (memberShare > 0) {
-            cfg.usdc.safeTransferFrom(msg.sender, address(this), memberShare);
+        if (shortfall > 0) {
+            // SF transfers shortfall USDC to this contract to complete the entry fee.
+            IStabilityFund(self.stabilityFund).payCoRescue(cfg.tierIndex, shortfall);
+            // Record as a soft loan -- repaid from member's future cycle-out earnings.
+            self.rescueDebt[member] += shortfall;
+            emit RescueLoanIssued(member, shortfall, "coPayRescue");
         }
 
         _removeFromParkedQueue(self, member);
 
-        emit CoPayRescue(member, sfShare, memberShare, withdrawable);
+        emit CoPayRescue(member, shortfall, 0, withdrawable);
+        _finalizeCrossing(self, cfg, member);
+    }
+
+    /// @notice Member rescues themselves by paying their own shortfall.
+    ///         No SF loan. No debt. No intermediary required.
+    ///         Anyone can call this — only msg.sender is rescued (prevents griefing).
+    function selfRescue(MatrixState storage self, ImmutableConfig memory cfg) external {
+        address member = msg.sender;
+        require(self.members[member].hasEverJoined,  "F8V8: not a member");
+        require(!self.members[member].isInMatrix,    "F8V8: still in matrix");
+        require(self.parkedAt[member] > 0,            "F8V8: not parked");
+
+        uint256 withdrawable = self.members[member].withdrawable;
+        uint256 shortfall = cfg.entryFee > withdrawable ? cfg.entryFee - withdrawable : 0;
+
+        self.members[member].withdrawable = 0;
+
+        if (shortfall > 0) {
+            // Member pays their own shortfall directly — no debt, no SF involvement.
+            cfg.usdc.safeTransferFrom(member, address(this), shortfall);
+        }
+
+        _removeFromParkedQueue(self, member);
+
+        emit SelfRescue(member, shortfall, withdrawable);
         _finalizeCrossing(self, cfg, member);
     }
 

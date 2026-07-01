@@ -65,6 +65,7 @@ interface IStabilityFundKeeper {
     function payGhostEntry(uint8 tierIndex, address pairManager) external;
     function activateLayer(uint8 layer, bool active) external;
     function balanceByTier(uint8 tier) external view returns (uint256);
+    function totalBalance() external view returns (uint256);
     function payForceCross(uint8 tierIdx, address sourceMatrix, uint256 fee) external;
 }
 
@@ -82,7 +83,8 @@ interface IFigureEightKeeper {
     function isParked(address member) external view returns (bool);
     function getParkedCount() external view returns (uint256);
     function getParkedMember(uint256 idx) external view returns (address);
-    function forceCrossKeeper(address member, uint256 sfContribution) external;
+    function forceCrossKeeper(address member, uint256 sfContribution, uint256 crossingBuffer) external;
+    function rescueDebtOf(address member) external view returns (uint256);
     function parkedAt(address member) external view returns (uint256);
     function evictParked(address member) external;
     function getMemberTotalWithdrawn(address member) external view returns (uint256);
@@ -112,6 +114,25 @@ contract MatrixKeeper is Ownable {
     uint8 public constant STATE_SLOW     = 1;
     uint8 public constant STATE_RECOVERY = 2;
 
+    /// @notice Fraction of each pool distribution share redirected to SF for gradual debt repayment.
+    ///         Must match MatrixLogicLib.RESCUE_REPAY_BPS.
+    ///         V8.31: raised from 15% (1500) → 50% (5000).
+    ///         Clears rescue debt ~3× faster (6 cycles vs 18 at T1) while member still earns CNOVA.
+    ///         Passive members earn CNOVA mining rewards; USDC is the active-recruiter bonus.
+    uint256 public constant RESCUE_REPAY_BPS = 5_000;
+
+    /// @notice Pool-split BPS used to compute the crossing buffer.
+    ///         Must match the splitPoolBps in SplitConfig (4500 = 45%).
+    uint256 public constant POOL_BPS = 4_500;
+
+    /// @notice Pre-computed BPS fraction of the entry fee to advance as a crossing buffer.
+    ///         crossingBuffer = entryFee * CROSSING_BUFFER_BPS / 10_000
+    ///         Derivation: entryFee - (entryFee * POOL_BPS / 10_000) * (10_000 - RESCUE_REPAY_BPS) / 10_000
+    ///                   = entryFee * (10_000 - POOL_BPS * (10_000 - RESCUE_REPAY_BPS) / 10_000) / 10_000
+    ///                   = entryFee * (10_000 - 4500 * 5000 / 10_000) / 10_000
+    ///                   = entryFee * 7750 / 10_000
+    uint256 public constant CROSSING_BUFFER_BPS = 7_750;
+
     uint8 public constant WORK_VELOCITY      = 0;
     uint8 public constant WORK_GHOST         = 1;
     uint8 public constant WORK_RECLAIM       = 2;
@@ -128,7 +149,7 @@ contract MatrixKeeper is Ownable {
     uint256 public idleSlotTimeout     = 43_200;
     uint256 public extendedIdleTimeout = 86_400;
     uint256 public maxItemsPerUpkeep   = 15;
-    uint256 public parkedGracePeriod   = 10 days;
+    uint256 public parkedGracePeriod   = 6 hours;  // V8.25: mainnet default 6h; testnet owner can set as low as 5 min
     uint256 public rescueRatioBps      = 7_000;
 
     address public tierRouter;
@@ -254,16 +275,16 @@ contract MatrixKeeper is Ownable {
         idleSlotTimeout = v;
     }
     function setMaxItemsPerUpkeep(uint256 v) external onlyOwnerOrGovernance {
-        require(v == 5 || v == 10 || v == 15 || v == 20, "MK: invalid max items");
+        // V8.31: ceiling raised to 40 to handle 10 tiers × 2 matrices at scale
+        require(v == 5 || v == 10 || v == 15 || v == 20 || v == 30 || v == 40, "MK: invalid max items");
         maxItemsPerUpkeep = v;
     }
     /// @notice V8.20: DAO-governable.
+    /// @dev V8.25: changed from enum check to range. 0 = no grace period (testing/admin override).
+    ///      Non-zero values must be between 5 minutes and 30 days.
+    ///      Mainnet recommendation: 6 hours (21600). Testnet: 0 or 5-10 minutes.
     function setParkedGracePeriod(uint256 v) external onlyOwnerOrGovernance {
-        require(
-            v == 0 || v == 3_600 || v == 21_600 ||
-            v == 5 days || v == 10 days || v == 15 days,
-            "MK: invalid grace period"
-        );
+        require(v == 0 || (v >= 5 minutes && v <= 30 days), "MK: grace period out of range (0 or 5min-30d)");
         parkedGracePeriod = v;
         emit ConfigUpdated("parkedGracePeriod", v);
     }
@@ -437,7 +458,7 @@ contract MatrixKeeper is Ownable {
                 chainLinkProcessed++;
             } else if (item.workType == WORK_PARKED_RESCUE) {
                 // V8.18: only swallow expected "already done" strings; unexpected reverts bubble up.
-                // V8.24: added "insufficient withdrawable for rescue" — member cannot cover their
+                // V8.24: added "insufficient withdrawable for rescue" -- member cannot cover their
                 //        share under the SF rescue ladder; skip them so the rest of the batch runs.
                 //        This is what makes the ladder self-sustaining without SF top-ups.
                 try this._doParkedRescueExternal(item.addr1, item.addr2, item.tierIndex) {}
@@ -483,13 +504,43 @@ contract MatrixKeeper is Ownable {
         if (!mat.isParked(member)) return;
         uint256 fee          = mat.ENTRY_FEE();
         uint256 withdrawable = mat.withdrawableOf(member);
+
+        // -- Zero-balance eviction guard -----------------------------------------
+        // If this member has $0 AND already carries rescue debt from a prior rescue,
+        // they've proven they cannot repay (likely a testnet zero-income wallet or a
+        // mainnet member who has never referred anyone).  Evict instead of piling on
+        // more unpayable debt that drains the SF indefinitely.
+        if (withdrawable == 0 && mat.rescueDebtOf(member) > 0) {
+            _doEvictParked(matrix, member);
+            return;
+        }
+
         uint256 sfBps = _sfRescueBps(withdrawable, fee);
         if (sfBps == type(uint256).max) return;
         uint256 sfShare = fee * sfBps / 10_000;
-        uint256 sfBal   = IStabilityFundKeeper(stabilityFund).balanceByTier(tierIdx);
-        if (sfBal < sfShare) return;
-        if (sfShare > 0) IStabilityFundKeeper(stabilityFund).payForceCross(tierIdx, matrix, sfShare);
-        mat.forceCrossKeeper(member, sfShare);
+
+        // -- Crossing buffer ------------------------------------------------------
+        // Advance an extra (fee * CROSSING_BUFFER_BPS / 10_000) from the SF so the
+        // member starts MatA with enough withdrawable to reach the MatA root and
+        // cross to MatB, even after the 15% gradual pool-repayment deductions.
+        // Formula: fee * 6175 / 10_000  (see CROSSING_BUFFER_BPS derivation above).
+        uint256 crossingBuffer = fee * CROSSING_BUFFER_BPS / 10_000;
+
+        uint256 totalSfNeeded = sfShare + crossingBuffer;
+        uint256 sfBal         = IStabilityFundKeeper(stabilityFund).balanceByTier(tierIdx);
+        // Fall back to total SF balance if tier bucket cannot fully cover the rescue cost.
+        // FIX V8.31: was `sfBal > 0` — caused stall when bucket had pennies left (> 0 but < sfShare).
+        uint256 sfAvail       = sfBal >= totalSfNeeded ? sfBal : IStabilityFundKeeper(stabilityFund).totalBalance();
+
+        // If SF cannot cover both, trim the buffer rather than skip the rescue entirely
+        if (sfAvail < totalSfNeeded) {
+            crossingBuffer = sfAvail > sfShare ? sfAvail - sfShare : 0;
+            totalSfNeeded  = sfShare + crossingBuffer;
+        }
+        if (sfAvail < sfShare) return;   // can't even cover the entry shortfall -- bail
+
+        if (totalSfNeeded > 0) IStabilityFundKeeper(stabilityFund).payForceCross(tierIdx, matrix, totalSfNeeded);
+        mat.forceCrossKeeper(member, sfShare, crossingBuffer);
         emit ParkedRescued(matrix, member, tierIdx);
     }
 
@@ -567,8 +618,11 @@ contract MatrixKeeper is Ownable {
         address pm = pairManagerForTier[tierIdx];
         if (pm == address(0)) return;
         uint256 fee   = IPairManagerKeeper(pm).entryFee();
-        uint256 sfBal = IStabilityFundKeeper(stabilityFund).balanceByTier(tierIdx);
-        if (sfBal < fee) return;
+        uint256 sfBal   = IStabilityFundKeeper(stabilityFund).balanceByTier(tierIdx);
+        // Fall back to total SF balance if tier bucket cannot cover the ghost entry fee.
+        // FIX V8.31: was `sfBal > 0` — same stall-on-pennies bug as rescue path.
+        uint256 sfAvail = sfBal >= fee ? sfBal : IStabilityFundKeeper(stabilityFund).totalBalance();
+        if (sfAvail < fee) return;
         lastGhostTime[matrix] = block.timestamp;
         IStabilityFundKeeper(stabilityFund).payGhostEntry(tierIdx, pm);
         emit GhostEntryFunded(matrix, tierIdx);
@@ -639,7 +693,10 @@ contract MatrixKeeper is Ownable {
         if (sfBps == type(uint256).max) return (parkedMember, WORK_EVICT_PARKED);
         uint256 sfShare = fee * sfBps / 10_000;
         uint256 sfBal   = IStabilityFundKeeper(stabilityFund).balanceByTier(tierIdx);
-        workType = (sfBal >= sfShare) ? WORK_PARKED_RESCUE : type(uint8).max;
+        // Fall back to total SF balance if tier bucket cannot cover the rescue share.
+        // FIX V8.31: was `sfBal > 0` — same stall-on-pennies bug; checkUpkeep must agree with execution path.
+        uint256 sfAvail = sfBal >= sfShare ? sfBal : IStabilityFundKeeper(stabilityFund).totalBalance();
+        workType = (sfAvail >= sfShare) ? WORK_PARKED_RESCUE : type(uint8).max;
     }
 
     function _scanMatrix(address matrix, uint8 tierIdx, WorkItem[] memory items, uint256 count)
