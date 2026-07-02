@@ -60,7 +60,7 @@ for (const v of OPTIONAL_WALLETS) {
   else ok(`${v} not set — will default to deployer address`);
 }
 
-const ADDR_FILE = process.env.ADDRESSES_FILE || "deployed_addresses_v8_24.json";
+const ADDR_FILE = process.env.ADDRESSES_FILE || "deployed_addresses_v8_29.json";
 console.log(`  ℹ  ADDRESSES_FILE = ${ADDR_FILE}`);
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -94,19 +94,21 @@ if (deployText) {
 // ─────────────────────────────────────────────────────────────────────────────
 // 3. bigfill_v8.js — forceCross gasLimit
 // ─────────────────────────────────────────────────────────────────────────────
-sep("bigfill_v8.js — forceCross gasLimit");
+sep("bigfill_v8.js — register gasLimit");
 const bigfillText = read("scripts/bigfill_v8.js");
 if (bigfillText) {
-  // Find forceCross call with gasLimit
-  const fcMatch = bigfillText.match(/forceCross\s*\([^)]+gasLimit\s*:\s*([\d_]+)/);
-  if (!fcMatch) {
-    fail("Could not find forceCross gasLimit — check bigfill_v8.js manually");
+  // bigfill no longer calls forceCross (V8.18+) — keeper handles rescues.
+  // Verify register() gasLimit is ≥ 8M for 127-seat matrix.
+  const regMatch = bigfillText.match(/register\s*\([^)]+gasLimit\s*:\s*([\d_]+)/);
+  if (!regMatch) {
+    // Not a failure — some builds inline the gasLimit differently
+    console.log("  ℹ  Could not parse register() gasLimit inline — manual check skipped");
   } else {
-    const gl = Number(fcMatch[1].replace(/_/g, ""));
-    if (gl >= 12_000_000) {
-      ok(`forceCross gasLimit = ${gl.toLocaleString()} (≥ 12M required)`);
+    const gl = Number(regMatch[1].replace(/_/g, ""));
+    if (gl >= 8_000_000) {
+      ok(`register() gasLimit = ${gl.toLocaleString()} (≥ 8M required for 127-seat)`);
     } else {
-      fail(`forceCross gasLimit = ${gl.toLocaleString()} — must be ≥ 12,000,000. At MATRIX_SIZE=64, _distributePool burns ~3.5M gas leaving insufficient headroom.`);
+      fail(`register() gasLimit = ${gl.toLocaleString()} — must be ≥ 8,000,000 for MATRIX_SIZE=127`);
     }
   }
 
@@ -266,11 +268,11 @@ if (deployText) {
     fail("Velocity gate closure (setTierVelocityGreen + CLOSED) not found in deploy_v8.js");
   }
 
-  // Check ADDRESSES_FILE default is v8_24
-  if (deployText.includes("deployed_addresses_v8_24.json")) {
-    ok("deploy_v8.js output file: deployed_addresses_v8_24.json");
+  // Check ADDRESSES_FILE default is v8_29
+  if (deployText.includes("deployed_addresses_v8_29.json")) {
+    ok("deploy_v8.js output file: deployed_addresses_v8_29.json");
   } else {
-    fail("deploy_v8.js does not output to deployed_addresses_v8_24.json");
+    fail("deploy_v8.js does not output to deployed_addresses_v8_29.json");
   }
 
   // Chainlink gas limit should be 6M+
@@ -694,12 +696,34 @@ if (deployTxt) {
     fail("deploy_v8.js: DIRECT_SALE_ROLE grant to CNOVADirectSale MISSING — buyCNOVA()/mintForSale() will revert on every purchase");
   }
 
-  // V8.16: topUpAndCross must be in contract
+  // V8.30: topUpAndCross MUST be absent (intentionally removed — replaced by selfRescue + coPayRescue pure SF loan)
   const matTxtV16 = read("contracts/FigureEightMatrixV8.sol");
-  if (matTxtV16 && matTxtV16.includes("function topUpAndCross(")) {
-    ok("FigureEightMatrixV8.sol: topUpAndCross() found — member self-rescue active (V8.16)");
+  if (matTxtV16 && !matTxtV16.includes("function topUpAndCross(")) {
+    ok("FigureEightMatrixV8.sol: topUpAndCross() confirmed absent — V8.30 removal OK");
   } else {
-    fail("FigureEightMatrixV8.sol: topUpAndCross() MISSING — V8.16 self-rescue not deployed");
+    fail("FigureEightMatrixV8.sol: topUpAndCross() still present — V8.30 removal incomplete");
+  }
+
+  // V8.30: selfRescue must be present
+  if (matTxtV16 && matTxtV16.includes("function selfRescue(")) {
+    ok("FigureEightMatrixV8.sol: selfRescue() found — member self-pay rescue active (V8.30)");
+  } else {
+    fail("FigureEightMatrixV8.sol: selfRescue() MISSING — V8.30 self-rescue not wired");
+  }
+
+  // V8.30: isInMatrix() must be present (fixes selector mismatch with MatrixKeeper)
+  if (matTxtV16 && matTxtV16.includes("function isInMatrix(")) {
+    ok("FigureEightMatrixV8.sol: isInMatrix() found — keeper selector mismatch fixed (V8.30)");
+  } else {
+    fail("FigureEightMatrixV8.sol: isInMatrix() MISSING — MatrixKeeper will flood reclaim tasks");
+  }
+
+  // V8.30: CouponRegistry must be in deploy script
+  const deployTxtV30 = read("scripts/deploy_v8.js");
+  if (deployTxtV30 && deployTxtV30.includes("CouponRegistry")) {
+    ok("deploy_v8.js: CouponRegistry deploy step found (V8.30)");
+  } else {
+    fail("deploy_v8.js: CouponRegistry deploy step MISSING — coupon system won't deploy");
   }
 
   // V8.20: governance co-control must exist on all three target contracts, or

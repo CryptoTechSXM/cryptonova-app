@@ -79,6 +79,11 @@ interface IPairManagerV8 {
     function registerDirectFor(address member, address referrer) external;
     function registerFor(address member, address referrer) external;
     function entryFee() external view returns (uint256);
+    function currentMatA() external view returns (address);   // V8.31: for coupon routing
+}
+
+interface IFigureEightMatrixV8Coupon {
+    function enterWithCouponFrom(address member, address referrer, bytes32 couponCodeHash) external;  // V8.31
 }
 
 // ─── Contract ──────────────────────────────────────────────────────────────────
@@ -505,6 +510,46 @@ contract TierRouter is Ownable2Step {
         IPairManagerV8(tierPairManagers[0]).registerDirectFor(msg.sender, resolved);
 
         // Community Fund enrollment (no-op if communityWallet not yet deployed)
+        if (communityWallet != address(0)) {
+            ICommunityWallet(communityWallet).enroll(msg.sender);
+            emit MemberEnrolled(msg.sender, globalJoinedCount);
+        }
+
+        _recordEntry(0);
+        emit MemberRegistered(msg.sender, 1, resolved);
+    }
+
+    /// @notice V8.31: Register with an on-chain coupon code.
+    ///         Identical TierRouter bookkeeping to register() (globalJoined, memberReferrer,
+    ///         CommunityWallet enroll, velocity counters) then routes coupon entry through
+    ///         the current T1 MatA via enterWithCouponFrom(), which handles USDC pull.
+    ///         Member must approve the current MatA for at least (entryFee − couponAmount) USDC.
+    /// @param referrer       The member who referred this new member (address(0) → W1).
+    /// @param couponCodeHash keccak256(abi.encodePacked(plaintextCode)) — computed by the frontend.
+    function registerWithCoupon(address referrer, bytes32 couponCodeHash) external whenNotPaused {
+        require(!globalJoined[msg.sender],         "TR: already joined");
+        require(tierPairManagers[0] != address(0), "TR: T1 not configured");
+        require(couponCodeHash != bytes32(0),       "TR: empty coupon hash");
+
+        address resolved = (referrer != address(0) && globalJoined[referrer])
+            ? referrer
+            : (defaultReferrer != address(0) && globalJoined[defaultReferrer])
+                ? defaultReferrer
+                : address(0);
+
+        memberReferrer[msg.sender]    = resolved;
+        globalJoined[msg.sender]      = true;
+        _checkTierFirstEntry(msg.sender, 1);
+        memberHighestTier[msg.sender] = 1;
+        globalJoinedCount            += 1;
+
+        lastActivityTimestamp    = block.timestamp;
+        cyclesAtLastRegistration = totalSystemCycles;
+
+        // Route coupon entry through the current T1 MatA (not PairManager — USDC goes direct).
+        address matA = IPairManagerV8(tierPairManagers[0]).currentMatA();
+        IFigureEightMatrixV8Coupon(matA).enterWithCouponFrom(msg.sender, resolved, couponCodeHash);
+
         if (communityWallet != address(0)) {
             ICommunityWallet(communityWallet).enroll(msg.sender);
             emit MemberEnrolled(msg.sender, globalJoinedCount);

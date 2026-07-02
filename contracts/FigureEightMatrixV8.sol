@@ -91,6 +91,8 @@ contract FigureEightMatrixV8 is Ownable2Step {
     event MemberParked(address indexed member, uint256 shortfall);
     event MemberEvicted(address indexed member, uint256 totalWithdrawn);
     event CoPayRescue(address indexed member, uint256 sfShare, uint256 memberWalletShare, uint256 withdrawableUsed);
+    event CouponRegistrySet(address indexed registry);
+    event CouponApplied(address indexed member, bytes32 indexed codeHash, uint256 couponAmount, uint256 walletAmount);
 
     error F8V8_ZeroAddress();
 
@@ -275,6 +277,12 @@ contract FigureEightMatrixV8 is Ownable2Step {
         _state.communityWallet = _cw;
     }
 
+    /// @notice Wire the CouponRegistry.  Set to address(0) to disable coupon redemption.
+    function setCouponRegistry(address _registry) external onlyOwner {
+        _state.couponRegistry = _registry;
+        emit CouponRegistrySet(_registry);
+    }
+
     // --- Governance setters (DAO-votable, enumerated menus only) ---------------
 
     /// @notice V8.21: added `_state.pairManager` to the allow-list. PairManagerV8
@@ -327,6 +335,67 @@ contract FigureEightMatrixV8 is Ownable2Step {
         IFigureEightMatrixV8Cross(entry)._enterMatrix(msg.sender, referrer);
     }
 
+    /// @notice Register with an on-chain coupon code that covers part or all of the entry fee.
+    ///         Must be called on the MatA contract (the entry point) when using a coupon.
+    /// @param referrer       The member who referred this new member.
+    /// @param couponCodeHash keccak256(abi.encodePacked(plaintextCode)) — computed by the frontend.
+    function registerWithCoupon(address referrer, bytes32 couponCodeHash) external {
+        require(isMatrixA, "F8V8: coupon registration must use MatA");
+        require(
+            !_state.members[msg.sender].hasEverJoined || !_state.members[msg.sender].isInMatrix,
+            "F8V8: already in matrix"
+        );
+        require(_state.partner != address(0),        "F8V8: partner not set");
+        require(_state.couponRegistry != address(0), "F8V8: coupon registry not set");
+        require(couponCodeHash != bytes32(0),         "F8V8: empty coupon hash");
+
+        // Redeem coupon — registry transfers couponAmount USDC to this contract.
+        uint256 couponCovered = ICouponRegistry(_state.couponRegistry).redeemCoupon(couponCodeHash, msg.sender);
+
+        // Member pays only the remaining shortfall (zero if coupon fully covers the fee).
+        uint256 fromWallet = ENTRY_FEE > couponCovered ? ENTRY_FEE - couponCovered : 0;
+        if (fromWallet > 0) {
+            usdc.safeTransferFrom(msg.sender, address(this), fromWallet);
+        }
+
+        emit CouponApplied(msg.sender, couponCodeHash, couponCovered, fromWallet);
+        // Route through this._enterMatrix so msg.sender == address(this) inside the library,
+        // which passes the auth check without attempting another USDC pull.
+        this._enterMatrix(msg.sender, referrer);
+    }
+
+    /// @notice V8.31: TierRouter-authorised coupon entry.
+    ///         Called by TierRouter.registerWithCoupon() so the TierRouter bookkeeping
+    ///         (globalJoined, memberReferrer, globalJoinedCount, CommunityWallet enroll)
+    ///         fires before the matrix entry — identical USDC flow as registerWithCoupon()
+    ///         but uses `member` for the wallet pull instead of `msg.sender`.
+    /// @param member         The wallet registering (resolved by TierRouter).
+    /// @param referrer       Resolved referrer (already validated by TierRouter).
+    /// @param couponCodeHash keccak256 hash of the coupon code.
+    function enterWithCouponFrom(address member, address referrer, bytes32 couponCodeHash) external {
+        require(msg.sender == _state.tierRouter,     "F8V8: only tierRouter");
+        require(isMatrixA,                           "F8V8: coupon registration must use MatA");
+        require(
+            !_state.members[member].hasEverJoined || !_state.members[member].isInMatrix,
+            "F8V8: already in matrix"
+        );
+        require(_state.partner != address(0),        "F8V8: partner not set");
+        require(_state.couponRegistry != address(0), "F8V8: coupon registry not set");
+        require(couponCodeHash != bytes32(0),         "F8V8: empty coupon hash");
+
+        // Redeem coupon — registry transfers couponAmount USDC to this contract.
+        uint256 couponCovered = ICouponRegistry(_state.couponRegistry).redeemCoupon(couponCodeHash, member);
+
+        // Member pays only the remaining shortfall (zero if coupon fully covers the fee).
+        uint256 fromWallet = ENTRY_FEE > couponCovered ? ENTRY_FEE - couponCovered : 0;
+        if (fromWallet > 0) {
+            usdc.safeTransferFrom(member, address(this), fromWallet);
+        }
+
+        emit CouponApplied(member, couponCodeHash, couponCovered, fromWallet);
+        this._enterMatrix(member, referrer);
+    }
+
     function enterFor(address member, address referrer) external {
         require(msg.sender == _state.pairManager, "F8V8: not pairManager");
         require(
@@ -377,17 +446,19 @@ contract FigureEightMatrixV8 is Ownable2Step {
         MatrixLogicLib.forceCross(_state, _cfg(), member);
     }
 
-    function forceCrossKeeper(address member, uint256 sfContribution) external {
+    function forceCrossKeeper(address member, uint256 sfContribution, uint256 crossingBuffer) external {
         require(msg.sender == _state.matrixKeeper, "F8V8: not keeper");
-        MatrixLogicLib.forceCrossKeeper(_state, _cfg(), member, sfContribution);
-    }
-
-    function topUpAndCross(address member) external {
-        MatrixLogicLib.topUpAndCross(_state, _cfg(), member);
+        MatrixLogicLib.forceCrossKeeper(_state, _cfg(), member, sfContribution, crossingBuffer);
     }
 
     function coPayRescue(address member) external {
         MatrixLogicLib.coPayRescue(_state, _cfg(), member);
+    }
+
+    /// @notice Parked member rescues themselves by paying their own shortfall.
+    ///         No SF loan. No debt. Call from the parked wallet directly.
+    function selfRescue() external {
+        MatrixLogicLib.selfRescue(_state, _cfg());
     }
 
     function evictParked(address member) external {
@@ -407,14 +478,31 @@ contract FigureEightMatrixV8 is Ownable2Step {
     function getMember(address member) external view returns (MatrixLogicLib.Member memory) { return _state.members[member]; }
     function getCyclesCompleted(address m) external view returns (uint256) { return _state.members[m].cyclesCompleted; }
     function withdrawableOf(address member) external view returns (uint256) { return _state.members[member].withdrawable; }
+    function crossingReserveOf(address member) external view returns (uint256) { return _state.members[member].crossingReserve; }  // V8.31
     function rescueDebtOf(address member) external view returns (uint256) { return _state.rescueDebt[member]; }
+
+    /// @notice Called by the partner MatA during forceCrossKeeper to record the
+    ///         rescue loan on THIS contract (MatB), so the 15% gradual repayment
+    ///         fires correctly on every MatB distribution and MatB cycle-out.
+    ///         Only callable by the registered partner.
+    function addRescueDebt(address member, uint256 amount) external {
+        require(msg.sender == _state.partner, "F8V8: only partner");
+        _state.rescueDebt[member] += amount;
+    }
 
     function freeWithdrawable(address member) external view returns (uint256) {
         uint256 bal = _state.members[member].withdrawable;
         if (bal == 0) return 0;
         if (_state.members[member].isInMatrix) {
-            if (bal <= ENTRY_FEE) return 0;
-            bal -= ENTRY_FEE;
+            // V8.31: crossing cost = ENTRY_FEE, funded from crossingReserve first then withdrawable.
+            // Only lock the withdrawable portion needed beyond the reserve.
+            uint256 crossNeeded = ENTRY_FEE > _state.members[member].crossingReserve
+                ? ENTRY_FEE - _state.members[member].crossingReserve
+                : 0;
+            if (crossNeeded > 0) {
+                if (bal <= crossNeeded) return 0;
+                bal -= crossNeeded;
+            }
         }
         if (_state.tierRouter != address(0)) {
             uint8 highest = ITierRouter(_state.tierRouter).memberHighestTier(member);
@@ -431,6 +519,7 @@ contract FigureEightMatrixV8 is Ownable2Step {
     function escrowOf(address /* member */) external pure returns (uint256) { return 0; }
     function isFull() external view returns (bool) { return _state.occupancy == MATRIX_SIZE; }
     function isActiveInMatrix(address member) external view returns (bool) { return _state.members[member].isInMatrix; }
+    function isInMatrix(address member) external view returns (bool) { return _state.members[member].isInMatrix; }
 
     function getIdleSeconds(address member) external view returns (uint256) {
         if (_state.lastActivityTime[member] == 0) return 0;
@@ -519,5 +608,6 @@ contract FigureEightMatrixV8 is Ownable2Step {
     function liquidityReserve() external view returns (address) { return _state.liquidityReserve; }
     function governance() external view returns (address) { return _state.governance; }
     function matrixKeeper() external view returns (address) { return _state.matrixKeeper; }
+    function couponRegistry() external view returns (address) { return _state.couponRegistry; }
     function chainPayBps(uint256 i) external view returns (uint256) { return _state.chainPayBps[i]; }
 }
