@@ -464,13 +464,16 @@ if (matTxt) {
 
   // Withdrawal reserve check in withdraw() -- V8.21: lives in
   // MatrixLogicLib.withdrawCore() now, not inline in FigureEightMatrixV8.sol.
+  // V8.31: message updated to "must keep crossing reserve while active".
+  const guardMsgOld = "must keep entry fee reserve while active";
+  const guardMsgNew = "must keep crossing reserve while active";
   if (
-    matTxt.includes("must keep entry fee reserve while active") ||
-    (libTxt && libTxt.includes("must keep entry fee reserve while active"))
+    matTxt.includes(guardMsgOld) || matTxt.includes(guardMsgNew) ||
+    (libTxt && (libTxt.includes(guardMsgOld) || libTxt.includes(guardMsgNew)))
   ) {
     ok("Withdrawal reserve guard found (withdraw()/withdrawCore())");
   } else {
-    fail("Withdrawal reserve guard NOT found — add 'must keep entry fee reserve while active' check to withdraw()/withdrawCore()");
+    fail("Withdrawal reserve guard NOT found — add crossing reserve guard check to withdraw()/withdrawCore()");
   }
 }
 
@@ -605,13 +608,9 @@ if (deployTxt) {
     fail("deploy_v8.js: tierRouter.setTierMatrices() MISSING — manualUpgrade will always revert 'cross to MatB first' because tierMatrixBAddr stays address(0)");
   }
 
-  // V8.19/V8.22: 10-field SplitConfig — verify ALL FOUR tier-band arrays actually
-  // sum to 10000 BPS, and that each CHAIN_PAY_* sub-split sums to its band's
-  // chainBps. (Previously this only string-matched the T1-T3 array literal — it
-  // never caught a bad edit to SPLITS_T4_T5/T6_T7/T8_T10. The on-chain
-  // constructor's require(sum == 10000) would still block a bad deploy, but only
-  // after spending gas and failing loudly mid-deploy — this catches it for free,
-  // before any transaction is sent.)
+  // V8.19/V8.22: 10-field SplitConfig — verify BPS arrays sum to 10000.
+  // V8.31: all tiers unified into SPLITS_ALL + CHAIN_PAY_ALL (Option B uniform).
+  // Earlier versions used per-band arrays (SPLITS_T1_T3 etc.). Accept either.
   function parseBpsArray(label) {
     const re = new RegExp(`const\\s+${label}\\s*=\\s*\\[([^\\]]+)\\]`);
     const m = deployTxt.match(re);
@@ -620,48 +619,75 @@ if (deployTxt) {
     return nums.some(Number.isNaN) ? null : nums;
   }
 
-  const SPLIT_BANDS = ["SPLITS_T1_T3", "SPLITS_T4_T5", "SPLITS_T6_T7", "SPLITS_T8_T10"];
-  const splitArrays = {};
-  for (const band of SPLIT_BANDS) {
-    const arr = parseBpsArray(band);
-    splitArrays[band] = arr;
-    if (!arr) {
-      fail(`deploy_v8.js: ${band} array not found or unparseable — cannot verify BPS sum`);
-      continue;
-    }
-    if (arr.length !== 10) {
-      fail(`deploy_v8.js: ${band} has ${arr.length} fields, expected 10 (l1,chain,pool,treasury,sf,dev,ops,cw,bbr,lq) — [${arr.join(",")}]`);
-      continue;
-    }
-    const sum = arr.reduce((a, b) => a + b, 0);
-    if (sum === 10000) ok(`deploy_v8.js: ${band} sums to 10000 BPS — [${arr.join(",")}]`);
-    else fail(`deploy_v8.js: ${band} sums to ${sum} BPS, NOT 10000 — [${arr.join(",")}]`);
-  }
+  const splitsAll    = parseBpsArray("SPLITS_ALL");
+  const chainPayAll  = parseBpsArray("CHAIN_PAY_ALL");
+  const isUnifiedBps = !!splitsAll;
 
-  // chainBps is field index 1 in the 10-field SplitConfig array order above.
-  const CHAIN_BANDS = [
-    { name: "CHAIN_PAY_T1_T3",  splitBands: ["SPLITS_T1_T3"] },
-    { name: "CHAIN_PAY_T4_T5",  splitBands: ["SPLITS_T4_T5"] },
-    // T6-T7 and T8-T10 are documented to share the same 17.5% chain rate, so
-    // CHAIN_PAY_T6_T10 must match the chainBps of BOTH split bands.
-    { name: "CHAIN_PAY_T6_T10", splitBands: ["SPLITS_T6_T7", "SPLITS_T8_T10"] },
-  ];
-  for (const { name, splitBands } of CHAIN_BANDS) {
-    const arr = parseBpsArray(name);
-    if (!arr) { fail(`deploy_v8.js: ${name} array not found or unparseable — cannot verify chain-pay sum`); continue; }
-    if (arr.length !== 6) {
-      fail(`deploy_v8.js: ${name} has ${arr.length} levels, expected 6 — [${arr.join(",")}]`);
-      continue;
+  if (isUnifiedBps) {
+    // V8.31+ unified model: one array for all tiers
+    if (splitsAll.length !== 10) {
+      fail(`deploy_v8.js: SPLITS_ALL has ${splitsAll.length} fields, expected 10 — [${splitsAll.join(",")}]`);
+    } else {
+      const sum = splitsAll.reduce((a, b) => a + b, 0);
+      if (sum === 10000) ok(`deploy_v8.js: SPLITS_ALL sums to 10000 BPS (V8.31 unified) — [${splitsAll.join(",")}]`);
+      else               fail(`deploy_v8.js: SPLITS_ALL sums to ${sum} BPS, NOT 10000 — [${splitsAll.join(",")}]`);
     }
-    const sum = arr.reduce((a, b) => a + b, 0);
-    for (const splitBand of splitBands) {
-      const expected = splitArrays[splitBand] ? splitArrays[splitBand][1] : null;
-      if (expected == null) {
-        fail(`deploy_v8.js: cannot verify ${name} against ${splitBand} — chainBps unknown`);
-      } else if (sum === expected) {
-        ok(`deploy_v8.js: ${name} sums to ${sum} BPS, matches ${splitBand} chainBps=${expected}`);
+    if (!chainPayAll) {
+      fail("deploy_v8.js: CHAIN_PAY_ALL array not found — cannot verify chain-pay sum");
+    } else if (chainPayAll.length !== 6) {
+      fail(`deploy_v8.js: CHAIN_PAY_ALL has ${chainPayAll.length} levels, expected 6 — [${chainPayAll.join(",")}]`);
+    } else {
+      const cpSum    = chainPayAll.reduce((a, b) => a + b, 0);
+      const chainBps = splitsAll ? splitsAll[1] : null;
+      if (chainBps != null && cpSum === chainBps) {
+        ok(`deploy_v8.js: CHAIN_PAY_ALL sums to ${cpSum} BPS, matches SPLITS_ALL chainBps=${chainBps} (V8.31 unified)`);
       } else {
-        fail(`deploy_v8.js: ${name} sums to ${sum} BPS but ${splitBand} chainBps=${expected} — mismatch! [${arr.join(",")}]`);
+        fail(`deploy_v8.js: CHAIN_PAY_ALL sums to ${cpSum} BPS but SPLITS_ALL chainBps=${chainBps} — mismatch! [${chainPayAll.join(",")}]`);
+      }
+    }
+  } else {
+    // Legacy per-band model (V8.19-V8.30)
+    const SPLIT_BANDS = ["SPLITS_T1_T3", "SPLITS_T4_T5", "SPLITS_T6_T7", "SPLITS_T8_T10"];
+    const splitArrays = {};
+    for (const band of SPLIT_BANDS) {
+      const arr = parseBpsArray(band);
+      splitArrays[band] = arr;
+      if (!arr) {
+        fail(`deploy_v8.js: ${band} array not found or unparseable — cannot verify BPS sum`);
+        continue;
+      }
+      if (arr.length !== 10) {
+        fail(`deploy_v8.js: ${band} has ${arr.length} fields, expected 10 (l1,chain,pool,treasury,sf,dev,ops,cw,bbr,lq) — [${arr.join(",")}]`);
+        continue;
+      }
+      const sum = arr.reduce((a, b) => a + b, 0);
+      if (sum === 10000) ok(`deploy_v8.js: ${band} sums to 10000 BPS — [${arr.join(",")}]`);
+      else               fail(`deploy_v8.js: ${band} sums to ${sum} BPS, NOT 10000 — [${arr.join(",")}]`);
+    }
+    // chainBps is field index 1 in the 10-field SplitConfig array order above.
+    const CHAIN_BANDS = [
+      { name: "CHAIN_PAY_T1_T3",  splitBands: ["SPLITS_T1_T3"] },
+      { name: "CHAIN_PAY_T4_T5",  splitBands: ["SPLITS_T4_T5"] },
+      // T6-T7 and T8-T10 share the same 17.5% chain rate
+      { name: "CHAIN_PAY_T6_T10", splitBands: ["SPLITS_T6_T7", "SPLITS_T8_T10"] },
+    ];
+    for (const { name, splitBands } of CHAIN_BANDS) {
+      const arr = parseBpsArray(name);
+      if (!arr) { fail(`deploy_v8.js: ${name} array not found or unparseable — cannot verify chain-pay sum`); continue; }
+      if (arr.length !== 6) {
+        fail(`deploy_v8.js: ${name} has ${arr.length} levels, expected 6 — [${arr.join(",")}]`);
+        continue;
+      }
+      const sum = arr.reduce((a, b) => a + b, 0);
+      for (const splitBand of splitBands) {
+        const expected = splitArrays[splitBand] ? splitArrays[splitBand][1] : null;
+        if (expected == null) {
+          fail(`deploy_v8.js: cannot verify ${name} against ${splitBand} — chainBps unknown`);
+        } else if (sum === expected) {
+          ok(`deploy_v8.js: ${name} sums to ${sum} BPS, matches ${splitBand} chainBps=${expected}`);
+        } else {
+          fail(`deploy_v8.js: ${name} sums to ${sum} BPS but ${splitBand} chainBps=${expected} — mismatch! [${arr.join(",")}]`);
+        }
       }
     }
   }

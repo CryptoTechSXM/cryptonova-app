@@ -29,12 +29,6 @@ interface IStabilityFund {
     function receiveDebtRepayment(uint256 amount) external;
 }
 
-/// @notice Interface for CouponRegistry — used by MatrixLogicLib to redeem coupons during registration.
-interface ICouponRegistry {
-    function redeemCoupon(bytes32 codeHash, address newMember) external returns (uint256 amount);
-    function isValid(bytes32 codeHash) external view returns (bool);
-}
-
 /// @notice Minimal cross-instance interface -- used when matrix A needs to call
 ///         matrix B (its Figure-8 partner, or a chained matrix in the same tier).
 ///         Avoids needing the full concrete FigureEightMatrixV8 type, which would
@@ -42,7 +36,4 @@ interface ICouponRegistry {
 interface IFigureEightMatrixV8Cross {
     function _enterMatrix(address member, address referrer) external;
     function ENTRY_FEE() external view returns (uint256);
-    /// @notice Called by the partner MatA immediately after forceCrossKeeper
-    ///         to record the rescue loan on MatB, where the 15% repayment fires.
-    function addRescueDebt(address member, uint256 amount) external;
 }

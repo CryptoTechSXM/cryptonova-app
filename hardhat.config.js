@@ -40,11 +40,14 @@ module.exports = {
         enabled: true,
         runs: 200,
       },
-      // V8.31: viaIR NOT needed. The 50/5/45 split originally used 3 named
-      // variables (reserve, direct, payBase) which pushed _distributePayments
-      // past the 16-slot stack limit. Fixed by inlining reserve and direct
-      // (crediting them immediately without storing in named vars), leaving
-      // only payBase as a local. Stack depth is now 14 at the deepest point.
+      // V8.21: viaIR no longer needed -- FigureEightMatrixV8's core logic now
+      // lives in MatrixLogicLib (deployed once), leaving the matrix contract
+      // itself at ~12.5KB / 49% margin under the 24576-byte limit even via
+      // the legacy (non-IR) codegen path. Turning this off restores normal
+      // solc compile speed (was previously the only thing forcing the much
+      // slower IR pipeline for every contract in this project, not just
+      // FigureEightMatrixV8). Verified: all contracts re-checked for size
+      // after this change (see predeploy_check.js + contract_sizes check).
       viaIR: false,
     },
   },
@@ -53,7 +56,7 @@ module.exports = {
     hardhat: {
       chainId: 31337,
       accounts: { count: 300 },
-      allowUnlimitedContractSize: true,
+      allowUnlimitedContractSize: true,  // V8.18: contract ~24856 bytes; use viaIR before deploy
     },
 
     baseSepolia: {
