@@ -79,6 +79,16 @@ interface IPairManagerV8 {
     function registerDirectFor(address member, address referrer) external;
     function registerFor(address member, address referrer) external;
     function entryFee() external view returns (uint256);
+    function currentMatA() external view returns (address);   // V8.31: for coupon routing
+}
+
+interface IFigureEightMatrixV8Coupon {
+    function enterWithCouponFrom(address member, address referrer, bytes32 couponCodeHash) external;  // V8.31
+    function couponRegistry() external view returns (address);                                        // V8.31
+}
+
+interface ICouponRegistry {
+    function coupons(bytes32 codeHash) external view returns (address issuer, uint256 amount, uint256 expiry, bool used);
 }
 
 // ─── Contract ──────────────────────────────────────────────────────────────────
@@ -505,6 +515,60 @@ contract TierRouter is Ownable2Step {
         IPairManagerV8(tierPairManagers[0]).registerDirectFor(msg.sender, resolved);
 
         // Community Fund enrollment (no-op if communityWallet not yet deployed)
+        if (communityWallet != address(0)) {
+            ICommunityWallet(communityWallet).enroll(msg.sender);
+            emit MemberEnrolled(msg.sender, globalJoinedCount);
+        }
+
+        _recordEntry(0);
+        emit MemberRegistered(msg.sender, 1, resolved);
+    }
+
+    /// @notice V8.31: Register with an on-chain coupon code.
+    ///         Identical TierRouter bookkeeping to register() (globalJoined, memberReferrer,
+    ///         CommunityWallet enroll, velocity counters) then routes coupon entry through
+    ///         the current T1 MatA via enterWithCouponFrom(), which handles USDC pull.
+    ///         Member must approve the current MatA for at least (entryFee − couponAmount) USDC.
+    /// @param referrer       The member who referred this new member (address(0) → W1).
+    /// @param couponCodeHash keccak256(abi.encodePacked(plaintextCode)) — computed by the frontend.
+    function registerWithCoupon(address referrer, bytes32 couponCodeHash) external whenNotPaused {
+        require(!globalJoined[msg.sender],         "TR: already joined");
+        require(tierPairManagers[0] != address(0), "TR: T1 not configured");
+        require(couponCodeHash != bytes32(0),       "TR: empty coupon hash");
+
+        // Route coupon entry through the current T1 MatA (not PairManager — USDC goes direct).
+        // Resolve matA first so we can look up the coupon issuer before setting memberReferrer.
+        address matA = IPairManagerV8(tierPairManagers[0]).currentMatA();
+
+        // V8.31: Force referrer = coupon issuer.
+        // The coupon code is cryptographically bound to whoever issued it — the frontend-supplied
+        // referrer parameter is overridden so no one can hijack referral credit by typing a code
+        // with a different sponsor address.
+        address couponReg = IFigureEightMatrixV8Coupon(matA).couponRegistry();
+        if (couponReg != address(0)) {
+            (address issuer,,,) = ICouponRegistry(couponReg).coupons(couponCodeHash);
+            if (issuer != address(0) && globalJoined[issuer]) {
+                referrer = issuer;  // coupon issuer wins, always
+            }
+        }
+
+        address resolved = (referrer != address(0) && globalJoined[referrer])
+            ? referrer
+            : (defaultReferrer != address(0) && globalJoined[defaultReferrer])
+                ? defaultReferrer
+                : address(0);
+
+        memberReferrer[msg.sender]    = resolved;
+        globalJoined[msg.sender]      = true;
+        _checkTierFirstEntry(msg.sender, 1);
+        memberHighestTier[msg.sender] = 1;
+        globalJoinedCount            += 1;
+
+        lastActivityTimestamp    = block.timestamp;
+        cyclesAtLastRegistration = totalSystemCycles;
+
+        IFigureEightMatrixV8Coupon(matA).enterWithCouponFrom(msg.sender, resolved, couponCodeHash);
+
         if (communityWallet != address(0)) {
             ICommunityWallet(communityWallet).enroll(msg.sender);
             emit MemberEnrolled(msg.sender, globalJoinedCount);
