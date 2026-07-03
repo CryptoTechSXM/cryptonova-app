@@ -52,10 +52,11 @@
  *   DRY_RUN                  Log what would happen, no TXs    (default: false)
  */
 
-const { ethers } = require('ethers');
-const fs         = require('fs');
-const path       = require('path');
-const https      = require('https');
+const { ethers }        = require('ethers');
+const fs                = require('fs');
+const path              = require('path');
+const https             = require('https');
+const { createProvider } = require('./rpcProvider');
 require('dotenv').config({ path: path.resolve(__dirname, '../.env') });
 
 // ── Config ────────────────────────────────────────────────────────────────────
@@ -227,7 +228,7 @@ async function main() {
 
   log('');
   log('╔═══════════════════════════════════════════════════════════════╗');
-  log('║        CryptoNova V8.30 — Health Report                      ║');
+  log('║        CryptoNova V8.31 — Health Report                      ║');
   log('╚═══════════════════════════════════════════════════════════════╝');
   log(`  Run at:    ${ts()}`);
   log(`  Log file:  ${LOG_FILE}`);
@@ -247,7 +248,7 @@ async function main() {
   const T2     = addrs.tiers?.T2 || addrs.T2;
   const W1     = addrs.accountOne || addrs.W1;
 
-  const provider = new ethers.JsonRpcProvider(RPC_URL, 84532, { staticNetwork: true });
+  const provider = await createProvider(RPC_URL);
   const sf       = new ethers.Contract(addrs.stabilityFund, SF_ABI,    provider);
   const tr       = new ethers.Contract(addrs.tierRouter,    TR_ABI,    provider);
   const usdc     = new ethers.Contract(addrs.usdc,          USDC_ABI,  provider);
@@ -699,9 +700,8 @@ async function main() {
     const lines = [
       headerEmoji + ' <b>CryptoNova Keeper — ' + headerLabel + '</b>',
       '',
-      // sfTarget() auto-scales to the highest open tier's fee × 20x.
-      // When T2 gate is open but T2 has 0 members, clamp display to T1 baseline ($200).
-      sfEmoji + ' <b>StabilityFund:</b> ' + fmt6(sfTotal) + ' / ' + (Number(t2aOcc) === 0 ? '$200.00' : fmt6(sfTarget)) + ' (' + sfHealthPct.toFixed(0) + '% health)',
+      // sfTarget() is read live from the contract — always show the real on-chain value.
+      sfEmoji + ' <b>StabilityFund:</b> ' + fmt6(sfTotal) + ' / ' + fmt6(sfTarget) + ' (' + sfHealthPct.toFixed(0) + '% health)',
     ];
 
     if (sfTotalUSD < SF_CRITICAL_USD) lines.push('   ⚠️ SF CRITICAL — below $' + SF_CRITICAL_USD + '!');

@@ -1,6 +1,6 @@
 "use strict";
 /**
- * deploy_v8.js  --  V8.18 Full Deploy  (all 10 tiers, MATRIX_SIZE=127, auto-keeper)
+ * deploy_v8.js  --  V8.31 Full Deploy  (all 10 tiers, MATRIX_SIZE=127, auto-keeper)
  * ─────────────────────────────────────────────────────────────────────────────
  * Deploys the complete V8.8 stack:
  *
@@ -48,7 +48,7 @@
  *   USDC_ADDRESS           Reuse existing USDC; omit to deploy MockUSDC
  *   MATRIX_SIZE            127 (default) | 15 (quick dev cycle)
  *   DEPLOY_TIERS           Comma-separated list e.g. "1,2" (default: "1,2,3,4,5,6,7,8,9,10")
- *   ADDRESSES_FILE         Output filename (default: deployed_addresses_v8_26.json)
+ *   ADDRESSES_FILE         Output filename (default: deployed_addresses_v8_29.json)
  *
  * Run: npx hardhat run scripts/deploy_v8.js --network baseSepolia
  */
@@ -63,7 +63,7 @@ require("dotenv").config();
 // v8_1 = size-15 testnet (retired).  v8_2 = size-64 pre-mainnet stress test.
 const ADDRESSES_FILE = path.join(
   __dirname,
-  process.env.ADDRESSES_FILE || "deployed_addresses_v8_26.json"
+  process.env.ADDRESSES_FILE || "deployed_addresses_v8_29.json"
 );
 
 // ── Config ────────────────────────────────────────────────────────────────────
@@ -89,42 +89,43 @@ const TIER_FEES = [
   10_000_000_000n, // T10 $10,000
 ];
 
-// ── V8.19 BPS SplitConfigs ────────────────────────────────────────────────────
+// ── V8.31 BPS SplitConfigs (50/5/45 crossing reserve model) ──────────────────
 // Field order MUST match Solidity SplitConfig struct (10 fields):
 //   l1Bps, chainBps, poolBps, treasuryBps, stabilityBps, devBps, opsBps, communityBps, buybackBps, liquidityBps
 //
-// V8.19 changes from V8.18 (June 2026):
-//   Added liquidityBps=200 (2%) per entry → liquidityReserve (CNOVA/USDC LP)
-//   T1-T3: pool 4500→4400 (−100), sf 1300→1200 (−100), lq 0→200 (+200), bbr 100→100
-//   The LQ reserve feeds Aerodrome CNOVA/USDC LP at mainnet. Testnet: held at lq wallet.
-//   Frontend display (index.html): Pool=44%, Chain=17%, SF=12%, LQ=2%, L1=10%, Treasury=10%,
-//                                   Dev=2%, Ops=1%, Community=1%, Buyback=1%
+// V8.31 changes from V8.19 (50/5/45 Option B — uniform across all tiers):
+//   These BPS values are applied to the 45% payout base (payBase), NOT the full entry fee.
+//   Before BPS distribution: 50% → crossingReserve, 5% → direct earnings, 45% → payBase.
 //
-//   [  l1,  chain,  pool, treasury,   sf,  dev,  ops,  cw,  bbr,   lq] sum
-const SPLITS_T1_T3  = [1000,  1700,  4400,    1000, 1200,  200,  100, 100,  100,  200]; // 10000 ✓  pool=44% sf=12%
-const SPLITS_T4_T5  = [2000,  2000,  2600,    1600,  800,  360,  240, 100,  100,  200]; // 10000 ✓
-const SPLITS_T6_T7  = [2000,  1750,  2450,    1800,  800,  420,  280, 100,  200,  200]; // 10000 ✓
-const SPLITS_T8_T10 = [2000,  1750,  2250,    1900,  800,  480,  320, 100,  200,  200]; // 10000 ✓
+//   At T1 ($10 entry, $4.50 payBase):
+//     L1  direct referrer : 700 bps × $4.50 = $0.315
+//     L2-L6 chain (each) : 600 bps × $4.50 = $0.270 × 5 = $1.350 total
+//     Pool               : 4000 bps × $4.50 = $1.800 per cycle
+//     SF                 : 600 bps × $4.50 = $0.270
+//     Treasury (CNOVA)   : 1000 bps × $4.50 = $0.450
+//     Dev                : 200 bps × $4.50 = $0.090
+//     Ops                : 100 bps × $4.50 = $0.045
+//     Community          : 100 bps × $4.50 = $0.045
+//     Buyback (CNOVA)    : 100 bps × $4.50 = $0.045
+//     Liquidity reserve  : 200 bps × $4.50 = $0.090
+//   Sum: 700+3000+4000+1000+600+200+100+100+100+200 = 10000 ✓
+//
+//   Crossing math (all tiers):
+//     Crossing cost  = 50% of entry fee (funded from crossingReserve first, then withdrawable)
+//     Pool per cycle = 4000/10000 × 45% × fee = 18% of fee (e.g. $1.80 at T1)
+//     Cycles to next cross (after reserve exhausted) = ceil(50%/18%) = 3 cycles ✓
+//     Buffer: $0.40 at T1 (3 × $1.80 = $5.40 > $5.00 crossing cost)
+//
+//   [  l1, chain,  pool, treasury,   sf,  dev,  ops,  cw,  bbr,   lq] sum
+const SPLITS_ALL    = [ 700,  3000,  4000,    1000,  600,  200,  100, 100,  100,  200]; // 10000 ✓
 
-// ── Chain pay BPS per level (6 levels, must sum to chainBps for that tier) ───
-// T1-T3:  chain=1700  →  850/340/255/127/64/64   = 1700
-// T4-T5:  chain=2000  →  1000/400/300/150/75/75  = 2000
-// T6-T10: chain=1750  →  875/350/262/131/66/66   = 1750
-const CHAIN_PAY_T1_T3  = [850, 340, 255, 127, 64, 64];   // sum=1700 ✓
-const CHAIN_PAY_T4_T5  = [1000, 400, 300, 150, 75, 75];  // sum=2000 ✓
-const CHAIN_PAY_T6_T10 = [875, 350, 262, 131, 66, 66];   // sum=1750 ✓
+// ── Chain pay BPS per level (6 slots, must sum to chainBps = 3000) ────────────
+// Option B: L2-L6 equal (600 each = 3000), L7 slot unused (0).
+// "L2–L6 earn identically; L1 gets a small recruiting premium."
+const CHAIN_PAY_ALL = [600, 600, 600, 600, 600, 0];  // sum=3000 ✓
 
-function tierSplits(tierNum) {
-  if (tierNum <= 3) return SPLITS_T1_T3;
-  if (tierNum <= 5) return SPLITS_T4_T5;
-  if (tierNum <= 7) return SPLITS_T6_T7;
-  return SPLITS_T8_T10;
-}
-function tierChainPay(tierNum) {
-  if (tierNum <= 3) return CHAIN_PAY_T1_T3;
-  if (tierNum <= 5) return CHAIN_PAY_T4_T5;
-  return CHAIN_PAY_T6_T10;
-}
+function tierSplits(tierNum)   { return SPLITS_ALL; }     // unified across all tiers
+function tierChainPay(tierNum) { return CHAIN_PAY_ALL; }  // unified across all tiers
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 const fmt   = a   => `${a.slice(0,10)}…`;
@@ -154,9 +155,7 @@ async function main() {
   // during the 30-45 min deploy window and cause "nonce too low" errors.
   const _origSend = nonceMgr.sendTransaction.bind(nonceMgr);
   nonceMgr.sendTransaction = async (tx) => {
-    await sleep(3000);
-    const chainNonce = await rawSigner.provider.getTransactionCount(rawSigner.address, "pending");
-    nonceMgr.reset(chainNonce);
+    await sleep(8000);
     return _origSend(tx);
   };
   const deployer    = nonceMgr;
@@ -175,7 +174,7 @@ async function main() {
   // V8.19: liquidityReserve — CNOVA/USDC LP wallet. Defaults to opsWallet until mainnet LP deployed.
   const liquidityReserve = process.env.LIQUIDITY_RESERVE_ADDRESS || opsWallet;
 
-  console.log("\n  V8.26 Deploy — MatrixKeeper narrow catch: add 'insufficient withdrawable for rescue' so SF rescue ladder is safe to activate");
+  console.log("\n  V8.31 Deploy — 50/5/45 crossing reserve + Option B BPS + registerWithCoupon globalJoined fix + sfBal fallback fix");
   sep();
   console.log(`  Deployer        : ${deployerAddr}`);
   console.log(`  AccountOne      : ${accountOne}`);
@@ -571,6 +570,27 @@ async function main() {
   await (await directSale.setGovernance(govAddr)).wait();
   console.log(`  ↳  CNOVADirectSale.setGovernance OK (${govAddr})`);
 
+  // ── 9e. CouponRegistry ──────────────────────────────────────────────────────
+  // Lets any USDC holder issue a coupon (hash of a plaintext code).
+  // New members can redeem the coupon at registration to cover part/all of the
+  // T1 entry fee. Registry holds USDC on behalf of the issuer until redemption
+  // or expiry (30 days). Only authorized matrices can call redeemCoupon().
+  sep("CouponRegistry");
+  const COUPON_AMOUNT_USD = Number(process.env.COUPON_AMOUNT_USD || 10);
+  const couponAmountWei   = BigInt(COUPON_AMOUNT_USD) * 1_000_000n; // 6-decimal USDC
+  const CouponRegistry    = await ethers.getContractFactory("CouponRegistry", deployer);
+  const couponRegistry    = await deploy(CouponRegistry, [usdcAddr, couponAmountWei], "CouponRegistry");
+  const crAddr            = await couponRegistry.getAddress();
+  console.log(`  ↳  CouponRegistry deployed — default coupon = $${COUPON_AMOUNT_USD} USDC`);
+
+  // Wire registry into every T1 MatA (coupon registration only works on MatA)
+  for (const tierNum of DEPLOY_TIERS) {
+    const mA = await ethers.getContractAt("FigureEightMatrixV8", deployed[tierNum].matA, deployer);
+    await (await couponRegistry.setAuthorizedMatrix(deployed[tierNum].matA, true)).wait();
+    await (await mA.setCouponRegistry(crAddr)).wait();
+    console.log(`  ↳  T${tierNum} MatA authorized + wired → CouponRegistry`);
+  }
+
   // ── 10a. Save addresses BEFORE W1 seed (so a seed failure doesn't lose addresses) ──
   {
     sep("Save Addresses");
@@ -585,7 +605,8 @@ async function main() {
       stabilityFund: sfAddr, buybackReserve: bbrAddr, tierRouter: trAddr,
       matrixFactory: mfAddr, matrixKeeper: keeperAddr,
       v8Governance: govAddr, communityWallet: cwAddr,
-      liquidityReserve, directSale: dsAddr, tiers: tierAddresses,
+      liquidityReserve, directSale: dsAddr, couponRegistry: crAddr,
+      tiers: tierAddresses,
     };
     fs.writeFileSync(ADDRESSES_FILE, JSON.stringify(out, null, 2));
     console.log(`  ✓  Addresses saved → ${path.basename(ADDRESSES_FILE)}`);
@@ -659,5 +680,12 @@ async function main() {
   }
   sep();
   console.log(`  Addresses file: ${require("path").basename(ADDRESSES_FILE)}`);
-  console.log("  V8.26 Deploy complete.\n");
-  console.log("  NEXT STEP: run scripts/set_rescu
+  console.log("  V8.31 Deploy complete.\n");
+  console.log("  NEXT STEP: run scripts/seed_w1.js then scripts/bigfill_v8.js\n");
+  sep();
+}
+
+main().catch(err => {
+  console.error(err);
+  process.exitCode = 1;
+});
