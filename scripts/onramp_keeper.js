@@ -47,17 +47,18 @@
  */
 
 require("dotenv").config();
-const { ethers } = require("ethers");
-const fs         = require("fs");
-const path       = require("path");
-const https      = require("https");
+const { ethers }          = require("ethers");
+const { createProvider }  = require("./rpcProvider");
+const fs                  = require("fs");
+const path                = require("path");
+const https               = require("https");
 
 // ── Config ────────────────────────────────────────────────────────────────────
 
 const RPC_URL = process.env.BASE_SEPOLIA_RPC_URL || "https://sepolia.base.org";
 const ADDRESSES_FILE = path.join(
     __dirname, "..",
-    process.env.ADDRESSES_FILE || "deployed_addresses_v8_22.json"
+    process.env.ADDRESSES_FILE || "deployed_addresses_v8_28.json"
 );
 const DUST_THRESHOLD_USD = Number(process.env.DUST_THRESHOLD_USD || "1");
 const DUST_THRESHOLD     = BigInt(Math.round(DUST_THRESHOLD_USD * 1_000_000)); // USDC 6 dec
@@ -167,22 +168,14 @@ async function main() {
     }
 
     // ── Provider + signer ─────────────────────────────────────────────────────
-    const provider    = new ethers.JsonRpcProvider(RPC_URL);
+    // createProvider tries primary RPC first, falls back to public endpoints.
+    const provider    = await createProvider(RPC_URL);
     const distributor = new ethers.Wallet(process.env.DISTRIBUTOR_PRIVATE_KEY, provider);
 
     log(`  Distributor  ${distributor.address}`);
     log(`  Pool         ${poolAddress}`);
     log(`  USDC         ${usdcAddress}`);
     log(`  Dust threshold  ${usdStr(DUST_THRESHOLD)}`);
-
-    // ── RPC health check ──────────────────────────────────────────────────────
-    log("  Checking RPC connectivity…");
-    const rpcOk = await checkRpc(provider);
-    if (!rpcOk) {
-        log("✗ RPC unreachable — skipping run (will retry next cycle)");
-        process.exit(0); // soft exit, not a hard failure
-    }
-    log("  ✓  RPC OK");
 
     // ── Contracts ─────────────────────────────────────────────────────────────
     const usdc = new ethers.Contract(usdcAddress,  ERC20_ABI, distributor);
