@@ -62,7 +62,7 @@ require('dotenv').config({ path: path.resolve(__dirname, '../.env') });
 const RPC_URL        = process.env.BASE_SEPOLIA_RPC_URL || 'https://sepolia.base.org';
 const DEPLOYER_KEY   = process.env.DEPLOYER_PRIVATE_KEY;
 const W1_KEY         = process.env.W1_PRIVATE_KEY;          // optional — W1 separate key
-const ADDR_FILE      = path.join(__dirname, process.env.ADDRESSES_FILE || 'deployed_addresses_v8_26.json');
+const ADDR_FILE      = path.join(__dirname, process.env.ADDRESSES_FILE || 'deployed_addresses_v8_30.json');
 const LOG_FILE       = process.env.KEEPER_LOG
   ? path.resolve(process.env.KEEPER_LOG)
   : path.join(__dirname, '../logs/keeper.log');
@@ -227,7 +227,7 @@ async function main() {
 
   log('');
   log('╔═══════════════════════════════════════════════════════════════╗');
-  log('║        CryptoNova V8.26 — Health Report                      ║');
+  log('║        CryptoNova V8.30 — Health Report                      ║');
   log('╚═══════════════════════════════════════════════════════════════╝');
   log(`  Run at:    ${ts()}`);
   log(`  Log file:  ${LOG_FILE}`);
