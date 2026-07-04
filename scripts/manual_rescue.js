@@ -39,6 +39,7 @@ const MAT_ABI = [
   'function isParked(address) view returns (bool)',
   'function parkedAt(address) view returns (uint256)',
   'function withdrawableOf(address) view returns (uint256)',
+  'function crossingReserveOf(address) view returns (uint256)',  // V8.31: must include in floor check
   'function rescueDebtOf(address) view returns (uint256)',
   'function ENTRY_FEE() view returns (uint256)',  // fee varies per tier
 ];
@@ -86,17 +87,22 @@ async function main() {
         continue;
       }
 
-      // Rescue floor check: withdrawable must be >= 40% of entry fee
-      const withdrawable = await mat.withdrawableOf(member);
-      const wBps = entryFee > 0n ? (BigInt(withdrawable) * 10_000n) / BigInt(entryFee) : 0n;
+      // V8.31 rescue floor check: effectiveContrib = crossingReserve + withdrawable >= 40% of fee.
+      // Pre-V8.31: only withdrawable was checked. In V8.31, the crossing reserve is consumed first
+      // toward the entry fee, so it counts toward the member's effective contribution.
+      // Using withdrawable alone incorrectly classifies all fresh V8.31 members as below the floor.
+      const withdrawable  = await mat.withdrawableOf(member);
+      const crossRes      = await mat.crossingReserveOf(member).catch(() => 0n);
+      const effectiveContrib = BigInt(withdrawable) + BigInt(crossRes);
+      const wBps = entryFee > 0n ? (effectiveContrib * 10_000n) / BigInt(entryFee) : 0n;
       if (wBps < RESCUE_FLOOR_BPS) {
         skippedFloor++;
-        console.log(`  [${i}] ${member.slice(0,10)}… age=${(age/3600).toFixed(1)}h ❌ (withdrawable $${(Number(withdrawable)/1e6).toFixed(2)} < 40% floor — needs eviction)`);
+        console.log(`  [${i}] ${member.slice(0,10)}… age=${(age/3600).toFixed(1)}h ❌ (effectiveContrib $${(Number(effectiveContrib)/1e6).toFixed(2)} [withdraw=$${(Number(withdrawable)/1e6).toFixed(2)} + reserve=$${(Number(crossRes)/1e6).toFixed(2)}] < 40% floor — needs eviction)`);
         continue;
       }
 
       eligible.push({ member, matAddr, tierIdx });
-      console.log(`  [${i}] ${member.slice(0,10)}… age=${(age/3600).toFixed(1)}h ✅ $${(Number(withdrawable)/1e6).toFixed(2)}`);
+      console.log(`  [${i}] ${member.slice(0,10)}… age=${(age/3600).toFixed(1)}h ✅ withdraw=$${(Number(withdrawable)/1e6).toFixed(2)} reserve=$${(Number(crossRes)/1e6).toFixed(2)} total=$${(Number(effectiveContrib)/1e6).toFixed(2)}`);
     }
 
     if (skippedGrace  > 0) console.log(`  ⏳ ${skippedGrace} in grace period`);
@@ -182,23 +188,4 @@ async function main() {
   }
 
   // ── Final parked counts across all tiers ─────────────────────────────────
-  console.log('\n── Post-rescue parked counts ──');
-  let grandTotal = 0n;
-  for (let t = 0; t < TIER_KEYS.length; t++) {
-    const key = TIER_KEYS[t];
-    if (!addrs.tiers || !addrs.tiers[key]) continue;
-    const matAAddr = addrs.tiers[key].matA;
-    const matBAddr = addrs.tiers[key].matB;
-    if (!matAAddr || !matBAddr) continue;
-    const matA = new ethers.Contract(matAAddr, MAT_ABI, ethers.provider);
-    const matB = new ethers.Contract(matBAddr, MAT_ABI, ethers.provider);
-    const cA = await matA.getParkedCount();
-    const cB = await matB.getParkedCount();
-    const total = BigInt(cA) + BigInt(cB);
-    if (total > 0n) console.log(`  T${t+1}: MatA=${cA}  MatB=${cB}  (${total})`);
-    grandTotal += total;
-  }
-  console.log(`  TOTAL: ${grandTotal}`);
-}
-
-main().catch(e => { console.error(e); process.exit(1); });
+  console.log('\n── Post-rescue parked count
