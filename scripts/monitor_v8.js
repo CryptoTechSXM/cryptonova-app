@@ -17,7 +17,7 @@ const { ethers } = require('ethers');
 const https = require('https');
 
 // ── Network ─────────────────────────────────────────────────────────
-const RPC_URL = 'https://sepolia.base.org';
+const RPC_URL = process.env.BASE_SEPOLIA_RPC_URL || 'https://sepolia.base.org';
 
 // ── Matrix size ──────────────────────────────────────────────────────
 const MATRIX_SIZE = 127;
@@ -33,6 +33,8 @@ if (!fs_sync.existsSync(ADDR_FILE)) {
   process.exit(1);
 }
 const _raw = JSON.parse(fs_sync.readFileSync(ADDR_FILE, 'utf8'));
+// Tier entry fee labels (matches deploy_v8.js TIER_FEES array)
+const TIER_FEES_USD = ['$10','$25','$50','$100','$250','$500','$1,000','$2,500','$5,000','$10,000'];
 const ADDRS = {
   usdc:           _raw.usdc           || '',
   cnova:          _raw.cnova          || '',
@@ -45,7 +47,7 @@ const ADDRS = {
   // Convert { "T1": { pm, matA, matB }, ... } OR { "1": ... } → array sorted by tier num
   tiers: Object.keys(_raw.tiers || {})
     .sort((a, b) => parseInt(a.replace(/\D/g,'')) - parseInt(b.replace(/\D/g,'')))
-    .map(k => ({ num: parseInt(k.replace(/\D/g,'')), ..._raw.tiers[k] })),
+    .map(k => { const n = parseInt(k.replace(/\D/g,'')); return { num: n, fee: TIER_FEES_USD[n-1] || `$?`, ..._raw.tiers[k] }; }),
 };
 console.log(`📂  Loaded addresses: ${path.basename(ADDR_FILE)}`);
 
@@ -154,6 +156,7 @@ const CW_ABI   = [
 
 // ── Main ─────────────────────────────────────────────────────────────
 async function main() {
+  const sleep = ms => new Promise(r => setTimeout(r, ms));
   const prev   = loadState();
   const now    = {};
   const alerts = [];
@@ -161,7 +164,7 @@ async function main() {
 
   const rp = new ethers.JsonRpcProvider(RPC_URL);
 
-  console.log('CryptoNova V8.9 — Daily Monitor');
+  console.log('CryptoNova V8.31 — Daily Monitor');
   console.log('Time:', today);
   console.log('RPC: ', RPC_URL);
 
@@ -173,8 +176,9 @@ async function main() {
     matB: new ethers.Contract(t.matB, MATRIX_ABI, rp),
   }));
 
-  // ── Read all tier data in parallel ───────────────────────────────
-  const tierData = await Promise.all(tierContracts.map(async (t) => {
+  // ── Read all tier data sequentially (avoid rate-limit burst) ────
+  const tierData = [];
+  for (const t of tierContracts) {
     const [aOcc, aCycles, aPool, aTotal, bOcc, bCycles, bPool] = await Promise.all([
       t.matA.occupancy(),
       t.matA.rotationCount(),
@@ -184,9 +188,11 @@ async function main() {
       t.matB.rotationCount().catch(() => 0n),
       t.matB.poolAccumulator().catch(() => 0n),
     ]);
-    return { num: t.num, fee: t.fee, aOcc, aCycles, aPool, aTotal, bOcc, bCycles, bPool };
-  }));
+    tierData.push({ num: t.num, fee: t.fee, aOcc, aCycles, aPool, aTotal, bOcc, bCycles, bPool });
+    await sleep(200);
+  }
 
+  await sleep(500);
   // ── Read shared infrastructure ────────────────────────────────────
   const cnovaC = new ethers.Contract(ADDRS.cnova, CNOVA_ABI, rp);
   const sfC    = new ethers.Contract(ADDRS.stabilityFund, SF_ABI, rp);
@@ -292,7 +298,7 @@ async function main() {
     const pT = prev.tiers?.[td.num];
     const aCy = pT ? delta(Number(td.aCycles), pT.aCycles) : '';
     const bCy = pT ? delta(Number(td.bCycles), pT.bCycles) : '';
-    return `  T${td.num.toString().padEnd(2)} ${td.fee.padEnd(6)} A:${String(Number(td.aOcc)).padStart(3)}/${MATRIX_SIZE}(${td.aCycles}${aCy}) B:${String(Number(td.bOcc)).padStart(3)}/${MATRIX_SIZE}(${td.bCycles}${bCy})`;
+    return `T${td.num.toString().padEnd(2)} ${td.fee.padEnd(8)} A:${String(Number(td.aOcc)).padStart(3)}/127(${td.aCycles}${aCy}) B:${String(Number(td.bOcc)).padStart(3)}/127(${td.bCycles}${bCy})`;
   });
 
   // ── Status line ───────────────────────────────────────────────────
@@ -304,7 +310,7 @@ async function main() {
 
   // ── Build report ──────────────────────────────────────────────────
   const report = [
-    `📊 <b>CryptoNova V8.9 — Daily Report</b>`,
+    `📊 <b>CryptoNova V8.31 — Daily Report</b>`,
     `📅 ${today}`,
     ``,
     statusLine,
@@ -315,8 +321,7 @@ async function main() {
     `  Members enrolled (CW): ${Number(cwEnrolled)}/1000  (G:${Number(cwGenesis)} / P:${Number(cwPioneer)})`,
     ``,
     `<b>── TIER MATRIX SNAPSHOT ────────────</b>`,
-    `  (Tier Fee  MatA:occ/127(cycles) MatB:occ/127(cycles))`,
-    ...tierRows,
+    `<pre>Tier Fee       A:occ/127(cyc)   B:occ/127(cyc)\n${tierRows.join('\n')}</pre>`,
     ``,
     `<b>── TREASURY & RESERVES ─────────────</b>`,
     `  Treasury USDC:   ${fmt6(tUSDC)}${delta6(tUSDC, prev.tUSDC)}`,
@@ -346,4 +351,29 @@ async function main() {
     report.push('<b>── ALERTS ──────────────────────────</b>');
     alerts.forEach(a => report.push(`  ${a}`));
   } else {
-    repor
+    report.push('  ✅ No alerts — everything looks normal');
+  }
+
+  const msg = report.join('\n');
+  saveState(now);
+  await sendTelegram(msg);
+}
+
+async function mainWithRetry() {
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      await main();
+      return;
+    } catch (e) {
+      if (attempt < 2 && e?.info?.error?.code === -32016) {
+        const wait = (attempt + 1) * 5000;
+        console.log(`⏳ Rate limit hit, retrying in ${wait/1000}s... (attempt ${attempt+1}/3)`);
+        await new Promise(r => setTimeout(r, wait));
+      } else {
+        throw e;
+      }
+    }
+  }
+}
+
+mainWithRetry().catch(console.error);
