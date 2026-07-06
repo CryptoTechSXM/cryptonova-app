@@ -19,24 +19,33 @@ const { time }        = require("@nomicfoundation/hardhat-toolbox/network-helper
 // ─── Constants ────────────────────────────────────────────────────────────────
 const UNIT    = 1_000_000n;     // 1 USDC (6 decimals)
 const T1_FEE  = 10n  * UNIT;   // $10
-const T2_FEE  = 15n  * UNIT;   // $15  (V8.7: W1 earns $15.60 in matB; L1 from 6 force-crosses + chain pay > $15)
+const T2_FEE  = 7n   * UNIT;   // $7   (V8.32: W1 earns $7.66 in matB with 50/2.5/47.5 model;
+                                //        L1 from 6 force-crosses (6×$0.95) + chain pay ($1.71) + direct_earn ($0.25) = $7.91 > $7)
 const MSIZE   = 7n;             // smallest valid matrix for the test
 
-/** V8.19 T1-T3 splits  (sum = 10 000 BPS, 10 fields) */
+/** V8.32 T1-T3 splits — sum = 4 750 BPS.
+ *  50% crossing reserve + 2.5% direct earn are pre-allocated in _distributePayments
+ *  BEFORE the BPS array runs (5000 + 250 + 4750 = 10000 total).
+ *  Values scaled from V8.19 proportions (×0.475), rounded to sum exactly 4750. */
 const SPLITS = {
-  l1Bps:        2000,   // $2.00  L1 referral
-  chainBps:     2000,   // $2.00  chain pay (6 levels)
-  poolBps:      3300,   // $3.30  equalization pool
-  treasuryBps:  1500,   // $1.50  CNOVA treasury backing (SACRED)
-  stabilityBps:  500,   // $0.50  StabilityFund per-entry carve
-  devBps:        300,   // $0.30  dev wallet
-  opsBps:        200,   // $0.20  ops wallet
-  communityBps:  100,   // $0.10  community wallet
-  buybackBps:    100,   // $0.10  CNOVABuybackReserve
-  liquidityBps:    0,   // $0.00  LiquidityReserve (0 for test — no LQ wallet needed)
+  l1Bps:        950,   // $0.95  L1 referral
+  chainBps:     950,   // $0.95  chain pay (6 levels)
+  poolBps:     1568,   // $1.57  equalization pool
+  treasuryBps:  713,   // $0.71  CNOVA treasury backing (SACRED)
+  stabilityBps: 238,   // $0.24  StabilityFund per-entry carve
+  devBps:       143,   // $0.14  dev wallet
+  opsBps:        95,   // $0.10  ops wallet
+  communityBps:  48,   // $0.05  community wallet
+  buybackBps:    45,   // $0.05  CNOVABuybackReserve
+  liquidityBps:   0,   // $0.00  LiquidityReserve (0 for test — no LQ wallet needed)
 };
-// Per-level chain pay BPS (must sum to chainBps = 2000)
-const CHAIN_BPS = [1000n, 400n, 300n, 150n, 75n, 75n];  // sum = 2000
+// Per-level chain pay BPS (must sum to chainBps = 950)
+const CHAIN_BPS = [475n, 190n, 143n, 71n, 36n, 35n];  // sum = 950
+
+// V8.31: crossing is funded 50% from crossingReserve, 50% from withdrawable.
+// Members only need to keep crossNeeded = entryFee − crossingReserve in withdrawable
+// while active.  CROSSING_RESERVE_BPS=5000 → crossNeeded = T1_FEE × 5000/10000 = $5.
+const CROSS_NEEDED = T1_FEE / 2n;   // $5 (= entryFee − crossingReserve)
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // FIXTURE A — Full V8.1 system  (TierRouter + matrices + CNOVA)
@@ -96,7 +105,7 @@ async function deployV8Fixture() {
     tierIdx,
     // SplitConfig struct  (V8.1 fields)
     SPLITS,
-    // Per-level chain pay BPS (sum must equal SPLITS.chainBps = 2000)
+    // Per-level chain pay BPS (sum must equal SPLITS.chainBps = 950)
     CHAIN_BPS
   );
 
@@ -183,11 +192,6 @@ async function deployV8Fixture() {
 }
 
 // ─── Helper: deploy a THIRD matrix pair for T1, for multi-pair broadcast tests ──
-// V8.21: PairManagerV8.setWithdrawalFeeBps/setEarlyExitPenaltyBps must reach
-// EVERY pair a tier has ever added, not just the first one -- this helper
-// builds a second T1 pair (distinct contracts, same tierIdx/fee as matA/matB)
-// so tests can add it to pm1 via addPair() and verify the broadcast actually
-// crosses pair boundaries.
 async function deployExtraT1Pair({ usdc, cnova, treasury, devOps, accountOne, admin, matrixLib, pm1, tierRouter }) {
   const FM = await ethers.getContractFactory("FigureEightMatrixV8", {
     libraries: { MatrixLogicLib: await matrixLib.getAddress() },
@@ -205,11 +209,6 @@ async function deployExtraT1Pair({ usdc, cnova, treasury, devOps, accountOne, ad
   const matB3 = await FM.deploy(deployParams, T1_FEE, MSIZE, false, 0, SPLITS, CHAIN_BPS);
   await matA3.connect(admin).setPartner(await matB3.getAddress());
   await matB3.connect(admin).setPartner(await matA3.getAddress());
-  // Wire pairManager + tierRouter exactly like the main fixture does for
-  // matA/matB before they're added to pm1 -- without this, PairManagerV8.
-  // addPair()'s internal setChainAuthorized() call on the new pair reverts
-  // with "F8V8: not chain admin" (pm1 isn't owner/pairManager/tierRouter on
-  // a matrix that's never been told pm1 IS its pairManager).
   const pm1Addr = await pm1.getAddress();
   const trAddr  = await tierRouter.getAddress();
   await matA3.connect(admin).setPairManager(pm1Addr);
@@ -221,7 +220,6 @@ async function deployExtraT1Pair({ usdc, cnova, treasury, devOps, accountOne, ad
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // FIXTURE B — CNOVAToken only  (for token-unit tests)
-// ═══════════════════════════════════════════════════════════════════════════════
 async function deployCNOVAFixture() {
   const [admin, minter, alice, bob] = await ethers.getSigners();
   const CNOVAToken = await ethers.getContractFactory("CNOVAToken");
@@ -288,21 +286,22 @@ describe("V8Elevator — T1 → T2 upgrade cycle (MSIZE=7)", function () {
       expect(await tierRouter.globalJoined(w1.address)).to.be.true;
       expect(await tierRouter.memberHighestTier(w1.address)).to.equal(1);
 
-      // ROUND 2: S7-S12 register → cycles out S0-S5 (each parks: earned < $25)
+      // ROUND 2: S7-S12 register → cycles out S0-S5 (each parks: earned < $5)
       for (const s of [s7, s8, s9, s10, s11, s12]) await reg(s, w1.address);
 
       // S13 registers → S6 cycles out of matA → parks
       await reg(s13, w1.address);
 
       // FORCE-CROSS S0-S5 into matB  (occ goes 1→7)
-      for (const s of [s0, s1, s2, s3, s4, s5]) await fc(s.address);  // V8.7: S5 earns $8.98 < $10, must force-cross
+      for (const s of [s0, s1, s2, s3, s4, s5]) await fc(s.address);  // V8.32: S0-S5 earn well below $5 cross_needed → all park, need force-cross
       expect(await matB.isFull()).to.be.true;
 
       // FORCE-CROSS S6 → fills matB to occ==7+1 → W1 cycles out of matB
-      // handleCycleOut fires → W1 matB withdrawable (matB-only):
-      //   L1 from S0-S5 force-crosses into matB (6 × $2.00)  = $12.00  (V8.7)
-      //   chain pay from S0-S5 positions in matB              =  $3.60
-      //   matB total = $15.60 > T2_FEE $15  → UPGRADE fires
+      // handleCycleOut fires → W1 matB withdrawable:
+      //   direct_earn from W1's own matB entry                =  $0.25
+      //   L1 from S0-S5 force-crosses into matB (6 × $0.95)  =  $5.70  (V8.32: payBase=entryFee)
+      //   chain pay from S0-S5 matrix positions in matB       =  $1.71
+      //   matB total = $7.66 > T2_FEE $7  → UPGRADE fires
       await fc(s6.address);
 
       // ── KEY ASSERTIONS ────────────────────────────────────────────────────
@@ -337,7 +336,7 @@ describe("V8Elevator — T1 → T2 upgrade cycle (MSIZE=7)", function () {
       await reg(s6, w1.address);
       for (const s of [s7, s8, s9, s10, s11, s12]) await reg(s, w1.address);
       await reg(s13, w1.address);
-      for (const s of [s0, s1, s2, s3, s4, s5]) await fc(s.address);  // V8.7: S5 earns $8.98 < $10, must force-cross
+      for (const s of [s0, s1, s2, s3, s4, s5]) await fc(s.address);  // V8.32: S0-S5 earn well below $5 cross_needed → all park, need force-cross
       await fc(s6.address);
 
       await tierRouter.checkInactivity();
@@ -358,7 +357,7 @@ describe("V8Elevator — T1 → T2 upgrade cycle (MSIZE=7)", function () {
       await reg(s6, w1.address);
       for (const s of [s7, s8, s9, s10, s11, s12]) await reg(s, w1.address);
       await reg(s13, w1.address);
-      for (const s of [s0, s1, s2, s3, s4, s5]) await fc(s.address);  // V8.7: S5 earns $8.98 < $10, must force-cross
+      for (const s of [s0, s1, s2, s3, s4, s5]) await fc(s.address);  // V8.32: S0-S5 earn well below $5 cross_needed → all park, need force-cross
       await fc(s6.address);
 
       await tierRouter.checkInactivity();
@@ -367,11 +366,6 @@ describe("V8Elevator — T1 → T2 upgrade cycle (MSIZE=7)", function () {
       await tierRouter.connect(admin).resumeSystem();
       expect(await tierRouter.systemPaused()).to.be.false;
     });
-
-    // ── V8.21: manual kill switch (pauseSystem/unpauseSystem) ───────────────
-    // Owner-only emergency stop, separate trigger but the SAME systemPaused
-    // flag/whenNotPaused gate the automatic inactivity guard above uses --
-    // see TierRouter.sol's pauseSystem()/unpauseSystem() doc comments.
 
     it("owner can pauseSystem() immediately, blocking new register()", async function () {
       const { tierRouter, admin, w1, reg } = await loadFixture(deployV8Fixture);
@@ -452,8 +446,6 @@ describe("V8Elevator — T1 → T2 upgrade cycle (MSIZE=7)", function () {
       await tierRouter.checkInactivity();
       expect(await tierRouter.systemPaused()).to.be.true;
 
-      // The kill-switch's unpauseSystem() is just a paired name for the same
-      // resume logic -- it must clear an automatically-triggered pause too.
       await tierRouter.connect(admin).unpauseSystem();
       expect(await tierRouter.systemPaused()).to.be.false;
     });
@@ -548,25 +540,18 @@ describe("CNOVAToken V8.1 — tier multiplier + epoch triggers", function () {
     it("epoch advances when epochMintLimit is crossed", async function () {
       const { cnova, admin, minter, alice } = await loadFixture(deployCNOVAFixture);
 
-      // Min allowed epochMintLimit = 100,000 CNOVA (contract enforces >= 100k).
-      // T7 mints 4,000 CNOVA per call. After 25 calls = 100,000 CNOVA exactly at limit.
-      // The 26th call's _tryAdvanceEpoch sees totalMinted >= limit → ADVANCE.
       await cnova.connect(admin).setEpochMintLimit(ethers.parseUnits("100000", 18));
 
       expect(await cnova.currentEpoch()).to.equal(0);
 
-      // 25 × T7 mints = 100,000 CNOVA (hits the limit, but _tryAdvanceEpoch fires
-      // at the *start* of each call so epoch hasn't flipped yet)
       for (let i = 0; i < 25; i++) {
         await cnova.connect(minter).mintReward(alice.address, 6);
       }
       expect(await cnova.currentEpoch()).to.equal(0);
 
-      // 26th call: _tryAdvanceEpoch sees 100,000 >= 100,000 → ADVANCE → epoch = 1
       await cnova.connect(minter).mintReward(alice.address, 6);
       expect(await cnova.currentEpoch()).to.equal(1);
 
-      // Epoch 2 (V8.10 schedule): 50 → 40. T7 at epoch 2 = 40 * 80 = 3,200 CNOVA.
       const batches = await cnova.vestBatchesOf(alice.address);
       expect(batches.length).to.be.gte(2);
     });
@@ -579,20 +564,16 @@ describe("CNOVAToken V8.1 — tier multiplier + epoch triggers", function () {
     it("epoch advances when epochMemberLimit is crossed", async function () {
       const { cnova, admin, minter, alice, bob } = await loadFixture(deployCNOVAFixture);
 
-      // Default admin can set member limit (lower threshold only)
-      await cnova.connect(admin).setEpochMemberLimit(2);  // advance after 2 members
+      await cnova.connect(admin).setEpochMemberLimit(2);
 
       expect(await cnova.currentEpoch()).to.equal(0);
 
-      // Mint 1: epochMemberCount becomes 1 (< 2)
       await cnova.connect(minter).mintReward(alice.address, 0);
       expect(await cnova.currentEpoch()).to.equal(0);
 
-      // Mint 2: count becomes 2 (still no advance — _tryAdvanceEpoch ran first with count=1)
       await cnova.connect(minter).mintReward(bob.address, 0);
       expect(await cnova.currentEpoch()).to.equal(0);
 
-      // Mint 3: _tryAdvanceEpoch sees count=2 >= limit 2 → ADVANCE
       const [extra1] = await ethers.getSigners().then(s => s.slice(5));
       await cnova.connect(minter).mintReward(extra1.address, 0);
       expect(await cnova.currentEpoch()).to.equal(1);
@@ -608,17 +589,15 @@ describe("CNOVAToken V8.1 — tier multiplier + epoch triggers", function () {
 
       expect(await cnova.currentEpoch()).to.equal(0);
 
-      // Wind clock forward past 30 days
       await time.increase(30 * 24 * 3600 + 1);
 
-      // Next mint triggers _tryAdvanceEpoch → time trigger fires
       await cnova.connect(minter).mintReward(alice.address, 0);
       expect(await cnova.currentEpoch()).to.equal(1);
     });
 
     it("epochLeadingTrigger returns TIME when no activity", async function () {
       const { cnova } = await loadFixture(deployCNOVAFixture);
-      await time.increase(25 * 24 * 3600);  // 25 days — time trigger closest
+      await time.increase(25 * 24 * 3600);
       const TRIGGER_TIME = 2;
       expect(await cnova.epochLeadingTrigger()).to.equal(TRIGGER_TIME);
     });
@@ -638,26 +617,21 @@ describe("CNOVAToken V8.1b — early withdrawal penalty", function () {
     it("at day 0: 50% released, 50% burned, tokens unlocked", async function () {
       const { cnova, minter, alice } = await loadFixture(deployCNOVAFixture);
 
-      // Mint T1 epoch 1 = 50 CNOVA (vested)
       await cnova.connect(minter).mintReward(alice.address, 0);
       const minted = ethers.parseUnits("50", 18);
 
       expect(await cnova.lockedBalanceOf(alice.address)).to.equal(minted);
 
-      // earlyUnlock(0) immediately → timeRemaining = vestDuration → 50% penalty
       const tx = await cnova.connect(alice).earlyUnlock(0);
       const receipt = await tx.wait();
 
-      // batch is gone → lockedBalance = 0
       expect(await cnova.lockedBalanceOf(alice.address)).to.equal(0n);
 
-      // Alice should hold ~25 CNOVA (closeTo: 1 block of elapsed time shifts penalty slightly)
       const expectedReleased = minted / 2n;
       expect(await cnova.balanceOf(alice.address)).to.be.closeTo(
         expectedReleased, ethers.parseUnits("0.01", 18)
       );
 
-      // totalSupply dropped by ~25 CNOVA (burned penalty)
       expect(await cnova.totalSupply()).to.be.closeTo(expectedReleased, ethers.parseUnits("0.01", 18));
     });
 
@@ -666,7 +640,6 @@ describe("CNOVAToken V8.1b — early withdrawal penalty", function () {
       await cnova.connect(minter).mintReward(alice.address, 0);
       const minted = ethers.parseUnits("50", 18);
 
-      // Event values are approximate (block-time drift); just verify it fires.
       await expect(cnova.connect(alice).earlyUnlock(0))
         .to.emit(cnova, "EarlyUnlock");
     });
@@ -682,18 +655,15 @@ describe("CNOVAToken V8.1b — early withdrawal penalty", function () {
       await cnova.connect(minter).mintReward(alice.address, 0);
       const minted = ethers.parseUnits("50", 18);
 
-      // Fast-forward 90 days (half the 180-day cliff)
       await time.increase(90 * 24 * 3600);
 
       await cnova.connect(alice).earlyUnlock(0);
 
-      // penaltyBps = 5000 * (90 days) / (180 days) = 2500 (25%)
-      // released = 50 * 75% = 37.5 CNOVA
       const expectedPenalty  = minted * 2500n / 10000n;
       const expectedReleased = minted - expectedPenalty;
 
       expect(await cnova.balanceOf(alice.address)).to.be.closeTo(
-        expectedReleased, ethers.parseUnits("0.01", 18)  // 0.01 CNOVA tolerance for block time
+        expectedReleased, ethers.parseUnits("0.01", 18)
       );
     });
 
@@ -708,12 +678,10 @@ describe("CNOVAToken V8.1b — early withdrawal penalty", function () {
       await cnova.connect(minter).mintReward(alice.address, 0);
       const minted = ethers.parseUnits("50", 18);
 
-      // Past the cliff
       await time.increase(181 * 24 * 3600);
 
       await cnova.connect(alice).earlyUnlock(0);
 
-      // No penalty — alice keeps all 50 CNOVA
       expect(await cnova.balanceOf(alice.address)).to.equal(minted);
       expect(await cnova.totalSupply()).to.equal(minted);
     });
@@ -726,35 +694,25 @@ describe("CNOVAToken V8.1b — early withdrawal penalty", function () {
     it("unlocks 3 batches, applies independent penalties to each", async function () {
       const { cnova, admin, minter, alice } = await loadFixture(deployCNOVAFixture);
 
-      // Push epoch time limit to max (365 days) so the 30-day time.increase calls
-      // between mints do NOT trigger the TIME epoch trigger (default limit = 30 days).
       await cnova.connect(admin).setEpochTimeLimit(365 * 24 * 3600);
 
-      // Mint 3 batches at different times
-      await cnova.connect(minter).mintReward(alice.address, 0);   // batch 0: 50 CNOVA day 0
-      await time.increase(30 * 24 * 3600);                        // 30 days pass
-      await cnova.connect(minter).mintReward(alice.address, 0);   // batch 1: 50 CNOVA day 30
-      await time.increase(30 * 24 * 3600);                        // 30 more days
-      await cnova.connect(minter).mintReward(alice.address, 0);   // batch 2: 50 CNOVA day 60
+      await cnova.connect(minter).mintReward(alice.address, 0);
+      await time.increase(30 * 24 * 3600);
+      await cnova.connect(minter).mintReward(alice.address, 0);
+      await time.increase(30 * 24 * 3600);
+      await cnova.connect(minter).mintReward(alice.address, 0);
 
       const totalMinted = ethers.parseUnits("150", 18);
       expect(await cnova.balanceOf(alice.address)).to.equal(totalMinted);
       expect(await cnova.lockedBalanceOf(alice.address)).to.equal(totalMinted);
 
-      // earlyUnlockAll at day 60:
-      //   batch 0: 120 days remaining / 180 = 66.7%  → penalty ~33.3%
-      //   batch 1:  90 days remaining / 180 = 50%    → penalty 25%
-      //   batch 2:  60 days remaining / 180 = 33.3%  → penalty ~16.7%
       await cnova.connect(alice).earlyUnlockAll();
 
-      // All batches gone
       expect(await cnova.lockedBalanceOf(alice.address)).to.equal(0n);
       expect(await cnova.vestBatchesOf(alice.address)).to.have.length(0);
 
-      // Alice holds less than 150 CNOVA (penalties were applied)
       const finalBal = await cnova.balanceOf(alice.address);
       expect(finalBal).to.be.lt(totalMinted);
-      // But more than 75 CNOVA (average penalty < 50%)
       expect(finalBal).to.be.gt(ethers.parseUnits("75", 18));
     });
 
@@ -766,7 +724,6 @@ describe("CNOVAToken V8.1b — early withdrawal penalty", function () {
     it("penalty goes to penaltyDestination instead of being burned", async function () {
       const { cnova, admin, minter, alice, bob } = await loadFixture(deployCNOVAFixture);
 
-      // Set bob as penalty destination
       await cnova.connect(admin).setPenaltyDestination(bob.address);
 
       await cnova.connect(minter).mintReward(alice.address, 0);
@@ -774,10 +731,8 @@ describe("CNOVAToken V8.1b — early withdrawal penalty", function () {
 
       await cnova.connect(alice).earlyUnlock(0);
 
-      // totalSupply unchanged (no burn), bob received the penalty
       expect(await cnova.totalSupply()).to.equal(minted);
       expect(await cnova.balanceOf(bob.address)).to.be.gt(0n);
-      // alice got the released portion (~25 CNOVA)
       expect(await cnova.balanceOf(alice.address)).to.be.lt(minted);
     });
 
@@ -794,7 +749,6 @@ describe("CNOVAToken V8.1b — early withdrawal penalty", function () {
       await cnova.connect(minter).mintReward(alice.address, 0);
       const minted = ethers.parseUnits("50", 18);
 
-      // earlyUnlock with 0 penalty — alice keeps everything
       await cnova.connect(alice).earlyUnlock(0);
       expect(await cnova.balanceOf(alice.address)).to.equal(minted);
       expect(await cnova.totalSupply()).to.equal(minted);
@@ -820,23 +774,23 @@ describe("V8.10 — Withdrawal reserve, drain-and-park prevention, grace evictio
   // ── 7a. Withdraw while active: ENTRY_FEE reserve enforced ────────────────────
   describe("7a. Withdrawal reserve — active member", function () {
 
-    it("withdraw() while in-matrix reverts when earnings ≤ ENTRY_FEE", async function () {
+    it("withdraw() while in-matrix reverts when earnings <= ENTRY_FEE", async function () {
       const { matA, usdc, w1, s0, reg } = await loadFixture(deployV8Fixture);
 
       await reg(w1, ethers.ZeroAddress);   // W1 = root
-      await reg(s0, w1.address);           // S0 joins; W1 earns L1 + chain pay ≈ $3-6
+      await reg(s0, w1.address);           // S0 joins; W1 earns L1 + chain pay
 
       const { withdrawable, isInMatrix } = await matA.getMember(w1.address);
       expect(isInMatrix).to.be.true;
       expect(withdrawable).to.be.gt(0n);
-      expect(withdrawable).to.be.lte(T1_FEE);   // ≤ $10 → reserve would eat everything
+      expect(withdrawable).to.be.lte(T1_FEE);   // <= $10 -> reserve would eat everything
 
       await expect(
         matA.connect(w1).withdraw()
-      ).to.be.revertedWith("F8V8: must keep entry fee reserve while active");
+      ).to.be.revertedWith("F8V8: must keep crossing reserve while active");
     });
 
-    it("withdraw() while in-matrix succeeds and leaves exactly ENTRY_FEE in reserve", async function () {
+    it("withdraw() while in-matrix with automation disabled: full balance withdrawable (V8.32 Task #63)", async function () {
       const { matA, usdc, tierRouter, w1, s0, s1, s2, s3, s4, s5, reg } =
         await loadFixture(deployV8Fixture);
 
@@ -845,9 +799,11 @@ describe("V8.10 — Withdrawal reserve, drain-and-park prevention, grace evictio
 
       const { withdrawable: earnedBefore, isInMatrix } = await matA.getMember(w1.address);
       expect(isInMatrix).to.be.true;
-      expect(earnedBefore).to.be.gt(T1_FEE, "W1 must earn > $10 for this test");
+      expect(earnedBefore).to.be.gt(CROSS_NEEDED, "W1 must earn > crossNeeded ($5) for this test");
 
-      // V8.19: disable auto-upgrade so Protocol Reserve = 0 (this test is about ENTRY_FEE reserve only)
+      // V8.32 Task #63: disable auto-upgrade AND auto-reentry -> reservedFor(w1) = 0
+      // -> automationReserve = 0 -> crossing reserve check intentionally skipped.
+      // Member opted out of all automation -> may withdraw full balance freely.
       await tierRouter.connect(w1).setMemberOptions(true, false, false);
 
       const balBefore = await usdc.balanceOf(w1.address);
@@ -856,14 +812,14 @@ describe("V8.10 — Withdrawal reserve, drain-and-park prevention, grace evictio
 
       const { withdrawable: reserveLeft, totalWithdrawn } = await matA.getMember(w1.address);
 
-      // Exactly ENTRY_FEE must remain
-      expect(reserveLeft).to.equal(T1_FEE, "Exactly ENTRY_FEE must remain as reserve");
+      // V8.32: no reserve kept when automation is fully disabled -- full withdrawable cleared
+      expect(reserveLeft).to.equal(0n, "No reserve kept when automation is fully disabled (V8.32 Task #63)");
 
-      // Gross withdrawn = original_withdrawable - ENTRY_FEE (pre-fee amount)
-      const grossWithdrawn = earnedBefore - T1_FEE;
+      // V8.32: automation disabled -> full balance withdrawable, no reserve locked
+      const grossWithdrawn = earnedBefore;
       expect(totalWithdrawn).to.equal(grossWithdrawn, "totalWithdrawn must match gross amount");
 
-      // Net payout = grossWithdrawn − 1.5% withdrawal fee
+      // Net payout = grossWithdrawn - 1.5% withdrawal fee
       const fee    = grossWithdrawn * 150n / 10_000n;
       const payout = grossWithdrawn - fee;
       expect(balAfter - balBefore).to.equal(payout, "Payout must be gross minus withdrawal fee");
@@ -880,16 +836,13 @@ describe("V8.10 — Withdrawal reserve, drain-and-park prevention, grace evictio
 
       await reg(w1, ethers.ZeroAddress);
       for (const s of [s0, s1, s2, s3, s4, s5]) await reg(s, w1.address);
-      await reg(s6, w1.address);   // fills matA (occ = MSIZE) → W1 cycles out, crosses to matB
+      await reg(s6, w1.address);
 
-      // W1 is now in matB, NOT in matA
       const matAMember = await matA.getMember(w1.address);
       expect(matAMember.isInMatrix).to.be.false;
 
-      // V8.19: disable auto-upgrade so Protocol Reserve = 0 (this test is about post-cycle-out free withdrawal)
       await tierRouter.connect(w1).setMemberOptions(true, false, false);
 
-      // Any residual in matA can be fully withdrawn (no ENTRY_FEE reserve when inactive)
       if (matAMember.withdrawable > 0n) {
         const balBefore = await usdc.balanceOf(w1.address);
         await matA.connect(w1).withdraw();
@@ -897,7 +850,7 @@ describe("V8.10 — Withdrawal reserve, drain-and-park prevention, grace evictio
 
         expect(balAfter).to.be.gte(balBefore, "Payout must be non-negative");
         expect((await matA.getMember(w1.address)).withdrawable).to.equal(
-          0n, "All withdrawable must be cleared — no reserve held for inactive member"
+          0n, "All withdrawable must be cleared -- no reserve held for inactive member"
         );
       }
     });
@@ -915,22 +868,23 @@ describe("V8.10 — Withdrawal reserve, drain-and-park prevention, grace evictio
       for (const s of [s0, s1, s2, s3, s4, s5]) await reg(s, w1.address);
 
       const { withdrawable: earned } = await matA.getMember(w1.address);
-      expect(earned).to.be.gt(T1_FEE);
+      expect(earned).to.be.gt(CROSS_NEEDED);  // V8.31: check vs crossNeeded ($5) not ENTRY_FEE
 
-      // V8.19: disable auto-upgrade so Protocol Reserve = 0 (this test is about totalWithdrawn tracking only)
+      // V8.32: disable auto-upgrade so Protocol Reserve = 0 (this test is about totalWithdrawn tracking only)
       await tierRouter.connect(w1).setMemberOptions(true, false, false);
 
-      // First withdrawal while active — gross = earned - ENTRY_FEE
+      // V8.32: automation disabled (setMemberOptions(true,false,false)) -> automationReserve = 0
+      // -> no crossing reserve check -> full balance withdrawn, no reserve kept
       await matA.connect(w1).withdraw();
-      const gross1 = earned - T1_FEE;
+      const gross1 = earned;   // full amount when automationReserve = 0
       expect((await matA.getMember(w1.address)).totalWithdrawn).to.equal(
         gross1, "totalWithdrawn after first withdraw must equal gross amount"
       );
 
-      // Cycle W1 out of matA → W1 inactive in matA
+      // Cycle W1 out of matA -> W1 inactive in matA
       await reg(s6, w1.address);
 
-      // Withdraw the remaining ENTRY_FEE reserve (now no restriction)
+      // V8.32: after first full withdrawal, withdrawable = 0; remaining = 0
       const { withdrawable: remaining } = await matA.getMember(w1.address);
       if (remaining > 0n) {
         await matA.connect(w1).withdraw();
@@ -953,14 +907,12 @@ describe("V8.10 — Withdrawal reserve, drain-and-park prevention, grace evictio
         reg,
       } = await loadFixture(deployV8Fixture);
 
-      // Standard run: W1 crosses to matB; S0-S6 park (earned < ENTRY_FEE at cycle-out)
       await reg(w1, ethers.ZeroAddress);
       for (const s of [s0, s1, s2, s3, s4, s5]) await reg(s, w1.address);
       await reg(s6, w1.address);
       for (const s of [s7, s8, s9, s10, s11, s12]) await reg(s, w1.address);
       await reg(s13, w1.address);
 
-      // At least S0 should be parked
       const parkedTs = await matA.parkedAt(s0.address);
       expect(parkedTs).to.be.gt(0n, "parkedAt must be set when member parks");
       expect(await matA.getParkedCount()).to.be.gte(1n);
@@ -1007,7 +959,6 @@ describe("V8.10 — Withdrawal reserve, drain-and-park prevention, grace evictio
 
       expect(await matA.parkedAt(s0.address)).to.be.gt(0n);
 
-      // Any non-keeper call must revert
       await expect(
         matA.connect(w1).evictParked(s0.address)
       ).to.be.revertedWith("F8V8: not keeper");
@@ -1030,22 +981,17 @@ describe("V8.10 — Withdrawal reserve, drain-and-park prevention, grace evictio
       expect(countBefore).to.be.gte(1n);
       expect(await matA.parkedAt(s0.address)).to.be.gt(0n);
 
-      // Set admin as matrixKeeper for test
       await matA.connect(admin).setMatrixKeeper(admin.address);
 
-      // Evict S0 and capture events
       const tx      = await matA.connect(admin).evictParked(s0.address);
       const receipt = await tx.wait();
 
-      // parkedAt cleared
       expect(await matA.parkedAt(s0.address)).to.equal(
         0n, "parkedAt must clear after eviction"
       );
-      // parked count decremented by 1
       expect(await matA.getParkedCount()).to.equal(
         countBefore - 1n, "Parked count must decrease by 1"
       );
-      // MemberEvicted event emitted
       const evicted = receipt.logs.some(log => {
         try { return matA.interface.parseLog(log)?.name === "MemberEvicted"; }
         catch { return false; }
@@ -1057,7 +1003,7 @@ describe("V8.10 — Withdrawal reserve, drain-and-park prevention, grace evictio
       const { matA, admin, w1, reg } = await loadFixture(deployV8Fixture);
 
       await matA.connect(admin).setMatrixKeeper(admin.address);
-      await reg(w1, ethers.ZeroAddress);   // W1 is active in matrix, not parked
+      await reg(w1, ethers.ZeroAddress);
 
       await expect(
         matA.connect(admin).evictParked(w1.address)
@@ -1072,17 +1018,17 @@ describe("V8.10 — Withdrawal reserve, drain-and-park prevention, grace evictio
       for (const s of [s0, s1, s2, s3, s4, s5]) await reg(s, w1.address);
 
       const { withdrawable: earned } = await matA.getMember(w1.address);
-      expect(earned).to.be.gt(T1_FEE);
+      expect(earned).to.be.gt(CROSS_NEEDED);  // V8.31: check vs crossNeeded ($5) not ENTRY_FEE
 
-      // V8.19: disable auto-upgrade so Protocol Reserve = 0 (this test is about totalWithdrawn tracking only)
+      // V8.32: disable auto-upgrade so Protocol Reserve = 0 (this test is about totalWithdrawn tracking only)
       await tierRouter.connect(w1).setMemberOptions(true, false, false);
 
       // Before any withdrawal
       expect(await matA.getMemberTotalWithdrawn(w1.address)).to.equal(0n);
 
-      // After withdrawal (gross = earned - ENTRY_FEE)
+      // V8.32: automation disabled -> full withdrawal, no reserve kept
       await matA.connect(w1).withdraw();
-      const grossExpected = earned - T1_FEE;
+      const grossExpected = earned;  // full amount when automationReserve = 0
       expect(await matA.getMemberTotalWithdrawn(w1.address)).to.equal(grossExpected);
     });
 
@@ -1090,83 +1036,6 @@ describe("V8.10 — Withdrawal reserve, drain-and-park prevention, grace evictio
 
 });
 
-// =============================================================================
-// SUITE 8 — V8.16 topUpAndCross
-// =============================================================================
-describe("V8.16 — topUpAndCross: member self-rescue from parked queue", function () {
-
-  it("parked member with shortfall is rescued by third-party paying shortfall only", async function () {
-    // Pattern: round-1 fills matA (W1 + s0-s5 + s6 triggers W1 to cross to matB — W1 not parked).
-    // Round-2 registrations (s7-s12) each trigger one of s0-s5 to cycle out; those members
-    // earn only chain pay from a single new joiner (~$2) which is < ENTRY_FEE ($10), so they park.
-    const { matA, matB, usdc, admin, w1, s0, s1, s2, s3, s4, s5, s6, s7, s8, s9, s10, s11, s12, s13, reg } =
-      await loadFixture(deployV8Fixture);
-
-    // Round 1 — fill matA; s6 triggers W1 cycle-out → W1 crosses to matB (not parked)
-    await reg(w1, ethers.ZeroAddress);
-    for (const s of [s0, s1, s2, s3, s4, s5]) await reg(s, w1.address);
-    await reg(s6, w1.address); // W1 exits matA → enters matB
-
-    // Round 2 — each registration triggers one old root to cycle out and park
-    for (const s of [s7, s8, s9, s10, s11, s12]) await reg(s, w1.address);
-
-    // Verify s0 is now parked (cycled out with insufficient withdrawable)
-    expect(await matA.parkedAt(s0.address)).to.be.gt(0n, "s0 should be parked after round-2 fill");
-    expect(await matA.getParkedCount()).to.be.gte(1n);
-
-    // Compute shortfall for s0
-    const { withdrawable: bal } = await matA.getMember(s0.address);
-    const entryFee = await matA.ENTRY_FEE();
-    const shortfall = bal >= entryFee ? 0n : entryFee - bal;
-    expect(shortfall).to.be.gt(0n, "s0 should have a shortfall (earned < ENTRY_FEE)");
-
-    // Admin pays only the shortfall; s0's withdrawable covers the rest
-    await usdc.connect(admin).approve(await matA.getAddress(), shortfall);
-    await expect(matA.connect(admin).topUpAndCross(s0.address))
-      .to.emit(matA, "MemberCrossedToPartner");
-
-    // s0 should no longer be parked
-    expect(await matA.parkedAt(s0.address)).to.equal(0n);
-  });
-
-  it("topUpAndCross reverts if member was never registered", async function () {
-    const { matA, admin, s13 } = await loadFixture(deployV8Fixture);
-    await expect(
-      matA.connect(admin).topUpAndCross(s13.address)
-    ).to.be.revertedWith("F8V8: not a member");
-  });
-
-  it("topUpAndCross reverts if member is still active in matrix", async function () {
-    const { matA, admin, w1, reg } = await loadFixture(deployV8Fixture);
-    await reg(w1, ethers.ZeroAddress);
-    await expect(
-      matA.connect(admin).topUpAndCross(w1.address)
-    ).to.be.revertedWith("F8V8: still in matrix");
-  });
-
-  it("topUpAndCross reverts if member is not parked (parkedAt == 0)", async function () {
-    const { matA, usdc, admin, w1, s0, s1, s2, s3, s4, s5, reg } =
-      await loadFixture(deployV8Fixture);
-
-    await reg(w1, ethers.ZeroAddress);
-    for (const s of [s0, s1, s2, s3, s4, s5]) await reg(s, w1.address);
-
-    // s0 cycled out — check if they crossed (parkedAt == 0 means they crossed successfully)
-    const parkedAt = await matA.parkedAt(s0.address);
-    if (parkedAt > 0n) {
-      this.skip(); // s0 is actually parked — wrong fixture for this test
-    }
-
-    // s0 was not parked (crossed successfully) — topUpAndCross should revert
-    const s0Info = await matA.getMember(s0.address);
-    if (s0Info.hasEverJoined && !s0Info.isInMatrix) {
-      await expect(
-        matA.connect(admin).topUpAndCross(s0.address)
-      ).to.be.revertedWith("F8V8: not parked");
-    }
-  });
-
-});
 
 // =============================================================================
 // SUITE 9 — V8.21 Whale Gate redesign: per-tier tracking, no skip-ahead
@@ -1201,13 +1070,10 @@ describe("V8.21 — Whale Gate: per-tier first-entry tracking (shared threshold)
       reg,
     } = await loadFixture(deployV8Fixture);
 
-    // Lower the shared threshold to the minimum allowed value (10) so the test
-    // doesn't need 25 distinct wallets.
     await tierRouter.connect(admin).setWhaleGateThreshold(10);
 
     const first9 = [w1, s0, s1, s2, s3, s4, s5, s6, s7];
 
-    // First 9 distinct T1 registrations -- gate must still be closed.
     await reg(first9[0], ethers.ZeroAddress);
     for (let i = 1; i < first9.length; i++) {
       await reg(first9[i], first9[0].address);
@@ -1215,7 +1081,6 @@ describe("V8.21 — Whale Gate: per-tier first-entry tracking (shared threshold)
     expect(await tierRouter.tierFirstEntries(1)).to.equal(9n);
     expect(await tierRouter.isWhaleGateActiveForTier(1)).to.be.false;
 
-    // 10th distinct member trips it.
     await expect(reg(s8, first9[0].address))
       .to.emit(tierRouter, "WhaleGateActivated")
       .withArgs(1, 10n);
@@ -1223,7 +1088,6 @@ describe("V8.21 — Whale Gate: per-tier first-entry tracking (shared threshold)
     expect(await tierRouter.tierFirstEntries(1)).to.equal(10n);
     expect(await tierRouter.isWhaleGateActiveForTier(1)).to.be.true;
 
-    // Tier 2's gate must be completely independent -- nobody has reached T2 yet.
     expect(await tierRouter.tierFirstEntries(2)).to.equal(0n);
     expect(await tierRouter.isWhaleGateActiveForTier(2)).to.be.false;
   });
@@ -1235,9 +1099,6 @@ describe("V8.21 — Whale Gate: per-tier first-entry tracking (shared threshold)
     expect(await tierRouter.tierFirstEntries(1)).to.equal(1n);
     expect(await tierRouter.memberHighestTier(w1.address)).to.equal(1);
 
-    // Duplicate registration is blocked at the TR: already joined guard, which
-    // is the only path that would re-invoke _checkTierFirstEntry(w1, 1) --
-    // confirms the counter can't be inflated by replaying the same member.
     await expect(
       tierRouter.connect(w1).register(ethers.ZeroAddress)
     ).to.be.revertedWith("TR: already joined");
@@ -1249,7 +1110,6 @@ describe("V8.21 — Whale Gate: per-tier first-entry tracking (shared threshold)
 
     await reg(w1, ethers.ZeroAddress);
 
-    // T2 (tierNum 2) gate is closed -- a fresh T1 member must read as not eligible.
     let info = await tierRouter.getMemberInfo(w1.address);
     expect(info.whaleGateEligible).to.be.false;
     expect(info.whaleGateEligible).to.equal(await tierRouter.isWhaleGateActiveForTier(2));
@@ -1257,24 +1117,9 @@ describe("V8.21 — Whale Gate: per-tier first-entry tracking (shared threshold)
 
 });
 
-// ═══════════════════════════════════════════════════════════════════════════════
+// ===============================================================================
 // SUITE — V8.21: PairManagerV8 fee broadcast (param #9 target wiring fix)
-// ═══════════════════════════════════════════════════════════════════════════════
-//
-// BUG THIS FIXES: governance.html pointed param 9 (Withdrawal Fee BPS)
-// proposals at TierRouter's address, but TierRouter never implemented
-// setWithdrawalFeeBps -- any such proposal would revert at execute().
-// Separately, each tier can have MULTIPLE matrix pairs (PairManagerV8.addPair()
-// during auto-expansion), and fees are stored per FigureEightMatrixV8
-// instance, so even targeting one real matrix would leave every other pair
-// on a stale value. The fix: the DAO targets PairManagerV8 (one per tier)
-// directly, which broadcasts the change to every pair it has ever added and
-// auto-stamps future pairs too.
-//
-// (Param #10, Early Exit Penalty BPS, was going to get the same broadcast
-// treatment but was retired entirely instead -- it was stored and DAO-votable
-// on FigureEightMatrixV8 but never actually consumed by any withdraw/cycle
-// logic. See V8Governance.sol's PARAM_EARLY_EXIT_PENALTY_BPS retirement note.)
+// ===============================================================================
 describe("V8.21 — PairManagerV8 fee broadcast (param #9 target wiring fix)", function () {
 
   it("setWithdrawalFeeBps broadcasts to every pair the tier has ever added, not just the first", async function () {
@@ -1300,7 +1145,7 @@ describe("V8.21 — PairManagerV8 fee broadcast (param #9 target wiring fix)", f
     await pm1.connect(admin).addPair(await matA3.getAddress(), await matB3.getAddress());
 
     await expect(pm1.connect(admin).setWithdrawalFeeBps(200))
-      .to.emit(pm1, "WithdrawalFeeBpsBroadcast").withArgs(200n, 2n); // 2 pairs now
+      .to.emit(pm1, "WithdrawalFeeBpsBroadcast").withArgs(200n, 2n);
   });
 
   it("a brand-new pair stays on FigureEightMatrixV8's constructor default (150) when nothing has been broadcast yet", async function () {
@@ -1312,8 +1157,6 @@ describe("V8.21 — PairManagerV8 fee broadcast (param #9 target wiring fix)", f
 
     await pm1.connect(admin).addPair(await matA3.getAddress(), await matB3.getAddress());
 
-    // Pre-V8.21 behavior preserved exactly: no broadcast yet means addPair()
-    // does not touch the new pair's fee at all.
     expect(await matA3.withdrawalFeeBps()).to.equal(150n);
   });
 
@@ -1321,14 +1164,11 @@ describe("V8.21 — PairManagerV8 fee broadcast (param #9 target wiring fix)", f
     const fx = await loadFixture(deployV8Fixture);
     const { pm1, admin } = fx;
 
-    // Broadcast BEFORE the second pair exists.
     await pm1.connect(admin).setWithdrawalFeeBps(200);
 
     const { matA3, matB3 } = await deployExtraT1Pair(fx);
     await pm1.connect(admin).addPair(await matA3.getAddress(), await matB3.getAddress());
 
-    // New pair picks up the DAO's most recent value immediately, without
-    // anyone having to re-broadcast after expansion.
     expect(await matA3.withdrawalFeeBps()).to.equal(200n);
     expect(await matB3.withdrawalFeeBps()).to.equal(200n);
   });
@@ -1339,7 +1179,6 @@ describe("V8.21 — PairManagerV8 fee broadcast (param #9 target wiring fix)", f
     await expect(pm1.connect(w1).setWithdrawalFeeBps(100))
       .to.be.revertedWith("PM8: not authorized");
 
-    // Owner (admin) always works without governance wired.
     await expect(pm1.connect(admin).setWithdrawalFeeBps(100)).to.not.be.reverted;
   });
 
@@ -1351,8 +1190,6 @@ describe("V8.21 — PairManagerV8 fee broadcast (param #9 target wiring fix)", f
     await expect(pm1.connect(admin).setGovernance(ethers.ZeroAddress))
       .to.be.revertedWith("PM8: zero governance");
 
-    // Use w1 as a stand-in "governance" address (mirrors how V8Governance.test.js
-    // stands in a throwaway address to isolate the access-control check).
     await expect(pm1.connect(admin).setGovernance(w1.address))
       .to.emit(pm1, "GovernanceSet").withArgs(w1.address);
 

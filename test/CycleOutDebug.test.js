@@ -12,14 +12,17 @@
 const { ethers } = require("hardhat");
 const { expect } = require("chai");
 
-/** V8.19 10-field SplitConfig (liquidityBps added, default 0) */
+/** V8.32 10-field SplitConfig — splits sum to 4750 BPS.
+ *  50% crossing reserve + 2.5% direct earn are pre-allocated in _distributePayments
+ *  BEFORE the BPS array runs (5000 + 250 + 4750 = 10000 total).
+ *  Values scaled from V8.19 proportions (×0.475), rounded to sum exactly 4750. */
 const SPLITS = {
-  l1Bps: 2000, chainBps: 2000, poolBps: 3300,
-  treasuryBps: 1500, stabilityBps: 500,
-  devBps: 300, opsBps: 200, communityBps: 100, buybackBps: 100,
+  l1Bps: 950, chainBps: 950, poolBps: 1568,
+  treasuryBps: 713, stabilityBps: 238,
+  devBps: 143, opsBps: 95, communityBps: 48, buybackBps: 45,
   liquidityBps: 0,
-};  // sum = 10 000
-const CP_BPS  = [800, 500, 250, 200, 150, 100];  // sum = 2000 = chainBps
+};  // sum = 4750
+const CP_BPS  = [380, 238, 119, 95, 71, 47];  // sum = 950 = chainBps
 const FEE     = 10_000_000n;  // $10 USDC (6 decimals)
 const SF_SEED = 50_000_000n;  // $50 pre-seeded so keeper can fund the rescue
 
@@ -99,7 +102,7 @@ async function deploy(size = 4) {
   await sf.setTierFee(0, FEE);
   await sf.setTierRouter(trAddr);
 
-  // Pre-seed SF: MSIZE=4 gives W1 ~$4.10 in earnings, not enough for the $10 cross.
+  // Pre-seed SF: MSIZE=4 gives W1 ~$2.53 in earnings, not enough for the $5 cross_needed.
   // SF covers the gap. In production, keeper checks SF.balanceByTier[tier] >= fee before rescue.
   await usdc.mint(owner.address, SF_SEED);
   await usdc.connect(owner).approve(sfAddr, SF_SEED);
@@ -170,8 +173,9 @@ describe("CycleOutDebug", function () {
     }
 
     // ── Phase 2: Verify parked state ─────────────────────────────────────────
-    // W1 earns ~$4.10 (L1 from filler0 + chain pay from fillers 0-2).
-    // That is less than FEE=$10, so _crossToPartner parks W1 (MemberParked event emitted).
+    // V8.32 (scaled BPS, MSIZE=4): W1 earns ~$2.53 total
+    //   direct_earn=$0.25, L1-from-filler0=$0.95, chain (lvl1×2 + lvl2×2) = $1.14.
+    // cross_needed = $5 (50% crossingReserve model). $2.53 < $5 → W1 parks.
     const w1Parked  = await matA.isParked(W1.address);
     const w1InBpre  = await matB.getMember(W1.address);
     const w1Earn    = await matA.withdrawableOf(W1.address);
@@ -188,7 +192,7 @@ describe("CycleOutDebug", function () {
     // Here we call both steps directly with owner acting as keeper.
     await sf.connect(owner).payForceCross(0, matAAddr, FEE);
     // V8.11: sfContribution=FEE (SF covers 100% in this test scenario)
-    await matA.connect(owner).forceCrossKeeper(W1.address, FEE);
+    await matA.connect(owner).forceCrossKeeper(W1.address, FEE, 0n);
 
     const w1InB  = await matB.getMember(W1.address);
     const w1PosB = await matB.matrixPos(W1.address);

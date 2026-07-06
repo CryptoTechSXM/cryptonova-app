@@ -257,4 +257,16 @@ async function main() {
       await sendTelegram(`⚠️ <b>Keeper OOG pre-flight</b>\nCap: ${prevCap} → ${state.currentCap}\n${msg}`);
     } else {
       log(`ERROR performUpkeep: ${msg}`);
- 
+      await sendTelegram(`FAIL <b>Keeper performUpkeep error</b>\n${msg}`);
+    }
+    saveState(state);
+    process.exit(1);
+  }
+
+  saveState(state);
+}
+
+main().catch(e => {
+  console.error("Fatal:", e);
+  process.exit(1);
+});

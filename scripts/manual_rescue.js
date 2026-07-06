@@ -188,4 +188,23 @@ async function main() {
   }
 
   // ── Final parked counts across all tiers ─────────────────────────────────
-  console.log('\n── Post-rescue parked count
+  console.log('\n── Post-rescue parked counts ──');
+  let grandTotal = 0n;
+  for (let t = 0; t < TIER_KEYS.length; t++) {
+    const key = TIER_KEYS[t];
+    if (!addrs.tiers || !addrs.tiers[key]) continue;
+    const matAAddr = addrs.tiers[key].matA;
+    const matBAddr = addrs.tiers[key].matB;
+    if (!matAAddr || !matBAddr) continue;
+    const matA = new ethers.Contract(matAAddr, MAT_ABI, ethers.provider);
+    const matB = new ethers.Contract(matBAddr, MAT_ABI, ethers.provider);
+    const cA = await matA.getParkedCount();
+    const cB = await matB.getParkedCount();
+    const total = BigInt(cA) + BigInt(cB);
+    if (total > 0n) console.log(`  T${t+1}: MatA=${cA}  MatB=${cB}  (${total})`);
+    grandTotal += total;
+  }
+  console.log(`  TOTAL: ${grandTotal}`);
+}
+
+main().catch(e => { console.error(e); process.exit(1); });

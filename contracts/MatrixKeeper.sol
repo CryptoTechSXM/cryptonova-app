@@ -89,8 +89,10 @@ interface IFigureEightKeeper {
     function evictParked(address member) external;
     function getMemberTotalWithdrawn(address member) external view returns (uint256);
     function withdrawableOf(address member) external view returns (uint256);
+    function crossingReserveOf(address member) external view returns (uint256);  // V8.31
     function isMatrixA() external view returns (bool);
     function ENTRY_FEE() external view returns (uint256);
+    function rotationCount() external view returns (uint256);
 }
 
 interface ICommunityWalletKeeper {
@@ -121,17 +123,34 @@ contract MatrixKeeper is Ownable {
     ///         Passive members earn CNOVA mining rewards; USDC is the active-recruiter bonus.
     uint256 public constant RESCUE_REPAY_BPS = 5_000;
 
-    /// @notice Pool-split BPS used to compute the crossing buffer.
-    ///         Must match the splitPoolBps in SplitConfig (4500 = 45%).
-    uint256 public constant POOL_BPS = 4_500;
+    /// @notice V8.31: 50/5/45 model constants (must mirror MatrixLogicLib).
+    ///         50% of each entry fee is pre-funded as a crossing reserve in the member struct.
+    ///          5% is credited as instant direct earnings.
+    ///         45% (= payBase) is distributed via the BPS array.
+    uint256 public constant CROSSING_RESERVE_BPS = 5_000;  // 50%
+    uint256 public constant DIRECT_EARN_BPS      =   500;  // 5%
+
+    /// @notice Effective pool income as a BPS fraction of the full entry fee.
+    ///         pool income per entry = payBase × splitPoolBps / 10_000
+    ///                               = (entryFee × 4500/10_000) × (4000/10_000)
+    ///                               = entryFee × 1800 / 10_000
+    uint256 public constant POOL_BPS = 1_800;
 
     /// @notice Pre-computed BPS fraction of the entry fee to advance as a crossing buffer.
-    ///         crossingBuffer = entryFee * CROSSING_BUFFER_BPS / 10_000
-    ///         Derivation: entryFee - (entryFee * POOL_BPS / 10_000) * (10_000 - RESCUE_REPAY_BPS) / 10_000
-    ///                   = entryFee * (10_000 - POOL_BPS * (10_000 - RESCUE_REPAY_BPS) / 10_000) / 10_000
-    ///                   = entryFee * (10_000 - 4500 * 5000 / 10_000) / 10_000
-    ///                   = entryFee * 7750 / 10_000
-    uint256 public constant CROSSING_BUFFER_BPS = 7_750;
+    ///         After a keeper rescue, the member enters a new matrix and receives:
+    ///           crossingReserve = entryFee × 50%    (pre-funded by new matrix entry)
+    ///           direct earn     = entryFee × 5%     (instant withdrawable)
+    ///           crossingBuffer  = advanced by SF     (so member can cross after ~1 pool cycle)
+    ///
+    ///         For the NEXT crossing, member needs entryFee − crossingReserve from withdrawable:
+    ///           need = entryFee × (1 − CROSSING_RESERVE_BPS/10_000)
+    ///                = entryFee × 5000/10_000  = 50%
+    ///         Member already has directEarn + one pool cycle after RESCUE_REPAY_BPS deduction:
+    ///           directEarn         = entryFee × 500/10_000  = 5%
+    ///           poolCycle (net)    = entryFee × POOL_BPS/10_000 × (1 − RESCUE_REPAY_BPS/10_000)
+    ///                             = entryFee × 1800/10_000 × 5000/10_000 = 9%
+    ///         Buffer needed = 50% − 5% − 9% = 36% = 3_600 bps
+    uint256 public constant CROSSING_BUFFER_BPS = 3_600;
 
     uint8 public constant WORK_VELOCITY      = 0;
     uint8 public constant WORK_GHOST         = 1;
@@ -502,29 +521,45 @@ contract MatrixKeeper is Ownable {
     function _doParkedRescue(address matrix, address member, uint8 tierIdx) internal {
         IFigureEightKeeper mat = IFigureEightKeeper(matrix);
         if (!mat.isParked(member)) return;
-        uint256 fee          = mat.ENTRY_FEE();
-        uint256 withdrawable = mat.withdrawableOf(member);
 
-        // -- Zero-balance eviction guard -----------------------------------------
-        // If this member has $0 AND already carries rescue debt from a prior rescue,
-        // they've proven they cannot repay (likely a testnet zero-income wallet or a
-        // mainnet member who has never referred anyone).  Evict instead of piling on
-        // more unpayable debt that drains the SF indefinitely.
-        if (withdrawable == 0 && mat.rescueDebtOf(member) > 0) {
-            _doEvictParked(matrix, member);
-            return;
-        }
+        // Declare outputs before the scoped block so they survive into the SF-call section.
+        // The block frees fee/withdrawable/reserve/effectiveContrib/sfBps/maxShortfall from
+        // the EVM stack before the payForceCross call, keeping peak depth ≤ 9 (limit = 16).
+        uint256 sfShare;
+        uint256 crossingBuffer;
 
-        uint256 sfBps = _sfRescueBps(withdrawable, fee);
-        if (sfBps == type(uint256).max) return;
-        uint256 sfShare = fee * sfBps / 10_000;
+        {   // ---- amount-computation block ----------------------------------------
+            uint256 fee          = mat.ENTRY_FEE();
+            uint256 withdrawable = mat.withdrawableOf(member);
+            // V8.31: crossing reserve reduces SF shortfall — read it alongside withdrawable.
+            uint256 reserve      = mat.crossingReserveOf(member);
 
-        // -- Crossing buffer ------------------------------------------------------
-        // Advance an extra (fee * CROSSING_BUFFER_BPS / 10_000) from the SF so the
-        // member starts MatA with enough withdrawable to reach the MatA root and
-        // cross to MatB, even after the 15% gradual pool-repayment deductions.
-        // Formula: fee * 6175 / 10_000  (see CROSSING_BUFFER_BPS derivation above).
-        uint256 crossingBuffer = fee * CROSSING_BUFFER_BPS / 10_000;
+            // -- Zero-balance eviction guard -----------------------------------------
+            // If this member has $0 in both withdrawable AND crossingReserve, AND already
+            // carries rescue debt from a prior rescue, they've proven they cannot repay
+            // (likely a testnet zero-income wallet or mainnet member who never referred anyone).
+            // Evict instead of piling on more unpayable debt that drains the SF indefinitely.
+            if (withdrawable == 0 && reserve == 0 && mat.rescueDebtOf(member) > 0) {
+                _doEvictParked(matrix, member);
+                return;
+            }
+
+            // V8.31: effective contribution = crossingReserve + withdrawable.
+            uint256 effectiveContrib = reserve + withdrawable;
+            uint256 sfBps = _sfRescueBps(effectiveContrib, fee);
+            if (sfBps == type(uint256).max) return;
+
+            // Cap sfShare at the actual shortfall (don't advance more than needed).
+            uint256 maxShortfall = fee > effectiveContrib ? fee - effectiveContrib : 0;
+            sfShare = fee * sfBps / 10_000;
+            if (sfShare > maxShortfall) sfShare = maxShortfall;
+
+            // -- Crossing buffer --------------------------------------------------
+            // V8.31: buffer formula derivation in CROSSING_BUFFER_BPS constant above.
+            // Advances enough for member to cross after ~1 pool cycle at the new matrix,
+            // even with 50% RESCUE_REPAY_BPS deductions from pool income.
+            crossingBuffer = fee * CROSSING_BUFFER_BPS / 10_000;
+        }   // fee, withdrawable, reserve, effectiveContrib, sfBps, maxShortfall freed here
 
         uint256 totalSfNeeded = sfShare + crossingBuffer;
         uint256 sfBal         = IStabilityFundKeeper(stabilityFund).balanceByTier(tierIdx);
@@ -630,6 +665,11 @@ contract MatrixKeeper is Ownable {
 
     function _doReclaimSlot(address matrix, address member, uint8) internal {
         IFigureEightKeeper mat = IFigureEightKeeper(matrix);
+        // Never reclaim from a matrix that hasn't completed its first rotation.
+        // Members waiting for an unfilled matrix to reach 127 are not idle —
+        // they're simply waiting for growth. Idle logic only applies to
+        // matrices that are already cycling.
+        if (mat.rotationCount() == 0) return;
         if (!mat.isInMatrix(member)) return;
         uint256 idleTime = block.timestamp - mat.lastActivityTime(member);
         if (idleTime < extendedIdleTimeout) return;
@@ -659,14 +699,17 @@ contract MatrixKeeper is Ownable {
 
     /// @notice V8.20: ladder is now governable storage (see sfRescueThresholds/sfRescueBpsLadder)
     ///         instead of hardcoded breakpoints. Behavior is identical to V8.18 by default.
-    function _sfRescueBps(uint256 withdrawable, uint256 entryFee)
+    /// @notice V8.31: parameter renamed to effectiveContrib (= crossingReserve + withdrawable).
+    ///         The ladder ratio is now (crossingReserve + withdrawable) / entryFee, so a member
+    ///         with a full crossing reserve but zero earnings correctly shows 50% contribution.
+    function _sfRescueBps(uint256 effectiveContrib, uint256 entryFee)
         internal view returns (uint256)
     {
         uint256 n = sfRescueThresholds.length;
         // V8.23: if no ladder is configured yet (fresh deploy before governance seeds it),
         // fall back to 100% SF coverage so the keeper still rescues parked members.
         if (n == 0) return 10_000;
-        uint256 wBps = withdrawable * 10_000 / entryFee;
+        uint256 wBps = effectiveContrib * 10_000 / entryFee;
         for (uint256 i = 0; i < n; i++) {
             if (wBps >= sfRescueThresholds[i]) return sfRescueBpsLadder[i];
         }
@@ -683,15 +726,30 @@ contract MatrixKeeper is Ownable {
         uint256 ts = mat.parkedAt(parkedMember);
         if (ts == 0) return (address(0), type(uint8).max);
         if (block.timestamp - ts < parkedGracePeriod) return (address(0), type(uint8).max);
-        uint256 withdrawn    = mat.getMemberTotalWithdrawn(parkedMember);
-        uint256 withdrawable = mat.withdrawableOf(parkedMember);
-        uint256 fee          = mat.ENTRY_FEE();
-        uint256 totalEarned  = withdrawn + withdrawable;
-        uint256 withdrawRatio = totalEarned > 0 ? withdrawn * 10_000 / totalEarned : 0;
-        if (withdrawRatio > rescueRatioBps) return (parkedMember, WORK_EVICT_PARKED);
-        uint256 sfBps = _sfRescueBps(withdrawable, fee);
-        if (sfBps == type(uint256).max) return (parkedMember, WORK_EVICT_PARKED);
-        uint256 sfShare = fee * sfBps / 10_000;
+
+        // Declare sfShare before the computation block so it survives into the SF-balance
+        // check. The block frees withdrawn/withdrawable/reserve/fee/totalEarned/withdrawRatio/
+        // effectiveContrib/sfBps/maxShortfall from the EVM stack, keeping peak depth ≤ 8.
+        uint256 sfShare;
+
+        {   // ---- amount-computation block ----------------------------------------
+            uint256 withdrawn    = mat.getMemberTotalWithdrawn(parkedMember);
+            uint256 withdrawable = mat.withdrawableOf(parkedMember);
+            // V8.31: crossing reserve reduces SF shortfall — include it in effective contribution.
+            uint256 reserve      = mat.crossingReserveOf(parkedMember);
+            uint256 fee          = mat.ENTRY_FEE();
+            uint256 totalEarned  = withdrawn + withdrawable;
+            uint256 withdrawRatio = totalEarned > 0 ? withdrawn * 10_000 / totalEarned : 0;
+            if (withdrawRatio > rescueRatioBps) return (parkedMember, WORK_EVICT_PARKED);
+            uint256 effectiveContrib = reserve + withdrawable;
+            uint256 sfBps = _sfRescueBps(effectiveContrib, fee);
+            if (sfBps == type(uint256).max) return (parkedMember, WORK_EVICT_PARKED);
+            uint256 maxShortfall = fee > effectiveContrib ? fee - effectiveContrib : 0;
+            sfShare = fee * sfBps / 10_000;
+            if (sfShare > maxShortfall) sfShare = maxShortfall;
+        }   // withdrawn, withdrawable, reserve, fee, totalEarned, withdrawRatio,
+            // effectiveContrib, sfBps, maxShortfall freed here
+
         uint256 sfBal   = IStabilityFundKeeper(stabilityFund).balanceByTier(tierIdx);
         // Fall back to total SF balance if tier bucket cannot cover the rescue share.
         // FIX V8.31: was `sfBal > 0` — same stall-on-pennies bug; checkUpkeep must agree with execution path.
@@ -704,6 +762,11 @@ contract MatrixKeeper is Ownable {
     {
         if (matrix == address(0)) return count;
         IFigureEightKeeper mat = IFigureEightKeeper(matrix);
+        // Skip idle/ghost checks entirely for matrices that have never completed
+        // a full rotation. Members in a first-fill matrix are waiting for growth,
+        // not genuinely idle. Ghost-funding and reclaiming only make sense once
+        // the matrix is established and actively cycling.
+        if (mat.rotationCount() == 0) return count;
         uint256 size = mat.MATRIX_SIZE();
         for (uint256 pos = 1; pos <= size && count < maxItemsPerUpkeep; pos++) {
             address member = mat.posToMember(pos);

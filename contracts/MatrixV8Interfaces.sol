@@ -27,6 +27,14 @@ interface IStabilityFund {
     /// @notice Called by an authorized matrix after approving `amount` USDC.
     ///         SF pulls the USDC and increments totalBalance.
     function receiveDebtRepayment(uint256 amount) external;
+    /// @notice V8.32: DAO-votable rescue loan repayment BPS (param #50).
+    function rescueRepayBps() external view returns (uint256);
+}
+
+/// @notice Interface for CouponRegistry — used by MatrixLogicLib to redeem coupons during registration.
+interface ICouponRegistry {
+    function redeemCoupon(bytes32 codeHash, address newMember) external returns (uint256 amount);
+    function isValid(bytes32 codeHash) external view returns (bool);
 }
 
 /// @notice Minimal cross-instance interface -- used when matrix A needs to call
@@ -36,4 +44,7 @@ interface IStabilityFund {
 interface IFigureEightMatrixV8Cross {
     function _enterMatrix(address member, address referrer) external;
     function ENTRY_FEE() external view returns (uint256);
+    /// @notice Called by the partner MatA immediately after forceCrossKeeper
+    ///         to record the rescue loan on MatB, where the 15% repayment fires.
+    function addRescueDebt(address member, uint256 amount) external;
 }

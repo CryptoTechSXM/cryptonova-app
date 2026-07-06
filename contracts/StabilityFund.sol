@@ -94,6 +94,9 @@ contract StabilityFund is Ownable2Step {
     /// @notice V8.20: DAO governance contract. Co-governs the params below
     ///         alongside owner -- neither replaces the other (owner keeps emergency backstop).
     address public governance;
+    /// @notice V8.32 param #50: fraction of pool-share redirected to SF as rescue-loan repayment.
+    ///         DAO-votable via V8Governance param #50 (PARAM_SF_RESCUE_REPAY_BPS).
+    uint256 public rescueRepayBps = 5_000;
 
     // ── CommunityWallet carve-out ─────────────────────────────────────────────
     /// @notice CommunityWallet address. When set, 1% of L1 deposits route here.
@@ -207,6 +210,12 @@ contract StabilityFund is Ownable2Step {
         require(_gov != address(0), "SF: zero governance");
         governance = _gov;
         emit GovernanceSet(_gov);
+    }
+
+    /// @notice V8.32 param #50: DAO or owner can adjust the rescue loan repayment fraction.
+    function setRescueRepayBps(uint256 newVal) external onlyOwnerOrGovernance {
+        require(newVal <= 10_000, "SF: bps overflow");
+        rescueRepayBps = newVal;
     }
 
     function setMatrixKeeper(address _keeper) external onlyOwner {
@@ -541,9 +550,10 @@ contract StabilityFund is Ownable2Step {
     // ── V8.18: Member co-pay rescue ───────────────────────────────────────────
 
     /**
-     * @notice Authorized matrix pulls sfShare from SF to co-fund a coPayRescue.
-     *         SF covers 50% of the member's withdrawable; matrix calls this then
-     *         pulls the member's wallet share via safeTransferFrom in coPayRescue().
+     * @notice Authorized matrix pulls sfShare from SF to fund a coPayRescue.
+     *         SF covers the full shortfall (entryFee - withdrawable). No deployer
+     *         USDC required. The shortfall is recorded as a soft loan to the member,
+     *         repaid from future cycle-out earnings.
      *         Only callable by an authorizedMatrix.
      */
     function payCoRescue(uint8 tierIdx, uint256 sfShare) external {

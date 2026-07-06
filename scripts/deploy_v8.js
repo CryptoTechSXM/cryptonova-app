@@ -89,40 +89,40 @@ const TIER_FEES = [
   10_000_000_000n, // T10 $10,000
 ];
 
-// ── V8.31 BPS SplitConfigs (50/5/45 crossing reserve model) ──────────────────
+// ── V8.32 BPS SplitConfigs (50/2.5/47.5 crossing reserve model) ─────────────
 // Field order MUST match Solidity SplitConfig struct (10 fields):
 //   l1Bps, chainBps, poolBps, treasuryBps, stabilityBps, devBps, opsBps, communityBps, buybackBps, liquidityBps
 //
-// V8.31 changes from V8.19 (50/5/45 Option B — uniform across all tiers):
-//   These BPS values are applied to the 45% payout base (payBase), NOT the full entry fee.
-//   Before BPS distribution: 50% → crossingReserve, 5% → direct earnings, 45% → payBase.
+// V8.32 changes from V8.31: BPS values are now applied to the FULL entry fee (payBase = entryFee).
+//   Before BPS distribution: 50% → crossingReserve, 2.5% → direct earnings, 47.5% = splits (sum 4750 BPS).
 //
-//   At T1 ($10 entry, $4.50 payBase):
-//     L1  direct referrer : 700 bps × $4.50 = $0.315
-//     L2-L6 chain (each) : 600 bps × $4.50 = $0.270 × 5 = $1.350 total
-//     Pool               : 4000 bps × $4.50 = $1.800 per cycle
-//     SF                 : 600 bps × $4.50 = $0.270
-//     Treasury (CNOVA)   : 1000 bps × $4.50 = $0.450
-//     Dev                : 200 bps × $4.50 = $0.090
-//     Ops                : 100 bps × $4.50 = $0.045
-//     Community          : 100 bps × $4.50 = $0.045
-//     Buyback (CNOVA)    : 100 bps × $4.50 = $0.045
-//     Liquidity reserve  : 200 bps × $4.50 = $0.090
-//   Sum: 700+3000+4000+1000+600+200+100+100+100+200 = 10000 ✓
+//   At T1 ($10 entry, payBase = $10):
+//     L1  direct referrer :  500 bps × $10 = $0.50
+//     L2-L6 chain (each) :  270 bps × $10 = $0.27 × 5 = $1.35 total
+//     Pool               : 1800 bps × $10 = $1.80 per cycle
+//     SF                 :  300 bps × $10 = $0.30
+//     Treasury (CNOVA)   :  500 bps × $10 = $0.50
+//     Dev                :  100 bps × $10 = $0.10
+//     Ops                :   50 bps × $10 = $0.05
+//     Community          :   50 bps × $10 = $0.05
+//     Buyback (CNOVA)    :   50 bps × $10 = $0.05
+//     Liquidity reserve  :   50 bps × $10 = $0.05
+//   Sum of splits: 500+1350+1800+500+300+100+50+50+50+50 = 4750 ✓
+//   Total: 5000 (cross) + 250 (instant) + 4750 (splits) = 10000 ✓
 //
 //   Crossing math (all tiers):
 //     Crossing cost  = 50% of entry fee (funded from crossingReserve first, then withdrawable)
-//     Pool per cycle = 4000/10000 × 45% × fee = 18% of fee (e.g. $1.80 at T1)
+//     Pool per cycle = 1800/10000 × $10 = $1.80 at T1  (unchanged)
 //     Cycles to next cross (after reserve exhausted) = ceil(50%/18%) = 3 cycles ✓
 //     Buffer: $0.40 at T1 (3 × $1.80 = $5.40 > $5.00 crossing cost)
 //
 //   [  l1, chain,  pool, treasury,   sf,  dev,  ops,  cw,  bbr,   lq] sum
-const SPLITS_ALL    = [ 700,  3000,  4000,    1000,  600,  200,  100, 100,  100,  200]; // 10000 ✓
+const SPLITS_ALL    = [ 500,  1350,  1800,     500,  300,  100,   50,  50,   50,   50]; // 4750 BPS of entryFee ✓
 
 // ── Chain pay BPS per level (6 slots, must sum to chainBps = 3000) ────────────
 // Option B: L2-L6 equal (600 each = 3000), L7 slot unused (0).
 // "L2–L6 earn identically; L1 gets a small recruiting premium."
-const CHAIN_PAY_ALL = [600, 600, 600, 600, 600, 0];  // sum=3000 ✓
+const CHAIN_PAY_ALL = [270, 270, 270, 270, 270, 0];  // sum=1350 ✓ (each L2-L6 = $0.27 at T1)
 
 function tierSplits(tierNum)   { return SPLITS_ALL; }     // unified across all tiers
 function tierChainPay(tierNum) { return CHAIN_PAY_ALL; }  // unified across all tiers
@@ -174,7 +174,8 @@ async function main() {
   // V8.19: liquidityReserve — CNOVA/USDC LP wallet. Defaults to opsWallet until mainnet LP deployed.
   const liquidityReserve = process.env.LIQUIDITY_RESERVE_ADDRESS || opsWallet;
 
-  console.log("\n  V8.31 Deploy — 50/5/45 crossing reserve + Option B BPS + registerWithCoupon globalJoined fix + sfBal fallback fix");
+  console.log("\n  V8.32 Deploy — 50/2.5/47.5 BPS + gas gift on-chain + DAO param #50 + Task #59/#60/#63 + setGlobalJoined");
+  console.log("  Remember: set ADDRESSES_FILE=deployed_addresses_v8_32.json in .env after this deploy.");
   sep();
   console.log(`  Deployer        : ${deployerAddr}`);
   console.log(`  AccountOne      : ${accountOne}`);
@@ -590,6 +591,11 @@ async function main() {
     await (await mA.setCouponRegistry(crAddr)).wait();
     console.log(`  ↳  T${tierNum} MatA authorized + wired → CouponRegistry`);
   }
+
+  // V8.32: Set gas gift wallet so ETH forwarded with issueCoupon() goes to faucet wallet.
+  const gasGiftWalletAddr = process.env.GAS_GIFT_WALLET_ADDRESS || opsWallet;
+  await (await couponRegistry.setGasGiftWallet(gasGiftWalletAddr)).wait();
+  console.log(`  ↳  CouponRegistry.setGasGiftWallet → ${gasGiftWalletAddr.slice(0,10)}…`);
 
   // ── 10a. Save addresses BEFORE W1 seed (so a seed failure doesn't lose addresses) ──
   {

@@ -27,12 +27,20 @@ const UNIT   = 1_000_000n;     // 1 USDC (6 decimals)
 const T1_FEE = 10n * UNIT;     // $10
 const MSIZE  = 7n;
 
+/** V8.32 10-field SplitConfig — splits sum to 4750 BPS. */
 const SPLITS = {
-  l1Bps: 2000, chainBps: 2000, poolBps: 3300, treasuryBps: 1500,
-  stabilityBps: 500, devBps: 300, opsBps: 200, communityBps: 100,
-  buybackBps: 100, liquidityBps: 0,
-};
-const CHAIN_BPS = [1000n, 400n, 300n, 150n, 75n, 75n];
+  l1Bps:        950,
+  chainBps:     950,
+  poolBps:     1568,
+  treasuryBps:  713,
+  stabilityBps: 238,
+  devBps:       143,
+  opsBps:        95,
+  communityBps:  48,
+  buybackBps:    45,
+  liquidityBps:   0,
+};  // sum = 4750
+const CHAIN_BPS = [475n, 190n, 143n, 71n, 36n, 35n];  // sum = 950 = chainBps
 
 const VOTING_PERIOD   = 72n * 3600n;
 const TIMELOCK_PERIOD = 48n * 3600n;

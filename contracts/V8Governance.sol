@@ -97,6 +97,7 @@ interface IGovernanceTarget {
     // ── V8.20: second wave -- MatrixKeeper ───────────────────────────────────
     function setParkedGracePeriod(uint256 v) external;
     function setRescueRatioBps(uint256 v) external;
+    function setRescueRepayBps(uint256 v) external;  // V8.32 param #50
     // ── V8.20: second wave -- StabilityFund ──────────────────────────────────
     function setSFTarget(uint256 v) external;
     function setCommunityCarveOutBps(uint256 v) external;
@@ -228,9 +229,11 @@ contract V8Governance is Ownable {
     uint8 public constant PARAM_SF_MULT_T8                 = 47;
     uint8 public constant PARAM_SF_MULT_T9                 = 48;
     uint8 public constant PARAM_SF_MULT_T10                = 49;
+    /// @notice V8.32: DAO-votable rescue loan repayment fraction (StabilityFund.rescueRepayBps).
+    uint8 public constant PARAM_SF_RESCUE_REPAY_BPS         = 50;
     /// @dev Highest assigned param id -- update this (not PARAM_CW_DISTRIBUTE_INTERVAL)
     ///      in setAllowedValues()/propose()'s bound checks whenever a new param is added.
-    uint8 public constant PARAM_MAX_ID                     = PARAM_SF_MULT_T10;
+    uint8 public constant PARAM_MAX_ID                     = PARAM_SF_RESCUE_REPAY_BPS;
 
     // ── Governance config (self-governable) ───────────────────────────────────
     uint256 public votingPeriod   = 72 hours;
@@ -394,6 +397,8 @@ contract V8Governance is Ownable {
         _allowedValues[PARAM_SF_MULT_T8]  = [5, 10, 15, 20, 30, 40, 50, 75, 100, 150];
         _allowedValues[PARAM_SF_MULT_T9]  = [5, 10, 15, 20, 30, 40, 50, 75, 100, 150];
         _allowedValues[PARAM_SF_MULT_T10] = [5, 10, 15, 20, 30, 40, 50, 75, 100, 150];
+        // V8.32 param #50: rescue loan repayment BPS — 10%→100% in 10% steps
+        _allowedValues[PARAM_SF_RESCUE_REPAY_BPS] = [1000, 2000, 3000, 4000, 5000, 6000, 7000, 8000, 9000, 10000];
     }
 
     /// @notice Owner can add or replace the allowed-values list for any param.
@@ -710,6 +715,9 @@ contract V8Governance is Ownable {
             t.setSfTargetMultiplierT9(value);
         } else if (paramId == PARAM_SF_MULT_T10) {
             t.setSfTargetMultiplierT10(value);
+        // ── V8.32: StabilityFund rescue repayment BPS ─────────────────────────
+        } else if (paramId == PARAM_SF_RESCUE_REPAY_BPS) {
+            t.setRescueRepayBps(value);
         }
     }
 

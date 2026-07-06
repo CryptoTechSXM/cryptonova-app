@@ -111,6 +111,8 @@ contract TierRouter is Ownable2Step {
     mapping(address => address) public memberReferrer;
     mapping(address => uint8)   public memberHighestTier;
     mapping(address => bool)    public globalJoined;
+    /// @notice V8.32 Task #59: admin grants a free re-entry to a wrongfully reclaimed member.
+    mapping(address => bool)    public freeReentryAllowed;
 
     /// @dev V8.1: Structured member options (replaces loose doubleEntryEnabled mapping).
     ///      Legacy doubleEntryEnabled still readable for compatibility with V8 test scripts.
@@ -512,7 +514,17 @@ contract TierRouter is Ownable2Step {
         lastActivityTimestamp    = block.timestamp;
         cyclesAtLastRegistration = totalSystemCycles;
 
-        IPairManagerV8(tierPairManagers[0]).registerDirectFor(msg.sender, resolved);
+        // V8.32 Task #59: free re-entry for wrongfully reclaimed members.
+        // Admin pre-funds TierRouter with USDC; we approve PairManager and call registerFor
+        // (which pulls from TierRouter = msg.sender) instead of pulling from the member.
+        if (freeReentryAllowed[msg.sender]) {
+            freeReentryAllowed[msg.sender] = false;
+            uint256 fee = IPairManagerV8(tierPairManagers[0]).entryFee();
+            usdc.forceApprove(tierPairManagers[0], fee);
+            IPairManagerV8(tierPairManagers[0]).registerFor(msg.sender, resolved);
+        } else {
+            IPairManagerV8(tierPairManagers[0]).registerDirectFor(msg.sender, resolved);
+        }
 
         // Community Fund enrollment (no-op if communityWallet not yet deployed)
         if (communityWallet != address(0)) {
@@ -1064,6 +1076,21 @@ contract TierRouter is Ownable2Step {
     /// @dev    Reserve is computed from the member's current options + tier fees.
     ///         Double-entry stacks: one slot upgrades + one slot re-enters.
     ///         Only the active highest-tier matrix enforces this (checked in the matrix).
+    // ── V8.32 admin helpers ───────────────────────────────────────────────────
+
+    /// @notice V8.32: Retroactively set globalJoined for pre-V8.31 coupon members
+    ///         who bypassed registerWithCoupon() and therefore never got the flag set.
+    ///         Fixes setMemberOptions() reverting with "TR: not registered".
+    function setGlobalJoined(address member, bool val) external onlyOwner {
+        globalJoined[member] = val;
+    }
+
+    /// @notice V8.32 Task #59: grant a single free re-entry to a wrongfully reclaimed member.
+    ///         Admin must pre-fund TierRouter with enough USDC before calling register().
+    function grantFreeReentry(address member) external onlyOwner {
+        freeReentryAllowed[member] = true;
+    }
+
     function reservedFor(address member) external view returns (uint256) {
         uint8 highest = memberHighestTier[member];
         if (highest == 0) return 0;

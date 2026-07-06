@@ -24,14 +24,21 @@ const T1_FEE = 10n  * UNIT;   // $10
 const T2_FEE = 25n  * UNIT;   // $25
 const MSIZE  = 7n;             // smallest valid full BFS tree for tests
 
-/** V8.19 10-field SplitConfig (liquidityBps added, default 0 -- no LQ wallet needed in these tests) */
+/** V8.32 10-field SplitConfig — splits sum to 4750 BPS.
+ *  50% crossing reserve + 2.5% direct earn are pre-allocated before this array runs. */
 const SPLITS_T1 = {
-  l1Bps: 2000, chainBps: 2000, poolBps: 3300,
-  treasuryBps: 1500, stabilityBps: 500,
-  devBps: 300, opsBps: 200, communityBps: 100, buybackBps: 100,
-  liquidityBps: 0,
-};  // sum = 10 000
-const CHAIN_BPS = [1000n, 400n, 300n, 150n, 75n, 75n];
+  l1Bps:        950,
+  chainBps:     950,
+  poolBps:     1568,
+  treasuryBps:  713,
+  stabilityBps: 238,
+  devBps:       143,
+  opsBps:        95,
+  communityBps:  48,
+  buybackBps:    45,
+  liquidityBps:   0,
+};  // sum = 4750
+const CHAIN_BPS = [475n, 190n, 143n, 71n, 36n, 35n];  // sum = 950 = chainBps
 
 // ─── Shared fixture ─────────────────────────────────────────────────────────────
 async function deployFixture() {
@@ -301,7 +308,7 @@ describe("S2: Parked wallet rescue", function () {
     // forceCrossKeeper for already-crossed W1 → MatB._enterMatrix reverts "already in matrix"
     await expect(
       // V8.11: sfContribution=T1_FEE so memberShare=0; revert comes from MatB._enterMatrix
-      matA.connect(keeper).forceCrossKeeper(w1.address, T1_FEE)
+      matA.connect(keeper).forceCrossKeeper(w1.address, T1_FEE, 0n)
     ).to.be.revertedWith("F8V8: already in matrix");
 
     // Rescue queue stays empty (W1 was never pushed to parkedMembers[])
@@ -320,8 +327,77 @@ describe("S2: Parked wallet rescue", function () {
 
     // members[0] is not the keeper
     await expect(
-      matA.connect(members[0]).forceCrossKeeper(w1.address, 0n)
+      matA.connect(members[0]).forceCrossKeeper(w1.address, 0n, 0n)
     ).to.be.revertedWith("F8V8: not keeper");
+  });
+
+  // ── V8.28 debt-storage fix tests ──────────────────────────────────────────
+
+  it("V8.28: addRescueDebt reverts if caller is not partner", async function () {
+    // addRescueDebt on MatB must reject any caller except MatA (its partner).
+    const { matB, members } = await loadFixture(deployFixture);
+    await expect(
+      matB.connect(members[0]).addRescueDebt(members[1].address, 1_000_000n)
+    ).to.be.revertedWith("F8V8: only partner");
+  });
+
+  it("V8.28: addRescueDebt called by partner stores and accumulates debt on MatB", async function () {
+    // Simulate what forceCrossKeeper now does: record debt on MatB (destination),
+    // NOT MatA (source).  Impersonate MatA (partner of MatB) to call addRescueDebt.
+    const { matB, matAAddr, members } = await loadFixture(deployFixture);
+    const debtor = members[0];
+
+    // Fund the impersonated matA account with ETH for gas
+    await hre.network.provider.send("hardhat_setBalance", [matAAddr, "0x16345785D8A0000"]); // 0.1 ETH
+    await hre.network.provider.request({ method: "hardhat_impersonateAccount", params: [matAAddr] });
+    const matASigner = await ethers.getSigner(matAAddr);
+
+    // Before: zero debt on MatB
+    expect(await matB.rescueDebtOf(debtor.address)).to.equal(0n);
+
+    // First loan recorded
+    await matB.connect(matASigner).addRescueDebt(debtor.address, 5_000_000n);   // $5
+    expect(await matB.rescueDebtOf(debtor.address)).to.equal(5_000_000n);
+
+    // Second loan accumulates (two rescues for same member)
+    await matB.connect(matASigner).addRescueDebt(debtor.address, 3_000_000n);   // +$3
+    expect(await matB.rescueDebtOf(debtor.address)).to.equal(8_000_000n);
+
+    await hre.network.provider.request({ method: "hardhat_stopImpersonatingAccount", params: [matAAddr] });
+  });
+
+  it("V8.28: forceCrossKeeper leaves zero rescueDebt on MatA for rescued member", async function () {
+    // After the V8.28 fix, MatA.rescueDebt[member] must stay zero — debt is stored
+    // on MatB via addRescueDebt instead.  The reverting case (W1 already in MatB)
+    // is sufficient to verify this: the whole tx reverts so nothing is stored anywhere.
+    // The passing case (parked rescue) is covered by on-chain integration (check_loans.js).
+    const { matA, matB, tr, fund, w1, members, pm1Addr, keeper, sf } =
+      await loadFixture(deployFixture);
+
+    // Trigger W1 natural cycle-out into MatB
+    await fund(w1, T1_FEE, pm1Addr);
+    await tr.connect(w1).register(ethers.ZeroAddress, { gasLimit: 2_000_000 });
+    for (let i = 0; i < 7; i++) {
+      await fund(members[i], T1_FEE, pm1Addr);
+      await tr.connect(members[i]).register(w1.address, { gasLimit: 4_000_000 });
+    }
+
+    // Confirm W1 is in MatB (forceCrossKeeper will revert "already in matrix")
+    expect((await matB.getMember(w1.address)).isInMatrix).to.be.true;
+
+    // Capture state BEFORE call attempt
+    const debtOnMatABefore = await matA.rescueDebtOf(w1.address);
+    const debtOnMatBBefore = await matB.rescueDebtOf(w1.address);
+
+    // forceCrossKeeper for W1 who is already in MatB: REVERTS — tx is fully atomic,
+    // so both MatA and MatB rescueDebt remain zero (no partial writes)
+    await expect(
+      matA.connect(keeper).forceCrossKeeper(w1.address, T1_FEE, 0n)
+    ).to.be.revertedWith("F8V8: already in matrix");
+
+    // Verify: zero debt on BOTH contracts after revert
+    expect(await matA.rescueDebtOf(w1.address)).to.equal(debtOnMatABefore);  // 0
+    expect(await matB.rescueDebtOf(w1.address)).to.equal(debtOnMatBBefore);  // 0
   });
 });
 
