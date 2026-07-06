@@ -629,8 +629,12 @@ if (deployTxt) {
       fail(`deploy_v8.js: SPLITS_ALL has ${splitsAll.length} fields, expected 10 — [${splitsAll.join(",")}]`);
     } else {
       const sum = splitsAll.reduce((a, b) => a + b, 0);
+      // V8.32: CROSSING_RESERVE_BPS (5000) + DIRECT_EARN_BPS (250) are contract constants,
+      // so SPLITS_ALL covers only the remaining 4750 BPS.  Accept either 10000 (pre-V8.32)
+      // or 4750 (V8.32+).
       if (sum === 10000) ok(`deploy_v8.js: SPLITS_ALL sums to 10000 BPS (V8.31 unified) — [${splitsAll.join(",")}]`);
-      else               fail(`deploy_v8.js: SPLITS_ALL sums to ${sum} BPS, NOT 10000 — [${splitsAll.join(",")}]`);
+      else if (sum === 4750) ok(`deploy_v8.js: SPLITS_ALL sums to 4750 BPS (V8.32 — crossing reserve + direct earn handled by contract constants) — [${splitsAll.join(",")}]`);
+      else               fail(`deploy_v8.js: SPLITS_ALL sums to ${sum} BPS, expected 4750 (V8.32) or 10000 (pre-V8.32) — [${splitsAll.join(",")}]`);
     }
     if (!chainPayAll) {
       fail("deploy_v8.js: CHAIN_PAY_ALL array not found — cannot verify chain-pay sum");
