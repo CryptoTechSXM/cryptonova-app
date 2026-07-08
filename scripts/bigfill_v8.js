@@ -9,7 +9,8 @@
  *   2. Registers them all into T1 via TierRouter (referrer = W1 / Account #1)
  *   3. After each batch: prints occupancy, cycle-outs, W1 earnings, W1 tier
  *   4. Confirms W1 auto-upgrades to T2 after enough T1 cycle-outs
- *   5. Final snapshot: treasury balance, CNOVA minted, TierRouter state
+ *   5. Self-rescue simulation — parked members pay own shortfall (SELF_RESCUE_RATE %)
+ *   6. Final snapshot: treasury balance, CNOVA minted, TierRouter state
  *
  * Env vars (all optional):
  *   COUNT=50          total wallets to register  (default 50)
@@ -70,6 +71,15 @@ const ETH_PER      = ethers.parseEther("0.02");   // gas budget per wallet — 0
 // UPGRADE_RATE: fraction of T1-MatB-eligible wallets to manually upgrade each batch (0–1).
 // 0.75 = 75% of eligible wallets self-upgrade.  Set to 0 to disable.  Set to 1 for 100%.
 const UPGRADE_RATE = Number(process.env.UPGRADE_RATE ?? "0.75");
+// SELF_RESCUE_RATE: fraction of parked test wallets that immediately pay their own
+// shortfall via selfRescue() (0–1). The rest wait for the VPS keeper's coPayRescue.
+// 0.5 = 50% self-rescue, 50% take the SF loan. Set to 0 to disable.
+const SELF_RESCUE_RATE  = Number(process.env.SELF_RESCUE_RATE ?? "0.5");
+// RESCUE_APPROVAL: max USDC approved per wallet to the matrix contract for selfRescue.
+// The contract only pulls what it needs; $15 covers any T1 shortfall with headroom.
+const RESCUE_APPROVAL   = BigInt(process.env.RESCUE_APPROVAL ?? "15000000"); // $15 USDC
+// RESCUE_SCAN_EVERY: also run rescue scan every N batches (always runs on cycle detect).
+const RESCUE_SCAN_EVERY = Number(process.env.RESCUE_SCAN_EVERY ?? "5");
 
 // ROUND_ROBIN: comma-separated list of pre-registered addresses to rotate as referrer.
 // If set, wallet[i] uses ROUND_ROBIN[i % len] as its sponsor instead of W1.
@@ -388,6 +398,111 @@ async function simulateManualUpgrades({
   return fNonce;
 }
 
+
+// ── Self-rescue simulation (V8.33) ───────────────────────────────────────────
+// After each registration batch or system cycle, scans all test wallets for
+// parked members (parkedAt > 0 on any matrix). SELF_RESCUE_RATE % of them
+// immediately pay their own shortfall by calling selfRescue() from their own
+// wallet — simulating real members who prefer zero debt over waiting for the
+// keeper's SF loan.
+//
+// This is SAFE to run alongside the VPS keeper:
+//   • selfRescue() is called FROM THE MEMBER'S OWN WALLET (not keeper or funder)
+//   • Keeper conflict = keeper rescues first → selfRescue reverts "not parked" → caught
+//   • Only ETH top-up uses rawFunder — brief tx, rarely races in practice
+//
+// matrices: array of { matrix, label, addr } for all deployed tiers.
+// Returns updated fNonce.
+async function simulateSelfRescues({ walletList, matrices, usdc, rawFunder, funderAddr, fNonce }) {
+  if (SELF_RESCUE_RATE <= 0) return fNonce;
+
+  // Scan all wallets across all matrices to find parked members.
+  // A member can only be parked on ONE matrix at a time — break on first hit.
+  const parked = [];
+  for (const w of walletList) {
+    for (const matObj of matrices) {
+      try {
+        const ts = await matObj.matrix.parkedAt(w.address);
+        if (ts > 0n) {
+          parked.push({ w, ...matObj });
+          break;
+        }
+      } catch { /* RPC hiccup — skip */ }
+    }
+  }
+
+  if (parked.length === 0) {
+    console.log(`  🆘 Self-rescue scan: 0 parked members in test wallets`);
+    return fNonce;
+  }
+
+  // Randomly select SELF_RESCUE_RATE fraction to rescue right now.
+  const shuffled  = parked.sort(() => Math.random() - 0.5);
+  const toRescue  = shuffled.slice(0, Math.max(1, Math.round(shuffled.length * SELF_RESCUE_RATE)));
+  const remaining = parked.length - toRescue.length;
+
+  sep(
+    `Self-Rescue — ${parked.length} parked · rescuing ${toRescue.length}` +
+    ` (${Math.round(SELF_RESCUE_RATE * 100)}%) · ${remaining} wait for keeper`
+  );
+
+  let rescued = 0, skipped = 0;
+  for (const { w, matrix, label, addr } of toRescue) {
+    try {
+      const conn = w.connect(ethers.provider);
+
+      // Skip wallets with no USDC — keeper's SF loan will handle them instead.
+      const usdcBal = await usdc.balanceOf(w.address);
+      if (usdcBal === 0n) {
+        console.log(`  ⚠ selfRescue ${label} ${w.address.slice(0, 10)}… — $0 USDC, keeper SF path`);
+        skipped++;
+        continue;
+      }
+
+      // Top up ETH for gas if the wallet is dry (gas-only, not USDC).
+      const ethBal = await ethers.provider.getBalance(w.address);
+      if (ethBal < 200_000_000_000n) { // < ~$0.00005 worth of gas
+        fNonce = Number(await ethers.provider.getTransactionCount(funderAddr, 'pending'));
+        const tx = await rawFunder.sendTransaction({
+          to: w.address, value: ethers.parseEther("0.01"), nonce: fNonce
+        });
+        await tx.wait();
+        fNonce++;
+        await sleep(1);
+      }
+
+      // Approve matrix to pull shortfall (contract pulls only what it needs).
+      const allowance = await usdc.allowance(w.address, addr);
+      if (allowance < RESCUE_APPROVAL) {
+        await (await usdc.connect(conn).approve(addr, RESCUE_APPROVAL)).wait();
+        await sleep(1);
+      }
+
+      // Call selfRescue() — member pays own shortfall, zero SF debt incurred.
+      await (await matrix.connect(conn).selfRescue({ gasLimit: 800_000 })).wait();
+      console.log(`  ✓ selfRescue ${label}  ${w.address.slice(0, 10)}…  (${fmt6(usdcBal)} USDC in wallet)`);
+      rescued++;
+    } catch (e) {
+      const msg = e.shortMessage || e.message?.slice(0, 120) || 'unknown';
+      if (msg.includes("not parked")) {
+        // Keeper rescued them first — totally fine, member is back in matrix
+        console.log(`  ℹ  ${w.address.slice(0, 10)}… keeper rescued first — all good`);
+      } else {
+        console.warn(`  ⚠ selfRescue ${w.address.slice(0, 10)}… failed: ${msg}`);
+      }
+      skipped++;
+      try { fNonce = Number(await ethers.provider.getTransactionCount(funderAddr, 'pending')); } catch {}
+    }
+    await sleep(2); // 2s gap — stay under Base Sepolia in-flight limit
+  }
+
+  console.log(
+    `  Self-rescues: ${rescued} succeeded · ${skipped} skipped` +
+    (remaining > 0 ? ` · ${remaining} parked wallets left for keeper` : '')
+  );
+  return fNonce;
+}
+
 // ── Snapshot helper (V8.1) ────────────────────────────────────────────────────
 async function snapshot(label, { tierRouter, pm1, matA1, matB1, matA2, matB2,
                                    cnova, treasury, stabilityFund, w1Addr }) {
@@ -539,6 +654,17 @@ async function main() {
   const matA3        = T3.matA ? await ethers.getContractAt("FigureEightMatrixV8", T3.matA) : null;
   const matB3        = T3.matB ? await ethers.getContractAt("FigureEightMatrixV8", T3.matB) : null;
   const stabilityFund = SF_ADDR ? await ethers.getContractAt("StabilityFund", SF_ADDR) : null;
+  // All deployed matrices — used by simulateSelfRescues() to scan parkedAt.
+  // Null entries (T2/T3 if not deployed) are filtered out.
+  const allMatrices = [
+    { matrix: matA1, label: "T1 MatA", addr: T1.matA },
+    { matrix: matB1, label: "T1 MatB", addr: T1.matB },
+    ...(matA2 ? [{ matrix: matA2, label: "T2 MatA", addr: T2.matA }] : []),
+    ...(matB2 ? [{ matrix: matB2, label: "T2 MatB", addr: T2.matB }] : []),
+    ...(matA3 ? [{ matrix: matA3, label: "T3 MatA", addr: T3.matA }] : []),
+    ...(matB3 ? [{ matrix: matB3, label: "T3 MatB", addr: T3.matB }] : []),
+  ];
+
   const MK_ADDR    = addrs.matrixKeeper || addrs.MatrixKeeper || null;
   const matrixKeeper = MK_ADDR ? await ethers.getContractAt("MatrixKeeper", MK_ADDR, deployer) : null;
   const DS_ADDR    = addrs.directSale || addrs.CNOVADirectSale || null;
@@ -1011,12 +1137,16 @@ async function main() {
       await withdrawSweep(wallets, matA1, matB1);
       console.log(`  ↳ Running CNOVA buy sweep (simulate purchases via DirectSale)…`);
       await cnovaBuySweep(wallets, directSale, usdc);
+      // Self-rescue sweep on every cycle — most likely time wallets just got parked
+      fNonce = await simulateSelfRescues({
+        walletList: wallets, matrices: allMatrices, usdc: usdcContract,
+        rawFunder, funderAddr, fNonce,
+      });
       prevSysCyc = sysCyc;
     }
-    // Rescue is handled exclusively by direct_keeper.js + MatrixKeeper.performUpkeep.
-    // bigfill no longer calls coPayRescue() or any rescue path directly — this prevents
-    // the race condition where keeper's performUpkeep reverts because bigfill rescued
-    // the member first (both reading the same deployer wallet, same nonce window).
+    // Self-rescue simulation: runs on every cycle (keeper may also rescue in parallel —
+    // selfRescue uses member wallets, not the keeper/funder wallet, so no nonce conflict).
+    // Also scans every RESCUE_SCAN_EVERY batches to catch delayed parks.
 
     // V8.19: Manual upgrade simulation — UPGRADE_RATE% of eligible, self-funded
     // wallets upgrade each hop. Run T1→T2 first, then T2→T3 — a wallet can
@@ -1040,6 +1170,14 @@ async function main() {
     // Withdraw sweep every 10 batches — simulate ongoing sell pressure
     if (batchNum % 10 === 0) {
       await withdrawSweep(wallets, matA1, matB1);
+    }
+
+    // Periodic self-rescue scan — catch members parked between cycles
+    if (batchNum % RESCUE_SCAN_EVERY === 0) {
+      fNonce = await simulateSelfRescues({
+        walletList: wallets, matrices: allMatrices, usdc: usdcContract,
+        rawFunder, funderAddr, fNonce,
+      });
     }
 
     // Watched wallet report (every WATCH_EVERY batches, always on last batch)
