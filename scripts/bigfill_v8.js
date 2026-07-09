@@ -50,6 +50,10 @@ const ADDRESSES_FILE = path.join(
 //   HDR_OFFSET=127 COUNT=127  → fill T1 MatB → trigger MatB cycle → auto-open T2
 //   HDR_OFFSET=254 COUNT=200  → drive W1 T2 upgrade + T2 MatA fill
 const COUNT       = Number(process.env.COUNT       || 127);
+// SCAN_FROM: BIP-44 start index for the historical wallet scan used by rescue/upgrade.
+// Set to 0 to cover ALL wallets ever registered (default). If you started fresh at
+// a higher offset (e.g. HDR_OFFSET=500) and want to skip truly old wallets, raise this.
+const SCAN_FROM   = Number(process.env.SCAN_FROM   ?? "0");
 const BATCH_SIZE  = Number(process.env.BATCH_SIZE  || 5);
 const BATCH_DELAY = Number(process.env.BATCH_DELAY || 8);
 const HDR_OFFSET  = Number(process.env.HDR_OFFSET  || 0); // BIP-44 index offset — fresh V8.9 deploy starts at 0
@@ -105,7 +109,8 @@ function sep(label = "") {
 // IMPORTANT: Do NOT use the public "test junk" mnemonic on Base Sepolia —
 // EIP-7702 drainer contracts have been set on those well-known addresses.
 // Set FILL_MNEMONIC in .env to a private mnemonic only this project knows.
-function makeWallets(count) {
+function makeWallets(count, startOffset) {
+  if (startOffset === undefined) startOffset = HDR_OFFSET;
   const mnemo = process.env.FILL_MNEMONIC;
   if (!mnemo) {
     console.error("\n  ❌  FILL_MNEMONIC not set in .env.");
@@ -115,7 +120,7 @@ function makeWallets(count) {
   }
   const wallets = [];
   for (let i = 0; i < count; i++) {
-    const path = `m/44'/60'/0'/0/${i + HDR_OFFSET}`; // configurable offset — change HDR_OFFSET env var to get fresh addresses
+    const path = `m/44'/60'/0'/0/${i + startOffset}`; // startOffset = HDR_OFFSET for new wallets, SCAN_FROM for historical
     wallets.push(ethers.HDNodeWallet.fromPhrase(mnemo, undefined, path));
   }
   return wallets;
@@ -799,12 +804,47 @@ async function main() {
   sep();
 
   // ── Generate wallets ───────────────────────────────────────────────────────
-  const wallets = makeWallets(COUNT);
-  console.log(`  Generated ${wallets.length} test wallets`);
+  const wallets = makeWallets(COUNT, HDR_OFFSET);
+  // allWallets = every wallet ever registered (SCAN_FROM..HDR_OFFSET-1) + new batch.
+  // Used for rescue/upgrade scans — historical wallets may be parked or upgrade-ready.
+  const historicalCount = Math.max(0, HDR_OFFSET - SCAN_FROM);
+  const allWallets = historicalCount > 0
+    ? [...makeWallets(historicalCount, SCAN_FROM), ...wallets]
+    : [...wallets];
+  console.log(`  Generated ${wallets.length} new test wallets  (HDR_OFFSET=${HDR_OFFSET})`);
+  if (historicalCount > 0)
+    console.log(`  + ${historicalCount} historical wallets (SCAN_FROM=${SCAN_FROM}..${HDR_OFFSET - 1}) → ${allWallets.length} total for rescue/upgrade`);
   sep();
 
   // ── Pre-snapshot ───────────────────────────────────────────────────────────
   await snapshot("PRE-FILL SNAPSHOT", { tierRouter, pm1, matA1, matB1, matA2, matB2, cnova, treasury, stabilityFund, w1Addr: W1_ADDR });
+
+  // ── Pre-run: rescue + upgrade ALL historical wallets ──────────────────────
+  // Runs BEFORE new registrations so parked/eligible old wallets are handled
+  // immediately without waiting for the registration loop to encounter them.
+  if (allWallets.length > wallets.length) {
+    sep(`Pre-run sweep — ${historicalCount} historical wallets (rescue + upgrade)`);
+    fNonce = await simulateSelfRescues({
+      walletList: allWallets, matrices: allMatrices, usdc: usdcContract,
+      rawFunder, funderAddr, fNonce,
+    });
+    if (matA2) {
+      fNonce = await simulateManualUpgrades({
+        walletList: allWallets, tierRouter, fromMatB: matB1, toMatA: matA2,
+        usdc, usdcFunder, rawFunder, funderAddr, fNonce,
+        tierRouterAddr: addrs.tierRouter || addrs.TierRouter,
+        fee: T2_FEE, targetTierIndex: 1, tierLabel: "T2",
+      });
+    }
+    if (matA3) {
+      fNonce = await simulateManualUpgrades({
+        walletList: allWallets, tierRouter, fromMatB: matB2, toMatA: matA3,
+        usdc, usdcFunder, rawFunder, funderAddr, fNonce,
+        tierRouterAddr: addrs.tierRouter || addrs.TierRouter,
+        fee: T3_FEE, targetTierIndex: 2, tierLabel: "T3",
+      });
+    }
+  }
 
   // ── Fund wallets in slices (explicit nonces to avoid collision) ─────────────
   sep("Funding wallets — ETH + USDC");
@@ -1141,7 +1181,7 @@ async function main() {
       await cnovaBuySweep(wallets, directSale, usdc);
       // Self-rescue sweep on every cycle — most likely time wallets just got parked
       fNonce = await simulateSelfRescues({
-        walletList: wallets, matrices: allMatrices, usdc: usdcContract,
+        walletList: allWallets, matrices: allMatrices, usdc: usdcContract,
         rawFunder, funderAddr, fNonce,
       });
       prevSysCyc = sysCyc;
@@ -1155,14 +1195,14 @@ async function main() {
     // chain both in the same batch if it's already crossed T1 MatB AND holds
     // enough of its own USDC reserve to cover both fees.
     fNonce = await simulateManualUpgrades({
-      walletList: wallets, tierRouter, fromMatB: matB1, toMatA: matA2,
+      walletList: allWallets, tierRouter, fromMatB: matB1, toMatA: matA2,
       usdc, usdcFunder, rawFunder,
       funderAddr, fNonce,
       tierRouterAddr: addrs.tierRouter || addrs.TierRouter,
       fee: T2_FEE, targetTierIndex: 1, tierLabel: "T2",
     });
     fNonce = await simulateManualUpgrades({
-      walletList: wallets, tierRouter, fromMatB: matB2, toMatA: matA3,
+      walletList: allWallets, tierRouter, fromMatB: matB2, toMatA: matA3,
       usdc, usdcFunder, rawFunder,
       funderAddr, fNonce,
       tierRouterAddr: addrs.tierRouter || addrs.TierRouter,
@@ -1177,7 +1217,7 @@ async function main() {
     // Periodic self-rescue scan — catch members parked between cycles
     if (batchNum % RESCUE_SCAN_EVERY === 0) {
       fNonce = await simulateSelfRescues({
-        walletList: wallets, matrices: allMatrices, usdc: usdcContract,
+        walletList: allWallets, matrices: allMatrices, usdc: usdcContract,
         rawFunder, funderAddr, fNonce,
       });
     }
