@@ -479,7 +479,9 @@ async function simulateSelfRescues({ walletList, matrices, usdc, rawFunder, fund
       }
 
       // Call selfRescue() — member pays own shortfall, zero SF debt incurred.
-      await (await matrix.connect(conn).selfRescue({ gasLimit: 800_000 })).wait();
+      // gasLimit 15M: selfRescue can trigger a 127-seat MatA cycle-out (double
+      // cycle-out costs ~8M gas) — same ceiling used for register() and manualUpgrade().
+      await (await matrix.connect(conn).selfRescue({ gasLimit: 15_000_000 })).wait();
       console.log(`  ✓ selfRescue ${label}  ${w.address.slice(0, 10)}…  (${fmt6(usdcBal)} USDC in wallet)`);
       rescued++;
     } catch (e) {
