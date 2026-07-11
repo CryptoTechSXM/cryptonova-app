@@ -190,6 +190,9 @@ contract TierRouter is Ownable2Step {
     mapping(uint8 => uint256) public tierFirstEntries;   // keyed by tierNum (1-10)
     mapping(uint8 => bool)    public tierWhaleGateActive; // keyed by tierNum (1-10)
     uint256 public whaleGateThreshold = 25;
+    // V8.35: per-tier pioneer thresholds. T2-T5 share T5's gate; T6-T10 each independent.
+    // Defaults: T5=25, T6=15, T7=10, T8-T10=5. DAO-adjustable 1-50.
+    mapping(uint8 => uint256) public tierGateThreshold;
 
     // ─── Inactivity Pause (dual-guard) ────────────────────────────────────────
     bool    public systemPaused;
@@ -210,9 +213,10 @@ contract TierRouter is Ownable2Step {
     mapping(uint8 => uint256[]) private _tierEntryTimes;
 
     // ─── Events ───────────────────────────────────────────────────────────────
-    event MemberRegistered(address indexed member, uint8 tier, address referrer);
+    event MemberRegistered(address indexed member, uint8 tier, address indexed referrer); // V8.34: referrer indexed for efficient log queries
     event MemberUpgraded(address indexed member, uint8 fromTier, uint8 toTier, uint256 fee);
     event ManualUpgrade(address indexed member, uint8 fromTier, uint8 toTier, uint256 fee);
+    event BulkUpgrade(address indexed member, uint8 fromTier, uint8 toTier, uint256 totalFee); // V8.35
     event MemberReentered(address indexed member, uint8 tier);
     event DoubleEntryFired(address indexed member, uint8 primaryTier, uint8 secondaryTier);
     event WhaleGateActivated(uint8 indexed tierNum, uint256 count);
@@ -241,6 +245,7 @@ contract TierRouter is Ownable2Step {
     // V8.20
     event GovernanceSet(address indexed governance);
     event WhaleGateThresholdSet(uint256 threshold);
+    event TierGateThresholdUpdated(uint8 indexed tierNum, uint256 threshold); // V8.35
     event InactivityDaysThresholdSet(uint256 days_);
     event InactivityCyclesThresholdSet(uint256 cycles);
     event InactivityGuardEnabledSet(bool enabled);
@@ -258,6 +263,16 @@ contract TierRouter is Ownable2Step {
         for (uint8 i = 0; i < MAX_TIERS; i++) {
             tierVelocityGreen[i] = true;
         }
+
+        // V8.35: Whale Gate per-tier pioneer thresholds (DAO-adjustable 1-50)
+        // T2-T5 unlock together when tierFirstEntries[5] >= tierGateThreshold[5]
+        // T6-T10 each unlock independently via their own counter
+        tierGateThreshold[5]  = 25;
+        tierGateThreshold[6]  = 15;
+        tierGateThreshold[7]  = 10;
+        tierGateThreshold[8]  = 5;
+        tierGateThreshold[9]  = 5;
+        tierGateThreshold[10] = 5;
     }
 
     // ─── Modifier ─────────────────────────────────────────────────────────────
@@ -328,6 +343,27 @@ contract TierRouter is Ownable2Step {
         );
         whaleGateThreshold = threshold;
         emit WhaleGateThresholdSet(threshold);
+    }
+
+    /// @notice V8.35: DAO adjusts the pioneer threshold for a specific tier (T5-T10).
+    /// T2-T5 share T5's gate; T6-T10 are independent. Range 1-50.
+    function setTierGateThreshold(uint8 tierNum, uint256 threshold) external onlyOwnerOrGovernance {
+        require(tierNum >= 5 && tierNum <= MAX_TIERS, "TR: gate only applies to T5-T10");
+        require(threshold >= 1 && threshold <= 50,    "TR: threshold must be 1-50");
+        tierGateThreshold[tierNum] = threshold;
+        emit TierGateThresholdUpdated(tierNum, threshold);
+    }
+
+    /// @notice V8.35: Admin override — force a tier's whale gate open (or closed).
+    /// Use for emergency recovery if the organic threshold is misconfigured,
+    /// or to manually open a gate for a tier that had its threshold changed.
+    /// T2-T5 share T5's gate, so force-opening tier 5 unlocks T2-T5 together.
+    function setTierWhaleGateActive(uint8 tierNum, bool active) external onlyOwnerOrGovernance {
+        require(tierNum >= 1 && tierNum <= MAX_TIERS, "TR: invalid tier");
+        tierWhaleGateActive[tierNum] = active;
+        if (active) {
+            emit WhaleGateActivated(tierNum, tierFirstEntries[tierNum]);
+        }
     }
 
     /// @notice V8.1: Set the MatrixKeeper address (Chainlink Automation).
@@ -621,13 +657,17 @@ contract TierRouter is Ownable2Step {
 
         uint8 prevIndex = targetTierIndex - 1;
 
-        // V8.14: eligible when (a) completed >=1 cycle OR (b) currently in prev MatB
+        // V8.14: eligible when (a) completed >=1 cycle OR (b) currently in prev MatB.
+        // V8.35: (c) Whale Gate open for this tier — gate opening waives the crossing
+        // requirement so existing members can chain upgrades immediately on payment.
+        // Brand-new wallets (no cycles, not in MatB) are blocked until gate opens.
         address prevMatB = tierMatrixBAddr[prevIndex];
         bool inPrevMatB  = prevMatB != address(0) &&
                            IFigureEightMatrixV8(prevMatB).isActiveInMatrix(msg.sender);
+        bool gateOpen    = _isTierUnlockedForManualEntry(targetTierIndex + 1);
         require(
-            tierCycles[msg.sender][prevIndex] >= 1 || inPrevMatB,
-            "TR: cross to MatB first to unlock upgrade"
+            tierCycles[msg.sender][prevIndex] >= 1 || inPrevMatB || gateOpen,
+            "TR: cross to MatB first, or wait for this tier's Whale Gate to open"
         );
 
         address destMatA = tierMatrixAAddr[targetTierIndex];
@@ -657,6 +697,58 @@ contract TierRouter is Ownable2Step {
         _recordEntry(targetTierIndex);
 
         emit ManualUpgrade(msg.sender, prevIndex + 1, targetTierNum, fee);
+    }
+
+    // ─── V8.35: Bulk upgrade — single tx through multiple tiers ──────────────
+
+    /// @notice When a tier's Whale Gate is open, members can enter multiple tiers
+    /// in one transaction. Pays all fees upfront and seats the member in each tier's
+    /// MatA simultaneously — earning from all tiers at once.
+    /// @param targetTierIndex 0-based index of the highest tier to enter (e.g. 4 = T5).
+    ///        Must equal or exceed member's current highest tier.
+    function bulkUpgrade(uint8 targetTierIndex) external whenNotPaused {
+        require(globalJoined[msg.sender],                              "TR: register at T1 first");
+        require(targetTierIndex >= 1 && targetTierIndex < MAX_TIERS,  "TR: invalid target tier");
+        require(tierPairManagers[targetTierIndex] != address(0),       "TR: tier not deployed");
+        require(
+            _isTierUnlockedForManualEntry(targetTierIndex + 1),
+            "TR: Whale Gate not yet open for this tier"
+        );
+
+        // memberHighestTier is 1-based; next-to-enter 0-based index = memberHighestTier
+        uint8 startIdx = memberHighestTier[msg.sender];
+        require(startIdx <= targetTierIndex, "TR: already at or above target tier");
+
+        // Calculate and collect total fee upfront
+        uint256 totalFee;
+        for (uint8 i = startIdx; i <= targetTierIndex; i++) {
+            require(tierPairManagers[i] != address(0), "TR: intermediate tier not deployed");
+            totalFee += tierEntryFees[i];
+        }
+        usdc.safeTransferFrom(msg.sender, address(this), totalFee);
+
+        // Register in each tier sequentially in the same tx
+        address referrer = memberReferrer[msg.sender];
+        for (uint8 i = startIdx; i <= targetTierIndex; i++) {
+            // Skip if member is already seated here (e.g. double-entry edge case)
+            address matA = tierMatrixAAddr[i];
+            if (matA != address(0) && IFigureEightMatrixV8(matA).isActiveInMatrix(msg.sender)) {
+                continue;
+            }
+            usdc.forceApprove(tierPairManagers[i], tierEntryFees[i]);
+            IPairManagerV8(tierPairManagers[i]).registerFor(msg.sender, referrer);
+
+            uint8 tierNum = i + 1;
+            _checkTierFirstEntry(msg.sender, tierNum);
+            if (tierNum > memberHighestTier[msg.sender]) {
+                memberHighestTier[msg.sender] = tierNum;
+            }
+            _recordEntry(i);
+        }
+
+        lastActivityTimestamp    = block.timestamp;
+        cyclesAtLastRegistration = totalSystemCycles;
+        emit BulkUpgrade(msg.sender, startIdx + 1, targetTierIndex + 1, totalFee);
     }
 
     // ─── V8.14: MatB entry hook — upgrade eligibility at first crossing ───────
@@ -928,11 +1020,24 @@ contract TierRouter is Ownable2Step {
         if (tierWhaleGateActive[tierNum]) return;
         if (memberHighestTier[member] < tierNum) {
             tierFirstEntries[tierNum] += 1;
-            if (tierFirstEntries[tierNum] >= whaleGateThreshold) {
+            // V8.35: use per-tier threshold if set, else fall back to global whaleGateThreshold
+            uint256 threshold = tierGateThreshold[tierNum] > 0
+                ? tierGateThreshold[tierNum]
+                : whaleGateThreshold;
+            if (tierFirstEntries[tierNum] >= threshold) {
                 tierWhaleGateActive[tierNum] = true;
                 emit WhaleGateActivated(tierNum, tierFirstEntries[tierNum]);
             }
         }
+    }
+
+    /// @dev V8.35: T1 is always open. T2-T5 unlock together when T5's pioneer
+    /// threshold fires. T6-T10 each unlock independently via their own counter.
+    /// Used only by manualUpgrade() — auto-upgrades are never gated.
+    function _isTierUnlockedForManualEntry(uint8 tierNum) internal view returns (bool) {
+        if (tierNum <= 1) return true;
+        if (tierNum <= 5) return tierWhaleGateActive[5]; // T2-T5 share T5's gate
+        return tierWhaleGateActive[tierNum];             // T6-T10 independent
     }
 
     /// @notice View whether a given tier's whale-gate first-entry threshold
@@ -1012,7 +1117,10 @@ contract TierRouter is Ownable2Step {
         // V8.21: no longer means "eligible to skip a tier" (that behavior is
         // removed) -- just reports whether the member's next tier already
         // has its whale-gate first-entry threshold tripped.
-        whaleGateEligible  = highestTier < MAX_TIERS && tierWhaleGateActive[highestTier + 1];
+        // V8.35: use _isTierUnlockedForManualEntry so T2 shows eligible when T5's
+        // shared gate fires (T2-T5 all check tierWhaleGateActive[5]).
+        whaleGateEligible  = highestTier < MAX_TIERS &&
+                             _isTierUnlockedForManualEntry(uint8(highestTier + 1));
         autoUpgradeEnabled = !memberOptions[member].autoUpgradeDisabled;
         autoReentryEnabled = memberOptions[member].autoReentryEnabled;
         for (uint8 i = 0; i < MAX_TIERS; i++) {

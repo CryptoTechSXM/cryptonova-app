@@ -1117,6 +1117,179 @@ describe("V8.21 — Whale Gate: per-tier first-entry tracking (shared threshold)
 
 });
 
+// =============================================================================
+// SUITE — V8.35: bulkUpgrade + sequential manualUpgrade + per-tier gate config
+// =============================================================================
+describe("V8.35 — Whale Gate: bulkUpgrade + sequential manualUpgrade + per-tier thresholds", function () {
+
+  // ── Part 1: gate-closed blocking ─────────────────────────────────────────────
+
+  it("bulkUpgrade reverts 'TR: Whale Gate not yet open' when T5 gate is closed", async function () {
+    const { tierRouter, w1, reg } = await loadFixture(deployV8Fixture);
+
+    await reg(w1, ethers.ZeroAddress);
+
+    await expect(
+      tierRouter.connect(w1).bulkUpgrade(1)
+    ).to.be.revertedWith("TR: Whale Gate not yet open for this tier");
+  });
+
+  it("manualUpgrade reverts with MatB message when gate closed, no cycles, not in MatB", async function () {
+    const { tierRouter, w1, reg } = await loadFixture(deployV8Fixture);
+
+    await reg(w1, ethers.ZeroAddress);
+
+    // w1 has 0 T1 cycles, is not in T1 MatB, and T5 gate is closed → should revert
+    await expect(
+      tierRouter.connect(w1).manualUpgrade(1)
+    ).to.be.revertedWith("TR: cross to MatB first, or wait for this tier's Whale Gate to open");
+  });
+
+  // ── Part 2: admin gate controls ───────────────────────────────────────────────
+
+  it("setTierGateThreshold writes the per-tier threshold and emits TierGateThresholdUpdated", async function () {
+    const { tierRouter, admin } = await loadFixture(deployV8Fixture);
+
+    // default T5 threshold = 25
+    expect(await tierRouter.tierGateThreshold(5)).to.equal(25n);
+    expect(await tierRouter.tierGateThreshold(6)).to.equal(15n);
+    expect(await tierRouter.tierGateThreshold(7)).to.equal(10n);
+
+    await expect(tierRouter.connect(admin).setTierGateThreshold(5, 3))
+      .to.emit(tierRouter, "TierGateThresholdUpdated")
+      .withArgs(5, 3n);
+
+    expect(await tierRouter.tierGateThreshold(5)).to.equal(3n);
+  });
+
+  it("setTierGateThreshold rejects tier < 5 and threshold 0 or > 50", async function () {
+    const { tierRouter, admin } = await loadFixture(deployV8Fixture);
+
+    await expect(tierRouter.connect(admin).setTierGateThreshold(2, 5))
+      .to.be.revertedWith("TR: gate only applies to T5-T10");
+
+    await expect(tierRouter.connect(admin).setTierGateThreshold(5, 0))
+      .to.be.revertedWith("TR: threshold must be 1-50");
+
+    await expect(tierRouter.connect(admin).setTierGateThreshold(5, 51))
+      .to.be.revertedWith("TR: threshold must be 1-50");
+  });
+
+  it("setTierWhaleGateActive(5, true) makes isWhaleGateActiveForTier(5) true and emits WhaleGateActivated", async function () {
+    const { tierRouter, admin } = await loadFixture(deployV8Fixture);
+
+    expect(await tierRouter.isWhaleGateActiveForTier(5)).to.be.false;
+
+    await expect(tierRouter.connect(admin).setTierWhaleGateActive(5, true))
+      .to.emit(tierRouter, "WhaleGateActivated")
+      .withArgs(5, 0n); // tierFirstEntries[5] is still 0 — admin override, not organic
+
+    expect(await tierRouter.isWhaleGateActiveForTier(5)).to.be.true;
+  });
+
+  it("setTierWhaleGateActive(5, true) does NOT activate T6 — gates are per-tier independent", async function () {
+    const { tierRouter, admin } = await loadFixture(deployV8Fixture);
+
+    await tierRouter.connect(admin).setTierWhaleGateActive(5, true);
+
+    expect(await tierRouter.isWhaleGateActiveForTier(5)).to.be.true;
+    expect(await tierRouter.isWhaleGateActiveForTier(6)).to.be.false;  // T6 has its own gate
+    expect(await tierRouter.isWhaleGateActiveForTier(7)).to.be.false;
+  });
+
+  // ── Part 3: gate-open happy path ─────────────────────────────────────────────
+
+  it("manualUpgrade(1) succeeds without MatB crossing when T5 gate is open (T2-T5 share T5 gate)", async function () {
+    const { tierRouter, usdc, admin, w1, reg } = await loadFixture(deployV8Fixture);
+
+    // Register w1 at T1 — 0 cycles, not in T1 MatB
+    await reg(w1, ethers.ZeroAddress);
+    expect(await tierRouter.memberHighestTier(w1.address)).to.equal(1);
+
+    // Admin opens T5 whale gate (T2-T5 all check this flag)
+    await tierRouter.connect(admin).setTierWhaleGateActive(5, true);
+
+    // manualUpgrade pulls T2_FEE from member → TierRouter, so approve TierRouter (not pm2)
+    await usdc.connect(w1).approve(await tierRouter.getAddress(), T2_FEE);
+    await tierRouter.connect(w1).manualUpgrade(1);
+
+    expect(await tierRouter.memberHighestTier(w1.address)).to.equal(2);
+    expect(await tierRouter.tierCycles(w1.address, 0)).to.equal(0n); // no cycles consumed
+  });
+
+  it("bulkUpgrade(1) seats member in T2 MatA, deducts exact T2_FEE, emits BulkUpgrade event", async function () {
+    const { tierRouter, usdc, admin, w1, reg } = await loadFixture(deployV8Fixture);
+
+    await reg(w1, ethers.ZeroAddress);
+    await tierRouter.connect(admin).setTierWhaleGateActive(5, true);
+
+    const trAddr = await tierRouter.getAddress();
+    const balBefore = await usdc.balanceOf(w1.address);
+
+    // bulkUpgrade pulls totalFee from member → TierRouter, so approve TierRouter
+    await usdc.connect(w1).approve(trAddr, T2_FEE);
+
+    await expect(tierRouter.connect(w1).bulkUpgrade(1))
+      .to.emit(tierRouter, "BulkUpgrade")
+      .withArgs(w1.address, 2n, 2n, T2_FEE); // fromTier=2, toTier=2, totalFee=T2_FEE
+
+    expect(await tierRouter.memberHighestTier(w1.address)).to.equal(2);
+
+    const balAfter = await usdc.balanceOf(w1.address);
+    // balBefore captured after T1 reg — bulkUpgrade charges exactly T2_FEE on top
+    expect(balBefore - balAfter).to.equal(T2_FEE);
+  });
+
+  it("bulkUpgrade reverts 'TR: already at or above target tier' when member is already there", async function () {
+    const { tierRouter, usdc, admin, w1, reg } = await loadFixture(deployV8Fixture);
+
+    await reg(w1, ethers.ZeroAddress);
+    await tierRouter.connect(admin).setTierWhaleGateActive(5, true);
+
+    const trAddr = await tierRouter.getAddress();
+
+    // First bulk upgrade to T2
+    await usdc.connect(w1).approve(trAddr, T2_FEE);
+    await tierRouter.connect(w1).bulkUpgrade(1);
+
+    // Second call to the same tier should revert (memberHighestTier=2 > targetTierIndex=1)
+    await usdc.connect(w1).approve(trAddr, T2_FEE);
+    await expect(tierRouter.connect(w1).bulkUpgrade(1))
+      .to.be.revertedWith("TR: already at or above target tier");
+  });
+
+  it("T6 gate independent: T6 upgrade reverts 'TR: tier not deployed' (not a gate error) when T5 open but T6 missing", async function () {
+    // This test proves the error ordering: "tier not deployed" is checked BEFORE the gate flag.
+    // If the gate check were first, we'd get a gate error (T6 gate is closed).
+    // Getting "tier not deployed" confirms the code reaches the gate check only after tier exists.
+    const { tierRouter, usdc, admin, w1, reg } = await loadFixture(deployV8Fixture);
+
+    await reg(w1, ethers.ZeroAddress);
+    await tierRouter.connect(admin).setTierWhaleGateActive(5, true); // T5 gate open
+
+    // targetTierIndex=5 = T6, which is not deployed in the base fixture
+    await expect(tierRouter.connect(w1).manualUpgrade(5))
+      .to.be.revertedWith("TR: tier not deployed");
+  });
+
+  it("getMemberInfo.whaleGateEligible uses _isTierUnlockedForManualEntry: T5 gate open makes T1 member eligible for T2", async function () {
+    const { tierRouter, admin, w1, reg } = await loadFixture(deployV8Fixture);
+
+    await reg(w1, ethers.ZeroAddress);
+
+    // Gate closed → eligible = false (T2 unlock requires T5 gate, which is closed)
+    let info = await tierRouter.getMemberInfo(w1.address);
+    expect(info.whaleGateEligible).to.be.false;
+
+    // Admin opens T5 gate → _isTierUnlockedForManualEntry(2) = tierWhaleGateActive[5] = true
+    // → getMemberInfo.whaleGateEligible flips to true for the T1 member
+    await tierRouter.connect(admin).setTierWhaleGateActive(5, true);
+    info = await tierRouter.getMemberInfo(w1.address);
+    expect(info.whaleGateEligible).to.be.true;
+  });
+
+});
+
 // ===============================================================================
 // SUITE — V8.21: PairManagerV8 fee broadcast (param #9 target wiring fix)
 // ===============================================================================
