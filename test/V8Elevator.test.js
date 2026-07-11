@@ -1385,3 +1385,79 @@ describe("V8.21 — PairManagerV8 fee broadcast (param #9 target wiring fix)", f
   });
 
 });
+// =============================================================================
+// V8.35 -- Multi-pair capacity expansion (setActivePairIndex + _tryAdvancePair)
+// =============================================================================
+describe("V8.35 -- Multi-pair capacity expansion", function () {
+
+  // ── setActivePairIndex guard tests ────────────────────────────────────────
+
+  it("setActivePairIndex: non-owner reverts", async function () {
+    const { pm1, w1 } = await loadFixture(deployV8Fixture);
+    await expect(pm1.connect(w1).setActivePairIndex(0))
+      .to.be.revertedWithCustomError(pm1, "OwnableUnauthorizedAccount");
+  });
+
+  it("setActivePairIndex: out-of-range index reverts with PM8: invalid index", async function () {
+    const { pm1, admin } = await loadFixture(deployV8Fixture);
+    // pm1 starts with 1 pair (index 0). Setting index 1 should revert.
+    await expect(pm1.connect(admin).setActivePairIndex(1))
+      .to.be.revertedWith("PM8: invalid index");
+  });
+
+  it("setActivePairIndex(0) resets activePairIndex and emits PairActivated", async function () {
+    const base = await loadFixture(deployV8Fixture);
+    const { pm1, admin } = base;
+    const { matA3, matB3 } = await deployExtraT1Pair(base);
+    await pm1.connect(admin).addPair(await matA3.getAddress(), await matB3.getAddress());
+
+    // addPair advances activePairIndex to 1
+    expect(await pm1.activePairIndex()).to.equal(1n);
+
+    // setActivePairIndex(0) resets and emits PairActivated(0)
+    await expect(pm1.connect(admin).setActivePairIndex(0))
+      .to.emit(pm1, "PairActivated").withArgs(0n);
+    expect(await pm1.activePairIndex()).to.equal(0n);
+  });
+
+  // ── _tryAdvancePair auto-advance ──────────────────────────────────────────
+
+  it("after setActivePairIndex(0) and pair 0 reaches threshold, new registration auto-advances to pair 1", async function () {
+    // MSIZE=7 per matrix. Pair 0 maxCap = 14.
+    // Set expandThresholdBps = 5000 (50%) so filling matA alone (7/14 = 50%) triggers advance.
+    // _tryAdvancePair fires BEFORE the actual register call inside registerDirectFor(),
+    // so the first registration AFTER the threshold is hit goes to pair 1's matA.
+    const base = await loadFixture(deployV8Fixture);
+    const { pm1, matA, admin, treasury, w1, s0, s1, s2, s3, s4, s5, s6, reg } = base;
+
+    // Add a second pair then reset active to 0
+    const { matA3: matAExtra, matB3: matBExtra } = await deployExtraT1Pair(base);
+    const matAExtraAddr = await matAExtra.getAddress();
+    const matBExtraAddr = await matBExtra.getAddress();
+    await pm1.connect(admin).addPair(matAExtraAddr, matBExtraAddr);
+    // Authorize extra pair matrices with treasury (deploy script does this; test helper skips it)
+    await treasury.connect(admin).setAuthorizedCaller(matAExtraAddr, true);
+    await treasury.connect(admin).setAuthorizedCaller(matBExtraAddr, true);
+    await pm1.connect(admin).setActivePairIndex(0);
+    expect(await pm1.activePairIndex()).to.equal(0n);
+
+    // Lower threshold to 50% so filling matA (7/14 = 50%) is sufficient to trigger advance
+    await pm1.connect(admin).setExpandThreshold(5000);
+
+    // Fill pair 0 matA to capacity (MSIZE = 7 seats)
+    await reg(w1, ethers.ZeroAddress);
+    for (const s of [s0, s1, s2, s3, s4, s5]) await reg(s, w1.address);
+    expect(await matA.occupancy()).to.equal(MSIZE);  // 7/7, combined = 7/14 = 50% >= threshold
+    // Still at pair 0 — _tryAdvancePair hasn't been called yet (no new reg happened)
+    expect(await pm1.activePairIndex()).to.equal(0n);
+
+    // Register s6: _tryAdvancePair fires first (pair 0 at 50% >= 5000 bps threshold)
+    // => activePairIndex advances to 1, THEN s6 is placed in extra pair's matA
+    await reg(s6, w1.address);
+    expect(await pm1.activePairIndex()).to.equal(1n);
+
+    // s6 must land in the extra pair's matA, not pair 0's matA (which was full)
+    expect((await matA.getMember(s6.address)).isInMatrix).to.be.false;
+    expect((await matAExtra.getMember(s6.address)).isInMatrix).to.be.true;
+  });
+});

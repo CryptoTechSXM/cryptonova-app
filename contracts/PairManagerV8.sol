@@ -305,6 +305,17 @@ contract PairManagerV8 is Ownable2Step {
         emit PairActivated(activePairIndex);
     }
 
+    /// @notice V8.35: Admin override for activePairIndex.
+    ///         Use case: deploy script pre-deploys multiple pairs (addPair advances the index
+    ///         to the last-added pair each time); call setActivePairIndex(0) after the deploy
+    ///         loop so the W1 seed and bigfill fill pair 0 (T1.1).  _tryAdvancePair() then
+    ///         auto-advances 0→1→2 as each pair reaches 80% occupancy.
+    function setActivePairIndex(uint256 idx) external onlyOwner {
+        require(idx < pairs.length, "PM8: invalid index");
+        activePairIndex = idx;
+        emit PairActivated(idx);
+    }
+
     // ─── Internal ─────────────────────────────────────────────────────────────
 
     function _tryAdvancePair() internal {

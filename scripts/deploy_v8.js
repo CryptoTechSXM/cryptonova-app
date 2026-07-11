@@ -48,7 +48,7 @@
  *   USDC_ADDRESS           Reuse existing USDC; omit to deploy MockUSDC
  *   MATRIX_SIZE            127 (default) | 15 (quick dev cycle)
  *   DEPLOY_TIERS           Comma-separated list e.g. "1,2" (default: "1,2,3,4,5,6,7,8,9,10")
- *   ADDRESSES_FILE         Output filename (default: deployed_addresses_v8_29.json)
+ *   ADDRESSES_FILE         Output filename (default: deployed_addresses_v8_35.json)
  *
  * Run: npx hardhat run scripts/deploy_v8.js --network baseSepolia
  */
@@ -63,7 +63,7 @@ require("dotenv").config();
 // v8_1 = size-15 testnet (retired).  v8_2 = size-64 pre-mainnet stress test.
 const ADDRESSES_FILE = path.join(
   __dirname,
-  process.env.ADDRESSES_FILE || "deployed_addresses_v8_29.json"
+  process.env.ADDRESSES_FILE || "deployed_addresses_v8_35.json"
 );
 
 // ── Config ────────────────────────────────────────────────────────────────────
@@ -72,6 +72,16 @@ const ADDRESSES_FILE = path.join(
 //              Pass MATRIX_SIZE=64 for the old v8_5 config.
 const MATRIX_SIZE    = BigInt(process.env.MATRIX_SIZE || "127");
 const DEPLOY_TIERS   = (process.env.DEPLOY_TIERS || "1,2,3,4,5,6,7,8,9,10").split(",").map(Number);
+
+// ── Multi-pair capacity expansion (V8.35) ─────────────────────────────────────
+// PairManager._tryAdvancePair() auto-advances to the next pair at 80% occupancy,
+// giving each tier infinite horizontal capacity (T1.1 → T1.2 → T1.3 …).
+// New members always register into the ACTIVE pair; natural cycle-outs are
+// routed through TierRouter → PairManager → active pair.  Force-cross (keeper)
+// stays within each pair via circular chainNext (A→B→A).
+// MatrixKeeper auto-discovers all pairs via getPairAt() — no keeper changes needed.
+// Index 0 = T1.  Min 1 (at least the primary pair must always be deployed).
+const PAIRS_PER_TIER = [3, 2, 2, 1, 1, 1, 1, 1, 1, 1]; // T1=3, T2-T3=2, T4-T10=1
 
 // ── Tier entry fees (USDC 6-decimal) ─────────────────────────────────────────
 // T2 restored to $25 — with 64-seat matrices the MatB root accumulates ~$63
@@ -175,7 +185,7 @@ async function main() {
   const liquidityReserve = process.env.LIQUIDITY_RESERVE_ADDRESS || opsWallet;
 
   console.log("\n  V8.32 Deploy — 50/2.5/47.5 BPS + gas gift on-chain + DAO param #50 + Task #59/#60/#63 + setGlobalJoined");
-  console.log("  Remember: set ADDRESSES_FILE=deployed_addresses_v8_32.json in .env after this deploy.");
+  console.log("  Remember: set ADDRESSES_FILE=deployed_addresses_v8_35.json in .env after this deploy.");
   sep();
   console.log(`  Deployer        : ${deployerAddr}`);
   console.log(`  AccountOne      : ${accountOne}`);
@@ -399,7 +409,83 @@ async function main() {
     await (await treasury.setAuthorizedCaller(matBAddr, true)).wait();
     console.log(`       Treasury.setAuthorizedCaller T${tierNum} OK`);
 
-    deployed[tierNum] = { pm: pmAddr, matA: matAAddr, matB: matBAddr };
+    // V8.35: Deploy extra pairs for multi-instance capacity expansion.
+    // Each pair is self-contained (chainNext loops A→B→A within the pair).
+    // PairManager._tryAdvancePair() routes new registrations to the next pair
+    // when the active pair reaches 80% occupancy — no manual intervention needed.
+    const numExtraPairs = Math.max(0, (PAIRS_PER_TIER[tIdx] || 1) - 1);
+    const extraPairs = [];
+    for (let ep = 0; ep < numExtraPairs; ep++) {
+      const pairNum = ep + 2;  // "2", "3", etc.
+      console.log(`\n     ── T${tierNum}.${pairNum} (extra pair ${pairNum}/${PAIRS_PER_TIER[tIdx]}) ──`);
+
+      const matAx = await deploy(
+        F8V8,
+        [dpStruct, fee, MATRIX_SIZE, true, tIdx, splits, cpBps],
+        `MatA T${tierNum}.${pairNum}`
+      );
+      const matBx = await deploy(
+        F8V8,
+        [dpStruct, fee, MATRIX_SIZE, false, tIdx, splits, cpBps],
+        `MatB T${tierNum}.${pairNum}`
+      );
+      const matAxAddr = await matAx.getAddress();
+      const matBxAddr = await matBx.getAddress();
+
+      // Register with MatrixFactory
+      await (await matFactory.registerPair(tIdx, matAxAddr, matBxAddr)).wait();
+      // Partner link
+      await (await matAx.setPartner(matBxAddr)).wait();
+      await (await matBx.setPartner(matAxAddr)).wait();
+      // TierRouter
+      await (await matAx.setTierRouter(trAddr)).wait();
+      await (await matBx.setTierRouter(trAddr)).wait();
+      // PairManager
+      await (await matAx.setPairManager(pmAddr)).wait();
+      await (await matBx.setPairManager(pmAddr)).wait();
+      // StabilityFund
+      await (await matAx.setStabilityFund(sfAddr)).wait();
+      await (await matBx.setStabilityFund(sfAddr)).wait();
+      // BuybackReserve
+      await (await matAx.setBuybackReserve(bbrAddr)).wait();
+      await (await matBx.setBuybackReserve(bbrAddr)).wait();
+      // LiquidityReserve
+      await (await matAx.setLiquidityReserve(liquidityReserve)).wait();
+      await (await matBx.setLiquidityReserve(liquidityReserve)).wait();
+      // matAx.chainNext = matBx — addPair does NOT set matA.chainNext, so we set it manually
+      // matBx.chainNext is overwritten by addPair to point to chainHead (matA0), completing
+      // the global loop: matA0→matB0→matA1→matB1→…→matAn→matBn→matA0
+      await (await matAx.setChainNext(matBxAddr)).wait();
+      // Register with TierRouter (handleCycleOut authorization)
+      await (await tierRouter.registerMatrix(matAxAddr, tIdx)).wait();
+      await (await tierRouter.registerMatrix(matBxAddr, tIdx)).wait();
+      // Add to PairManager — keeper auto-discovers via getPairAt(), no keeper changes needed
+      await (await pm.addPair(matAxAddr, matBxAddr)).wait();
+      // Authorize in StabilityFund and Treasury
+      await (await stabilityFund.setMatrixAuthorized(matAxAddr, true)).wait();
+      await (await stabilityFund.setMatrixAuthorized(matBxAddr, true)).wait();
+      await (await treasury.setAuthorizedCaller(matAxAddr, true)).wait();
+      await (await treasury.setAuthorizedCaller(matBxAddr, true)).wait();
+
+      extraPairs.push({ matA: matAxAddr, matB: matBxAddr });
+      console.log(`       T${tierNum}.${pairNum} wired + registered OK (matA=${matAxAddr.slice(0,10)}…)`);
+    }
+
+    deployed[tierNum] = { pm: pmAddr, matA: matAAddr, matB: matBAddr, pairs: extraPairs };
+  }
+
+  // ── 7b. Reset activePairIndex to 0 for tiers with pre-deployed extra pairs ──
+  // addPair() sets activePairIndex = last-added pair on every call.
+  // After pre-deploying T1=3 pairs, T2/T3=2 pairs, activePairIndex ends at the last
+  // index. Reset to 0 so seed_w1.js and bigfill fill pair 0 (T1.1).
+  // _tryAdvancePair() auto-advances 0→1→2 as each pair reaches 80% occupancy.
+  sep("Reset activePairIndex");
+  for (const tierNum of DEPLOY_TIERS) {
+    if (deployed[tierNum].pairs.length > 0) {
+      const pm = await ethers.getContractAt("PairManagerV8", deployed[tierNum].pm, deployer);
+      await (await pm.setActivePairIndex(0)).wait();
+      console.log(`  ↳  T${tierNum} PairManager activePairIndex → 0 (bigfill fills T${tierNum}.1 first)`);
+    }
   }
 
   // ── 8. MatrixKeeper ──────────────────────────────────────────────────────
@@ -430,8 +516,15 @@ async function main() {
     const mB = await ethers.getContractAt("FigureEightMatrixV8", deployed[tierNum].matB, deployer);
     await (await mA.setMatrixKeeper(keeperAddr)).wait();
     await (await mB.setMatrixKeeper(keeperAddr)).wait();
+    // V8.35: wire extra pairs' matrices at keeper
+    for (const ep of deployed[tierNum].pairs) {
+      const mAx = await ethers.getContractAt("FigureEightMatrixV8", ep.matA, deployer);
+      const mBx = await ethers.getContractAt("FigureEightMatrixV8", ep.matB, deployer);
+      await (await mAx.setMatrixKeeper(keeperAddr)).wait();
+      await (await mBx.setMatrixKeeper(keeperAddr)).wait();
+    }
   }
-  console.log("  ↳  MatrixKeeper set on all matrices");
+  console.log("  ↳  MatrixKeeper set on all matrices (primary + extra pairs)");
 
   // Wire matrixKeeper into MatrixFactory (upgrade the immutable isn't possible,
   // so we note: factory was deployed with ZeroAddress for keeper;
@@ -456,6 +549,13 @@ async function main() {
     const mB = await ethers.getContractAt("FigureEightMatrixV8", deployed[tierNum].matB, deployer);
     await (await mA.setGovernance(govAddr)).wait();
     await (await mB.setGovernance(govAddr)).wait();
+    // V8.35: also wire governance on extra pairs
+    for (const ep of deployed[tierNum].pairs) {
+      const mAx = await ethers.getContractAt("FigureEightMatrixV8", ep.matA, deployer);
+      const mBx = await ethers.getContractAt("FigureEightMatrixV8", ep.matB, deployer);
+      await (await mAx.setGovernance(govAddr)).wait();
+      await (await mBx.setGovernance(govAddr)).wait();
+    }
     // V8.21: PARAM_WITHDRAWAL_FEE_BPS (id 9) now targets PairManagerV8 (one per
     // tier) instead of a single matrix instance -- PairManagerV8.setWithdrawalFeeBps()
     // broadcasts to every pair the tier has ever added. Without this wiring,
@@ -463,7 +563,7 @@ async function main() {
     const pm = await ethers.getContractAt("PairManagerV8", deployed[tierNum].pm, deployer);
     await (await pm.setGovernance(govAddr)).wait();
   }
-  console.log("  ↳  V8Governance wired onto all per-tier PairManagerV8 instances (param #9 target)");
+  console.log("  ↳  V8Governance wired onto all matrices + extra pairs + PairManagers");
   // V8.20 second wave: StabilityFund and CNOVABuybackReserve are both already
   // deployed by this point (steps 4/6 above) -- wire them in now alongside
   // everything else. CNOVADirectSale and CommunityWallet deploy AFTER this
@@ -584,114 +684,12 @@ async function main() {
   const crAddr            = await couponRegistry.getAddress();
   console.log(`  ↳  CouponRegistry deployed — default coupon = $${COUPON_AMOUNT_USD} USDC`);
 
-  // Wire registry into every T1 MatA (coupon registration only works on MatA)
+  // Wire registry into every MatA (coupon registration only works on MatA)
   for (const tierNum of DEPLOY_TIERS) {
     const mA = await ethers.getContractAt("FigureEightMatrixV8", deployed[tierNum].matA, deployer);
     await (await couponRegistry.setAuthorizedMatrix(deployed[tierNum].matA, true)).wait();
     await (await mA.setCouponRegistry(crAddr)).wait();
     console.log(`  ↳  T${tierNum} MatA authorized + wired → CouponRegistry`);
-  }
-
-  // V8.32: Set gas gift wallet so ETH forwarded with issueCoupon() goes to faucet wallet.
-  const gasGiftWalletAddr = process.env.GAS_GIFT_WALLET_ADDRESS || opsWallet;
-  await (await couponRegistry.setGasGiftWallet(gasGiftWalletAddr)).wait();
-  console.log(`  ↳  CouponRegistry.setGasGiftWallet → ${gasGiftWalletAddr.slice(0,10)}…`);
-
-  // ── 10a. Save addresses BEFORE W1 seed (so a seed failure doesn't lose addresses) ──
-  {
-    sep("Save Addresses");
-    const tierAddresses = {};
-    for (const t of DEPLOY_TIERS) tierAddresses[`T${t}`] = deployed[t];
-    const out = {
-      network: (await ethers.provider.getNetwork()).name,
-      deployedAt: new Date().toISOString(),
-      matrixSize: Number(MATRIX_SIZE),
-      deployer: deployerAddr, admin, accountOne, devWallet, opsWallet,
-      usdc: usdcAddr, cnova: cnovaAddr, treasury: treasuryAddr,
-      stabilityFund: sfAddr, buybackReserve: bbrAddr, tierRouter: trAddr,
-      matrixFactory: mfAddr, matrixKeeper: keeperAddr,
-      v8Governance: govAddr, communityWallet: cwAddr,
-      liquidityReserve, directSale: dsAddr, couponRegistry: crAddr,
-      tiers: tierAddresses,
-    };
-    fs.writeFileSync(ADDRESSES_FILE, JSON.stringify(out, null, 2));
-    console.log(`  ✓  Addresses saved → ${path.basename(ADDRESSES_FILE)}`);
-  }
-
-  // ── 10b. Register W1 (Account #1) as position-1 root of T1 MatA ─────────
-  // W1 must be registered FIRST so it sits at position-1 (root) and accumulates
-  // orphan fees from every subsequent member. Requires SEED_W1_KEY env var.
-  // If the key is absent the step is skipped — run scripts/seed_w1.js separately.
-  sep("W1 Registration");
-  const T1_FEE     = TIER_FEES[0];
-  const T1_PM_ADDR = deployed[1].pm; // already an address string from deploy loop
-  const w1Key      = process.env.SEED_W1_KEY || process.env.W1_PRIVATE_KEY;
-
-  if (!w1Key) {
-    console.log(`  ⚠  SEED_W1_KEY / W1_PRIVATE_KEY not set — skipping W1 seed.`);
-    console.log(`     Run: $env:SEED_W1_KEY="0x<key>"; npx hardhat run scripts/seed_w1.js --network baseSepolia`);
-  } else {
-    try {
-      const w1Wallet = new ethers.Wallet(w1Key, ethers.provider);
-      const W1_ADDR  = w1Wallet.address;
-
-      // Already registered? (idempotent)
-      const alreadyJoined = await tierRouter.globalJoined(W1_ADDR);
-      if (alreadyJoined) {
-        console.log(`  ✓  W1 (${W1_ADDR}) already registered — skip`);
-      } else {
-        // Ensure W1 has ETH for gas
-        const w1Eth = await ethers.provider.getBalance(W1_ADDR);
-        if (w1Eth < ethers.parseEther("0.01")) {
-          await (await deployer.sendTransaction({ to: W1_ADDR, value: ethers.parseEther("0.02") })).wait();
-          console.log(`  ↳  Funded W1 with 0.02 ETH for gas`);
-        }
-        // Mint USDC to W1
-        await (await usdc.mint(W1_ADDR, T1_FEE)).wait();
-        console.log(`  ↳  Minted $${Number(T1_FEE) / 1e6} USDC to W1`);
-        // W1 approves T1 PairManager (NOT TierRouter — PM pulls the USDC)
-        await (await usdc.connect(w1Wallet).approve(T1_PM_ADDR, T1_FEE)).wait();
-        console.log(`  ↳  W1 approved T1 PM (${T1_PM_ADDR.slice(0,10)})`);
-        // W1 registers
-        await (await tierRouter.connect(w1Wallet).register(ethers.ZeroAddress, { gasLimit: 3_000_000 })).wait();
-        console.log(`  ✓  W1 (${W1_ADDR}) registered as T1 MatA root (position-1)`);
-      }
-
-      // V8.23: wire W1 as the default referrer so all organic sign-ups (no referral
-      // link) credit W1 with the L1 chain-pay, growing its withdrawable balance.
-      await (await tierRouter.setDefaultReferrer(W1_ADDR)).wait();
-      console.log(`  ✓  TierRouter.setDefaultReferrer → W1 (${W1_ADDR})`);
-    } catch (e) {
-      console.log(`  ⚠  W1 registration failed: ${e.reason || e.message}`);
-      if (e.data) console.log(`     Revert data: ${e.data}`);
-      console.log(`     Run scripts/seed_w1.js manually after deploy.`);
-    }
-  }
-
-  // ── 11. Final summary ────────────────────────────────────────────────────
-  sep("Deploy Complete");
-  console.log(`  Network      : ${(await ethers.provider.getNetwork()).name}`);
-  console.log(`  MockUSDC     : ${usdcAddr}`);
-  console.log(`  CNOVAToken   : ${cnovaAddr}`);
-  console.log(`  Treasury     : ${treasuryAddr}`);
-  console.log(`  StabilityFund: ${sfAddr}`);
-  console.log(`  BuybackReserve:${bbrAddr}`);
-  console.log(`  TierRouter   : ${trAddr}`);
-  console.log(`  MatrixFactory: ${mfAddr}`);
-  console.log(`  MatrixKeeper : ${keeperAddr}`);
-  console.log(`  V8Governance : ${govAddr}`);
-  console.log(`  CommunityWallet:${cwAddr}`);
-  for (const t of DEPLOY_TIERS) {
-    console.log(`  T${t.toString().padStart(2,'0')} PM:${deployed[t].pm.slice(0,10)} MatA:${deployed[t].matA.slice(0,10)} MatB:${deployed[t].matB.slice(0,10)}`);
-  }
-  sep();
-  console.log(`  Addresses file: ${require("path").basename(ADDRESSES_FILE)}`);
-  console.log("  V8.31 Deploy complete.\n");
-  console.log("  NEXT STEP: run scripts/seed_w1.js then scripts/bigfill_v8.js\n");
-  sep();
-}
-
-main().catch(err => {
-  console.error(err);
-  process.exitCode = 1;
-});
+    // V8.35: also wire extra pairs' MatA so coupons work in expanded pairs
+    for (const ep of deployed[tierNum].pairs) {
+     
