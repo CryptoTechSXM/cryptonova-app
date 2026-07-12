@@ -98,6 +98,15 @@ interface IGovernanceTarget {
     function setParkedGracePeriod(uint256 v) external;
     function setRescueRatioBps(uint256 v) external;
     function setRescueRepayBps(uint256 v) external;  // V8.32 param #50
+    // ── V8.33: MatrixKeeper extended idle timeout (param #51) ────────────────
+    function setExtendedIdleTimeout(uint256 v) external;
+    // ── V8.35: TierRouter per-tier whale gate thresholds (params #52-57) ─────
+    function setTierGateThresholdT5(uint256 v) external;
+    function setTierGateThresholdT6(uint256 v) external;
+    function setTierGateThresholdT7(uint256 v) external;
+    function setTierGateThresholdT8(uint256 v) external;
+    function setTierGateThresholdT9(uint256 v) external;
+    function setTierGateThresholdT10(uint256 v) external;
     // ── V8.20: second wave -- StabilityFund ──────────────────────────────────
     function setSFTarget(uint256 v) external;
     function setCommunityCarveOutBps(uint256 v) external;
@@ -231,9 +240,21 @@ contract V8Governance is Ownable {
     uint8 public constant PARAM_SF_MULT_T10                = 49;
     /// @notice V8.32: DAO-votable rescue loan repayment fraction (StabilityFund.rescueRepayBps).
     uint8 public constant PARAM_SF_RESCUE_REPAY_BPS         = 50;
-    /// @dev Highest assigned param id -- update this (not PARAM_CW_DISTRIBUTE_INTERVAL)
-    ///      in setAllowedValues()/propose()'s bound checks whenever a new param is added.
-    uint8 public constant PARAM_MAX_ID                     = PARAM_SF_RESCUE_REPAY_BPS;
+
+    /// @notice V8.33: MatrixKeeper extended idle timeout (7-day default).
+    uint8 public constant PARAM_EXTENDED_IDLE_TIMEOUT       = 51;
+
+    /// @notice V8.35: Per-tier whale gate thresholds (T5-T10 pioneer milestones).
+    ///         T5 gate also unlocks T2-T4; T6-T10 are independent.
+    uint8 public constant PARAM_WHALE_GATE_T5               = 52;
+    uint8 public constant PARAM_WHALE_GATE_T6               = 53;
+    uint8 public constant PARAM_WHALE_GATE_T7               = 54;
+    uint8 public constant PARAM_WHALE_GATE_T8               = 55;
+    uint8 public constant PARAM_WHALE_GATE_T9               = 56;
+    uint8 public constant PARAM_WHALE_GATE_T10              = 57;
+
+    /// @dev Highest assigned param id -- update whenever a new param is added.
+    uint8 public constant PARAM_MAX_ID                     = PARAM_WHALE_GATE_T10;
 
     // ── Governance config (self-governable) ───────────────────────────────────
     uint256 public votingPeriod   = 72 hours;
@@ -399,6 +420,16 @@ contract V8Governance is Ownable {
         _allowedValues[PARAM_SF_MULT_T10] = [5, 10, 15, 20, 30, 40, 50, 75, 100, 150];
         // V8.32 param #50: rescue loan repayment BPS — 10%→100% in 10% steps
         _allowedValues[PARAM_SF_RESCUE_REPAY_BPS] = [1000, 2000, 3000, 4000, 5000, 6000, 7000, 8000, 9000, 10000];
+        // V8.33: extended idle timeout -- 0.5d/1d/2d/3d/4d/5d/6d/7d/14d
+        _allowedValues[PARAM_EXTENDED_IDLE_TIMEOUT] = [43200, 86400, 172800, 259200, 345600, 432000, 518400, 604800, 1209600];
+        // V8.35: per-tier whale gate thresholds (1–50 pioneers)
+        uint256[9] memory gateVals = [uint256(1), 5, 10, 15, 20, 25, 30, 40, 50];
+        _allowedValues[PARAM_WHALE_GATE_T5]  = gateVals;
+        _allowedValues[PARAM_WHALE_GATE_T6]  = gateVals;
+        _allowedValues[PARAM_WHALE_GATE_T7]  = gateVals;
+        _allowedValues[PARAM_WHALE_GATE_T8]  = gateVals;
+        _allowedValues[PARAM_WHALE_GATE_T9]  = gateVals;
+        _allowedValues[PARAM_WHALE_GATE_T10] = gateVals;
     }
 
     /// @notice Owner can add or replace the allowed-values list for any param.
@@ -718,6 +749,22 @@ contract V8Governance is Ownable {
         // ── V8.32: StabilityFund rescue repayment BPS ─────────────────────────
         } else if (paramId == PARAM_SF_RESCUE_REPAY_BPS) {
             t.setRescueRepayBps(value);
+        // ── V8.33: MatrixKeeper extended idle timeout ──────────────────────────
+        } else if (paramId == PARAM_EXTENDED_IDLE_TIMEOUT) {
+            t.setExtendedIdleTimeout(value);
+        // ── V8.35: TierRouter per-tier whale gate thresholds ──────────────────
+        } else if (paramId == PARAM_WHALE_GATE_T5) {
+            t.setTierGateThresholdT5(value);
+        } else if (paramId == PARAM_WHALE_GATE_T6) {
+            t.setTierGateThresholdT6(value);
+        } else if (paramId == PARAM_WHALE_GATE_T7) {
+            t.setTierGateThresholdT7(value);
+        } else if (paramId == PARAM_WHALE_GATE_T8) {
+            t.setTierGateThresholdT8(value);
+        } else if (paramId == PARAM_WHALE_GATE_T9) {
+            t.setTierGateThresholdT9(value);
+        } else if (paramId == PARAM_WHALE_GATE_T10) {
+            t.setTierGateThresholdT10(value);
         }
     }
 

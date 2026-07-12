@@ -1461,3 +1461,70 @@ describe("V8.35 -- Multi-pair capacity expansion", function () {
     expect((await matAExtra.getMember(s6.address)).isInMatrix).to.be.true;
   });
 });
+
+// =============================================================================
+// SUITE — V8.35: Governance params #51-57 — TierRouter per-tier wrapper setters
+// (V8Governance not deployed in fixture; these tests exercise the wrapper
+//  functions that governance.execute() will call.)
+// =============================================================================
+describe("V8.35 — Governance params #51-57: TierRouter per-tier wrappers", function () {
+
+  it("setTierGateThresholdT5: non-owner reverts with TR: not authorized", async function () {
+    const { tierRouter, w1 } = await loadFixture(deployV8Fixture);
+    await expect(tierRouter.connect(w1).setTierGateThresholdT5(10))
+      .to.be.revertedWith("TR: not authorized");
+  });
+
+  it("setTierGateThresholdT5: owner sets threshold[5] and emits TierGateThresholdUpdated", async function () {
+    const { tierRouter, admin } = await loadFixture(deployV8Fixture);
+    await expect(tierRouter.connect(admin).setTierGateThresholdT5(10))
+      .to.emit(tierRouter, "TierGateThresholdUpdated")
+      .withArgs(5, 10n);
+    expect(await tierRouter.tierGateThreshold(5)).to.equal(10n);
+  });
+
+  it("setTierGateThresholdT6/T7/T8/T9/T10: each sets its own slot independently", async function () {
+    const { tierRouter, admin } = await loadFixture(deployV8Fixture);
+    const tiers = [
+      [6, 'setTierGateThresholdT6',  15],
+      [7, 'setTierGateThresholdT7',  10],
+      [8, 'setTierGateThresholdT8',  5],
+      [9, 'setTierGateThresholdT9',  5],
+      [10,'setTierGateThresholdT10', 5],
+    ];
+    for (const [tierNum, fn, expected] of tiers) {
+      // default values: T6=15 T7=10 T8=5 T9=5 T10=5
+      expect(await tierRouter.tierGateThreshold(tierNum)).to.equal(BigInt(expected));
+    }
+    // Write new values and verify isolation
+    await tierRouter.connect(admin).setTierGateThresholdT6(20);
+    await tierRouter.connect(admin).setTierGateThresholdT10(1);
+    expect(await tierRouter.tierGateThreshold(6)).to.equal(20n);
+    expect(await tierRouter.tierGateThreshold(10)).to.equal(1n);
+    // Other slots untouched
+    expect(await tierRouter.tierGateThreshold(7)).to.equal(10n);
+    expect(await tierRouter.tierGateThreshold(5)).to.equal(25n); // default
+  });
+
+  it("setTierGateThresholdTx: threshold 0 and threshold 51 revert", async function () {
+    const { tierRouter, admin } = await loadFixture(deployV8Fixture);
+    await expect(tierRouter.connect(admin).setTierGateThresholdT6(0))
+      .to.be.revertedWith("TR: threshold 1-50");
+    await expect(tierRouter.connect(admin).setTierGateThresholdT7(51))
+      .to.be.revertedWith("TR: threshold 1-50");
+  });
+
+  it("setTierGateThresholdT5(1) — min boundary — succeeds", async function () {
+    const { tierRouter, admin } = await loadFixture(deployV8Fixture);
+    await expect(tierRouter.connect(admin).setTierGateThresholdT5(1))
+      .to.emit(tierRouter, "TierGateThresholdUpdated")
+      .withArgs(5, 1n);
+  });
+
+  it("setTierGateThresholdT10(50) — max boundary — succeeds", async function () {
+    const { tierRouter, admin } = await loadFixture(deployV8Fixture);
+    await expect(tierRouter.connect(admin).setTierGateThresholdT10(50))
+      .to.emit(tierRouter, "TierGateThresholdUpdated")
+      .withArgs(10, 50n);
+  });
+})

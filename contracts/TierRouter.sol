@@ -358,6 +358,17 @@ contract TierRouter is Ownable2Step {
     /// Use for emergency recovery if the organic threshold is misconfigured,
     /// or to manually open a gate for a tier that had its threshold changed.
     /// T2-T5 share T5's gate, so force-opening tier 5 unlocks T2-T5 together.
+    // ── V8.35: DAO per-tier wrappers used by V8Governance execute() (params 52-57) ──
+    // Governance can only pass a single uint256 value, so each tier gets its
+    // own entry-point that hard-codes the tier number.  The shared internal
+    // validation (1 ≤ v ≤ 50) mirrors setTierGateThreshold's require guard.
+    function setTierGateThresholdT5(uint256 v)  external onlyOwnerOrGovernance { require(v >= 1 && v <= 50, "TR: threshold 1-50"); tierGateThreshold[5]  = uint8(v); emit TierGateThresholdUpdated(5,  v); }
+    function setTierGateThresholdT6(uint256 v)  external onlyOwnerOrGovernance { require(v >= 1 && v <= 50, "TR: threshold 1-50"); tierGateThreshold[6]  = uint8(v); emit TierGateThresholdUpdated(6,  v); }
+    function setTierGateThresholdT7(uint256 v)  external onlyOwnerOrGovernance { require(v >= 1 && v <= 50, "TR: threshold 1-50"); tierGateThreshold[7]  = uint8(v); emit TierGateThresholdUpdated(7,  v); }
+    function setTierGateThresholdT8(uint256 v)  external onlyOwnerOrGovernance { require(v >= 1 && v <= 50, "TR: threshold 1-50"); tierGateThreshold[8]  = uint8(v); emit TierGateThresholdUpdated(8,  v); }
+    function setTierGateThresholdT9(uint256 v)  external onlyOwnerOrGovernance { require(v >= 1 && v <= 50, "TR: threshold 1-50"); tierGateThreshold[9]  = uint8(v); emit TierGateThresholdUpdated(9,  v); }
+    function setTierGateThresholdT10(uint256 v) external onlyOwnerOrGovernance { require(v >= 1 && v <= 50, "TR: threshold 1-50"); tierGateThreshold[10] = uint8(v); emit TierGateThresholdUpdated(10, v); }
+
     function setTierWhaleGateActive(uint8 tierNum, bool active) external onlyOwnerOrGovernance {
         require(tierNum >= 1 && tierNum <= MAX_TIERS, "TR: invalid tier");
         tierWhaleGateActive[tierNum] = active;
