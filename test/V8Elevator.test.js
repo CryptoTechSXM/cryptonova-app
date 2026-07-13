@@ -1528,3 +1528,644 @@ describe("V8.35 — Governance params #51-57: TierRouter per-tier wrappers", fun
       .withArgs(10, 50n);
   });
 })
+
+// ═══════════════════════════════════════════════════════════════════════════
+// V8.35 — MatrixPairFactory  (autonomous on-chain pair expansion)
+//
+// Tests cover:
+//   A. Constructor immutables + zero-address guards
+//   B. setWallets / setPeripherals access control
+//   C. configureTier boundary checks + storage
+//   D. registerPairManager boundary checks + storage
+//   E. deployAndWire error paths
+//   F. deployAndWire success — pair deployed, ownership transferred, state updated
+//   G. Integration — PM._tryAdvancePair auto-fires factory at 80% occupancy
+//
+// Timing note (G-tests):
+//   _tryAdvancePair() fires BEFORE the triggering member is routed (line 204
+//   precedes line 206 in PairManagerV8).  With MSIZE=7, combined cap=14, and
+//   expandThresholdBps=8000, the threshold condition (combined*10000/14 >= 8000)
+//   is first true when combined=12 (8571 bps).  Factory therefore fires on the
+//   13th registration call (which reads combined=12 from the previous 12 members).
+//   Member 13 is then routed to the newly created pair 1.
+//
+// Ownable2Step note (F3):
+//   FigureEightMatrixV8 extends Ownable2Step.  factory.deployAndWire() calls
+//   mA.transferOwnership(admin) which sets pendingOwner — owner() still returns
+//   the factory address until admin calls mA.acceptOwnership().
+// ═══════════════════════════════════════════════════════════════════════════
+describe("V8.35 — MatrixPairFactory", function () {
+
+  // ── Fixture: full V8 stack + MatrixPairFactory wired to T1 ──────────────
+  //
+  // MatrixPairFactory must be deployed with MatrixLogicLib linked because
+  // it embeds FigureEightMatrixV8 creation bytecode, which DELEGATECALL-refs
+  // the library.  We use the same matrixLib deployed by deployV8Fixture.
+  async function deployWithFactoryFixture() {
+    const base = await deployV8Fixture();
+    const { usdc, cnova, treasury, tierRouter, matrixLib,
+            pm1, admin, devOps, accountOne } = base;
+
+    const MPF = await ethers.getContractFactory("MatrixPairFactory", {
+      libraries: { MatrixLogicLib: await matrixLib.getAddress() },
+    });
+    const factory = await MPF.deploy(
+      admin.address,
+      await usdc.getAddress(),
+      await cnova.getAddress(),
+      await treasury.getAddress()
+    );
+    const factoryAddr = await factory.getAddress();
+
+    // Wallets the factory passes to each new matrix's DeployParams
+    await factory.connect(admin).setWallets(
+      devOps.address,     // devWallet
+      devOps.address,     // opsWallet
+      accountOne.address  // accountOne
+    );
+
+    // Peripherals: tierRouter only (SF/CR/gov/keeper are not in test fixture)
+    await factory.connect(admin).setPeripherals(
+      ethers.ZeroAddress,            // sf
+      ethers.ZeroAddress,            // cr
+      await tierRouter.getAddress(), // tr
+      ethers.ZeroAddress,            // keeper
+      ethers.ZeroAddress,            // gov
+      ethers.ZeroAddress,            // bbr
+      ethers.ZeroAddress             // lr
+    );
+
+    // Wire factory into peripherals that gate on pairFactory address
+    await treasury.connect(admin).setFactory(factoryAddr);
+    await tierRouter.connect(admin).setFactory(factoryAddr);
+    await pm1.connect(admin).setFactory(factoryAddr);
+
+    // Tell factory which tier T1's PM is for and what to construct
+    await factory.connect(admin).configureTier(1, T1_FEE, MSIZE, SPLITS, CHAIN_BPS);
+    await factory.connect(admin).registerPairManager(await pm1.getAddress(), 1);
+
+    // V8.36 Bug Fix #1: factory needs DEFAULT_ADMIN_ROLE on CNOVAToken so it can
+    // call grantRole(MINTER_ROLE, newMatrix) in deployAndWire().
+    // Mirrors what deploy_v8.js does in production.
+    await cnova.connect(admin).grantRole(ethers.ZeroHash, factoryAddr);
+
+    return { ...base, factory, factoryAddr, MPF };
+  }
+
+  // ── A. Constructor immutables ────────────────────────────────────────────
+
+  it("A1: stores usdc, cnova, treasuryAddr as immutables", async function () {
+    const { factory, usdc, cnova, treasury } = await loadFixture(deployWithFactoryFixture);
+    expect(await factory.usdc()).to.equal(await usdc.getAddress());
+    expect(await factory.cnova()).to.equal(await cnova.getAddress());
+    expect(await factory.treasuryAddr()).to.equal(await treasury.getAddress());
+  });
+
+  it("A2: zero usdc reverts MPF_ZeroAddress", async function () {
+    const { cnova, treasury, admin, matrixLib } = await loadFixture(deployV8Fixture);
+    const F = await ethers.getContractFactory("MatrixPairFactory", {
+      libraries: { MatrixLogicLib: await matrixLib.getAddress() },
+    });
+    await expect(
+      F.deploy(admin.address, ethers.ZeroAddress, await cnova.getAddress(), await treasury.getAddress())
+    ).to.be.revertedWithCustomError(F, "MPF_ZeroAddress");
+  });
+
+  it("A3: zero cnova reverts MPF_ZeroAddress", async function () {
+    const { usdc, treasury, admin, matrixLib } = await loadFixture(deployV8Fixture);
+    const F = await ethers.getContractFactory("MatrixPairFactory", {
+      libraries: { MatrixLogicLib: await matrixLib.getAddress() },
+    });
+    await expect(
+      F.deploy(admin.address, await usdc.getAddress(), ethers.ZeroAddress, await treasury.getAddress())
+    ).to.be.revertedWithCustomError(F, "MPF_ZeroAddress");
+  });
+
+  it("A4: zero treasury reverts MPF_ZeroAddress", async function () {
+    const { usdc, cnova, admin, matrixLib } = await loadFixture(deployV8Fixture);
+    const F = await ethers.getContractFactory("MatrixPairFactory", {
+      libraries: { MatrixLogicLib: await matrixLib.getAddress() },
+    });
+    await expect(
+      F.deploy(admin.address, await usdc.getAddress(), await cnova.getAddress(), ethers.ZeroAddress)
+    ).to.be.revertedWithCustomError(F, "MPF_ZeroAddress");
+  });
+
+  // ── B. setWallets / setPeripherals access control ────────────────────────
+
+  it("B1: setWallets: stores devWallet, opsWallet, accountOne", async function () {
+    const { factory, admin, s0, s1, s2 } = await loadFixture(deployWithFactoryFixture);
+    await factory.connect(admin).setWallets(s0.address, s1.address, s2.address);
+    expect(await factory.devWallet()).to.equal(s0.address);
+    expect(await factory.opsWallet()).to.equal(s1.address);
+    expect(await factory.accountOne()).to.equal(s2.address);
+  });
+
+  it("B2: setWallets: non-owner reverts OwnableUnauthorizedAccount", async function () {
+    const { factory, s0, s1, s2 } = await loadFixture(deployWithFactoryFixture);
+    await expect(factory.connect(s0).setWallets(s0.address, s1.address, s2.address))
+      .to.be.revertedWithCustomError(factory, "OwnableUnauthorizedAccount");
+  });
+
+  it("B3: setPeripherals: stores all 7 addresses", async function () {
+    const { factory, admin, s0, s1, s2, s3, s4, s5, s6 } = await loadFixture(deployWithFactoryFixture);
+    await factory.connect(admin).setPeripherals(
+      s0.address, s1.address, s2.address, s3.address, s4.address, s5.address, s6.address
+    );
+    expect(await factory.stabilityFund()).to.equal(s0.address);
+    expect(await factory.couponRegistry()).to.equal(s1.address);
+    expect(await factory.tierRouterAddr()).to.equal(s2.address);
+    expect(await factory.matrixKeeper()).to.equal(s3.address);
+    expect(await factory.governance()).to.equal(s4.address);
+    expect(await factory.buybackReserve()).to.equal(s5.address);
+    expect(await factory.liquidityReserve()).to.equal(s6.address);
+  });
+
+  it("B4: setPeripherals: non-owner reverts OwnableUnauthorizedAccount", async function () {
+    const { factory, s0 } = await loadFixture(deployWithFactoryFixture);
+    const Z = ethers.ZeroAddress;
+    await expect(factory.connect(s0).setPeripherals(Z, Z, Z, Z, Z, Z, Z))
+      .to.be.revertedWithCustomError(factory, "OwnableUnauthorizedAccount");
+  });
+
+  // ── C. configureTier ─────────────────────────────────────────────────────
+
+  it("C1: configureTier: stores config and emits TierConfigured", async function () {
+    const { factory, admin } = await loadFixture(deployWithFactoryFixture);
+    await expect(factory.connect(admin).configureTier(2, T2_FEE, MSIZE, SPLITS, CHAIN_BPS))
+      .to.emit(factory, "TierConfigured")
+      .withArgs(2, T2_FEE, MSIZE);
+    const cfg = await factory.tierConfigs(2);
+    expect(cfg.configured).to.be.true;
+    expect(cfg.entryFee).to.equal(T2_FEE);
+    expect(cfg.matrixSize).to.equal(MSIZE);
+  });
+
+  it("C2: configureTier: tierNum=0 reverts MPF_InvalidTier", async function () {
+    const { factory, admin } = await loadFixture(deployWithFactoryFixture);
+    await expect(factory.connect(admin).configureTier(0, T1_FEE, MSIZE, SPLITS, CHAIN_BPS))
+      .to.be.revertedWithCustomError(factory, "MPF_InvalidTier");
+  });
+
+  it("C3: configureTier: tierNum=11 reverts MPF_InvalidTier", async function () {
+    const { factory, admin } = await loadFixture(deployWithFactoryFixture);
+    await expect(factory.connect(admin).configureTier(11, T1_FEE, MSIZE, SPLITS, CHAIN_BPS))
+      .to.be.revertedWithCustomError(factory, "MPF_InvalidTier");
+  });
+
+  it("C4: configureTier: non-owner reverts OwnableUnauthorizedAccount", async function () {
+    const { factory, s0 } = await loadFixture(deployWithFactoryFixture);
+    await expect(factory.connect(s0).configureTier(1, T1_FEE, MSIZE, SPLITS, CHAIN_BPS))
+      .to.be.revertedWithCustomError(factory, "OwnableUnauthorizedAccount");
+  });
+
+  // ── D. registerPairManager ───────────────────────────────────────────────
+
+  it("D1: registerPairManager: sets isPairManager + pairManagerTierNum, emits PMRegistered", async function () {
+    const { factory, admin, pm2 } = await loadFixture(deployWithFactoryFixture);
+    const pm2Addr = await pm2.getAddress();
+    await expect(factory.connect(admin).registerPairManager(pm2Addr, 2))
+      .to.emit(factory, "PMRegistered")
+      .withArgs(pm2Addr, 2);
+    expect(await factory.isPairManager(pm2Addr)).to.be.true;
+    expect(await factory.pairManagerTierNum(pm2Addr)).to.equal(2);
+  });
+
+  it("D2: registerPairManager: zero address reverts MPF_ZeroAddress", async function () {
+    const { factory, admin } = await loadFixture(deployWithFactoryFixture);
+    await expect(factory.connect(admin).registerPairManager(ethers.ZeroAddress, 1))
+      .to.be.revertedWithCustomError(factory, "MPF_ZeroAddress");
+  });
+
+  it("D3: registerPairManager: tierNum=0 reverts MPF_InvalidTier", async function () {
+    const { factory, admin, pm2 } = await loadFixture(deployWithFactoryFixture);
+    await expect(factory.connect(admin).registerPairManager(await pm2.getAddress(), 0))
+      .to.be.revertedWithCustomError(factory, "MPF_InvalidTier");
+  });
+
+  it("D4: registerPairManager: tierNum=11 reverts MPF_InvalidTier", async function () {
+    const { factory, admin, pm2 } = await loadFixture(deployWithFactoryFixture);
+    await expect(factory.connect(admin).registerPairManager(await pm2.getAddress(), 11))
+      .to.be.revertedWithCustomError(factory, "MPF_InvalidTier");
+  });
+
+  it("D5: registerPairManager: non-owner reverts OwnableUnauthorizedAccount", async function () {
+    const { factory, s0, pm2 } = await loadFixture(deployWithFactoryFixture);
+    await expect(factory.connect(s0).registerPairManager(await pm2.getAddress(), 2))
+      .to.be.revertedWithCustomError(factory, "OwnableUnauthorizedAccount");
+  });
+
+  // ── E. deployAndWire error paths ─────────────────────────────────────────
+
+  it("E1: deployAndWire: unregistered address argument reverts MPF_UnauthorizedPM", async function () {
+    const { factory, s0 } = await loadFixture(deployWithFactoryFixture);
+    await expect(factory.deployAndWire(s0.address))
+      .to.be.revertedWithCustomError(factory, "MPF_UnauthorizedPM");
+  });
+
+  it("E2: deployAndWire: registered PM but tier not configured reverts MPF_TierNotConfigured", async function () {
+    const { usdc, cnova, treasury, pm2, admin, matrixLib } = await loadFixture(deployV8Fixture);
+    const F = await ethers.getContractFactory("MatrixPairFactory", {
+      libraries: { MatrixLogicLib: await matrixLib.getAddress() },
+    });
+    const f = await F.deploy(
+      admin.address, await usdc.getAddress(), await cnova.getAddress(), await treasury.getAddress()
+    );
+    const pm2Addr = await pm2.getAddress();
+    await f.connect(admin).registerPairManager(pm2Addr, 2); // register but skip configureTier
+    await expect(f.deployAndWire(pm2Addr))
+      .to.be.revertedWithCustomError(f, "MPF_TierNotConfigured");
+  });
+
+  // ── F. deployAndWire success ─────────────────────────────────────────────
+
+  // Helper: call deployAndWire and parse the PairExpanded event from receipt
+  async function callDeployAndWire(factory, pm1, admin) {
+    const tx = await factory.connect(admin).deployAndWire(await pm1.getAddress());
+    const receipt = await tx.wait();
+    const event = receipt.logs
+      .map(log => { try { return factory.interface.parseLog(log); } catch (_) { return null; } })
+      .find(e => e && e.name === "PairExpanded");
+    return event;
+  }
+
+  it("F1: deployAndWire: emits PairExpanded with tierNum=1, correct pairManager, non-zero matrix addrs", async function () {
+    const { factory, pm1, admin } = await loadFixture(deployWithFactoryFixture);
+    const event = await callDeployAndWire(factory, pm1, admin);
+
+    expect(event).to.not.be.undefined;
+    expect(event.args.tierNum).to.equal(1);
+    expect(event.args.pairManager).to.equal(await pm1.getAddress());
+    expect(event.args.matA).to.not.equal(ethers.ZeroAddress);
+    expect(event.args.matB).to.not.equal(ethers.ZeroAddress);
+  });
+
+  it("F2: deployAndWire: activePairIndex advances from 0 to 1", async function () {
+    const { factory, pm1, admin } = await loadFixture(deployWithFactoryFixture);
+    expect(await pm1.activePairIndex()).to.equal(0n);
+    await callDeployAndWire(factory, pm1, admin);
+    expect(await pm1.activePairIndex()).to.equal(1n);
+  });
+
+  it("F3: Ownable2Step — factory stays owner; admin completes via acceptOwnership()", async function () {
+    const { factory, pm1, admin } = await loadFixture(deployWithFactoryFixture);
+    const event = await callDeployAndWire(factory, pm1, admin);
+    const factoryAddr = await factory.getAddress();
+
+    const newMatA = await ethers.getContractAt("FigureEightMatrixV8", event.args.matA);
+    const newMatB = await ethers.getContractAt("FigureEightMatrixV8", event.args.matB);
+
+    // FigureEightMatrixV8 uses Ownable2Step: transferOwnership only sets pendingOwner.
+    // owner() stays factory until admin calls acceptOwnership().
+    expect(await newMatA.owner()).to.equal(factoryAddr);
+    expect(await newMatA.pendingOwner()).to.equal(admin.address);
+
+    // Admin completes the two-step transfer
+    await newMatA.connect(admin).acceptOwnership();
+    await newMatB.connect(admin).acceptOwnership();
+    expect(await newMatA.owner()).to.equal(admin.address);
+    expect(await newMatB.owner()).to.equal(admin.address);
+  });
+
+  it("F4: deployAndWire: new matrices are partners of each other", async function () {
+    const { factory, pm1, admin } = await loadFixture(deployWithFactoryFixture);
+    const event = await callDeployAndWire(factory, pm1, admin);
+
+    const newMatA = await ethers.getContractAt("FigureEightMatrixV8", event.args.matA);
+    const newMatB = await ethers.getContractAt("FigureEightMatrixV8", event.args.matB);
+    expect(await newMatA.partner()).to.equal(event.args.matB);
+    expect(await newMatB.partner()).to.equal(event.args.matA);
+  });
+
+  it("F5: deployAndWire: new matrices have pairManager set to pm1", async function () {
+    const { factory, pm1, admin } = await loadFixture(deployWithFactoryFixture);
+    const event = await callDeployAndWire(factory, pm1, admin);
+    const pm1Addr = await pm1.getAddress();
+
+    const newMatA = await ethers.getContractAt("FigureEightMatrixV8", event.args.matA);
+    const newMatB = await ethers.getContractAt("FigureEightMatrixV8", event.args.matB);
+    expect(await newMatA.pairManager()).to.equal(pm1Addr);
+    expect(await newMatB.pairManager()).to.equal(pm1Addr);
+  });
+
+  it("F6: deployAndWire: new MatA has chainNext set to new MatB", async function () {
+    const { factory, pm1, admin } = await loadFixture(deployWithFactoryFixture);
+    const event = await callDeployAndWire(factory, pm1, admin);
+
+    const newMatA = await ethers.getContractAt("FigureEightMatrixV8", event.args.matA);
+    expect(await newMatA.chainNext()).to.equal(event.args.matB);
+  });
+
+  it("F7: deployAndWire: second consecutive call deploys a third pair (no hard cap)", async function () {
+    const { factory, pm1, admin } = await loadFixture(deployWithFactoryFixture);
+    // First expansion: pair 0 → pair 1
+    await callDeployAndWire(factory, pm1, admin);
+    expect(await pm1.activePairIndex()).to.equal(1n);
+
+    // Second expansion: pair 1 → pair 2 (proves unlimited growth)
+    const event2 = await callDeployAndWire(factory, pm1, admin);
+    expect(event2).to.not.be.undefined;
+    expect(await pm1.activePairIndex()).to.equal(2n);
+  });
+
+  // ── G. Integration — PM auto-fires factory at 80% threshold ─────────────
+  //
+  // MSIZE=7 → combined cap = 14 seats.  expandThresholdBps = 8000 (80%).
+  //
+  // _tryAdvancePair() runs BEFORE routing the triggering member:
+  //   Call N  → _tryAdvancePair checks occupancy of members (N-1)
+  //   → routes member N into whatever activePairIndex points to at that moment
+  //
+  // Factory fires when: combined(N-1) * 10000 / 14 >= 8000
+  //   → G1: 12 registrations with default 8000 threshold — factory does NOT fire
+  //         (organic crossings blocked in test fixture → combined stays at 7 = 5000 bps)
+  //   → G2-G4: threshold lowered to 5000 (50%) — factory fires on 8th registration
+  //         (matA fills to 7 = 5000 bps ≥ 5000 → expansion triggered)
+  //   → member 8 is routed into factory-deployed pair 1; pair 0 keeps its 7 occupants
+  //
+  // Signers used: w1=member1, s0-s6=members 2-8 (8 total for G2-G4)
+  // ─────────────────────────────────────────────────────────────────────────
+
+  it("G1: factory does NOT fire with default 80% threshold when combined stays at 7 (5000 bps)", async function () {
+    const { pm1, reg, w1, s0, s1, s2, s3, s4, s5, s6, s7, s8, s9, s10 } =
+      await loadFixture(deployWithFactoryFixture);
+
+    // Default expandThresholdBps = 8000 (80%).  With MSIZE=7 and maxCap=14,
+    // the factory fires when combined * 10000 / 14 >= 8000, i.e. combined >= 12.
+    // In the test fixture organic crossings are blocked (members lack the $5
+    // withdrawable needed to cross to matB), so matB occupancy stays at 0 and
+    // combined stays at 7 (= 5000 bps < 8000).  Factory never fires regardless
+    // of how many new members register.
+    for (const m of [w1, s0, s1, s2, s3, s4, s5, s6, s7, s8, s9, s10]) {
+      await reg(m);
+    }
+    expect(await pm1.activePairIndex()).to.equal(0n);
+  });
+
+  // G2 / G3 / G4 — lower the threshold to 50 % so matA alone (7/7 seats = 5 000 bps)
+  // satisfies the condition.  With the default 80 % threshold organic crossings would
+  // be needed (members need $5 withdrawable to cross, which the test fixture doesn't
+  // accumulate), so the threshold param is the correct lever to test auto-expansion.
+  // Strategy:
+  //   1. setExpandThreshold(5000)   — 50%, i.e. combined ≥ 7 triggers expansion
+  //   2. Register 7 members         — fills matA (occupancy=7, combined=7, bps=5000)
+  //   3. Register member 8          — _tryAdvancePair sees 5000 ≥ 5000 → factory fires
+  //   4. Member 8 is routed to pair 1; original pair 0 keeps its 7 occupants
+
+  it("G2: factory fires on 8th registration when threshold lowered to 50%", async function () {
+    const { pm1, admin, reg, w1, s0, s1, s2, s3, s4, s5, s6 } =
+      await loadFixture(deployWithFactoryFixture);
+
+    // Lower threshold: combined=7 out of maxCap=14 → 5000 bps ≥ 5000 → will fire
+    await pm1.connect(admin).setExpandThreshold(5000n);
+    // V8.36: also lower factory threshold so factory fires at same 50% point
+    await pm1.connect(admin).setFactoryExpandThreshold(5000n);
+
+    // Fill matA with 7 members; factory does NOT fire during these registrations
+    // because _tryAdvancePair runs before routing: it sees the PREVIOUS state
+    // (combined grows 0→1→…→6 on calls 1-7, never ≥7 yet).
+    for (const m of [w1, s0, s1, s2, s3, s4, s5]) {
+      await reg(m);
+    }
+    expect(await pm1.activePairIndex()).to.equal(0n); // pair 0 still active
+
+    // 8th registration: _tryAdvancePair now sees combined=7 → 5000 bps ≥ 5000 → fires
+    await reg(s6);
+    expect(await pm1.activePairIndex()).to.equal(1n);  // expanded to pair 1
+  });
+
+  it("G3: after factory fires, pairs[1] has non-zero addresses and 1 registered member", async function () {
+    const { pm1, admin, reg, w1, s0, s1, s2, s3, s4, s5, s6 } =
+      await loadFixture(deployWithFactoryFixture);
+
+    await pm1.connect(admin).setExpandThreshold(5000n);
+    await pm1.connect(admin).setFactoryExpandThreshold(5000n); // V8.36: separate factory threshold
+    for (const m of [w1, s0, s1, s2, s3, s4, s5]) await reg(m);
+    await reg(s6); // triggers factory; s6 routed to pair 1
+
+    const newPair = await pm1.pairs(1);
+    expect(newPair.matrixA).to.not.equal(ethers.ZeroAddress);
+    expect(newPair.matrixB).to.not.equal(ethers.ZeroAddress);
+    expect(newPair.totalRegistered).to.equal(1n); // only s6 went to pair 1
+  });
+
+  it("G4: original pair 0 retains its 7 occupants after expansion (member 8 went to pair 1)", async function () {
+    const { pm1, matA, matB, admin, reg, w1, s0, s1, s2, s3, s4, s5, s6 } =
+      await loadFixture(deployWithFactoryFixture);
+
+    await pm1.connect(admin).setExpandThreshold(5000n);
+    await pm1.connect(admin).setFactoryExpandThreshold(5000n); // V8.36: separate factory threshold
+    for (const m of [w1, s0, s1, s2, s3, s4, s5]) await reg(m);
+    await reg(s6); // factory fires, s6 -> pair 1
+
+    // matA has 7 members; matB has 0 (no organic crossings in the test fixture).
+    // Combined = 7, which is the snapshot at the moment factory fired.
+    const occupA = await matA.occupancy();
+    const occupB = await matB.occupancy();
+    expect(occupA + occupB).to.equal(7n);
+    expect(await pm1.activePairIndex()).to.equal(1n);
+  });
+
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// V8.36 — Bug Fix #1: factory grants MINTER_ROLE to factory-created pairs
+//
+// Before: deployAndWire() never called cnova.grantRole(MINTER_ROLE, matA/matB).
+//         Members entering T1.2+ pairs silently got no CNOVA minted.
+// After:  factory holds DEFAULT_ADMIN_ROLE on CNOVAToken (granted in deploy_v8.js);
+//         deployAndWire() calls grantRole(MINTER_ROLE, matA) and grantRole(MINTER_ROLE, matB).
+//
+// Tests: H1–H5
+// ═══════════════════════════════════════════════════════════════════════════════
+describe("V8.36 — Bug Fix #1: MINTER_ROLE granted to factory-created pairs (all tiers)", function () {
+
+  // Extended fixture: grant DEFAULT_ADMIN_ROLE to factory so deployAndWire()
+  // can call cnova.grantRole(MINTER_ROLE, newMat).  In production this is done
+  // by deploy_v8.js; in tests we set it up manually.
+  async function deployWithMinterFixture() {
+    const base = await loadFixture(deployWithFactoryFixture);
+    const { cnova, admin, factoryAddr } = base;
+    // DEFAULT_ADMIN_ROLE = bytes32(0) = ZeroHash
+    await cnova.connect(admin).grantRole(ethers.ZeroHash, factoryAddr);
+    return base;
+  }
+
+  it("H1: factoryExpandThresholdBps default is 10 000 (100% — full pair cycle)", async function () {
+    const { pm1 } = await loadFixture(deployWithFactoryFixture);
+    expect(await pm1.factoryExpandThresholdBps()).to.equal(10_000n);
+  });
+
+  it("H2: setFactoryExpandThreshold updates factoryExpandThresholdBps independently of expandThresholdBps", async function () {
+    const { pm1, admin } = await loadFixture(deployWithFactoryFixture);
+    await pm1.connect(admin).setFactoryExpandThreshold(7500n);
+    expect(await pm1.factoryExpandThresholdBps()).to.equal(7500n);
+    // expandThresholdBps (pre-deployed pair advance) must be unchanged
+    expect(await pm1.expandThresholdBps()).to.equal(8000n);
+  });
+
+  it("H3: setFactoryExpandThreshold(0) reverts PM8: invalid bps", async function () {
+    const { pm1, admin } = await loadFixture(deployWithFactoryFixture);
+    await expect(pm1.connect(admin).setFactoryExpandThreshold(0n))
+      .to.be.revertedWith("PM8: invalid bps");
+  });
+
+  it("H4: setFactoryExpandThreshold(10001) reverts PM8: invalid bps", async function () {
+    const { pm1, admin } = await loadFixture(deployWithFactoryFixture);
+    await expect(pm1.connect(admin).setFactoryExpandThreshold(10_001n))
+      .to.be.revertedWith("PM8: invalid bps");
+  });
+
+  it("H5: factory-created matA and matB both have MINTER_ROLE on CNOVAToken", async function () {
+    const { pm1, cnova, admin, reg, w1, s0, s1, s2, s3, s4, s5, s6 } =
+      await loadFixture(deployWithMinterFixture);
+
+    // Lower factory threshold to 50% to trigger on matA fill (MSIZE=7, combined=7/14=50%)
+    await pm1.connect(admin).setFactoryExpandThreshold(5000n);
+
+    for (const m of [w1, s0, s1, s2, s3, s4, s5]) await reg(m);
+    await reg(s6); // 8th registration triggers factory; s6 routed to new pair 1
+
+    const MINTER_ROLE = ethers.keccak256(ethers.toUtf8Bytes("MINTER_ROLE"));
+    const pair1 = await pm1.pairs(1);
+    expect(pair1.matrixA).to.not.equal(ethers.ZeroAddress, "pair 1 matrixA not deployed");
+    expect(pair1.matrixB).to.not.equal(ethers.ZeroAddress, "pair 1 matrixB not deployed");
+    expect(await cnova.hasRole(MINTER_ROLE, pair1.matrixA)).to.be.true;
+    expect(await cnova.hasRole(MINTER_ROLE, pair1.matrixB)).to.be.true;
+  });
+
+});
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// V8.36 — Bug Fix #2: cross-pair referrers credited L1 in factory pairs
+//
+// Before: MatrixLogicLib.enterMatrix() used self.members[referrer].hasEverJoined
+//         which is always false in T1.2 for referrers who only joined T1.1.
+//         Result: l1 = address(0) → L1 commission went to W1, not the actual referrer.
+// After:  If local hasEverJoined is false, fall back to TierRouter.globalJoined().
+//         The referrer's withdrawable in the new matrix receives the L1 credit.
+//
+// Tests: I1–I2
+// ═══════════════════════════════════════════════════════════════════════════════
+describe("V8.36 — Bug Fix #2: cross-pair referrer receives L1 credit (all tiers)", function () {
+
+  // Fixture: factory with DEFAULT_ADMIN_ROLE + factory threshold lowered to 50%
+  // so we can trigger expansion after 7 T1.1 registrations without needing
+  // members to cross to matB (which would require a full forceCross sequence).
+  async function deployReferrerFixture() {
+    const base = await loadFixture(deployWithFactoryFixture);
+    const { cnova, pm1, admin, factoryAddr } = base;
+    await cnova.connect(admin).grantRole(ethers.ZeroHash, factoryAddr);
+    await pm1.connect(admin).setFactoryExpandThreshold(5000n);
+    return base;
+  }
+
+  it("I1: member in T1.2 with cross-pair referrer stores referrer address (not address(0))", async function () {
+    const { pm1, reg, w1, s0, s1, s2, s3, s4, s5, s6, s7 } =
+      await loadFixture(deployReferrerFixture);
+
+    // w1 registers in T1.1 — sets globalJoined[w1] = true on TierRouter
+    await reg(w1);
+
+    // Fill remaining 6 T1.1 slots (s0–s5) then register s6 to trigger factory
+    for (const m of [s0, s1, s2, s3, s4, s5]) await reg(m);
+    await reg(s6); // factory fires; s6 → T1.2 pair 1
+
+    // s7 registers in T1.2 with w1 as referrer.
+    // w1.hasEverJoined in T1.2 = false (never entered T1.2).
+    // Bug fix: MatrixLogicLib falls back to TierRouter.globalJoined(w1) = true → l1 = w1.
+    await reg(s7, w1.address);
+
+    const pair1 = await pm1.pairs(1);
+    const newMatA = await ethers.getContractAt("FigureEightMatrixV8", pair1.matrixA);
+    const s7Info = await newMatA.getMember(s7.address);
+    expect(s7Info.referrer).to.equal(w1.address, "referrer should be w1, not address(0)");
+  });
+
+  it("I2: cross-pair referrer's withdrawableOf in factory matrix equals L1 credit after sponsored entry", async function () {
+    const { pm1, reg, w1, s0, s1, s2, s3, s4, s5, s6, s7 } =
+      await loadFixture(deployReferrerFixture);
+
+    await reg(w1);
+    for (const m of [s0, s1, s2, s3, s4, s5]) await reg(m);
+    await reg(s6); // factory fires; s6 → T1.2
+
+    const pair1 = await pm1.pairs(1);
+    const newMatA = await ethers.getContractAt("FigureEightMatrixV8", pair1.matrixA);
+
+    const w1BalBefore = await newMatA.withdrawableOf(w1.address); // 0 — w1 not in T1.2
+
+    // s7 joins T1.2 with w1 as referrer; L1 credit goes to w1 in T1.2's matA
+    await reg(s7, w1.address);
+
+    const w1BalAfter = await newMatA.withdrawableOf(w1.address);
+
+    // L1 credit = T1_FEE * l1Bps / BPS_DENOM = 10e6 * 950 / 10000 = 950 000
+    const expectedL1 = T1_FEE * BigInt(SPLITS.l1Bps) / 10_000n;
+    expect(w1BalAfter - w1BalBefore).to.equal(expectedL1,
+      `expected L1 credit of ${expectedL1}, got ${w1BalAfter - w1BalBefore}`);
+  });
+
+});
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// V8.36 — Bug Fix #3: factory fires at factoryExpandThresholdBps (default 100%)
+//
+// Before: _tryAdvancePair() used expandThresholdBps (80%) for BOTH pre-deployed
+//         pair advance AND factory trigger.  Factory fired when matA filled
+//         (combined=127/254=50% at MSIZE=127), splitting community while
+//         T1.1's matB was still ~60% unfilled.
+// After:  Separate factoryExpandThresholdBps (default 100%) ensures factory
+//         fires only after the FULL pair cycle (both matA + matB complete).
+//         expandThresholdBps still controls pre-deployed pair advancement.
+//
+// Tests: J1–J3
+// ═══════════════════════════════════════════════════════════════════════════════
+describe("V8.36 — Bug Fix #3: factory fires at factoryExpandThresholdBps not expandThresholdBps", function () {
+
+  it("J1: with expandThresholdBps=50% but factoryExpandThresholdBps=100%, factory does NOT fire when matA fills", async function () {
+    const { pm1, admin, reg, w1, s0, s1, s2, s3, s4, s5, s6 } =
+      await loadFixture(deployWithFactoryFixture);
+
+    // Lower pre-deployed pair advance threshold to 50%
+    await pm1.connect(admin).setExpandThreshold(5000n);
+    // Leave factoryExpandThresholdBps at default 100% — factory should NOT fire at 50%
+
+    // Register 7 members: fills matA (combined=7, maxCap=14, bps=5000)
+    for (const m of [w1, s0, s1, s2, s3, s4, s5]) await reg(m);
+
+    // 8th registration: expandThresholdBps=5000 would advance a pre-deployed pair,
+    // but no pre-deployed pair exists. factoryExpandThresholdBps=10000 → 5000 < 10000
+    // → factory does NOT fire. Member 8 stays in pair 0.
+    await reg(s6);
+
+    expect(await pm1.pairCount()).to.equal(1n, "factory should not have fired");
+    expect(await pm1.activePairIndex()).to.equal(0n);
+  });
+
+  it("J2: factory fires exactly when factoryExpandThresholdBps threshold is met (lowered to 50%)", async function () {
+    const { pm1, admin, reg, w1, s0, s1, s2, s3, s4, s5, s6 } =
+      await loadFixture(deployWithFactoryFixture);
+
+    await pm1.connect(admin).setFactoryExpandThreshold(5000n);
+
+    // 7 members fill matA: combined=7/14=5000bps; on 8th call _tryAdvancePair sees 5000 ≥ 5000
+    for (const m of [w1, s0, s1, s2, s3, s4, s5]) await reg(m);
+    await reg(s6); // triggers factory
+
+    expect(await pm1.pairCount()).to.equal(2n, "factory should have deployed pair 1");
+    expect(await pm1.activePairIndex()).to.equal(1n);
+  });
+
+  it("J3: expandThresholdBps and factoryExpandThresholdBps are independent getters", async function () {
+    const { pm1, admin } = await loadFixture(deployWithFactoryFixture);
+
+    await pm1.connect(admin).setExpandThreshold(7000n);
+    await pm1.connect(admin).setFactoryExpandThreshold(9000n);
+
+    expect(await pm1.expandThresholdBps()).to.equal(7000n);
+    expect(await pm1.factoryExpandThresholdBps()).to.equal(9000n);
+  });
+
+});
+
+}); // end: V8.35 — MatrixPairFactory (contains V8.36 bug fixes)

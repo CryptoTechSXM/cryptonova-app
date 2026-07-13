@@ -34,13 +34,26 @@ const BSC_TESTNET_RPC  = process.env.BSC_TESTNET_RPC_URL  || "https://data-seed-
 /** @type import('hardhat/config').HardhatUserConfig */
 module.exports = {
   solidity: {
-    version: "0.8.26",
-    settings: {
-      optimizer: {
-        enabled: true,
-        runs: 200,
+    compilers: [
+      {
+        version: "0.8.26",
+        settings: {
+          optimizer: { enabled: true, runs: 1 },
+          viaIR: false,
+        },
       },
-      viaIR: false,
+    ],
+    // V8.36: MatrixPairFactory embeds FigureEightMatrixV8 init code and sits at
+    // 24621 bytes (45 bytes over EIP-170 limit) with runs=1 and viaIR=false.
+    // Enable viaIR only for this contract to squeeze under 24576 bytes.
+    overrides: {
+      "contracts/MatrixPairFactory.sol": {
+        version: "0.8.26",
+        settings: {
+          optimizer: { enabled: true, runs: 1 },
+          viaIR: true,
+        },
+      },
     },
   },
 

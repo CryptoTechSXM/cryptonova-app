@@ -34,6 +34,12 @@ import "@openzeppelin/contracts/access/Ownable2Step.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 
+interface IMatrixPairFactory {
+    /// @notice Deploy and wire a new MatA+MatB pair for the calling PairManager's tier.
+    ///         Called by _tryAdvancePair() when no pre-deployed next pair exists.
+    function deployAndWire(address pairManager) external returns (address matA, address matB);
+}
+
 interface IFigureEightMatrixV8PM {
     function enterFor(address member, address referrer) external;
     function occupancy()   external view returns (uint256);
@@ -75,6 +81,16 @@ contract PairManagerV8 is Ownable2Step {
 
     address public tierRouter;      // set post-deploy via setTierRouter()
 
+    // ─── V8.35: Autonomous pair factory ──────────────────────────────────────
+    /// @notice MatrixPairFactory — called by _tryAdvancePair() to deploy a new pair
+    ///         inline when the active pair hits expandThresholdBps and no pre-deployed
+    ///         next pair exists.  address(0) = factory not wired (expansion disabled).
+    address public pairFactory;
+
+    /// @notice Reentrancy guard for factory expansion.  Prevents a misbehaving
+    ///         factory from calling back into routing during deployAndWire().
+    bool private _expanding;
+
     // ─── V8.21: Governance co-control ─────────────────────────────────────────
     /// @notice DAO governance contract. Co-governs the broadcast fee setters
     ///         below alongside owner -- neither replaces the other (owner
@@ -95,7 +111,14 @@ contract PairManagerV8 is Ownable2Step {
     address public chainHead;       // first pair's Matrix A
     address public lastChainB;      // most recent B-type matrix
 
-    uint256 public expandThresholdBps = 8000;  // 80%
+    uint256 public expandThresholdBps = 8000;   // 80% — advance to a pre-deployed next pair
+    // V8.36 Bug Fix #3: Separate threshold for autonomous factory expansion.
+    // Old behaviour: factory fired at 80% combined occupancy (when MatA=127, MatB~77).
+    // This opened T1.2 while T1.1's MatB was still 60% unfilled, splitting the community
+    // too early and causing cross-pair referrer issues.
+    // New behaviour: factory fires only when the pair is 100% complete (MatA=127, MatB=127),
+    // i.e. a full 254-seat cycle is done. Pre-deployed pairs still advance at 80%.
+    uint256 public factoryExpandThresholdBps = 10_000; // 100% — factory fires at MatB cycle complete
     uint256 public constant BPS_DENOM = 10_000;
 
     // ─── Events ───────────────────────────────────────────────────────────────
@@ -122,14 +145,33 @@ contract PairManagerV8 is Ownable2Step {
         tierRouter = _tr;
     }
 
+    /// @notice V8.35: Wire the MatrixPairFactory. address(0) disables auto-expansion.
+    function setFactory(address _factory) external onlyOwner {
+        pairFactory = _factory;
+    }
+
     function setExpandThreshold(uint256 _bps) external onlyOwner {
         require(_bps > 0 && _bps <= BPS_DENOM, "PM8: invalid bps");
         expandThresholdBps = _bps;
     }
 
+    /// @notice V8.36: Set the occupancy threshold at which the factory auto-deploys
+    ///         a new pair.  Default 10000 (100%) = only fire when MatA+MatB are both
+    ///         fully complete.  Can be lowered for testing (e.g. 8000 = 80%).
+    function setFactoryExpandThreshold(uint256 _bps) external onlyOwner {
+        require(_bps > 0 && _bps <= BPS_DENOM, "PM8: invalid bps");
+        factoryExpandThresholdBps = _bps;
+    }
+
     /// @notice V8.21: owner keeps emergency backstop, governance address co-governs.
     modifier onlyOwnerOrGovernance() {
         require(msg.sender == owner() || msg.sender == governance, "PM8: not authorized");
+        _;
+    }
+
+    /// @notice V8.35: owner or MatrixPairFactory can call addPair() during expansion.
+    modifier onlyOwnerOrFactory() {
+        require(msg.sender == owner() || msg.sender == pairFactory, "PM8: not owner/factory");
         _;
     }
 
@@ -206,7 +248,7 @@ contract PairManagerV8 is Ownable2Step {
         Pair storage p = pairs[activePairIndex];
         address matA   = p.matrixA;
 
-        // Pull fee from member directly — TierRouter told them to approve this PM
+        // Pull fee from member directly -- TierRouter told them to approve this PM
         usdc.safeTransferFrom(member, matA, entryFee);
         IFigureEightMatrixV8PM(matA).enterFor(member, referrer);
 
@@ -234,7 +276,7 @@ contract PairManagerV8 is Ownable2Step {
         Pair storage p = pairs[activePairIndex];
         address matA   = p.matrixA;
 
-        // Pull fee from TierRouter — TierRouter must have approved this PM before calling
+        // Pull fee from TierRouter -- TierRouter must have approved this PM before calling
         usdc.safeTransferFrom(msg.sender, matA, entryFee);
         IFigureEightMatrixV8PM(matA).enterFor(member, referrer);
 
@@ -255,7 +297,7 @@ contract PairManagerV8 is Ownable2Step {
      *   Subsequent:    lastChainB.chainNext = matA, matB.chainNext = chainHead
      *                  matA.setChainAuthorized(lastChainB), chainHead.setChainAuthorized(matB)
      */
-    function addPair(address matrixA, address matrixB) external onlyOwner {
+    function addPair(address matrixA, address matrixB) external onlyOwnerOrFactory {
         require(matrixA != address(0) && matrixB != address(0), "PM8: zero address");
         require(
             IFigureEightMatrixV8PM(matrixA).partner() == matrixB,
@@ -309,7 +351,7 @@ contract PairManagerV8 is Ownable2Step {
     ///         Use case: deploy script pre-deploys multiple pairs (addPair advances the index
     ///         to the last-added pair each time); call setActivePairIndex(0) after the deploy
     ///         loop so the W1 seed and bigfill fill pair 0 (T1.1).  _tryAdvancePair() then
-    ///         auto-advances 0→1→2 as each pair reaches 80% occupancy.
+    ///         auto-advances 0->1->2 as each pair reaches 80% occupancy.
     function setActivePairIndex(uint256 idx) external onlyOwner {
         require(idx < pairs.length, "PM8: invalid index");
         activePairIndex = idx;
@@ -319,13 +361,33 @@ contract PairManagerV8 is Ownable2Step {
     // ─── Internal ─────────────────────────────────────────────────────────────
 
     function _tryAdvancePair() internal {
-        if (activePairIndex + 1 >= pairs.length) return;
+        // Reentrancy guard: factory's addPair() calls back here indirectly,
+        // but _expanding prevents any re-entry during factory deployment.
+        if (_expanding) return;
 
         Pair storage p = pairs[activePairIndex];
         uint256 combined = IFigureEightMatrixV8PM(p.matrixA).occupancy()
                          + IFigureEightMatrixV8PM(p.matrixB).occupancy();
         uint256 maxCap   = IFigureEightMatrixV8PM(p.matrixA).MATRIX_SIZE() * 2;
 
+        if (activePairIndex + 1 >= pairs.length) {
+            // ── V8.35/V8.36: No pre-deployed next pair — try autonomous factory expansion ──
+            // V8.36 Bug Fix #3: use factoryExpandThresholdBps (default 100%) so the factory
+            // only fires when the FULL pair cycle (MatA=127 + MatB=127 = 254 seats) is
+            // complete, not at 80% when MatB is still ~60% unfilled.
+            if (pairFactory != address(0) && maxCap > 0
+                    && combined * BPS_DENOM / maxCap >= factoryExpandThresholdBps) {
+                _expanding = true;
+                // deployAndWire() internally calls addPair() which advances
+                // activePairIndex to the newly deployed pair.
+                IMatrixPairFactory(pairFactory).deployAndWire(address(this));
+                _expanding = false;
+            }
+            // No next pair and threshold not yet crossed (or no factory) -- stay put.
+            return;
+        }
+
+        // Normal path: a pre-deployed next pair exists -- advance if threshold crossed.
         if (combined * BPS_DENOM / maxCap >= expandThresholdBps) {
             activePairIndex += 1;
             emit PairActivated(activePairIndex);

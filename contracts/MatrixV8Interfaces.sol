@@ -19,6 +19,9 @@ interface ITierRouter {
     function onCrossToMatB(address member, uint8 tierIndex) external;
     function memberHighestTier(address member) external view returns (uint8);
     function reservedFor(address member) external view returns (uint256);
+    /// @notice V8.36: Used by MatrixLogicLib to accept cross-pair referrers.
+    ///         Returns true if the address has ever registered via TierRouter.register().
+    function globalJoined(address member) external view returns (bool);
 }
 
 interface IStabilityFund {

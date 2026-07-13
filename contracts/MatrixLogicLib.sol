@@ -143,11 +143,11 @@ library MatrixLogicLib {
 
     /// @notice V8.31: 50/5/45 fee split constants.
     ///         Every entry fee is divided into three buckets BEFORE the BPS array runs:
-    ///           50% → crossingReserve  (pre-funds first crossing; held in member struct)
-    ///            5% → direct earnings  (immediately withdrawable by the new member)
-    ///           45% → payout base      (BPS array applied to this portion ONLY)
+    ///           50% -> crossingReserve  (pre-funds first crossing; held in member struct)
+    ///            5% -> direct earnings  (immediately withdrawable by the new member)
+    ///           45% -> payout base      (BPS array applied to this portion ONLY)
     ///         Crossing cost = full entryFee, funded from crossingReserve first then withdrawable.
-    ///         Member only needs to accumulate entryFee × 50% = $5 in withdrawable per crossing
+    ///         Member only needs to accumulate entryFee x 50% = $5 in withdrawable per crossing
     ///         (the other 50% is always pre-funded by the reserve deposited at entry time),
     ///         reducing cycles to cross from ~6 to ~3 at every tier.
     uint256 internal constant CROSSING_RESERVE_BPS = 5_000;   // 50% pre-funded for crossing
@@ -156,14 +156,14 @@ library MatrixLogicLib {
 
     /// @notice Fraction of each pool distribution share that is redirected to the SF
     ///         as gradual rescue-debt repayment.  5000 = 50%.
-    ///         V8.31: raised from 15% → 50%.  Faster debt clearing (6 cycles vs 18 at T1)
+    ///         V8.31: raised from 15% -> 50%.  Faster debt clearing (6 cycles vs 18 at T1)
     ///         while the member still earns CNOVA throughout.  Passive members earn
     ///         CNOVA mining rewards; the USDC stream is the active-recruiter bonus,
     ///         so redirecting half of it during rescue repayment is transparent and fair.
     ///         Paired with the crossing-buffer in forceCrossKeeper so that:
     ///           buffer = entryFee - poolEarningsPerJourney x (1 - RESCUE_REPAY_BPS/BPS_DENOM)
     ///         guaranteeing the member arrives at MatA root position with exactly entryFee.
-    // V8.32: RESCUE_REPAY_BPS removed as constant — now read from StabilityFund (DAO param #50).
+    // V8.32: RESCUE_REPAY_BPS removed as constant -- now read from StabilityFund (DAO param #50).
 
     // --- Events (identical to the originals; emitted from library code, but the
     //     LOG opcode under delegatecall records the CALLING matrix's address,
@@ -180,6 +180,8 @@ library MatrixLogicLib {
     event PoolShareCredited(address indexed member, uint256 position, uint256 amount);
     event StabilityContribution(uint8 indexed tier, uint256 amount, uint8 layer);
     event SlotReclaimed(address indexed member, uint256 position, uint256 idleDuration);
+    /// @notice V8.33: Emitted when keeper soft-parks an idle member (parks instead of hard-evict).
+    event SlotParkedIdle(address indexed member, uint256 position, uint256 idleDuration);
     event WithdrawalFeeCharged(address indexed member, uint256 fee);
     event MemberParked(address indexed member, uint256 shortfall);
     event MemberEvicted(address indexed member, uint256 totalWithdrawn);
@@ -221,8 +223,24 @@ library MatrixLogicLib {
 
         if (!self.members[member].hasEverJoined) {
             self.totalJoined += 1;
-            address l1 = (referrer != address(0) && self.members[referrer].hasEverJoined)
-                ? referrer : address(0);
+            // V8.36 Bug Fix #2: Accept cross-pair referrers.
+            // Old check only accepted referrers who had joined THIS specific matrix pair.
+            // This caused factory-created pairs (T1.2+) to always store l1 = address(0)
+            // for members whose referrers were only in the original pair (T1.1), sending
+            // the L1 commission to accountOne (W1) instead of the actual referrer.
+            // New check: also accept referrers who are globally joined in TierRouter.
+            // withdraw() checks withdrawable > 0, not hasEverJoined, so the cross-pair
+            // referrer can claim earned L1 credits from this matrix at any time.
+            address l1;
+            if (referrer != address(0)) {
+                if (self.members[referrer].hasEverJoined) {
+                    l1 = referrer;
+                } else if (self.tierRouter != address(0)) {
+                    try ITierRouter(self.tierRouter).globalJoined(referrer) returns (bool joined) {
+                        if (joined) l1 = referrer;
+                    } catch {}
+                }
+            }
 
             self.members[member] = Member({
                 id:              self.totalJoined,
@@ -239,6 +257,15 @@ library MatrixLogicLib {
         }
 
         if (self.occupancy < cfg.matrixSize) {
+            // V8.33 CRITICAL FIX: reclaimIdleSlot / softParkIdle can create gaps at low
+            // positions while nextSlot keeps incrementing past matrixSize.  If nextSlot
+            // overflowed (> matrixSize), reset to 1 and scan forward to find the lowest
+            // empty slot.  Filling from the bottom guarantees position 1 is occupied
+            // whenever occupancy == matrixSize, preventing "F8V8: no root" on cycle-outs.
+            if (self.nextSlot > cfg.matrixSize) self.nextSlot = 1;
+            while (self.posToMember[self.nextSlot] != address(0)) {
+                self.nextSlot++;
+            }
             _placeInMatrix(self, member, self.nextSlot);
             self.nextSlot  += 1;
             self.occupancy += 1;
@@ -353,7 +380,7 @@ library MatrixLogicLib {
             // Take repayBps (default 50%) of this member's pool share and redirect
             // it back to the SF as partial loan repayment.  The remaining share is
             // credited to the member as normal.
-            // Note: `debt` local removed to stay within 16-slot stack limit —
+            // Note: `debt` local removed to stay within 16-slot stack limit --
             //       self.rescueDebt[m] accessed directly (same slot, cheaper stack).
             if (self.rescueDebt[m] > 0 && self.stabilityFund != address(0)) {
                 uint256 repay = share * repayBps / BPS_DENOM;
@@ -484,13 +511,13 @@ library MatrixLogicLib {
         Member storage m = self.members[newMember];
 
         // V8.32: 50/2.5/47.5 pre-split.  Before the BPS array runs, carve the entry fee into:
-        //   50%   → crossingReserve  (stays in contract; funds member's next crossing)
-        //    2.5% → direct earnings  (immediately withdrawable by the new member)
-        //   47.5% → payBase = entryFee (BPS splits are expressed as BPS-of-entryFee, sum to 4750)
+        //   50%   -> crossingReserve  (stays in contract; funds member's next crossing)
+        //    2.5% -> direct earnings  (immediately withdrawable by the new member)
+        //   47.5% -> payBase = entryFee (BPS splits are expressed as BPS-of-entryFee, sum to 4750)
         //
         // V8.32 change: payBase is now the full entryFee; all SplitConfig BPS values
         // are expressed as fractions of entryFee (not of the 45% sub-pool).
-        // Sum check: 5000 (cross) + 250 (instant) + 4750 (splits) = 10000 ✓
+        // Sum check: 5000 (cross) + 250 (instant) + 4750 (splits) = 10000
         m.crossingReserve += cfg.entryFee * CROSSING_RESERVE_BPS / BPS_DENOM;
         _credit(self, newMember, cfg.entryFee * DIRECT_EARN_BPS / BPS_DENOM);
         uint256 payBase = cfg.entryFee;
@@ -640,7 +667,7 @@ library MatrixLogicLib {
         return (4000, 4000);
     }
 
-    // V8.31: payBase parameter added — chain pay is a fraction of the 45% payout base,
+    // V8.31: payBase parameter added -- chain pay is a fraction of the 45% payout base,
     // not the full entry fee.
     function _distributeChainPay(MatrixState storage self, ImmutableConfig memory cfg, address newMember, uint256 payBase) internal {
         uint256 myPos = self.matrixPos[newMember];
@@ -662,6 +689,11 @@ library MatrixLogicLib {
         if (recipient == address(0) || amount == 0) return;
         self.members[recipient].withdrawable += amount;
         self.members[recipient].totalEarned  += amount;
+        // V8.33: Earning from chain pay, direct earn, or pool distributions resets the idle
+        // timer.  Without this, passively-earning members (others filling slots below them)
+        // are incorrectly flagged as idle and reclaimed -- they ARE active, new joins are
+        // paying into their chain.  Root cause of the V8.32 reclaim flood.
+        self.lastActivityTime[recipient] = block.timestamp;
     }
 
     // ===========================================================================
@@ -693,7 +725,7 @@ library MatrixLogicLib {
         if (self.members[msg.sender].isInMatrix && automationReserve > 0) {
             // V8.32: only enforce crossing reserve when automation is active.
             // If all automation is disabled (automationReserve == 0), member may
-            // withdraw freely — they have explicitly opted out of auto-reentry.
+            // withdraw freely -- they have explicitly opted out of auto-reentry.
             uint256 crossNeeded = cfg.entryFee > self.members[msg.sender].crossingReserve
                 ? cfg.entryFee - self.members[msg.sender].crossingReserve
                 : 0;
@@ -740,12 +772,47 @@ library MatrixLogicLib {
         uint256 pos      = self.matrixPos[member];
         uint256 idleTime = block.timestamp - self.lastActivityTime[member];
 
+        // V8.33: Return crossing reserve to withdrawable before eviction.
+        // Previously locked forever -- member left limbo unable to access their reserve.
+        if (self.members[member].crossingReserve > 0) {
+            self.members[member].withdrawable    += self.members[member].crossingReserve;
+            self.members[member].crossingReserve  = 0;
+        }
+
         self.posToMember[pos]           = address(0);
         self.matrixPos[member]          = 0;
         self.members[member].isInMatrix = false;
         self.occupancy                 -= 1;
 
         emit SlotReclaimed(member, pos, idleTime);
+    }
+
+    /// @notice V8.33: Keeper calls this for timeout-triggered idle members instead of
+    ///         reclaimIdleSlot.  Unlike reclaimIdleSlot (hard eviction, member lands in
+    ///         limbo), this adds the member to the parked queue so the rescue mechanism
+    ///         re-enters them automatically.  Crossing reserve is returned to withdrawable
+    ///         so it's accessible while parked.  The slot opens immediately for new members.
+    function softParkIdle(MatrixState storage self, address member) external {
+        require(self.members[member].isInMatrix, "F8V8: not in matrix");
+        uint256 pos      = self.matrixPos[member];
+        uint256 idleTime = block.timestamp - self.lastActivityTime[member];
+
+        // Return crossing reserve so member keeps full access to their balance while parked
+        if (self.members[member].crossingReserve > 0) {
+            self.members[member].withdrawable    += self.members[member].crossingReserve;
+            self.members[member].crossingReserve  = 0;
+        }
+
+        self.posToMember[pos]           = address(0);
+        self.matrixPos[member]          = 0;
+        self.members[member].isInMatrix = false;
+        self.occupancy                 -= 1;
+
+        // Add to parked queue -- keeper rescue path (forceCrossKeeper) will re-enter them
+        self.parkedAt[member]      = block.timestamp;
+        self.parkedMembers.push(member);
+
+        emit SlotParkedIdle(member, pos, idleTime);
     }
 
     function forceCross(MatrixState storage self, ImmutableConfig memory cfg, address member) external {
@@ -802,9 +869,9 @@ library MatrixLogicLib {
         // V8.28 FIX: store debt on the DESTINATION (MatB), not the source (MatA).
         // forceCrossKeeper crosses the member directly into MatB.  Storing debt on MatA
         // meant MatB's _distributePool (50% deduction) and MatB cycle-out repayment
-        // never fired — MatB's rescueDebt was always zero.  Moving debt to MatB ensures:
-        //   - 50% deduction fires on every MatB pool distribution share  (lines ~323-338)
-        //   - Lump-sum repayment fires at MatB cycle-out                 (lines ~278-289)
+        // never fired -- MatB's rescueDebt was always zero.  Moving debt to MatB ensures:
+        //   - 50% deduction fires on every MatB pool distribution share
+        //   - Lump-sum repayment fires at MatB cycle-out
         // The RescueLoanIssued event is still emitted HERE (on MatA) for off-chain tracking.
         uint256 totalLoan = sfContribution + crossingBuffer;
         if (totalLoan > 0) {
@@ -829,7 +896,7 @@ library MatrixLogicLib {
 
         uint256 withdrawable = self.members[member].withdrawable;
 
-        // V8.31: crossing reserve is consumed first — reduces SF shortfall.
+        // V8.31: crossing reserve is consumed first -- reduces SF shortfall.
         uint256 reserve = self.members[member].crossingReserve;
         uint256 effectiveContrib = reserve + withdrawable;
 
@@ -855,7 +922,7 @@ library MatrixLogicLib {
 
     /// @notice Member rescues themselves by paying their own shortfall.
     ///         No SF loan. No debt. No intermediary required.
-    ///         Anyone can call this — only msg.sender is rescued (prevents griefing).
+    ///         Anyone can call this -- only msg.sender is rescued (prevents griefing).
     function selfRescue(MatrixState storage self, ImmutableConfig memory cfg) external {
         address member = msg.sender;
         require(self.members[member].hasEverJoined,  "F8V8: not a member");
@@ -864,7 +931,7 @@ library MatrixLogicLib {
 
         uint256 withdrawable = self.members[member].withdrawable;
 
-        // V8.31: crossing reserve is consumed first — reduces what member must pay.
+        // V8.31: crossing reserve is consumed first -- reduces what member must pay.
         uint256 reserve = self.members[member].crossingReserve;
         uint256 effectiveContrib = reserve + withdrawable;
         uint256 shortfall = cfg.entryFee > effectiveContrib ? cfg.entryFee - effectiveContrib : 0;
@@ -873,7 +940,7 @@ library MatrixLogicLib {
         self.members[member].withdrawable = 0;
 
         if (shortfall > 0) {
-            // Member pays their own shortfall directly — no debt, no SF involvement.
+            // Member pays their own shortfall directly -- no debt, no SF involvement.
             cfg.usdc.safeTransferFrom(member, address(this), shortfall);
         }
 
