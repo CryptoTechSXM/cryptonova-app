@@ -202,33 +202,31 @@ async function burnSweep(walletList, cnova) {
 }
 
 // ── Withdraw sweep — simulate members cashing out earned USDC ───────────────
-// Called on every matrix cycle. Sweeps all wallets for withdrawable USDC in
-// MatA and MatB and calls withdraw() — simulates organic selling pressure /
-// members realising gains as the matrix cycles.
-async function withdrawSweep(walletList, matA1, matB1) {
+// Called on every matrix cycle. Sweeps all wallets for withdrawable USDC across
+// ALL discovered matrix pairs (T1.1, T1.2, T2, T3 …) — simulates organic
+// selling pressure / members realising gains as the matrix cycles.
+// V8.36: accepts matrices array (not two separate contracts) so factory-spawned
+// pairs like T1.2 are covered automatically.
+async function withdrawSweep(walletList, matrices) {
   let swept = 0;
   let totalWithdrawn = 0n;
   for (const w of walletList) {
     try {
-      const conn    = w.connect(ethers.provider);
-      const ethBal  = await ethers.provider.getBalance(w.address);
+      const conn   = w.connect(ethers.provider);
+      const ethBal = await ethers.provider.getBalance(w.address);
       if (ethBal < 500_000_000_000n) continue; // need ETH for gas
-      // Withdraw from MatA if earned
-      const mA = await matA1.getMember(w.address);
-      if (mA.hasEverJoined && mA.withdrawable > 0n) {
-        await (await matA1.connect(conn).withdraw({ gasLimit: 300_000 })).wait();
-        totalWithdrawn += mA.withdrawable;
-        swept++;
-      }
-      // Withdraw from MatB if earned
-      const mB = await matB1.getMember(w.address);
-      if (mB.hasEverJoined && mB.withdrawable > 0n) {
-        await (await matB1.connect(conn).withdraw({ gasLimit: 300_000 })).wait();
-        totalWithdrawn += mB.withdrawable;
-        swept++;
+      for (const { matrix } of matrices) {
+        try {
+          const mData = await matrix.getMember(w.address);
+          if (mData.hasEverJoined && mData.withdrawable > 0n) {
+            await (await matrix.connect(conn).withdraw({ gasLimit: 300_000 })).wait();
+            totalWithdrawn += mData.withdrawable;
+            swept++;
+          }
+        } catch { /* no earnings in this matrix — skip */ }
       }
     } catch {
-      // wallet had no withdrawable or failed — silent skip
+      // wallet query failed — silent skip
     }
   }
   console.log(`  Withdraw sweep: ${swept} withdrawals | ${fmt6(totalWithdrawn)} USDC total`);
@@ -663,14 +661,60 @@ async function main() {
   const stabilityFund = SF_ADDR ? await ethers.getContractAt("StabilityFund", SF_ADDR) : null;
   // All deployed matrices — used by simulateSelfRescues() to scan parkedAt.
   // Null entries (T2/T3 if not deployed) are filtered out.
-  const allMatrices = [
-    { matrix: matA1, label: "T1 MatA", addr: T1.matA },
-    { matrix: matB1, label: "T1 MatB", addr: T1.matB },
+  // V8.36: declared `let` so the PM discovery block below can expand it with
+  // factory-spawned pairs like T1.2 without re-declaring.
+  let allMatrices = [
+    { matrix: matA1, label: "T1.1 MatA", addr: T1.matA },
+    { matrix: matB1, label: "T1.1 MatB", addr: T1.matB },
     ...(matA2 ? [{ matrix: matA2, label: "T2 MatA", addr: T2.matA }] : []),
     ...(matB2 ? [{ matrix: matB2, label: "T2 MatB", addr: T2.matB }] : []),
     ...(matA3 ? [{ matrix: matA3, label: "T3 MatA", addr: T3.matA }] : []),
     ...(matB3 ? [{ matrix: matB3, label: "T3 MatB", addr: T3.matB }] : []),
   ];
+
+  // ── Discover factory-spawned T1 pairs via PairManager ──────────────────────
+  // When T1.1 reaches 127/127 (both matrices), the factory autonomously spawns
+  // T1.2 and sets activePairIndex = 1.  All subsequent registrations go to T1.2.
+  // We query allPairsStatus() to find T1.2 (and any future T1.3, T1.4…) so that:
+  //   • simulateSelfRescues() scans T1.2 parked members (not just T1.1)
+  //   • occupancy display shows T1.2 live fill (not T1.1's archived 127/127)
+  //   • withdrawSweep catches T1.2 earnings
+  //   • simulateManualUpgrades checks T1.2 MatB → T2 eligibility
+  let activeMatA1    = matA1;   // T1.1 MatA — default pre-factory
+  let activeMatB1    = matB1;   // T1.1 MatB — default pre-factory
+  let activeMatA1Addr = T1.matA;
+  let activeMatB1Addr = T1.matB;
+  try {
+    const pm1View = await ethers.getContractAt("PairManagerV8", T1.pm);
+    const [pmMatAs, pmMatBs] = await pm1View.allPairsStatus();
+    if (pmMatAs.length > 1) {
+      const lastPair = pmMatAs.length - 1;
+      activeMatA1Addr = pmMatAs[lastPair];
+      activeMatB1Addr = pmMatBs[lastPair];
+      activeMatA1 = await ethers.getContractAt("FigureEightMatrixV8", activeMatA1Addr);
+      activeMatB1 = await ethers.getContractAt("FigureEightMatrixV8", activeMatB1Addr);
+      console.log(`  ℹ  T1 factory: ${pmMatAs.length} pairs. T1.1 archived (127/127). Active: T1.${pmMatAs.length} (${activeMatA1Addr.slice(0,10)}…)`);
+      // Rebuild allMatrices: T1.1 (archived) + T1.2 … T1.N (active) + T2 + T3
+      allMatrices = [
+        { matrix: matA1, label: "T1.1 MatA", addr: T1.matA },
+        { matrix: matB1, label: "T1.1 MatB", addr: T1.matB },
+      ];
+      for (let pi = 1; pi < pmMatAs.length; pi++) {
+        const pairLabel = `T1.${pi + 1}`;
+        allMatrices.push(
+          { matrix: await ethers.getContractAt("FigureEightMatrixV8", pmMatAs[pi]), label: `${pairLabel} MatA`, addr: pmMatAs[pi] },
+          { matrix: await ethers.getContractAt("FigureEightMatrixV8", pmMatBs[pi]), label: `${pairLabel} MatB`, addr: pmMatBs[pi] },
+        );
+      }
+      if (matA2) allMatrices.push({ matrix: matA2, label: "T2 MatA", addr: T2.matA });
+      if (matB2) allMatrices.push({ matrix: matB2, label: "T2 MatB", addr: T2.matB });
+      if (matA3) allMatrices.push({ matrix: matA3, label: "T3 MatA", addr: T3.matA });
+      if (matB3) allMatrices.push({ matrix: matB3, label: "T3 MatB", addr: T3.matB });
+      console.log(`  allMatrices rebuilt: ${allMatrices.map(m => m.label).join(', ')}`);
+    }
+  } catch(e) {
+    console.warn(`  ⚠  PM pair discovery failed — using T1.1 static addresses: ${e.message?.slice(0,80)}`);
+  }
 
   const MK_ADDR    = addrs.matrixKeeper || addrs.MatrixKeeper || null;
   const matrixKeeper = MK_ADDR ? await ethers.getContractAt("MatrixKeeper", MK_ADDR, deployer) : null;
@@ -833,8 +877,17 @@ async function main() {
         walletList: allWallets, tierRouter, fromMatB: matB1, toMatA: matA2,
         usdc, usdcFunder, rawFunder, funderAddr, fNonce,
         tierRouterAddr: addrs.tierRouter || addrs.TierRouter,
-        fee: T2_FEE, targetTierIndex: 1, tierLabel: "T2",
+        fee: T2_FEE, targetTierIndex: 1, tierLabel: "T2 (from T1.1 MatB)",
       });
+      // If factory spawned T1.2, also check T1.2 MatB → T2
+      if (activeMatB1Addr !== T1.matB) {
+        fNonce = await simulateManualUpgrades({
+          walletList: allWallets, tierRouter, fromMatB: activeMatB1, toMatA: matA2,
+          usdc, usdcFunder, rawFunder, funderAddr, fNonce,
+          tierRouterAddr: addrs.tierRouter || addrs.TierRouter,
+          fee: T2_FEE, targetTierIndex: 1, tierLabel: "T2 (from T1.2 MatB)",
+        });
+      }
     }
     if (matA3) {
       fNonce = await simulateManualUpgrades({
@@ -1146,9 +1199,9 @@ async function main() {
       console.log(`\n  🎉  W1 UPGRADED to T2 after ${registered} registrations!`);
     }
 
-    // Per-batch stats
-    const occ1A    = await matA1.occupancy();
-    const occ1B    = await matB1.occupancy();
+    // Per-batch stats — use ACTIVE pair (T1.2 after factory) not archived T1.1
+    const occ1A    = await activeMatA1.occupancy();
+    const occ1B    = await activeMatB1.occupancy();
     const sysCyc   = await tierRouter.totalSystemCycles();
     const w1Tier   = await tierRouter.memberHighestTier(W1_ADDR);
     const w1Cyc    = await tierRouter.tierCycles(W1_ADDR, 0);
@@ -1176,7 +1229,7 @@ async function main() {
       console.log(`  ↳ Running early-unlock burn sweep (simulate CNOVA sell)…`);
       await burnSweep(wallets, cnova);
       console.log(`  ↳ Running withdraw sweep (USDC exit simulation)…`);
-      await withdrawSweep(wallets, matA1, matB1);
+      await withdrawSweep(wallets, allMatrices);
       console.log(`  ↳ Running CNOVA buy sweep (simulate purchases via DirectSale)…`);
       await cnovaBuySweep(wallets, directSale, usdc);
       // Self-rescue sweep on every cycle — most likely time wallets just got parked
@@ -1199,8 +1252,18 @@ async function main() {
       usdc, usdcFunder, rawFunder,
       funderAddr, fNonce,
       tierRouterAddr: addrs.tierRouter || addrs.TierRouter,
-      fee: T2_FEE, targetTierIndex: 1, tierLabel: "T2",
+      fee: T2_FEE, targetTierIndex: 1, tierLabel: "T2 (from T1.1 MatB)",
     });
+    // If factory spawned T1.2, also check T1.2 MatB → T2 (members who crossed in T1.2)
+    if (activeMatB1Addr !== T1.matB && matA2) {
+      fNonce = await simulateManualUpgrades({
+        walletList: allWallets, tierRouter, fromMatB: activeMatB1, toMatA: matA2,
+        usdc, usdcFunder, rawFunder,
+        funderAddr, fNonce,
+        tierRouterAddr: addrs.tierRouter || addrs.TierRouter,
+        fee: T2_FEE, targetTierIndex: 1, tierLabel: "T2 (from T1.2 MatB)",
+      });
+    }
     fNonce = await simulateManualUpgrades({
       walletList: allWallets, tierRouter, fromMatB: matB2, toMatA: matA3,
       usdc, usdcFunder, rawFunder,
@@ -1211,7 +1274,7 @@ async function main() {
 
     // Withdraw sweep every 10 batches — simulate ongoing sell pressure
     if (batchNum % 10 === 0) {
-      await withdrawSweep(wallets, matA1, matB1);
+      await withdrawSweep(wallets, allMatrices);
     }
 
     // Periodic self-rescue scan — catch members parked between cycles
