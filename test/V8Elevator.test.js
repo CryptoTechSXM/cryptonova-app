@@ -2142,18 +2142,21 @@ describe("V8.36 — Bug Fix #3: factory fires at factoryExpandThresholdBps not e
     expect(await pm1.activePairIndex()).to.equal(0n);
   });
 
-  it("J2: factory fires exactly when factoryExpandThresholdBps threshold is met (lowered to 50%)", async function () {
+  it("J2: factoryExpandThresholdBps=50% — factory does NOT fire when only MatA fills (V8.37: rotationCount now gates factory)", async function () {
     const { pm1, admin, reg, w1, s0, s1, s2, s3, s4, s5, s6 } =
       await loadFixture(deployWithFactoryFixture);
 
     await pm1.connect(admin).setFactoryExpandThreshold(5000n);
 
-    // 7 members fill matA: combined=7/14=5000bps; on 8th call _tryAdvancePair sees 5000 ≥ 5000
+    // 7 members fill MatA (combined = 7/14 = 50%). Old V8.36 code would fire the factory here
+    // because 50% >= factoryExpandThresholdBps=50%. V8.37 changes the trigger: the factory
+    // only fires after MatB.rotationCount() >= 1. MatB has 0 members at this point
+    // (rotationCount=0), so the factory stays quiet even though the threshold is met.
     for (const m of [w1, s0, s1, s2, s3, s4, s5]) await reg(m);
-    await reg(s6); // triggers factory
+    await reg(s6); // 8th member: _tryAdvancePair sees rotationCount=0, factory does NOT fire
 
-    expect(await pm1.pairCount()).to.equal(2n, "factory should have deployed pair 1");
-    expect(await pm1.activePairIndex()).to.equal(1n);
+    expect(await pm1.pairCount()).to.equal(1n,  "factory must NOT fire — V8.37 requires MatB rotation first");
+    expect(await pm1.activePairIndex()).to.equal(0n, "still on pair 0");
   });
 
   it("J3: expandThresholdBps and factoryExpandThresholdBps are independent getters", async function () {
@@ -2167,5 +2170,197 @@ describe("V8.36 — Bug Fix #3: factory fires at factoryExpandThresholdBps not e
   });
 
 });
+
+
+
+
+// ─────────────────────────────────────────────────────────────────────────────
+// V8.37 — Rotation-based factory trigger + adminForceRotateRoot
+//
+// V8.36 froze T1.1 MatB because factoryExpand fired at 100% occupancy (member
+// 255 going to T1.2 instead of pushing T1.1 MatB's first rotation).
+// V8.37 fix: fire factory only after MatB.rotationCount() >= 1.
+// adminForceRotateRoot() provides an emergency escape for the current frozen pair.
+// ─────────────────────────────────────────────────────────────────────────────
+describe("V8.37 — Rotation-based factory trigger + adminForceRotateRoot", function () {
+
+  // Fill sequence (MSIZE=7):
+  //   Members  1-7  → fill MatA (7/7). MatB.occupancy=0.
+  //   Members  8-14 → each triggers a MatA rotation; root crosses to MatB.
+  //                   MatB now has 7/7. MatB.rotationCount=0 (frozen state).
+  //   Member  15    → _tryAdvancePair: rotationCount=0 → no factory.
+  //                   Enters MatA → MatA rotation → root crosses to MatB slot 8
+  //                   → MatB._cycleOutRoot fires → MatB.rotationCount=1.
+  //   Member  16    → _tryAdvancePair: rotationCount=1 >= 1 → factory fires!
+
+  it("K1: combined=100% (MatA=7 MatB=7) with rotationCount=0 — factory does NOT fire", async function () {
+    const { pm1, reg, fc, matA, matB,
+            w1, s0, s1, s2, s3, s4, s5, s6, s7, s8, s9, s10, s11, s12, s13 } =
+      await loadFixture(deployWithFactoryFixture);
+
+    // Organic crossings are blocked in this fixture (reg() uses address(0) referrer so
+    // roots accumulate $0 withdrawable — below the $5 needed to cross to MatB).
+    // Fix: interleave reg() to trigger MatA rotation (parks the root) with fc() to
+    // forceCross each parked root into MatB (admin pays the entry fee).
+
+    // Step 1: fill MatA with 7 members
+    for (const m of [w1, s0, s1, s2, s3, s4, s5]) await reg(m);
+
+    // Step 2: 7 regs trigger MatA rotations; fc() pushes each parked root to MatB
+    const triggers    = [s6,  s7,  s8,  s9,  s10, s11, s12];
+    const parkedRoots = [w1,  s0,  s1,  s2,  s3,  s4,  s5];
+    for (let i = 0; i < 7; i++) {
+      await reg(triggers[i]);                  // parks MatA root
+      await fc(parkedRoots[i].address);        // pushes root → MatB
+    }
+    // State: MatA.occupancy=7, MatB.occupancy=7, MatB.rotationCount=0 (frozen)
+
+    expect(await matB.occupancy()).to.equal(7n,  "MatB fully occupied via forceCross");
+    expect(await matB.rotationCount()).to.equal(0n, "MatB has not rotated yet (frozen state)");
+
+    // Register s13 (member 15): _tryAdvancePair fires at combined=100%, rotationCount=0
+    // V8.37: rotationCount=0 → factory must NOT fire
+    await reg(s13);
+    expect(await pm1.pairCount()).to.equal(1n, "factory must NOT fire: rotationCount=0 even at 100%");
+    expect(await pm1.activePairIndex()).to.equal(0n, "still on pair 0");
+  });
+
+  it("K2: factory fires on registration AFTER first MatB rotation (rotationCount 0 → 1)", async function () {
+    const { pm1, reg, fc, matA, matB, deployer, usdc,
+            w1, s0, s1, s2, s3, s4, s5, s6, s7, s8, s9, s10, s11, s12, s13 } =
+      await loadFixture(deployWithFactoryFixture);
+
+    // extra = 16th member (needs fresh USDC)
+    const allSigners = await ethers.getSigners();
+    const extra = allSigners[19];
+    await usdc.connect(deployer).mint(extra.address, 200n * UNIT);
+
+    // Organic crossings are blocked in this fixture (reg() uses address(0) referrer so
+    // roots accumulate $0 withdrawable — below the $5 needed to cross to MatB).
+    // Fix: interleave reg() to trigger MatA rotation (parks the root) with fc() to
+    // forceCross each parked root into MatB (admin pays the entry fee).
+
+    // Step 1: fill MatA with 7 members
+    for (const m of [w1, s0, s1, s2, s3, s4, s5]) await reg(m);
+
+    // Step 2: 7 regs trigger MatA rotations; fc() pushes each parked root to MatB
+    const triggers    = [s6,  s7,  s8,  s9,  s10, s11, s12];
+    const parkedRoots = [w1,  s0,  s1,  s2,  s3,  s4,  s5];
+    for (let i = 0; i < 7; i++) {
+      await reg(triggers[i]);                  // parks MatA root
+      await fc(parkedRoots[i].address);        // pushes root → MatB
+    }
+    // State: MatA.occupancy=7, MatB.occupancy=7, MatB.rotationCount=0 (frozen)
+
+    expect(await matB.rotationCount()).to.equal(0n, "frozen: no MatB rotation yet");
+    expect(await pm1.pairCount()).to.equal(1n, "factory has not fired");
+
+    // Register s13 (member 15): _tryAdvancePair: combined=100%, rotationCount=0 → no factory
+    // MatA rotation: s6 gets parked
+    await reg(s13);
+    expect(await pm1.pairCount()).to.equal(1n, "still no factory with rotationCount=0");
+
+    // forceCross parked s6 into FULL MatB (7/7) → MatB._cycleOutRoot fires → rotationCount=1
+    await fc(s6.address);
+    expect(await matB.rotationCount()).to.equal(1n, "MatB first rotation: rotationCount=1");
+
+    // extra (member 16): _tryAdvancePair sees rotationCount=1 >= 1 → factory deploys T1.2
+    await reg(extra);
+    expect(await pm1.pairCount()).to.equal(2n, "factory deployed T1.2 after MatB rotation confirmed");
+    expect(await pm1.activePairIndex()).to.equal(1n, "active pair now T1.2");
+  });
+
+  it("K3: adminForceRotateRoot() evicts MatB root and increments rotationCount (emergency unfreeze)", async function () {
+    const { matB, admin, reg, fc, matA,
+            w1, s0, s1, s2, s3, s4, s5, s6, s7, s8, s9, s10, s11, s12 } =
+      await loadFixture(deployWithFactoryFixture);
+
+    // Organic crossings are blocked in this fixture (reg() uses address(0) referrer so
+    // roots accumulate $0 withdrawable — below the $5 needed to cross to MatB).
+    // Fix: interleave reg() to trigger MatA rotation (parks the root) with fc() to
+    // forceCross each parked root into MatB (admin pays the entry fee).
+
+    // Step 1: fill MatA with 7 members
+    for (const m of [w1, s0, s1, s2, s3, s4, s5]) await reg(m);
+
+    // Step 2: 7 regs trigger MatA rotations; fc() pushes each parked root to MatB
+    const triggers    = [s6,  s7,  s8,  s9,  s10, s11, s12];
+    const parkedRoots = [w1,  s0,  s1,  s2,  s3,  s4,  s5];
+    for (let i = 0; i < 7; i++) {
+      await reg(triggers[i]);                  // parks MatA root
+      await fc(parkedRoots[i].address);        // pushes root → MatB
+    }
+    // State: MatA.occupancy=7, MatB.occupancy=7, MatB.rotationCount=0 (frozen)
+
+    expect(await matB.rotationCount()).to.equal(0n, "pre-condition: frozen MatB");
+    expect(await matB.occupancy()).to.equal(7n,  "MatB fully occupied");
+
+    // w1 was the first to be forceCrossed into MatB → root at position 1
+    const frozenRoot = await matB.posToMember(1n);
+    expect(frozenRoot).to.equal(w1.address, "w1 should be at MatB position 1");
+
+    // Admin emergency call: manually trigger the rotation
+    await matB.connect(admin).adminForceRotateRoot();
+
+    // Verify rotation occurred
+    expect(await matB.rotationCount()).to.equal(1n, "rotationCount should be 1 after forced rotation");
+    // Root was evicted; occupancy drops by 1 (no new member enters from this call)
+    expect(await matB.occupancy()).to.equal(6n, "occupancy decreases by 1 after forced eviction");
+    // Root's member record reflects the cycle-out
+    const memberData = await matB.getMember(frozenRoot);
+    expect(memberData.isInMatrix).to.be.false;
+    expect(memberData.cyclesCompleted).to.equal(1n);
+  });
+
+  it("K4: adminForceRotateRoot() reverts on MatA with 'F8V8: only callable on MatB'", async function () {
+    const { matA, admin } = await loadFixture(deployWithFactoryFixture);
+
+    await expect(matA.connect(admin).adminForceRotateRoot())
+      .to.be.revertedWith("F8V8: only callable on MatB");
+  });
+
+  it("K5: adminForceRotateRoot() reverts for non-owner with OwnableUnauthorizedAccount", async function () {
+    const { matB, s0 } = await loadFixture(deployWithFactoryFixture);
+
+    await expect(matB.connect(s0).adminForceRotateRoot())
+      .to.be.revertedWithCustomError(matB, "OwnableUnauthorizedAccount");
+  });
+
+  it("K6: after adminForceRotateRoot(), next registration sees rotationCount=1 and factory fires", async function () {
+    const { pm1, matB, admin, reg, fc, matA,
+            w1, s0, s1, s2, s3, s4, s5, s6, s7, s8, s9, s10, s11, s12, s13 } =
+      await loadFixture(deployWithFactoryFixture);
+
+    // Organic crossings are blocked in this fixture (reg() uses address(0) referrer so
+    // roots accumulate $0 withdrawable — below the $5 needed to cross to MatB).
+    // Fix: interleave reg() to trigger MatA rotation (parks the root) with fc() to
+    // forceCross each parked root into MatB (admin pays the entry fee).
+
+    // Step 1: fill MatA with 7 members
+    for (const m of [w1, s0, s1, s2, s3, s4, s5]) await reg(m);
+
+    // Step 2: 7 regs trigger MatA rotations; fc() pushes each parked root to MatB
+    const triggers    = [s6,  s7,  s8,  s9,  s10, s11, s12];
+    const parkedRoots = [w1,  s0,  s1,  s2,  s3,  s4,  s5];
+    for (let i = 0; i < 7; i++) {
+      await reg(triggers[i]);                  // parks MatA root
+      await fc(parkedRoots[i].address);        // pushes root → MatB
+    }
+    // State: MatA.occupancy=7, MatB.occupancy=7, MatB.rotationCount=0 (frozen)
+
+    expect(await pm1.pairCount()).to.equal(1n, "frozen: factory not fired");
+
+    // Admin manually rotates the frozen MatB root (unfreeze operation)
+    await matB.connect(admin).adminForceRotateRoot();
+    expect(await matB.rotationCount()).to.equal(1n, "rotationCount=1 after manual rotation");
+
+    // Next registration: _tryAdvancePair sees rotationCount=1 >= 1 → factory fires
+    // combined = MatA.occupancy(7) + MatB.occupancy(6) = 13/14 (92.8%) at check time
+    await reg(s13);
+    expect(await pm1.pairCount()).to.equal(2n, "factory fires after manual rotation + registration");
+    expect(await pm1.activePairIndex()).to.equal(1n, "active pair advanced to T1.2");
+  });
+
+}); // end: V8.37 — Rotation-based factory trigger + adminForceRotateRoot
 
 }); // end: V8.35 — MatrixPairFactory (contains V8.36 bug fixes)
