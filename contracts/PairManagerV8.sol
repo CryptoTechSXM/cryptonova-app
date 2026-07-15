@@ -58,6 +58,7 @@ interface IFigureEightMatrixV8PM {
     ///         withdraw/cycle logic. See FigureEightMatrixV8.sol/V8Governance.sol
     ///         PARAM_EARLY_EXIT_PENALTY_BPS retirement notes.)
     function setWithdrawalFeeBps(uint256 bps) external;
+    function rotationCount() external view returns (uint256);
 }
 
 contract PairManagerV8 is Ownable2Step {
@@ -371,19 +372,33 @@ contract PairManagerV8 is Ownable2Step {
         uint256 maxCap   = IFigureEightMatrixV8PM(p.matrixA).MATRIX_SIZE() * 2;
 
         if (activePairIndex + 1 >= pairs.length) {
-            // ── V8.35/V8.36: No pre-deployed next pair — try autonomous factory expansion ──
-            // V8.36 Bug Fix #3: use factoryExpandThresholdBps (default 100%) so the factory
-            // only fires when the FULL pair cycle (MatA=127 + MatB=127 = 254 seats) is
-            // complete, not at 80% when MatB is still ~60% unfilled.
-            if (pairFactory != address(0) && maxCap > 0
-                    && combined * BPS_DENOM / maxCap >= factoryExpandThresholdBps) {
-                _expanding = true;
-                // deployAndWire() internally calls addPair() which advances
-                // activePairIndex to the newly deployed pair.
-                IMatrixPairFactory(pairFactory).deployAndWire(address(this));
-                _expanding = false;
+            // ── V8.37: No pre-deployed next pair — try autonomous factory expansion ──
+            // Trigger: active MatB must have completed at least 1 rotation, meaning all
+            // original 127 MatB members have been paid out and the full cycle is done.
+            // This prevents the V8.36 freeze where the factory fired BEFORE the 255th
+            // member could enter T1.1 MatA to push MatB's first rotation.
+            //
+            // Fallback: if rotationCount() call fails (e.g., non-upgraded matrix),
+            // fall back to the old occupancy-based factoryExpandThresholdBps check
+            // so this upgrade is backwards-compatible with test fixtures.
+            if (pairFactory != address(0)) {
+                bool matBHasRotated = false;
+                try IFigureEightMatrixV8PM(p.matrixB).rotationCount() returns (uint256 rc) {
+                    matBHasRotated = rc >= 1;
+                } catch {
+                    // Backwards-compat fallback for matrices without rotationCount()
+                    matBHasRotated = maxCap > 0
+                        && combined * BPS_DENOM / maxCap >= factoryExpandThresholdBps;
+                }
+                if (matBHasRotated) {
+                    _expanding = true;
+                    // deployAndWire() internally calls addPair() which advances
+                    // activePairIndex to the newly deployed pair.
+                    IMatrixPairFactory(pairFactory).deployAndWire(address(this));
+                    _expanding = false;
+                }
             }
-            // No next pair and threshold not yet crossed (or no factory) -- stay put.
+            // No next pair and rotation not yet complete (or no factory) -- stay put.
             return;
         }
 

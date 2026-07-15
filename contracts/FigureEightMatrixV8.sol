@@ -448,6 +448,21 @@ contract FigureEightMatrixV8 is Ownable2Step {
         MatrixLogicLib.forceCross(_state, _cfg(), member);
     }
 
+    // --- Admin: adminForceRotateRoot (V8.37) ------------------------------------
+
+    /// @notice V8.37 emergency: manually trigger the root rotation on a frozen MatB.
+    ///         Only valid on MatB (isMatrixA == false).
+    ///
+    ///         Use-case: the factory expanded to T1.2 at exactly 254 seats, routing
+    ///         member 255 away from T1.1 MatA before T1.1 MatB could receive its 128th
+    ///         entry and fire its first rotation.  This call manually executes the
+    ///         cycle-out for the current root of this MatB, paying out pool distributions
+    ///         and calling handleCycleOut on TierRouter — identical to what would have
+    ///         happened naturally.  Safe to call multiple times (each call evicts one root).
+    function adminForceRotateRoot() external onlyOwner {
+        MatrixLogicLib.adminForceRotateRoot(_state, _cfg());
+    }
+
     function forceCrossKeeper(address member, uint256 sfContribution, uint256 crossingBuffer) external {
         require(msg.sender == _state.matrixKeeper, "F8V8: not keeper");
         MatrixLogicLib.forceCrossKeeper(_state, _cfg(), member, sfContribution, crossingBuffer);

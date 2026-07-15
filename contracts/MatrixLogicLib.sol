@@ -1003,4 +1003,17 @@ library MatrixLogicLib {
             cfg.usdc.safeTransfer(self.tierRouter, total);
         }
     }
+
+    // --- V8.37: adminForceRotateRoot -------------------------------------------
+    // Body lives here (not in FigureEightMatrixV8) so that FigureEightMatrixV8's
+    // creation bytecode stays small enough for MatrixPairFactory to embed it under
+    // the EIP-170 24,576-byte limit.
+    function adminForceRotateRoot(
+        MatrixState storage self,
+        ImmutableConfig memory cfg
+    ) external {
+        require(!cfg.isMatrixA, "F8V8: only callable on MatB");
+        require(self.nextSlot > 1,  "F8V8: no members to rotate");
+        _cycleOutRoot(self, cfg);
+    }
 }
