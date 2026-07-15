@@ -1912,54 +1912,57 @@ describe("V8.35 — MatrixPairFactory", function () {
   //   3. Register member 8          — _tryAdvancePair sees 5000 ≥ 5000 → factory fires
   //   4. Member 8 is routed to pair 1; original pair 0 keeps its 7 occupants
 
-  it("G2: factory fires on 8th registration when threshold lowered to 50%", async function () {
-    const { pm1, admin, reg, w1, s0, s1, s2, s3, s4, s5, s6 } =
+  it("G2: V8.37: factory fires after first MatB rotation (rotationCount 0→1 via adminForceRotateRoot)", async function () {
+    const { pm1, matB, admin, reg, fc, w1, s0, s1, s2, s3, s4, s5, s6, s7 } =
       await loadFixture(deployWithFactoryFixture);
 
-    // Lower threshold: combined=7 out of maxCap=14 → 5000 bps ≥ 5000 → will fire
-    await pm1.connect(admin).setExpandThreshold(5000n);
-    // V8.36: also lower factory threshold so factory fires at same 50% point
-    await pm1.connect(admin).setFactoryExpandThreshold(5000n);
+    // V8.37: factory trigger is now MatB.rotationCount() >= 1, not occupancy threshold.
+    // Minimal path: fill MatA (7), rotate once to park w1, fc(w1) into MatB (occupancy=1),
+    // adminForceRotateRoot() → rotationCount=1, then one registration fires factory.
+    for (const m of [w1, s0, s1, s2, s3, s4, s5]) await reg(m);
+    await reg(s6);                              // w1 cycled out → parked
+    await fc(w1.address);                       // w1 → MatB (occupancy=1)
+    await matB.connect(admin).adminForceRotateRoot(); // rotationCount=1
 
-    // Fill matA with 7 members; factory does NOT fire during these registrations
-    // because _tryAdvancePair runs before routing: it sees the PREVIOUS state
-    // (combined grows 0→1→…→6 on calls 1-7, never ≥7 yet).
-    for (const m of [w1, s0, s1, s2, s3, s4, s5]) {
-      await reg(m);
-    }
-    expect(await pm1.activePairIndex()).to.equal(0n); // pair 0 still active
-
-    // 8th registration: _tryAdvancePair now sees combined=7 → 5000 bps ≥ 5000 → fires
-    await reg(s6);
-    expect(await pm1.activePairIndex()).to.equal(1n);  // expanded to pair 1
+    // s7 registration: _tryAdvancePair sees rotationCount=1 → factory fires
+    await reg(s7);
+    expect(await pm1.activePairIndex()).to.equal(1n, "factory expanded to pair 1");
+    expect(await pm1.pairCount()).to.equal(2n);
   });
 
   it("G3: after factory fires, pairs[1] has non-zero addresses and 1 registered member", async function () {
-    const { pm1, admin, reg, w1, s0, s1, s2, s3, s4, s5, s6 } =
+    const { pm1, matB, admin, reg, fc, w1, s0, s1, s2, s3, s4, s5, s6, s7 } =
       await loadFixture(deployWithFactoryFixture);
 
-    await pm1.connect(admin).setExpandThreshold(5000n);
-    await pm1.connect(admin).setFactoryExpandThreshold(5000n); // V8.36: separate factory threshold
+    // V8.37: factory trigger is now MatB.rotationCount() >= 1, not occupancy threshold.
+    // Minimal path: fill MatA (7), rotate once to park w1, fc(w1) into MatB (occupancy=1),
+    // adminForceRotateRoot() → rotationCount=1, then one registration fires factory.
     for (const m of [w1, s0, s1, s2, s3, s4, s5]) await reg(m);
-    await reg(s6); // triggers factory; s6 routed to pair 1
+    await reg(s6);                              // w1 cycled out → parked
+    await fc(w1.address);                       // w1 → MatB (occupancy=1)
+    await matB.connect(admin).adminForceRotateRoot(); // rotationCount=1
+    await reg(s7); // factory fires; s7 routed to pair 1
 
     const newPair = await pm1.pairs(1);
     expect(newPair.matrixA).to.not.equal(ethers.ZeroAddress);
     expect(newPair.matrixB).to.not.equal(ethers.ZeroAddress);
-    expect(newPair.totalRegistered).to.equal(1n); // only s6 went to pair 1
+    expect(newPair.totalRegistered).to.equal(1n); // only s7 went to pair 1
   });
 
   it("G4: original pair 0 retains its 7 occupants after expansion (member 8 went to pair 1)", async function () {
-    const { pm1, matA, matB, admin, reg, w1, s0, s1, s2, s3, s4, s5, s6 } =
+    const { pm1, matA, matB, admin, reg, fc, w1, s0, s1, s2, s3, s4, s5, s6, s7 } =
       await loadFixture(deployWithFactoryFixture);
 
-    await pm1.connect(admin).setExpandThreshold(5000n);
-    await pm1.connect(admin).setFactoryExpandThreshold(5000n); // V8.36: separate factory threshold
+    // V8.37: factory trigger is now MatB.rotationCount() >= 1, not occupancy threshold.
+    // Minimal path: fill MatA (7), rotate once to park w1, fc(w1) into MatB (occupancy=1),
+    // adminForceRotateRoot() → rotationCount=1, then one registration fires factory.
     for (const m of [w1, s0, s1, s2, s3, s4, s5]) await reg(m);
-    await reg(s6); // factory fires, s6 -> pair 1
+    await reg(s6);                              // w1 cycled out → parked
+    await fc(w1.address);                       // w1 → MatB (occupancy=1)
+    await matB.connect(admin).adminForceRotateRoot(); // rotationCount=1
+    await reg(s7); // factory fires, s7 → pair 1
 
-    // matA has 7 members; matB has 0 (no organic crossings in the test fixture).
-    // Combined = 7, which is the snapshot at the moment factory fired.
+    // pair 0: matA has 7 members (s0-s6), matB has 0 (w1 was evicted by adminForceRotateRoot)
     const occupA = await matA.occupancy();
     const occupB = await matB.occupancy();
     expect(occupA + occupB).to.equal(7n);
@@ -2016,14 +2019,17 @@ describe("V8.36 — Bug Fix #1: MINTER_ROLE granted to factory-created pairs (al
   });
 
   it("H5: factory-created matA and matB both have MINTER_ROLE on CNOVAToken", async function () {
-    const { pm1, cnova, admin, reg, w1, s0, s1, s2, s3, s4, s5, s6 } =
+    const { pm1, cnova, matB, admin, reg, fc, w1, s0, s1, s2, s3, s4, s5, s6, s7 } =
       await loadFixture(deployWithMinterFixture);
 
-    // Lower factory threshold to 50% to trigger on matA fill (MSIZE=7, combined=7/14=50%)
-    await pm1.connect(admin).setFactoryExpandThreshold(5000n);
-
+    // V8.37: factory trigger is now MatB.rotationCount() >= 1, not occupancy threshold.
+    // Minimal path: fill MatA (7), rotate once to park w1, fc(w1) into MatB (occupancy=1),
+    // adminForceRotateRoot() → rotationCount=1, then one registration fires factory.
     for (const m of [w1, s0, s1, s2, s3, s4, s5]) await reg(m);
-    await reg(s6); // 8th registration triggers factory; s6 routed to new pair 1
+    await reg(s6);                              // w1 cycled out → parked
+    await fc(w1.address);                       // w1 → MatB (occupancy=1)
+    await matB.connect(admin).adminForceRotateRoot(); // rotationCount=1
+    await reg(s7); // factory fires; s7 routed to new pair 1
 
     const MINTER_ROLE = ethers.keccak256(ethers.toUtf8Bytes("MINTER_ROLE"));
     const pair1 = await pm1.pairs(1);
@@ -2052,57 +2058,57 @@ describe("V8.36 — Bug Fix #2: cross-pair referrer receives L1 credit (all tier
   // so we can trigger expansion after 7 T1.1 registrations without needing
   // members to cross to matB (which would require a full forceCross sequence).
   async function deployReferrerFixture() {
-    const base = await loadFixture(deployWithFactoryFixture);
-    const { cnova, pm1, admin, factoryAddr } = base;
-    await cnova.connect(admin).grantRole(ethers.ZeroHash, factoryAddr);
-    await pm1.connect(admin).setFactoryExpandThreshold(5000n);
-    return base;
+    // V8.37: factory trigger is now rotationCount>=1.
+    // DEFAULT_ADMIN_ROLE already granted to factory in deployWithFactoryFixture.
+    // No occupancy-threshold manipulation needed — tests fire factory via adminForceRotateRoot.
+    return loadFixture(deployWithFactoryFixture);
   }
 
   it("I1: member in T1.2 with cross-pair referrer stores referrer address (not address(0))", async function () {
-    const { pm1, reg, w1, s0, s1, s2, s3, s4, s5, s6, s7 } =
+    const { pm1, matB, admin, reg, fc, w1, s0, s1, s2, s3, s4, s5, s6, s7, s8 } =
       await loadFixture(deployReferrerFixture);
 
-    // w1 registers in T1.1 — sets globalJoined[w1] = true on TierRouter
-    await reg(w1);
+    // Fire factory via rotation: fill MatA, rotate once, fc into MatB, adminForceRotateRoot
+    for (const m of [w1, s0, s1, s2, s3, s4, s5]) await reg(m);
+    await reg(s6);                              // w1 cycled out → parked
+    await fc(w1.address);                       // w1 → MatB (occupancy=1)
+    await matB.connect(admin).adminForceRotateRoot(); // rotationCount=1
+    await reg(s7); // factory fires; s7 → T1.2 pair 1
 
-    // Fill remaining 6 T1.1 slots (s0–s5) then register s6 to trigger factory
-    for (const m of [s0, s1, s2, s3, s4, s5]) await reg(m);
-    await reg(s6); // factory fires; s6 → T1.2 pair 1
-
-    // s7 registers in T1.2 with w1 as referrer.
+    // s8 registers in T1.2 with w1 as referrer.
     // w1.hasEverJoined in T1.2 = false (never entered T1.2).
     // Bug fix: MatrixLogicLib falls back to TierRouter.globalJoined(w1) = true → l1 = w1.
-    await reg(s7, w1.address);
+    await reg(s8, w1.address);
 
     const pair1 = await pm1.pairs(1);
     const newMatA = await ethers.getContractAt("FigureEightMatrixV8", pair1.matrixA);
-    const s7Info = await newMatA.getMember(s7.address);
-    expect(s7Info.referrer).to.equal(w1.address, "referrer should be w1, not address(0)");
+    const s8Info = await newMatA.getMember(s8.address);
+    expect(s8Info.referrer).to.equal(w1.address, "referrer should be w1, not address(0)");
   });
 
   it("I2: cross-pair referrer's withdrawableOf in factory matrix equals L1 credit after sponsored entry", async function () {
-    const { pm1, reg, w1, s0, s1, s2, s3, s4, s5, s6, s7 } =
+    const { pm1, matB, admin, reg, fc, w1, s0, s1, s2, s3, s4, s5, s6, s7, s8 } =
       await loadFixture(deployReferrerFixture);
 
-    await reg(w1);
-    for (const m of [s0, s1, s2, s3, s4, s5]) await reg(m);
-    await reg(s6); // factory fires; s6 → T1.2
+    // Fire factory via rotation (same setup as I1)
+    for (const m of [w1, s0, s1, s2, s3, s4, s5]) await reg(m);
+    await reg(s6);
+    await fc(w1.address);
+    await matB.connect(admin).adminForceRotateRoot();
+    await reg(s7); // factory fires; s7 → T1.2
 
     const pair1 = await pm1.pairs(1);
     const newMatA = await ethers.getContractAt("FigureEightMatrixV8", pair1.matrixA);
 
     const w1BalBefore = await newMatA.withdrawableOf(w1.address); // 0 — w1 not in T1.2
 
-    // s7 joins T1.2 with w1 as referrer; L1 credit goes to w1 in T1.2's matA
-    await reg(s7, w1.address);
+    // s8 joins T1.2 with w1 as referrer; L1 credit goes to w1 in T1.2's matA
+    await reg(s8, w1.address);
 
     const w1BalAfter = await newMatA.withdrawableOf(w1.address);
-
-    // L1 credit = T1_FEE * l1Bps / BPS_DENOM = 10e6 * 950 / 10000 = 950 000
-    const expectedL1 = T1_FEE * BigInt(SPLITS.l1Bps) / 10_000n;
+    const expectedL1 = 10n * 10n ** 6n * 950n / 10_000n; // T1_FEE * l1Bps / BPS_DENOM = $0.95
     expect(w1BalAfter - w1BalBefore).to.equal(expectedL1,
-      `expected L1 credit of ${expectedL1}, got ${w1BalAfter - w1BalBefore}`);
+      "w1 should receive L1 credit for s8 in T1.2 even though w1 never joined T1.2");
   });
 
 });
