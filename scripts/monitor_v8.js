@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════
-// CryptoNova V8.10 — Daily Chain Health Monitor
+// CryptoNova Matrix — Daily Chain Health Monitor
 //
 // Usage:
 //   node scripts/monitor_v8.js
@@ -88,16 +88,7 @@ const ALERTS = {
 };
 
 // ── Telegram sender ──────────────────────────────────────────────────
-async function sendTelegram(msg) {
-  const token  = process.env.TELEGRAM_BOT_TOKEN;
-  const chatId = process.env.TELEGRAM_CHAT_ID;
-  if (!token || !chatId) {
-    console.log('\n─── TELEGRAM NOT CONFIGURED ──────────────────────────');
-    console.log('Set TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID in .env');
-    console.log('Report (console only):');
-    console.log(msg.replace(/<[^>]+>/g, ''));
-    return;
-  }
+async function _tgSend(chatId, msg, token) {
   return new Promise((resolve, reject) => {
     const body = JSON.stringify({
       chat_id: chatId,
@@ -126,6 +117,26 @@ async function sendTelegram(msg) {
   });
 }
 
+async function sendTelegram(msg) {
+  const token  = process.env.TELEGRAM_BOT_TOKEN;
+  const chatId = process.env.TELEGRAM_CHAT_ID;
+  if (!token || !chatId) {
+    console.log('\n─── TELEGRAM NOT CONFIGURED ──────────────────────────');
+    console.log('Set TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID in .env');
+    console.log('Report (console only):');
+    console.log(msg.replace(/<[^>]+>/g, ''));
+    return;
+  }
+  return _tgSend(chatId, msg, token);
+}
+
+async function sendChannel(msg) {
+  const token   = process.env.TELEGRAM_BOT_TOKEN;
+  const channel = process.env.TELEGRAM_ANNOUNCE_CHANNEL_ID;
+  if (!token || !channel) return; // silently skip if not configured
+  return _tgSend(channel, msg, token).catch(e => console.warn('Channel send failed:', e.message));
+}
+
 // ── ABIs (minimal) ───────────────────────────────────────────────────
 const MATRIX_ABI = [
   'function occupancy() external view returns (uint256)',
@@ -144,6 +155,7 @@ const USDC_ABI = ['function balanceOf(address) external view returns (uint256)']
 const TR_ABI   = [
   'function systemPaused() external view returns (bool)',
   'function totalSystemCycles() external view returns (uint256)',
+  'function globalJoinedCount() external view returns (uint256)', // unique wallets — matches pulse
 ];
 const CW_ABI   = [
   'function totalEnrolled() external view returns (uint256)',
@@ -164,7 +176,7 @@ async function main() {
 
   const rp = new ethers.JsonRpcProvider(RPC_URL);
 
-  console.log('CryptoNova V8.31 — Daily Monitor');
+  console.log('CryptoNova Matrix — Daily Monitor');
   console.log('Time:', today);
   console.log('RPC: ', RPC_URL);
 
@@ -204,7 +216,7 @@ async function main() {
     totalSupply, totalBurned, epoch,
     sfBal,
     tUSDC, bbUSDC, cwUSDC,
-    paused, systemCycles,
+    paused, systemCycles, globalJoinedCount,
     cwEnrolled, cwGenesis, cwPioneer, cwPool, cwDistReady, cwLifetime,
   ] = await Promise.all([
     cnovaC.totalSupply(),
@@ -216,6 +228,7 @@ async function main() {
     usdcC.balanceOf(ADDRS.communityWallet),
     trC.systemPaused(),
     trC.totalSystemCycles(),
+    trC.globalJoinedCount(),         // unique wallets ever registered
     cwC.totalEnrolled().catch(() => 0n),
     cwC.genesisCount().catch(() => 0n),
     cwC.pioneerCount().catch(() => 0n),
@@ -258,6 +271,10 @@ async function main() {
     if (prev.tiers?.[td.num]) totalJoinedPrev += (prev.tiers[td.num].aTotal || 0);
   }
   now.totalJoined = totalJoinedNow;
+  // globalMembers = unique wallets from TierRouter — the authoritative member count.
+  // totalJoinedNow = sum of matA.totalJoined() across all tiers, which counts upgraded
+  // members once per tier (always >= globalMembers). Used for tier detail only.
+  now.globalMembers = Number(globalJoinedCount);
 
   // ── Alert checks ──────────────────────────────────────────────────
   if (paused) {
@@ -276,8 +293,9 @@ async function main() {
     alerts.push(`⚠️  T1 MatB STALLED at ${now.tiers[1].bOcc}/${MATRIX_SIZE} for ~${Math.round(hoursSinceLast)}h — consider forceCross`);
   }
 
-  const newRegs = prev.totalJoined !== undefined
-    ? totalJoinedNow - prev.totalJoined
+  // newRegs: delta of unique members (globalJoinedCount) — not sum-of-tiers
+  const newRegs = prev.globalMembers !== undefined
+    ? now.globalMembers - prev.globalMembers
     : null;
 
   if (hoursSinceLast >= 20 && newRegs === 0) {
@@ -310,14 +328,15 @@ async function main() {
 
   // ── Build report ──────────────────────────────────────────────────
   const report = [
-    `📊 <b>CryptoNova V8.31 — Daily Report</b>`,
+    `📊 <b>CryptoNova Matrix — Daily Report</b>`,
     `📅 ${today}`,
     ``,
     statusLine,
     ``,
     `<b>── REGISTRATIONS ──────────────────</b>`,
-    `  Total all tiers: ${totalJoinedNow}${newRegs !== null ? delta(totalJoinedNow, prev.totalJoined) : ' (first run)'}`,
+    `  Unique members:  ${now.globalMembers}${newRegs !== null ? delta(now.globalMembers, prev.globalMembers) : ' (first run)'}`,
     `  New (24h est):   ${newRegs === null ? 'first run' : newRegs}`,
+    `  Seats filled:    ${totalJoinedNow} (across all tiers — counts upgrades separately)`,
     `  Members enrolled (CW): ${Number(cwEnrolled)}/1000  (G:${Number(cwGenesis)} / P:${Number(cwPioneer)})`,
     ``,
     `<b>── TIER MATRIX SNAPSHOT ────────────</b>`,
@@ -357,6 +376,35 @@ async function main() {
   const msg = report.join('\n');
   saveState(now);
   await sendTelegram(msg);
+
+  // ── Community channel digest (public-friendly) ───────────────────────
+  const t1 = tierData[0];
+  const t1Progress = `${Number(t1.aOcc)}/127 MatA · ${Number(t1.bOcc)}/127 MatB`;
+  const sfHealthIcon = sfBal >= 50_000_000n ? '✅' : sfBal >= 10_000_000n ? '⚠️' : '🚨';
+  const dateStr = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' });
+  const newRegStr = newRegs === null ? '—' : newRegs > 0 ? `+${newRegs} today` : 'no new today';
+
+  const communityMsg = [
+    `📊 <b>CryptoNova Daily Update — ${dateStr}</b>`,
+    ``,
+    statusLine,
+    ``,
+    `👥 <b>Members:</b> ${now.globalMembers.toLocaleString()} total (${newRegStr})`,
+    `🔄 <b>Matrix Cycles:</b> ${now.systemCycles.toLocaleString()} completed`,
+    `⚡ <b>T1 Progress:</b> ${t1Progress}`,
+    ``,
+    `${sfHealthIcon} <b>Stability Fund:</b> ${fmt6(sfBal)}`,
+    `🪙 <b>CNOVA Floor:</b> $${floorPriceUSD.toFixed(4)} / token`,
+    `💎 <b>Epoch:</b> ${['Genesis','Pioneer','Expansion','Momentum','Apex','Legacy','Endgame','Infinity'][Number(epoch)] || `#${epoch}`} — ${fmtE(epochReward)} CNOVA per entry`,
+    ``,
+    alerts.length > 0
+      ? `⚠️ <b>Active alerts:</b> ${alerts.length} — check admin channel`
+      : `✅ All systems running normally`,
+    ``,
+    `🔗 <a href="https://crypto-nova.app">crypto-nova.app</a>`,
+  ].join('\n');
+
+  await sendChannel(communityMsg);
 }
 
 async function mainWithRetry() {
