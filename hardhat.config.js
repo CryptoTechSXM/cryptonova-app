@@ -45,9 +45,18 @@ module.exports = {
     ],
     // V8.36: MatrixPairFactory embeds FigureEightMatrixV8 init code and sits at
     // 24621 bytes (45 bytes over EIP-170 limit) with runs=1 and viaIR=false.
-    // Enable viaIR only for this contract to squeeze under 24576 bytes.
+    // V8.38: TierRouter grew to 24765 bytes (189 bytes over) with multi-pair
+    // manualUpgrade() scan + factory wiring additions.
+    // Enable viaIR only for these contracts to squeeze under 24576 bytes.
     overrides: {
       "contracts/MatrixPairFactory.sol": {
+        version: "0.8.26",
+        settings: {
+          optimizer: { enabled: true, runs: 1 },
+          viaIR: true,
+        },
+      },
+      "contracts/TierRouter.sol": {
         version: "0.8.26",
         settings: {
           optimizer: { enabled: true, runs: 1 },
@@ -62,6 +71,18 @@ module.exports = {
       chainId: 31337,
       accounts: { count: 300 },
       allowUnlimitedContractSize: true,
+      ...(process.env.FORK === "1" ? {
+        forking: {
+          url: BASE_SEPOLIA_RPC,
+        },
+        chains: {
+          84532: {                 // Base Sepolia — Cancun active from genesis
+            hardforkHistory: {
+              cancun: 0,
+            },
+          },
+        },
+      } : {}),
     },
 
     baseSepolia: {
