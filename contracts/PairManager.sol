@@ -251,6 +251,20 @@ contract PairManager is Ownable2Step {
         return pairs.length;
     }
 
+    /// @notice Required by IPairManagerKeeper (MatrixKeeper).
+    ///         Returns total pair count — all pairs, active or historical.
+    function activePairCount() external view returns (uint256) {
+        return pairs.length;
+    }
+
+    /// @notice Get matrixA and matrixB addresses for a given pair index.
+    ///         Required by IPairManagerKeeper (MatrixKeeper) and IPairManagerV8 (TierRouter).
+    ///         V8.38: added to support multi-pair MatB eligibility scan in manualUpgrade().
+    function getPairAt(uint256 idx) external view returns (address matA, address matB) {
+        require(idx < pairs.length, "PM: invalid index");
+        return (pairs[idx].matrixA, pairs[idx].matrixB);
+    }
+
     /// @notice The circular chain: A→B→C→D→...→A
     function getChainInfo() external view returns (address head, address lastB) {
         return (chainHead, lastChainB);

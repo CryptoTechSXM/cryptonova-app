@@ -80,6 +80,9 @@ interface IPairManagerV8 {
     function registerFor(address member, address referrer) external;
     function entryFee() external view returns (uint256);
     function currentMatA() external view returns (address);   // V8.31: for coupon routing
+    // V8.38: multi-pair MatB scan for manualUpgrade() eligibility
+    function pairCount() external view returns (uint256);
+    function getPairAt(uint256 idx) external view returns (address matA, address matB);
 }
 
 interface IFigureEightMatrixV8Coupon {
@@ -141,6 +144,12 @@ contract TierRouter is Ownable2Step {
     /// @notice DAO governance contract. Co-governs params below alongside owner --
     ///         neither replaces the other (owner keeps emergency backstop).
     address public governance;
+
+    // ─── V8.35: Autonomous pair factory ──────────────────────────────────────
+    /// @notice MatrixPairFactory. When wired, factory can call registerMatrix()
+    ///         to authorize newly deployed matrices inline, in the same tx as
+    ///         the triggering member registration.
+    address public pairFactory;
 
     // ─── V8.1: Velocity gate (keeper-maintained per tier) ─────────────────────
     mapping(uint8 => bool) public tierVelocityGreen;
@@ -288,6 +297,12 @@ contract TierRouter is Ownable2Step {
         _;
     }
 
+    /// @notice V8.35: owner or MatrixPairFactory can register new matrices.
+    modifier onlyOwnerOrFactory() {
+        require(msg.sender == owner() || msg.sender == pairFactory, "TR: not owner/factory");
+        _;
+    }
+
     /// @notice V8.20: wire the V8Governance contract so DAO-passed proposals can execute.
     function setGovernance(address _gov) external onlyOwner {
         require(_gov != address(0), "TR: zero governance");
@@ -322,7 +337,12 @@ contract TierRouter is Ownable2Step {
         tierMatrixBAddr[tierIndex] = matB;
     }
 
-    function registerMatrix(address matrix, uint8 tierIndex) external onlyOwner {
+    /// @notice V8.35: Wire the MatrixPairFactory so it can register new matrices inline.
+    function setFactory(address _factory) external onlyOwner {
+        pairFactory = _factory;
+    }
+
+    function registerMatrix(address matrix, uint8 tierIndex) external onlyOwnerOrFactory {
         require(matrix != address(0),  "TR: zero matrix");
         require(tierIndex < MAX_TIERS, "TR: invalid tier");
         authorizedMatrices[matrix] = true;
@@ -672,10 +692,23 @@ contract TierRouter is Ownable2Step {
         // V8.35: (c) Whale Gate open for this tier — gate opening waives the crossing
         // requirement so existing members can chain upgrades immediately on payment.
         // Brand-new wallets (no cycles, not in MatB) are blocked until gate opens.
-        address prevMatB = tierMatrixBAddr[prevIndex];
-        bool inPrevMatB  = prevMatB != address(0) &&
-                           IFigureEightMatrixV8(prevMatB).isActiveInMatrix(msg.sender);
-        bool gateOpen    = _isTierUnlockedForManualEntry(targetTierIndex + 1);
+        //
+        // V8.38 FIX: scan ALL MatBs across all pairs for prevIndex, not just the first one.
+        // tierMatrixBAddr[prevIndex] is hardcoded to the original MatB (e.g. T1.1 MatB).
+        // When the factory spawns T1.2, a member sitting in T1.2 MatB was incorrectly
+        // blocked because isActiveInMatrix() on T1.1 MatB returned false for them.
+        bool inPrevMatB = false;
+        address prevPM  = tierPairManagers[prevIndex];
+        if (prevPM != address(0)) {
+            uint256 numPairs = IPairManagerV8(prevPM).pairCount();
+            for (uint256 pi = 0; pi < numPairs && !inPrevMatB; pi++) {
+                (, address matB) = IPairManagerV8(prevPM).getPairAt(pi);
+                if (matB != address(0) && IFigureEightMatrixV8(matB).isActiveInMatrix(msg.sender)) {
+                    inPrevMatB = true;
+                }
+            }
+        }
+        bool gateOpen = _isTierUnlockedForManualEntry(targetTierIndex + 1);
         require(
             tierCycles[msg.sender][prevIndex] >= 1 || inPrevMatB || gateOpen,
             "TR: cross to MatB first, or wait for this tier's Whale Gate to open"

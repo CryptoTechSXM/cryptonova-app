@@ -2370,3 +2370,116 @@ describe("V8.37 — Rotation-based factory trigger + adminForceRotateRoot", func
 }); // end: V8.37 — Rotation-based factory trigger + adminForceRotateRoot
 
 }); // end: V8.35 — MatrixPairFactory (contains V8.36 bug fixes)
+
+// ══════════════════════════════════════════════════════════════════════════════════
+// V8.38 — manualUpgrade multi-pair MatB scan
+//   Bug fixed: TierRouter.manualUpgrade() only checked tierMatrixBAddr[prevIndex]
+//   (the FIRST pair's MatB), ignoring members sitting in T1.2+ MatBs.
+//   Fix: iterate all pairs via pairCount() / getPairAt() on the tier's PairManager.
+// ══════════════════════════════════════════════════════════════════════════════════
+
+describe("V8.38 — manualUpgrade multi-pair MatB scan", function () {
+
+  // ─── Shared helper: wire a second T1 pair and advance activePairIndex to 1 ──
+  async function setupSecondPair(fx) {
+    const { usdc, cnova, treasury, tierRouter, pm1, admin, MINTER_ROLE } = fx;
+    const { matA3, matB3 } = await deployExtraT1Pair(fx);
+    const matA3Addr = await matA3.getAddress();
+    const matB3Addr = await matB3.getAddress();
+
+    // Grant treasury auth + CNOVA minter role to both new matrices
+    await treasury.connect(admin).setAuthorizedCaller(matA3Addr, true);
+    await treasury.connect(admin).setAuthorizedCaller(matB3Addr, true);
+    await cnova.connect(admin).grantRole(MINTER_ROLE, matA3Addr);
+    await cnova.connect(admin).grantRole(MINTER_ROLE, matB3Addr);
+
+    // Register matB3 with TierRouter so the onCrossToMatB() callback is authorized
+    await tierRouter.connect(admin).registerMatrix(matB3Addr, 0);
+
+    // addPair() wires the circular chain and auto-advances activePairIndex to 1
+    // → all subsequent reg() calls will route to matA3
+    await pm1.connect(admin).addPair(matA3Addr, matB3Addr);
+
+    // fc3: admin forceCrosses a parked member from matA3 into matB3
+    const fc3 = async (memberAddr) => {
+      await usdc.connect(admin).approve(matA3Addr, T1_FEE);
+      return matA3.connect(admin).forceCross(memberAddr);
+    };
+
+    return { matA3, matB3, matA3Addr, matB3Addr, fc3 };
+  }
+
+  // ─── L1: pair 0 MatB → manualUpgrade succeeds (regression) ──────────────────
+  it("L1: manualUpgrade(1) succeeds when member is in pair 0's MatB (regression)", async function () {
+    const { usdc, tierRouter, matB,
+            admin, w1, s0, s1, s2, s3, s4, s5, s6,
+            reg, fc } = await loadFixture(deployV8Fixture);
+
+    // Register W1 + S0-S5 WITHOUT referrer → chain pay only (~$1.99) < $5 CROSS_NEEDED.
+    // W1 occupies the root (position 1); S0-S5 fill positions 2-7.
+    await reg(w1);
+    for (const s of [s0, s1, s2, s3, s4, s5]) await reg(s);
+
+    // S6 triggers MatA rotation → W1 cycles out and PARKS (chain pay < CROSS_NEEDED)
+    await reg(s6);
+    expect(await matB.isActiveInMatrix(w1.address)).to.be.false;
+
+    // Admin pays T1_FEE and forceCrosses W1 from matA into matB (pair 0's MatB)
+    await fc(w1.address);
+    expect(await matB.isActiveInMatrix(w1.address)).to.be.true;
+
+    // manualUpgrade(1): pm1 has only pair 0 → loop finds W1 in pair 0's matB on first try
+    await usdc.connect(w1).approve(await tierRouter.getAddress(), T2_FEE);
+    await tierRouter.connect(w1).manualUpgrade(1);
+    expect(await tierRouter.memberHighestTier(w1.address)).to.equal(2n);
+  });
+
+  // ─── L2: pair 1 MatB → manualUpgrade succeeds (the V8.38 fix) ───────────────
+  it("L2: manualUpgrade(1) succeeds when member is in pair 1's MatB (V8.38 fix)", async function () {
+    this.timeout(120_000); // 8 registrations × ~8 s each ≈ 64 s
+    const fx = await loadFixture(deployV8Fixture);
+    const { usdc, tierRouter, matB,
+            admin, w1, s0, s1, s2, s3, s4, s5, s6, reg } = fx;
+    const { matA3, matB3, fc3 } = await setupSecondPair(fx);
+
+    // addPair already advanced activePairIndex to 1 → reg() routes to matA3.
+    // Register WITHOUT referrer → W1 earns chain pay only (~$1.99 < $5 CROSS_NEEDED).
+    await reg(w1);
+    for (const s of [s0, s1, s2, s3, s4, s5]) await reg(s);
+
+    // S6 triggers rotation in matA3 → W1 parks (insufficient earnings to auto-cross)
+    await reg(s6);
+    expect(await matA3.isActiveInMatrix(w1.address)).to.be.false;
+
+    // Admin forceCross: pushes parked W1 from matA3 into matB3 (pair 1's MatB)
+    await fc3(w1.address);
+    expect(await matB3.isActiveInMatrix(w1.address)).to.be.true;
+    expect(await matB.isActiveInMatrix(w1.address)).to.be.false; // NOT in pair 0's matB
+
+    // V8.38 fix: TierRouter loops pairCount()=2 pairs:
+    //   pi=0: getPairAt(0).matB = matB  → isActiveInMatrix(w1) = false  (skip)
+    //   pi=1: getPairAt(1).matB = matB3 → isActiveInMatrix(w1) = true   (found!)
+    // Without the fix: only checked tierMatrixBAddr[0]=matB → would revert.
+    await usdc.connect(w1).approve(await tierRouter.getAddress(), T2_FEE);
+    await tierRouter.connect(w1).manualUpgrade(1);
+    expect(await tierRouter.memberHighestTier(w1.address)).to.equal(2n);
+  });
+
+  // ─── L3: in pair 1's MatA (not MatB) → manualUpgrade reverts ────────────────
+  it("L3: manualUpgrade(1) reverts when member is in pair 1's MatA and has no cycle or gate", async function () {
+    const fx = await loadFixture(deployV8Fixture);
+    const { usdc, tierRouter, w1, reg } = fx;
+    await setupSecondPair(fx); // activePairIndex advances to 1 (matA3)
+
+    // W1 registers in matA3 only — in MatA, not MatB; no cycle; whale gate closed
+    await reg(w1);
+
+    // inPrevMatB = false (W1 is in matA3, not any MatB)
+    // tierCycles[w1][0] = 0 (no completed cycle)
+    // gateOpen = _isTierUnlockedForManualEntry(2) = tierWhaleGateActive[5] = false
+    await usdc.connect(w1).approve(await tierRouter.getAddress(), T2_FEE);
+    await expect(tierRouter.connect(w1).manualUpgrade(1))
+      .to.be.revertedWith("TR: cross to MatB first, or wait for this tier's Whale Gate to open");
+  });
+
+}); // end: V8.38 — manualUpgrade multi-pair MatB scan
