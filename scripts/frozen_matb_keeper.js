@@ -10,16 +10,20 @@
 //   This keeper detects that and forces the rotation, unblocking the payout queue.
 //   Same applies to T2, T3 ... T10 whenever a new pair is spawned.
 //
-// Run: npx hardhat run scripts/frozen_matb_keeper.js --network baseSepolia
+// Run (standalone — no hardhat needed):
+//   node scripts/frozen_matb_keeper.js
+// Requires in .env: BASE_SEPOLIA_RPC_URL, DEPLOYER_PRIVATE_KEY, ADDRESSES_FILE
 // Cron: add to VPS alongside direct_keeper — every 5 minutes is plenty.
 
-const hre  = require("hardhat");
+const { ethers } = require("ethers");
 const fs   = require("fs");
 const path = require("path");
 require("dotenv").config();
 
 // ── Config ────────────────────────────────────────────────────────────────────
-const ADDRESSES_FILE     = process.env.ADDRESSES_FILE || "deployed_addresses_v8_30.json";
+const RPC_URL            = process.env.BASE_SEPOLIA_RPC_URL;
+const DEPLOYER_KEY       = process.env.DEPLOYER_PRIVATE_KEY;
+const ADDRESSES_FILE     = process.env.ADDRESSES_FILE || "deployed_addresses_v8_39.json";
 const MATRIX_SIZE        = 127;
 // How long (ms) to wait before force-rotating the same MatB again.
 // 10 min is comfortable — the matrix needs new crossings to refill before another rotation.
@@ -39,6 +43,9 @@ const PM_ABI = [
 const MATB_ABI = [
   "function occupancy() external view returns (uint256)",
   "function nextSlot() external view returns (uint256)",
+  // adminForceRotateRoot() is onlyOwner — T1.1 MatB owner = DEPLOYER_PRIVATE_KEY (0xCd0Af6).
+  // Factory-created MatBs (T1.2+) are owned by MatrixPairFactory.pairAdmin which must also
+  // match DEPLOYER_PRIVATE_KEY, or ownership must be transferred at deploy time.
   "function adminForceRotateRoot() external",
 ];
 
@@ -73,8 +80,12 @@ async function sendTelegram(msg) {
 
 // ── Main ──────────────────────────────────────────────────────────────────────
 async function main() {
+  if (!RPC_URL)      { log("FATAL: BASE_SEPOLIA_RPC_URL not set in .env"); process.exit(1); }
+  if (!DEPLOYER_KEY) { log("FATAL: DEPLOYER_PRIVATE_KEY not set in .env"); process.exit(1); }
+
   // adminForceRotateRoot is onlyOwner — must use DEPLOYER_PRIVATE_KEY (signers[0])
-  const [deployer] = await hre.ethers.getSigners();
+  const provider = new ethers.JsonRpcProvider(RPC_URL);
+  const deployer = new ethers.Wallet(DEPLOYER_KEY, provider);
 
   const addrsPath = path.join(__dirname, ADDRESSES_FILE);
   if (!fs.existsSync(addrsPath)) {
@@ -96,7 +107,7 @@ async function main() {
     const tierData = addrs.tiers?.[tierKey];
     if (!tierData?.pm) continue;
 
-    const pm = new hre.ethers.Contract(tierData.pm, PM_ABI, deployer);
+    const pm = new ethers.Contract(tierData.pm, PM_ABI, deployer);
     let pairCount = 0;
     try { pairCount = Number(await pm.pairCount()); }
     catch (e) {
@@ -111,7 +122,7 @@ async function main() {
         matBAddr = matB;
       } catch { continue; }
 
-      if (!matBAddr || matBAddr === hre.ethers.ZeroAddress) continue;
+      if (!matBAddr || matBAddr === ethers.ZeroAddress) continue;
       checkedMatBs++;
 
       const key = matBAddr.toLowerCase();
@@ -120,7 +131,7 @@ async function main() {
       const lastRot = state.lastRotated[key] || 0;
       if (now - lastRot < ROTATION_COOLDOWN_MS) continue;
 
-      const matB = new hre.ethers.Contract(matBAddr, MATB_ABI, deployer);
+      const matB = new ethers.Contract(matBAddr, MATB_ABI, deployer);
       let occ, nextSlot;
       try {
         [occ, nextSlot] = await Promise.all([
@@ -142,7 +153,7 @@ async function main() {
 
         if (receipt.status === 1) {
           const cost = (() => {
-            try { return parseFloat(hre.ethers.formatEther(receipt.gasUsed * receipt.effectiveGasPrice)).toFixed(6) + " ETH"; }
+            try { return parseFloat(ethers.formatEther(receipt.gasUsed * receipt.effectiveGasPrice)).toFixed(6) + " ETH"; }
             catch { return "?"; }
           })();
           log(`  ✅ Rotated ${tierKey}.${i+1} — block ${receipt.blockNumber}  gas ${receipt.gasUsed.toLocaleString()}  cost ${cost}`);
