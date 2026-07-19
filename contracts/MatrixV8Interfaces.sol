@@ -50,4 +50,6 @@ interface IFigureEightMatrixV8Cross {
     /// @notice Called by the partner MatA immediately after forceCrossKeeper
     ///         to record the rescue loan on MatB, where the 15% repayment fires.
     function addRescueDebt(address member, uint256 amount) external;
+    /// @notice V8.40: used by selfRescue() to fail early if destination is full.
+    function isFull() external view returns (bool);
 }

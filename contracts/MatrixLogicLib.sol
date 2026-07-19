@@ -336,7 +336,9 @@ library MatrixLogicLib {
                     self.rescueDebt[root]           -= repay;
                     self.members[root].withdrawable -= repay;
                     SafeERC20.forceApprove(cfg.usdc, self.stabilityFund, repay);
-                    IStabilityFund(self.stabilityFund).receiveDebtRepayment(repay);
+                    // V8.39: try/catch — SF failure must not block cycle-out
+                    try IStabilityFund(self.stabilityFund).receiveDebtRepayment(repay) {}
+                    catch {}
                     emit RescueDebtRepaid(root, repay, self.rescueDebt[root]);
                 }
             }
@@ -398,13 +400,20 @@ library MatrixLogicLib {
             emit PoolShareCredited(m, pos, share);
         }
 
-        // Single USDC transfer to SF for all per-member repayments collected above
+        // Single USDC transfer to SF for all per-member repayments collected above.
+        // V8.39: track sfReceived so the dust calculation is correct regardless of
+        // whether the SF call succeeds.  If SF reverts, the USDC stays in the contract
+        // and dust correctly absorbs it; if SF succeeds, dust is only the rounding remainder.
+        uint256 sfReceived = 0;
         if (pendingRepayment > 0) {
             SafeERC20.forceApprove(cfg.usdc, self.stabilityFund, pendingRepayment);
-            IStabilityFund(self.stabilityFund).receiveDebtRepayment(pendingRepayment);
+            try IStabilityFund(self.stabilityFund).receiveDebtRepayment(pendingRepayment) {
+                sfReceived = pendingRepayment;
+            } catch {}
         }
 
-        uint256 dust = pool - distributed;
+        // V8.39: subtract sfReceived so dust only reflects physical USDC remaining.
+        uint256 dust = pool - distributed - sfReceived;
         if (dust > 0) {
             address dest = self.posToMember[2] != address(0)
                 ? self.posToMember[2]
@@ -479,7 +488,9 @@ library MatrixLogicLib {
                 self.rescueDebt[member] -= repay;
                 self.members[member].withdrawable -= repay;
                 SafeERC20.forceApprove(cfg.usdc, self.stabilityFund, repay);
-                IStabilityFund(self.stabilityFund).receiveDebtRepayment(repay);
+                // V8.39: try/catch — SF failure must never block the crossing.
+                try IStabilityFund(self.stabilityFund).receiveDebtRepayment(repay) {}
+                catch {}
                 emit RescueDebtRepaid(member, repay, self.rescueDebt[member]);
             }
         }
@@ -928,6 +939,15 @@ library MatrixLogicLib {
         require(self.members[member].hasEverJoined,  "F8V8: not a member");
         require(!self.members[member].isInMatrix,    "F8V8: still in matrix");
         require(self.parkedAt[member] > 0,            "F8V8: not parked");
+
+        // V8.40: Fail early with a readable message if partner MatB is full.
+        // Before this fix, _finalizeCrossing silently reverted causing keeper RESC WARN spam.
+        address _dest = (!cfg.isMatrixA && self.chainNext != address(0))
+            ? self.chainNext : self.partner;
+        require(
+            !IFigureEightMatrixV8Cross(_dest).isFull(),
+            "F8V8: partner full - wait for rotation"
+        );
 
         uint256 withdrawable = self.members[member].withdrawable;
 
