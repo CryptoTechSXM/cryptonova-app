@@ -14,6 +14,8 @@
  * 10. setCouponAmount updates future coupons but not existing ones
  * 11. Unauthorized matrix cannot call redeemCoupon
  * 12. selfRescue — parked member pays own shortfall, no debt
+ * 13. cancelCoupon — issuer cancels before expiry (USDC back + event); non-issuer blocked;
+ *     already-used or already-cancelled coupons blocked; cancelled coupon cannot be redeemed
  */
 
 const { expect } = require("chai");
@@ -384,6 +386,79 @@ describe("CouponRegistry", function () {
         });
     });
 
+    // ── 3b. cancelCoupon ───────────────────────────────────────────────────────
+
+    describe("cancelCoupon", function () {
+
+        it("issuer cancels unused coupon: USDC returned and CouponCancelled emitted", async function () {
+            const { registry, usdc, issuer, COUPON_AMOUNT } = await deployFixture();
+
+            const codeHash = hashCode("CANCEL-ME");
+            await registry.connect(issuer).issueCoupon(codeHash);
+
+            const balBefore = await usdc.balanceOf(issuer.address);
+            const tx        = await registry.connect(issuer).cancelCoupon(codeHash);
+            const balAfter  = await usdc.balanceOf(issuer.address);
+
+            // USDC refunded to issuer
+            expect(balAfter - balBefore).to.equal(COUPON_AMOUNT);
+
+            // Contract marks it used so it cannot be redeemed or reclaimed
+            const c = await registry.coupons(codeHash);
+            expect(c.used).to.be.true;
+
+            // Event
+            await expect(tx)
+                .to.emit(registry, "CouponCancelled")
+                .withArgs(codeHash, issuer.address, COUPON_AMOUNT);
+        });
+
+        it("non-issuer cannot cancel (CR: not issuer)", async function () {
+            const { registry, issuer, rando } = await deployFixture();
+
+            const codeHash = hashCode("CANCEL-NONISSUER");
+            await registry.connect(issuer).issueCoupon(codeHash);
+
+            await expect(registry.connect(rando).cancelCoupon(codeHash))
+                .to.be.revertedWith("CR: not issuer");
+        });
+
+        it("cannot cancel an already-used coupon (CR: already used)", async function () {
+            const { registry, matA, issuer, member1 } = await deployFixture();
+
+            const codeHash = hashCode("CANCEL-AFTER-USE");
+            await registry.connect(issuer).issueCoupon(codeHash);
+            // Member redeems it first
+            await matA.connect(member1).registerWithCoupon(ethers.ZeroAddress, codeHash);
+
+            await expect(registry.connect(issuer).cancelCoupon(codeHash))
+                .to.be.revertedWith("CR: already used");
+        });
+
+        it("cancelled coupon cannot be redeemed (CR: already used)", async function () {
+            const { registry, matA, issuer, member1 } = await deployFixture();
+
+            const codeHash = hashCode("CANCEL-THEN-REDEEM");
+            await registry.connect(issuer).issueCoupon(codeHash);
+            await registry.connect(issuer).cancelCoupon(codeHash);
+
+            await expect(
+                matA.connect(member1).registerWithCoupon(ethers.ZeroAddress, codeHash)
+            ).to.be.revertedWith("CR: already used");
+        });
+
+        it("already-redeemed coupon cannot be cancelled (CR: already used)", async function () {
+            const { registry, matA, issuer, member1 } = await deployFixture();
+
+            const codeHash = hashCode("REDEEM-THEN-CANCEL");
+            await registry.connect(issuer).issueCoupon(codeHash);
+            await matA.connect(member1).registerWithCoupon(ethers.ZeroAddress, codeHash);
+
+            await expect(registry.connect(issuer).cancelCoupon(codeHash))
+                .to.be.revertedWith("CR: already used");
+        });
+    });
+
     // ── 4. Owner controls ──────────────────────────────────────────────────────
 
     describe("owner controls", function () {
@@ -452,7 +527,7 @@ describe("CouponRegistry", function () {
             const { registry, matA, rando } = await deployFixture();
             await expect(
                 registry.connect(rando).setAuthorizedMatrix(await matA.getAddress(), false)
-            ).to.be.revertedWithCustomError(registry, "OwnableUnauthorizedAccount");
+            ).to.be.revertedWith("CR: not owner/factory");
         });
     });
 

@@ -191,6 +191,56 @@ async function deployV8Fixture() {
   };
 }
 
+// ═══════════════════════════════════════════════════════════════════════════════
+// FIXTURE C — V8 system + fully-wired MatrixPairFactory (for V8.39 tests)
+// ═══════════════════════════════════════════════════════════════════════════════
+async function deployWithFactoryFixture() {
+  const base = await deployV8Fixture();
+  const { usdc, cnova, treasury, tierRouter, pm1,
+          admin, devOps, accountOne, matrixLib } = base;
+
+  // Deploy MatrixPairFactory with admin as _admin (mirrors production setup).
+  // Must link MatrixLogicLib — MatrixPairFactory embeds FigureEightMatrixV8 creation bytecode.
+  const MPF     = await ethers.getContractFactory("MatrixPairFactory", {
+    libraries: { MatrixLogicLib: await matrixLib.getAddress() },
+  });
+  const factory = await MPF.deploy(
+    admin.address,
+    await usdc.getAddress(),
+    await cnova.getAddress(),
+    await treasury.getAddress()
+  );
+  const factoryAddr = await factory.getAddress();
+
+  // Configure factory for T1
+  await factory.connect(admin).setWallets(
+    devOps.address, devOps.address, accountOne.address
+  );
+  await factory.connect(admin).setPeripherals(
+    ethers.ZeroAddress,            // sf  — not deployed in unit tests
+    ethers.ZeroAddress,            // cr
+    await tierRouter.getAddress(), // tierRouter
+    ethers.ZeroAddress,            // keeper
+    ethers.ZeroAddress,            // gov
+    ethers.ZeroAddress,            // bbr
+    ethers.ZeroAddress             // lr
+  );
+  await factory.connect(admin).configureTier(1, T1_FEE, MSIZE, SPLITS, CHAIN_BPS);
+  await factory.connect(admin).registerPairManager(await pm1.getAddress(), 1);
+
+  // Wire factory into pm1  → _tryAdvancePair can call factory.deployAndWire()
+  await pm1.connect(admin).setFactory(factoryAddr);
+  // Wire factory into treasury → factory.deployAndWire() can call setAuthorizedCaller()
+  await treasury.connect(admin).setFactory(factoryAddr);
+  // Wire factory into tierRouter → factory.deployAndWire() can call registerMatrix()
+  await tierRouter.connect(admin).setFactory(factoryAddr);
+  // Grant factory DEFAULT_ADMIN_ROLE on cnova → factory.deployAndWire() can grantRole(MINTER_ROLE)
+  const DEFAULT_ADMIN_ROLE = ethers.ZeroHash;
+  await cnova.connect(admin).grantRole(DEFAULT_ADMIN_ROLE, factoryAddr);
+
+  return { ...base, factory };
+}
+
 // ─── Helper: deploy a THIRD matrix pair for T1, for multi-pair broadcast tests ──
 async function deployExtraT1Pair({ usdc, cnova, treasury, devOps, accountOne, admin, matrixLib, pm1, tierRouter }) {
   const FM = await ethers.getContractFactory("FigureEightMatrixV8", {
@@ -1422,11 +1472,10 @@ describe("V8.35 -- Multi-pair capacity expansion", function () {
 
   // ── _tryAdvancePair auto-advance ──────────────────────────────────────────
 
-  it("after setActivePairIndex(0) and pair 0 reaches threshold, new registration auto-advances to pair 1", async function () {
-    // MSIZE=7 per matrix. Pair 0 maxCap = 14.
-    // Set expandThresholdBps = 5000 (50%) so filling matA alone (7/14 = 50%) triggers advance.
-    // _tryAdvancePair fires BEFORE the actual register call inside registerDirectFor(),
-    // so the first registration AFTER the threshold is hit goes to pair 1's matA.
+  it("after setActivePairIndex(0) and pair 0 fills, new registration routes to pair 1 (V8.40: oldest-first via _findRoutingPair)", async function () {
+    // V8.40: _tryAdvancePair no longer advances activePairIndex.
+    // Routing is done by _findRoutingPair() which scans pairs 0→N and returns
+    // the first pair whose MatA has space. When pair 0 MatA is full, s6 routes to pair 1.
     const base = await loadFixture(deployV8Fixture);
     const { pm1, matA, admin, treasury, w1, s0, s1, s2, s3, s4, s5, s6, reg } = base;
 
@@ -1441,22 +1490,20 @@ describe("V8.35 -- Multi-pair capacity expansion", function () {
     await pm1.connect(admin).setActivePairIndex(0);
     expect(await pm1.activePairIndex()).to.equal(0n);
 
-    // Lower threshold to 50% so filling matA (7/14 = 50%) is sufficient to trigger advance
-    await pm1.connect(admin).setExpandThreshold(5000);
-
     // Fill pair 0 matA to capacity (MSIZE = 7 seats)
     await reg(w1, ethers.ZeroAddress);
     for (const s of [s0, s1, s2, s3, s4, s5]) await reg(s, w1.address);
-    expect(await matA.occupancy()).to.equal(MSIZE);  // 7/7, combined = 7/14 = 50% >= threshold
-    // Still at pair 0 — _tryAdvancePair hasn't been called yet (no new reg happened)
+    expect(await matA.occupancy()).to.equal(MSIZE);  // 7/7 — pair 0 full
+    // activePairIndex still 0 — V8.40 does NOT auto-advance it via _tryAdvancePair
     expect(await pm1.activePairIndex()).to.equal(0n);
 
-    // Register s6: _tryAdvancePair fires first (pair 0 at 50% >= 5000 bps threshold)
-    // => activePairIndex advances to 1, THEN s6 is placed in extra pair's matA
+    // Register s6: _findRoutingPair() scans → pair 0 full (7/7) → skips → pair 1 (0/7 < 7) → returns 1
+    // s6 lands in extra pair's matA. activePairIndex stays at 0 (V8.40 change).
     await reg(s6, w1.address);
-    expect(await pm1.activePairIndex()).to.equal(1n);
+    // activePairIndex NOT advanced (V8.40 — routing is now independent of activePairIndex)
+    expect(await pm1.activePairIndex()).to.equal(0n);
 
-    // s6 must land in the extra pair's matA, not pair 0's matA (which was full)
+    // s6 must land in the extra pair's matA (pair 1), not pair 0's matA (which was full)
     expect((await matA.getMember(s6.address)).isInMatrix).to.be.false;
     expect((await matAExtra.getMember(s6.address)).isInMatrix).to.be.true;
   });
@@ -2380,9 +2427,18 @@ describe("V8.37 — Rotation-based factory trigger + adminForceRotateRoot", func
 
 describe("V8.38 — manualUpgrade multi-pair MatB scan", function () {
 
-  // ─── Shared helper: wire a second T1 pair and advance activePairIndex to 1 ──
+  // ─── Shared helper: wire a second T1 pair (V8.40: pre-fills pair 0 so routing goes to pair 1) ──
   async function setupSecondPair(fx) {
-    const { usdc, cnova, treasury, tierRouter, pm1, admin, MINTER_ROLE } = fx;
+    const { usdc, cnova, treasury, tierRouter, pm1, admin, MINTER_ROLE,
+            reg, s7, s8, s9, s10, s11, s12, s13 } = fx;
+
+    // V8.40 oldest-first routing: _findRoutingPair() routes to the FIRST pair whose MatA
+    // has space. Pre-fill pair 0's MatA to MSIZE (=7) BEFORE adding pair 1, so that
+    // subsequent reg() calls in the test go to pair 1 (matA3), not pair 0.
+    await reg(s7, ethers.ZeroAddress);
+    for (const filler of [s8, s9, s10, s11, s12, s13]) await reg(filler, s7.address);
+    // Pair 0 MatA is now at 7/7 — _findRoutingPair() will skip it.
+
     const { matA3, matB3 } = await deployExtraT1Pair(fx);
     const matA3Addr = await matA3.getAddress();
     const matB3Addr = await matB3.getAddress();
@@ -2396,8 +2452,7 @@ describe("V8.38 — manualUpgrade multi-pair MatB scan", function () {
     // Register matB3 with TierRouter so the onCrossToMatB() callback is authorized
     await tierRouter.connect(admin).registerMatrix(matB3Addr, 0);
 
-    // addPair() wires the circular chain and auto-advances activePairIndex to 1
-    // → all subsequent reg() calls will route to matA3
+    // addPair() records pair 1 in PairManager; pair 0 is full so routing goes to pair 1
     await pm1.connect(admin).addPair(matA3Addr, matB3Addr);
 
     // fc3: admin forceCrosses a parked member from matA3 into matB3
@@ -2482,4 +2537,248 @@ describe("V8.38 — manualUpgrade multi-pair MatB scan", function () {
       .to.be.revertedWith("TR: cross to MatB first, or wait for this tier's Whale Gate to open");
   });
 
-}); // end: V8.38 — manualUpgrade multi-pair MatB scan
+  it("L4: manualUpgrade(1) succeeds in pair-1 MatB when W1 is referrer root — fill with 7 members: W1 is root (position 1)", async function () {
+    const fx = await loadFixture(deployV8Fixture);
+    const { usdc, tierRouter, matB,
+            w1, s0, s1, s2, s3, s4, s5, s6, reg } = fx;
+    const { matA3, matB3, fc3 } = await setupSecondPair(fx);
+    // fill with 7 members: W1 is root (position 1)
+    await reg(w1, ethers.ZeroAddress);
+    for (const s of [s0, s1, s2, s3, s4, s5]) await reg(s, w1.address);
+
+    // S6 triggers rotation → W1 cycles out of matA3.
+    // As referrer root with 6 referrals, W1 earns ~$7.20 > CROSS_NEEDED ($5),
+    // so W1 may auto-cross into matB3 rather than parking.
+    await reg(s6, w1.address);
+    expect(await matA3.isActiveInMatrix(w1.address)).to.be.false;
+
+    // Confirm W1 is NOT in the original pair-0 MatB
+    expect(await matB.isActiveInMatrix(w1.address)).to.be.false;
+
+    // If W1 auto-crossed (earned enough as referrer root), skip fc3 to avoid "already in matrix".
+    // If W1 parked (insufficient earnings), fc3 pays the crossing reserve manually.
+    const alreadyInMatB3 = await matB3.isActiveInMatrix(w1.address);
+    if (!alreadyInMatB3) {
+      await fc3(w1.address);
+    }
+    expect(await matB3.isActiveInMatrix(w1.address)).to.be.true;
+    expect(await matB.isActiveInMatrix(w1.address)).to.be.false;  // still not in pair-0 MatB
+
+    // manualUpgrade(1): V8.38 fix loops all pairs via getPairAt → finds W1 in matB3 → succeeds
+    await usdc.connect(w1).approve(await tierRouter.getAddress(), T2_FEE);
+    await tierRouter.connect(w1).manualUpgrade(1);
+    expect(await tierRouter.memberHighestTier(w1.address)).to.equal(2n);
+  });
+
+  it("L8: manualUpgrade(1) reverts for member not in any MatB with gate closed", async function () {
+    // Member has registered (T1 MatA) but has NOT crossed to any MatB.
+    // Gate is closed (no Whale Gate open). Must still revert.
+    // (deployV8_38Fixture replaced with inline setup: deployV8 + setupSecondPair)
+    const fx = await loadFixture(deployV8Fixture);
+    const { tierRouter, w1, reg } = fx;
+    await setupSecondPair(fx); // pair 0 full → reg() routes to pair 1 (matA3)
+
+    await reg(w1, ethers.ZeroAddress); // W1 enters pair 1's matA (matA3)
+
+    // W1 is in matA3 — NOT in any MatB, gate closed
+    await expect(
+      tierRouter.connect(w1).manualUpgrade(1)
+    ).to.be.revertedWith("TR: cross to MatB first, or wait for this tier's Whale Gate to open");
+  });
+
+}); // end: V8.38 — manualUpgrade() multi-pair MatB scan
+
+// =============================================================================
+// V8.39 — Frozen MatB keeper fix + try/catch guards + pairAdmin ownership
+// =============================================================================
+//
+// Root cause fixed: MatrixPairFactory(admin, ...) sets owner() = admin, but the
+// keeper signs with deployer (DEPLOYER_PRIVATE_KEY).  If admin ≠ deployer,
+// factory-created MatBs are owned by admin and adminForceRotateRoot() reverts
+// with OwnableUnauthorizedAccount when called from the keeper wallet.
+//
+// V8.39 fixes:
+//   • keeperForceRotateRoot() — same as adminForceRotateRoot but authorised by
+//     matrixKeeper (consistent with forceCrossKeeper / evictParked).
+//   • MatrixPairFactory.pairAdmin — explicit address for matrix ownership transfer,
+//     decoupled from factory Ownable owner.
+//   • _tryAdvancePair deployAndWire try/catch — factory failure never reverts registration.
+//   • _crossToPartner SF receiveDebtRepayment try/catch — SF failure never blocks crossing.
+//   • _distributePool dust calculation fix — sfReceived subtracted so dust is exact.
+
+describe("V8.39 — keeperForceRotateRoot + pairAdmin + try/catch guards", function () {
+
+  // ── Helper: build frozen-MatB state (MSIZE=7) ──────────────────────────────
+  // After this helper: MatB has 7/7 members, rotationCount=0 (frozen, never rotated).
+  async function buildFrozenMatB(fixture) {
+    const { reg, fc, matA, matB,
+            w1, s0, s1, s2, s3, s4, s5, s6, s7, s8, s9, s10, s11, s12 } = fixture;
+
+    // Fill MatA with 7 members
+    for (const m of [w1, s0, s1, s2, s3, s4, s5]) await reg(m);
+
+    // 7 registrations each trigger a MatA rotation; fc() pushes each parked root to MatB
+    const triggers    = [s6,  s7,  s8,  s9,  s10, s11, s12];
+    const parkedRoots = [w1,  s0,  s1,  s2,  s3,  s4,  s5];
+    for (let i = 0; i < 7; i++) {
+      await reg(triggers[i]);
+      await fc(parkedRoots[i].address);
+    }
+    // MatB: occ=7, nextSlot=8 (>MSIZE=7), rotationCount=0 — frozen state
+    expect(await matB.occupancy()).to.equal(7n);
+    expect(await matB.rotationCount()).to.equal(0n, "pre-condition: MatB not yet rotated");
+    return fixture;
+  }
+
+  // ── M1: keeperForceRotateRoot() succeeds when called by the matrixKeeper ───
+  it("M1: keeperForceRotateRoot() evicts frozen MatB root and increments rotationCount", async function () {
+    const fix = await loadFixture(deployWithFactoryFixture);
+    const { matB, admin, w1 } = fix;
+    await buildFrozenMatB(fix);
+
+    // Wire the keeper (admin acts as keeper for this test)
+    await matB.connect(admin).setMatrixKeeper(admin.address);
+
+    const frozenRoot = await matB.posToMember(1n);
+    expect(frozenRoot).to.equal(w1.address, "w1 should be at position 1 (root)");
+
+    await matB.connect(admin).keeperForceRotateRoot();
+
+    expect(await matB.rotationCount()).to.equal(1n, "rotationCount must increment to 1");
+    const memberData = await matB.getMember(frozenRoot);
+    expect(memberData.isInMatrix).to.be.false;
+    expect(await matB.occupancy()).to.equal(6n, "occupancy drops by 1 after cycle-out");
+  });
+
+  // ── M2: keeperForceRotateRoot() reverts for non-keeper ─────────────────────
+  it("M2: keeperForceRotateRoot() reverts for non-keeper with 'F8V8: not keeper'", async function () {
+    const fix = await loadFixture(deployWithFactoryFixture);
+    const { matB, admin, s0 } = fix;
+    await buildFrozenMatB(fix);
+    await matB.connect(admin).setMatrixKeeper(admin.address);
+
+    // s0 is not the keeper
+    await expect(
+      matB.connect(s0).keeperForceRotateRoot()
+    ).to.be.revertedWith("F8V8: not keeper");
+  });
+
+  // ── M3: keeperForceRotateRoot() reverts on MatA ────────────────────────────
+  it("M3: keeperForceRotateRoot() reverts on MatA with 'F8V8: only callable on MatB'", async function () {
+    const fix = await loadFixture(deployWithFactoryFixture);
+    const { matA, admin } = fix;
+    await matA.connect(admin).setMatrixKeeper(admin.address);
+
+    await expect(
+      matA.connect(admin).keeperForceRotateRoot()
+    ).to.be.revertedWith("F8V8: only callable on MatB");
+  });
+
+  // ── M4: keeper works even when MatB is owned by a DIFFERENT address ─────────
+  // This is the exact production scenario: factory.owner()=admin, keeper signs with deployer.
+  // Old code: deployer.adminForceRotateRoot() → OwnableUnauthorizedAccount.
+  // V8.39 fix: deployer.keeperForceRotateRoot() → success (deployer=matrixKeeper).
+  it("M4: keeperForceRotateRoot() works when MatB owner ≠ keeper signer (production scenario)", async function () {
+    const fix = await loadFixture(deployWithFactoryFixture);
+    const { matB, admin, deployer, w1 } = fix;
+    await buildFrozenMatB(fix);
+
+    // admin owns matB (factory deployed with admin as pairAdmin).
+    // deployer acts as the matrixKeeper (different wallet — the production gap).
+    await matB.connect(admin).setMatrixKeeper(deployer.address);
+
+    // Deployer (keeper) CAN rotate even though it doesn't own the MatB
+    await matB.connect(deployer).keeperForceRotateRoot();
+    expect(await matB.rotationCount()).to.equal(1n);
+
+    // Confirm old adminForceRotateRoot would reject the DEPLOYER (non-owner)
+    // (state reset: rotationCount=1 so it won't revert due to nextSlot check,
+    //  but onlyOwner check fires first — use admin to confirm it still works for owner)
+    await matB.connect(admin).adminForceRotateRoot();
+    expect(await matB.rotationCount()).to.equal(2n);
+  });
+
+  // ── M5: MatrixPairFactory.pairAdmin set correctly at construction ───────────
+  it("M5: MatrixPairFactory.pairAdmin equals the constructor _admin arg", async function () {
+    const fix = await loadFixture(deployWithFactoryFixture);
+    const { factory, admin } = fix;
+    expect(await factory.pairAdmin()).to.equal(admin.address);
+  });
+
+  // ── M6: pairAdmin defaults to constructor arg; setPairAdmin() updates it ─────
+  it("M6: pairAdmin defaults to constructor _admin; setPairAdmin() updates it and blocks non-owner", async function () {
+    const fix = await loadFixture(deployWithFactoryFixture);
+    const { factory, admin, deployer, s0 } = fix;
+
+    // Default: pairAdmin == constructor admin arg
+    expect(await factory.pairAdmin()).to.equal(admin.address,
+      "pairAdmin must equal constructor _admin by default");
+
+    // Update to a different address
+    await factory.connect(admin).setPairAdmin(deployer.address);
+    expect(await factory.pairAdmin()).to.equal(deployer.address, "pairAdmin updated");
+
+    // Non-owner cannot call setPairAdmin
+    await expect(
+      factory.connect(s0).setPairAdmin(s0.address)
+    ).to.be.reverted; // OwnableUnauthorizedAccount
+  });
+
+  // ── M6b: factory-created MatBs are owned by pairAdmin, not factory.owner() ──
+  it("M6b: factory-created MatB is owned by pairAdmin (V8.39 fix — decoupled from factory.owner)", async function () {
+    const fix = await loadFixture(deployWithFactoryFixture);
+    const { factory, admin, deployer, pm1, matB,
+            reg, matrixLib,
+            s13 } = fix;
+    await buildFrozenMatB(fix);
+
+    // Rotate MatB so rotationCount=1 → next registration triggers factory
+    await matB.connect(admin).adminForceRotateRoot();
+
+    // Override pairAdmin to deployer BEFORE factory fires, so the new MatB gets deployer as owner
+    await factory.connect(admin).setPairAdmin(deployer.address);
+
+    // s13 registration triggers _tryAdvancePair → factory.deployAndWire() → T1.2 created
+    await reg(s13);
+    expect(await pm1.pairCount()).to.equal(2n, "factory must have fired");
+
+    const [, newMatBAddr] = await pm1.getPairAt(1n);
+    const F8V8 = await ethers.getContractFactory("FigureEightMatrixV8", {
+      libraries: { MatrixLogicLib: await matrixLib.getAddress() },
+    });
+    const newMatB = F8V8.attach(newMatBAddr);
+
+    // FigureEightMatrixV8 inherits Ownable2Step — transferOwnership() only proposes.
+    // V8.39 pairAdmin fix: factory calls transferOwnership(pairAdmin) inside deployAndWire,
+    // so the PENDING owner is pairAdmin (deployer), not factory.owner() (admin).
+    // The deployer must call acceptOwnership() to complete the transfer.
+    expect(await newMatB.pendingOwner()).to.equal(deployer.address,
+      "V8.39: pairAdmin (deployer) must be the pending owner of factory-created MatB");
+
+    // Complete the two-step transfer; deployer becomes the confirmed owner.
+    await newMatB.connect(deployer).acceptOwnership();
+    expect(await newMatB.owner()).to.equal(deployer.address,
+      "after acceptOwnership(): deployer is confirmed owner — can call adminForceRotateRoot");
+  });
+
+  // ── M7: _tryAdvancePair deployAndWire failure does NOT revert registration ──
+  // Point pm1's pairFactory at a real contract (USDC) that has code but no
+  // deployAndWire() function.  The call reverts with "function not found", which
+  // the V8.39 try/catch catches.  The triggering registration must still succeed.
+  it("M7: factory deployAndWire failure in _tryAdvancePair does not revert the registration", async function () {
+    const fix = await loadFixture(deployWithFactoryFixture);
+    const { usdc, admin, pm1, matB, reg, s13 } = fix;
+    await buildFrozenMatB(fix);
+    await matB.connect(admin).adminForceRotateRoot(); // rotationCount=1 → factory will fire
+
+    // Break the factory: point pm1 at USDC (real contract, no deployAndWire).
+    // The IMatrixPairFactory(usdc).deployAndWire() call will revert inside _tryAdvancePair.
+    await pm1.connect(admin).setFactory(await usdc.getAddress());
+
+    // V8.39 try/catch guard: factory reverts silently, registration completes normally.
+    await expect(reg(s13)).to.not.be.reverted;
+    expect(await pm1.pairCount()).to.equal(1n, "factory failed silently — pairCount unchanged");
+    expect(await pm1.activePairIndex()).to.equal(0n, "still on pair 0");
+  });
+
+});
