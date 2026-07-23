@@ -94,12 +94,6 @@ contract StabilityFund is Ownable2Step {
     /// @notice V8.20: DAO governance contract. Co-governs the params below
     ///         alongside owner -- neither replaces the other (owner keeps emergency backstop).
     address public governance;
-    /// @notice V8.35: MatrixPairFactory. When wired, factory can call
-    ///         setMatrixAuthorized() to register newly deployed matrices inline.
-    address public pairFactory;
-    /// @notice V8.32 param #50: fraction of pool-share redirected to SF as rescue-loan repayment.
-    ///         DAO-votable via V8Governance param #50 (PARAM_SF_RESCUE_REPAY_BPS).
-    uint256 public rescueRepayBps = 10_000;
 
     // ── CommunityWallet carve-out ─────────────────────────────────────────────
     /// @notice CommunityWallet address. When set, 1% of L1 deposits route here.
@@ -208,23 +202,11 @@ contract StabilityFund is Ownable2Step {
         _;
     }
 
-    /// @notice V8.35: owner or MatrixPairFactory can authorize new matrices.
-    modifier onlyOwnerOrFactory() {
-        require(msg.sender == owner() || msg.sender == pairFactory, "SF: not owner/factory");
-        _;
-    }
-
     /// @notice V8.20: wire the V8Governance contract so DAO-passed proposals can execute.
     function setGovernance(address _gov) external onlyOwner {
         require(_gov != address(0), "SF: zero governance");
         governance = _gov;
         emit GovernanceSet(_gov);
-    }
-
-    /// @notice V8.32 param #50: DAO or owner can adjust the rescue loan repayment fraction.
-    function setRescueRepayBps(uint256 newVal) external onlyOwnerOrGovernance {
-        require(newVal <= 10_000, "SF: bps overflow");
-        rescueRepayBps = newVal;
     }
 
     function setMatrixKeeper(address _keeper) external onlyOwner {
@@ -239,12 +221,7 @@ contract StabilityFund is Ownable2Step {
         emit TierRouterSet(_tr);
     }
 
-    /// @notice V8.35: Wire the MatrixPairFactory so it can authorize new matrices.
-    function setFactory(address _factory) external onlyOwner {
-        pairFactory = _factory;
-    }
-
-    function setMatrixAuthorized(address matrix, bool authorized) external onlyOwnerOrFactory {
+    function setMatrixAuthorized(address matrix, bool authorized) external onlyOwner {
         require(matrix != address(0), "SF: zero matrix");
         authorizedMatrices[matrix] = authorized;
         emit MatrixAuthorized(matrix, authorized);
@@ -616,6 +593,4 @@ contract StabilityFund is Ownable2Step {
         require(amount <= totalBalance, "SF: insufficient balance");
         totalBalance -= amount;
         usdc.safeTransfer(to, amount);
-        emit FundWithdrawn(to, amount, reason);
-    }
-}
+    

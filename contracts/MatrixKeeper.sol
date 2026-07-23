@@ -84,6 +84,7 @@ interface IFigureEightKeeper {
     function getParkedCount() external view returns (uint256);
     function getParkedMember(uint256 idx) external view returns (address);
     function forceCrossKeeper(address member, uint256 sfContribution, uint256 crossingBuffer) external;
+    function softParkIdle(address member) external;  // V8.33
     function rescueDebtOf(address member) external view returns (uint256);
     function parkedAt(address member) external view returns (uint256);
     function evictParked(address member) external;
@@ -165,11 +166,15 @@ contract MatrixKeeper is Ownable {
     uint256 public velocityThreshold   = 3;
     uint256 public deflationThreshold  = 10;
     uint256 public recoveryThreshold   = 3;
-    uint256 public idleSlotTimeout     = 43_200;
-    uint256 public extendedIdleTimeout = 86_400;
+    uint256 public idleSlotTimeout     = 259_200;   // V8.33: 3 days (was 43200 = 12h)
+    uint256 public extendedIdleTimeout = 604_800;   // V8.33: 7 days (was 86400 = 24h)
     uint256 public maxItemsPerUpkeep   = 15;
     uint256 public parkedGracePeriod   = 6 hours;  // V8.25: mainnet default 6h; testnet owner can set as low as 5 min
     uint256 public rescueRatioBps      = 7_000;
+    /// @notice V8.33: Ghost entries are disabled by default.  Ghost entries drain the SF to
+    ///         fill empty slots with fake positions.  At launch, empty slots should fill with
+    ///         real members.  DAO can flip on if the matrix genuinely stalls.
+    bool    public ghostEntryEnabled   = false;
 
     address public tierRouter;
     address public stabilityFund;
@@ -290,8 +295,21 @@ contract MatrixKeeper is Ownable {
         deflationThreshold = v;
     }
     function setIdleSlotTimeout(uint256 v) external onlyOwnerOrGovernance {
-        require(v == 21600 || v == 43200 || v == 86400, "MK: invalid idle timeout");
+        // V8.33: expanded range — 6h, 12h, 24h, 3d, 7d
+        require(v == 21600 || v == 43200 || v == 86400 || v == 3 days || v == 7 days, "MK: invalid idle timeout");
         idleSlotTimeout = v;
+        emit ConfigUpdated("idleSlotTimeout", v);
+    }
+    /// @notice V8.33: DAO-governable reclaim window (1 day – 90 days).
+    function setExtendedIdleTimeout(uint256 v) external onlyOwnerOrGovernance {
+        require(v >= 1 days && v <= 90 days, "MK: out of range (1d-90d)");
+        extendedIdleTimeout = v;
+        emit ConfigUpdated("extendedIdleTimeout", v);
+    }
+    /// @notice V8.33: Toggle ghost entries on/off.  Off by default — preserves SF for rescues.
+    function setGhostEntryEnabled(bool v) external onlyOwnerOrGovernance {
+        ghostEntryEnabled = v;
+        emit ConfigUpdated("ghostEntryEnabled", v ? 1 : 0);
     }
     function setMaxItemsPerUpkeep(uint256 v) external onlyOwnerOrGovernance {
         // V8.31: ceiling raised to 40 to handle 10 tiers × 2 matrices at scale
@@ -650,6 +668,7 @@ contract MatrixKeeper is Ownable {
     }
 
     function _doGhostEntry(address matrix, uint8 tierIdx) internal {
+        if (!ghostEntryEnabled) return;  // V8.33: ghost entries disabled by default at launch
         address pm = pairManagerForTier[tierIdx];
         if (pm == address(0)) return;
         uint256 fee   = IPairManagerKeeper(pm).entryFee();
@@ -674,7 +693,10 @@ contract MatrixKeeper is Ownable {
         uint256 idleTime = block.timestamp - mat.lastActivityTime(member);
         if (idleTime < extendedIdleTimeout) return;
         reclaimAttemptTime[matrix][member] = block.timestamp;
-        mat.reclaimIdleSlot(member);
+        // V8.33: soft park instead of hard eviction — member goes to the rescue queue
+        // and is re-entered automatically.  reclaimIdleSlot sent members to limbo with
+        // no path back; softParkIdle keeps them in the system.
+        mat.softParkIdle(member);
         emit SlotReclaimed(matrix, member, idleTime);
     }
 

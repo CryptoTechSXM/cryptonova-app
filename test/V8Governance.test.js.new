@@ -145,10 +145,6 @@ async function deployFixture() {
   await cnova.connect(admin).mintForSale(voterA.address,   ethers.parseEther("60000"));
   await cnova.connect(admin).mintForSale(voterB.address,   ethers.parseEther("1000"));
 
-  // V8.34: proposer must approve governance to burn the 100 CNOVA proposal fee.
-  // Use MaxUint256 so a single approval covers all proposals in this fixture.
-  await cnova.connect(proposer).approve(await gov.getAddress(), ethers.MaxUint256);
-
   // Helper: full propose -> vote -> finalize -> timelock-elapsed lifecycle,
   // leaving the proposal ready for execute().
   async function proposeVoteAndQueue(paramId, target, newValue, desc = "test") {

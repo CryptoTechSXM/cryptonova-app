@@ -109,6 +109,21 @@ contract MatrixPairFactory is Ownable {
     // the PairManager routing path during expansion.
     bool private _expanding;
 
+    /// @notice V8.39: Explicit admin address transferred to factory-created matrices.
+    ///         Defaults to the constructor _admin (same as Ownable initial owner) but
+    ///         can be overridden via setPairAdmin() to decouple matrix ownership from
+    ///         factory contract ownership.
+    ///
+    ///         Root cause fixed: MatrixPairFactory is Ownable(_admin), but the deploy
+    ///         script sets admin = process.env.ADMIN_WALLET_ADDRESS (may differ from
+    ///         DEPLOYER_PRIVATE_KEY).  Factory-created MatBs were receiving
+    ///         transferOwnership(owner()) = ADMIN_WALLET_ADDRESS, while the keeper
+    ///         was signing with DEPLOYER_PRIVATE_KEY — causing OwnableUnauthorizedAccount
+    ///         on adminForceRotateRoot().  keeperForceRotateRoot() sidesteps this by
+    ///         checking matrixKeeper instead of owner, and pairAdmin makes the assign
+    ///         explicit so future deploys don't silently inherit the wrong address.
+    address public pairAdmin;
+
     // -- Events ------------------------------------------------------------------
     event PairExpanded(
         uint8   indexed tierNum,
@@ -118,6 +133,7 @@ contract MatrixPairFactory is Ownable {
     );
     event PMRegistered(address indexed pm, uint8 tierNum);
     event TierConfigured(uint8 indexed tierNum, uint256 entryFee, uint256 matrixSize);
+    event PairAdminSet(address indexed newAdmin);
 
     // -- Errors ------------------------------------------------------------------
     error MPF_UnauthorizedPM();
@@ -140,9 +156,22 @@ contract MatrixPairFactory is Ownable {
         usdc         = _usdc;
         cnova        = _cnova;
         treasuryAddr = _treasury;
+        pairAdmin    = _admin; // V8.39: explicit matrix-ownership target (matches Ownable default)
     }
 
     // -- Config setters (all onlyOwner, all called by deploy script) -------------
+
+    /// @notice V8.39: Override the address that factory-created matrices are transferred to.
+    ///         Call this in deploy_v8.js after factory deployment if ADMIN_WALLET_ADDRESS
+    ///         differs from DEPLOYER_PRIVATE_KEY, so that the keeper (which signs with
+    ///         DEPLOYER_PRIVATE_KEY) can call adminForceRotateRoot() on new pairs.
+    ///         In practice, keeperForceRotateRoot() is the preferred path — it uses
+    ///         matrixKeeper auth and bypasses ownership entirely.
+    function setPairAdmin(address _pairAdmin) external onlyOwner {
+        if (_pairAdmin == address(0)) revert MPF_ZeroAddress();
+        pairAdmin = _pairAdmin;
+        emit PairAdminSet(_pairAdmin);
+    }
 
     /// @notice Set wallet addresses passed to every new matrix's DeployParams.
     function setWallets(
@@ -324,7 +353,10 @@ contract MatrixPairFactory is Ownable {
         IMPFPairManager(pairManager).addPair(matA, matB);
 
         // -- 6. Hand ownership back to real admin --------------------------------
-        address realAdmin = owner();
+        // V8.39: use pairAdmin (explicit) rather than owner() so factory-created
+        // matrices are always owned by the intended deployer wallet, regardless of
+        // whether factory contract ownership differs (ADMIN_WALLET_ADDRESS vs DEPLOYER).
+        address realAdmin = pairAdmin != address(0) ? pairAdmin : owner();
         mA.transferOwnership(realAdmin);
         mB.transferOwnership(realAdmin);
 

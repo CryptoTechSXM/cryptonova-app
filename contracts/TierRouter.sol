@@ -73,16 +73,28 @@ interface IFigureEightMatrixV8 {
     /// @notice V8.1 governance gateway — forwards DAO-voted fee changes.
     function setWithdrawalFeeBps(uint256 bps) external;
     function setEarlyExitPenaltyBps(uint256 bps) external;
+    /// @notice V8.41 FIFO: which pair slot this MatB occupies (0=T1.1, 1=T1.2…).
+    function pairIndex()                      external view returns (uint256);
+    /// @notice V8.42: current number of seats filled in this matrix (0-127).
+    function occupancy()                      external view returns (uint256);
+    /// @notice V8.43: partner matrix (MatB's partner = its pair's MatA).
+    function partner()                        external view returns (address);
 }
 
 interface IPairManagerV8 {
     function registerDirectFor(address member, address referrer) external;
-    function registerFor(address member, address referrer) external;
+    /// @notice V8.41 FIFO: targetPairIndex tells PM which pair to route into.
+    ///         Upgrades pass 0 (first pair of dest tier). Re-entries pass srcPairIndex+1.
+    function registerFor(address member, address referrer, uint256 targetPairIndex) external;
     function entryFee() external view returns (uint256);
     function currentMatA() external view returns (address);   // V8.31: for coupon routing
     // V8.38: multi-pair MatB scan for manualUpgrade() eligibility
     function pairCount() external view returns (uint256);
     function getPairAt(uint256 idx) external view returns (address matA, address matB);
+    /// V8.43: public pairs[] getter — totalRegistered is the routing saturation measure
+    function pairs(uint256 idx) external view returns (
+        address matrixA, address matrixB, uint256 deployedAt, uint256 totalRegistered
+    );
 }
 
 interface IFigureEightMatrixV8Coupon {
@@ -184,6 +196,15 @@ contract TierRouter is Ownable2Step {
     ///         Zero = disabled (legacy behaviour: unmatched referrers → address(0)).
     address public defaultReferrer;
 
+    // ─── V8.42: Hybrid pair routing ───────────────────────────────────────────
+    /// @notice Minimum combined occupancy (MatA + MatB) a pair must have before
+    ///         graduates are routed to the NEXT pair (expansion mode).
+    ///         Below this threshold graduates loop back into the SAME pair
+    ///         (self-sustaining mode) — the pair never goes stale.
+    ///         Default 381 = 127 * 3 (one full MatA + one full MatB + one MatA buffer).
+    ///         Owner-adjustable; suggested range 200-508.
+    uint256 public pairExpansionThreshold = 381;
+
     // ─── Whale Gate ───────────────────────────────────────────────────────────
     // V8.21 REDESIGN: was a single global T5-only counter that, once tripped,
     // let funded members cycling out of T4 SKIP T5 entirely and land in T6 --
@@ -260,6 +281,8 @@ contract TierRouter is Ownable2Step {
     event InactivityGuardEnabledSet(bool enabled);
     // V8.23
     event DefaultReferrerSet(address indexed ref);
+    // V8.42
+    event PairExpansionThresholdSet(uint256 threshold);
 
     // ─── Constructor ──────────────────────────────────────────────────────────
 
@@ -415,6 +438,16 @@ contract TierRouter is Ownable2Step {
     function setDefaultReferrer(address _ref) external onlyOwner {
         defaultReferrer = _ref;
         emit DefaultReferrerSet(_ref);
+    }
+
+    /// @notice V8.42: Set the pair expansion threshold.
+    ///         Graduate re-entries loop back into the SAME pair (self-sustaining)
+    ///         until MatA.occupancy + MatB.occupancy >= threshold, then route to
+    ///         the next pair (expansion). Min 127 (one full MatA); default 381 (127*3).
+    function setPairExpansionThreshold(uint256 threshold) external onlyOwner {
+        require(threshold >= 127, "TR: threshold too low");
+        pairExpansionThreshold = threshold;
+        emit PairExpansionThresholdSet(threshold);
     }
 
     // ─── V8.1: Velocity gate (keeper-only) ───────────────────────────────────
@@ -588,7 +621,7 @@ contract TierRouter is Ownable2Step {
             freeReentryAllowed[msg.sender] = false;
             uint256 fee = IPairManagerV8(tierPairManagers[0]).entryFee();
             usdc.forceApprove(tierPairManagers[0], fee);
-            IPairManagerV8(tierPairManagers[0]).registerFor(msg.sender, resolved);
+            IPairManagerV8(tierPairManagers[0]).registerFor(msg.sender, resolved, 0);
         } else {
             IPairManagerV8(tierPairManagers[0]).registerDirectFor(msg.sender, resolved);
         }
@@ -727,7 +760,7 @@ contract TierRouter is Ownable2Step {
         usdc.forceApprove(tierPairManagers[targetTierIndex], fee);
 
         address referrer = memberReferrer[msg.sender];
-        IPairManagerV8(tierPairManagers[targetTierIndex]).registerFor(msg.sender, referrer);
+        IPairManagerV8(tierPairManagers[targetTierIndex]).registerFor(msg.sender, referrer, 0);
 
         uint8 targetTierNum = targetTierIndex + 1;
         // V8.21 bugfix: must run before the memberHighestTier write below --
@@ -780,7 +813,7 @@ contract TierRouter is Ownable2Step {
                 continue;
             }
             usdc.forceApprove(tierPairManagers[i], tierEntryFees[i]);
-            IPairManagerV8(tierPairManagers[i]).registerFor(msg.sender, referrer);
+            IPairManagerV8(tierPairManagers[i]).registerFor(msg.sender, referrer, 0);
 
             uint8 tierNum = i + 1;
             _checkTierFirstEntry(msg.sender, tierNum);
@@ -833,14 +866,26 @@ contract TierRouter is Ownable2Step {
         if (memberOptions[member].autoUpgradeDisabled) return;
 
         uint256 fee = tierEntryFees[nextIndex];
-        if (usdc.balanceOf(member)                < fee) return;
-        if (usdc.allowance(member, address(this)) < fee) return;
 
-        usdc.safeTransferFrom(member, address(this), fee);
+        // V8.43: two funding paths (owner rule 2026-07-22).
+        //  Path A (V8.14): member's WALLET — needs a standing allowance, which is
+        //    rare in practice (the frontend approves exact per-tx amounts).
+        //  Path B (V8.43 NEW): member's in-matrix WITHDRAWABLE in the MatA they
+        //    just crossed out of. Withdrawable ONLY — the crossing reserve stays
+        //    locked for its re-entry purpose. If neither path can fund the fee,
+        //    silently skip; the member upgrades at cycle-out as before.
+        if (usdc.balanceOf(member) >= fee && usdc.allowance(member, address(this)) >= fee) {
+            usdc.safeTransferFrom(member, address(this), fee);
+        } else {
+            address srcMatA = IFigureEightMatrixV8(msg.sender).partner();
+            if (srcMatA == address(0)) return;
+            if (IFigureEightMatrixV8(srcMatA).withdrawableOf(member) < fee) return; // silent skip
+            IFigureEightMatrixV8(srcMatA).deductForUpgrade(member, 0, fee);
+        }
         usdc.forceApprove(tierPairManagers[nextIndex], fee);
 
         address referrer = memberReferrer[member];
-        IPairManagerV8(tierPairManagers[nextIndex]).registerFor(member, referrer);
+        IPairManagerV8(tierPairManagers[nextIndex]).registerFor(member, referrer, 0);
 
         // V8.21 bugfix: must run before the memberHighestTier write below --
         // see the ordering note in register().
@@ -876,181 +921,116 @@ contract TierRouter is Ownable2Step {
         lastActivityTimestamp         = block.timestamp;
         emit CycleRecorded(member, tierIndex, cycles);
 
-        // -- 2. Resolve destination with all V8.1 guards ----------------------
-        (uint8 destTierIndex, uint256 primaryFee, bool isUpgrade) =
-            _resolveDest(member, tierIndex, escrow, withdrawable, cycles);
-
-        // -- 3. Guard: park if neither upgrade nor re-entry fires --------------
-        if (!isUpgrade && !_shouldFireReentry(member, cycles, escrow + withdrawable, tierEntryFees[tierIndex])) {
-            emit MemberParked(member, tierIndex + 1, "autoReentry disabled");
-            return;
-        }
-
-        // -- 4. Execute: deduct + register + optional double ------------------
-        _executeAndDouble(matrixB, member, tierIndex, destTierIndex, primaryFee, isUpgrade, escrow, withdrawable, cycles);
+        // -- 2. V8.43 ADDITIVE TOGGLES (owner rule 2026-07-22) -----------------
+        // The three automation toggles are now independent and ADDITIVE, with
+        // funding priority: re-entry → upgrade → double seat. Each step deducts
+        // its fee from the remaining cycle-out funds and is silently skipped
+        // when the remainder can't cover it.
+        //   auto-reentry ON  → member NEVER graduates: always re-enter this tier.
+        //   auto-upgrade ON  → ADDITIONALLY take a seat in the next tier.
+        //   double reentry ON → ADDITIONALLY take a 2nd seat in this tier.
+        // (Replaces V8.1 _resolveDest/_executeAndDouble where an upgrade MOVED
+        // the member out of the tier unless double entry happened to be on.)
+        _executeAdditive(matrixB, member, tierIndex, escrow + withdrawable, cycles);
     }
 
-    // --- Internal: Routing Helpers -------------------------------------------
+    // --- Internal: V8.43 additive cycle-out engine ----------------------------
 
-    function _resolveDest(
+    /// @dev One seat per funded step, priority re-entry → upgrade → double
+    ///      (owner-confirmed 2026-07-22). Early-phase defaults kept from V8.1:
+    ///        - re-entry defaults ON until optionsSet && cycles ≥ reentryMinCycles
+    ///        - upgrade defaults ON while cycles < autoUpgradeCycleThreshold
+    ///      T10 never upgrades (top tier loops forever). If no step fires,
+    ///      the member parks exactly as before.
+    function _executeAdditive(
+        address matrixB,
         address member,
         uint8   tierIndex,
-        uint256 escrow,
-        uint256 withdrawable,
+        uint256 funds,
         uint256 cycles
-    ) internal view returns (uint8 destTierIndex, uint256 primaryFee, bool isUpgrade) {
-        destTierIndex = tierIndex;
-        primaryFee    = tierEntryFees[tierIndex];
-
-        // Guard a: T10 always loops
-        if (tierIndex >= 9) return (destTierIndex, primaryFee, false);
-
-        // Guard b: autoUpgrade toggle (only respected after threshold cycles)
-        bool earlyPhase = cycles < autoUpgradeCycleThreshold;
-        if (!earlyPhase && memberOptions[member].autoUpgradeDisabled) {
-            return (destTierIndex, primaryFee, false);
-        }
-
-        // Guard c (REMOVED V8.21): used to let a funded member cycling out of
-        // T4 skip T5 entirely and land in T6 once the (then-global) whale
-        // gate tripped -- bypassing every member still waiting in T5's
-        // queue. Removed per user feedback: whales must enter the same next
-        // tier through the normal queue, never jump past it. nextIndex is
-        // now always simply tierIndex + 1, same as every other member.
-        uint8 nextIndex = tierIndex + 1;
-
-        // Guard d: destination tier deployed
-        if (tierPairManagers[nextIndex] == address(0)) return (destTierIndex, primaryFee, false);
-
-        uint256 nextFee = tierEntryFees[nextIndex];
-
-        // Guard e: funds sufficient
-        if (escrow + withdrawable < nextFee) return (destTierIndex, primaryFee, false);
-
-        // Guard f (REMOVED 2026-06-22, fully deleted in V8.21): used to require
-        // `escrow >= nextFee * escrowFloorMultiplier/100`. The `escrow` parameter
-        // passed into handleCycleOut() by MatrixLogicLib._distributePool()'s
-        // cycle-out callback is hardcoded to the literal 0 (escrow tracking was
-        // removed from the matrix contracts back in V8.8) -- so this guard could
-        // never pass once !earlyPhase, permanently blocking auto-upgrade after a
-        // member's 5th cycle at a tier. Members weren't put at risk (handleCycleOut
-        // still falls back to same-tier re-entry via _shouldFireReentry, which only
-        // needs escrow+withdrawable >= the CURRENT tier's fee), but the convenience
-        // auto-upgrade stopped firing silently. V8.21: escrowFloorMultiplier, its
-        // setter, and its event were deleted entirely (PARAM_ESCROW_FLOOR_MULT
-        // is retired in V8Governance.sol and permanently blocked at propose() time).
-
-        // Guard g: velocity gate
-        if (!tierVelocityGreen[nextIndex]) return (destTierIndex, primaryFee, false);
-
-        // Guard h: manual-upgrade guard
-        address dMatA = tierMatrixAAddr[nextIndex];
-        if (dMatA != address(0) && IFigureEightMatrixV8(dMatA).isActiveInMatrix(member)) {
-            return (destTierIndex, primaryFee, false);
-        }
-
-        return (nextIndex, nextFee, true);
-    }
-
-    function _shouldFireReentry(
-        address member,
-        uint256 cycles,
-        uint256 totalFunds,
-        uint256 fee
-    ) internal view returns (bool) {
-        if (totalFunds < fee) return false;
+    ) internal {
         MemberOptions storage opts = memberOptions[member];
-        if (!opts.optionsSet || cycles < reentryMinCycles) return true;
-        return opts.autoReentryEnabled;
-    }
+        bool reentryOn = (!opts.optionsSet || cycles < reentryMinCycles)
+            ? true
+            : opts.autoReentryEnabled;
+        bool upgradeOn = cycles < autoUpgradeCycleThreshold
+            ? true
+            : !opts.autoUpgradeDisabled;
+        bool doubleOn = (opts.optionsSet ? opts.doubleReentryEnabled : doubleEntryEnabled[member])
+            && cycles >= reentryMinCycles;
 
-    function _executeAndDouble(
-        address matrixB,
-        address member,
-        uint8   tierIndex,
-        uint8   destTierIndex,
-        uint256 primaryFee,
-        bool    isUpgrade,
-        uint256 escrow,
-        uint256 withdrawable,
-        uint256 cycles
-    ) internal {
         address referrer = memberReferrer[member];
+        uint256 curFee   = tierEntryFees[tierIndex];
+        bool anySeat = false;
 
-        uint256 remEscrow;
-        uint256 remWithdrawable;
-        {
-            (uint256 fe, uint256 fw) = _computeSplit(escrow, withdrawable, primaryFee);
-            remEscrow       = escrow      - fe;
-            remWithdrawable = withdrawable - fw;
-            IFigureEightMatrixV8(matrixB).deductForUpgrade(member, fe, fw);
-        }
-
-        usdc.forceApprove(tierPairManagers[destTierIndex], primaryFee);
-        IPairManagerV8(tierPairManagers[destTierIndex]).registerFor(member, referrer);
-
-        _recordEntry(destTierIndex);
-        if (isUpgrade) {
-            uint8 destTierNum = destTierIndex + 1;
-            // V8.21 bugfix: must run before the memberHighestTier write below
-            // -- see the ordering note in register().
-            _checkTierFirstEntry(member, destTierNum);
-            if (destTierNum > memberHighestTier[member]) memberHighestTier[member] = destTierNum;
-            emit MemberUpgraded(member, tierIndex + 1, destTierNum, primaryFee);
-        } else {
+        // -- 1. RE-ENTRY: never graduate while enabled -------------------------
+        if (reentryOn && funds >= curFee) {
+            _takeSeat(matrixB, member, referrer, tierIndex, curFee, _sameTierTarget(matrixB, tierIndex));
+            funds -= curFee;
             emit MemberReentered(member, tierIndex + 1);
+            anySeat = true;
         }
 
-        bool doubleOn = memberOptions[member].optionsSet
-            ? memberOptions[member].doubleReentryEnabled
-            : doubleEntryEnabled[member];
+        // -- 2. UPGRADE: additive next-tier seat (V8.1 guards d/g/h kept) ------
+        if (upgradeOn && tierIndex < 9) {
+            uint8   nextIndex = tierIndex + 1;
+            uint256 nextFee   = tierEntryFees[nextIndex];
+            if (tierPairManagers[nextIndex] != address(0)
+                && funds >= nextFee
+                && tierVelocityGreen[nextIndex]) {
+                address dMatA = tierMatrixAAddr[nextIndex];
+                if (dMatA == address(0) || !IFigureEightMatrixV8(dMatA).isActiveInMatrix(member)) {
+                    _takeSeat(matrixB, member, referrer, nextIndex, nextFee, 0);
+                    funds -= nextFee;
+                    uint8 destTierNum = nextIndex + 1;
+                    // V8.21 bugfix ordering: _checkTierFirstEntry BEFORE the
+                    // memberHighestTier write (see note in register()).
+                    _checkTierFirstEntry(member, destTierNum);
+                    if (destTierNum > memberHighestTier[member]) memberHighestTier[member] = destTierNum;
+                    emit MemberUpgraded(member, tierIndex + 1, destTierNum, nextFee);
+                    anySeat = true;
+                }
+            }
+        }
 
-        if (doubleOn && cycles >= reentryMinCycles) {
-            _handleDoubleEntry(
-                matrixB, member, tierIndex, destTierIndex,
-                isUpgrade, remEscrow, remWithdrawable, referrer
-            );
+        // -- 3. DOUBLE: 2nd seat in the CURRENT tier ---------------------------
+        if (doubleOn && anySeat && funds >= curFee) {
+            _takeSeat(matrixB, member, referrer, tierIndex, curFee, _sameTierTarget(matrixB, tierIndex));
+            funds -= curFee;
+            emit DoubleEntryFired(member, tierIndex + 1, tierIndex + 1);
+        }
+
+        if (!anySeat) {
+            emit MemberParked(member, tierIndex + 1, reentryOn ? "insufficient funds" : "autoReentry disabled");
         }
     }
 
-    function _handleDoubleEntry(
+    /// @dev Deduct `fee` from the member's cycle-out funds held in `matrixB`,
+    ///      then register one seat in `destTierIndex` at `targetPairIndex`.
+    function _takeSeat(
         address matrixB,
         address member,
-        uint8   tierIndex,
+        address referrer,
         uint8   destTierIndex,
-        bool    isUpgrade,
-        uint256 remEscrow,
-        uint256 remWithdrawable,
-        address referrer
+        uint256 fee,
+        uint256 targetPairIndex
     ) internal {
-        uint8   secIndex = isUpgrade ? tierIndex : destTierIndex;
-        uint256 secFee   = tierEntryFees[secIndex];
-
-        if (remEscrow + remWithdrawable < secFee)     return;
-        if (tierPairManagers[secIndex] == address(0)) return;
-
-        (uint256 esc2, uint256 earn2) = _computeSplit(remEscrow, remWithdrawable, secFee);
-        if (esc2 + earn2 != secFee) return;
-
-        IFigureEightMatrixV8(matrixB).deductForUpgrade(member, esc2, earn2);
-        address secPM = tierPairManagers[secIndex];
-        usdc.forceApprove(secPM, secFee);
-        IPairManagerV8(secPM).registerFor(member, referrer);
-        emit DoubleEntryFired(member, destTierIndex + 1, secIndex + 1);
+        IFigureEightMatrixV8(matrixB).deductForUpgrade(member, 0, fee);
+        usdc.forceApprove(tierPairManagers[destTierIndex], fee);
+        IPairManagerV8(tierPairManagers[destTierIndex]).registerFor(member, referrer, targetPairIndex);
+        _recordEntry(destTierIndex);
     }
 
-    function _computeSplit(
-        uint256 escrow,
-        uint256 /* withdrawable */,
-        uint256 needed
-    ) internal pure returns (uint256 fromEscrow, uint256 fromWithdrawable) {
-        if (escrow >= needed) {
-            fromEscrow       = needed;
-            fromWithdrawable = 0;
-        } else {
-            fromEscrow       = escrow;
-            fromWithdrawable = needed - escrow;
-        }
+    /// @dev V8.43 hybrid routing for same-tier seats (fixes V8.42 bug: the old
+    ///      measure was MatA+MatB occupancy vs 381 — live seats max out at 254,
+    ///      so expansion mode could NEVER fire and pair .2 sat empty). New
+    ///      measure: the pair's CUMULATIVE entries (totalRegistered). Loop back
+    ///      to the same pair while < pairExpansionThreshold (127×3 = 381);
+    ///      overflow to pairIndex+1 once saturated.
+    function _sameTierTarget(address matrixB, uint8 tierIndex) internal view returns (uint256) {
+        uint256 srcPairIndex = IFigureEightMatrixV8(matrixB).pairIndex();
+        (, , , uint256 pairEntries) = IPairManagerV8(tierPairManagers[tierIndex]).pairs(srcPairIndex);
+        return pairEntries >= pairExpansionThreshold ? srcPairIndex + 1 : srcPairIndex;
     }
 
     /// @dev V8.21: generalized from the old T5-only `_checkT5FirstEntry` to
@@ -1260,14 +1240,15 @@ contract TierRouter is Ownable2Step {
         uint256 curFee  = tierEntryFees[curIdx];
         uint256 nextFee = (nextIdx < MAX_TIERS) ? tierEntryFees[nextIdx] : 0;
 
-        if (doubleE) {
-            if (autoUpgrade && nextFee > 0) { return nextFee + curFee; }
-            else if (reentry) { return 2 * curFee; }
-        } else {
-            if (autoUpgrade && nextFee > 0) { return nextFee; }
-            else if (reentry) { return curFee; }
-        }
-        return 0;
+        // V8.43 additive semantics: each enabled toggle reserves its own fee.
+        //   re-entry → curFee, upgrade → nextFee, double → another curFee.
+        // (double only fires after a re-entry or upgrade seat, which the
+        // !autoUpgrade && !reentry guard above already covers.)
+        uint256 total = 0;
+        if (reentry)                     total += curFee;
+        if (autoUpgrade && nextFee > 0)  total += nextFee;
+        if (doubleE)                     total += curFee;
+        return total;
     }
 
     function inactivityStatus() external view returns (

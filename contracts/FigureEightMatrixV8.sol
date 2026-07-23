@@ -63,6 +63,13 @@ contract FigureEightMatrixV8 is Ownable2Step {
     address        public immutable devWallet;
     address        public immutable opsWallet;
 
+    // --- V8.41 FIFO: pair index ------------------------------------------------
+    /// @notice Which pair slot this matrix occupies within its PairManager
+    ///         (0 = T1.1, 1 = T1.2, 2 = T1.3 …). Set once by addPair() via
+    ///         setPairIndex(); used by TierRouter.handleCycleOut() to route
+    ///         MatB graduates to pairIndex+1 (FIFO graduation chain).
+    uint256 public pairIndex;
+
     // --- Mutable state, bundled for the library --------------------------------
     MatrixLogicLib.MatrixState private _state;
 
@@ -222,6 +229,17 @@ contract FigureEightMatrixV8 is Ownable2Step {
 
     function setPairManager(address _pm) external onlyOwner {
         _state.pairManager = _pm;
+    }
+
+    /// @notice V8.41 FIFO: called by PairManagerV8.addPair() to stamp this matrix
+    ///         with its position in the pair array (0 = T1.1, 1 = T1.2 …).
+    ///         Access: owner (deployer or MatrixPairFactory.pairAdmin) OR pairManager.
+    function setPairIndex(uint256 idx) external {
+        require(
+            msg.sender == owner() || msg.sender == _state.pairManager,
+            "F8V8: not pair admin"
+        );
+        pairIndex = idx;
     }
 
     function setAccountOne(address _a1) external onlyOwner {
@@ -460,6 +478,18 @@ contract FigureEightMatrixV8 is Ownable2Step {
     ///         and calling handleCycleOut on TierRouter — identical to what would have
     ///         happened naturally.  Safe to call multiple times (each call evicts one root).
     function adminForceRotateRoot() external onlyOwner {
+        MatrixLogicLib.adminForceRotateRoot(_state, _cfg());
+    }
+
+    /// @notice Called by the matrix keeper to force-rotate a frozen MatB.
+    ///         Identical to adminForceRotateRoot() but authorised by matrixKeeper,
+    ///         not onlyOwner.  Required because factory-created MatBs (T1.2+, T2.2+…)
+    ///         are owned by MatrixPairFactory.pairAdmin — which may differ from the
+    ///         keeper's signing wallet.  The keeper is already trusted for
+    ///         forceCrossKeeper() and evictParked(), so extending that trust here
+    ///         is consistent and intentional.
+    function keeperForceRotateRoot() external {
+        require(msg.sender == _state.matrixKeeper, "F8V8: not keeper");
         MatrixLogicLib.adminForceRotateRoot(_state, _cfg());
     }
 

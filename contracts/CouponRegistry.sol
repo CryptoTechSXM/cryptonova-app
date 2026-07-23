@@ -54,11 +54,17 @@ contract CouponRegistry is Ownable2Step {
     /// @notice Only whitelisted matrix contracts may call redeemCoupon.
     mapping(address => bool) public authorizedMatrix;
 
+    /// @notice V8.35: MatrixPairFactory. When wired, factory can call
+    ///         setAuthorizedMatrix() to whitelist newly deployed MatA contracts inline.
+    address public pairFactory;
+
     // ── Events ────────────────────────────────────────────────────────────────
 
-    event CouponIssued   (bytes32 indexed codeHash, address indexed issuer, uint256 amount, uint256 expiry);
-    event CouponRedeemed (bytes32 indexed codeHash, address indexed issuer, address indexed newMember, uint256 amount);
-    event CouponReclaimed(bytes32 indexed codeHash, address indexed issuer, uint256 amount);
+    event CouponIssued    (bytes32 indexed codeHash, address indexed issuer, uint256 amount, uint256 expiry);
+    event CouponRedeemed  (bytes32 indexed codeHash, address indexed issuer, address indexed newMember, uint256 amount);
+    event CouponReclaimed (bytes32 indexed codeHash, address indexed issuer, uint256 amount);
+    /// @notice V8.33: Emitted when an issuer cancels an active coupon before expiry.
+    event CouponCancelled (bytes32 indexed codeHash, address indexed issuer, uint256 amount);
     event MatrixAuthorized(address indexed matrix, bool authorized);
     event CouponAmountUpdated(uint256 oldAmount, uint256 newAmount);
     event GasGiftWalletUpdated(address indexed wallet);
@@ -74,8 +80,15 @@ contract CouponRegistry is Ownable2Step {
 
     // ── Owner controls ────────────────────────────────────────────────────────
 
+    /// @notice V8.35: Wire the MatrixPairFactory so it can whitelist new MatA contracts inline.
+    function setFactory(address _factory) external onlyOwner {
+        pairFactory = _factory;
+    }
+
     /// @notice Whitelist or de-whitelist a matrix contract.
-    function setAuthorizedMatrix(address matrix, bool authorized) external onlyOwner {
+    ///         V8.35: Also callable by pairFactory for autonomous expansion.
+    function setAuthorizedMatrix(address matrix, bool authorized) external {
+        require(msg.sender == owner() || msg.sender == pairFactory, "CR: not owner/factory");
         authorizedMatrix[matrix] = authorized;
         emit MatrixAuthorized(matrix, authorized);
     }
@@ -124,6 +137,22 @@ contract CouponRegistry is Ownable2Step {
         }
 
         emit CouponIssued(codeHash, msg.sender, amt, expiry);
+    }
+
+    /**
+     * @notice V8.33: Cancel an active (unexpired, unused) coupon and reclaim USDC immediately.
+     *         Only the original issuer may cancel.  Use this for wrong/broken codes; for
+     *         expired coupons use reclaimCoupon() instead.
+     * @param codeHash  Same hash passed to issueCoupon.
+     */
+    function cancelCoupon(bytes32 codeHash) external {
+        Coupon storage c = coupons[codeHash];
+        require(c.issuer == msg.sender, "CR: not issuer");
+        require(!c.used,                "CR: already used");
+        uint256 amt = c.amount;
+        c.used = true;   // mark used so it cannot be redeemed or reclaimed again
+        usdc.safeTransfer(msg.sender, amt);
+        emit CouponCancelled(codeHash, msg.sender, amt);
     }
 
     /**

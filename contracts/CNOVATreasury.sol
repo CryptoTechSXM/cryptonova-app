@@ -82,6 +82,10 @@ contract CNOVATreasury is Ownable2Step, ReentrancyGuard {
     address public tier1Matrix;
     address public communityWallet; // V4: receives 20% of early exit penalties
 
+    /// @notice V8.35: MatrixPairFactory. When wired, factory can call
+    ///         setAuthorizedCaller() to register newly deployed matrices inline.
+    address public pairFactory;
+
     // ─────────────────────────────────────────────────────────────────────────
     // Events
     // ─────────────────────────────────────────────────────────────────────────
@@ -126,9 +130,15 @@ contract CNOVATreasury is Ownable2Step, ReentrancyGuard {
     // Admin setup
     // ─────────────────────────────────────────────────────────────────────────
 
-    /// @notice Authorise or deauthorise a caller (V3 matrix) to call depositReserve().
-    ///         Call once per V3 matrix after deploy.  All 7 matrices must be set.
-    function setAuthorizedCaller(address caller, bool authorized) external onlyOwner {
+    /// @notice V8.35: Wire the MatrixPairFactory so it can authorize new matrices inline.
+    function setFactory(address _factory) external onlyOwner {
+        pairFactory = _factory;
+    }
+
+    /// @notice Authorise or deauthorise a caller (matrix) to call depositReserve().
+    ///         V8.35: Also callable by pairFactory for autonomous expansion.
+    function setAuthorizedCaller(address caller, bool authorized) external {
+        require(msg.sender == owner() || msg.sender == pairFactory, "Treasury: not owner/factory");
         require(caller != address(0), "Treasury: zero address");
         authorizedCallers[caller] = authorized;
         emit AuthorizedCallerSet(caller, authorized);

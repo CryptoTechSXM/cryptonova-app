@@ -26,7 +26,7 @@ pragma solidity ^0.8.24;
  * UNCHANGED FROM V7
  * ─────────────────────────────────────────────────────────────────────────────
  *  - addPair() and circular chain wiring
- *  - _tryAdvancePair() at 80% capacity
+ *  - _tryAdvancePair() factory trigger (newest pair MatB ≥1 rotation + MatA full)
  *  - allPairsStatus(), shouldExpand(), all view functions
  */
 
@@ -59,6 +59,8 @@ interface IFigureEightMatrixV8PM {
     ///         PARAM_EARLY_EXIT_PENALTY_BPS retirement notes.)
     function setWithdrawalFeeBps(uint256 bps) external;
     function rotationCount() external view returns (uint256);
+    /// @notice V8.41 FIFO: stores which pair index (0 = T1.1, 1 = T1.2 …) this matrix belongs to.
+    function setPairIndex(uint256 idx) external;
 }
 
 contract PairManagerV8 is Ownable2Step {
@@ -119,8 +121,24 @@ contract PairManagerV8 is Ownable2Step {
     // too early and causing cross-pair referrer issues.
     // New behaviour: factory fires only when the pair is 100% complete (MatA=127, MatB=127),
     // i.e. a full 254-seat cycle is done. Pre-deployed pairs still advance at 80%.
-    uint256 public factoryExpandThresholdBps = 10_000; // 100% — factory fires at MatB cycle complete
+    uint256 public factoryExpandThresholdBps = 9_000;  // V8.41: 90% MatB occupancy triggers next pair
     uint256 public constant BPS_DENOM = 10_000;
+
+    // ─── V8.43: Two-threshold pair opening (owner rule 2026-07-22) ───────────
+    // Both thresholds count CUMULATIVE entries routed into a pair
+    // (pair.totalRegistered — every registration, re-entry and double seat):
+    //   deployEntryThreshold (125×3 = 375): deploy the next pair EARLY as a
+    //     buffer, so it exists before it's needed (factory deploy is heavy —
+    //     avoids a repeat of the July 19 frozen-MatB incident).
+    //   routeEntryThreshold (127×3 = 381): from here the pair's loop is
+    //     saturated — ALL overflow routes to the next pair: new externals,
+    //     re-entries, double-entry seats, and self-rescues.
+    // Loop capacity 127×4 = 508 should never be reached.
+    uint256 public deployEntryThreshold = 375;
+    uint256 public routeEntryThreshold  = 381;
+
+    /// @notice V8.43: matrices belonging to this PM — allow-list for rescueOverflow().
+    mapping(address => bool) public isPairMatrix;
 
     // ─── Events ───────────────────────────────────────────────────────────────
     event PairAdded(uint256 indexed pairId, address matrixA, address matrixB);
@@ -130,6 +148,8 @@ contract PairManagerV8 is Ownable2Step {
     // V8.21
     event GovernanceSet(address indexed governance);
     event WithdrawalFeeBpsBroadcast(uint256 bps, uint256 pairsUpdated);
+    // V8.43
+    event EntryThresholdsSet(uint256 deployThreshold, uint256 routeThreshold);
 
     // ─── Constructor ──────────────────────────────────────────────────────────
 
@@ -154,6 +174,41 @@ contract PairManagerV8 is Ownable2Step {
     function setExpandThreshold(uint256 _bps) external onlyOwner {
         require(_bps > 0 && _bps <= BPS_DENOM, "PM8: invalid bps");
         expandThresholdBps = _bps;
+    }
+
+    /// @notice V8.43: adjust the two entry-count thresholds (deploy early / route overflow).
+    function setEntryThresholds(uint256 _deploy, uint256 _route) external onlyOwner {
+        require(_deploy > 0 && _route >= _deploy, "PM8: deploy<=route required");
+        deployEntryThreshold = _deploy;
+        routeEntryThreshold  = _route;
+        emit EntryThresholdsSet(_deploy, _route);
+    }
+
+    /// @notice V8.43: is pair `idx` saturated AND is a next pair available to overflow into?
+    function overflowActive(uint256 idx) public view returns (bool) {
+        return idx < pairs.length
+            && pairs[idx].totalRegistered >= routeEntryThreshold
+            && idx + 1 < pairs.length;
+    }
+
+    /// @notice V8.43: route a self-rescuing member from a saturated pair into the
+    ///         next pair's MatA. Called by one of this PM's matrices, which sends
+    ///         the entry fee with the call (approve → safeTransferFrom here).
+    ///         The caller matrix has already verified overflowActive(pairIndex).
+    function rescueOverflow(address member, address referrer, uint256 fromPairIndex) external {
+        require(isPairMatrix[msg.sender],        "PM8: not a pair matrix");
+        require(overflowActive(fromPairIndex),   "PM8: overflow not active");
+
+        uint256 destIdx = fromPairIndex + 1;
+        address matA    = pairs[destIdx].matrixA;
+
+        usdc.safeTransferFrom(msg.sender, matA, entryFee);
+        IFigureEightMatrixV8PM(matA).enterFor(member, referrer);
+
+        pairs[destIdx].totalRegistered += 1;
+        totalRegistrations             += 1;
+
+        emit MemberRouted(member, destIdx, matA);
     }
 
     /// @notice V8.36: Set the occupancy threshold at which the factory auto-deploys
@@ -219,7 +274,8 @@ contract PairManagerV8 is Ownable2Step {
 
         _tryAdvancePair();
 
-        Pair storage p = pairs[activePairIndex];
+        uint256 routingIdx = _findRoutingPair(); // V8.40: oldest pair with MatA space
+        Pair storage p = pairs[routingIdx];
         address matA   = p.matrixA;
 
         usdc.safeTransferFrom(msg.sender, matA, entryFee);
@@ -228,7 +284,7 @@ contract PairManagerV8 is Ownable2Step {
         p.totalRegistered  += 1;
         totalRegistrations += 1;
 
-        emit MemberRouted(msg.sender, activePairIndex, matA);
+        emit MemberRouted(msg.sender, routingIdx, matA);
         _checkExpansion();
     }
 
@@ -246,7 +302,12 @@ contract PairManagerV8 is Ownable2Step {
 
         _tryAdvancePair();
 
-        Pair storage p = pairs[activePairIndex];
+        // V8.43: externals route to the oldest NON-SATURATED pair. MatA fullness
+        // is ignored on purpose — entering a full MatA triggers the natural root
+        // rotation (V8.41 mechanism) that keeps the pair's self-sustaining loop
+        // alive. Overflow to the next pair only at true saturation (127×3 entries).
+        uint256 routingIdx = _findExternalPair();
+        Pair storage p = pairs[routingIdx];
         address matA   = p.matrixA;
 
         // Pull fee from member directly -- TierRouter told them to approve this PM
@@ -256,7 +317,7 @@ contract PairManagerV8 is Ownable2Step {
         p.totalRegistered  += 1;
         totalRegistrations += 1;
 
-        emit MemberRouted(member, activePairIndex, matA);
+        emit MemberRouted(member, routingIdx, matA);
         _checkExpansion();
     }
 
@@ -268,13 +329,23 @@ contract PairManagerV8 is Ownable2Step {
      * @param member   The member being entered
      * @param referrer Sponsor address (locked in TierRouter)
      */
-    function registerFor(address member, address referrer) external {
+    /// @notice V8.41 FIFO: TierRouter passes the explicit target pair index.
+    ///         - Upgrades (new tier): pass 0 — first pair of the destination tier.
+    ///         - Re-entries / double-entry (same tier): pass srcPairIndex + 1 —
+    ///           graduate from T1.x MatB → T1.(x+1) MatA.
+    ///         If targetPairIndex is out of range, falls back to the newest pair
+    ///         so handleCycleOut never reverts (safety net only — 90% MatB trigger
+    ///         should always have the next pair deployed before it is needed).
+    function registerFor(address member, address referrer, uint256 targetPairIndex) external {
         require(msg.sender == tierRouter, "PM8: not tierRouter");
         require(pairs.length > 0,         "PM8: no pairs");
 
         _tryAdvancePair();
 
-        Pair storage p = pairs[activePairIndex];
+        // Safety: clamp to newest pair if caller passes a stale/invalid index
+        if (targetPairIndex >= pairs.length) targetPairIndex = pairs.length - 1;
+
+        Pair storage p = pairs[targetPairIndex];
         address matA   = p.matrixA;
 
         // Pull fee from TierRouter -- TierRouter must have approved this PM before calling
@@ -284,7 +355,7 @@ contract PairManagerV8 is Ownable2Step {
         p.totalRegistered  += 1;
         totalRegistrations += 1;
 
-        emit MemberRouted(member, activePairIndex, matA);
+        emit MemberRouted(member, targetPairIndex, matA);
         _checkExpansion();
     }
 
@@ -312,6 +383,15 @@ contract PairManagerV8 is Ownable2Step {
             deployedAt:      block.timestamp,
             totalRegistered: 0
         }));
+
+        // V8.43: allow-list for rescueOverflow()
+        isPairMatrix[matrixA] = true;
+        isPairMatrix[matrixB] = true;
+
+        // V8.41 FIFO: stamp both matrices with their pair index so TierRouter can
+        // route graduates to pairIndex+1 (T1.1 MatB root → T1.2 MatA, etc.)
+        IFigureEightMatrixV8PM(matrixA).setPairIndex(pairId);
+        IFigureEightMatrixV8PM(matrixB).setPairIndex(pairId);
 
         if (pairId == 0) {
             chainHead  = matrixA;
@@ -361,52 +441,76 @@ contract PairManagerV8 is Ownable2Step {
 
     // ─── Internal ─────────────────────────────────────────────────────────────
 
-    function _tryAdvancePair() internal {
-        // Reentrancy guard: factory's addPair() calls back here indirectly,
-        // but _expanding prevents any re-entry during factory deployment.
-        if (_expanding) return;
-
-        Pair storage p = pairs[activePairIndex];
-        uint256 combined = IFigureEightMatrixV8PM(p.matrixA).occupancy()
-                         + IFigureEightMatrixV8PM(p.matrixB).occupancy();
-        uint256 maxCap   = IFigureEightMatrixV8PM(p.matrixA).MATRIX_SIZE() * 2;
-
-        if (activePairIndex + 1 >= pairs.length) {
-            // ── V8.37: No pre-deployed next pair — try autonomous factory expansion ──
-            // Trigger: active MatB must have completed at least 1 rotation, meaning all
-            // original 127 MatB members have been paid out and the full cycle is done.
-            // This prevents the V8.36 freeze where the factory fired BEFORE the 255th
-            // member could enter T1.1 MatA to push MatB's first rotation.
-            //
-            // Fallback: if rotationCount() call fails (e.g., non-upgraded matrix),
-            // fall back to the old occupancy-based factoryExpandThresholdBps check
-            // so this upgrade is backwards-compatible with test fixtures.
-            if (pairFactory != address(0)) {
-                bool matBHasRotated = false;
-                try IFigureEightMatrixV8PM(p.matrixB).rotationCount() returns (uint256 rc) {
-                    matBHasRotated = rc >= 1;
-                } catch {
-                    // Backwards-compat fallback for matrices without rotationCount()
-                    matBHasRotated = maxCap > 0
-                        && combined * BPS_DENOM / maxCap >= factoryExpandThresholdBps;
-                }
-                if (matBHasRotated) {
-                    _expanding = true;
-                    // deployAndWire() internally calls addPair() which advances
-                    // activePairIndex to the newly deployed pair.
-                    IMatrixPairFactory(pairFactory).deployAndWire(address(this));
-                    _expanding = false;
-                }
+    /// @notice V8.40: Oldest-first pair routing.
+    ///         Returns the index of the oldest pair whose MatA still has available seats.
+    ///         Falls back to the newest pair when ALL MatAs are at capacity (brief
+    ///         crossing-pending window that resolves within one keeper cycle).
+    ///
+    ///         Why: before V8.40, all new registrations went to the NEWEST pair (activePairIndex).
+    ///         This caused older pairs (T1.1, T1.2…) to go dark — their MatA starved of new
+    ///         members, so MatB members could never complete further cycles and got stuck.
+    ///         Now T1.1 always receives new members first; T1.2+ only when T1.1 MatA is full.
+    function _findRoutingPair() internal view returns (uint256) {
+        uint256 n = pairs.length;
+        for (uint256 i = 0; i < n; i++) {
+            address matA = pairs[i].matrixA;
+            if (IFigureEightMatrixV8PM(matA).occupancy() < IFigureEightMatrixV8PM(matA).MATRIX_SIZE()) {
+                return i;
             }
-            // No next pair and rotation not yet complete (or no factory) -- stay put.
+        }
+        return n - 1; // All MatAs at 127/127 — crossing pending; use newest as temp holder
+    }
+
+    /// @notice V8.43: external-registration routing — oldest pair whose CUMULATIVE
+    ///         entries are still under routeEntryThreshold (127×3). MatA fullness
+    ///         is ignored: a full MatA rotates its root on entry (V8.41), keeping
+    ///         the self-sustaining loop fed until true saturation. When every pair
+    ///         is saturated, the newest holds until the factory adds the next one.
+    function _findExternalPair() internal view returns (uint256) {
+        uint256 n = pairs.length;
+        for (uint256 i = 0; i < n; i++) {
+            if (pairs[i].totalRegistered < routeEntryThreshold) return i;
+        }
+        return n - 1;
+    }
+
+    /// @notice V8.41 FIFO: Factory deployment trigger.
+    ///         Deploys the next pair when the NEWEST pair's MatB reaches ≥90% occupancy.
+    ///         This fires BEFORE MatB fills completely, so the next pair's MatA is ready
+    ///         to receive the first MatB graduate (FIFO graduation chain).
+    ///
+    ///         Why MatB (not MatA): MatA fills first; MatB starts filling only after MatA
+    ///         is full and crossings begin. By the time MatB hits 90% (114/127 seats),
+    ///         there are still 13 seats of buffer before the first graduation fires —
+    ///         ample time for the factory deploy to settle on-chain.
+    function _tryAdvancePair() internal {
+        // Reentrancy guard: factory's addPair() calls back here indirectly.
+        if (_expanding) return;
+        if (pairs.length == 0 || pairFactory == address(0)) return;
+
+        Pair storage newest = pairs[pairs.length - 1];
+        address newestMatB  = newest.matrixB;
+
+        uint256 matBOcc  = IFigureEightMatrixV8PM(newestMatB).occupancy();
+        uint256 matBSize = IFigureEightMatrixV8PM(newestMatB).MATRIX_SIZE();
+        // V8.43 two triggers (either fires):
+        //   a) newest pair has absorbed deployEntryThreshold (125×3) cumulative
+        //      entries — deploy the next pair EARLY as a buffer, or
+        //   b) newest MatB ≥ factoryExpandThresholdBps (90%) — V8.41 FIFO rule,
+        //      kept as a safety net for low-churn pairs.
+        bool entryTrigger = newest.totalRegistered >= deployEntryThreshold;
+        bool matBTrigger  = matBSize > 0 && matBOcc * BPS_DENOM / matBSize >= factoryExpandThresholdBps;
+        if (!entryTrigger && !matBTrigger) return;
+
+        _expanding = true;
+        // V8.39: wrap deployAndWire in try/catch — registration must not revert if factory fails.
+        try IMatrixPairFactory(pairFactory).deployAndWire(address(this)) {
+            // success — addPair() callback updates activePairIndex and pairs[]
+        } catch {
+            _expanding = false;
             return;
         }
-
-        // Normal path: a pre-deployed next pair exists -- advance if threshold crossed.
-        if (combined * BPS_DENOM / maxCap >= expandThresholdBps) {
-            activePairIndex += 1;
-            emit PairActivated(activePairIndex);
-        }
+        _expanding = false;
     }
 
     function _checkExpansion() internal {
@@ -456,21 +560,20 @@ contract PairManagerV8 is Ownable2Step {
         return pairs.length - 1;
     }
 
+    /// @notice V8.40: returns the pair currently receiving new registrations (routing target).
     function getActivePair() external view
         returns (address matrixA, address matrixB, uint256 pairId, uint256 reg)
     {
         require(pairs.length > 0, "PM8: no pairs");
-        uint256 i = activePairIndex;
+        uint256 i = _findRoutingPair(); // V8.40: routing pair, not newest pair
         return (pairs[i].matrixA, pairs[i].matrixB, i, pairs[i].totalRegistered);
     }
 
+    /// @notice V8.40: expansion is needed when the newest pair's MatA is at capacity.
     function shouldExpand() external view returns (bool) {
         if (pairs.length == 0) return false;
-        Pair storage p = pairs[activePairIndex];
-        uint256 combined = IFigureEightMatrixV8PM(p.matrixA).occupancy()
-                         + IFigureEightMatrixV8PM(p.matrixB).occupancy();
-        uint256 maxCap   = IFigureEightMatrixV8PM(p.matrixA).MATRIX_SIZE() * 2;
-        return combined * BPS_DENOM / maxCap >= expandThresholdBps;
+        address matA = pairs[pairs.length - 1].matrixA; // V8.40: check newest pair
+        return IFigureEightMatrixV8PM(matA).occupancy() >= IFigureEightMatrixV8PM(matA).MATRIX_SIZE();
     }
 
     function allPairsStatus() external view returns (
@@ -489,6 +592,7 @@ contract PairManagerV8 is Ownable2Step {
         registered = new uint256[](n);
         active     = new bool[](n);
 
+        uint256 routingIdx = _findRoutingPair(); // V8.40: mark routing target as active
         for (uint256 i = 0; i < n; i++) {
             Pair storage p = pairs[i];
             matrixAs[i]   = p.matrixA;
@@ -496,7 +600,7 @@ contract PairManagerV8 is Ownable2Step {
             occupancyA[i] = IFigureEightMatrixV8PM(p.matrixA).occupancy();
             occupancyB[i] = IFigureEightMatrixV8PM(p.matrixB).occupancy();
             registered[i] = p.totalRegistered;
-            active[i]     = (i == activePairIndex);
+            active[i]     = (i == routingIdx); // V8.40
         }
     }
 
@@ -532,9 +636,10 @@ contract PairManagerV8 is Ownable2Step {
         uint256 n = pairs.length;
         pairIds   = new uint256[](n);
         sharesBps = new uint256[](n);
+        uint256 routingIdx = _findRoutingPair(); // V8.40: shows actual routing target
         for (uint256 i = 0; i < n; i++) {
             pairIds[i]   = i;
-            sharesBps[i] = (i == activePairIndex) ? BPS_DENOM : 0;
+            sharesBps[i] = (i == routingIdx) ? BPS_DENOM : 0;
         }
     }
 }
