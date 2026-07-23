@@ -57,13 +57,21 @@ const fs                = require('fs');
 const path              = require('path');
 const https             = require('https');
 const { createProvider } = require('./rpcProvider');
-require('dotenv').config({ path: path.resolve(__dirname, '../.env') });
+// V8.43 fix: load the .env in THIS script's own directory. The old '../.env'
+// path silently loaded a stale /root/.env on the VPS (frozen at v8_40) —
+// root cause of the "heartbeat shows old contracts after every deploy" pattern.
+require('dotenv').config({ path: path.resolve(__dirname, '.env') });
 
 // ── Config ────────────────────────────────────────────────────────────────────
 const RPC_URL        = process.env.BASE_SEPOLIA_RPC_URL || 'https://sepolia.base.org';
 const DEPLOYER_KEY   = process.env.DEPLOYER_PRIVATE_KEY;
 const W1_KEY         = process.env.W1_PRIVATE_KEY;          // optional — W1 separate key
-const ADDR_FILE      = path.join(__dirname, process.env.ADDRESSES_FILE || 'deployed_addresses_v8_30.json');
+if (!process.env.ADDRESSES_FILE) {
+  console.error('FATAL: ADDRESSES_FILE env var not set in .env — refusing to start with a stale default.');
+  console.error('Set ADDRESSES_FILE=deployed_addresses_vX_XX.json in /root/keeper/.env');
+  process.exit(1);
+}
+const ADDR_FILE      = path.join(__dirname, process.env.ADDRESSES_FILE);
 const LOG_FILE       = process.env.KEEPER_LOG
   ? path.resolve(process.env.KEEPER_LOG)
   : path.join(__dirname, '../logs/keeper.log');
@@ -697,8 +705,10 @@ async function main() {
     const sfEmoji     = sfTotalUSD < SF_CRITICAL_USD ? '\u{1F534}' : sfTotalUSD < SF_MIN_USD ? '\u{1F7E1}' : '\u{1F7E2}';
     const parkedEmoji = totalParked > PARKED_CRITICAL ? '\u{1F534}' : totalParked > PARKED_WARN ? '\u{1F7E1}' : '\u{1F7E2}';
 
+    const versionTag = path.basename(ADDR_FILE, '.json').replace('deployed_addresses_', '');
     const lines = [
       headerEmoji + ' <b>CryptoNova Keeper — ' + headerLabel + '</b>',
+      '📋 <b>Contracts:</b> ' + versionTag + '  |  SF: <code>' + addrs.stabilityFund.slice(0, 10) + '...</code>',
       '',
       // sfTarget() is read live from the contract — always show the real on-chain value.
       sfEmoji + ' <b>StabilityFund:</b> ' + fmt6(sfTotal) + ' / ' + fmt6(sfTarget) + ' (' + sfHealthPct.toFixed(0) + '% health)',
