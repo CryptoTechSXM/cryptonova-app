@@ -1,6 +1,21 @@
 # CryptoNova — V4 Fix List & Mainnet Prep
-*Last updated: 2026-05-30*
-*V3 is live on testnet (Base Sepolia) — community testing in progress*
+*Last updated: 2026-07-23*
+*V8.43 is live on testnet (Base Sepolia) — community testing + full-ladder stress run in progress*
+
+---
+
+## 🟠 MAINNET FINDING (2026-07-23) — Full-matrix registration gas cascade
+
+**Observed during V8.43 stress run** (T1 pair 0 at 248 cumulative entries, MatA full 127/127, MatB 115/127):
+
+A registration landing on a **full matrix** measured **~15.45M gas** — vs a routine seat-fill's small fraction of that. Cause: one transaction chains the full rotation cascade — rotate MatA root out → position-weighted pool distribution across 126 seats → root crossing into MatB → (when MatB also full) MatB rotation + its own pool distribution → TierRouter `handleCycleOut` → additive re-entry/upgrade seats. The pool distribution loop over 126 members is the dominant cost and runs once per full-matrix entry.
+
+**Mainnet implications / action items:**
+- [ ] Any keeper, bot, or integration that hardcodes a gas limit will start failing exactly when matrices fill (highest-activity moment). Use per-tx `estimateGas` + ≥50% buffer everywhere (stress keeper fixed 2026-07-23 — pattern to copy).
+- [ ] Verify frontend register/upgrade/self-rescue paths rely on wallet gas estimation, not fixed limits.
+- [ ] Members registering into full matrices pay noticeably more gas than seat-fillers — cheap on Base, but document it (FAQ "why did my gas vary?") to preempt support tickets.
+- [ ] Confirm worst-case single-tx gas (both matrices full + max additive toggles + pair-overflow routing) stays comfortably under the Base mainnet block gas limit — measure during this stress run as pairs saturate (375/381 thresholds).
+- [ ] Consider for V9: bounding or amortizing the per-rotation pool-distribution loop (e.g., pull-based claims or bucketed weights) if worst-case gas grows with future matrix sizes.
 
 ---
 
