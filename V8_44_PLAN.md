@@ -68,7 +68,23 @@ Three interacting facts:
 - Either way: enumerate affected wallets from `MemberCycledOut` events minus re-seated members,
   publish the list, and announce recovery before mainnet.
 
-### D. Docs/bot sync after fix
+### D. Pull-based pool distribution (owner decision 2026-07-24: nothing deferred — in V8.44)
+Replace the per-rotation 126-member credit loop in `_distributePool` with O(1) accumulator
+accounting; members' shares are computed at claim/exit instead of written every rotation.
+- Per matrix, maintain two accumulators updated once per rotation (pool `P`, weight `W = N(N+1)/2 − 1`,
+  rotation counter `r`): `S1 += P / W` and `Sr += r × P / W`.
+- A member seated at rotation `r0`, position `p0` advances one seat per rotation, so their
+  accrued shares from checkpoint to now = `(p0 + r0) × ΔS1 − ΔSr` (exact closed form of the
+  current weighted drip — payout amounts unchanged, only the accounting moves).
+- Checkpoint (settle into `withdrawable` and re-snapshot) on every seat event: join, cross,
+  cycle-out, park, rescue, double-seat, eviction.
+- Rescue-debt repayment (currently deducted inside the loop) moves to the settle step.
+- Result: full-cascade registration gas drops from ~15.5M to well under any RPC cap — resolves
+  the MAINNET_TODO gas finding at the root instead of working around it.
+- This is an economics-engine rewrite: test with property-based comparison against V8.43's
+  loop output across randomized rotation sequences (payouts must match to the wei).
+
+### E. Docs/bot sync after fix
 - Update bot SYSTEM_PROMPT + faq/comp pages: cycle-out funding = crossing reserve + withdrawable;
   underfunded re-entry → parked (not exited). Re-verify against deployed V8.44 per the
   code-is-truth doctrine in CryptoNova-Testnet-App/CLAUDE.md.
@@ -81,8 +97,10 @@ Three interacting facts:
 4. Unit: re-entry OFF (explicit opt-out) → clean exit WITH reserve released to withdrawable.
 5. Stress keeper regression: full-ladder run on a fresh deploy; assert zero stranded reserves
    across 500+ rotations (sum of crossingReserve over non-seated members == 0).
-6. Gas: re-measure the full-cascade registration (rotation + pool distribution + crossing + additive
-   seats now touching reserve accounting) against the public-RPC cap (~<17.8M) — see MAINNET_TODO.md.
+6. Gas: re-measure the full-cascade registration after the pull-based pool rewrite — target is
+   comfortable clearance under the public-RPC cap (~<17.8M) at worst case; see MAINNET_TODO.md.
+7. Pool-accounting equivalence: property-based test — V8.44 accumulator payouts must equal
+   V8.43 loop payouts to the wei across randomized join/rotate/park/rescue sequences.
 
 ## Related
 - MAINNET_TODO.md → "Full-matrix registration gas cascade" finding (2026-07-23).

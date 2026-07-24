@@ -15,7 +15,7 @@ A registration landing on a **full matrix** measured **~15.45M gas** — vs a ro
 - [ ] Verify frontend register/upgrade/self-rescue paths rely on wallet gas estimation, not fixed limits.
 - [ ] Members registering into full matrices pay noticeably more gas than seat-fillers — cheap on Base, but document it (FAQ "why did my gas vary?") to preempt support tickets.
 - [ ] **RPC policy cap, not block limit, is the binding constraint.** Measured on Base Sepolia public RPC (sepolia.base.org): block gas limit 1.2B, but the node rejects tx gasLimit somewhere below ~17.8M (`-32003 gas limit too high`; 15.5M accepted, 17.8M rejected). Cascade registrations at est≈15.5M only clear it with an exact-estimate gas limit (keeper now uses a retry ladder: est×1.15 → est×1.05 → est). If worst-case cascade gas (both matrices full + max additive toggles + overflow routing) grows past the public-RPC cap, registrations become impossible for anyone on the default endpoint — frontend included. Measure worst case during this stress run as pairs saturate (375/381); if it approaches ~17M, mainnet needs either a dedicated RPC for the dapp or the V9 pool-loop amortization below.
-- [ ] Consider for V9: bounding or amortizing the per-rotation pool-distribution loop (e.g., pull-based claims or bucketed weights) if worst-case gas grows with future matrix sizes.
+- [ ] Pull-based pool distribution — pulled INTO V8.44 scope (owner decision 2026-07-24: nothing deferred). Spec in V8_44_PLAN.md section D; resolves this gas finding at the root.
 
 ---
 
