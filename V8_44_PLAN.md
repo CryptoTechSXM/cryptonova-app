@@ -84,7 +84,29 @@ accounting; members' shares are computed at claim/exit instead of written every 
 - This is an economics-engine rewrite: test with property-based comparison against V8.43's
   loop output across randomized rotation sequences (payouts must match to the wei).
 
-### E. Docs/bot sync after fix
+### E. Factory-spawned matrices are admin-orphaned (found 2026-07-24, frozen-keeper spam)
+**Symptom:** frozen_matb_keeper spammed reverts on T1.2 MatB — `OwnableUnauthorizedAccount`.
+**Diagnosis (on-chain verified):** T1.2 MatA/MatB owner = the live MatrixPairFactory
+(`0xf0b629cc89Ca612473Ea714d6Af8Ac2C2Ae1FB33`) — NOT pairAdmin. The factory's `pairAdmin` and
+`owner` are correctly the deployer, and the CURRENT source transfers matrix ownership to
+pairAdmin at the end of `_deployPair` (V8.39 fix) — but the DEPLOYED factory bytecode predates
+that fix. Every pair it spawns (T1.2 now; T1.3, T2.2… soon) is admin-orphaned: no
+`adminForceRotateRoot`, no owner setters, no emergency admin control. `keeperForceRotateRoot`
+doesn't help — it requires msg.sender == the MatrixKeeper CONTRACT, which has no passthrough.
+Also: `deployed_addresses_v8_43.json` lists a stale `matrixFactory` (`0x907193…`) — the
+PairManagers were re-wired to `0xf0b629cc…` later. Update the addresses file.
+**V8.44 fix:**
+- Redeploy MatrixPairFactory from current source (includes the ownership transfer), re-wire every
+  PairManager via `setFactory`, verify `pairAdmin` before first spawn.
+- Add a factory `sweepMatrixOwnership(address matrix)` (onlyOwner) so ownership of
+  already-spawned orphan matrices can be recovered retroactively — without it, orphans are
+  permanent for the life of a deployment.
+- Deploy checklist addition: after first factory expansion on any fresh deployment, assert
+  `matrix.owner() == pairAdmin` (catches this class of drift immediately).
+**Interim (V8.43):** acceptable — on-contract overflow/rotation automation covers the real freeze
+cases; frozen_matb_keeper now preflights and stands down cleanly (no gas burn, one log line).
+
+### F. Docs/bot sync after fix
 - Update bot SYSTEM_PROMPT + faq/comp pages: cycle-out funding = crossing reserve + withdrawable;
   underfunded re-entry → parked (not exited). Re-verify against deployed V8.44 per the
   code-is-truth doctrine in CryptoNova-Testnet-App/CLAUDE.md.
