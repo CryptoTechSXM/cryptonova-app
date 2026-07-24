@@ -68,6 +68,12 @@ Three interacting facts:
 - Either way: enumerate affected wallets from `MemberCycledOut` events minus re-seated members,
   publish the list, and announce recovery before mainnet.
 
+### C2. Unify upgrade eligibility across entrypoints (found 2026-07-24, Sherwyn T2 report)
+`manualUpgrade` accepts cycle-completed / prev-MatB / whale-gate eligibility, but `bulkUpgrade`
+hard-requires the whale gate only ("TR: Whale Gate not yet open") — a member eligible via a
+completed cycle can upgrade through one button and not the other. Align `bulkUpgrade` to the
+same three-way eligibility check (or route both frontends through one entrypoint).
+
 ### D. Pull-based pool distribution (owner decision 2026-07-24: nothing deferred — in V8.44)
 Replace the per-rotation 126-member credit loop in `_distributePool` with O(1) accumulator
 accounting; members' shares are computed at claim/exit instead of written every rotation.
