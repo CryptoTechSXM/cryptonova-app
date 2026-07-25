@@ -5,6 +5,41 @@
 
 ---
 
+## 🏗️ BUILD ORDER & KICKOFF (start here — decided 2026-07-25, owner: full V8.44, all fixes)
+
+**Doctrine for this build:** code is truth · test-first (write a test that reproduces the bug,
+prove it fails, then fix until green) · fresh deploy + stress-test to PROVE cycling before any
+promote · 3-stage frontend/keeper sync only after contracts verified. Do NOT edit tired.
+
+**Sequence (dependency-ordered):**
+1. **Crossing-fund fix** (item A) — passive members must not park at the MatA→MatB crossing;
+   fund from crossingReserve + withdrawable; park+self-rescue only as true last resort.
+2. **MatB cycle-out fix** (item A cont.) — pass escrow (not 0) into handleCycleOut; reserve
+   accounting in deductForUpgrade; park-not-exit when re-entry ON but underfunded.
+3. **Overflow rework** (item E-refined) — THE cycling fix. A saturated pair's OWN members
+   (re-entries, self-rescues) return to THAT pair's MatB to keep it churning; only genuinely
+   NEW externals overflow to the next pair. Fixes the frozen-MatB starvation.
+4. **Factory ownership + MatB self-heal** (item E) — redeploy factory (owner→pairAdmin),
+   add frozen-MatB work-item to MatrixKeeper.performUpkeep, factory sweepMatrixOwnership.
+5. **Pull-based pool distribution** (item D) — gas/economics rewrite; wei-equivalence test vs
+   V8.43 loop across randomized sequences. Do AFTER cycling proven (biggest blast radius).
+6. **Upgrade eligibility unify + hybrid upgrade** (C2 + G3).
+7. **Approval UX** (G1): EIP-2612 permit, fold auto-reentry into register; **bulk withdraw** (G2).
+8. **Graceful exit** (BUGS.md graceful-exit + I3) — exitSeat/queue + reserve release.
+9. **CW** (I1): decide advanceEpoch owner-vs-permissionless; add mainnet distribution keeper.
+10. **Stranded-reserve recovery** (item C) — migration for wallets already stranded on V8.43.
+11. **Docs/bot/frontend sync** (item F) — code-is-truth pass; update this session's E2 verify.
+
+**Verification gates:** (a) unit tests green incl. the frozen-MatB reproduction; (b) fresh
+stress-test deploy shows MatB rotationCount climbing on ALL pairs (the metric that was 0 on
+pairs 2–5 this session); (c) zero stranded crossingReserve across 500+ rotations; (d) gas
+per full-cascade registration under the ~17.8M public-RPC cap.
+
+**Anchor line for the fresh session:**
+`CryptoNova work — read your memory first, then let's build V8.44. Start with the build order at the top of V8_44_PLAN.md.`
+
+---
+
 ## Symptom
 
 Members with **auto re-entry enabled** cycle out of T1 MatB and are **silently exited** ("graduated") instead of re-entered or parked. They must manually pay a fresh $10 entry to rejoin. Member expectation (and the code's own intent comment) is: re-entry always — or, if underfunded, parked with the self-rescue path available.
