@@ -1185,14 +1185,18 @@ describe("V8.35 — Whale Gate: bulkUpgrade + sequential manualUpgrade + per-tie
 
   // ── Part 1: gate-closed blocking ─────────────────────────────────────────────
 
-  it("bulkUpgrade reverts 'TR: Whale Gate not yet open' when T5 gate is closed", async function () {
+  it("bulkUpgrade reverts with the unified eligibility message when T5 gate is closed (V8.44 C2)", async function () {
     const { tierRouter, w1, reg } = await loadFixture(deployV8Fixture);
 
     await reg(w1, ethers.ZeroAddress);
 
+    // V8.44 (C2): bulkUpgrade's FIRST tier uses the SAME three-way eligibility
+    // as manualUpgrade (cycle done OR in prev MatB OR gate open), so a member
+    // with none of the three gets the manualUpgrade-style message. Tiers
+    // BEYOND the first still revert "TR: Whale Gate not yet open for this tier".
     await expect(
       tierRouter.connect(w1).bulkUpgrade(1)
-    ).to.be.revertedWith("TR: Whale Gate not yet open for this tier");
+    ).to.be.revertedWith("TR: cross to MatB first, or wait for this tier's Whale Gate to open");
   });
 
   it("manualUpgrade reverts with MatB message when gate closed, no cycles, not in MatB", async function () {

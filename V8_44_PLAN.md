@@ -36,6 +36,18 @@ verified (code-is-truth: sync against DEPLOYED V8.44).
 pure member-driven flow — both MatBs' rotationCount climbs; zero stranded reserves
 sweep asserted across every wallet/matrix.
 
+**EIP-170 size diet (2026-07-25, after first Windows compile):** V8.44 features pushed
+TierRouter to 26,438 and MatrixPairFactory (embeds FigureEightMatrixV8 creation code) to
+26,725 — both over 24,576 even with viaIR. Fixed: evmVersion pinned to **cancun** in
+hardhat.config.js (OZ ERC20Permit pulls Bytes.sol/mcopy; Base is Cancun from genesis),
+non-test-asserted revert strings → compact custom errors (TRZero/TRBadValue/TRAuth/TRState;
+F8V8_NotAuthorized/BadValue/BadConfig), coupon entry + join bookkeeping + upgrade tail
+deduplicated, adminReleaseStrandedReserve guards moved into the lib. **Final sizes:
+TierRouter 24,490 · MatrixPairFactory 24,464** (margins 86/112 bytes — any future TierRouter
+or matrix-wrapper feature must re-check sizes first). Behavior change encoded in tests:
+bulkUpgrade's gate-closed revert for the FIRST tier is now the unified eligibility message
+(V8Elevator test updated). All V8_44 + legacy suites re-run green after the diet.
+
 **Verification still owed (Windows / fresh testnet deploy):**
 1. Full suite on the REAL config (`npx hardhat test` — sandbox used a no-viaIR/wasm
    sidecar compiler, artifacts-sandbox; TierRouter/Factory viaIR paths compiled OK).

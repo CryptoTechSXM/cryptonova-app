@@ -40,6 +40,10 @@ module.exports = {
         settings: {
           optimizer: { enabled: true, runs: 1 },
           viaIR: false,
+          // V8.44: OZ ERC20Permit (MockUSDC) pulls in Bytes.sol, which uses
+          // mcopy — requires Cancun. Base + Base Sepolia are Cancun from
+          // genesis (see hardfork history below), so this is safe.
+          evmVersion: "cancun",
         },
       },
     ],
@@ -54,6 +58,7 @@ module.exports = {
         settings: {
           optimizer: { enabled: true, runs: 1 },
           viaIR: true,
+          evmVersion: "cancun",
         },
       },
       "contracts/TierRouter.sol": {
@@ -61,6 +66,7 @@ module.exports = {
         settings: {
           optimizer: { enabled: true, runs: 1 },
           viaIR: true,
+          evmVersion: "cancun",
         },
       },
     },

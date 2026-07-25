@@ -761,7 +761,7 @@ library MatrixLogicLib {
 
     // V8.31: payBase parameter added -- chain pay is a fraction of the 45% payout base,
     // not the full entry fee.
-    function _distributeChainPay(MatrixState storage self, ImmutableConfig memory cfg, address newMember, uint256 payBase) internal {
+    function _distributeChainPay(MatrixState storage self, ImmutableConfig memory /* cfg */, address newMember, uint256 payBase) internal {
         uint256 myPos = self.matrixPos[newMember];
         if (myPos == 0) return;
 
@@ -1212,6 +1212,20 @@ library MatrixLogicLib {
             self.members[member].crossingReserve  = 0;
             self.members[member].withdrawable    += r;
         }
+    }
+
+    /// @notice V8.44 (item C): admin stranded-reserve recovery — guards + event
+    ///         here so the wrapper stays tiny (EIP-170 factory embed).
+    event StrandedReserveReleased(address indexed member, uint256 amount);
+
+    function releaseStranded(MatrixState storage self, address member) external {
+        require(!self.members[member].isInMatrix, "F8V8: still in matrix");
+        require(self.parkedAt[member] == 0,       "F8V8: parked - use selfRescue path");
+        uint256 r = self.members[member].crossingReserve;
+        require(r > 0, "F8V8: no stranded reserve");
+        self.members[member].crossingReserve  = 0;
+        self.members[member].withdrawable    += r;
+        emit StrandedReserveReleased(member, r);
     }
 
     // --- V8.37: adminForceRotateRoot -------------------------------------------

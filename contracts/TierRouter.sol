@@ -133,6 +133,14 @@ interface IERC20PermitLike {
 contract TierRouter is Ownable2Step {
     using SafeERC20 for IERC20;
 
+    // V8.44 size-diet errors (EIP-170: contract exceeded 24,576 with viaIR).
+    // Revert strings that tests/frontends assert are KEPT verbatim; all other
+    // guards use these compact errors.
+    error TRZero();      // zero address / zero value argument
+    error TRBadValue();  // value outside the allowed menu/range
+    error TRAuth();      // caller not authorized
+    error TRState();     // wrong state / not registered / not deployed
+
     IERC20 public immutable usdc;
 
     // ─── Tier configuration ───────────────────────────────────────────────────
@@ -309,7 +317,7 @@ contract TierRouter is Ownable2Step {
     // ─── Constructor ──────────────────────────────────────────────────────────
 
     constructor(address _usdc, address _admin) Ownable(_admin) {
-        require(_usdc != address(0), "TR: zero usdc");
+        if (_usdc == address(0)) revert TRZero();
         usdc = IERC20(_usdc);
         lastActivityTimestamp = block.timestamp;
 
@@ -344,13 +352,13 @@ contract TierRouter is Ownable2Step {
 
     /// @notice V8.35: owner or MatrixPairFactory can register new matrices.
     modifier onlyOwnerOrFactory() {
-        require(msg.sender == owner() || msg.sender == pairFactory, "TR: not owner/factory");
+        if (msg.sender != owner() && msg.sender != pairFactory) revert TRAuth();
         _;
     }
 
     /// @notice V8.20: wire the V8Governance contract so DAO-passed proposals can execute.
     function setGovernance(address _gov) external onlyOwner {
-        require(_gov != address(0), "TR: zero governance");
+        if (_gov == address(0)) revert TRZero();
         governance = _gov;
         emit GovernanceSet(_gov);
     }
@@ -362,9 +370,9 @@ contract TierRouter is Ownable2Step {
         address pairManager,
         uint256 entryFee
     ) external onlyOwner {
-        require(tierIndex < MAX_TIERS,     "TR: invalid tier");
-        require(pairManager != address(0), "TR: zero pm");
-        require(entryFee > 0,              "TR: zero fee");
+        if (tierIndex >= MAX_TIERS) revert TRBadValue();
+        if (pairManager == address(0)) revert TRZero();
+        if (entryFee == 0) revert TRZero();
         tierPairManagers[tierIndex] = pairManager;
         tierEntryFees[tierIndex]    = entryFee;
         emit TierRegistered(tierIndex, pairManager, entryFee);
@@ -375,9 +383,9 @@ contract TierRouter is Ownable2Step {
         address matA,
         address matB
     ) external onlyOwner {
-        require(tierIndex < MAX_TIERS, "TR: invalid tier");
-        require(matA != address(0),    "TR: zero matA");
-        require(matB != address(0),    "TR: zero matB");
+        if (tierIndex >= MAX_TIERS) revert TRBadValue();
+        if (matA == address(0)) revert TRZero();
+        if (matB == address(0)) revert TRZero();
         tierMatrixAAddr[tierIndex] = matA;
         tierMatrixBAddr[tierIndex] = matB;
     }
@@ -388,8 +396,8 @@ contract TierRouter is Ownable2Step {
     }
 
     function registerMatrix(address matrix, uint8 tierIndex) external onlyOwnerOrFactory {
-        require(matrix != address(0),  "TR: zero matrix");
-        require(tierIndex < MAX_TIERS, "TR: invalid tier");
+        if (matrix == address(0)) revert TRZero();
+        if (tierIndex >= MAX_TIERS) revert TRBadValue();
         authorizedMatrices[matrix] = true;
         matrixTierIndex[matrix]    = tierIndex;
         emit MatrixRegistered(matrix, tierIndex);
@@ -401,11 +409,8 @@ contract TierRouter is Ownable2Step {
 
     /// @notice V8.20: DAO-governable. Allowed: 10, 15, 20, 25, 30, 50.
     function setWhaleGateThreshold(uint256 threshold) external onlyOwnerOrGovernance {
-        require(
-            threshold == 10 || threshold == 15 || threshold == 20 ||
-            threshold == 25 || threshold == 30 || threshold == 50,
-            "TR: invalid threshold (allowed: 10,15,20,25,30,50)"
-        );
+        if (threshold != 10 && threshold != 15 && threshold != 20 &&
+            threshold != 25 && threshold != 30 && threshold != 50) revert TRBadValue();
         whaleGateThreshold = threshold;
         emit WhaleGateThresholdSet(threshold);
     }
@@ -435,7 +440,7 @@ contract TierRouter is Ownable2Step {
     function setTierGateThresholdT10(uint256 v) external onlyOwnerOrGovernance { require(v >= 1 && v <= 50, "TR: threshold 1-50"); tierGateThreshold[10] = uint8(v); emit TierGateThresholdUpdated(10, v); }
 
     function setTierWhaleGateActive(uint8 tierNum, bool active) external onlyOwnerOrGovernance {
-        require(tierNum >= 1 && tierNum <= MAX_TIERS, "TR: invalid tier");
+        if (tierNum < 1 || tierNum > MAX_TIERS) revert TRBadValue();
         tierWhaleGateActive[tierNum] = active;
         if (active) {
             emit WhaleGateActivated(tierNum, tierFirstEntries[tierNum]);
@@ -444,7 +449,7 @@ contract TierRouter is Ownable2Step {
 
     /// @notice V8.1: Set the MatrixKeeper address (Chainlink Automation).
     function setMatrixKeeper(address _keeper) external onlyOwner {
-        require(_keeper != address(0), "TR: zero keeper");
+        if (_keeper == address(0)) revert TRZero();
         matrixKeeper = _keeper;
         emit MatrixKeeperSet(_keeper);
     }
@@ -467,7 +472,7 @@ contract TierRouter is Ownable2Step {
     ///         until MatA.occupancy + MatB.occupancy >= threshold, then route to
     ///         the next pair (expansion). Min 127 (one full MatA); default 381 (127*3).
     function setPairExpansionThreshold(uint256 threshold) external onlyOwner {
-        require(threshold >= 127, "TR: threshold too low");
+        if (threshold < 127) revert TRBadValue();
         pairExpansionThreshold = threshold;
         emit PairExpansionThresholdSet(threshold);
     }
@@ -475,11 +480,8 @@ contract TierRouter is Ownable2Step {
     // ─── V8.1: Velocity gate (keeper-only) ───────────────────────────────────
 
     function setTierVelocityGreen(uint8 tierIndex, bool green) external {
-        require(
-            msg.sender == matrixKeeper || msg.sender == owner(),
-            "TR: not keeper"
-        );
-        require(tierIndex < MAX_TIERS, "TR: invalid tier");
+        if (msg.sender != matrixKeeper && msg.sender != owner()) revert TRAuth();
+        if (tierIndex >= MAX_TIERS) revert TRBadValue();
         tierVelocityGreen[tierIndex] = green;
         emit VelocityGateSet(tierIndex, green);
     }
@@ -487,19 +489,13 @@ contract TierRouter is Ownable2Step {
     // ─── V8.1: DAO governance setters (enumerated menus only) ────────────────
 
     function setAutoUpgradeCycleThreshold(uint256 threshold) external onlyOwnerOrGovernance {
-        require(
-            threshold == 1 || threshold == 3 || threshold == 5 || threshold == 10,
-            "TR: invalid threshold (allowed: 1,3,5,10)"
-        );
+        if (threshold != 1 && threshold != 3 && threshold != 5 && threshold != 10) revert TRBadValue();
         autoUpgradeCycleThreshold = threshold;
         emit AutoUpgradeThresholdSet(threshold);
     }
 
     function setReentryMinCycles(uint256 minCycles) external onlyOwnerOrGovernance {
-        require(
-            minCycles == 1 || minCycles == 2 || minCycles == 3 || minCycles == 5,
-            "TR: invalid minCycles (allowed: 1,2,3,5)"
-        );
+        if (minCycles != 1 && minCycles != 2 && minCycles != 3 && minCycles != 5) revert TRBadValue();
         reentryMinCycles = minCycles;
         emit ReentryMinCyclesSet(minCycles);
     }
@@ -526,20 +522,14 @@ contract TierRouter is Ownable2Step {
 
     /// @notice DAO-governable. Allowed: 7, 14, 30, 60, 90 (days). 0 disables the days guard.
     function setInactivityDaysThreshold(uint256 v) external onlyOwnerOrGovernance {
-        require(
-            v == 0 || v == 7 || v == 14 || v == 30 || v == 60 || v == 90,
-            "TR: invalid days threshold"
-        );
+        if (v != 0 && v != 7 && v != 14 && v != 30 && v != 60 && v != 90) revert TRBadValue();
         inactivityDaysThreshold = v;
         emit InactivityDaysThresholdSet(v);
     }
 
     /// @notice DAO-governable. Allowed: 1, 2, 3, 5, 10 (cycles). 0 disables the cycles guard.
     function setInactivityCyclesThreshold(uint256 v) external onlyOwnerOrGovernance {
-        require(
-            v == 0 || v == 1 || v == 2 || v == 3 || v == 5 || v == 10,
-            "TR: invalid cycles threshold"
-        );
+        if (v != 0 && v != 1 && v != 2 && v != 3 && v != 5 && v != 10) revert TRBadValue();
         inactivityCyclesThreshold = v;
         emit InactivityCyclesThresholdSet(v);
     }
@@ -547,7 +537,7 @@ contract TierRouter is Ownable2Step {
     /// @notice DAO-governable. v must be 0 (disabled) or 1 (enabled) -- V8Governance
     ///         only deals in uint256, so bool is encoded this way.
     function setInactivityGuardEnabled(uint256 v) external onlyOwnerOrGovernance {
-        require(v == 0 || v == 1, "TR: invalid bool value (0 or 1)");
+        if (v > 1) revert TRBadValue();
         inactivityGuardEnabled = (v == 1);
         emit InactivityGuardEnabledSet(v == 1);
     }
@@ -646,33 +636,34 @@ contract TierRouter is Ownable2Step {
         _setMemberOptions(msg.sender, disableUpgrade, enableReentry, enableDouble);
     }
 
-    function _register(address referrer) internal {
-        require(!globalJoined[msg.sender],         "TR: already joined");
-        require(tierPairManagers[0] != address(0), "TR: T1 not configured");
-
-        // V8.23: fall back to defaultReferrer (W1) when no valid referrer is supplied.
-        // This credits W1 with L1 chain-pay on every organic sign-up, growing its
-        // withdrawable balance and reducing SF rescue pressure.
-        address resolved = (referrer != address(0) && globalJoined[referrer])
+    /// @dev V8.44 size-diet: shared referrer resolution (V8.23 default-W1 rule).
+    function _resolveRef(address referrer) internal view returns (address) {
+        return (referrer != address(0) && globalJoined[referrer])
             ? referrer
             : (defaultReferrer != address(0) && globalJoined[defaultReferrer])
                 ? defaultReferrer
                 : address(0);
+    }
 
+    /// @dev V8.44 size-diet: shared join bookkeeping for register / coupon paths.
+    ///      V8.21 ordering preserved: _checkTierFirstEntry BEFORE the
+    ///      memberHighestTier write (see original note in git history).
+    function _bookkeepJoin(address resolved) internal {
         memberReferrer[msg.sender]    = resolved;
         globalJoined[msg.sender]      = true;
-        // V8.21 bugfix: _checkTierFirstEntry() gates on memberHighestTier[member]
-        // < tierNum -- it must run BEFORE memberHighestTier is written to 1,
-        // otherwise the check always sees 1 < 1 (false) and the per-tier
-        // counter can never increment. This exact ordering bug existed in the
-        // original T5-only code too (silently dead since register() always
-        // called it with tierNum=1, which the old code ignored anyway).
         _checkTierFirstEntry(msg.sender, 1);
         memberHighestTier[msg.sender] = 1;
         globalJoinedCount            += 1;
-
         lastActivityTimestamp    = block.timestamp;
         cyclesAtLastRegistration = totalSystemCycles;
+    }
+
+    function _register(address referrer) internal {
+        require(!globalJoined[msg.sender],         "TR: already joined");
+        if (tierPairManagers[0] == address(0)) revert TRState();
+
+        address resolved = _resolveRef(referrer);
+        _bookkeepJoin(resolved);
 
         // V8.32 Task #59: free re-entry for wrongfully reclaimed members.
         // Admin pre-funds TierRouter with USDC; we approve PairManager and call registerFor
@@ -705,8 +696,8 @@ contract TierRouter is Ownable2Step {
     /// @param couponCodeHash keccak256(abi.encodePacked(plaintextCode)) — computed by the frontend.
     function registerWithCoupon(address referrer, bytes32 couponCodeHash) external whenNotPaused {
         require(!globalJoined[msg.sender],         "TR: already joined");
-        require(tierPairManagers[0] != address(0), "TR: T1 not configured");
-        require(couponCodeHash != bytes32(0),       "TR: empty coupon hash");
+        if (tierPairManagers[0] == address(0)) revert TRState();
+        if (couponCodeHash == bytes32(0)) revert TRZero();
 
         // Route coupon entry through the current T1 MatA (not PairManager — USDC goes direct).
         // Resolve matA first so we can look up the coupon issuer before setting memberReferrer.
@@ -724,20 +715,8 @@ contract TierRouter is Ownable2Step {
             }
         }
 
-        address resolved = (referrer != address(0) && globalJoined[referrer])
-            ? referrer
-            : (defaultReferrer != address(0) && globalJoined[defaultReferrer])
-                ? defaultReferrer
-                : address(0);
-
-        memberReferrer[msg.sender]    = resolved;
-        globalJoined[msg.sender]      = true;
-        _checkTierFirstEntry(msg.sender, 1);
-        memberHighestTier[msg.sender] = 1;
-        globalJoinedCount            += 1;
-
-        lastActivityTimestamp    = block.timestamp;
-        cyclesAtLastRegistration = totalSystemCycles;
+        address resolved = _resolveRef(referrer);
+        _bookkeepJoin(resolved);
 
         IFigureEightMatrixV8Coupon(matA).enterWithCouponFrom(msg.sender, resolved, couponCodeHash);
 
@@ -755,7 +734,7 @@ contract TierRouter is Ownable2Step {
         bool enableReentry,
         bool enableDouble
     ) external {
-        require(globalJoined[msg.sender], "TR: not registered");
+        if (!globalJoined[msg.sender]) revert TRState();
         _setMemberOptions(msg.sender, disableUpgrade, enableReentry, enableDouble);
     }
 
@@ -791,6 +770,14 @@ contract TierRouter is Ownable2Step {
     ///      Eligible when (a) completed >=1 cycle in the previous tier, OR
     ///      (b) currently seated in ANY of the previous tier's MatBs (V8.38:
     ///      all pairs scanned), OR (c) the Whale Gate is open for the target.
+    /// @dev V8.44 size-diet: one require site for the shared eligibility string.
+    function _requireUpgradeEligible(uint8 targetTierIndex) internal view {
+        require(
+            _upgradeEligible(msg.sender, targetTierIndex),
+            "TR: cross to MatB first, or wait for this tier's Whale Gate to open"
+        );
+    }
+
     function _upgradeEligible(address member, uint8 targetTierIndex) internal view returns (bool) {
         uint8 prevIndex = targetTierIndex - 1;
         if (tierCycles[member][prevIndex] >= 1) return true;
@@ -827,22 +814,16 @@ contract TierRouter is Ownable2Step {
     }
 
     function _manualUpgrade(uint8 targetTierIndex) internal {
-        require(globalJoined[msg.sender],                           "TR: not registered");
-        require(targetTierIndex > 0 && targetTierIndex < MAX_TIERS, "TR: invalid tier");
+        if (!globalJoined[msg.sender]) revert TRState();
+        if (targetTierIndex == 0 || targetTierIndex >= MAX_TIERS) revert TRBadValue();
         require(tierPairManagers[targetTierIndex] != address(0),    "TR: tier not deployed");
 
         uint8 prevIndex = targetTierIndex - 1;
-        require(
-            _upgradeEligible(msg.sender, targetTierIndex),
-            "TR: cross to MatB first, or wait for this tier's Whale Gate to open"
-        );
+        _requireUpgradeEligible(targetTierIndex);
 
         address destMatA = tierMatrixAAddr[targetTierIndex];
         if (destMatA != address(0)) {
-            require(
-                !IFigureEightMatrixV8(destMatA).isActiveInMatrix(msg.sender),
-                "TR: already seated in target tier"
-            );
+            if (IFigureEightMatrixV8(destMatA).isActiveInMatrix(msg.sender)) revert TRState();
         }
 
         uint256 fee = tierEntryFees[targetTierIndex];
@@ -852,17 +833,7 @@ contract TierRouter is Ownable2Step {
         address referrer = memberReferrer[msg.sender];
         IPairManagerV8(tierPairManagers[targetTierIndex]).registerFor(msg.sender, referrer, 0);
 
-        uint8 targetTierNum = targetTierIndex + 1;
-        // V8.21 bugfix: must run before the memberHighestTier write below --
-        // see the ordering note in register().
-        _checkTierFirstEntry(msg.sender, targetTierNum);
-        if (targetTierNum > memberHighestTier[msg.sender]) {
-            memberHighestTier[msg.sender] = targetTierNum;
-        }
-        lastActivityTimestamp    = block.timestamp;
-        cyclesAtLastRegistration = totalSystemCycles;
-        _recordEntry(targetTierIndex);
-
+        uint8 targetTierNum = _finishTierEntry(targetTierIndex);
         emit ManualUpgrade(msg.sender, prevIndex + 1, targetTierNum, fee);
     }
 
@@ -875,19 +846,13 @@ contract TierRouter is Ownable2Step {
     ///         locks — freeWithdrawable only), pulling only the shortfall from
     ///         the wallet in the same tx. Same eligibility as manualUpgrade.
     function hybridUpgrade(uint8 targetTierIndex) external whenNotPaused {
-        require(globalJoined[msg.sender],                           "TR: not registered");
-        require(targetTierIndex > 0 && targetTierIndex < MAX_TIERS, "TR: invalid tier");
+        if (!globalJoined[msg.sender]) revert TRState();
+        if (targetTierIndex == 0 || targetTierIndex >= MAX_TIERS) revert TRBadValue();
         require(tierPairManagers[targetTierIndex] != address(0),    "TR: tier not deployed");
-        require(
-            _upgradeEligible(msg.sender, targetTierIndex),
-            "TR: cross to MatB first, or wait for this tier's Whale Gate to open"
-        );
+        _requireUpgradeEligible(targetTierIndex);
         address destMatA = tierMatrixAAddr[targetTierIndex];
         if (destMatA != address(0)) {
-            require(
-                !IFigureEightMatrixV8(destMatA).isActiveInMatrix(msg.sender),
-                "TR: already seated in target tier"
-            );
+            if (IFigureEightMatrixV8(destMatA).isActiveInMatrix(msg.sender)) revert TRState();
         }
 
         uint256 fee       = tierEntryFees[targetTierIndex];
@@ -913,7 +878,14 @@ contract TierRouter is Ownable2Step {
             msg.sender, memberReferrer[msg.sender], 0
         );
 
-        uint8 targetTierNum = targetTierIndex + 1;
+        uint8 targetTierNum = _finishTierEntry(targetTierIndex);
+        emit HybridUpgrade(msg.sender, targetTierNum, fee - fromWallet, fromWallet);
+    }
+
+    /// @dev V8.44 size-diet: shared post-entry bookkeeping for upgrade paths.
+    function _finishTierEntry(uint8 targetTierIndex) internal returns (uint8 targetTierNum) {
+        targetTierNum = targetTierIndex + 1;
+        // V8.21 ordering: _checkTierFirstEntry BEFORE the memberHighestTier write.
         _checkTierFirstEntry(msg.sender, targetTierNum);
         if (targetTierNum > memberHighestTier[msg.sender]) {
             memberHighestTier[msg.sender] = targetTierNum;
@@ -921,9 +893,6 @@ contract TierRouter is Ownable2Step {
         lastActivityTimestamp    = block.timestamp;
         cyclesAtLastRegistration = totalSystemCycles;
         _recordEntry(targetTierIndex);
-
-        emit HybridUpgrade(msg.sender, targetTierNum, fee - fromWallet, fromWallet);
-        emit ManualUpgrade(msg.sender, targetTierIndex, targetTierNum, fee);
     }
 
     /// @dev Pull up to `remaining` of the member's FREE (lock-respecting)
@@ -951,7 +920,7 @@ contract TierRouter is Ownable2Step {
     ///         balance is zero or fully locked are skipped silently; each
     ///         matrix applies its own withdrawal fee and lock guards.
     function bulkWithdraw() external {
-        require(globalJoined[msg.sender], "TR: not registered");
+        if (!globalJoined[msg.sender]) revert TRState();
         for (uint8 t = 0; t < MAX_TIERS; t++) {
             address pmAddr = tierPairManagers[t];
             if (pmAddr == address(0)) continue;
@@ -980,8 +949,8 @@ contract TierRouter is Ownable2Step {
     /// @param targetTierIndex 0-based index of the highest tier to enter (e.g. 4 = T5).
     ///        Must equal or exceed member's current highest tier.
     function bulkUpgrade(uint8 targetTierIndex) external whenNotPaused {
-        require(globalJoined[msg.sender],                              "TR: register at T1 first");
-        require(targetTierIndex >= 1 && targetTierIndex < MAX_TIERS,  "TR: invalid target tier");
+        if (!globalJoined[msg.sender]) revert TRState();
+        if (targetTierIndex < 1 || targetTierIndex >= MAX_TIERS) revert TRBadValue();
         require(tierPairManagers[targetTierIndex] != address(0),       "TR: tier not deployed");
 
         // memberHighestTier is 1-based; next-to-enter 0-based index = memberHighestTier
@@ -993,10 +962,7 @@ contract TierRouter is Ownable2Step {
         // V8.43 gate-only require blocked members who were eligible through the
         // manualUpgrade button. Tiers BEYOND the first still each require their
         // Whale Gate (eligibility can't be pre-earned for tiers not yet held).
-        require(
-            _upgradeEligible(msg.sender, startIdx),
-            "TR: cross to MatB first, or wait for this tier's Whale Gate to open"
-        );
+        _requireUpgradeEligible(startIdx);
         for (uint8 i = startIdx + 1; i <= targetTierIndex; i++) {
             require(
                 _isTierUnlockedForManualEntry(i + 1),
@@ -1007,7 +973,7 @@ contract TierRouter is Ownable2Step {
         // Calculate and collect total fee upfront
         uint256 totalFee;
         for (uint8 i = startIdx; i <= targetTierIndex; i++) {
-            require(tierPairManagers[i] != address(0), "TR: intermediate tier not deployed");
+            if (tierPairManagers[i] == address(0)) revert TRState();
             totalFee += tierEntryFees[i];
         }
         usdc.safeTransferFrom(msg.sender, address(this), totalFee);
@@ -1046,8 +1012,8 @@ contract TierRouter is Ownable2Step {
      *         2. If auto-upgrade ON + balance + allowance >= fee → auto-executes upgrade.
      */
     function onCrossToMatB(address member, uint8 tierIndex) external {
-        require(authorizedMatrices[msg.sender],            "TR: not authorized matrix");
-        require(matrixTierIndex[msg.sender] == tierIndex,  "TR: tier mismatch");
+        if (!authorizedMatrices[msg.sender]) revert TRAuth();
+        if (matrixTierIndex[msg.sender] != tierIndex) revert TRBadValue();
 
         if (tierIndex >= MAX_TIERS - 1) return;
         uint8 nextIndex = tierIndex + 1;
@@ -1117,8 +1083,8 @@ contract TierRouter is Ownable2Step {
         uint256 withdrawable
     ) external {
         require(authorizedMatrices[msg.sender],           "TR: unauthorized");
-        require(matrixTierIndex[msg.sender] == tierIndex, "TR: tier mismatch");
-        require(tierIndex < MAX_TIERS,                    "TR: invalid tier");
+        if (matrixTierIndex[msg.sender] != tierIndex) revert TRBadValue();
+        if (tierIndex >= MAX_TIERS) revert TRBadValue();
 
         address matrixB = msg.sender;
 
@@ -1351,11 +1317,8 @@ contract TierRouter is Ownable2Step {
     // ─── Keeper interface ─────────────────────────────────────────────────────
 
     function setDeflationState(uint8 state) external {
-        require(
-            msg.sender == matrixKeeper || msg.sender == owner(),
-            "TR: not keeper"
-        );
-        require(state <= 2, "TR: invalid deflation state");
+        if (msg.sender != matrixKeeper && msg.sender != owner()) revert TRAuth();
+        if (state > 2) revert TRBadValue();
         uint8 prev = deflationState;
         deflationState = state;
         if (state != prev) emit DeflationStateChanged(prev, state);
@@ -1445,7 +1408,7 @@ contract TierRouter is Ownable2Step {
         external view
         returns (address pairManager, uint256 entryFee)
     {
-        require(tierIndex < MAX_TIERS, "TR: invalid tier");
+        if (tierIndex >= MAX_TIERS) revert TRBadValue();
         pairManager = tierPairManagers[tierIndex];
         entryFee    = tierEntryFees[tierIndex];
     }

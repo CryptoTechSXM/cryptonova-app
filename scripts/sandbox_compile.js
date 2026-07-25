@@ -81,6 +81,7 @@ const input = {
   sources,
   settings: {
     ...(process.env.VIA_IR === "1" ? { viaIR: true } : {}),
+    evmVersion: "cancun",   // matches hardhat.config.js (V8.44)
     optimizer: { enabled: OPT_ON, runs: 1 },
     outputSelection: {
       "*": { "*": ["abi", "evm.bytecode", "evm.deployedBytecode", "evm.methodIdentifiers"] },

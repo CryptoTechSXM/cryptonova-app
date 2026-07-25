@@ -102,6 +102,12 @@ contract FigureEightMatrixV8 is Ownable2Step {
     event CouponApplied(address indexed member, bytes32 indexed codeHash, uint256 couponAmount, uint256 walletAmount);
 
     error F8V8_ZeroAddress();
+    // V8.44 size-diet errors (EIP-170: factory embeds this contract's creation
+    // code and went over the limit). Strings that tests/tools assert are KEPT;
+    // everything else uses these compact errors.
+    error F8V8_NotAuthorized();
+    error F8V8_BadValue();
+    error F8V8_BadConfig();
 
     struct SplitConfig {
         uint256 l1Bps;
@@ -136,15 +142,13 @@ contract FigureEightMatrixV8 is Ownable2Step {
         SplitConfig  memory _splits,
         uint256[6]   memory _chainPayBps
     ) Ownable(_p.admin) {
-        require(_p.usdc         != address(0), "F8V8: zero usdc");
-        require(_p.cnova        != address(0), "F8V8: zero cnova");
-        require(_p.treasury     != address(0), "F8V8: zero treasury");
-        require(_p.devWallet    != address(0), "F8V8: zero devWallet");
-        require(_p.opsWallet    != address(0), "F8V8: zero opsWallet");
-        require(_p.accountOne   != address(0), "F8V8: zero accountOne");
-        require(_entryFee     > 0,             "F8V8: zero fee");
-        require(_matrixSize   >= 3 && _matrixSize <= 1023, "F8V8: invalid size");
-        require(_tierIndex    < 10,            "F8V8: invalid tier");
+        // V8.44: constructor guards use compact custom errors — these strings
+        // lived in the CREATION code, which MatrixPairFactory embeds (EIP-170).
+        if (_p.usdc == address(0) || _p.cnova == address(0) || _p.treasury == address(0)
+            || _p.devWallet == address(0) || _p.opsWallet == address(0)
+            || _p.accountOne == address(0)) revert F8V8_ZeroAddress();
+        if (_entryFee == 0 || _matrixSize < 3 || _matrixSize > 1023 || _tierIndex >= 10)
+            revert F8V8_BadValue();
 
         uint256 sum = _splits.l1Bps + _splits.chainBps + _splits.poolBps
             + _splits.treasuryBps + _splits.stabilityBps
@@ -152,7 +156,7 @@ contract FigureEightMatrixV8 is Ownable2Step {
             + _splits.buybackBps + _splits.liquidityBps;
         // V8.32: splits now sum to 4750 BPS (50% crossing reserve + 2.5% direct earn
         // are allocated BEFORE the BPS array in _distributePayments; total = 5000+250+4750=10000)
-        require(sum == 4_750, "F8V8: splits != 4750");
+        if (sum != 4_750) revert F8V8_BadConfig();
 
         usdc         = IERC20(_p.usdc);
         cnova        = CNOVAToken(_p.cnova);
@@ -187,6 +191,20 @@ contract FigureEightMatrixV8 is Ownable2Step {
         }
     }
 
+    // --- V8.44 size-diet shared guards (dedupe repeated require sites) --------
+    function _onlyTierRouter() private view {
+        if (msg.sender != _state.tierRouter) revert F8V8_NotAuthorized();
+    }
+    function _requirePartner() private view {
+        if (_state.partner == address(0)) revert F8V8_BadConfig();
+    }
+    function _requireNotSeated(address member) private view {
+        require(
+            !_state.members[member].hasEverJoined || !_state.members[member].isInMatrix,
+            "F8V8: already in matrix"
+        );
+    }
+
     /// @dev Rebuilds the immutable-config struct passed into every library call.
     ///      Cheap: every field here is either an immutable (free read) or a
     ///      contract reference already held by this contract.
@@ -218,7 +236,7 @@ contract FigureEightMatrixV8 is Ownable2Step {
 
     function setPartner(address _partner) external onlyOwner {
         if (_partner == address(0)) revert F8V8_ZeroAddress();
-        require(_partner != address(this), "F8V8: self partner");
+        if (_partner == address(this)) revert F8V8_BadValue();
         _state.partner = _partner;
         emit PartnerSet(_partner, isMatrixA);
     }
@@ -235,10 +253,7 @@ contract FigureEightMatrixV8 is Ownable2Step {
     ///         with its position in the pair array (0 = T1.1, 1 = T1.2 …).
     ///         Access: owner (deployer or MatrixPairFactory.pairAdmin) OR pairManager.
     function setPairIndex(uint256 idx) external {
-        require(
-            msg.sender == owner() || msg.sender == _state.pairManager,
-            "F8V8: not pair admin"
-        );
+        if (msg.sender != owner() && msg.sender != _state.pairManager) revert F8V8_NotAuthorized();
         pairIndex = idx;
     }
 
@@ -248,20 +263,13 @@ contract FigureEightMatrixV8 is Ownable2Step {
     }
 
     function setChainNext(address _next) external {
-        require(
-            msg.sender == owner() || msg.sender == _state.pairManager,
-            "F8V8: not chain admin"
-        );
+        if (msg.sender != owner() && msg.sender != _state.pairManager) revert F8V8_NotAuthorized();
         _state.chainNext = _next;
     }
 
     function setChainAuthorized(address caller, bool authorized) external {
-        require(
-            msg.sender == owner()             ||
-            msg.sender == _state.pairManager  ||
-            msg.sender == _state.tierRouter,
-            "F8V8: not chain admin"
-        );
+        if (msg.sender != owner() && msg.sender != _state.pairManager
+            && msg.sender != _state.tierRouter) revert F8V8_NotAuthorized();
         _state.chainAuthorized[caller] = authorized;
     }
 
@@ -318,10 +326,8 @@ contract FigureEightMatrixV8 is Ownable2Step {
             msg.sender == _state.governance || msg.sender == _state.pairManager,
             "F8V8: not governance"
         );
-        require(
-            _bps == 50 || _bps == 100 || _bps == 150 || _bps == 200 || _bps == 250,
-            "F8V8: invalid fee (allowed: 50,100,150,200,250)"
-        );
+        if (_bps != 50 && _bps != 100 && _bps != 150 && _bps != 200 && _bps != 250)
+            revert F8V8_BadValue();
         _state.withdrawalFeeBps = _bps;
     }
 
@@ -336,7 +342,7 @@ contract FigureEightMatrixV8 is Ownable2Step {
     // --- TierRouter: fund extraction --------------------------------------------
 
     function deductForUpgrade(address member, uint256 escrowAmt, uint256 withdrawableAmt) external {
-        require(msg.sender == _state.tierRouter, "F8V8: not tierRouter");
+        _onlyTierRouter();
         MatrixLogicLib.deductForUpgrade(_state, _cfg(), member, escrowAmt, withdrawableAmt);
         emit UpgradeFundsDeducted(member, escrowAmt, withdrawableAmt);
     }
@@ -344,14 +350,14 @@ contract FigureEightMatrixV8 is Ownable2Step {
     /// @notice V8.44 (item B): TierRouter parks a member whose MatB cycle-out
     ///         could not fund a re-entry — see MatrixLogicLib.parkCycledOut.
     function parkCycledOut(address member, uint256 shortfall) external {
-        require(msg.sender == _state.tierRouter, "F8V8: not tierRouter");
+        _onlyTierRouter();
         MatrixLogicLib.parkCycledOut(_state, member, shortfall);
     }
 
     /// @notice V8.44 (item B/I3): TierRouter releases an exiting member's
     ///         un-consumed crossing reserve to withdrawable (clean graduation).
     function releaseReserve(address member) external {
-        require(msg.sender == _state.tierRouter, "F8V8: not tierRouter");
+        _onlyTierRouter();
         MatrixLogicLib.releaseReserve(_state, member);
     }
 
@@ -361,15 +367,11 @@ contract FigureEightMatrixV8 is Ownable2Step {
     ///         is selfRescue; exiting members are released automatically by the
     ///         V8.44 engine — this valve exists for pathological drift only).
     ///         Releases to the member's withdrawable, never to the admin.
+    ///         Guards + event live in MatrixLogicLib (size diet).
     event StrandedReserveReleased(address indexed member, uint256 amount);
 
     function adminReleaseStrandedReserve(address member) external onlyOwner {
-        require(!_state.members[member].isInMatrix, "F8V8: still in matrix");
-        require(_state.parkedAt[member] == 0,       "F8V8: parked - use selfRescue path");
-        uint256 r = _state.members[member].crossingReserve;
-        require(r > 0, "F8V8: no stranded reserve");
-        MatrixLogicLib.releaseReserve(_state, member);
-        emit StrandedReserveReleased(member, r);
+        MatrixLogicLib.releaseStranded(_state, member);
     }
 
     /// @notice V8.44 (item E): one-step ownership handoff. Ownable2Step's
@@ -386,11 +388,8 @@ contract FigureEightMatrixV8 is Ownable2Step {
     // --- Registration -------------------------------------------------------------
 
     function register(address referrer) external {
-        require(
-            !_state.members[msg.sender].hasEverJoined || !_state.members[msg.sender].isInMatrix,
-            "F8V8: already in matrix"
-        );
-        require(_state.partner != address(0), "F8V8: partner not set");
+        _requireNotSeated(msg.sender);
+        _requirePartner();
 
         address entry = isMatrixA ? address(this) : _state.partner;
         usdc.safeTransferFrom(msg.sender, entry, ENTRY_FEE);
@@ -402,28 +401,7 @@ contract FigureEightMatrixV8 is Ownable2Step {
     /// @param referrer       The member who referred this new member.
     /// @param couponCodeHash keccak256(abi.encodePacked(plaintextCode)) — computed by the frontend.
     function registerWithCoupon(address referrer, bytes32 couponCodeHash) external {
-        require(isMatrixA, "F8V8: coupon registration must use MatA");
-        require(
-            !_state.members[msg.sender].hasEverJoined || !_state.members[msg.sender].isInMatrix,
-            "F8V8: already in matrix"
-        );
-        require(_state.partner != address(0),        "F8V8: partner not set");
-        require(_state.couponRegistry != address(0), "F8V8: coupon registry not set");
-        require(couponCodeHash != bytes32(0),         "F8V8: empty coupon hash");
-
-        // Redeem coupon — registry transfers couponAmount USDC to this contract.
-        uint256 couponCovered = ICouponRegistry(_state.couponRegistry).redeemCoupon(couponCodeHash, msg.sender);
-
-        // Member pays only the remaining shortfall (zero if coupon fully covers the fee).
-        uint256 fromWallet = ENTRY_FEE > couponCovered ? ENTRY_FEE - couponCovered : 0;
-        if (fromWallet > 0) {
-            usdc.safeTransferFrom(msg.sender, address(this), fromWallet);
-        }
-
-        emit CouponApplied(msg.sender, couponCodeHash, couponCovered, fromWallet);
-        // Route through this._enterMatrix so msg.sender == address(this) inside the library,
-        // which passes the auth check without attempting another USDC pull.
-        this._enterMatrix(msg.sender, referrer);
+        _couponEntry(msg.sender, referrer, couponCodeHash);
     }
 
     /// @notice V8.31: TierRouter-authorised coupon entry.
@@ -431,17 +409,17 @@ contract FigureEightMatrixV8 is Ownable2Step {
     ///         (globalJoined, memberReferrer, globalJoinedCount, CommunityWallet enroll)
     ///         fires before the matrix entry — identical USDC flow as registerWithCoupon()
     ///         but uses `member` for the wallet pull instead of `msg.sender`.
-    /// @param member         The wallet registering (resolved by TierRouter).
-    /// @param referrer       Resolved referrer (already validated by TierRouter).
-    /// @param couponCodeHash keccak256 hash of the coupon code.
     function enterWithCouponFrom(address member, address referrer, bytes32 couponCodeHash) external {
-        require(msg.sender == _state.tierRouter,     "F8V8: only tierRouter");
-        require(isMatrixA,                           "F8V8: coupon registration must use MatA");
-        require(
-            !_state.members[member].hasEverJoined || !_state.members[member].isInMatrix,
-            "F8V8: already in matrix"
-        );
-        require(_state.partner != address(0),        "F8V8: partner not set");
+        _onlyTierRouter();
+        _couponEntry(member, referrer, couponCodeHash);
+    }
+
+    /// @dev V8.44 size-diet: shared body of the two coupon entry points (they
+    ///      were byte-for-byte duplicates apart from auth + member source).
+    function _couponEntry(address member, address referrer, bytes32 couponCodeHash) private {
+        require(isMatrixA, "F8V8: coupon registration must use MatA");
+        _requireNotSeated(member);
+        _requirePartner();
         require(_state.couponRegistry != address(0), "F8V8: coupon registry not set");
         require(couponCodeHash != bytes32(0),         "F8V8: empty coupon hash");
 
@@ -455,16 +433,15 @@ contract FigureEightMatrixV8 is Ownable2Step {
         }
 
         emit CouponApplied(member, couponCodeHash, couponCovered, fromWallet);
+        // Route through this._enterMatrix so msg.sender == address(this) inside the library,
+        // which passes the auth check without attempting another USDC pull.
         this._enterMatrix(member, referrer);
     }
 
     function enterFor(address member, address referrer) external {
-        require(msg.sender == _state.pairManager, "F8V8: not pairManager");
-        require(
-            !_state.members[member].hasEverJoined || !_state.members[member].isInMatrix,
-            "F8V8: already in matrix"
-        );
-        require(_state.partner != address(0), "F8V8: partner not set");
+        if (msg.sender != _state.pairManager) revert F8V8_NotAuthorized();
+        _requireNotSeated(member);
+        _requirePartner();
         this._enterMatrix(member, referrer);
     }
 
@@ -480,18 +457,18 @@ contract FigureEightMatrixV8 is Ownable2Step {
     }
 
     function withdrawPartial(uint256 amount) external {
-        require(amount > 0, "F8V8: amount must be > 0");
+        if (amount == 0) revert F8V8_BadValue();
         MatrixLogicLib.withdrawCore(_state, _cfg(), msg.sender, msg.sender, amount, false);
     }
 
     function withdrawPartialTo(address recipient, uint256 amount) external {
-        require(recipient != address(0), "F8V8: zero recipient");
-        require(amount > 0, "F8V8: amount must be > 0");
+        if (recipient == address(0)) revert F8V8_ZeroAddress();
+        if (amount == 0) revert F8V8_BadValue();
         MatrixLogicLib.withdrawCore(_state, _cfg(), msg.sender, recipient, amount, false);
     }
 
     function withdrawTo(address recipient) external {
-        require(recipient != address(0), "F8V8: zero recipient");
+        if (recipient == address(0)) revert F8V8_ZeroAddress();
         MatrixLogicLib.withdrawCore(_state, _cfg(), msg.sender, recipient, 0, true);
     }
 
@@ -500,7 +477,7 @@ contract FigureEightMatrixV8 is Ownable2Step {
     ///         usual guards (crossing lock, automation reserve, withdrawal fee)
     ///         apply exactly as in a direct withdraw().
     function routerWithdrawFor(address member) external {
-        require(msg.sender == _state.tierRouter, "F8V8: not tierRouter");
+        _onlyTierRouter();
         MatrixLogicLib.withdrawCore(_state, _cfg(), member, member, 0, true);
     }
 
@@ -517,10 +494,8 @@ contract FigureEightMatrixV8 is Ownable2Step {
             msg.sender == owner() || msg.sender == _state.governance || msg.sender == _state.pairManager,
             "F8V8: not governance"
         );
-        require(
-            bps == 0 || bps == 1_000 || bps == 2_000 || bps == 3_000 || bps == 5_000,
-            "F8V8: invalid penalty (allowed: 0,1000,2000,3000,5000)"
-        );
+        if (bps != 0 && bps != 1_000 && bps != 2_000 && bps != 3_000 && bps != 5_000)
+            revert F8V8_BadValue();
         exitPenaltyBps = bps;
     }
 
