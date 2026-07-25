@@ -11,6 +11,17 @@
 prove it fails, then fix until green) · fresh deploy + stress-test to PROVE cycling before any
 promote · 3-stage frontend/keeper sync only after contracts verified. Do NOT edit tired.
 
+**🧭 DESIGN LAW (owner, 2026-07-25): the CONTRACT drives all rotation; the keeper is ONLY a
+backstop — never the primary driver.** The V8.43 freeze happened because rotation depended on
+an external condition (a fundable crossing) and the sole recovery was a keeper that was broken.
+That is inverted. In V8.44: (a) a full matrix MUST rotate as the natural, unavoidable
+consequence of the next entry attempt — no external trigger required; (b) crossings must ALWAYS
+be able to complete (funded from reserve; a shortfall parks the MEMBER without stalling the
+MATRIX's rotation for everyone else); (c) keeper force-rotate stays only as belt-and-suspenders
+for pathological cases AND must actually work (ownership fixed, performUpkeep self-heal). Test
+gate: with ALL keepers OFF, a fresh stress deploy must still show every MatB's rotationCount
+climbing purely from contract-driven flow. If cycling needs a keeper to move, the design failed.
+
 **Sequence (dependency-ordered):**
 1. **Crossing-fund fix** (item A) — passive members must not park at the MatA→MatB crossing;
    fund from crossingReserve + withdrawable; park+self-rescue only as true last resort.
