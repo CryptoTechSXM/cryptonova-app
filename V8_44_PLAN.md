@@ -109,14 +109,26 @@ Consequence: cycling stalls at the crossing stage, members pile up parked, froze
 reverts. One root cause, three symptoms. NOTE: raising entry thresholds (the intuitive "push
 the loop harder" fix) makes it WORSE — more members into MatAs whose MatBs then also freeze.
 
-**V8.44 fix (all three):**
-1. Redeploy MatrixPairFactory from current source (transfers matrix ownership to pairAdmin);
-   re-wire every PairManager; assert `matrix.owner()==pairAdmin` after first expansion.
-2. Add a frozen-MatB work-item to MatrixKeeper checkUpkeep/performUpkeep so it self-heals
-   (detect occ==size && nextSlot>size → keeperForceRotateRoot), OR add an owner-callable
-   `forceRotate(matrix)` wrapper on MatrixKeeper. This is the durable fix — don't rely on the
-   standalone frozen_matb_keeper.
-3. Add a factory `sweepMatrixOwnership(matrix)` to recover already-orphaned matrices.
+**REFINED ROOT CAUSE (2026-07-25, read _crossToPartner):** it's not a MatB-internal deadlock —
+it's STARVATION. (1) A MatA root cycling out must PAY the crossing fee to enter MatB; a passive
+member without earnings can't cover the withdrawable half → `_crossToPartner` PARKS them and
+returns before reaching MatB. (2) When rescued, the pair is saturated (≥381) so overflow routes
+them to the NEXT pair's MatA — NOT back to their own MatB. (3) So the frozen MatB never receives
+the entry that would rotate it; it filled early, then got orphaned from all flow at saturation.
+MatA keeps spinning on fresh externals; MatB sits frozen behind it. NO clean live fix exists —
+ghost-entry churn is messy/partial (leaves ghosts, trips the cycle-out bug), threshold raises
+backfire, force-rotate only churns without fixing starvation.
+
+**V8.44 fix (coupled — this is the cycling fix):**
+1. **Crossing-fund fix (= item A):** passive members must not park at the crossing. Fund from
+   crossingReserve + withdrawable properly; park-with-self-rescue only as true last resort.
+2. **Overflow rework (NEW, critical):** a saturated pair's OWN members (re-entries, self-rescues)
+   should return to THAT pair's MatB to keep it churning. Only genuinely NEW externals overflow
+   forward to the next pair. Today `rescueOverflow` + `_findExternalPair` divert everything at
+   381, orphaning the pair's crossing pool. Rework so overflow is external-only.
+3. **Ownership fix + MatB self-heal (= item E):** redeploy factory (owner→pairAdmin), add
+   frozen-MatB detection to MatrixKeeper performUpkeep (occ==size && nextSlot>size →
+   keeperForceRotateRoot), factory `sweepMatrixOwnership(matrix)` for existing orphans. Backstop.
 
 **Interim unfreeze to TEST in daylight (do NOT run blind at night):** `manualGhostEntry(matrix,
 tierIdx)` on MatrixKeeper is onlyOwner and injects a synthetic entry — into a full MatB it
