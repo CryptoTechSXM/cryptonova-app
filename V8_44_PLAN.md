@@ -155,6 +155,26 @@ source: **Dev+Ops budget** (1.5% of entry fees — its charter already covers "a
 protocol engineering"; bug bounty is exactly that). Owner batch-pays periodically and
 updates paid_usd during triage.
 
+### I. Community Wallet distribution + exit mechanics (member call 2026-07-25)
+1. **`advanceEpoch()` is `onlyOwner`, but comp page says "anyone can trigger every 30 days."**
+   Doc-vs-code mismatch. Decide: make it permissionless (matches the pitch) OR fix the docs.
+   Either way, MAINNET needs a scheduled keeper to call it on the 25th — else claimable never
+   updates (pending pool just grows). Confirmed working-as-designed that claimable only moves
+   at epoch advance; members reading "flat claimable" as a bug is an education gap too.
+2. **Verify Pioneer cohort accrual.** Pioneer #503 shows $0 claimable — expected (enrolled after
+   last snapshot; next advanceEpoch includes them, both cohorts now 500/500). Confirm the next
+   epoch advance actually pays both tranches once triggered.
+3. **Graceful exit / crossing-reserve refund (ties to the existing BUGS.md graceful-exit item).**
+   Current: disabling all automation releases the AUTOMATION reserve (reservedFor→0) to
+   withdrawable, but each active seat's crossing reserve stays locked until that seat crosses.
+   No mid-cycle quit/refund path exists. Add an exit flow (see graceful-exit options a/b/c) AND
+   pair it with the V8.44 cycle-out fix so a clean exit releases any un-consumed reserve to
+   withdrawable rather than stranding it.
+4. **Upgrade button not visible after MatA→MatB cross (frontend).** Contract makes a member
+   upgrade-eligible once seated in prev-tier MatB (`inPrevMatB`), but some members don't see the
+   upgrade UI. Frontend eligibility check likely misses the "seated in prev MatB" case — align it
+   with the contract's three-way rule (cycle done OR in prev MatB OR gate open). Same area as C2.
+
 ### F. Docs/bot sync after fix
 - Update bot SYSTEM_PROMPT + faq/comp pages: cycle-out funding = crossing reserve + withdrawable;
   underfunded re-entry → parked (not exited). Re-verify against deployed V8.44 per the
