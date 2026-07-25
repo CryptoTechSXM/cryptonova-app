@@ -112,6 +112,20 @@ PairManagers were re-wired to `0xf0b629cc…` later. Update the addresses file.
 **Interim (V8.43):** acceptable — on-contract overflow/rotation automation covers the real freeze
 cases; frozen_matb_keeper now preflights and stands down cleanly (no gas burn, one log line).
 
+### E2. VERIFY overflow self-rescue on saturated pairs (flagged 2026-07-25)
+Parked count spiked to 144 (mostly T1.4 MatA, a SATURATED pair — 381 entries, both
+matrices full). Investigated live: it DRAINED on its own to 26 within the hour, so the
+V8.43 overflow self-rescue path (`_rescueToNextPair` → `rescueOverflow` into pair N+1)
+appears to work — the parking was steady-state churn (passive wallets park at crossing,
+keeper drains them about as fast). BUT never confirmed with a clean APPROVED simulation
+(an un-approved eth_call gave a misleading ERC20InsufficientAllowance red herring).
+**Before mainnet, deliberately verify:** a member parked on a saturated pair can
+self-rescue from the DASHBOARD — the overflow routes through pair N+1's MatA / the
+PairManager, NOT the from-matrix the frontend currently approves. If the frontend approves
+only the from-matrix, real members on saturated pairs would fail self-rescue on mainnet
+even though the keeper/contract path works. Diagnostic left on VPS: /root/keeper/diag_overflow.js.
+Watch signal: if parked count climbs and STAYS high (not draining), this is the likely cause.
+
 ### F. Docs/bot sync after fix
 - Update bot SYSTEM_PROMPT + faq/comp pages: cycle-out funding = crossing reserve + withdrawable;
   underfunded re-entry → parked (not exited). Re-verify against deployed V8.44 per the
