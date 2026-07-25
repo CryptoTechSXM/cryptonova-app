@@ -126,6 +126,35 @@ only the from-matrix, real members on saturated pairs would fail self-rescue on 
 even though the keeper/contract path works. Diagnostic left on VPS: /root/keeper/diag_overflow.js.
 Watch signal: if parked count climbs and STAYS high (not draining), this is the likely cause.
 
+### G. Member UX friction — approvals & upgrade funding (member call 2026-07-24)
+1. **Too many approvals on register.** ERC20 approve is a separate tx from the spend, and
+   registration fires a SECOND popup to auto-enable re-entry (`setMemberOptions`). Fix:
+   (a) fold the auto-reentry toggle into the register tx (one popup, not two); (b) adopt
+   **EIP-2612 permit** so USDC approval is a signature, not an on-chain tx (gasless, no
+   standing allowance — fits the project's "fresh signature per spend, no delegation"
+   security stance better than an unlimited approve). CNOVA/USDC must support permit;
+   if MockUSDC/mainnet USDC does, wire permit into register + upgrade + coupon paths.
+2. **Too many approvals on withdraw.** Withdrawing one's OWN balance needs no approval —
+   if members see popups it's (a) per-matrix withdraw (one tx per matrix a member sits in)
+   and/or (b) CNOVA redeem approve. Add `bulkWithdraw()` that sweeps withdrawable across
+   ALL of a member's matrices in one tx. NOTE: keep the existing partial/type-an-amount
+   withdraw — bulk is additive (withdraw-all), not a replacement.
+3. **Pay the upgrade difference from wallet (hybrid funding).** Today `manualUpgrade` pulls
+   the FULL fee from wallet; auto paths pull from earnings only. Members want "use my
+   earnings + top up the shortfall from wallet" as one flow. Add a hybrid upgrade:
+   deduct min(withdrawable, fee) from earnings, pull the remainder from wallet in the same tx.
+4. **Auto-funding from wallet = DECLINED (owner, 2026-07-24).** Standing allowances / account
+   delegation (EIP-7702) let the contract pull funds without a fresh signature — the exact
+   attack surface that drains wallets if anything is compromised. Keep "every spend needs a
+   fresh signature" as a security feature. Do NOT implement auto-funding.
+
+### H. Bug bounty payout (decided 2026-07-24)
+Method (a): **manual USDC send** at milestones, `paid_usd` in bounties.json tracked per
+reporter (dashboard already shows earned vs paid). No claim contract for now. Funding
+source: **Dev+Ops budget** (1.5% of entry fees — its charter already covers "audits,
+protocol engineering"; bug bounty is exactly that). Owner batch-pays periodically and
+updates paid_usd during triage.
+
 ### F. Docs/bot sync after fix
 - Update bot SYSTEM_PROMPT + faq/comp pages: cycle-out funding = crossing reserve + withdrawable;
   underfunded re-entry → parked (not exited). Re-verify against deployed V8.44 per the
