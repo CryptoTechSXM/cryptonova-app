@@ -90,7 +90,41 @@ accounting; members' shares are computed at claim/exit instead of written every 
 - This is an economics-engine rewrite: test with property-based comparison against V8.43's
   loop output across randomized rotation sequences (payouts must match to the wei).
 
-### E. Factory-spawned matrices are admin-orphaned (found 2026-07-24, frozen-keeper spam)
+### E. 🔴 CRITICAL — Factory-spawned matrices admin-orphaned → MatB DEADLOCK freezes cycling
+**Upgraded from "keeper spam" to CRITICAL 2026-07-25.** This is the root cause of the V8.43
+cycling slowdown vs V8.42. Evidence (live T1, 2026-07-25): MatA halves rotate healthily
+(rot 254–291) but factory-spawned MatB halves are FULL (occ 127, nextSlot 128) with rot 0 —
+frozen. Only pair 1's MatB (the original non-factory deploy) rotated (rot 79).
+
+**The deadlock:** a full MatB needs one more entry to cycle its root out, but the incoming
+MatA→MatB crossing is blocked *because* MatB is full ("partner full — wait for rotation").
+Can't rotate without an entry; can't accept an entry without rotating. The only escape is an
+authorized force-rotate — and ALL paths are sealed on this deployment:
+- `adminForceRotateRoot` — needs matrix owner = the FACTORY (`0xf0b629cc`, orphaned); factory
+  has no wrapper to make the call. ✗
+- `keeperForceRotateRoot` — needs msg.sender = MatrixKeeper contract; simulated OK, but the
+  MatrixKeeper has NO function that calls it. ✗
+- `performUpkeep` — generates no work-item for the frozen-MatB condition. ✗
+Consequence: cycling stalls at the crossing stage, members pile up parked, frozen-MatB keeper
+reverts. One root cause, three symptoms. NOTE: raising entry thresholds (the intuitive "push
+the loop harder" fix) makes it WORSE — more members into MatAs whose MatBs then also freeze.
+
+**V8.44 fix (all three):**
+1. Redeploy MatrixPairFactory from current source (transfers matrix ownership to pairAdmin);
+   re-wire every PairManager; assert `matrix.owner()==pairAdmin` after first expansion.
+2. Add a frozen-MatB work-item to MatrixKeeper checkUpkeep/performUpkeep so it self-heals
+   (detect occ==size && nextSlot>size → keeperForceRotateRoot), OR add an owner-callable
+   `forceRotate(matrix)` wrapper on MatrixKeeper. This is the durable fix — don't rely on the
+   standalone frozen_matb_keeper.
+3. Add a factory `sweepMatrixOwnership(matrix)` to recover already-orphaned matrices.
+
+**Interim unfreeze to TEST in daylight (do NOT run blind at night):** `manualGhostEntry(matrix,
+tierIdx)` on MatrixKeeper is onlyOwner and injects a synthetic entry — into a full MatB it
+should trigger `_cycleOutRoot` (cycle-then-place), unfreezing it. Verify mechanics + fee cost
+on ONE frozen MatB first; if it works, it drains the current backlog while V8.44 ships the
+permanent fix. Diagnostic saved: the per-pair rotation scan (this session).
+
+### E-OLD. Factory-spawned matrices are admin-orphaned (found 2026-07-24, frozen-keeper spam)
 **Symptom:** frozen_matb_keeper spammed reverts on T1.2 MatB — `OwnableUnauthorizedAccount`.
 **Diagnosis (on-chain verified):** T1.2 MatA/MatB owner = the live MatrixPairFactory
 (`0xf0b629cc89Ca612473Ea714d6Af8Ac2C2Ae1FB33`) — NOT pairAdmin. The factory's `pairAdmin` and
