@@ -32,11 +32,9 @@ require("dotenv").config();
 
 // ── Config ────────────────────────────────────────────────────────────────────
 // ADDRESSES_FILE: point to whichever deployment you want to stress-test.
-//   v8_1 = size-15 testnet (retired)
-//   v8_2 = size-64 pre-mainnet  ← default
 const ADDRESSES_FILE = path.join(
   __dirname,
-  process.env.ADDRESSES_FILE || "deployed_addresses_v8_29.json"
+  process.env.ADDRESSES_FILE || "deployed_addresses_v8_43.json"
 );
 
 // COUNT: for 127-seat matrices, 260 fills MatA + MatB (W1 seeds pos-1, 126 fill
@@ -481,8 +479,41 @@ async function simulateSelfRescues({ walletList, matrices, usdc, rawFunder, fund
         await sleep(1);
       }
 
+      // Dry-run first (staticCall) to surface the exact revert reason before
+      // spending gas on a doomed transaction.  Ethers v6 staticCall throws with
+      // the decoded revert string; we log that and bail rather than submitting.
+      try {
+        await matrix.connect(conn).selfRescue.staticCall({ gasLimit: 15_000_000 });
+      } catch (staticErr) {
+        // Decode the best available reason string from the static-call error.
+        const reason =
+          staticErr.reason ||
+          staticErr.errorName ||
+          staticErr.shortMessage ||
+          staticErr.message?.replace(/\n/g, ' ')?.slice(0, 200) ||
+          'unknown reason';
+        if (reason.includes('not parked') || reason.includes('not a member')) {
+          console.log(`  ℹ  ${w.address.slice(0, 10)}… keeper rescued first — all good`);
+        } else {
+          // Log wallet state to help diagnose
+          let walletState = '';
+          try {
+            const m         = await matrix.getMember(w.address);
+            const parkedTs  = await matrix.parkedAt(w.address);
+            const usdcW     = await usdc.balanceOf(w.address);
+            walletState = ` [joined=${m.hasEverJoined} inMatrix=${m.isInMatrix} parkedAt=${parkedTs} withdrawable=${fmt6(m.withdrawable)} reserve=${fmt6(m.crossingReserve)} walletUSDC=${fmt6(usdcW)}]`;
+          } catch { walletState = ' [state query failed]'; }
+          const rawHex = staticErr.data ?? staticErr.error?.data ?? staticErr.info?.error?.data ?? null;
+          const rawHexStr = rawHex ? ` | RAW=${String(rawHex).slice(0, 130)}` : '';
+          console.warn(`  ⚠ selfRescue ${label} ${w.address.slice(0, 10)}… STATIC CALL REVERT: ${reason}${walletState}${rawHexStr}`);
+        }
+        skipped++;
+        continue; // skip the actual send — it would definitely fail
+      }
+
+      // Static call passed — submit the real transaction.
       // Call selfRescue() — member pays own shortfall, zero SF debt incurred.
-      // gasLimit 15M: selfRescue can trigger a 127-seat MatA cycle-out (double
+      // gasLimit 15M: selfRescue can trigger a 127-seat MatB cycle-out (double
       // cycle-out costs ~8M gas) — same ceiling used for register() and manualUpgrade().
       await (await matrix.connect(conn).selfRescue({ gasLimit: 15_000_000 })).wait();
       console.log(`  ✓ selfRescue ${label}  ${w.address.slice(0, 10)}…  (${fmt6(usdcBal)} USDC in wallet)`);
@@ -493,7 +524,7 @@ async function simulateSelfRescues({ walletList, matrices, usdc, rawFunder, fund
         // Keeper rescued them first — totally fine, member is back in matrix
         console.log(`  ℹ  ${w.address.slice(0, 10)}… keeper rescued first — all good`);
       } else {
-        console.warn(`  ⚠ selfRescue ${w.address.slice(0, 10)}… failed: ${msg}`);
+        console.warn(`  ⚠ selfRescue ${w.address.slice(0, 10)}… unexpected TX error: ${msg}`);
       }
       skipped++;
       try { fNonce = Number(await ethers.provider.getTransactionCount(funderAddr, 'pending')); } catch {}

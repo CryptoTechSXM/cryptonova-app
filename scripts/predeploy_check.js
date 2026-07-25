@@ -60,7 +60,7 @@ for (const v of OPTIONAL_WALLETS) {
   else ok(`${v} not set — will default to deployer address`);
 }
 
-const ADDR_FILE = process.env.ADDRESSES_FILE || "deployed_addresses_v8_29.json";
+const ADDR_FILE = process.env.ADDRESSES_FILE || "deployed_addresses_v8_43.json";
 console.log(`  ℹ  ADDRESSES_FILE = ${ADDR_FILE}`);
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -165,40 +165,29 @@ for (const f of solFiles) {
 if (!emDashFound) ok("No em-dashes found in any .sol file");
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 6. FigureEightMatrixV8.sol — lastActivityTime NOT in _credit()
+// 6. MatrixLogicLib.sol — lastActivityTime IS in _credit() (V8.33 requirement)
+//    HISTORY: this check originally guarded AGAINST the assignment (gas cost).
+//    V8.33 deliberately reinstated it: passively-earning members were being
+//    flagged idle and reclaimed (the V8.32 reclaim flood). The ~gas cost is the
+//    accepted price of correct idle tracking. The check now asserts the V8.33
+//    fix is PRESENT so a future "optimization" can't silently reintroduce
+//    the reclaim flood.
 // ─────────────────────────────────────────────────────────────────────────────
-sep("FigureEightMatrixV8.sol — gas regression guard");
+sep("MatrixLogicLib.sol — V8.33 idle-tracking guard (_credit resets timer)");
 const matTxt = read("contracts/FigureEightMatrixV8.sol");
-// V8.21: _credit() moved into MatrixLogicLib.sol along with the rest of the
-// core logic -- check there if it's not found inline in the matrix contract.
 const libTxt = read("contracts/MatrixLogicLib.sol");
 const creditSourceTxt = (matTxt && matTxt.includes("function _credit(")) ? matTxt : libTxt;
-const creditSourceLabel = (matTxt && matTxt.includes("function _credit(")) ? "FigureEightMatrixV8.sol" : "MatrixLogicLib.sol";
 if (creditSourceTxt) {
-  // Find the _credit function body
-  const creditMatch = creditSourceTxt.match(/function _credit\b[\s\S]*?^    \}/m);
-  if (!creditMatch) {
-    // Try a looser match
-    const idx = creditSourceTxt.indexOf("function _credit(");
-    if (idx === -1) {
-      fail(`Could not find _credit() function in FigureEightMatrixV8.sol or MatrixLogicLib.sol`);
-    } else {
-      // Look at the next 30 lines after _credit
-      const snippet = creditSourceTxt.substring(idx, idx + 1500);
-      // Only flag actual assignments (= block.timestamp), not comments
-      const assignMatch = snippet.match(/lastActivityTime\s*\[\s*\w+\s*\]\s*=/);
-      if (assignMatch) {
-        fail("lastActivityTime assigned inside _credit() — this causes ~860k extra gas per cycle-out. Remove it.");
-      } else {
-        ok("lastActivityTime NOT assigned in _credit() (gas fix confirmed)");
-      }
-    }
+  const idx = creditSourceTxt.indexOf("function _credit(");
+  if (idx === -1) {
+    fail(`Could not find _credit() function in FigureEightMatrixV8.sol or MatrixLogicLib.sol`);
   } else {
-    const assignInCredit = /lastActivityTime\s*\[\s*\w+\s*\]\s*=/.test(creditMatch[0]);
-    if (assignInCredit) {
-      fail("lastActivityTime assigned inside _credit() — gas regression! Remove it.");
+    const snippet = creditSourceTxt.substring(idx, idx + 1500);
+    const assignMatch = snippet.match(/lastActivityTime\s*\[\s*\w+\s*\]\s*=/);
+    if (assignMatch) {
+      ok("lastActivityTime reset in _credit() (V8.33 reclaim-flood fix present)");
     } else {
-      ok("lastActivityTime NOT assigned in _credit() (gas fix confirmed)");
+      fail("lastActivityTime NOT reset in _credit() — V8.33 fix missing; passive earners will be reclaimed as idle (V8.32 flood).");
     }
   }
 }
@@ -269,10 +258,10 @@ if (deployText) {
   }
 
   // Check ADDRESSES_FILE default is v8_29
-  if (deployText.includes("deployed_addresses_v8_29.json")) {
-    ok("deploy_v8.js output file: deployed_addresses_v8_29.json");
+  if (deployText.includes("deployed_addresses_v8_43.json")) {
+    ok("deploy_v8.js output file: deployed_addresses_v8_43.json");
   } else {
-    fail("deploy_v8.js does not output to deployed_addresses_v8_29.json");
+    fail("deploy_v8.js does not output to deployed_addresses_v8_43.json");
   }
 
   // Chainlink gas limit should be 6M+

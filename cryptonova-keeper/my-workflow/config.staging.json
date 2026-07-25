@@ -3,7 +3,7 @@
   "evms": [
     {
       "chainSelectorName": "ethereum-testnet-sepolia-base-1",
-      "matrixKeeperAddress": "0xFe7ADd5c62695F0E437835670Bc88223EaA51865",
+      "matrixKeeperAddress": "0xa581CeBecFd6a6F96D7CD6931Df2176d79159102",
       "receiverAddress": "0x2dEb3BCEBDB4d906356B400C098a9eE964bF1CBe"
     }
   ]

@@ -10,7 +10,7 @@ $offset = $StartOffset
 $count = 0
 $delay = $IntervalMin * 60
 
-Write-Host "Drip Fill started — 1 member every $IntervalMin min, HDR_OFFSET=$offset" -ForegroundColor Cyan
+Write-Host "Drip Fill started -- 1 member every $IntervalMin min, HDR_OFFSET=$offset" -ForegroundColor Cyan
 
 while ($count -lt $MaxMembers) {
     $ts = Get-Date -Format "HH:mm:ss"
@@ -24,7 +24,7 @@ while ($count -lt $MaxMembers) {
         $offset++
         $count++
     } else {
-        Write-Host "Run failed — retrying same offset in 30s" -ForegroundColor Yellow
+        Write-Host "Run failed -- retrying same offset in 30s" -ForegroundColor Yellow
         Start-Sleep -Seconds 30
         continue
     }
@@ -36,4 +36,4 @@ while ($count -lt $MaxMembers) {
     }
 }
 
-Write-Host "Done — $count members added. Resume with -StartOffset $offset" -ForegroundColor Green
+Write-Host "Done -- $count members added. Resume with -StartOffset $offset" -ForegroundColor Green

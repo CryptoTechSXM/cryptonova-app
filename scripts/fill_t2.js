@@ -39,16 +39,17 @@ const path       = require("path");
 // ── Config ─────────────────────────────────────────────────────────────────────
 const ADDRESSES_FILE = path.join(
   __dirname,
-  process.env.ADDRESSES_FILE || "deployed_addresses_v8_7.json"
+  process.env.ADDRESSES_FILE || "deployed_addresses_v8_25.json"
 );
 const MAX_ITERS  = Number(process.env.MAX_ITERS || 200);
 const GAS_LIMIT  = 12_000_000;
 
-// Scan all historically used HDR_OFFSETs (100 wallets each).
+// Scan all historically used HDR_OFFSETs for V8.25 bigfill runs.
+// Runs used offsets: 0, 30, 60, 90, 115, 145, 175, 205, 230, 255 (COUNT 25-30 each).
+// A single base=0 with width=300 covers all wallets at paths m/44'/60'/0'/0/0..299.
 // IMPORTANT: must match the FILL_MNEMONIC used in bigfill_v8.js runs.
-// Add each new HDR_OFFSET here before running fill_t2.
-const SCAN_OFFSETS = [500, 1000, 1500, 1700, 1800, 2000, 2200, 2300, 2500, 3000];
-const SCAN_WIDTH   = 100;
+const SCAN_OFFSETS = [0];
+const SCAN_WIDTH   = 300;
 
 // IMPORTANT: use process.env.FILL_MNEMONIC — bigfill_v8.js derives wallets from
 // FILL_MNEMONIC (never from the public "test junk" mnemonic which has EIP-7702

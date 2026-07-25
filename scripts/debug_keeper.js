@@ -1,178 +1,115 @@
 /**
  * debug_keeper.js
- * Checks whether StabilityFund and FigureEightMatrixV8 (T1 MatA)
- * have the correct matrixKeeper address stored.
- *
- * If either is wrong, performUpkeep / payForceCross / forceCrossKeeper
- * will always revert with "not keeper".
- *
- * Usage: node scripts/debug_keeper.js
+ * Calls checkUpkeep → decodes performData → staticCall performUpkeep to get exact revert reason.
+ * Run: npx hardhat run scripts/debug_keeper.js --network baseSepolia
  */
 
-const { ethers } = require('ethers');
-require('dotenv').config({ path: require('path').resolve(__dirname, '../.env') });
+const hre = require("hardhat");
+require("dotenv").config();
 
-const RPC_URL = process.env.BASE_SEPOLIA_RPC_URL || 'https://sepolia.base.org';
+const MATRIX_KEEPER = "0x3f90161d548Add21e6134478070eA8b94805F9fe"; // V8.27
 
-// ── V8.8 Addresses ─────────────────────────────────────────────────────────────
-const MATRIX_KEEPER = '0x3009f21D51f7C46ED7EBDC9Fe7f26a4e4C596AAe';
-const T1_MATA       = '0xE23eF8d2c5d90CD8239ea729479fEdd1E9Fd3e1b';
-const T1_MATB       = '0xF059Da5E6C86A7aDeA9AaEAA2Fb8f717BcCD0E4d';
-const TIER_ROUTER   = '0x16c34eE760868E54E2450d6B10c0C44B0f704856';
-
-const KEEPER_ABI = [
-  'function stabilityFund() external view returns (address)',
-  'function tierRouter() external view returns (address)',
-  'function pairManagerForTier(uint8) external view returns (address)',
+const ABI = [
+  "function checkUpkeep(bytes calldata checkData) external view returns (bool upkeepNeeded, bytes memory performData)",
+  "function performUpkeep(bytes calldata performData) external",
 ];
 
-const SF_ABI = [
-  'function matrixKeeper() external view returns (address)',
-  'function totalBalance() external view returns (uint256)',
-  'function stabilityFloor() external view returns (uint256)',
-  'function balanceByTier(uint8) external view returns (uint256)',
+const MATRIX_ABI = [
+  "function getMemberInfo(address member) external view returns (uint8 matrixIndex, uint8 position, bool isActive, uint256 withdrawableBalance, uint256 parkedAt)",
+  "function parkedCount() external view returns (uint256)",
 ];
 
-const MATA_ABI = [
-  'function matrixKeeper() external view returns (address)',
-  'function partner() external view returns (address)',
-  'function pairManager() external view returns (address)',
-  'function getParkedCount() external view returns (uint256)',
-  'function getParkedMember(uint256) external view returns (address)',
-  'function isParked(address) external view returns (bool)',
-  'function ENTRY_FEE() external view returns (uint256)',
-  'function occupancy() external view returns (uint256)',
-];
-
-const MATB_ABI = [
-  'function matrixKeeper() external view returns (address)',
-  'function partner() external view returns (address)',
-  'function getMember(address) external view returns (tuple(uint256 id, address referrer, uint256 joinedAt, uint256 withdrawable, uint256 totalEarned, uint256 cyclesCompleted, bool isInMatrix, bool hasEverJoined))',
-];
-
-function check(label, actual, expected) {
-  const ok = actual.toLowerCase() === expected.toLowerCase();
-  console.log(`  ${label}`);
-  console.log(`    actual  : ${actual}`);
-  console.log(`    expected: ${expected}`);
-  console.log(`    match   : ${ok ? '✅ OK' : '❌ MISMATCH ← REVERT CAUSE'}`);
-  return ok;
-}
+const WORK_TYPES = { 0: "NONE", 1: "FORCE_CROSS", 2: "DISTRIBUTE", 3: "VELOCITY_GATE", 4: "PARKED_RESCUE", 5: "EVICT_PARKED" };
 
 async function main() {
-  const provider = new ethers.JsonRpcProvider(RPC_URL, 84532, { staticNetwork: true });
+  const [signer] = await hre.ethers.getSigners();
+  const keeper   = new hre.ethers.Contract(MATRIX_KEEPER, ABI, signer);
+  const coder    = hre.ethers.AbiCoder.defaultAbiCoder();
+  const WI_TYPE  = "tuple(uint8 workType, uint8 tierIndex, address addr1, address addr2)[]";
 
-  const keeper = new ethers.Contract(MATRIX_KEEPER, KEEPER_ABI, provider);
-  const matA   = new ethers.Contract(T1_MATA,       MATA_ABI,   provider);
-  const matB   = new ethers.Contract(T1_MATB,       MATB_ABI,   provider);
+  console.log("\n-- debug_keeper.js -----------------------------------------------");
+  console.log("Caller:", signer.address);
+  console.log("Keeper:", MATRIX_KEEPER);
 
-  console.log('═══════════════════════════════════════════════');
-  console.log(' KEEPER ADDRESS DIAGNOSTIC');
-  console.log('═══════════════════════════════════════════════\n');
+  // 1. checkUpkeep
+  let upkeepNeeded, performData;
+  try {
+    [upkeepNeeded, performData] = await keeper.checkUpkeep("0x");
+  } catch (e) {
+    console.error("checkUpkeep FAILED:", e.message);
+    process.exit(1);
+  }
 
-  // ── MatrixKeeper internal addresses ──────────────────────────────────────────
-  const [sfAddr, routerAddr, pmAddr] = await Promise.all([
-    keeper.stabilityFund(),
-    keeper.tierRouter(),
-    keeper.pairManagerForTier(0),
-  ]);
-  console.log('── MatrixKeeper config ───────────────────────');
-  console.log(`  MATRIX_KEEPER   : ${MATRIX_KEEPER}`);
-  console.log(`  stabilityFund() : ${sfAddr}`);
-  console.log(`  tierRouter()    : ${routerAddr}`);
-  console.log(`  pmForTier[0]    : ${pmAddr}`);
-  check('tierRouter vs expected', routerAddr, TIER_ROUTER);
+  console.log("\n[checkUpkeep]");
+  console.log("  upkeepNeeded:", upkeepNeeded);
+  console.log("  performData :", performData ? performData.slice(0, 80) + "..." : "(empty)");
 
-  // ── StabilityFund ─────────────────────────────────────────────────────────────
-  const sf = new ethers.Contract(sfAddr, SF_ABI, provider);
-  const [sfKeeper, sfTotal, sfFloor, sfT1Bal] = await Promise.all([
-    sf.matrixKeeper(),
-    sf.totalBalance(),
-    sf.stabilityFloor(),
-    sf.balanceByTier(0),
-  ]);
-  console.log('\n── StabilityFund ─────────────────────────────');
-  console.log(`  SF address      : ${sfAddr}`);
-  console.log(`  totalBalance    : $${(Number(sfTotal)/1e6).toFixed(2)}`);
-  console.log(`  stabilityFloor  : $${(Number(sfFloor)/1e6).toFixed(2)}`);
-  console.log(`  balanceByTier[0]: $${(Number(sfT1Bal)/1e6).toFixed(2)}`);
-  const sfOk = check('SF.matrixKeeper vs MATRIX_KEEPER', sfKeeper, MATRIX_KEEPER);
+  if (!upkeepNeeded) {
+    console.log("\nNo work needed -- keeper is idle.");
+    return;
+  }
 
-  // ── T1 MatA ───────────────────────────────────────────────────────────────────
-  const [matAKeeper, matAPartner, matAPM, parkedCount, entryFee, matAOcc] = await Promise.all([
-    matA.matrixKeeper(),
-    matA.partner(),
-    matA.pairManager(),
-    matA.getParkedCount(),
-    matA.ENTRY_FEE(),
-    matA.occupancy(),
-  ]);
-  console.log('\n── T1 MatA ───────────────────────────────────');
-  console.log(`  MatA address    : ${T1_MATA}`);
-  console.log(`  partner()       : ${matAPartner}  (should be MatB)`);
-  console.log(`    vs T1_MATB    : ${matAPartner.toLowerCase() === T1_MATB.toLowerCase() ? '✅' : '❌'}`);
-  console.log(`  pairManager()   : ${matAPM}`);
-  console.log(`  occupancy       : ${matAOcc}/127`);
-  console.log(`  getParkedCount  : ${parkedCount}`);
-  console.log(`  ENTRY_FEE       : $${(Number(entryFee)/1e6).toFixed(2)}`);
-  const matAOk = check('MatA.matrixKeeper vs MATRIX_KEEPER', matAKeeper, MATRIX_KEEPER);
+  // 2. Decode work items
+  let items = [];
+  try {
+    const [raw] = coder.decode([WI_TYPE], performData);
+    items = Array.from(raw);
+    console.log("\n[Work items] " + items.length + " total");
+    for (const item of items) {
+      const wt = Number(item.workType);
+      console.log("  workType=" + wt + "(" + (WORK_TYPES[wt]||"?") + ")  tier=" + item.tierIndex + "  addr1=" + item.addr1 + "  addr2=" + item.addr2);
+    }
+  } catch (e) {
+    console.error("  Failed to decode performData:", e.message);
+  }
 
-  // ── T1 MatB ───────────────────────────────────────────────────────────────────
-  const [matBKeeper, matBPartner] = await Promise.all([
-    matB.matrixKeeper(),
-    matB.partner(),
-  ]);
-  console.log('\n── T1 MatB ───────────────────────────────────');
-  console.log(`  MatB address    : ${T1_MATB}`);
-  console.log(`  partner()       : ${matBPartner}  (should be MatA)`);
-  console.log(`    vs T1_MATA    : ${matBPartner.toLowerCase() === T1_MATA.toLowerCase() ? '✅' : '❌'}`);
-  const matBOk = check('MatB.matrixKeeper vs MATRIX_KEEPER', matBKeeper, MATRIX_KEEPER);
+  // 3. staticCall to get exact revert reason
+  console.log("\n[staticCall performUpkeep]");
+  try {
+    await keeper.performUpkeep.staticCall(performData);
+    console.log("  staticCall SUCCEEDED -- revert may be transient (nonce/timing)");
+  } catch (e) {
+    console.log("  REVERTED");
+    console.log("  reason :", e.reason   || "(null)");
+    console.log("  code   :", e.code     || "(null)");
+    console.log("  data   :", e.data     || "(null)");
+    console.log("  message:", (e.message || "").slice(0, 400));
 
-  // ── Parked members snapshot ───────────────────────────────────────────────────
-  if (parkedCount > 0n) {
-    console.log('\n── Parked member check (first 5) ─────────────');
-    const toCheck = parkedCount < 5n ? parkedCount : 5n;
-    for (let i = 0n; i < toCheck; i++) {
-      const addr = await matA.getParkedMember(i);
-      const [isParkedInA, memberDataB] = await Promise.all([
-        matA.isParked(addr),
-        matB.getMember(addr).catch(() => null),
-      ]);
-      const inMatB = memberDataB ? memberDataB.isInMatrix : '(error)';
-      const hasJoinedB = memberDataB ? memberDataB.hasEverJoined : '(error)';
-      console.log(`  [${i}] ${addr}`);
-      console.log(`       MatA.isParked()    = ${isParkedInA}`);
-      console.log(`       MatB.isInMatrix    = ${inMatB}  hasEverJoinedB = ${hasJoinedB}`);
-      if (inMatB === true) {
-        console.log(`       ⚠️  ALREADY IN MATB — rescue call would revert!`);
+    if (e.data && e.data !== "0x") {
+      console.log("  Raw revert selector:", e.data.slice(0, 10));
+    }
+  }
+
+  // 4. Check each parked member's on-chain state (addr2 = member, addr1 = matrix)
+  const rescueItems = items.filter(i => Number(i.workType) === 4);
+  if (rescueItems.length > 0) {
+    console.log("\n[Member state for first 5 rescue candidates]");
+    const matContracts = {};
+
+    for (const item of rescueItems.slice(0, 5)) {
+      const matAddr = item.addr1;
+      if (!matContracts[matAddr]) {
+        matContracts[matAddr] = new hre.ethers.Contract(matAddr, MATRIX_ABI, signer);
+      }
+      const mat    = matContracts[matAddr];
+      const member = item.addr2;
+
+      try {
+        const info = await mat.getMemberInfo(member);
+        const now  = Math.floor(Date.now() / 1000);
+        const parkedAgo = info.parkedAt > 0n
+          ? (now - Number(info.parkedAt)) + "s ago"
+          : "parkedAt=0";
+        console.log("  " + member);
+        console.log("    matrixIdx=" + info.matrixIndex + "  pos=" + info.position + "  active=" + info.isActive);
+        console.log("    withdrawable=$" + (Number(info.withdrawableBalance)/1e6).toFixed(4) + "  parked=" + parkedAgo);
+      } catch (e2) {
+        console.log("  " + member + "  getMemberInfo FAILED: " + e2.message.slice(0, 80));
       }
     }
   }
 
-  // ── Summary ───────────────────────────────────────────────────────────────────
-  console.log('\n═══════════════════════════════════════════════');
-  console.log(' SUMMARY');
-  console.log('═══════════════════════════════════════════════');
-
-  if (!sfOk) {
-    console.log('  ❌ SF.matrixKeeper MISMATCH — payForceCross() will revert "SF: not keeper"');
-    console.log(`     Fix: call sf.setMatrixKeeper(${MATRIX_KEEPER}) from owner`);
-  }
-  if (!matAOk) {
-    console.log('  ❌ MatA.matrixKeeper MISMATCH — forceCrossKeeper() will revert "F8V8: not keeper"');
-    console.log(`     Fix: call matA.setMatrixKeeper(${MATRIX_KEEPER}) from owner`);
-  }
-  if (!matBOk) {
-    console.log('  ❌ MatB.matrixKeeper MISMATCH');
-    console.log(`     Fix: call matB.setMatrixKeeper(${MATRIX_KEEPER}) from owner`);
-  }
-  if (sfOk && matAOk && matBOk) {
-    console.log('  ✅ All keeper addresses match — NOT a keeper mismatch');
-    console.log('  Check: parked members already in MatB (duplicate queue entries)');
-    console.log('  Fix: run push_parked.js with ONE-AT-A-TIME mode');
-  }
-
-  console.log('');
+  console.log("\n-- done ----------------------------------------------------------");
 }
 
-main().catch(e => { console.error(e.message || e); process.exit(1); });
+main().catch(e => { console.error("Fatal:", e); process.exit(1); });

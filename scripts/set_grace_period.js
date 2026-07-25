@@ -1,52 +1,37 @@
-// set_grace_period.js
-// One-off: sets parkedGracePeriod on the live MatrixKeeper contract.
-//
-// Allowed values (V8.26+): 0 (immediate) or any value between 300 (5min) and 2592000 (30d)
-//
-// Testnet: 0  (immediate rescue — no waiting period)
-// Mainnet: 3600 (1hr) or 21600 (6hrs) recommended
-//
-// Run: npx hardhat run scripts/set_grace_period.js --network baseSepolia
-
-const { ethers } = require("hardhat");
-require("dotenv").config();
-
-const MATRIX_KEEPER = "0x3de9c7bD20cC82238BC39c98D7A1aC15dd1280df"; // V8.26
-
-// ─── Set this before running ─────────────────────────────────────────────────
-const NEW_GRACE_PERIOD = 300; // seconds  (300 = 5 minutes — testnet grace period testing)
-// ─────────────────────────────────────────────────────────────────────────────
-
-const ABI = [
-  "function parkedGracePeriod() external view returns (uint256)",
-  "function setParkedGracePeriod(uint256 v) external",
-];
+/**
+ * set_grace_period.js
+ * Temporarily reduces parkedGracePeriod on MatrixKeeper for testnet rescue ops.
+ * Usage: npx hardhat run scripts/set_grace_period.js --network baseSepolia
+ * Set back to 86400 (24h) after rescue: GRACE_SECS=86400 npx hardhat run ...
+ */
+const hre  = require('hardhat');
+const fs   = require('fs');
+const path = require('path');
+const { ethers } = hre;
 
 async function main() {
-  const [signer] = await ethers.getSigners();
-  console.log(`Signer : ${signer.address}`);
-  console.log(`Keeper : ${MATRIX_KEEPER}`);
+  const addrsPath = path.join(__dirname, process.env.ADDRESSES_FILE || 'deployed_addresses_v8_34.json');
+  const addrs = JSON.parse(fs.readFileSync(addrsPath, 'utf8'));
 
-  const keeper = new ethers.Contract(MATRIX_KEEPER, ABI, signer);
+  const [signer] = await hre.ethers.getSigners();
+  console.log('Signer:', signer.address);
 
-  const current = await keeper.parkedGracePeriod();
-  console.log(`Current parkedGracePeriod: ${current.toString()}s (${Number(current) / 86400} days)`);
-  console.log(`Target  parkedGracePeriod: ${NEW_GRACE_PERIOD}s`);
+  const mk = new ethers.Contract(addrs.matrixKeeper, [
+    'function setParkedGracePeriod(uint256 v) external',
+    'function parkedGracePeriod() view returns (uint256)',
+  ], signer);
 
-  if (current === BigInt(NEW_GRACE_PERIOD)) {
-    console.log("Already set — nothing to do.");
-    return;
-  }
+  const current = await mk.parkedGracePeriod();
+  console.log('Current grace period:', current.toString(), 's  (' + (Number(current) / 3600).toFixed(1) + 'h)');
 
-  console.log("\nSending setParkedGracePeriod transaction...");
-  const tx = await keeper.setParkedGracePeriod(NEW_GRACE_PERIOD, { gasLimit: 100_000 });
-  console.log(`TX hash: ${tx.hash}`);
-  const receipt = await tx.wait();
-  console.log(`Confirmed — block ${receipt.blockNumber}  status ${receipt.status === 1 ? "OK ✅" : "FAILED ❌"}`);
+  const newGrace = BigInt(process.env.GRACE_SECS || '3600');
+  console.log('Setting to:', newGrace.toString(), 's  (' + (Number(newGrace) / 3600).toFixed(1) + 'h) ...');
 
-  const updated = await keeper.parkedGracePeriod();
-  console.log(`\nNew parkedGracePeriod: ${updated.toString()}s ✅`);
+  const tx = await mk.setParkedGracePeriod(newGrace, { gasLimit: 100_000 });
+  await tx.wait();
+
+  const updated = await mk.parkedGracePeriod();
+  console.log('✓ Grace period updated:', updated.toString(), 's  (' + (Number(updated) / 3600).toFixed(1) + 'h)');
 }
 
-main().catch(e => {
-  console.error("Fatal:", e.
+main().catch(console.error);

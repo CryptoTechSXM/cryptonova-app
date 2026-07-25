@@ -53,7 +53,7 @@
  *   USDC_ADDRESS           Reuse existing USDC; omit to deploy MockUSDC
  *   MATRIX_SIZE            127 (default) | 15 (quick dev cycle)
  *   DEPLOY_TIERS           Comma-separated list e.g. "1,2" (default: "1,2,3,4,5,6,7,8,9,10")
- *   ADDRESSES_FILE         Output filename (default: deployed_addresses_v8_39.json)
+ *   ADDRESSES_FILE         Output filename (default: deployed_addresses_v8_43.json)
  *
  * Run: npx hardhat run scripts/deploy_v8.js --network baseSepolia
  */
@@ -67,7 +67,7 @@ require("dotenv").config();
 // ── Addresses output file ─────────────────────────────────────────────────────
 const ADDRESSES_FILE = path.join(
   __dirname,
-  process.env.ADDRESSES_FILE || "deployed_addresses_v8_39.json"
+  process.env.ADDRESSES_FILE || "deployed_addresses_v8_43.json"
 );
 
 // ── Config ────────────────────────────────────────────────────────────────────
@@ -149,8 +149,8 @@ async function main() {
   const admin            = process.env.ADMIN_WALLET_ADDRESS      || deployerAddr;
   const liquidityReserve = process.env.LIQUIDITY_RESERVE_ADDRESS || opsWallet;
 
-  console.log("\n  V8.39 Deploy — keeperForceRotateRoot, SF try/catch x2, dust fix, factory safety");
-  console.log("  Remember: set ADDRESSES_FILE=deployed_addresses_v8_39.json in .env after this deploy.");
+  console.log("\n  V8.41 Deploy — FIFO pair routing (external→pair 0, graduates→pairIndex+1)");
+  console.log("  Remember: set ADDRESSES_FILE=deployed_addresses_v8_43.json in .env after this deploy.");
   sep();
   console.log(`  Deployer        : ${deployerAddr}`);
   console.log(`  AccountOne      : ${accountOne}`);
@@ -639,7 +639,7 @@ async function main() {
   }
   sep();
   console.log(`  Addresses file: ${require("path").basename(ADDRESSES_FILE)}`);
-  console.log("  V8.39 Deploy complete.\n");
+  console.log("  V8.41 Deploy complete.\n");
   console.log("  NEXT STEP: run scripts/seed_w1.js then scripts/bigfill_v8.js\n");
   sep();
 }

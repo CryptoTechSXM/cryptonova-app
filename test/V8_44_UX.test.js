@@ -130,7 +130,11 @@ describe("V8.44 — UX batch (C2, G1, G2, G3, I3)", function () {
         { name: "deadline", type: "uint256" },
       ],
     };
-    const deadline = BigInt(Math.floor(Date.now() / 1000) + 3600);
+    // Deadline must come from CHAIN time, not wall-clock: in a full-suite run
+    // earlier tests advance block.timestamp by months (vesting/epoch suites),
+    // which would silently expire the permit (the try/catch would swallow it).
+    const blk = await ethers.provider.getBlock("latest");
+    const deadline = BigInt(blk.timestamp + 3600);
     const values = {
       owner: member.address,
       spender: await pm1.getAddress(),   // PairManager pulls the entry fee

@@ -23,11 +23,14 @@ require("dotenv").config();
 // ── Config ────────────────────────────────────────────────────────────────────
 const RPC_URL            = process.env.BASE_SEPOLIA_RPC_URL;
 const DEPLOYER_KEY       = process.env.DEPLOYER_PRIVATE_KEY;
-const ADDRESSES_FILE     = process.env.ADDRESSES_FILE || "deployed_addresses_v8_39.json";
+const ADDRESSES_FILE     = process.env.ADDRESSES_FILE || "deployed_addresses_v8_41.json";
 const MATRIX_SIZE        = 127;
 // How long (ms) to wait before force-rotating the same MatB again.
-// 10 min is comfortable — the matrix needs new crossings to refill before another rotation.
-const ROTATION_COOLDOWN_MS = 10 * 60 * 1000;
+// 60 s — keeps pace with the 1-min cron when MatB refills quickly after rotation.
+// Pre-V8.42 this was 10 min, which blocked repeated rotations when the self-sustaining
+// loop was broken and MatB refilled immediately. V8.42 hybrid routing fixes the root
+// cause; this cooldown is just a safety net.
+const ROTATION_COOLDOWN_MS = 60 * 1000;
 const GAS_LIMIT_ROTATE   = 8_000_000;  // adminForceRotateRoot shifts 127 slots + pool distrib
 const LOG_FILE            = path.join(__dirname, "..", "frozen_matb.log");
 const STATE_FILE          = path.join(__dirname, "..", "frozen_matb_state.json");
@@ -142,7 +145,7 @@ async function main() {
 
       // Frozen condition: MatB is exactly full AND nextSlot is past the end
       // (i.e., the next natural entrant would trigger _cycleOutRoot, but nobody is coming)
-      if (occ < MATRIX_SIZE || nextSlot <= MATRIX_SIZE) continue;
+      if (occ < MATRIX_SIZE || nextSlot < MATRIX_SIZE) continue;
 
       log(`⚠️  Frozen MatB: ${tierKey}.${i+1} (${matBAddr.slice(0,10)}…) occ=${occ}/${MATRIX_SIZE} nextSlot=${nextSlot} → forcing rotation`);
 
