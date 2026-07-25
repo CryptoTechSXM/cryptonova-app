@@ -217,8 +217,15 @@ contract CryptoNovaCommunityWallet is Ownable2Step, ReentrancyGuard {
      *           50%  becomes the payout pot
      *             70% of payout pot -> Tranche A (if trancheAActive, else rolls)
      *             30% of payout pot -> Tranche B (if trancheBActive, else rolls)
+     *
+     * V8.44 (plan I1): PERMISSIONLESS — was onlyOwner, which contradicted the
+     * comp page ("anyone can trigger every 30 days") and meant claimable never
+     * updated unless the owner remembered. Safe to open: the MIN_EPOCH_INTERVAL
+     * and pendingPool guards fully gate it, and advancing only snapshots
+     * accounting — no funds move. MatrixKeeper also auto-advances via
+     * epochReady() so mainnet never depends on a human.
      */
-    function advanceEpoch() external onlyOwner {
+    function advanceEpoch() external {
         if (currentEpoch > 0) {
             require(
                 block.timestamp >= epochs[currentEpoch].startTime + MIN_EPOCH_INTERVAL,
@@ -375,6 +382,14 @@ contract CryptoNovaCommunityWallet is Ownable2Step, ReentrancyGuard {
     // =========================================================================
     // VIEW FUNCTIONS
     // =========================================================================
+
+    /// @notice V8.44 (plan I1): true when advanceEpoch() would succeed — the
+    ///         MatrixKeeper polls this and auto-advances (WORK_ADVANCE_EPOCH).
+    function epochReady() external view returns (bool) {
+        if (pendingPool == 0) return false;
+        if (currentEpoch == 0) return true;
+        return block.timestamp >= epochs[currentEpoch].startTime + MIN_EPOCH_INTERVAL;
+    }
 
     function claimableAmount(address member, uint256 epochId)
         external view returns (uint256)

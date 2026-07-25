@@ -191,24 +191,55 @@ contract PairManagerV8 is Ownable2Step {
             && idx + 1 < pairs.length;
     }
 
-    /// @notice V8.43: route a self-rescuing member from a saturated pair into the
-    ///         next pair's MatA. Called by one of this PM's matrices, which sends
-    ///         the entry fee with the call (approve → safeTransferFrom here).
-    ///         The caller matrix has already verified overflowActive(pairIndex).
-    function rescueOverflow(address member, address referrer, uint256 fromPairIndex) external {
-        require(isPairMatrix[msg.sender],        "PM8: not a pair matrix");
-        require(overflowActive(fromPairIndex),   "PM8: overflow not active");
+    /// @notice V8.44 overflow rework (replaces V8.43 rescueOverflow, which
+    ///         diverted saturated-pair rescues to pair N+1 and starved the own
+    ///         MatB — the frozen-MatB root cause). A pair's OWN member being
+    ///         rescued/re-entered ALWAYS returns to their OWN pair:
+    ///           - below saturation → own MatA (normal self-sustaining loop)
+    ///           - at saturation    → own MatB (the entry rotates the full
+    ///             MatB root out — cycle-then-place — keeping it churning)
+    ///         Called by one of this PM's matrices, which sends the entry fee
+    ///         with the call (approve → safeTransferFrom here). Only genuinely
+    ///         NEW externals overflow forward (_findExternalPair).
+    function rescueReentry(address member, address referrer, uint256 fromPairIndex) external {
+        require(isPairMatrix[msg.sender],     "PM8: not a pair matrix");
+        require(fromPairIndex < pairs.length, "PM8: invalid pair index");
 
-        uint256 destIdx = fromPairIndex + 1;
-        address matA    = pairs[destIdx].matrixA;
+        Pair storage p = pairs[fromPairIndex];
+        address dest = p.totalRegistered >= routeEntryThreshold ? p.matrixB : p.matrixA;
 
-        usdc.safeTransferFrom(msg.sender, matA, entryFee);
-        IFigureEightMatrixV8PM(matA).enterFor(member, referrer);
+        usdc.safeTransferFrom(msg.sender, dest, entryFee);
+        IFigureEightMatrixV8PM(dest).enterFor(member, referrer);
 
-        pairs[destIdx].totalRegistered += 1;
-        totalRegistrations             += 1;
+        p.totalRegistered  += 1;
+        totalRegistrations += 1;
 
-        emit MemberRouted(member, destIdx, matA);
+        emit MemberRouted(member, fromPairIndex, dest);
+    }
+
+    /// @notice V8.44 overflow rework: TierRouter seats a same-tier re-entry
+    ///         directly in a pair's MatB (saturated own pair — the entry
+    ///         rotates the full MatB). Fee is pulled from TierRouter, exactly
+    ///         like registerFor.
+    function registerForMatB(address member, address referrer, uint256 targetPairIndex) external {
+        require(msg.sender == tierRouter, "PM8: not tierRouter");
+        require(pairs.length > 0,         "PM8: no pairs");
+
+        _tryAdvancePair();
+
+        if (targetPairIndex >= pairs.length) targetPairIndex = pairs.length - 1;
+
+        Pair storage p = pairs[targetPairIndex];
+        address matB   = p.matrixB;
+
+        usdc.safeTransferFrom(msg.sender, matB, entryFee);
+        IFigureEightMatrixV8PM(matB).enterFor(member, referrer);
+
+        p.totalRegistered  += 1;
+        totalRegistrations += 1;
+
+        emit MemberRouted(member, targetPairIndex, matB);
+        _checkExpansion();
     }
 
     /// @notice V8.36: Set the occupancy threshold at which the factory auto-deploys

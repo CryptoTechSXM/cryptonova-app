@@ -8,9 +8,14 @@ import "./CNOVATreasury.sol";
 import "./MatrixV8Interfaces.sol";
 
 /// @notice V8.43: PairManager overflow routing (two-threshold pair opening).
+///         V8.44 overflow rework: rescueOverflow (divert to next pair) is GONE —
+///         a pair's OWN members always return to their OWN pair. rescueReentry
+///         seats them in own MatA below saturation, own MatB at saturation
+///         (the entry that keeps a full MatB churning). Only genuinely NEW
+///         externals overflow forward (PairManagerV8._findExternalPair).
 interface IPairManagerOverflow {
     function overflowActive(uint256 idx) external view returns (bool);
-    function rescueOverflow(address member, address referrer, uint256 fromPairIndex) external;
+    function rescueReentry(address member, address referrer, uint256 fromPairIndex) external;
 }
 
 /// @notice V8.43: read the calling matrix's own pairIndex (contract-level public var).
@@ -123,6 +128,25 @@ library MatrixLogicLib {
         address matrixKeeper;
         // -- Optional coupon registry (address(0) = disabled) --
         address couponRegistry;
+
+        // -- V8.44 pull-based equalization pool (item D) --
+        // O(1) accumulator accounting replaces the per-rotation 126-member
+        // credit loop (the gas core of the ~15.5M full-cascade registration).
+        // Per rotation event t with pool P_t:  poolA1 += P_t; poolAr += t·P_t.
+        // A member seated at position p0 when rotationCount was r0 advances one
+        // seat per rotation, so their exact accrued share between checkpoints:
+        //   pending = (k·ΔpoolA1 − ΔpoolAr) / W,  k = p0 + r0 + 1,
+        //   W = N(N+1)/2 − 1  (constant per matrix).
+        // Same closed form as the old weighted drip; amounts identical in
+        // exact arithmetic. Rounding: ONE floor at settle instead of one per
+        // rotation — per-member deviation vs the old loop is bounded by the
+        // number of rotations between checkpoints, in USDC wei (1e-6 $).
+        // Fields appended at the END of the struct (layout discipline).
+        uint256 poolA1;
+        uint256 poolAr;
+        mapping(address => uint256) poolK;        // p0 + r0 + 1; 0 = no checkpoint
+        mapping(address => uint256) poolA1Snap;
+        mapping(address => uint256) poolArSnap;
     }
 
     /// @notice Per-instance immutable config, rebuilt cheaply (from the calling
@@ -301,6 +325,72 @@ library MatrixLogicLib {
         self.matrixPos[member]          = slot;
         self.posToMember[slot]          = member;
         self.members[member].isInMatrix = true;
+        // V8.44 (item D): pool checkpoint — k encodes seat + rotation epoch.
+        self.poolK[member]      = slot + self.rotationCount + 1;
+        self.poolA1Snap[member] = self.poolA1;
+        self.poolArSnap[member] = self.poolAr;
+    }
+
+    /// @notice V8.44 (item D): settle a member's accrued pool share into
+    ///         withdrawable and re-snapshot. Called on every seat event (join
+    ///         is a fresh checkpoint; cycle-out, park, idle-reclaim settle
+    ///         before removal) and before withdrawals. Rescue-debt repayment
+    ///         (formerly deducted inside the rotation loop) applies here.
+    function _settlePool(MatrixState storage self, ImmutableConfig memory cfg, address member) internal {
+        uint256 k = self.poolK[member];
+        if (k == 0) return;                       // no active checkpoint
+        uint256 dA1 = self.poolA1 - self.poolA1Snap[member];
+        uint256 dAr = self.poolAr - self.poolArSnap[member];
+        self.poolA1Snap[member] = self.poolA1;
+        self.poolArSnap[member] = self.poolAr;
+        if (dA1 == 0) return;                     // no rotations since checkpoint
+
+        uint256 W = cfg.matrixSize * (cfg.matrixSize + 1) / 2 - 1;
+        // Exact rational numerator; k − t ≥ 1 for every accumulated event
+        // (a member reaching seat 1 is settled+removed at that same event,
+        // BEFORE the event's pool is added to the accumulators).
+        uint256 share = (k * dA1 - dAr) / W;
+        if (share == 0) return;
+
+        // -- Gradual rescue-debt repayment (same policy as the V8.43 loop) ----
+        if (self.rescueDebt[member] > 0 && self.stabilityFund != address(0)) {
+            uint256 repayBps = IStabilityFund(self.stabilityFund).rescueRepayBps();
+            uint256 repay = share * repayBps / BPS_DENOM;
+            if (repay > self.rescueDebt[member]) repay = self.rescueDebt[member];
+            if (repay > 0) {
+                self.rescueDebt[member] -= repay;
+                share                   -= repay;
+                SafeERC20.forceApprove(cfg.usdc, self.stabilityFund, repay);
+                try IStabilityFund(self.stabilityFund).receiveDebtRepayment(repay) {}
+                catch {}
+                emit RescueDebtRepaid(member, repay, self.rescueDebt[member]);
+            }
+        }
+        if (share > 0) {
+            _credit(self, member, share);
+            emit PoolShareCredited(member, self.matrixPos[member], share);
+        }
+    }
+
+    /// @notice V8.44 (item D): view of a member's un-settled pool accrual
+    ///         (net of the rescue-debt redirect estimate).
+    function pendingPoolOf(MatrixState storage self, ImmutableConfig memory cfg, address member)
+        external view returns (uint256)
+    {
+        uint256 k = self.poolK[member];
+        if (k == 0) return 0;
+        uint256 dA1 = self.poolA1 - self.poolA1Snap[member];
+        if (dA1 == 0) return 0;
+        uint256 dAr = self.poolAr - self.poolArSnap[member];
+        uint256 W = cfg.matrixSize * (cfg.matrixSize + 1) / 2 - 1;
+        uint256 share = (k * dA1 - dAr) / W;
+        if (share == 0) return 0;
+        if (self.rescueDebt[member] > 0 && self.stabilityFund != address(0)) {
+            uint256 repay = share * IStabilityFund(self.stabilityFund).rescueRepayBps() / BPS_DENOM;
+            if (repay > self.rescueDebt[member]) repay = self.rescueDebt[member];
+            share -= repay;
+        }
+        return share;
     }
 
     // ===========================================================================
@@ -311,7 +401,19 @@ library MatrixLogicLib {
         address root = self.posToMember[1];
         require(root != address(0), "F8V8: no root");
 
-        _distributePool(self, cfg);
+        // V8.44 (item D): settle the departing root's accrued pool share up to
+        // the PREVIOUS event (the root receives nothing from this rotation —
+        // identical to the V8.43 loop, which paid seats 2..N only), THEN fold
+        // this rotation's pool into the accumulators for everyone else.
+        _settlePool(self, cfg, root);
+        self.poolK[root] = 0;
+        if (self.poolAccumulator > 0) {
+            uint256 pool = self.poolAccumulator;
+            self.poolAccumulator = 0;
+            self.poolA1 += pool;
+            self.poolAr += (self.rotationCount + 1) * pool;
+            emit PoolDistributed(pool, self.rotationCount + 1);
+        }
 
         self.matrixPos[root]               = 0;
         self.posToMember[1]                = address(0);
@@ -353,10 +455,15 @@ library MatrixLogicLib {
                     emit RescueDebtRepaid(root, repay, self.rescueDebt[root]);
                 }
             }
+            // V8.44 (item A): escrow = the member's crossing reserve. V8.43
+            // hardcoded 0 here, so the additive engine's budget excluded the
+            // 50% reserve pre-funded at the member's MatB entry — passive
+            // members (withdrawable < fee) silently graduated against their
+            // configured intent and the reserve was stranded forever.
             try ITierRouter(self.tierRouter).handleCycleOut(
                 root,
                 cfg.tierIndex,
-                0,
+                self.members[root].crossingReserve,
                 self.members[root].withdrawable
             ) {} catch {}
         } else {
@@ -364,87 +471,29 @@ library MatrixLogicLib {
         }
     }
 
-    function _distributePool(MatrixState storage self, ImmutableConfig memory cfg) internal {
-        if (self.poolAccumulator == 0) return;
-
-        uint256 N           = cfg.matrixSize;
-        uint256 totalWeight = N * (N + 1) / 2 - 1;
-
-        uint256 pool    = self.poolAccumulator;
-        self.poolAccumulator = 0;
-
-        uint256 distributed      = 0;
-        uint256 pendingRepayment = 0;   // accumulated SF debt repayment across all members
-        address firstNonNull = address(0);
-        // V8.32: read repayBps once before loop to avoid stack-too-deep in 16-slot loop body
-        uint256 repayBps = self.stabilityFund != address(0)
-            ? IStabilityFund(self.stabilityFund).rescueRepayBps()
-            : 5_000;
-
-        for (uint256 pos = 2; pos <= N; pos++) {
-            address m = self.posToMember[pos];
-            if (m == address(0)) continue;
-            if (firstNonNull == address(0)) firstNonNull = m;
-
-            uint256 share = pool * pos / totalWeight;
-            if (share == 0) continue;
-
-            // -- Gradual rescue-debt repayment ------------------------------------
-            // Take repayBps (default 50%) of this member's pool share and redirect
-            // it back to the SF as partial loan repayment.  The remaining share is
-            // credited to the member as normal.
-            // Note: `debt` local removed to stay within 16-slot stack limit --
-            //       self.rescueDebt[m] accessed directly (same slot, cheaper stack).
-            if (self.rescueDebt[m] > 0 && self.stabilityFund != address(0)) {
-                uint256 repay = share * repayBps / BPS_DENOM;
-                if (repay > self.rescueDebt[m]) repay = self.rescueDebt[m];
-                if (repay > 0) {
-                    self.rescueDebt[m] -= repay;
-                    pendingRepayment    += repay;
-                    share               -= repay;
-                    emit RescueDebtRepaid(m, repay, self.rescueDebt[m]);
-                }
-            }
-
-            distributed += share;
-            _credit(self, m, share);
-            emit PoolShareCredited(m, pos, share);
-        }
-
-        // Single USDC transfer to SF for all per-member repayments collected above.
-        // V8.39: track sfReceived so the dust calculation is correct regardless of
-        // whether the SF call succeeds.  If SF reverts, the USDC stays in the contract
-        // and dust correctly absorbs it; if SF succeeds, dust is only the rounding remainder.
-        uint256 sfReceived = 0;
-        if (pendingRepayment > 0) {
-            SafeERC20.forceApprove(cfg.usdc, self.stabilityFund, pendingRepayment);
-            try IStabilityFund(self.stabilityFund).receiveDebtRepayment(pendingRepayment) {
-                sfReceived = pendingRepayment;
-            } catch {}
-        }
-
-        // V8.39: subtract sfReceived so dust only reflects physical USDC remaining.
-        uint256 dust = pool - distributed - sfReceived;
-        if (dust > 0) {
-            address dest = self.posToMember[2] != address(0)
-                ? self.posToMember[2]
-                : firstNonNull;
-            if (dest != address(0)) {
-                _credit(self, dest, dust);
-            } else if (cfg.devWallet != address(0)) {
-                cfg.usdc.safeTransfer(cfg.devWallet, dust);
-            }
-        }
-
-        emit PoolDistributed(pool, self.rotationCount);
-    }
+    // V8.44 (item D): the per-rotation 126-member credit loop is GONE —
+    // replaced by the poolA1/poolAr accumulators (folded in _cycleOutRoot) and
+    // lazy _settlePool at each member's own seat events. Full-cascade
+    // registration gas drops accordingly (MAINNET_TODO gas finding fixed at
+    // the root). Rounding note: the old loop floored each member's share per
+    // rotation and swept the remainder ("dust") to seat 2; the pull model
+    // floors ONCE per settle (strictly less rounding loss per member) and
+    // leaves the microscopic global remainder (≤ a few wei per rotation) in
+    // the contract instead of gifting it to seat 2.
 
     function _crossToPartner(MatrixState storage self, ImmutableConfig memory cfg, address member) internal {
         require(self.partner != address(0), "F8V8: no partner");
 
         if (self.crossingInProgress) {
-            self.pendingCross         = member;
-            self.pendingCrossReferrer = self.members[member].referrer;
+            // V8.44 FIX: PARK instead of the pendingCross deferral. pendingCross
+            // was written here and NEVER processed anywhere — a member deferred
+            // mid-cascade sat in limbo (out of matrix, not parked, funds
+            // unreachable): the same stranded class as the cycle-out bug.
+            // Parking hands them to the standard machinery (auto-rescue keeper
+            // + selfRescue) and naturally bounds cascade recursion depth.
+            self.parkedMembers.push(member);
+            self.parkedAt[member] = block.timestamp;
+            emit MemberParked(member, 0);
             return;
         }
 
@@ -513,6 +562,27 @@ library MatrixLogicLib {
     }
 
     function _finalizeCrossing(MatrixState storage self, ImmutableConfig memory cfg, address member) internal {
+        // V8.44 overflow rework: a pair's OWN members always return to their
+        // OWN pair — never forward to the next pair (the V8.43 diversion that
+        // starved factory-spawned MatBs: live proof was MatA rot 254-291 with
+        // MatB rot 0 on pairs 2-5).
+        //   - From MatA: destination is the partner (own MatB). If it's full,
+        //     the entry itself rotates the root out — cycle-then-place — which
+        //     is exactly the churn a full MatB needs (design law: rotation is
+        //     the natural consequence of the next entry, no keeper required).
+        //   - From MatB (cycled-out-parked / idle-parked members): re-enter the
+        //     own pair via PairManager.rescueReentry (own MatA below
+        //     saturation, own MatB at saturation). chainNext is only a legacy
+        //     fallback for deployments without a PairManager.
+        if (!cfg.isMatrixA && self.pairManager != address(0)) {
+            uint256 pIdx = IMatrixPairIndexView(address(this)).pairIndex();
+            SafeERC20.forceApprove(cfg.usdc, self.pairManager, cfg.entryFee);
+            emit MemberCrossedToPartner(member, address(this), self.pairManager);
+            IPairManagerOverflow(self.pairManager).rescueReentry(
+                member, self.members[member].referrer, pIdx
+            );
+            return;
+        }
         address destination = (!cfg.isMatrixA && self.chainNext != address(0))
             ? self.chainNext : self.partner;
         SafeERC20.forceApprove(cfg.usdc, destination, cfg.entryFee);
@@ -724,32 +794,39 @@ library MatrixLogicLib {
     // thin wrappers for the four external entry points).
     // ===========================================================================
 
+    // V8.44 (G2): member parameter made explicit (was msg.sender) so the
+    // TierRouter bulkWithdraw sweep can withdraw on a member's behalf TO that
+    // member. Wrapper entry points pass msg.sender — semantics unchanged.
     function withdrawCore(
         MatrixState storage self,
         ImmutableConfig memory cfg,
+        address member,
         address recipient,
         uint256 amount,
         bool isFullWithdraw
     ) external {
-        uint256 available = self.members[msg.sender].withdrawable;
+        // V8.44 (item D): settle any accrued pool share first so withdrawals
+        // always see the up-to-date balance.
+        _settlePool(self, cfg, member);
+        uint256 available = self.members[member].withdrawable;
         require(available > 0, "F8V8: nothing to withdraw");
 
         // V8.32 Task #63: hoist automationReserve early so crossNeeded check can be
         // skipped when all automation is disabled (reservedFor == 0 means member opted out).
         uint256 automationReserve = 0;
         if (self.tierRouter != address(0)) {
-            uint8 highest = ITierRouter(self.tierRouter).memberHighestTier(msg.sender);
+            uint8 highest = ITierRouter(self.tierRouter).memberHighestTier(member);
             if (highest > 0 && (highest - 1) == cfg.tierIndex) {
-                automationReserve = ITierRouter(self.tierRouter).reservedFor(msg.sender);
+                automationReserve = ITierRouter(self.tierRouter).reservedFor(member);
             }
         }
 
-        if (self.members[msg.sender].isInMatrix && automationReserve > 0) {
+        if (self.members[member].isInMatrix && automationReserve > 0) {
             // V8.32: only enforce crossing reserve when automation is active.
             // If all automation is disabled (automationReserve == 0), member may
             // withdraw freely -- they have explicitly opted out of auto-reentry.
-            uint256 crossNeeded = cfg.entryFee > self.members[msg.sender].crossingReserve
-                ? cfg.entryFee - self.members[msg.sender].crossingReserve
+            uint256 crossNeeded = cfg.entryFee > self.members[member].crossingReserve
+                ? cfg.entryFee - self.members[member].crossingReserve
                 : 0;
             if (crossNeeded > 0) {
                 require(available > crossNeeded, "F8V8: must keep crossing reserve while active");
@@ -767,32 +844,36 @@ library MatrixLogicLib {
             require(amt <= available, "F8V8: amount exceeds withdrawable");
         }
 
-        self.members[msg.sender].withdrawable   -= amt;
-        self.members[msg.sender].totalWithdrawn += amt;
-        self.lastActivityTime[msg.sender] = block.timestamp;
+        self.members[member].withdrawable   -= amt;
+        self.members[member].totalWithdrawn += amt;
+        self.lastActivityTime[member] = block.timestamp;
 
         uint256 fee    = amt * self.withdrawalFeeBps / BPS_DENOM;
         uint256 payout = amt - fee;
 
         if (fee > 0) {
             _forwardToStabilityFund(self, cfg, fee, 3);
-            emit WithdrawalFeeCharged(msg.sender, fee);
+            emit WithdrawalFeeCharged(member, fee);
         }
 
         cfg.usdc.safeTransfer(recipient, payout);
-        emit EarningsWithdrawn(msg.sender, payout);
+        emit EarningsWithdrawn(member, payout);
     }
 
     // ===========================================================================
     // Parked queue: rescue / eviction
     // ===========================================================================
 
-    function reclaimIdleSlot(MatrixState storage self, address member) external {
+    function reclaimIdleSlot(MatrixState storage self, ImmutableConfig memory cfg, address member) external {
         require(self.members[member].isInMatrix, "F8V8: not in matrix");
         require(self.lastActivityTime[member] > 0, "F8V8: no activity record");
 
         uint256 pos      = self.matrixPos[member];
         uint256 idleTime = block.timestamp - self.lastActivityTime[member];
+
+        // V8.44 (item D): settle accrued pool share before the seat is freed.
+        _settlePool(self, cfg, member);
+        self.poolK[member] = 0;
 
         // V8.33: Return crossing reserve to withdrawable before eviction.
         // Previously locked forever -- member left limbo unable to access their reserve.
@@ -814,10 +895,14 @@ library MatrixLogicLib {
     ///         limbo), this adds the member to the parked queue so the rescue mechanism
     ///         re-enters them automatically.  Crossing reserve is returned to withdrawable
     ///         so it's accessible while parked.  The slot opens immediately for new members.
-    function softParkIdle(MatrixState storage self, address member) external {
+    function softParkIdle(MatrixState storage self, ImmutableConfig memory cfg, address member) external {
         require(self.members[member].isInMatrix, "F8V8: not in matrix");
         uint256 pos      = self.matrixPos[member];
         uint256 idleTime = block.timestamp - self.lastActivityTime[member];
+
+        // V8.44 (item D): settle accrued pool share before the seat is freed.
+        _settlePool(self, cfg, member);
+        self.poolK[member] = 0;
 
         // Return crossing reserve so member keeps full access to their balance while parked
         if (self.members[member].crossingReserve > 0) {
@@ -951,26 +1036,13 @@ library MatrixLogicLib {
         require(!self.members[member].isInMatrix,    "F8V8: still in matrix");
         require(self.parkedAt[member] > 0,            "F8V8: not parked");
 
-        // V8.43: if this pair's loop is saturated (≥ routeEntryThreshold cumulative
-        // entries) and a next pair exists, route the rescue to the next pair's MatA
-        // instead of crossing here. Owner rule 2026-07-22: at 127×3, ALL overflow
-        // (including self-rescues) moves to pair N+1.
-        if (self.pairManager != address(0)) {
-            uint256 pIdx = IMatrixPairIndexView(address(this)).pairIndex();
-            if (IPairManagerOverflow(self.pairManager).overflowActive(pIdx)) {
-                _rescueToNextPair(self, cfg, member, pIdx);
-                return;
-            }
-        }
-
-        // V8.40: Fail early with a readable message if partner MatB is full.
-        // Before this fix, _finalizeCrossing silently reverted causing keeper RESC WARN spam.
-        address _dest = (!cfg.isMatrixA && self.chainNext != address(0))
-            ? self.chainNext : self.partner;
-        require(
-            !IFigureEightMatrixV8Cross(_dest).isFull(),
-            "F8V8: partner full - wait for rotation"
-        );
+        // V8.44 overflow rework: the V8.43 saturation diversion to pair N+1
+        // (_rescueToNextPair) is REMOVED — it orphaned the own pair's MatB from
+        // all flow at saturation. Own members always return to their own pair
+        // via _finalizeCrossing (MatA→own MatB; MatB→own pair via PairManager).
+        // The V8.40 "partner full - wait for rotation" guard is also removed:
+        // an entry into a full matrix rotates its root out (cycle-then-place),
+        // which is precisely how a full MatB is supposed to churn.
 
         uint256 withdrawable = self.members[member].withdrawable;
 
@@ -993,40 +1065,8 @@ library MatrixLogicLib {
         _finalizeCrossing(self, cfg, member);
     }
 
-    /// @notice V8.43: fund entryFee from crossingReserve + withdrawable + member
-    ///         shortfall (same economics as a normal selfRescue) and hand the
-    ///         member to the PairManager, which seats them in pair N+1's MatA.
-    ///         Any surplus above the fee stays withdrawable in THIS matrix —
-    ///         the member is no longer active here, so it's freely claimable.
-    function _rescueToNextPair(
-        MatrixState storage self,
-        ImmutableConfig memory cfg,
-        address member,
-        uint256 pIdx
-    ) internal {
-        uint256 withdrawable = self.members[member].withdrawable;
-        uint256 reserve      = self.members[member].crossingReserve;
-        uint256 effective    = reserve + withdrawable;
-        uint256 shortfall    = cfg.entryFee > effective ? cfg.entryFee - effective : 0;
-
-        self.members[member].crossingReserve = 0;
-        self.members[member].withdrawable    = effective > cfg.entryFee ? effective - cfg.entryFee : 0;
-
-        if (shortfall > 0) {
-            // Member pays their own shortfall directly — no debt, no SF involvement.
-            cfg.usdc.safeTransferFrom(member, address(this), shortfall);
-        }
-
-        _removeFromParkedQueue(self, member);
-
-        // Forward the entry fee to the PairManager, which seats the member in pair N+1 MatA.
-        cfg.usdc.forceApprove(self.pairManager, cfg.entryFee);
-        IPairManagerOverflow(self.pairManager).rescueOverflow(
-            member, self.members[member].referrer, pIdx
-        );
-
-        emit SelfRescue(member, shortfall, withdrawable);
-    }
+    // V8.44: _rescueToNextPair removed (overflow rework — own members never
+    // divert to pair N+1; see _finalizeCrossing).
 
     function _removeFromParkedQueue(MatrixState storage self, address member) internal {
         uint256 len = self.parkedMembers.length;
@@ -1038,6 +1078,48 @@ library MatrixLogicLib {
                 return;
             }
         }
+    }
+
+    /// @notice V8.44 (graceful exit, BUGS.md option b + plan I3): a member
+    ///         voluntarily leaves their seat (or the parked queue) mid-cycle.
+    ///         Their crossing reserve is released to withdrawable MINUS a
+    ///         DAO-tunable penalty routed to the StabilityFund (the reserve
+    ///         funds the crossing mechanic that pays everyone — the penalty
+    ///         protects the loop while still giving members an exit door).
+    ///         Earnings are NEVER penalized. Root (seat 1) cannot exit — it is
+    ///         about to cycle out naturally.
+    event MemberExitedSeat(address indexed member, uint256 position, uint256 reserveReleased, uint256 penalty);
+
+    function exitSeat(MatrixState storage self, ImmutableConfig memory cfg, uint256 penaltyBps) external {
+        address member = msg.sender;
+        bool seated = self.members[member].isInMatrix;
+        bool parked = self.parkedAt[member] > 0;
+        require(seated || parked, "F8V8: no seat or parked slot to exit");
+
+        uint256 pos = 0;
+        if (seated) {
+            pos = self.matrixPos[member];
+            require(pos != 1, "F8V8: root exits by cycling out");
+            _settlePool(self, cfg, member);
+            self.poolK[member] = 0;
+            self.posToMember[pos]           = address(0);
+            self.matrixPos[member]          = 0;
+            self.members[member].isInMatrix = false;
+            self.occupancy                 -= 1;
+        }
+        if (parked) {
+            _removeFromParkedQueue(self, member);
+        }
+
+        uint256 r = self.members[member].crossingReserve;
+        uint256 penalty = 0;
+        if (r > 0) {
+            penalty = r * penaltyBps / BPS_DENOM;
+            self.members[member].crossingReserve  = 0;
+            self.members[member].withdrawable    += r - penalty;
+            if (penalty > 0) _forwardToStabilityFund(self, cfg, penalty, 3);
+        }
+        emit MemberExitedSeat(member, pos, r, penalty);
     }
 
     function evictParked(MatrixState storage self, address member) external {
@@ -1061,6 +1143,22 @@ library MatrixLogicLib {
         uint256 escrowAmt,
         uint256 withdrawableAmt
     ) external {
+        // V8.44 (item D): settle pool accrual first — callers gate on the
+        // pending-inclusive withdrawableOf view, so the stored balance must be
+        // brought current before the deduction guard below.
+        _settlePool(self, cfg, member);
+
+        // V8.44 (item A): proper reserve accounting. V8.43 transferred escrowAmt
+        // USDC without decrementing any member field — which is exactly why
+        // TierRouter passed 0 and the reserve stranded. Escrow now draws down
+        // the member's crossingReserve, with an explicit balance guard.
+        if (escrowAmt > 0) {
+            require(
+                self.members[member].crossingReserve >= escrowAmt,
+                "F8V8: insufficient crossing reserve"
+            );
+            self.members[member].crossingReserve -= escrowAmt;
+        }
         if (withdrawableAmt > 0) {
             require(
                 self.members[member].withdrawable >= withdrawableAmt,
@@ -1079,6 +1177,40 @@ library MatrixLogicLib {
         uint256 total = escrowAmt + withdrawableAmt;
         if (total > 0) {
             cfg.usdc.safeTransfer(self.tierRouter, total);
+        }
+    }
+
+    /// @notice V8.44 (item B): TierRouter parks a member whose MatB cycle-out
+    ///         could not fund a re-entry (re-entry ON but reserve + withdrawable
+    ///         < fee). Puts the member into the SAME parked machinery as the
+    ///         MatA crossing path, so the auto-rescue keeper and selfRescue()
+    ///         (reserve + withdrawable + shortfall, no debt) both apply.
+    ///         V8.43 had NO parking on this path — members silently exited.
+    function parkCycledOut(
+        MatrixState storage self,
+        address member,
+        uint256 shortfall
+    ) external {
+        require(self.members[member].hasEverJoined, "F8V8: not a member");
+        require(!self.members[member].isInMatrix,   "F8V8: still in matrix");
+        if (self.parkedAt[member] > 0) return;  // already parked — no-op
+        self.parkedMembers.push(member);
+        self.parkedAt[member] = block.timestamp;
+        emit MemberParked(member, shortfall);
+    }
+
+    /// @notice V8.44 (item B/I3): release a member's un-consumed crossing
+    ///         reserve to withdrawable. Called by TierRouter on a clean
+    ///         graduation (re-entry explicitly OFF, or member left the tier via
+    ///         upgrade-only) so the reserve is never stranded. NOT called when
+    ///         the member parks — a parked member's reserve stays earmarked for
+    ///         their rescue.
+    function releaseReserve(MatrixState storage self, address member) external {
+        require(!self.members[member].isInMatrix, "F8V8: still in matrix");
+        uint256 r = self.members[member].crossingReserve;
+        if (r > 0) {
+            self.members[member].crossingReserve  = 0;
+            self.members[member].withdrawable    += r;
         }
     }
 

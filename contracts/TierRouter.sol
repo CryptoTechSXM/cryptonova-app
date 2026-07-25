@@ -66,6 +66,14 @@ interface IFigureEightMatrixV8 {
         uint256 escrowAmt,
         uint256 withdrawableAmt
     ) external;
+    /// @notice V8.44: park an underfunded re-entry candidate at MatB cycle-out.
+    function parkCycledOut(address member, uint256 shortfall) external;
+    /// @notice V8.44: release un-consumed crossing reserve on clean graduation.
+    function releaseReserve(address member) external;
+    /// @notice V8.44 (G2): full withdrawal of member's balance, paid to member.
+    function routerWithdrawFor(address member) external;
+    /// @notice V8.44 (G3): balance available beyond crossing/automation locks.
+    function freeWithdrawable(address member) external view returns (uint256);
     function escrowOf(address member)         external view returns (uint256);
     function withdrawableOf(address member)   external view returns (uint256);
     function ENTRY_FEE()                      external view returns (uint256);
@@ -86,6 +94,10 @@ interface IPairManagerV8 {
     /// @notice V8.41 FIFO: targetPairIndex tells PM which pair to route into.
     ///         Upgrades pass 0 (first pair of dest tier). Re-entries pass srcPairIndex+1.
     function registerFor(address member, address referrer, uint256 targetPairIndex) external;
+    /// @notice V8.44 overflow rework: seat a re-entry directly in a pair's MatB
+    ///         (used when the own pair is saturated — the entry rotates a full
+    ///         MatB and keeps it churning instead of overflowing forward).
+    function registerForMatB(address member, address referrer, uint256 targetPairIndex) external;
     function entryFee() external view returns (uint256);
     function currentMatA() external view returns (address);   // V8.31: for coupon routing
     // V8.38: multi-pair MatB scan for manualUpgrade() eligibility
@@ -104,6 +116,16 @@ interface IFigureEightMatrixV8Coupon {
 
 interface ICouponRegistry {
     function coupons(bytes32 codeHash) external view returns (address issuer, uint256 amount, uint256 expiry, bool used);
+}
+
+/// @notice V8.44 (G1): EIP-2612 permit — USDC approval as a signature, not an
+///         on-chain tx. Fits the project's "fresh signature per spend, no
+///         standing allowance / no delegation" security stance.
+interface IERC20PermitLike {
+    function permit(
+        address owner, address spender, uint256 value,
+        uint256 deadline, uint8 v, bytes32 r, bytes32 s
+    ) external;
 }
 
 // ─── Contract ──────────────────────────────────────────────────────────────────
@@ -587,6 +609,44 @@ contract TierRouter is Ownable2Step {
     // ─── Member-facing ────────────────────────────────────────────────────────
 
     function register(address referrer) external whenNotPaused {
+        _register(referrer);
+    }
+
+    /// @notice V8.44 (G1a): one-popup registration — member options folded into
+    ///         the register tx (the old flow fired a SECOND wallet popup for
+    ///         setMemberOptions to enable auto re-entry).
+    function registerWithOptions(
+        address referrer,
+        bool disableUpgrade,
+        bool enableReentry,
+        bool enableDouble
+    ) external whenNotPaused {
+        _register(referrer);
+        _setMemberOptions(msg.sender, disableUpgrade, enableReentry, enableDouble);
+    }
+
+    /// @notice V8.44 (G1b): registration with an EIP-2612 permit signature —
+    ///         no separate approve tx, no standing allowance. The permit
+    ///         approves the T1 PairManager (which pulls the entry fee).
+    ///         permit() is wrapped in try/catch: if a front-runner consumed the
+    ///         signature, registration still succeeds when allowance is set.
+    function registerWithPermit(
+        address referrer,
+        bool disableUpgrade,
+        bool enableReentry,
+        bool enableDouble,
+        uint256 value,
+        uint256 deadline,
+        uint8 v, bytes32 r, bytes32 s
+    ) external whenNotPaused {
+        try IERC20PermitLike(address(usdc)).permit(
+            msg.sender, tierPairManagers[0], value, deadline, v, r, s
+        ) {} catch {}
+        _register(referrer);
+        _setMemberOptions(msg.sender, disableUpgrade, enableReentry, enableDouble);
+    }
+
+    function _register(address referrer) internal {
         require(!globalJoined[msg.sender],         "TR: already joined");
         require(tierPairManagers[0] != address(0), "TR: T1 not configured");
 
@@ -696,14 +756,23 @@ contract TierRouter is Ownable2Step {
         bool enableDouble
     ) external {
         require(globalJoined[msg.sender], "TR: not registered");
-        MemberOptions storage opts = memberOptions[msg.sender];
+        _setMemberOptions(msg.sender, disableUpgrade, enableReentry, enableDouble);
+    }
+
+    function _setMemberOptions(
+        address member,
+        bool disableUpgrade,
+        bool enableReentry,
+        bool enableDouble
+    ) internal {
+        MemberOptions storage opts = memberOptions[member];
         opts.autoUpgradeDisabled  = disableUpgrade;
         opts.autoReentryEnabled   = enableReentry;
         opts.doubleReentryEnabled = enableDouble;
         opts.optionsSet           = true;
         // Keep legacy mapping in sync
-        doubleEntryEnabled[msg.sender] = enableDouble;
-        emit MemberOptionsSet(msg.sender, disableUpgrade, enableReentry, enableDouble);
+        doubleEntryEnabled[member] = enableDouble;
+        emit MemberOptionsSet(member, disableUpgrade, enableReentry, enableDouble);
     }
 
     /// @dev Legacy toggle — kept for V8 test script compatibility.
@@ -714,36 +783,57 @@ contract TierRouter is Ownable2Step {
         emit DoubleEntryToggled(msg.sender, enabled);
     }
 
+    /// @dev V8.44 (C2): the manualUpgrade three-way eligibility, extracted so
+    ///      manualUpgrade, bulkUpgrade and hybridUpgrade all use the SAME rule.
+    ///      (V8.43 bug: bulkUpgrade hard-required the whale gate only, so a
+    ///      member eligible via a completed cycle could upgrade through one
+    ///      button and not the other.)
+    ///      Eligible when (a) completed >=1 cycle in the previous tier, OR
+    ///      (b) currently seated in ANY of the previous tier's MatBs (V8.38:
+    ///      all pairs scanned), OR (c) the Whale Gate is open for the target.
+    function _upgradeEligible(address member, uint8 targetTierIndex) internal view returns (bool) {
+        uint8 prevIndex = targetTierIndex - 1;
+        if (tierCycles[member][prevIndex] >= 1) return true;
+        if (_isTierUnlockedForManualEntry(targetTierIndex + 1)) return true;
+        address prevPM = tierPairManagers[prevIndex];
+        if (prevPM != address(0)) {
+            uint256 numPairs = IPairManagerV8(prevPM).pairCount();
+            for (uint256 pi = 0; pi < numPairs; pi++) {
+                (, address matB) = IPairManagerV8(prevPM).getPairAt(pi);
+                if (matB != address(0) && IFigureEightMatrixV8(matB).isActiveInMatrix(member)) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
     function manualUpgrade(uint8 targetTierIndex) external whenNotPaused {
+        _manualUpgrade(targetTierIndex);
+    }
+
+    /// @notice V8.44 (G1b): manualUpgrade with an EIP-2612 permit signature —
+    ///         approval and upgrade in one tx (spender = this TierRouter).
+    function manualUpgradeWithPermit(
+        uint8 targetTierIndex,
+        uint256 value,
+        uint256 deadline,
+        uint8 v, bytes32 r, bytes32 s
+    ) external whenNotPaused {
+        try IERC20PermitLike(address(usdc)).permit(
+            msg.sender, address(this), value, deadline, v, r, s
+        ) {} catch {}
+        _manualUpgrade(targetTierIndex);
+    }
+
+    function _manualUpgrade(uint8 targetTierIndex) internal {
         require(globalJoined[msg.sender],                           "TR: not registered");
         require(targetTierIndex > 0 && targetTierIndex < MAX_TIERS, "TR: invalid tier");
         require(tierPairManagers[targetTierIndex] != address(0),    "TR: tier not deployed");
 
         uint8 prevIndex = targetTierIndex - 1;
-
-        // V8.14: eligible when (a) completed >=1 cycle OR (b) currently in prev MatB.
-        // V8.35: (c) Whale Gate open for this tier — gate opening waives the crossing
-        // requirement so existing members can chain upgrades immediately on payment.
-        // Brand-new wallets (no cycles, not in MatB) are blocked until gate opens.
-        //
-        // V8.38 FIX: scan ALL MatBs across all pairs for prevIndex, not just the first one.
-        // tierMatrixBAddr[prevIndex] is hardcoded to the original MatB (e.g. T1.1 MatB).
-        // When the factory spawns T1.2, a member sitting in T1.2 MatB was incorrectly
-        // blocked because isActiveInMatrix() on T1.1 MatB returned false for them.
-        bool inPrevMatB = false;
-        address prevPM  = tierPairManagers[prevIndex];
-        if (prevPM != address(0)) {
-            uint256 numPairs = IPairManagerV8(prevPM).pairCount();
-            for (uint256 pi = 0; pi < numPairs && !inPrevMatB; pi++) {
-                (, address matB) = IPairManagerV8(prevPM).getPairAt(pi);
-                if (matB != address(0) && IFigureEightMatrixV8(matB).isActiveInMatrix(msg.sender)) {
-                    inPrevMatB = true;
-                }
-            }
-        }
-        bool gateOpen = _isTierUnlockedForManualEntry(targetTierIndex + 1);
         require(
-            tierCycles[msg.sender][prevIndex] >= 1 || inPrevMatB || gateOpen,
+            _upgradeEligible(msg.sender, targetTierIndex),
             "TR: cross to MatB first, or wait for this tier's Whale Gate to open"
         );
 
@@ -776,6 +866,112 @@ contract TierRouter is Ownable2Step {
         emit ManualUpgrade(msg.sender, prevIndex + 1, targetTierNum, fee);
     }
 
+    // ─── V8.44 (G3): hybrid upgrade — earnings first, wallet for the rest ────
+
+    event HybridUpgrade(address indexed member, uint8 toTier, uint256 fromEarnings, uint256 fromWallet);
+
+    /// @notice Upgrade funded from the member's FREE earnings in the previous
+    ///         tier's matrices first (never touching crossing/automation
+    ///         locks — freeWithdrawable only), pulling only the shortfall from
+    ///         the wallet in the same tx. Same eligibility as manualUpgrade.
+    function hybridUpgrade(uint8 targetTierIndex) external whenNotPaused {
+        require(globalJoined[msg.sender],                           "TR: not registered");
+        require(targetTierIndex > 0 && targetTierIndex < MAX_TIERS, "TR: invalid tier");
+        require(tierPairManagers[targetTierIndex] != address(0),    "TR: tier not deployed");
+        require(
+            _upgradeEligible(msg.sender, targetTierIndex),
+            "TR: cross to MatB first, or wait for this tier's Whale Gate to open"
+        );
+        address destMatA = tierMatrixAAddr[targetTierIndex];
+        if (destMatA != address(0)) {
+            require(
+                !IFigureEightMatrixV8(destMatA).isActiveInMatrix(msg.sender),
+                "TR: already seated in target tier"
+            );
+        }
+
+        uint256 fee       = tierEntryFees[targetTierIndex];
+        uint256 remaining = fee;
+
+        // Draw free earnings across the previous tier's pairs (MatB first —
+        // that's where cycle earnings sit — then MatA).
+        address prevPM = tierPairManagers[targetTierIndex - 1];
+        if (prevPM != address(0)) {
+            uint256 n = IPairManagerV8(prevPM).pairCount();
+            for (uint256 p = 0; p < n && remaining > 0; p++) {
+                (address mA, address mB) = IPairManagerV8(prevPM).getPairAt(p);
+                remaining = _drawFreeEarnings(mB, remaining);
+                remaining = _drawFreeEarnings(mA, remaining);
+            }
+        }
+        uint256 fromWallet = remaining;
+        if (fromWallet > 0) {
+            usdc.safeTransferFrom(msg.sender, address(this), fromWallet);
+        }
+        usdc.forceApprove(tierPairManagers[targetTierIndex], fee);
+        IPairManagerV8(tierPairManagers[targetTierIndex]).registerFor(
+            msg.sender, memberReferrer[msg.sender], 0
+        );
+
+        uint8 targetTierNum = targetTierIndex + 1;
+        _checkTierFirstEntry(msg.sender, targetTierNum);
+        if (targetTierNum > memberHighestTier[msg.sender]) {
+            memberHighestTier[msg.sender] = targetTierNum;
+        }
+        lastActivityTimestamp    = block.timestamp;
+        cyclesAtLastRegistration = totalSystemCycles;
+        _recordEntry(targetTierIndex);
+
+        emit HybridUpgrade(msg.sender, targetTierNum, fee - fromWallet, fromWallet);
+        emit ManualUpgrade(msg.sender, targetTierIndex, targetTierNum, fee);
+    }
+
+    /// @dev Pull up to `remaining` of the member's FREE (lock-respecting)
+    ///      earnings from one matrix into this router. Failures skip silently.
+    function _drawFreeEarnings(address mat, uint256 remaining) internal returns (uint256) {
+        if (mat == address(0) || remaining == 0) return remaining;
+        uint256 avail;
+        try IFigureEightMatrixV8(mat).freeWithdrawable(msg.sender) returns (uint256 a) {
+            avail = a;
+        } catch { return remaining; }
+        if (avail == 0) return remaining;
+        uint256 take = avail >= remaining ? remaining : avail;
+        try IFigureEightMatrixV8(mat).deductForUpgrade(msg.sender, 0, take) {
+            return remaining - take;
+        } catch {
+            return remaining;
+        }
+    }
+
+    // ─── V8.44 (G2): bulk withdraw — sweep every matrix in one tx ────────────
+
+    /// @notice Withdraw the member's FULL free balance from every matrix of
+    ///         every deployed tier in one transaction. Additive — the existing
+    ///         per-matrix partial withdraw stays available. Matrices where the
+    ///         balance is zero or fully locked are skipped silently; each
+    ///         matrix applies its own withdrawal fee and lock guards.
+    function bulkWithdraw() external {
+        require(globalJoined[msg.sender], "TR: not registered");
+        for (uint8 t = 0; t < MAX_TIERS; t++) {
+            address pmAddr = tierPairManagers[t];
+            if (pmAddr == address(0)) continue;
+            uint256 n = IPairManagerV8(pmAddr).pairCount();
+            for (uint256 p = 0; p < n; p++) {
+                (address mA, address mB) = IPairManagerV8(pmAddr).getPairAt(p);
+                _sweepMatrix(mA);
+                _sweepMatrix(mB);
+            }
+        }
+    }
+
+    function _sweepMatrix(address mat) internal {
+        if (mat == address(0)) return;
+        try IFigureEightMatrixV8(mat).withdrawableOf(msg.sender) returns (uint256 bal) {
+            if (bal == 0) return;
+        } catch { return; }
+        try IFigureEightMatrixV8(mat).routerWithdrawFor(msg.sender) {} catch {}
+    }
+
     // ─── V8.35: Bulk upgrade — single tx through multiple tiers ──────────────
 
     /// @notice When a tier's Whale Gate is open, members can enter multiple tiers
@@ -787,14 +983,26 @@ contract TierRouter is Ownable2Step {
         require(globalJoined[msg.sender],                              "TR: register at T1 first");
         require(targetTierIndex >= 1 && targetTierIndex < MAX_TIERS,  "TR: invalid target tier");
         require(tierPairManagers[targetTierIndex] != address(0),       "TR: tier not deployed");
-        require(
-            _isTierUnlockedForManualEntry(targetTierIndex + 1),
-            "TR: Whale Gate not yet open for this tier"
-        );
 
         // memberHighestTier is 1-based; next-to-enter 0-based index = memberHighestTier
         uint8 startIdx = memberHighestTier[msg.sender];
         require(startIdx <= targetTierIndex, "TR: already at or above target tier");
+
+        // V8.44 (C2): SAME three-way eligibility as manualUpgrade for the first
+        // tier entered (cycle done OR seated in prev MatB OR gate open) — the
+        // V8.43 gate-only require blocked members who were eligible through the
+        // manualUpgrade button. Tiers BEYOND the first still each require their
+        // Whale Gate (eligibility can't be pre-earned for tiers not yet held).
+        require(
+            _upgradeEligible(msg.sender, startIdx),
+            "TR: cross to MatB first, or wait for this tier's Whale Gate to open"
+        );
+        for (uint8 i = startIdx + 1; i <= targetTierIndex; i++) {
+            require(
+                _isTierUnlockedForManualEntry(i + 1),
+                "TR: Whale Gate not yet open for this tier"
+            );
+        }
 
         // Calculate and collect total fee upfront
         uint256 totalFee;
@@ -921,32 +1129,36 @@ contract TierRouter is Ownable2Step {
         lastActivityTimestamp         = block.timestamp;
         emit CycleRecorded(member, tierIndex, cycles);
 
-        // -- 2. V8.43 ADDITIVE TOGGLES (owner rule 2026-07-22) -----------------
-        // The three automation toggles are now independent and ADDITIVE, with
-        // funding priority: re-entry → upgrade → double seat. Each step deducts
-        // its fee from the remaining cycle-out funds and is silently skipped
-        // when the remainder can't cover it.
-        //   auto-reentry ON  → member NEVER graduates: always re-enter this tier.
+        // -- 2. V8.44 ADDITIVE TOGGLES (V8.43 semantics + two-bucket funding) --
+        // Funding priority unchanged: re-entry → upgrade → double seat. Each
+        // step deducts its fee from the remaining cycle-out funds and is
+        // silently skipped when the remainder can't cover it.
+        //   auto-reentry ON  → member NEVER graduates: re-enter or PARK.
         //   auto-upgrade ON  → ADDITIONALLY take a seat in the next tier.
         //   double reentry ON → ADDITIONALLY take a 2nd seat in this tier.
-        // (Replaces V8.1 _resolveDest/_executeAndDouble where an upgrade MOVED
-        // the member out of the tier unless double entry happened to be on.)
-        _executeAdditive(matrixB, member, tierIndex, escrow + withdrawable, cycles);
+        // V8.44: funds arrive as TWO buckets — escrow (the member's crossing
+        // reserve, passed by MatrixLogicLib._cycleOutRoot) and withdrawable.
+        // Each seat draws escrow first, then earnings (mirror of
+        // _crossToPartner's 50/50 crossing logic). If re-entry is ON but
+        // underfunded, the member is PARKED in matrixB (rescue machinery
+        // applies) instead of silently exiting; on a clean graduation any
+        // un-consumed reserve is released to withdrawable — never stranded.
+        _executeAdditive(matrixB, member, tierIndex, escrow, withdrawable, cycles);
     }
 
-    // --- Internal: V8.43 additive cycle-out engine ----------------------------
+    // --- Internal: V8.44 additive cycle-out engine ----------------------------
 
     /// @dev One seat per funded step, priority re-entry → upgrade → double
     ///      (owner-confirmed 2026-07-22). Early-phase defaults kept from V8.1:
     ///        - re-entry defaults ON until optionsSet && cycles ≥ reentryMinCycles
     ///        - upgrade defaults ON while cycles < autoUpgradeCycleThreshold
-    ///      T10 never upgrades (top tier loops forever). If no step fires,
-    ///      the member parks exactly as before.
+    ///      T10 never upgrades (top tier loops forever).
     function _executeAdditive(
         address matrixB,
         address member,
         uint8   tierIndex,
-        uint256 funds,
+        uint256 escrow,
+        uint256 withdrawable,
         uint256 cycles
     ) internal {
         MemberOptions storage opts = memberOptions[member];
@@ -962,13 +1174,17 @@ contract TierRouter is Ownable2Step {
         address referrer = memberReferrer[member];
         uint256 curFee   = tierEntryFees[tierIndex];
         bool anySeat = false;
+        bool reenteredThisTier = false;
 
         // -- 1. RE-ENTRY: never graduate while enabled -------------------------
-        if (reentryOn && funds >= curFee) {
-            _takeSeat(matrixB, member, referrer, tierIndex, curFee, _sameTierTarget(matrixB, tierIndex));
-            funds -= curFee;
+        if (reentryOn && escrow + withdrawable >= curFee) {
+            (bool toMatB, uint256 target) = _sameTierTarget(matrixB, tierIndex);
+            (escrow, withdrawable) = _takeSeat(
+                matrixB, member, referrer, tierIndex, curFee, target, toMatB, escrow, withdrawable
+            );
             emit MemberReentered(member, tierIndex + 1);
             anySeat = true;
+            reenteredThisTier = true;
         }
 
         // -- 2. UPGRADE: additive next-tier seat (V8.1 guards d/g/h kept) ------
@@ -976,12 +1192,13 @@ contract TierRouter is Ownable2Step {
             uint8   nextIndex = tierIndex + 1;
             uint256 nextFee   = tierEntryFees[nextIndex];
             if (tierPairManagers[nextIndex] != address(0)
-                && funds >= nextFee
+                && escrow + withdrawable >= nextFee
                 && tierVelocityGreen[nextIndex]) {
                 address dMatA = tierMatrixAAddr[nextIndex];
                 if (dMatA == address(0) || !IFigureEightMatrixV8(dMatA).isActiveInMatrix(member)) {
-                    _takeSeat(matrixB, member, referrer, nextIndex, nextFee, 0);
-                    funds -= nextFee;
+                    (escrow, withdrawable) = _takeSeat(
+                        matrixB, member, referrer, nextIndex, nextFee, 0, false, escrow, withdrawable
+                    );
                     uint8 destTierNum = nextIndex + 1;
                     // V8.21 bugfix ordering: _checkTierFirstEntry BEFORE the
                     // memberHighestTier write (see note in register()).
@@ -994,43 +1211,82 @@ contract TierRouter is Ownable2Step {
         }
 
         // -- 3. DOUBLE: 2nd seat in the CURRENT tier ---------------------------
-        if (doubleOn && anySeat && funds >= curFee) {
-            _takeSeat(matrixB, member, referrer, tierIndex, curFee, _sameTierTarget(matrixB, tierIndex));
-            funds -= curFee;
+        if (doubleOn && anySeat && escrow + withdrawable >= curFee) {
+            (bool toMatB2, uint256 target2) = _sameTierTarget(matrixB, tierIndex);
+            (escrow, withdrawable) = _takeSeat(
+                matrixB, member, referrer, tierIndex, curFee, target2, toMatB2, escrow, withdrawable
+            );
             emit DoubleEntryFired(member, tierIndex + 1, tierIndex + 1);
+            reenteredThisTier = true;
         }
 
-        if (!anySeat) {
-            emit MemberParked(member, tierIndex + 1, reentryOn ? "insufficient funds" : "autoReentry disabled");
+        // -- 4. V8.44 no-strand epilogue ---------------------------------------
+        if (!anySeat && reentryOn) {
+            // Re-entry intended but underfunded → PARK in matrixB. The member
+            // keeps reserve + withdrawable earmarked; the auto-rescue keeper
+            // covers them if funds suffice, selfRescue() (pay the shortfall,
+            // no debt) covers the rest. NEVER a silent exit.
+            uint256 have = escrow + withdrawable;
+            uint256 shortfall = curFee > have ? curFee - have : 0;
+            try IFigureEightMatrixV8(matrixB).parkCycledOut(member, shortfall) {} catch {}
+            emit MemberParked(member, tierIndex + 1, "insufficient funds");
+        } else if (!reenteredThisTier && escrow > 0) {
+            // Clean graduation from this tier (re-entry OFF, or upgrade-only
+            // exit) with un-consumed reserve → release it to withdrawable.
+            try IFigureEightMatrixV8(matrixB).releaseReserve(member) {} catch {}
+            if (!anySeat) {
+                emit MemberParked(member, tierIndex + 1, "autoReentry disabled");
+            }
+        } else if (!anySeat) {
+            emit MemberParked(member, tierIndex + 1, "autoReentry disabled");
         }
     }
 
-    /// @dev Deduct `fee` from the member's cycle-out funds held in `matrixB`,
-    ///      then register one seat in `destTierIndex` at `targetPairIndex`.
+    /// @dev Deduct `fee` from the member's cycle-out funds held in `matrixB` —
+    ///      escrow (crossing reserve) first, earnings for the remainder — then
+    ///      register one seat in `destTierIndex` at `targetPairIndex`.
+    ///      V8.44: `toMatB` seats the member directly in the target pair's
+    ///      MatB (saturated own pair — the entry rotates a full MatB).
     function _takeSeat(
         address matrixB,
         address member,
         address referrer,
         uint8   destTierIndex,
         uint256 fee,
-        uint256 targetPairIndex
-    ) internal {
-        IFigureEightMatrixV8(matrixB).deductForUpgrade(member, 0, fee);
+        uint256 targetPairIndex,
+        bool    toMatB,
+        uint256 escrow,
+        uint256 withdrawable
+    ) internal returns (uint256, uint256) {
+        uint256 fromEscrow = escrow >= fee ? fee : escrow;
+        uint256 fromW      = fee - fromEscrow;
+        IFigureEightMatrixV8(matrixB).deductForUpgrade(member, fromEscrow, fromW);
         usdc.forceApprove(tierPairManagers[destTierIndex], fee);
-        IPairManagerV8(tierPairManagers[destTierIndex]).registerFor(member, referrer, targetPairIndex);
+        if (toMatB) {
+            IPairManagerV8(tierPairManagers[destTierIndex]).registerForMatB(member, referrer, targetPairIndex);
+        } else {
+            IPairManagerV8(tierPairManagers[destTierIndex]).registerFor(member, referrer, targetPairIndex);
+        }
         _recordEntry(destTierIndex);
+        return (escrow - fromEscrow, withdrawable - fromW);
     }
 
-    /// @dev V8.43 hybrid routing for same-tier seats (fixes V8.42 bug: the old
-    ///      measure was MatA+MatB occupancy vs 381 — live seats max out at 254,
-    ///      so expansion mode could NEVER fire and pair .2 sat empty). New
-    ///      measure: the pair's CUMULATIVE entries (totalRegistered). Loop back
-    ///      to the same pair while < pairExpansionThreshold (127×3 = 381);
-    ///      overflow to pairIndex+1 once saturated.
-    function _sameTierTarget(address matrixB, uint8 tierIndex) internal view returns (uint256) {
+    /// @dev V8.44 overflow rework for same-tier seats. Below saturation the
+    ///      re-entry loops back into the OWN pair's MatA (V8.43 behavior kept).
+    ///      At saturation (cumulative entries >= pairExpansionThreshold) the
+    ///      V8.43 code diverted the seat to pair N+1 — starving the own MatB
+    ///      (frozen-MatB root cause). V8.44: the seat goes into the OWN pair's
+    ///      MatB instead, where it rotates the full matrix and keeps the pair
+    ///      churning. Only genuinely NEW externals overflow to later pairs.
+    function _sameTierTarget(address matrixB, uint8 tierIndex)
+        internal view returns (bool toMatB, uint256 target)
+    {
         uint256 srcPairIndex = IFigureEightMatrixV8(matrixB).pairIndex();
         (, , , uint256 pairEntries) = IPairManagerV8(tierPairManagers[tierIndex]).pairs(srcPairIndex);
-        return pairEntries >= pairExpansionThreshold ? srcPairIndex + 1 : srcPairIndex;
+        if (pairEntries >= pairExpansionThreshold) {
+            return (true, srcPairIndex);   // saturated → own MatB
+        }
+        return (false, srcPairIndex);      // self-sustaining → own MatA
     }
 
     /// @dev V8.21: generalized from the old T5-only `_checkT5FirstEntry` to

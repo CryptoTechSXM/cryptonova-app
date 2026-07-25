@@ -341,6 +341,48 @@ contract FigureEightMatrixV8 is Ownable2Step {
         emit UpgradeFundsDeducted(member, escrowAmt, withdrawableAmt);
     }
 
+    /// @notice V8.44 (item B): TierRouter parks a member whose MatB cycle-out
+    ///         could not fund a re-entry — see MatrixLogicLib.parkCycledOut.
+    function parkCycledOut(address member, uint256 shortfall) external {
+        require(msg.sender == _state.tierRouter, "F8V8: not tierRouter");
+        MatrixLogicLib.parkCycledOut(_state, member, shortfall);
+    }
+
+    /// @notice V8.44 (item B/I3): TierRouter releases an exiting member's
+    ///         un-consumed crossing reserve to withdrawable (clean graduation).
+    function releaseReserve(address member) external {
+        require(msg.sender == _state.tierRouter, "F8V8: not tierRouter");
+        MatrixLogicLib.releaseReserve(_state, member);
+    }
+
+    /// @notice V8.44 (item C): admin recovery of a STRANDED crossing reserve —
+    ///         a member who is out of the matrix and NOT parked has no
+    ///         member-facing path to a leftover reserve (parked members' path
+    ///         is selfRescue; exiting members are released automatically by the
+    ///         V8.44 engine — this valve exists for pathological drift only).
+    ///         Releases to the member's withdrawable, never to the admin.
+    event StrandedReserveReleased(address indexed member, uint256 amount);
+
+    function adminReleaseStrandedReserve(address member) external onlyOwner {
+        require(!_state.members[member].isInMatrix, "F8V8: still in matrix");
+        require(_state.parkedAt[member] == 0,       "F8V8: parked - use selfRescue path");
+        uint256 r = _state.members[member].crossingReserve;
+        require(r > 0, "F8V8: no stranded reserve");
+        MatrixLogicLib.releaseReserve(_state, member);
+        emit StrandedReserveReleased(member, r);
+    }
+
+    /// @notice V8.44 (item E): one-step ownership handoff. Ownable2Step's
+    ///         transferOwnership only sets pendingOwner — factory-spawned
+    ///         matrices stayed factory-owned forever because nothing ever
+    ///         called acceptOwnership (the V8.43 admin-orphan root cause).
+    ///         The factory calls this at the end of deployAndWire, and
+    ///         sweepMatrixOwnership uses it to recover existing orphans.
+    function adminHandoff(address newOwner) external onlyOwner {
+        if (newOwner == address(0)) revert F8V8_ZeroAddress();
+        _transferOwnership(newOwner);
+    }
+
     // --- Registration -------------------------------------------------------------
 
     function register(address referrer) external {
@@ -434,30 +476,74 @@ contract FigureEightMatrixV8 is Ownable2Step {
     // --- Withdraw -------------------------------------------------------------
 
     function withdraw() external {
-        MatrixLogicLib.withdrawCore(_state, _cfg(), msg.sender, 0, true);
+        MatrixLogicLib.withdrawCore(_state, _cfg(), msg.sender, msg.sender, 0, true);
     }
 
     function withdrawPartial(uint256 amount) external {
         require(amount > 0, "F8V8: amount must be > 0");
-        MatrixLogicLib.withdrawCore(_state, _cfg(), msg.sender, amount, false);
+        MatrixLogicLib.withdrawCore(_state, _cfg(), msg.sender, msg.sender, amount, false);
     }
 
     function withdrawPartialTo(address recipient, uint256 amount) external {
         require(recipient != address(0), "F8V8: zero recipient");
         require(amount > 0, "F8V8: amount must be > 0");
-        MatrixLogicLib.withdrawCore(_state, _cfg(), recipient, amount, false);
+        MatrixLogicLib.withdrawCore(_state, _cfg(), msg.sender, recipient, amount, false);
     }
 
     function withdrawTo(address recipient) external {
         require(recipient != address(0), "F8V8: zero recipient");
-        MatrixLogicLib.withdrawCore(_state, _cfg(), recipient, 0, true);
+        MatrixLogicLib.withdrawCore(_state, _cfg(), msg.sender, recipient, 0, true);
+    }
+
+    /// @notice V8.44 (G2): TierRouter's bulkWithdraw sweep — full withdrawal of
+    ///         `member`'s balance in THIS matrix, paid TO the member. All the
+    ///         usual guards (crossing lock, automation reserve, withdrawal fee)
+    ///         apply exactly as in a direct withdraw().
+    function routerWithdrawFor(address member) external {
+        require(msg.sender == _state.tierRouter, "F8V8: not tierRouter");
+        MatrixLogicLib.withdrawCore(_state, _cfg(), member, member, 0, true);
+    }
+
+    // --- V8.44 graceful exit (I3 / BUGS.md option b) ---------------------------
+
+    /// @notice Penalty applied to the RELEASED crossing reserve on a voluntary
+    ///         mid-cycle exit (earnings never penalized). Routed to the SF.
+    uint256 public exitPenaltyBps = 2_000;
+    event MemberExitedSeat(address indexed member, uint256 position, uint256 reserveReleased, uint256 penalty);
+
+    /// @notice DAO menu: 0, 10%, 20%, 30%, 50%.
+    function setExitPenaltyBps(uint256 bps) external {
+        require(
+            msg.sender == owner() || msg.sender == _state.governance || msg.sender == _state.pairManager,
+            "F8V8: not governance"
+        );
+        require(
+            bps == 0 || bps == 1_000 || bps == 2_000 || bps == 3_000 || bps == 5_000,
+            "F8V8: invalid penalty (allowed: 0,1000,2000,3000,5000)"
+        );
+        exitPenaltyBps = bps;
+    }
+
+    /// @notice Voluntarily leave this matrix (seat or parked queue) mid-cycle.
+    ///         Releases the crossing reserve to withdrawable minus exitPenaltyBps.
+    function exitSeat() external {
+        MatrixLogicLib.exitSeat(_state, _cfg(), exitPenaltyBps);
     }
 
     // --- Keeper: reclaim idle slot -----------------------------------------------
 
     function reclaimIdleSlot(address member) external {
         require(msg.sender == _state.matrixKeeper, "F8V8: not keeper");
-        MatrixLogicLib.reclaimIdleSlot(_state, member);
+        MatrixLogicLib.reclaimIdleSlot(_state, _cfg(), member);
+    }
+
+    /// @notice V8.44 FIX: this wrapper was MISSING in V8.43 — the keeper's
+    ///         _doReclaimSlot calls softParkIdle(member) on the matrix, which
+    ///         hit no function and reverted into WorkItemFailed on every idle
+    ///         soft-park attempt (silently broken since V8.33).
+    function softParkIdle(address member) external {
+        require(msg.sender == _state.matrixKeeper, "F8V8: not keeper");
+        MatrixLogicLib.softParkIdle(_state, _cfg(), member);
     }
 
     // --- Admin: forceCross --------------------------------------------------------
@@ -524,7 +610,16 @@ contract FigureEightMatrixV8 is Ownable2Step {
 
     function getMember(address member) external view returns (MatrixLogicLib.Member memory) { return _state.members[member]; }
     function getCyclesCompleted(address m) external view returns (uint256) { return _state.members[m].cyclesCompleted; }
-    function withdrawableOf(address member) external view returns (uint256) { return _state.members[member].withdrawable; }
+    /// @notice V8.44 (item D): includes the member's un-settled pool accrual —
+    ///         externally the balance behaves exactly as the V8.43 eager loop.
+    function withdrawableOf(address member) external view returns (uint256) {
+        return _state.members[member].withdrawable
+            + MatrixLogicLib.pendingPoolOf(_state, _cfg(), member);
+    }
+    /// @notice V8.44 (item D): raw stored balance + un-settled pool accrual, separately.
+    function pendingPoolOf(address member) external view returns (uint256) {
+        return MatrixLogicLib.pendingPoolOf(_state, _cfg(), member);
+    }
     function crossingReserveOf(address member) external view returns (uint256) { return _state.members[member].crossingReserve; }  // V8.31
     function rescueDebtOf(address member) external view returns (uint256) { return _state.rescueDebt[member]; }
 
@@ -538,7 +633,9 @@ contract FigureEightMatrixV8 is Ownable2Step {
     }
 
     function freeWithdrawable(address member) external view returns (uint256) {
-        uint256 bal = _state.members[member].withdrawable;
+        // V8.44 (item D): include un-settled pool accrual.
+        uint256 bal = _state.members[member].withdrawable
+            + MatrixLogicLib.pendingPoolOf(_state, _cfg(), member);
         if (bal == 0) return 0;
         if (_state.members[member].isInMatrix) {
             // V8.31: crossing cost = ENTRY_FEE, funded from crossingReserve first then withdrawable.

@@ -353,14 +353,30 @@ contract MatrixPairFactory is Ownable {
         IMPFPairManager(pairManager).addPair(matA, matB);
 
         // -- 6. Hand ownership back to real admin --------------------------------
-        // V8.39: use pairAdmin (explicit) rather than owner() so factory-created
-        // matrices are always owned by the intended deployer wallet, regardless of
-        // whether factory contract ownership differs (ADMIN_WALLET_ADDRESS vs DEPLOYER).
+        // V8.44 (item E): use adminHandoff — a TRUE one-step transfer.
+        // FigureEightMatrixV8 is Ownable2Step, so the V8.39 transferOwnership()
+        // call only set pendingOwner; nothing ever called acceptOwnership(), so
+        // every factory-spawned matrix stayed FACTORY-OWNED forever (the V8.43
+        // admin-orphan root cause: no adminForceRotateRoot, no owner setters).
         address realAdmin = pairAdmin != address(0) ? pairAdmin : owner();
-        mA.transferOwnership(realAdmin);
-        mB.transferOwnership(realAdmin);
+        mA.adminHandoff(realAdmin);
+        mB.adminHandoff(realAdmin);
 
         _expanding = false;
         emit PairExpanded(tierNum, pairManager, matA, matB);
+    }
+
+    // -- V8.44 (item E): retroactive orphan recovery ------------------------------
+
+    /// @notice Transfer ownership of a matrix still owned by THIS factory to
+    ///         pairAdmin (one-step, via the matrix's adminHandoff). Use after
+    ///         any drift where a spawned matrix was not handed off — without
+    ///         this, orphans are permanent for the life of a deployment.
+    ///         Deploy-checklist rule: after the first factory expansion on any
+    ///         fresh deployment, assert matrix.owner() == pairAdmin.
+    function sweepMatrixOwnership(address matrix) external onlyOwner {
+        if (matrix == address(0)) revert MPF_ZeroAddress();
+        address target = pairAdmin != address(0) ? pairAdmin : owner();
+        FigureEightMatrixV8(matrix).adminHandoff(target);
     }
 }

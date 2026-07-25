@@ -94,11 +94,18 @@ interface IFigureEightKeeper {
     function isMatrixA() external view returns (bool);
     function ENTRY_FEE() external view returns (uint256);
     function rotationCount() external view returns (uint256);
+    // V8.44 (item E): frozen-MatB self-heal
+    function nextSlot() external view returns (uint256);
+    function lastRotationTimestamp() external view returns (uint256);
+    function keeperForceRotateRoot() external;
 }
 
 interface ICommunityWalletKeeper {
     function distributeReady() external view returns (bool);
     function distribute() external;
+    // V8.44 (plan I1): CryptoNovaCommunityWallet epoch automation
+    function epochReady() external view returns (bool);
+    function advanceEpoch() external;
 }
 
 interface IPairManagerKeeper {
@@ -161,6 +168,16 @@ contract MatrixKeeper is Ownable {
     uint8 public constant WORK_VELOCITY_GATE = 5;
     uint8 public constant WORK_EVICT_PARKED  = 6;
     uint8 public constant WORK_DISTRIBUTE_CW = 7;
+    /// @notice V8.44 (item E): force-rotate a frozen full MatB. BACKSTOP ONLY —
+    ///         V8.44's contract-driven flow (crossing-fund fix + overflow
+    ///         rework) must keep MatBs rotating on their own; this work item
+    ///         exists for pathological cases and must never be the primary
+    ///         rotation driver (design law, owner 2026-07-25).
+    uint8 public constant WORK_FORCE_ROTATE  = 8;
+    /// @notice V8.44 (plan I1): auto-advance the CommunityWallet epoch on the
+    ///         25th — without this, claimable never updates on mainnet and the
+    ///         pending pool just grows.
+    uint8 public constant WORK_ADVANCE_EPOCH = 9;
 
     uint256 public velocityWindow      = 3_600;
     uint256 public velocityThreshold   = 3;
@@ -171,6 +188,10 @@ contract MatrixKeeper is Ownable {
     uint256 public maxItemsPerUpkeep   = 15;
     uint256 public parkedGracePeriod   = 6 hours;  // V8.25: mainnet default 6h; testnet owner can set as low as 5 min
     uint256 public rescueRatioBps      = 7_000;
+    /// @notice V8.44 (item E): how long a FULL MatB may sit without rotating
+    ///         before the keeper force-rotates it. Generous on purpose — the
+    ///         contract-driven flow should rotate it long before this fires.
+    uint256 public frozenMatBTimeout   = 6 hours;
     /// @notice V8.33: Ghost entries are disabled by default.  Ghost entries drain the SF to
     ///         fill empty slots with fake positions.  At launch, empty slots should fill with
     ///         real members.  DAO can flip on if the matrix genuinely stalls.
@@ -339,6 +360,13 @@ contract MatrixKeeper is Ownable {
         communityWallet = _cw;
         emit ConfigUpdated("communityWallet", uint256(uint160(_cw)));
     }
+    /// @notice V8.44 (item E): DAO/owner-tunable frozen-MatB backstop delay.
+    ///         5 min – 30 days; 0 = fire immediately (testing only).
+    function setFrozenMatBTimeout(uint256 v) external onlyOwnerOrGovernance {
+        require(v == 0 || (v >= 5 minutes && v <= 30 days), "MK: timeout out of range");
+        frozenMatBTimeout = v;
+        emit ConfigUpdated("frozenMatBTimeout", v);
+    }
 
     /// @notice V8.21: Pick one of 4 curated SF parked-rescue coverage ladders.
     ///         Replaces the old free-form custom-array proposal -- the community
@@ -407,6 +435,24 @@ contract MatrixKeeper is Ownable {
             );
         }
 
+        // V8.44 (item E): frozen-MatB backstop scan — a FULL MatB that hasn't
+        // rotated within frozenMatBTimeout (or NEVER rotated: the July 19
+        // occ=127/127 rot=0 signature) gets a keeperForceRotateRoot work item.
+        // Backstop only: V8.44 contract-driven flow keeps MatBs churning; if
+        // this ever fires regularly, the routing design has failed (test gate:
+        // keepers OFF → rotationCount must still climb).
+        for (uint8 t = 0; t < configuredTierCount && count < maxItemsPerUpkeep; t++) {
+            address pm = pairManagerForTier[t];
+            if (pm == address(0)) continue;
+            uint256 pairCount = IPairManagerKeeper(pm).activePairCount();
+            for (uint256 p = 0; p < pairCount && count < maxItemsPerUpkeep; p++) {
+                (, address matB) = IPairManagerKeeper(pm).getPairAt(p);
+                if (matB != address(0) && _isFrozenMatB(matB)) {
+                    items[count++] = WorkItem(WORK_FORCE_ROTATE, t, matB, address(0));
+                }
+            }
+        }
+
         for (uint8 t = 0; t < configuredTierCount && count < maxItemsPerUpkeep; t++) {
             address pm = pairManagerForTier[t];
             if (pm == address(0)) continue;
@@ -461,8 +507,16 @@ contract MatrixKeeper is Ownable {
         }
 
         if (communityWallet != address(0) && count < maxItemsPerUpkeep) {
-            if (ICommunityWalletKeeper(communityWallet).distributeReady())
-                items[count++] = WorkItem(WORK_DISTRIBUTE_CW, 0, communityWallet, address(0));
+            // try/catch: whichever CW variant is wired, a missing selector must
+            // not brick the entire checkUpkeep scan.
+            try ICommunityWalletKeeper(communityWallet).distributeReady() returns (bool ready) {
+                if (ready) items[count++] = WorkItem(WORK_DISTRIBUTE_CW, 0, communityWallet, address(0));
+            } catch {}
+            if (count < maxItemsPerUpkeep) {
+                try ICommunityWalletKeeper(communityWallet).epochReady() returns (bool ready) {
+                    if (ready) items[count++] = WorkItem(WORK_ADVANCE_EPOCH, 0, communityWallet, address(0));
+                } catch {}
+            }
         }
 
         if (count == 0) return (false, "");
@@ -516,8 +570,15 @@ contract MatrixKeeper is Ownable {
             } else if (item.workType == WORK_VELOCITY_GATE) {
                 try this._doVelocityGateExternal(item.tierIndex) {}
                 catch { emit WorkItemFailed(WORK_VELOCITY_GATE, item.tierIndex, item.addr1, item.addr2); }
+            } else if (item.workType == WORK_FORCE_ROTATE) {
+                try this._doForceRotateExternal(item.addr1) {}
+                catch { emit WorkItemFailed(WORK_FORCE_ROTATE, item.tierIndex, item.addr1, item.addr2); }
             } else if (item.workType == WORK_DISTRIBUTE_CW) {
                 _doDistributeCW(item.addr1);
+            } else if (item.workType == WORK_ADVANCE_EPOCH) {
+                try ICommunityWalletKeeper(item.addr1).advanceEpoch() {
+                    emit CommunityDistributed(item.addr1);
+                } catch { emit WorkItemFailed(WORK_ADVANCE_EPOCH, item.tierIndex, item.addr1, item.addr2); }
             }
         }
         if (chainLinkProcessed > 0) _flushChainLinks(chainLinkProcessed);
@@ -535,6 +596,30 @@ contract MatrixKeeper is Ownable {
     function _doParkedRescueExternal(address matrix, address member, uint8 t) external onlySelf { _doParkedRescue(matrix, member, t); }
     function _doEvictParkedExternal(address matrix, address member)           external onlySelf { _doEvictParked(matrix, member); }
     function _doVelocityGateExternal(uint8 t)                                 external onlySelf { _doVelocityGate(t); }
+    function _doForceRotateExternal(address matB)                             external onlySelf { _doForceRotate(matB); }
+
+    /// @notice V8.44 (item E): force-rotate a frozen full MatB. Re-verifies the
+    ///         frozen condition at execution time (checkUpkeep→performUpkeep
+    ///         race), then calls the matrix's keeperForceRotateRoot — which is
+    ///         authorised by matrixKeeper address, NOT ownership, so it works
+    ///         on factory-spawned matrices regardless of owner drift.
+    event FrozenMatBRotated(address indexed matB);
+
+    function _doForceRotate(address matB) internal {
+        if (!_isFrozenMatB(matB)) return;
+        IFigureEightKeeper(matB).keeperForceRotateRoot();
+        emit FrozenMatBRotated(matB);
+    }
+
+    /// @dev Full AND (never rotated OR stale past frozenMatBTimeout).
+    function _isFrozenMatB(address matB) internal view returns (bool) {
+        IFigureEightKeeper mat = IFigureEightKeeper(matB);
+        if (mat.isMatrixA()) return false;
+        if (mat.occupancy() < mat.MATRIX_SIZE()) return false;
+        uint256 lastRot = mat.lastRotationTimestamp();
+        if (lastRot == 0) return true;   // filled but NEVER rotated (July 19 signature)
+        return block.timestamp - lastRot >= frozenMatBTimeout;
+    }
 
     function _doParkedRescue(address matrix, address member, uint8 tierIdx) internal {
         IFigureEightKeeper mat = IFigureEightKeeper(matrix);

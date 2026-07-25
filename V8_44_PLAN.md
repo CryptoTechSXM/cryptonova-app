@@ -5,6 +5,58 @@
 
 ---
 
+## ✅ BUILD STATUS (2026-07-25 session — contracts COMPLETE, test-first, all green)
+
+**All fixes A–I implemented and unit-verified.** Build order steps 1–10 done; step 11
+(docs/bot/frontend sync) deliberately deferred until after the fresh testnet deploy is
+verified (code-is-truth: sync against DEPLOYED V8.44).
+
+| Step | Item | Status |
+|------|------|--------|
+| 1-2 | Crossing-fund + MatB cycle-out fix (A/B): escrow=crossingReserve into handleCycleOut, deductForUpgrade reserve accounting, two-bucket _takeSeat, park-not-exit, releaseReserve on clean exit | ✅ tests T1-T4 (V8_44_CycleOut) |
+| 3 | Overflow rework: own members → own pair (own MatB at saturation via PM.rescueReentry/registerForMatB); externals-only overflow; V8.40 "partner full" guard removed (entry rotates full MatB); _rescueToNextPair deleted | ✅ tests O1-O4 (V8_44_Overflow) |
+| 4 | Factory ownership: adminHandoff (TRUE one-step — Ownable2Step transferOwnership only set pendingOwner and NOTHING ever accepted: the real orphan root cause) + sweepMatrixOwnership; MatrixKeeper WORK_FORCE_ROTATE frozen-MatB backstop (full && never-rotated OR stale > frozenMatBTimeout 6h) | ✅ tests K1-K3, F3/M6b updated |
+| 5 | Pull-based pool (D): poolA1/poolAr accumulators, lazy _settlePool on seat events + withdraw, rescue-debt at settle, pendingPoolOf views. Per-rotation 126-member loop DELETED | ✅ property test (V8_44_PoolEquivalence) |
+| 6 | C2+G3: _upgradeEligible shared three-way rule (manual/bulk/hybrid); hybridUpgrade (free earnings first, wallet tops up) | ✅ UX3, UX4 |
+| 7 | G1+G2: registerWithOptions (one popup), registerWithPermit + manualUpgradeWithPermit (EIP-2612; MockUSDC now ERC20Permit), bulkWithdraw + routerWithdrawFor | ✅ UX1, UX2, UX5 |
+| 8 | Graceful exit (I3): exitSeat() — seat or parked, reserve released minus exitPenaltyBps (default 20%, DAO menu 0/10/20/30/50 — **owner to confirm default**), penalty → SF, earnings never penalized | ✅ UX6 |
+| 9 | CW (I1): advanceEpoch PERMISSIONLESS (guards: 25-day interval + pool>0; matches comp page) + epochReady() + keeper WORK_ADVANCE_EPOCH | ✅ K4 |
+| 10 | Stranded recovery (C): adminReleaseStrandedReserve (owner valve, guards: !inMatrix && !parked) + scripts/enumerate_stranded_v843.js (publish list; compensate via coupons/grantFreeReentry on V8.44) | ✅ K5 |
+
+**Bonus fixes found during build (all stranded-fund class):**
+- `softParkIdle` wrapper was MISSING in FigureEightMatrixV8 since V8.33 — every keeper
+  idle soft-park reverted into WorkItemFailed. Wrapper added.
+- `pendingCross` deferral was written but NEVER processed anywhere — members deferred
+  mid-cascade were stranded in limbo. Now PARKS instead (standard rescue machinery,
+  also bounds cascade recursion depth).
+- `deductForUpgrade` now settles pool accrual first (callers gate on the
+  pending-inclusive view — would otherwise revert).
+
+**Design-law gate (b) PASSED in unit form:** O4 runs two pairs with ALL keepers off,
+pure member-driven flow — both MatBs' rotationCount climbs; zero stranded reserves
+sweep asserted across every wallet/matrix.
+
+**Verification still owed (Windows / fresh testnet deploy):**
+1. Full suite on the REAL config (`npx hardhat test` — sandbox used a no-viaIR/wasm
+   sidecar compiler, artifacts-sandbox; TierRouter/Factory viaIR paths compiled OK).
+2. Fresh stress deploy: MatB rotationCount climbing on ALL pairs, 500+ rotations,
+   zero stranded reserves (sum crossingReserve over non-seated, non-parked == 0).
+3. Gas gate: re-measure full-cascade registration at MSIZE=127 — pool loop removal
+   should drop it well under the ~17.8M public-RPC cap. NOTE: pool checkpoint adds
+   ~100k to small entries (CycleOutDebug cycle-out 869k→970k at size 4) but removes
+   the ~N×credit loop from EVERY rotation in a cascade.
+4. Owner decisions to confirm: exitPenaltyBps default (20%?), frozenMatBTimeout (6h?),
+   bounty comp method for the published V8.43 stranded list.
+5. Docs/bot sync (item F) AFTER deploy verify: pool is now lazily settled —
+   withdrawableOf/freeWithdrawable include pending accrual (PoolShareCredited fires at
+   settle, in aggregates, not per rotation — status pages reading that event must adapt).
+
+*Sandbox compile helper: `scripts/sandbox_compile.js` (offline wasm solc, chunked;
+ART_DIR env; VIA_IR=1 for TierRouter/MatrixPairFactory). Tests run with
+`HH_ARTIFACTS_PATH=<dir> npx hardhat test <file> --no-compile`.*
+
+---
+
 ## 🏗️ BUILD ORDER & KICKOFF (start here — decided 2026-07-25, owner: full V8.44, all fixes)
 
 **Doctrine for this build:** code is truth · test-first (write a test that reproduces the bug,

@@ -319,7 +319,7 @@ describe("V8Elevator — T1 → T2 upgrade cycle (MSIZE=7)", function () {
 // ═══════════════════════════════════════════════════════════════════════════════
   describe("2. Full elevator: matA fill → forceCross fill → W1 upgrades to T2", function () {
 
-    it("15-registration + 7-forceCross sequence upgrades W1 to T2", async function () {
+    it("15-registration + 7-forceCross sequence re-enters W1 at T1 (V8.44 re-entry priority)", async function () {
       const {
         tierRouter, matA, matB, admin,
         w1, s0, s1, s2, s3, s4, s5, s6,
@@ -347,16 +347,27 @@ describe("V8Elevator — T1 → T2 upgrade cycle (MSIZE=7)", function () {
       expect(await matB.isFull()).to.be.true;
 
       // FORCE-CROSS S6 → fills matB to occ==7+1 → W1 cycles out of matB
-      // handleCycleOut fires → W1 matB withdrawable:
+      // handleCycleOut fires → W1 matB funds (V8.44 two-bucket):
+      //   escrow  = W1's matB crossing reserve                =  $5.00
       //   direct_earn from W1's own matB entry                =  $0.25
       //   L1 from S0-S5 force-crosses into matB (6 × $0.95)  =  $5.70  (V8.32: payBase=entryFee)
       //   chain pay from S0-S5 matrix positions in matB       =  $1.71
-      //   matB total = $7.66 > T2_FEE $7  → UPGRADE fires
+      //   funds = $12.66 ≥ T1_FEE $10 → RE-ENTRY fires first (V8.44 priority:
+      //   re-entry → upgrade); remaining $2.66 < T2_FEE $7 → upgrade skipped.
+      //   (V8.43 hardcoded escrow=0, so funds were $7.66 < $10: re-entry was
+      //   silently skipped and the upgrade fired instead — the exact bug class
+      //   V8.44 fixes: "auto-reentry ON → member NEVER graduates".)
       await fc(s6.address);
 
-      // ── KEY ASSERTIONS ────────────────────────────────────────────────────
+      // ── KEY ASSERTIONS (V8.44) ────────────────────────────────────────────
       expect(await tierRouter.memberHighestTier(w1.address)).to.equal(
-        2, "W1 should have reached T2"
+        1, "W1 re-enters T1 (re-entry priority consumes the funds first)"
+      );
+      expect(await matA.isActiveInMatrix(w1.address)).to.equal(
+        true, "W1 re-entered own pair's MatA"
+      );
+      expect(await matB.crossingReserveOf(w1.address)).to.equal(
+        0, "W1's matB crossing reserve was consumed as re-entry escrow"
       );
       expect(await tierRouter.tierCycles(w1.address, 0)).to.equal(
         1, "W1 should have exactly 1 T1 cycle"
@@ -1855,24 +1866,21 @@ describe("V8.35 — MatrixPairFactory", function () {
     expect(await pm1.activePairIndex()).to.equal(1n);
   });
 
-  it("F3: Ownable2Step — factory stays owner; admin completes via acceptOwnership()", async function () {
+  it("F3: V8.44 adminHandoff — new matrices are owned by admin IMMEDIATELY (no acceptOwnership limbo)", async function () {
     const { factory, pm1, admin } = await loadFixture(deployWithFactoryFixture);
     const event = await callDeployAndWire(factory, pm1, admin);
-    const factoryAddr = await factory.getAddress();
 
     const newMatA = await ethers.getContractAt("FigureEightMatrixV8", event.args.matA);
     const newMatB = await ethers.getContractAt("FigureEightMatrixV8", event.args.matB);
 
-    // FigureEightMatrixV8 uses Ownable2Step: transferOwnership only sets pendingOwner.
-    // owner() stays factory until admin calls acceptOwnership().
-    expect(await newMatA.owner()).to.equal(factoryAddr);
-    expect(await newMatA.pendingOwner()).to.equal(admin.address);
-
-    // Admin completes the two-step transfer
-    await newMatA.connect(admin).acceptOwnership();
-    await newMatB.connect(admin).acceptOwnership();
+    // V8.44 (item E): the V8.39 transferOwnership() only set pendingOwner
+    // (Ownable2Step) and nothing ever accepted — every factory-spawned matrix
+    // stayed factory-owned (the V8.43 admin-orphan root cause). deployAndWire
+    // now uses adminHandoff() for a TRUE one-step transfer.
     expect(await newMatA.owner()).to.equal(admin.address);
     expect(await newMatB.owner()).to.equal(admin.address);
+    expect(await newMatA.pendingOwner()).to.equal(ethers.ZeroAddress);
+    expect(await newMatB.pendingOwner()).to.equal(ethers.ZeroAddress);
   });
 
   it("F4: deployAndWire: new matrices are partners of each other", async function () {
@@ -2745,17 +2753,13 @@ describe("V8.39 — keeperForceRotateRoot + pairAdmin + try/catch guards", funct
     });
     const newMatB = F8V8.attach(newMatBAddr);
 
-    // FigureEightMatrixV8 inherits Ownable2Step — transferOwnership() only proposes.
-    // V8.39 pairAdmin fix: factory calls transferOwnership(pairAdmin) inside deployAndWire,
-    // so the PENDING owner is pairAdmin (deployer), not factory.owner() (admin).
-    // The deployer must call acceptOwnership() to complete the transfer.
-    expect(await newMatB.pendingOwner()).to.equal(deployer.address,
-      "V8.39: pairAdmin (deployer) must be the pending owner of factory-created MatB");
-
-    // Complete the two-step transfer; deployer becomes the confirmed owner.
-    await newMatB.connect(deployer).acceptOwnership();
+    // V8.44 (item E): deployAndWire uses adminHandoff() — a TRUE one-step
+    // transfer to pairAdmin (deployer). No pendingOwner limbo, no
+    // acceptOwnership required (the V8.39 two-step was never completed in
+    // practice, leaving every factory-spawned matrix admin-orphaned).
     expect(await newMatB.owner()).to.equal(deployer.address,
-      "after acceptOwnership(): deployer is confirmed owner — can call adminForceRotateRoot");
+      "V8.44: pairAdmin (deployer) is the CONFIRMED owner immediately — can call adminForceRotateRoot");
+    expect(await newMatB.pendingOwner()).to.equal(ethers.ZeroAddress);
   });
 
   // ── M7: _tryAdvancePair deployAndWire failure does NOT revert registration ──

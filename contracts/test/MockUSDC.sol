@@ -9,11 +9,15 @@ pragma solidity ^0.8.24;
  *         NOT for production use.
  */
 import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
+import "@openzeppelin/contracts/token/ERC20/extensions/ERC20Permit.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 
-contract MockUSDC is ERC20, Ownable {
+// V8.44 (G1): ERC20Permit added — mirrors native USDC on Base, which supports
+// EIP-2612 permit. Lets the testnet exercise the signature-based approval flow
+// (registerWithPermit / manualUpgradeWithPermit) exactly as mainnet will.
+contract MockUSDC is ERC20, ERC20Permit, Ownable {
     // Base USDC uses 6 decimals — override ERC20's default of 18
-    constructor(address admin) ERC20("USD Coin", "USDC") Ownable(admin) {}
+    constructor(address admin) ERC20("USD Coin", "USDC") ERC20Permit("USD Coin") Ownable(admin) {}
 
     /// @dev Override to return 6 decimals, matching Circle's native USDC on Base.
     function decimals() public pure override returns (uint8) {

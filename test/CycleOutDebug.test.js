@@ -128,7 +128,7 @@ describe("CycleOutDebug", function () {
     // Register W1 at position 1
     await usdc.mint(W1.address, FEE);
     await usdc.connect(W1).approve(pmAddr, FEE);
-    await tr.connect(W1).register(ethers.ZeroAddress, { gasLimit: 1_000_000 });
+    await tr.connect(W1).register(ethers.ZeroAddress, { gasLimit: 3_000_000 });
     expect(await matA.matrixPos(W1.address)).to.equal(1n);
     console.log("  W1 at position 1: OK");
 
@@ -139,7 +139,7 @@ describe("CycleOutDebug", function () {
       const ref = i === 0 ? W1.address : fillers[i-1].address;
       await usdc.mint(w.address, FEE);
       await usdc.connect(w).approve(pmAddr, FEE);
-      await tr.connect(w).register(ref, { gasLimit: 1_000_000 });
+      await tr.connect(w).register(ref, { gasLimit: 3_000_000 });
     }
     expect(await matA.occupancy()).to.equal(4n);
     console.log("  MatA full (4/4): OK");
