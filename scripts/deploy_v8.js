@@ -53,7 +53,7 @@
  *   USDC_ADDRESS           Reuse existing USDC; omit to deploy MockUSDC
  *   MATRIX_SIZE            127 (default) | 15 (quick dev cycle)
  *   DEPLOY_TIERS           Comma-separated list e.g. "1,2" (default: "1,2,3,4,5,6,7,8,9,10")
- *   ADDRESSES_FILE         Output filename (default: deployed_addresses_v8_43.json)
+ *   ADDRESSES_FILE         Output filename (default: deployed_addresses_v8_45.json)
  *
  * Run: npx hardhat run scripts/deploy_v8.js --network baseSepolia
  */
@@ -67,7 +67,7 @@ require("dotenv").config();
 // ── Addresses output file ─────────────────────────────────────────────────────
 const ADDRESSES_FILE = path.join(
   __dirname,
-  process.env.ADDRESSES_FILE || "deployed_addresses_v8_43.json"
+  process.env.ADDRESSES_FILE || "deployed_addresses_v8_45.json"
 );
 
 // ── Config ────────────────────────────────────────────────────────────────────
@@ -128,6 +128,26 @@ async function deploy(factory, args = [], label = "") {
 
 async function main() {
   const [rawSigner] = await ethers.getSigners();
+
+  // V8.44 deployer guard (owner decision 2026-07-25): 0xCd0Af6… is the ACTIVE
+  // testnet deployer again (it owns MockUSDC → direct mint). It is EIP-7702
+  // delegated to MetaMask's stateless delegator (0x63c0c19a… — signature-gated,
+  // accepted risk on TESTNET ONLY). The guard now: (a) prints the delegation
+  // status of whatever wallet is signing, (b) aborts only if EXPECTED_DEPLOYER
+  // is set in .env and doesn't match — so a stale key swap can never silently
+  // deploy from the wrong wallet again. MAINNET RULE: fresh, never-delegated
+  // deployer — do not carry this exception over.
+  {
+    const code = await ethers.provider.getCode(rawSigner.address);
+    if (code.startsWith("0xef0100")) {
+      console.log(`  ⚠️  Signer ${rawSigner.address} is EIP-7702 delegated to 0x${code.slice(8)} (testnet-accepted)`);
+    }
+    const expected = (process.env.EXPECTED_DEPLOYER || "").toLowerCase();
+    if (expected && rawSigner.address.toLowerCase() !== expected) {
+      throw new Error(`Signer ${rawSigner.address} != EXPECTED_DEPLOYER ${process.env.EXPECTED_DEPLOYER} — fix .env before deploying.`);
+    }
+  }
+
   const nonceMgr = new NonceManager(rawSigner);
   const _origSend = nonceMgr.sendTransaction.bind(nonceMgr);
   nonceMgr.sendTransaction = async (tx) => {
@@ -150,7 +170,7 @@ async function main() {
   const liquidityReserve = process.env.LIQUIDITY_RESERVE_ADDRESS || opsWallet;
 
   console.log("\n  V8.41 Deploy — FIFO pair routing (external→pair 0, graduates→pairIndex+1)");
-  console.log("  Remember: set ADDRESSES_FILE=deployed_addresses_v8_43.json in .env after this deploy.");
+  console.log("  Remember: ADDRESSES_FILE=deployed_addresses_v8_45.json must be set in .env BEFORE this deploy (script writes there).");
   sep();
   console.log(`  Deployer        : ${deployerAddr}`);
   console.log(`  AccountOne      : ${accountOne}`);

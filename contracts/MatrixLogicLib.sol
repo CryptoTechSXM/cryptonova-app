@@ -291,23 +291,48 @@ library MatrixLogicLib {
             });
         }
 
+        // V8.45 CRITICAL FIX (live incident 2026-07-26, T1.0 MatB wedged):
+        // NEVER trust a cached nextSlot across a _cycleOutRoot call, and NEVER write
+        // outside 1..matrixSize.
+        //
+        // What went wrong in V8.44: entering a FULL matrix calls _cycleOutRoot, which
+        // calls handleCycleOut -> TierRouter._executeAdditive -> _takeSeat, which can
+        // seat a member back into THIS SAME matrix (own-pair re-entry, or a partner
+        // MatA cycle-out crossing back in). That nested entry consumed the freed slot
+        // and advanced nextSlot; control then returned here and placed the outer member
+        // at the stale slot — overwriting the nested occupant, or writing to position
+        // 128 (out of range). Each occurrence orphaned one member and inflated
+        // occupancy by 1. After ~217 rotations: 44 holes, position 1 empty, and every
+        // subsequent entry reverted "F8V8: no root" — the matrix was permanently wedged.
+        //
+        // Fix: resolve the slot AFTER the rotation, from live storage, and park the
+        // member (fee still distributed, rescue path available) if the cascade refilled
+        // the matrix rather than corrupting the BFS array.
+        bool placed = false;
         if (self.occupancy < cfg.matrixSize) {
-            // V8.33 CRITICAL FIX: reclaimIdleSlot / softParkIdle can create gaps at low
-            // positions while nextSlot keeps incrementing past matrixSize.  If nextSlot
-            // overflowed (> matrixSize), reset to 1 and scan forward to find the lowest
-            // empty slot.  Filling from the bottom guarantees position 1 is occupied
-            // whenever occupancy == matrixSize, preventing "F8V8: no root" on cycle-outs.
-            if (self.nextSlot > cfg.matrixSize) self.nextSlot = 1;
-            while (self.posToMember[self.nextSlot] != address(0)) {
-                self.nextSlot++;
+            uint256 slot = _lowestFreeSlot(self, cfg.matrixSize);
+            if (slot != 0) {
+                _placeInMatrix(self, member, slot);
+                self.nextSlot  = slot + 1;
+                self.occupancy += 1;
+                placed = true;
             }
-            _placeInMatrix(self, member, self.nextSlot);
-            self.nextSlot  += 1;
-            self.occupancy += 1;
-        } else {
-            _cycleOutRoot(self, cfg);
-            _placeInMatrix(self, member, self.nextSlot);
-            self.occupancy += 1;
+        }
+        if (!placed) {
+            if (self.occupancy >= cfg.matrixSize) _cycleOutRoot(self, cfg);
+            uint256 slot2 = _lowestFreeSlot(self, cfg.matrixSize);
+            if (slot2 != 0) {
+                _placeInMatrix(self, member, slot2);
+                self.nextSlot  = slot2 + 1;
+                self.occupancy += 1;
+                placed = true;
+            } else {
+                // Cascade refilled every seat. Park instead of corrupting the array —
+                // the member keeps their funds and the standard rescue path applies.
+                self.parkedMembers.push(member);
+                self.parkedAt[member] = block.timestamp;
+                emit MemberParked(member, 0);
+            }
         }
 
         _distributePayments(self, cfg, member);
@@ -319,6 +344,21 @@ library MatrixLogicLib {
         if (!cfg.isMatrixA && self.tierRouter != address(0)) {
             try ITierRouter(self.tierRouter).onCrossToMatB(member, cfg.tierIndex) {} catch {}
         }
+    }
+
+    /// @notice V8.45: lowest genuinely-empty BFS position, read from LIVE storage.
+    ///         Returns 0 when every seat 1..size is taken. Checks the nextSlot hint
+    ///         first (the common path, one SLOAD) before the bounded scan, so the
+    ///         extra safety costs almost nothing in the normal case.
+    function _lowestFreeSlot(MatrixState storage self, uint256 size)
+        internal view returns (uint256)
+    {
+        uint256 hint = self.nextSlot;
+        if (hint >= 1 && hint <= size && self.posToMember[hint] == address(0)) return hint;
+        for (uint256 i = 1; i <= size; i++) {
+            if (self.posToMember[i] == address(0)) return i;
+        }
+        return 0;
     }
 
     function _placeInMatrix(MatrixState storage self, address member, uint256 slot) internal {
@@ -398,8 +438,18 @@ library MatrixLogicLib {
     // ===========================================================================
 
     function _cycleOutRoot(MatrixState storage self, ImmutableConfig memory cfg) internal {
-        address root = self.posToMember[1];
-        require(root != address(0), "F8V8: no root");
+        // V8.45 SELF-HEAL: cycle out the LOWEST OCCUPIED position, not blindly
+        // position 1. A matrix that somehow acquires a gap at position 1 (the
+        // V8.44 incident, or any future accounting drift) used to revert
+        // "F8V8: no root" on every single entry and was permanently wedged —
+        // no rescues, no registrations, no admin path back. Scanning forward
+        // makes that state recoverable instead of terminal.
+        uint256 rootPos = 1;
+        while (rootPos <= cfg.matrixSize && self.posToMember[rootPos] == address(0)) {
+            rootPos++;
+        }
+        require(rootPos <= cfg.matrixSize, "F8V8: no root");
+        address root = self.posToMember[rootPos];
 
         // V8.44 (item D): settle the departing root's accrued pool share up to
         // the PREVIOUS event (the root receives nothing from this rotation —
@@ -416,7 +466,7 @@ library MatrixLogicLib {
         }
 
         self.matrixPos[root]               = 0;
-        self.posToMember[1]                = address(0);
+        self.posToMember[rootPos]          = address(0);   // V8.45: clear the ACTUAL root seat
         self.members[root].isInMatrix      = false;
         self.members[root].cyclesCompleted += 1;
         self.occupancy             -= 1;
