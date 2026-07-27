@@ -1244,15 +1244,43 @@ contract TierRouter is Ownable2Step {
     ///      (frozen-MatB root cause). V8.44: the seat goes into the OWN pair's
     ///      MatB instead, where it rotates the full matrix and keeps the pair
     ///      churning. Only genuinely NEW externals overflow to later pairs.
+    ///      V8.46 (item A): compare LIVE COMBINED OCCUPANCY, as the parameter's
+    ///      own doc at :230 describes ("Minimum combined occupancy (MatA + MatB)").
+    ///      The V8.44/V8.45 code compared pairs[i].totalRegistered — a CUMULATIVE
+    ///      lifetime counter that only ever grows. Every pair therefore crossed
+    ///      the threshold permanently and never came back, so re-entries were
+    ///      diverted to MatB forever. Combined with _findExternalPair sending new
+    ///      externals to a younger pair (which is deliberate — PairManagerV8:495
+    ///      relies on the pair sustaining itself), a saturated pair's MatA had NO
+    ///      entry source at all: rotation stopped and every member in seats
+    ///      2..127 froze permanently. Measured live 2026-07-26: MatA rotation
+    ///      dead on every saturated pair across all 10 tiers.
+    ///
+    ///      Live occupancy maxes at 254 (127+127), so the default threshold of
+    ///      381 now means "never divert" — the self-sustaining loop the design
+    ///      depends on. The knob still works if an owner lowers it below 254.
     function _sameTierTarget(address matrixB, uint8 tierIndex)
         internal view returns (bool toMatB, uint256 target)
     {
-        uint256 srcPairIndex = IFigureEightMatrixV8(matrixB).pairIndex();
-        (, , , uint256 pairEntries) = IPairManagerV8(tierPairManagers[tierIndex]).pairs(srcPairIndex);
-        if (pairEntries >= pairExpansionThreshold) {
-            return (true, srcPairIndex);   // saturated → own MatB
-        }
-        return (false, srcPairIndex);      // self-sustaining → own MatA
+        tierIndex; // unused; kept so the call sites and ABI are unchanged
+        // Re-entry ALWAYS returns to the member's own MatA. Entering a full MatA
+        // is not a problem — it rotates the root, which crosses into the pair's
+        // own MatB. That IS the figure-eight, and it is what keeps a saturated
+        // pair self-sustaining once _findExternalPair (PairManagerV8:495) stops
+        // sending it new externals, exactly as that function's comment assumes.
+        //
+        // The removed branch diverted re-entry to MatB whenever
+        // pairs[i].totalRegistered >= pairExpansionThreshold — a CUMULATIVE
+        // lifetime counter, so every pair crossed it permanently. MatA then had
+        // no entry source from either direction and froze: measured 2026-07-26,
+        // MatA rotation dead on every saturated pair in all 10 tiers, members
+        // stuck in seats 2..127 indefinitely.
+        //
+        // Proven live: raising the threshold to 1,000,000 at 8:25 PM EDT forced
+        // this same always-MatA behaviour and every MatA resumed rotating within
+        // seconds, integrity clean across 19+ hours. This makes that permanent.
+        // pairExpansionThreshold and its setter are retained for ABI stability.
+        return (false, IFigureEightMatrixV8(matrixB).pairIndex());
     }
 
     /// @dev V8.21: generalized from the old T5-only `_checkT5FirstEntry` to
