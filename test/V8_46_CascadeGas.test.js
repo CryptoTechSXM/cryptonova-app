@@ -8,14 +8,27 @@
  * the SIZE=4 used by the other suites:
  *
  *  1. CASCADE GAS. Listed as a V8.44 deploy gate ("cascade gas < 17.8M") and
- *     never measured. It matters more since 2026-07-27: 5 wallets silently
- *     graduated because MatrixLogicLib:513 wrapped handleCycleOut in a try/catch
- *     with an EMPTY catch. try/catch forwards only 63/64 of remaining gas
- *     (EIP-150), so an out-of-gas inner call reverts, the catch swallows it, and
- *     the OUTER transaction still completes with the 1/64 it kept — a successful
- *     tx with a vanished member and no events. That is exactly what W1's event
- *     trail showed, and gas is the only surviving explanation after the live
- *     diagnostic ruled out fee mismatch and router funding.
+ *     never run until now.
+ *
+ *     RESULT (2026-07-27): worst-case single-pair cascade = 4,651,492 gas
+ *     against a 17,800,000 cap — 3.8x headroom. Plain entry 734,647; peak entry
+ *     during rotation 5,127,660.
+ *
+ *     THIS DISPROVES the gas hypothesis for the 8 silent graduations. The theory
+ *     was that try/catch forwards only 63/64 of remaining gas (EIP-150), so an
+ *     out-of-gas inner call would revert, the empty catch at MatrixLogicLib:513
+ *     would swallow it, and the outer tx would still succeed with its 1/64 — a
+ *     successful transaction with a vanished member and no events. That is what
+ *     W1's trail showed, but at 3.8x headroom a single-pair cascade cannot
+ *     exhaust gas. Fee mismatch and router funding were already eliminated by
+ *     diag_cycleout_revert.js. The cause of those 8 graduations is STILL UNKNOWN.
+ *
+ *     NOT MEASURED HERE: the multi-tier ladder cascade. This fixture wires ONE
+ *     tier. Live, a cycle-out continues into re-entry -> upgrade into the NEXT
+ *     tier's matrix -> possibly a double seat, each with its own rotation. That
+ *     is what CLAUDE.md's "~15.5M full-matrix cascade" refers to, and all 8
+ *     victims were wallets spanning many tiers (W1 held T1-T8). It remains the
+ *     best surviving candidate and needs its own fixture.
  *
  *  2. S2 ROUTING COVERAGE. V8.46-A (re-entry always seats in own MatA) has no
  *     unit test. Three attempts failed at SIZE=4 because a member's MatB balance
