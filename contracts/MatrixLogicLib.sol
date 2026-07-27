@@ -219,6 +219,11 @@ library MatrixLogicLib {
     event SlotParkedIdle(address indexed member, uint256 position, uint256 idleDuration);
     event WithdrawalFeeCharged(address indexed member, uint256 fee);
     event MemberParked(address indexed member, uint256 shortfall);
+    /// @notice V8.46 (item C): handleCycleOut reverted and the member was parked
+    ///         as a fallback instead of vanishing. If this ever fires, something
+    ///         upstream is broken — check gas on the cascade and the TierRouter's
+    ///         USDC balance/allowance. Silence here is the healthy state.
+    event CycleOutFailed(address indexed member, uint8 tierIndex);
     event MemberEvicted(address indexed member, uint256 totalWithdrawn);
     event CoPayRescue(address indexed member, uint256 sfShare, uint256 memberWalletShare, uint256 withdrawableUsed);
     /// @notice Emitted when a member self-rescues by paying their own shortfall (no debt).
@@ -510,12 +515,29 @@ library MatrixLogicLib {
             // 50% reserve pre-funded at the member's MatB entry — passive
             // members (withdrawable < fee) silently graduated against their
             // configured intent and the reserve was stranded forever.
+            // V8.46 (item C): the catch below used to be EMPTY. The root has
+            // ALREADY been removed from the seat map by this point, so a revert
+            // inside handleCycleOut — deep-cascade out of gas, TierRouter short
+            // of USDC or allowance for registerFor, any nested failure — left
+            // the member in NO matrix, NOT parked, with NO event emitted. They
+            // silently vanished, which is the exact "graduated against their
+            // configured intent" failure V8.44 was built to eliminate (see the
+            // comment above). Confirmed live 2026-07-27: 5 wallets, 8 events,
+            // $267.50 of crossing reserve left behind — W1 lost its T1, T2 and
+            // T3 seats this way while its options were correct throughout.
+            //
+            // PARK-NOT-EXIT MUST HOLD ON EVERY PATH, INCLUDING FAILURE.
             try ITierRouter(self.tierRouter).handleCycleOut(
                 root,
                 cfg.tierIndex,
                 self.members[root].crossingReserve,
                 self.members[root].withdrawable
-            ) {} catch {}
+            ) {} catch {
+                self.parkedMembers.push(root);
+                self.parkedAt[root] = block.timestamp;
+                emit MemberParked(root, 0);
+                emit CycleOutFailed(root, cfg.tierIndex);
+            }
         } else {
             _crossToPartner(self, cfg, root);
         }
