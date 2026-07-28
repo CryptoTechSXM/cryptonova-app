@@ -309,7 +309,7 @@ describe("V8Elevator — T1 → T2 upgrade cycle (MSIZE=7)", function () {
       await tierRouter.connect(w1).register(ethers.ZeroAddress);
       await expect(
         tierRouter.connect(w1).register(ethers.ZeroAddress)
-      ).to.be.revertedWith("TR: already joined");
+      ).to.be.revertedWithCustomError(tierRouter, "TRState");
     });
 
   });
@@ -440,7 +440,7 @@ describe("V8Elevator — T1 → T2 upgrade cycle (MSIZE=7)", function () {
       expect(await tierRouter.systemPaused()).to.be.true;
 
       await expect(reg(w1, ethers.ZeroAddress))
-        .to.be.revertedWith("TR: system paused - inactivity");
+        .to.be.revertedWithCustomError(tierRouter, "TRState");
     });
 
     it("rejects pauseSystem() from a non-owner", async function () {
@@ -455,7 +455,7 @@ describe("V8Elevator — T1 → T2 upgrade cycle (MSIZE=7)", function () {
 
       await tierRouter.connect(admin).pauseSystem("first pause");
       await expect(tierRouter.connect(admin).pauseSystem("second pause"))
-        .to.be.revertedWith("TR: already paused");
+        .to.be.revertedWithCustomError(tierRouter, "TRState");
     });
 
     it("owner can unpauseSystem() after a manual pause, restoring register()", async function () {
@@ -484,7 +484,7 @@ describe("V8Elevator — T1 → T2 upgrade cycle (MSIZE=7)", function () {
       const { tierRouter, admin } = await loadFixture(deployV8Fixture);
 
       await expect(tierRouter.connect(admin).unpauseSystem())
-        .to.be.revertedWith("TR: not paused");
+        .to.be.revertedWithCustomError(tierRouter, "TRState");
     });
 
     it("unpauseSystem() also clears a pause that was triggered automatically by checkInactivity()", async function () {
@@ -522,7 +522,7 @@ describe("V8Elevator — T1 → T2 upgrade cycle (MSIZE=7)", function () {
       const { tierRouter, w1 } = await loadFixture(deployV8Fixture);
       await expect(
         tierRouter.connect(w1).handleCycleOut(w1.address, 0, 0n, 0n)
-      ).to.be.revertedWith("TR: unauthorized");
+      ).to.be.revertedWithCustomError(tierRouter, "TRAuth");
     });
 
     it("registerTier reverts for non-owner", async function () {
@@ -1162,7 +1162,7 @@ describe("V8.21 — Whale Gate: per-tier first-entry tracking (shared threshold)
 
     await expect(
       tierRouter.connect(w1).register(ethers.ZeroAddress)
-    ).to.be.revertedWith("TR: already joined");
+    ).to.be.revertedWithCustomError(tierRouter, "TRState");
     expect(await tierRouter.tierFirstEntries(1)).to.equal(1n);
   });
 
@@ -1231,13 +1231,13 @@ describe("V8.35 — Whale Gate: bulkUpgrade + sequential manualUpgrade + per-tie
     const { tierRouter, admin } = await loadFixture(deployV8Fixture);
 
     await expect(tierRouter.connect(admin).setTierGateThreshold(2, 5))
-      .to.be.revertedWith("TR: gate only applies to T5-T10");
+      .to.be.revertedWithCustomError(tierRouter, "TRBadValue");
 
     await expect(tierRouter.connect(admin).setTierGateThreshold(5, 0))
-      .to.be.revertedWith("TR: threshold must be 1-50");
+      .to.be.revertedWithCustomError(tierRouter, "TRBadValue");
 
     await expect(tierRouter.connect(admin).setTierGateThreshold(5, 51))
-      .to.be.revertedWith("TR: threshold must be 1-50");
+      .to.be.revertedWithCustomError(tierRouter, "TRBadValue");
   });
 
   it("setTierWhaleGateActive(5, true) makes isWhaleGateActiveForTier(5) true and emits WhaleGateActivated", async function () {
@@ -1320,7 +1320,7 @@ describe("V8.35 — Whale Gate: bulkUpgrade + sequential manualUpgrade + per-tie
     // Second call to the same tier should revert (memberHighestTier=2 > targetTierIndex=1)
     await usdc.connect(w1).approve(trAddr, T2_FEE);
     await expect(tierRouter.connect(w1).bulkUpgrade(1))
-      .to.be.revertedWith("TR: already at or above target tier");
+      .to.be.revertedWithCustomError(tierRouter, "TRBadValue");
   });
 
   it("T6 gate independent: T6 upgrade reverts 'TR: tier not deployed' (not a gate error) when T5 open but T6 missing", async function () {
@@ -1334,7 +1334,7 @@ describe("V8.35 — Whale Gate: bulkUpgrade + sequential manualUpgrade + per-tie
 
     // targetTierIndex=5 = T6, which is not deployed in the base fixture
     await expect(tierRouter.connect(w1).manualUpgrade(5))
-      .to.be.revertedWith("TR: tier not deployed");
+      .to.be.revertedWithCustomError(tierRouter, "TRState");
   });
 
   it("getMemberInfo.whaleGateEligible uses _isTierUnlockedForManualEntry: T5 gate open makes T1 member eligible for T2", async function () {
@@ -1535,7 +1535,7 @@ describe("V8.35 — Governance params #51-57: TierRouter per-tier wrappers", fun
   it("setTierGateThresholdT5: non-owner reverts with TR: not authorized", async function () {
     const { tierRouter, w1 } = await loadFixture(deployV8Fixture);
     await expect(tierRouter.connect(w1).setTierGateThresholdT5(10))
-      .to.be.revertedWith("TR: not authorized");
+      .to.be.revertedWithCustomError(tierRouter, "TRAuth");
   });
 
   it("setTierGateThresholdT5: owner sets threshold[5] and emits TierGateThresholdUpdated", async function () {
@@ -1572,9 +1572,9 @@ describe("V8.35 — Governance params #51-57: TierRouter per-tier wrappers", fun
   it("setTierGateThresholdTx: threshold 0 and threshold 51 revert", async function () {
     const { tierRouter, admin } = await loadFixture(deployV8Fixture);
     await expect(tierRouter.connect(admin).setTierGateThresholdT6(0))
-      .to.be.revertedWith("TR: threshold 1-50");
+      .to.be.revertedWithCustomError(tierRouter, "TRBadValue");
     await expect(tierRouter.connect(admin).setTierGateThresholdT7(51))
-      .to.be.revertedWith("TR: threshold 1-50");
+      .to.be.revertedWithCustomError(tierRouter, "TRBadValue");
   });
 
   it("setTierGateThresholdT5(1) — min boundary — succeeds", async function () {

@@ -198,7 +198,7 @@ describe("V8Governance — wiring regression + SF rescue ladder", function () {
       const id = await proposeVoteAndQueue(
         PARAM_AUTO_UPGRADE_THRESH, await tierRouter.getAddress(), 3, "lower upgrade threshold"
       );
-      await expect(gov.execute(id)).to.be.revertedWith("TR: not authorized");
+      await expect(gov.execute(id)).to.be.revertedWithCustomError(tierRouter, "TRAuth");
     });
 
     it("FIX: execute() succeeds on MatrixKeeper once setGovernance is wired", async function () {

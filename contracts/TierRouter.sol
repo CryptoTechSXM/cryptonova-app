@@ -227,13 +227,20 @@ contract TierRouter is Ownable2Step {
     address public defaultReferrer;
 
     // ─── V8.42: Hybrid pair routing ───────────────────────────────────────────
-    /// @notice Minimum combined occupancy (MatA + MatB) a pair must have before
-    ///         graduates are routed to the NEXT pair (expansion mode).
-    ///         Below this threshold graduates loop back into the SAME pair
-    ///         (self-sustaining mode) — the pair never goes stale.
-    ///         Default 381 = 127 * 3 (one full MatA + one full MatB + one MatA buffer).
-    ///         Owner-adjustable; suggested range 200-508.
-    uint256 public pairExpansionThreshold = 381;
+    /// @notice REMOVED in V8.46 (2026-07-27). This knob decided whether a
+    ///         re-entering member looped back into their own pair or was routed
+    ///         onward. It compared a CUMULATIVE lifetime counter against a value
+    ///         documented as capacity, so every pair crossed it permanently and
+    ///         its MatA lost every entry source — rotation stopped dead across
+    ///         all 10 tiers (2026-07-26). The live workaround was to set it to
+    ///         1,000,000, i.e. "never divert". _sameTierTarget now implements
+    ///         that unconditionally, so nothing reads the value any more.
+    ///
+    ///         The variable and setPairExpansionThreshold() are DELETED rather
+    ///         than kept for ABI stability: TierRouter was 369 bytes over the
+    ///         EIP-170 limit after the V8.46 collision guard, and dead code was
+    ///         the honest place to find the space. Retire set_threshold.js and
+    ///         drop the read in pair_entries.js alongside this.
 
     // ─── Whale Gate ───────────────────────────────────────────────────────────
     // V8.21 REDESIGN: was a single global T5-only counter that, once tripped,
@@ -312,7 +319,6 @@ contract TierRouter is Ownable2Step {
     // V8.23
     event DefaultReferrerSet(address indexed ref);
     // V8.42
-    event PairExpansionThresholdSet(uint256 threshold);
 
     // ─── Constructor ──────────────────────────────────────────────────────────
 
@@ -340,13 +346,13 @@ contract TierRouter is Ownable2Step {
     // ─── Modifier ─────────────────────────────────────────────────────────────
 
     modifier whenNotPaused() {
-        require(!systemPaused, "TR: system paused - inactivity");
+        if (systemPaused) revert TRState();
         _;
     }
 
     /// @notice V8.20: owner keeps emergency backstop, governance address co-governs.
     modifier onlyOwnerOrGovernance() {
-        require(msg.sender == owner() || msg.sender == governance, "TR: not authorized");
+        if (msg.sender != owner() && msg.sender != governance) revert TRAuth();
         _;
     }
 
@@ -418,8 +424,8 @@ contract TierRouter is Ownable2Step {
     /// @notice V8.35: DAO adjusts the pioneer threshold for a specific tier (T5-T10).
     /// T2-T5 share T5's gate; T6-T10 are independent. Range 1-50.
     function setTierGateThreshold(uint8 tierNum, uint256 threshold) external onlyOwnerOrGovernance {
-        require(tierNum >= 5 && tierNum <= MAX_TIERS, "TR: gate only applies to T5-T10");
-        require(threshold >= 1 && threshold <= 50,    "TR: threshold must be 1-50");
+        if (tierNum < 5 || tierNum > MAX_TIERS) revert TRBadValue();
+        if (threshold < 1 || threshold > 50) revert TRBadValue();
         tierGateThreshold[tierNum] = threshold;
         emit TierGateThresholdUpdated(tierNum, threshold);
     }
@@ -432,12 +438,17 @@ contract TierRouter is Ownable2Step {
     // Governance can only pass a single uint256 value, so each tier gets its
     // own entry-point that hard-codes the tier number.  The shared internal
     // validation (1 ≤ v ≤ 50) mirrors setTierGateThreshold's require guard.
-    function setTierGateThresholdT5(uint256 v)  external onlyOwnerOrGovernance { require(v >= 1 && v <= 50, "TR: threshold 1-50"); tierGateThreshold[5]  = uint8(v); emit TierGateThresholdUpdated(5,  v); }
-    function setTierGateThresholdT6(uint256 v)  external onlyOwnerOrGovernance { require(v >= 1 && v <= 50, "TR: threshold 1-50"); tierGateThreshold[6]  = uint8(v); emit TierGateThresholdUpdated(6,  v); }
-    function setTierGateThresholdT7(uint256 v)  external onlyOwnerOrGovernance { require(v >= 1 && v <= 50, "TR: threshold 1-50"); tierGateThreshold[7]  = uint8(v); emit TierGateThresholdUpdated(7,  v); }
-    function setTierGateThresholdT8(uint256 v)  external onlyOwnerOrGovernance { require(v >= 1 && v <= 50, "TR: threshold 1-50"); tierGateThreshold[8]  = uint8(v); emit TierGateThresholdUpdated(8,  v); }
-    function setTierGateThresholdT9(uint256 v)  external onlyOwnerOrGovernance { require(v >= 1 && v <= 50, "TR: threshold 1-50"); tierGateThreshold[9]  = uint8(v); emit TierGateThresholdUpdated(9,  v); }
-    function setTierGateThresholdT10(uint256 v) external onlyOwnerOrGovernance { require(v >= 1 && v <= 50, "TR: threshold 1-50"); tierGateThreshold[10] = uint8(v); emit TierGateThresholdUpdated(10, v); }
+    // NOTE (2026-07-27): folding these six into a shared _setGate(tierNum, v)
+    // was tried and made TierRouter BIGGER — 24,809 -> 25,024 bytes. Constant
+    // indices (tierGateThreshold[5]) and literal event args compile smaller than
+    // a variable-indexed helper, and the optimiser at runs=1 already shares what
+    // it can. Do not "dedupe" these again.
+    function setTierGateThresholdT5(uint256 v)  external onlyOwnerOrGovernance { if (v < 1 || v > 50) revert TRBadValue(); tierGateThreshold[5]  = uint8(v); emit TierGateThresholdUpdated(5,  v); }
+    function setTierGateThresholdT6(uint256 v)  external onlyOwnerOrGovernance { if (v < 1 || v > 50) revert TRBadValue(); tierGateThreshold[6]  = uint8(v); emit TierGateThresholdUpdated(6,  v); }
+    function setTierGateThresholdT7(uint256 v)  external onlyOwnerOrGovernance { if (v < 1 || v > 50) revert TRBadValue(); tierGateThreshold[7]  = uint8(v); emit TierGateThresholdUpdated(7,  v); }
+    function setTierGateThresholdT8(uint256 v)  external onlyOwnerOrGovernance { if (v < 1 || v > 50) revert TRBadValue(); tierGateThreshold[8]  = uint8(v); emit TierGateThresholdUpdated(8,  v); }
+    function setTierGateThresholdT9(uint256 v)  external onlyOwnerOrGovernance { if (v < 1 || v > 50) revert TRBadValue(); tierGateThreshold[9]  = uint8(v); emit TierGateThresholdUpdated(9,  v); }
+    function setTierGateThresholdT10(uint256 v) external onlyOwnerOrGovernance { if (v < 1 || v > 50) revert TRBadValue(); tierGateThreshold[10] = uint8(v); emit TierGateThresholdUpdated(10, v); }
 
     function setTierWhaleGateActive(uint8 tierNum, bool active) external onlyOwnerOrGovernance {
         if (tierNum < 1 || tierNum > MAX_TIERS) revert TRBadValue();
@@ -465,16 +476,6 @@ contract TierRouter is Ownable2Step {
     function setDefaultReferrer(address _ref) external onlyOwner {
         defaultReferrer = _ref;
         emit DefaultReferrerSet(_ref);
-    }
-
-    /// @notice V8.42: Set the pair expansion threshold.
-    ///         Graduate re-entries loop back into the SAME pair (self-sustaining)
-    ///         until MatA.occupancy + MatB.occupancy >= threshold, then route to
-    ///         the next pair (expansion). Min 127 (one full MatA); default 381 (127*3).
-    function setPairExpansionThreshold(uint256 threshold) external onlyOwner {
-        if (threshold < 127) revert TRBadValue();
-        pairExpansionThreshold = threshold;
-        emit PairExpansionThresholdSet(threshold);
     }
 
     // ─── V8.1: Velocity gate (keeper-only) ───────────────────────────────────
@@ -561,7 +562,7 @@ contract TierRouter is Ownable2Step {
     }
 
     function resumeSystem() external onlyOwner {
-        require(systemPaused, "TR: not paused");
+        if (!systemPaused) revert TRState();
         _resume();
     }
 
@@ -575,7 +576,7 @@ contract TierRouter is Ownable2Step {
     /// Does NOT block withdrawals -- members can still withdraw funds already
     /// in the matrices while paused; this only stops NEW entries/upgrades.
     function pauseSystem(string calldata reason) external onlyOwner {
-        require(!systemPaused, "TR: already paused");
+        if (systemPaused) revert TRState();
         systemPaused = true;
         emit SystemPaused(reason, 0, 0);
     }
@@ -585,7 +586,7 @@ contract TierRouter is Ownable2Step {
     /// effect -- both clear the same systemPaused flag and reset the
     /// inactivity clocks so the automatic guard doesn't immediately re-trip.
     function unpauseSystem() external onlyOwner {
-        require(systemPaused, "TR: not paused");
+        if (!systemPaused) revert TRState();
         _resume();
     }
 
@@ -659,7 +660,7 @@ contract TierRouter is Ownable2Step {
     }
 
     function _register(address referrer) internal {
-        require(!globalJoined[msg.sender],         "TR: already joined");
+        if (globalJoined[msg.sender]) revert TRState();
         if (tierPairManagers[0] == address(0)) revert TRState();
 
         address resolved = _resolveRef(referrer);
@@ -695,7 +696,7 @@ contract TierRouter is Ownable2Step {
     /// @param referrer       The member who referred this new member (address(0) → W1).
     /// @param couponCodeHash keccak256(abi.encodePacked(plaintextCode)) — computed by the frontend.
     function registerWithCoupon(address referrer, bytes32 couponCodeHash) external whenNotPaused {
-        require(!globalJoined[msg.sender],         "TR: already joined");
+        if (globalJoined[msg.sender]) revert TRState();
         if (tierPairManagers[0] == address(0)) revert TRState();
         if (couponCodeHash == bytes32(0)) revert TRZero();
 
@@ -816,7 +817,7 @@ contract TierRouter is Ownable2Step {
     function _manualUpgrade(uint8 targetTierIndex) internal {
         if (!globalJoined[msg.sender]) revert TRState();
         if (targetTierIndex == 0 || targetTierIndex >= MAX_TIERS) revert TRBadValue();
-        require(tierPairManagers[targetTierIndex] != address(0),    "TR: tier not deployed");
+        if (tierPairManagers[targetTierIndex] == address(0)) revert TRState();
 
         uint8 prevIndex = targetTierIndex - 1;
         _requireUpgradeEligible(targetTierIndex);
@@ -848,7 +849,7 @@ contract TierRouter is Ownable2Step {
     function hybridUpgrade(uint8 targetTierIndex) external whenNotPaused {
         if (!globalJoined[msg.sender]) revert TRState();
         if (targetTierIndex == 0 || targetTierIndex >= MAX_TIERS) revert TRBadValue();
-        require(tierPairManagers[targetTierIndex] != address(0),    "TR: tier not deployed");
+        if (tierPairManagers[targetTierIndex] == address(0)) revert TRState();
         _requireUpgradeEligible(targetTierIndex);
         address destMatA = tierMatrixAAddr[targetTierIndex];
         if (destMatA != address(0)) {
@@ -951,11 +952,11 @@ contract TierRouter is Ownable2Step {
     function bulkUpgrade(uint8 targetTierIndex) external whenNotPaused {
         if (!globalJoined[msg.sender]) revert TRState();
         if (targetTierIndex < 1 || targetTierIndex >= MAX_TIERS) revert TRBadValue();
-        require(tierPairManagers[targetTierIndex] != address(0),       "TR: tier not deployed");
+        if (tierPairManagers[targetTierIndex] == address(0)) revert TRState();
 
         // memberHighestTier is 1-based; next-to-enter 0-based index = memberHighestTier
         uint8 startIdx = memberHighestTier[msg.sender];
-        require(startIdx <= targetTierIndex, "TR: already at or above target tier");
+        if (startIdx > targetTierIndex) revert TRBadValue();
 
         // V8.44 (C2): SAME three-way eligibility as manualUpgrade for the first
         // tier entered (cycle done OR seated in prev MatB OR gate open) — the
@@ -1082,7 +1083,7 @@ contract TierRouter is Ownable2Step {
         uint256 escrow,
         uint256 withdrawable
     ) external {
-        require(authorizedMatrices[msg.sender],           "TR: unauthorized");
+        if (!authorizedMatrices[msg.sender]) revert TRAuth();
         if (matrixTierIndex[msg.sender] != tierIndex) revert TRBadValue();
         if (tierIndex >= MAX_TIERS) revert TRBadValue();
 
@@ -1144,7 +1145,7 @@ contract TierRouter is Ownable2Step {
 
         // -- 1. RE-ENTRY: never graduate while enabled -------------------------
         if (reentryOn && escrow + withdrawable >= curFee) {
-            (bool toMatB, uint256 target) = _sameTierTarget(matrixB, tierIndex);
+            (bool toMatB, uint256 target) = _sameTierTarget(matrixB, tierIndex, member);
             (escrow, withdrawable) = _takeSeat(
                 matrixB, member, referrer, tierIndex, curFee, target, toMatB, escrow, withdrawable
             );
@@ -1160,8 +1161,33 @@ contract TierRouter is Ownable2Step {
             if (tierPairManagers[nextIndex] != address(0)
                 && escrow + withdrawable >= nextFee
                 && tierVelocityGreen[nextIndex]) {
+                // V8.46 PRIMARY FIX (2026-07-27) — PREVENT the duplicate seat.
+                // This guard used to check only the destination MatA. The member
+                // who graduated at block 44702114 was in the destination's MatB,
+                // so it passed, the upgrade seated them in MatA, and they then
+                // held BOTH halves of the T4 pair.
+                //
+                // I first tried to ACCOMMODATE that (route re-entry to MatB when
+                // MatA is occupied) and dropped this check to save 170 bytes.
+                // V8_46_SeatCollision.test.js proved that wrong: with a member in
+                // both halves, the next MatA rotation makes them root, the
+                // crossing tries to seat them in the MatB they already occupy,
+                // and `require(!isInMatrix)` reverts — from _crossToPartner, which
+                // is NOT inside the swallowing try/catch. That revert propagates
+                // out and kills an UNRELATED member's registration. Trading a
+                // silent member loss for a pair-wide denial of service.
+                //
+                // Grim corollary: the silent graduation was masking this. Losing
+                // the member freed their MatB seat, so the later crossing worked.
+                //
+                // So duplicates must never form. "Already in this tier" has to
+                // mean the whole pair, not one half of it.
                 address dMatA = tierMatrixAAddr[nextIndex];
-                if (dMatA == address(0) || !IFigureEightMatrixV8(dMatA).isActiveInMatrix(member)) {
+                address dMatB = tierMatrixBAddr[nextIndex];
+                if (dMatA == address(0) ||
+                    (!IFigureEightMatrixV8(dMatA).isActiveInMatrix(member) &&
+                     (dMatB == address(0) ||
+                      !IFigureEightMatrixV8(dMatB).isActiveInMatrix(member)))) {
                     (escrow, withdrawable) = _takeSeat(
                         matrixB, member, referrer, nextIndex, nextFee, 0, false, escrow, withdrawable
                     );
@@ -1178,7 +1204,7 @@ contract TierRouter is Ownable2Step {
 
         // -- 3. DOUBLE: 2nd seat in the CURRENT tier ---------------------------
         if (doubleOn && anySeat && escrow + withdrawable >= curFee) {
-            (bool toMatB2, uint256 target2) = _sameTierTarget(matrixB, tierIndex);
+            (bool toMatB2, uint256 target2) = _sameTierTarget(matrixB, tierIndex, member);
             (escrow, withdrawable) = _takeSeat(
                 matrixB, member, referrer, tierIndex, curFee, target2, toMatB2, escrow, withdrawable
             );
@@ -1259,7 +1285,27 @@ contract TierRouter is Ownable2Step {
     ///      Live occupancy maxes at 254 (127+127), so the default threshold of
     ///      381 now means "never divert" — the self-sustaining loop the design
     ///      depends on. The knob still works if an owner lowers it below 254.
-    function _sameTierTarget(address matrixB, uint8 tierIndex)
+    ///      V8.46 COLLISION GUARD (2026-07-27) — DO NOT REMOVE.
+    ///      Returning MatA *unconditionally* is wrong. Proven by fork replay of
+    ///      graduation tx 0xff488549… (block 44702114): the member already held
+    ///      a T4.1 MatA seat, so re-entry hit `require(!isInMatrix)` at
+    ///      MatrixLogicLib:255, the empty catch at :513 swallowed it, and they
+    ///      vanished with their crossing reserve — 9 events, 6 members, $467.50.
+    ///
+    ///      They were in MatA because an AUTO-UPGRADE put them there (44689351:
+    ///      T3 MatB cycle-out → re-enter T3 AND upgrade into T4 MatA) while
+    ///      their T4 MatB seat from an earlier crossing was still live. Nothing
+    ///      to do with double entry, which was suspected and is exonerated.
+    ///
+    ///      V8.45's saturation branch accidentally dodged this by diverting to
+    ///      MatB. Removing it without this guard would have made every such
+    ///      cycle-out graduate — MORE silent losses, not fewer.
+    ///
+    ///      So: MatA by default (keeps the figure-eight self-sustaining), but
+    ///      MatB when the member already occupies MatA. If they somehow hold
+    ///      both, the seat call still reverts and V8.46-C parks them with a
+    ///      CycleOutFailed event instead of losing them.
+    function _sameTierTarget(address matrixB, uint8 tierIndex, address member)
         internal view returns (bool toMatB, uint256 target)
     {
         tierIndex; // unused; kept so the call sites and ABI are unchanged
@@ -1279,8 +1325,12 @@ contract TierRouter is Ownable2Step {
         // Proven live: raising the threshold to 1,000,000 at 8:25 PM EDT forced
         // this same always-MatA behaviour and every MatA resumed rotating within
         // seconds, integrity clean across 19+ hours. This makes that permanent.
-        // pairExpansionThreshold and its setter are retained for ABI stability.
-        return (false, IFigureEightMatrixV8(matrixB).pairIndex());
+        // pairExpansionThreshold and its setter are now DELETED — nothing read
+        // them once this became unconditional, and TierRouter needed the space.
+        target = IFigureEightMatrixV8(matrixB).pairIndex();
+        address ownMatA = IFigureEightMatrixV8(matrixB).partner();
+        toMatB = ownMatA != address(0)
+              && IFigureEightMatrixV8(ownMatA).isActiveInMatrix(member);
     }
 
     /// @dev V8.21: generalized from the old T5-only `_checkT5FirstEntry` to

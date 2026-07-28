@@ -80,7 +80,11 @@ async function deployPair() {
   // Saturate immediately so same-tier re-entries target the OWN pair's MatB —
   // the exact routing that produced the live corruption.
   await pm.setEntryThresholds(1, 2);
-  await tr.setPairExpansionThreshold(127);
+  // V8.46 (2026-07-27): pairExpansionThreshold and its setter were DELETED.
+  // The knob compared a cumulative lifetime counter against a value documented
+  // as capacity, so every pair crossed it permanently and its MatA lost every
+  // entry source. _sameTierTarget is now unconditional (plus a collision guard),
+  // which is exactly what setting it to 127 was approximating here.
   return { usdc, tr, pm, matA, matB, owner, W1, sigs, pmAddr: await pm.getAddress() };
 }
 

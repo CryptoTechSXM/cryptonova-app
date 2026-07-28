@@ -86,7 +86,11 @@ async function deployPair(threshold) {
   await sf.setTierFee(0, FEE);
   await sf.setTierRouter(await tr.getAddress());
   await pm.setEntryThresholds(1, 2);
-  await tr.setPairExpansionThreshold(threshold);
+  // V8.46 (2026-07-27): the setter is gone — the starvation it caused is now
+  // fixed in code rather than configured around. `threshold` is kept in the
+  // fixture signature so the suite still reads as documentation of the original
+  // bug, but it no longer has anything to set.
+  void threshold;
   return { usdc, tr, pm, matA, matB, owner, W1, sigs, members: [], pmAddr: await pm.getAddress() };
 }
 
@@ -218,7 +222,13 @@ async function rotateAndDecode(ctx) {
 describe("V8.46 — MatA must not starve once a pair saturates", function () {
   this.timeout(600_000);
 
-  it("S1: REPRODUCE — saturated pair, no external entries: MatA rot stays frozen", async function () {
+  // RETIRED 2026-07-27. S1 reproduced the freeze by setting a LOW
+  // pairExpansionThreshold. V8.46 DELETED that knob — _sameTierTarget no longer
+  // consults any threshold, so the starvation this test demonstrated can no
+  // longer be configured into existence. The scenario is kept as the written
+  // record of the bug; it cannot be executed against a contract that lacks the
+  // setter. Do not "fix" it by re-adding the knob.
+  it.skip("S1 (RETIRED): saturated pair froze MatA when the expansion threshold was low", async function () {
     const ctx = await deployPair(127);          // minimum allowed => saturated immediately
     const before = await saturate(ctx);
 
