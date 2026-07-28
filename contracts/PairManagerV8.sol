@@ -130,12 +130,32 @@ contract PairManagerV8 is Ownable2Step {
     //   deployEntryThreshold (125×3 = 375): deploy the next pair EARLY as a
     //     buffer, so it exists before it's needed (factory deploy is heavy —
     //     avoids a repeat of the July 19 frozen-MatB incident).
-    //   routeEntryThreshold (127×3 = 381): from here the pair's loop is
-    //     saturated — ALL overflow routes to the next pair: new externals,
-    //     re-entries, double-entry seats, and self-rescues.
+    //   routeEntryThreshold (400): from here the pair's loop is saturated —
+    //     ALL overflow routes to the next pair: new externals, re-entries,
+    //     double-entry seats, and self-rescues.
     // Loop capacity 127×4 = 508 should never be reached.
+    //
+    // V8.46 (2026-07-28): route was 381 (127×3). The gap between deploy and
+    // route is the window the factory has to deploy the next pair, wire its
+    // partner and have it ready to receive — and at 375/381 that window was SIX
+    // ENTRIES, which under load is seconds. Pair expansion has already caused
+    // two incidents: the T1.2-at-254 freeze that needed adminForceRotateRoot,
+    // and the 2026-07-28 wedge where every upgrade guard went blind the moment
+    // a second pair existed. 375/400 gives 25 entries of headroom.
+    //
+    // Nothing depends on 381 being 127×3 — it was documentation, not logic.
+    //
+    // This value was ALREADY SET LIVE on T2–T10 via setEntryThresholds(375,400)
+    // on 2026-07-28 (block 44738582 onward). The source still said 381, so a
+    // redeploy would have silently reverted every one of those calls. Owner
+    // caught it. If you change this default, change it here AND on-chain, or the
+    // two disagree the moment anything redeploys.
+    //
+    // T1 IS DIFFERENT: its routeEntryThreshold is driven at runtime by the
+    // round-robin keeper (route_rr.js), which walks it to spread new members
+    // across T1's pairs. This default is only T1's starting point.
     uint256 public deployEntryThreshold = 375;
-    uint256 public routeEntryThreshold  = 381;
+    uint256 public routeEntryThreshold  = 400;
 
     /// @notice V8.43: matrices belonging to this PM — allow-list for rescueOverflow().
     mapping(address => bool) public isPairMatrix;
@@ -336,7 +356,8 @@ contract PairManagerV8 is Ownable2Step {
         // V8.43: externals route to the oldest NON-SATURATED pair. MatA fullness
         // is ignored on purpose — entering a full MatA triggers the natural root
         // rotation (V8.41 mechanism) that keeps the pair's self-sustaining loop
-        // alive. Overflow to the next pair only at true saturation (127×3 entries).
+        // alive. Overflow to the next pair only at true saturation
+        // (routeEntryThreshold entries — 400 since V8.46, was 127×3 = 381).
         uint256 routingIdx = _findExternalPair();
         Pair storage p = pairs[routingIdx];
         address matA   = p.matrixA;
@@ -493,7 +514,7 @@ contract PairManagerV8 is Ownable2Step {
     }
 
     /// @notice V8.43: external-registration routing — oldest pair whose CUMULATIVE
-    ///         entries are still under routeEntryThreshold (127×3). MatA fullness
+    ///         entries are still under routeEntryThreshold (400 since V8.46). MatA fullness
     ///         is ignored: a full MatA rotates its root on entry (V8.41), keeping
     ///         the self-sustaining loop fed until true saturation. When every pair
     ///         is saturated, the newest holds until the factory adds the next one.
