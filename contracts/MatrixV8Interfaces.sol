@@ -52,4 +52,9 @@ interface IFigureEightMatrixV8Cross {
     function addRescueDebt(address member, uint256 amount) external;
     /// @notice V8.40: used by selfRescue() to fail early if destination is full.
     function isFull() external view returns (bool);
+    /// @notice V8.46: is this member seated here? Needed so a matrix can ask its
+    ///         PARTNER before seating someone. A seat in either half of a pair is
+    ///         a seat in that pair, and every guard in V8.45 tested only one half
+    ///         — which is how 67 duplicate seats formed in five days.
+    function isActiveInMatrix(address member) external view returns (bool);
 }

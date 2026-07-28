@@ -103,6 +103,12 @@ interface IPairManagerV8 {
     // V8.38: multi-pair MatB scan for manualUpgrade() eligibility
     function pairCount() external view returns (uint256);
     function getPairAt(uint256 idx) external view returns (address matA, address matB);
+    /// @notice V8.46: a pair in this tier the member occupies NEITHER half of,
+    ///         or type(uint256).max if there is none. Used to place a DOUBLE
+    ///         seat somewhere other than the member's own pair — the same-pair
+    ///         double was a duplicate by construction. The search lives in
+    ///         PairManagerV8 because this contract has 143 bytes of headroom.
+    function freePairFor(address member, uint256 avoid) external view returns (uint256);
     /// V8.43: public pairs[] getter — totalRegistered is the routing saturation measure
     function pairs(uint256 idx) external view returns (
         address matrixA, address matrixB, uint256 deployedAt, uint256 totalRegistered
@@ -1204,12 +1210,31 @@ contract TierRouter is Ownable2Step {
 
         // -- 3. DOUBLE: 2nd seat in the CURRENT tier ---------------------------
         if (doubleOn && anySeat && escrow + withdrawable >= curFee) {
-            (bool toMatB2, uint256 target2) = _sameTierTarget(matrixB, tierIndex, member);
-            (escrow, withdrawable) = _takeSeat(
-                matrixB, member, referrer, tierIndex, curFee, target2, toMatB2, escrow, withdrawable
+            // V8.46: the double goes in a DIFFERENT PAIR of the same tier.
+            //
+            // V8.45 sent it through _sameTierTarget, which picks a half of the
+            // member's OWN pair — so the double seat and the re-entry seat ended
+            // up in MatA and MatB of one pair. That is a duplicate by
+            // construction, and a duplicate stops its pair dead the moment its
+            // holder reaches position 1 (T3.1 and T4.1 both had to be repaired
+            // live on 2026-07-28).
+            //
+            // The member still gets a second position in the tier — the benefit
+            // is unchanged. If every pair already holds them the double is
+            // SKIPPED, not attempted: this runs inside the cycle-out, so a
+            // revert here would roll back the re-entry and upgrade that already
+            // succeeded in the same call. A skipped double costs the member a
+            // bonus seat; a reverted one costs them their place in the tier.
+            uint256 dest = IPairManagerV8(tierPairManagers[tierIndex]).freePairFor(
+                member, IFigureEightMatrixV8(matrixB).pairIndex()
             );
-            emit DoubleEntryFired(member, tierIndex + 1, tierIndex + 1);
-            reenteredThisTier = true;
+            if (dest != type(uint256).max) {
+                (escrow, withdrawable) = _takeSeat(
+                    matrixB, member, referrer, tierIndex, curFee, dest, false, escrow, withdrawable
+                );
+                emit DoubleEntryFired(member, tierIndex + 1, tierIndex + 1);
+                reenteredThisTier = true;
+            }
         }
 
         // -- 4. V8.44 no-strand epilogue ---------------------------------------

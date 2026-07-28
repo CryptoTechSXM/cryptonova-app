@@ -61,6 +61,8 @@ interface IFigureEightMatrixV8PM {
     function rotationCount() external view returns (uint256);
     /// @notice V8.41 FIFO: stores which pair index (0 = T1.1, 1 = T1.2 …) this matrix belongs to.
     function setPairIndex(uint256 idx) external;
+    /// @notice V8.46: needed by freePairFor() to find a pair the member is not in.
+    function isActiveInMatrix(address member) external view returns (bool);
 }
 
 contract PairManagerV8 is Ownable2Step {
@@ -202,6 +204,35 @@ contract PairManagerV8 is Ownable2Step {
         deployEntryThreshold = _deploy;
         routeEntryThreshold  = _route;
         emit EntryThresholdsSet(_deploy, _route);
+    }
+
+    /// @notice V8.46: index of a pair in this tier where `member` holds NEITHER
+    ///         half, searching from just after `avoid`. Returns type(uint256).max
+    ///         when every pair already holds them.
+    ///
+    ///         Exists for DOUBLE ENTRY. A double takes a second seat in the same
+    ///         tier, and V8.45 sent it to the other half of the member's own pair
+    ///         — which is a duplicate by construction, and a duplicate is exactly
+    ///         what wedges a pair when its holder reaches the root. Measured
+    ///         2026-07-28: 67 duplicates formed in five days, three pairs stopped.
+    ///
+    ///         The search lives HERE rather than in TierRouter because the router
+    ///         has 143 bytes of EIP-170 headroom and this contract has ~11,900,
+    ///         and because the pair list is this contract's own data.
+    ///
+    ///         Starting AFTER `avoid` means the member's own pair is tried last,
+    ///         so a double lands somewhere else whenever anywhere else is free.
+    function freePairFor(address member, uint256 avoid) external view returns (uint256) {
+        uint256 n = pairs.length;
+        for (uint256 i = 0; i < n; i++) {
+            uint256 idx = (avoid + 1 + i) % n;
+            Pair storage pr = pairs[idx];
+            if (IFigureEightMatrixV8PM(pr.matrixA).isActiveInMatrix(member)) continue;
+            if (pr.matrixB != address(0) &&
+                IFigureEightMatrixV8PM(pr.matrixB).isActiveInMatrix(member)) continue;
+            return idx;
+        }
+        return type(uint256).max;
     }
 
     /// @notice V8.43: is pair `idx` saturated AND is a next pair available to overflow into?

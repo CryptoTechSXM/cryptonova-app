@@ -198,6 +198,12 @@ contract FigureEightMatrixV8 is Ownable2Step {
     function _requirePartner() private view {
         if (_state.partner == address(0)) revert F8V8_BadConfig();
     }
+    /// @dev V8.46: the PARTNER half of this check lives in MatrixLogicLib's
+    ///      enterMatrix, NOT here. Every seating path in this contract ends in
+    ///      _enterMatrix, so the library is the true chokepoint — and it is
+    ///      linked rather than embedded, so guarding there costs
+    ///      MatrixPairFactory nothing. Putting it here pushed the factory 75
+    ///      bytes over EIP-170.
     function _requireNotSeated(address member) private view {
         require(
             !_state.members[member].hasEverJoined || !_state.members[member].isInMatrix,

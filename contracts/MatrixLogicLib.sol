@@ -252,7 +252,35 @@ library MatrixLogicLib {
             self.chainAuthorized[msg.sender],
             "F8V8: not authorized"
         );
-        require(!self.members[member].isInMatrix, "F8V8: already in matrix");
+        // V8.46 THE UNIVERSAL PAIR GUARD — added 2026-07-28 from measured data.
+        //
+        // A seat in EITHER half of a pair is a seat in that pair. Every guard in
+        // V8.45 tested ONE matrix: _manualUpgrade:825, hybridUpgrade:854,
+        // bulkUpgrade:986 and _executeAdditive:1185 all check tierMatrixAAddr,
+        // while selfRescue:1108 and coPayRescue:1071 check only the matrix the
+        // member is PARKED in — then seat them in the PARTNER, unchecked.
+        //
+        // dupe_watch.js recorded 67 duplicates forming over 18,700 blocks:
+        //   coPayRescue 52 · selfRescue 7 · manualUpgrade 6 · performUpkeep 2
+        // 57 of 67 formed in a tier BELOW the member's highest and ZERO above —
+        // which is why the upgrade-path fix drafted on 2026-07-27 would not have
+        // stopped a single one of the 59 rescue-driven cases.
+        //
+        // EVERY seating path ends here: register, enterFor, coupon entry,
+        // crossings and rescues all reach _enterMatrix. Guarding the chokepoint
+        // covers them at once instead of patching six call sites and hoping
+        // there is no seventh — today alone turned up four nobody knew about.
+        //
+        // One require, reusing the existing string: MatrixKeeper:558 already
+        // treats "F8V8: already in matrix" as expected-and-swallowable on the
+        // parked-rescue path, so a co-pay that would create a duplicate is now
+        // skipped cleanly by the keeper rather than surfacing as a surprise.
+        require(
+            !self.members[member].isInMatrix
+            && (self.partner == address(0)
+                || !IFigureEightMatrixV8Cross(self.partner).isActiveInMatrix(member)),
+            "F8V8: already in matrix"
+        );
 
         if (msg.sender == self.partner || self.chainAuthorized[msg.sender]) {
             cfg.usdc.safeTransferFrom(msg.sender, address(this), cfg.entryFee);
@@ -539,7 +567,34 @@ library MatrixLogicLib {
                 emit CycleOutFailed(root, cfg.tierIndex);
             }
         } else {
-            _crossToPartner(self, cfg, root);
+            // V8.46 CONTAINMENT — the pair must never stop.
+            //
+            // This called _crossToPartner directly, outside any try/catch. If the
+            // root already held a seat in the partner, _enterMatrix reverted
+            // "already in matrix" and that revert propagated OUT of the rotation
+            // and killed whatever transaction triggered it — a stranger's
+            // register() or upgrade. T3.1 and T4.1 were both stopped dead this
+            // way on 2026-07-28 and had to be repaired live.
+            //
+            // A pre-check, not a try/catch: _crossToPartner is an internal
+            // library call and Solidity cannot catch those, and checking first is
+            // cheaper than reverting anyway. The member is PARKED instead —
+            // park-not-exit holds, they keep their funds, and once their partner
+            // seat cycles out the normal rescue machinery seats them again.
+            //
+            // The V8.46 guard in _requireNotSeated should make this unreachable.
+            // It stays regardless: prevention stops NEW duplicates, and this is
+            // what protects the pair from the ones already out there and from
+            // any cause nobody has found yet.
+            address dest = self.partner;
+            if (dest != address(0) && IFigureEightMatrixV8Cross(dest).isActiveInMatrix(root)) {
+                self.parkedMembers.push(root);
+                self.parkedAt[root] = block.timestamp;
+                emit MemberParked(root, 0);
+                emit CycleOutFailed(root, cfg.tierIndex);
+            } else {
+                _crossToPartner(self, cfg, root);
+            }
         }
     }
 
