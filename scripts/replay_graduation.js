@@ -198,7 +198,14 @@ async function main() {
   }
 
   const logs = trace.structLogs || [];
-  console.log(`  ${logs.length.toLocaleString()} steps, max depth ${Math.max(...logs.map(l => l.depth))}`);
+  // 2026-07-28: this was `Math.max(...logs.map(l => l.depth))`. Spreading the
+  // structLog array into a call passes one ARGUMENT PER STEP, and a 6.4M-gas
+  // cascade produces millions of them — "Maximum call stack size exceeded",
+  // after the fork and replay had already succeeded. The trace was there; the
+  // summary line threw it away. Fold instead of spread.
+  let maxDepth = 0;
+  for (let i = 0; i < logs.length; i++) if (logs[i].depth > maxDepth) maxDepth = logs[i].depth;
+  console.log(`  ${logs.length.toLocaleString()} steps, max depth ${maxDepth}`);
   console.log("");
 
   // ── 5. Find every failure and report the deepest ──────────────────────────
