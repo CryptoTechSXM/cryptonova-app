@@ -1,0 +1,13 @@
+{
+  "name": "cryptonova-keeper",
+  "version": "1.0.0",
+  "description": "CryptoNova keeper scripts (standalone ethers.js)",
+  "scripts": {
+    "keeper": "node direct_keeper.js",
+    "rescue": "node manual_rescue.js"
+  },
+  "dependencies": {
+    "dotenv": "^16.4.5",
+    "ethers": "^6.13.0"
+  }
+}

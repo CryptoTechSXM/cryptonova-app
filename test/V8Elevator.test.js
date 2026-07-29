@@ -1193,10 +1193,11 @@ describe("V8.35 — Whale Gate: bulkUpgrade + sequential manualUpgrade + per-tie
     // V8.44 (C2): bulkUpgrade's FIRST tier uses the SAME three-way eligibility
     // as manualUpgrade (cycle done OR in prev MatB OR gate open), so a member
     // with none of the three gets the manualUpgrade-style message. Tiers
-    // BEYOND the first still revert "TR: Whale Gate not yet open for this tier".
+    // BEYOND the first also revert TRGate (V8.46-B: both gate strings became
+    // one custom error, so the keeper and frontend can decode them).
     await expect(
       tierRouter.connect(w1).bulkUpgrade(1)
-    ).to.be.revertedWith("TR: cross to MatB first, or wait for this tier's Whale Gate to open");
+    ).to.be.revertedWithCustomError(tierRouter, "TRGate");
   });
 
   it("manualUpgrade reverts with MatB message when gate closed, no cycles, not in MatB", async function () {
@@ -1207,7 +1208,7 @@ describe("V8.35 — Whale Gate: bulkUpgrade + sequential manualUpgrade + per-tie
     // w1 has 0 T1 cycles, is not in T1 MatB, and T5 gate is closed → should revert
     await expect(
       tierRouter.connect(w1).manualUpgrade(1)
-    ).to.be.revertedWith("TR: cross to MatB first, or wait for this tier's Whale Gate to open");
+    ).to.be.revertedWithCustomError(tierRouter, "TRGate");
   });
 
   // ── Part 2: admin gate controls ───────────────────────────────────────────────
@@ -2530,7 +2531,7 @@ describe("V8.38 — manualUpgrade multi-pair MatB scan", function () {
     // gateOpen = _isTierUnlockedForManualEntry(2) = tierWhaleGateActive[5] = false
     await usdc.connect(w1).approve(await tierRouter.getAddress(), T2_FEE);
     await expect(tierRouter.connect(w1).manualUpgrade(1))
-      .to.be.revertedWith("TR: cross to MatB first, or wait for this tier's Whale Gate to open");
+      .to.be.revertedWithCustomError(tierRouter, "TRGate");
   });
 
   it("L4: manualUpgrade(1) succeeds when member is in pair 1 MatB (V8.38 scan — deployWithFactoryFixture)", async function () {
@@ -2593,7 +2594,7 @@ describe("V8.38 — manualUpgrade multi-pair MatB scan", function () {
     // W1 is in matA3 — NOT in any MatB, gate closed
     await expect(
       tierRouter.connect(w1).manualUpgrade(1)
-    ).to.be.revertedWith("TR: cross to MatB first, or wait for this tier's Whale Gate to open");
+    ).to.be.revertedWithCustomError(tierRouter, "TRGate");
   });
 
 }); // end: V8.38 — manualUpgrade() multi-pair MatB scan

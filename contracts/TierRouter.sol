@@ -109,6 +109,10 @@ interface IPairManagerV8 {
     ///         double was a duplicate by construction. The search lives in
     ///         PairManagerV8 because this contract has 143 bytes of headroom.
     function freePairFor(address member, uint256 avoid) external view returns (uint256);
+    /// @notice V8.46: does the member hold a seat anywhere in this tier — any
+    ///         pair, either half? Replaces the tierMatrixAAddr checks, which
+    ///         only ever saw pair 1.
+    function holdsSeatIn(address member) external view returns (bool);
     /// V8.43: public pairs[] getter — totalRegistered is the routing saturation measure
     function pairs(uint256 idx) external view returns (
         address matrixA, address matrixB, uint256 deployedAt, uint256 totalRegistered
@@ -146,11 +150,53 @@ contract TierRouter is Ownable2Step {
     error TRBadValue();  // value outside the allowed menu/range
     error TRAuth();      // caller not authorized
     error TRState();     // wrong state / not registered / not deployed
+    /// @notice V8.46-B: this tier is not open to you yet — either you have not
+    ///         crossed into the previous tier's MatB and completed no cycle, or
+    ///         the Whale Gate for the target tier has not opened.
+    ///
+    ///         Replaces two long revert STRINGS. Bytes were the trigger (the
+    ///         depth counter put TierRouter 146 over EIP-170) but readability is
+    ///         the better reason: a string revert with no ABI match gives ethers
+    ///         nothing, which is why rr_keeper's job D logged a bare "— Error"
+    ///         on every ineligible span and nobody could tell why.
+    ///         FRONTEND: friendlyError() must map TRGate to
+    ///         "this tier isn't open to you yet" — it is a normal, expected
+    ///         state, not a failure.
+    error TRGate();
 
     IERC20 public immutable usdc;
 
     // ─── Tier configuration ───────────────────────────────────────────────────
     uint8 public constant MAX_TIERS = 10;
+
+    /// @notice V8.46-B: how many cycle-out links may chain in ONE transaction.
+    ///         Owner-settable because the right value is an operational
+    ///         question, not a constant: too low and members are parked who
+    ///         could have been seated; too high and a deep chain becomes
+    ///         unsendable, which is the bug this fixes. 4 is deliberately above
+    ///         the 2 a fresh population reaches and below the 6 that produced
+    ///         17.76M live. Measure CascadeDepthCapped before moving it.
+    ///         uint256, NOT uint8 — measured 2026-07-28: narrowing it ADDED 54
+    ///         bytes (24,595 -> 24,649). A packed small type needs masking and
+    ///         shifting on every read and write, which costs more code than the
+    ///         narrower getter saves. Same trap as the tier-gate wrapper dedupe.
+    ///         MEASURE size changes here; intuition is wrong more often than not.
+    uint256 public maxCascadeDepth = 4;
+
+    /// @dev Transient slot (EIP-1153) holding the current chain depth.
+    ///
+    ///      Slot 0 is safe and deliberate: TRANSIENT STORAGE IS A SEPARATE
+    ///      ADDRESS SPACE from contract storage, so this cannot collide with any
+    ///      state variable, and nothing else in this contract uses tstore.
+    ///      (A keccak-derived slot would have been tidier but inline assembly
+    ///      only accepts direct number constants.)
+    ///
+    ///      On the compiler's composability warning: the counter is restored
+    ///      after every _executeAdditive, so the OUTERMOST frame always leaves
+    ///      it at 0. A revert inside the cascade also rolls transient storage
+    ///      back, so the swallowing try/catch in MatrixLogicLib cannot strand a
+    ///      raised value either.
+    uint256 private constant _CASCADE_DEPTH_SLOT = 0;
 
     address[MAX_TIERS] public tierPairManagers;
     uint256[MAX_TIERS] public tierEntryFees;
@@ -292,6 +338,14 @@ contract TierRouter is Ownable2Step {
     event BulkUpgrade(address indexed member, uint8 fromTier, uint8 toTier, uint256 totalFee); // V8.35
     event MemberReentered(address indexed member, uint8 tier);
     event DoubleEntryFired(address indexed member, uint8 primaryTier, uint8 secondaryTier);
+    /// @notice V8.46-B: the cascade hit maxCascadeDepth and this member was
+    ///         parked instead of continuing the chain in the same transaction.
+    ///         NOT an error — it is the cap doing its job. Watch the rate: a
+    ///         steady stream means maxCascadeDepth is set below what the system
+    ///         naturally reaches, and members are being parked who need not be.
+    ///         (No depth argument — it is always maxCascadeDepth when this
+    ///         fires, so carrying it costs bytes to say nothing new.)
+    event CascadeDepthCapped(address indexed member, uint8 tierIndex);
     event WhaleGateActivated(uint8 indexed tierNum, uint256 count);
     event CycleRecorded(address indexed member, uint8 tierIndex, uint256 newCount);
     event TierRegistered(uint8 indexed tierIndex, address pairManager, uint256 entryFee);
@@ -549,6 +603,25 @@ contract TierRouter is Ownable2Step {
         emit InactivityGuardEnabledSet(v == 1);
     }
 
+    /// @notice V8.46-B: tune the cascade depth cap without a redeploy.
+    ///         Required, not optional: the right value is an operational
+    ///         question and the harness cannot reach the default (a fresh
+    ///         population stops at depth 2 through lack of funds), so without a
+    ///         setter the cap is neither testable nor correctable.
+    ///         onlyOwner rather than onlyOwnerOrGovernance: this is an emergency
+    ///         throttle, and the compound modifier costs bytes TierRouter does
+    ///         not have (30 spare before this setter existed).
+    ///
+    ///         ONLY the zero check survives. An upper bound was nice-to-have and
+    ///         cost the last bytes available: setting this absurdly high merely
+    ///         disables the cap and is recoverable in one transaction, whereas
+    ///         setting it to ZERO would park every single cycle-out — so that is
+    ///         the one that stays guarded.
+    function setMaxCascadeDepth(uint256 v) external onlyOwner {
+        if (v == 0) revert TRBadValue();
+        maxCascadeDepth = v;
+    }
+
     function checkInactivity() public {
         if (!inactivityGuardEnabled || systemPaused) return;
 
@@ -560,9 +633,13 @@ contract TierRouter is Ownable2Step {
 
         if (daysBreached || cyclesBreached) {
             systemPaused = true;
+            // Short literals: the event already carries daysSince and
+            // cyclesSinceReg, so the words only name which threshold tripped.
+            // Trimmed to buy the last bytes for the V8.46-B depth cap — the
+            // signature is unchanged and nothing consumes the text.
             string memory reason = daysBreached
-                ? (cyclesBreached ? "both guards" : "days guard")
-                : "cycles guard";
+                ? (cyclesBreached ? "both" : "days")
+                : "cycles";
             emit SystemPaused(reason, daysSince, cyclesSinceReg);
         }
     }
@@ -779,10 +856,7 @@ contract TierRouter is Ownable2Step {
     ///      all pairs scanned), OR (c) the Whale Gate is open for the target.
     /// @dev V8.44 size-diet: one require site for the shared eligibility string.
     function _requireUpgradeEligible(uint8 targetTierIndex) internal view {
-        require(
-            _upgradeEligible(msg.sender, targetTierIndex),
-            "TR: cross to MatB first, or wait for this tier's Whale Gate to open"
-        );
+        if (!_upgradeEligible(msg.sender, targetTierIndex)) revert TRGate();
     }
 
     function _upgradeEligible(address member, uint8 targetTierIndex) internal view returns (bool) {
@@ -828,10 +902,8 @@ contract TierRouter is Ownable2Step {
         uint8 prevIndex = targetTierIndex - 1;
         _requireUpgradeEligible(targetTierIndex);
 
-        address destMatA = tierMatrixAAddr[targetTierIndex];
-        if (destMatA != address(0)) {
-            if (IFigureEightMatrixV8(destMatA).isActiveInMatrix(msg.sender)) revert TRState();
-        }
+        // V8.46: ask the PairManager, not tierMatrixAAddr — that is pair 1 only.
+        if (IPairManagerV8(tierPairManagers[targetTierIndex]).holdsSeatIn(msg.sender)) revert TRState();
 
         uint256 fee = tierEntryFees[targetTierIndex];
         usdc.safeTransferFrom(msg.sender, address(this), fee);
@@ -857,10 +929,8 @@ contract TierRouter is Ownable2Step {
         if (targetTierIndex == 0 || targetTierIndex >= MAX_TIERS) revert TRBadValue();
         if (tierPairManagers[targetTierIndex] == address(0)) revert TRState();
         _requireUpgradeEligible(targetTierIndex);
-        address destMatA = tierMatrixAAddr[targetTierIndex];
-        if (destMatA != address(0)) {
-            if (IFigureEightMatrixV8(destMatA).isActiveInMatrix(msg.sender)) revert TRState();
-        }
+        // V8.46: ask the PairManager, not tierMatrixAAddr — that is pair 1 only.
+        if (IPairManagerV8(tierPairManagers[targetTierIndex]).holdsSeatIn(msg.sender)) revert TRState();
 
         uint256 fee       = tierEntryFees[targetTierIndex];
         uint256 remaining = fee;
@@ -971,26 +1041,34 @@ contract TierRouter is Ownable2Step {
         // Whale Gate (eligibility can't be pre-earned for tiers not yet held).
         _requireUpgradeEligible(startIdx);
         for (uint8 i = startIdx + 1; i <= targetTierIndex; i++) {
-            require(
-                _isTierUnlockedForManualEntry(i + 1),
-                "TR: Whale Gate not yet open for this tier"
-            );
+            if (!_isTierUnlockedForManualEntry(i + 1)) revert TRGate();
         }
 
-        // Calculate and collect total fee upfront
+        // V8.46 — CHARGE ONLY FOR TIERS ACTUALLY ENTERED.
+        //
+        // The fee loop summed EVERY tier from startIdx to target while the
+        // seating loop below `continue`s past tiers the member already holds, so
+        // a skipped tier was still paid for and the router kept the difference.
+        // It was latent only because the skip tested tierMatrixAAddr[i] — pair 1
+        // — and so almost never fired. Fixing that guard (below) is exactly what
+        // would have made this a live overcharge, which is why the two have to
+        // ship together.
+        //
+        // Both loops now use the SAME condition, so what you are charged for and
+        // what you are seated in cannot diverge.
         uint256 totalFee;
         for (uint8 i = startIdx; i <= targetTierIndex; i++) {
             if (tierPairManagers[i] == address(0)) revert TRState();
+            if (IPairManagerV8(tierPairManagers[i]).holdsSeatIn(msg.sender)) continue;
             totalFee += tierEntryFees[i];
         }
-        usdc.safeTransferFrom(msg.sender, address(this), totalFee);
+        if (totalFee > 0) usdc.safeTransferFrom(msg.sender, address(this), totalFee);
 
         // Register in each tier sequentially in the same tx
         address referrer = memberReferrer[msg.sender];
         for (uint8 i = startIdx; i <= targetTierIndex; i++) {
-            // Skip if member is already seated here (e.g. double-entry edge case)
-            address matA = tierMatrixAAddr[i];
-            if (matA != address(0) && IFigureEightMatrixV8(matA).isActiveInMatrix(msg.sender)) {
+            // Already seated ANYWHERE in this tier — any pair, either half.
+            if (IPairManagerV8(tierPairManagers[i]).holdsSeatIn(msg.sender)) {
                 continue;
             }
             usdc.forceApprove(tierPairManagers[i], tierEntryFees[i]);
@@ -1116,7 +1194,51 @@ contract TierRouter is Ownable2Step {
         // underfunded, the member is PARKED in matrixB (rescue machinery
         // applies) instead of silently exiting; on a clean graduation any
         // un-consumed reserve is released to withdrawable — never stranded.
+        // -- 3. V8.46-B CASCADE DEPTH CAP -------------------------------------
+        //
+        // THE PROBLEM, measured on production 2026-07-28: a self-rescue by a
+        // member spanning six tiers estimated 17,762,199 gas against a Base
+        // Sepolia per-tx ceiling of ~17.8M. It could not be sent at all, and
+        // clamping the limit would only trade a refusal for an out-of-gas revert
+        // that costs the member their fee. @Lavern_Gay hit the same wall.
+        //
+        // WHY IT IS DEEP: this function is RE-ENTERED through the whole stack —
+        // _executeAdditive -> _takeSeat -> PairManager.registerFor ->
+        // matrix.enterFor -> _enterMatrix -> rotation -> _cycleOutRoot ->
+        // handleCycleOut again, one tier up, with a DIFFERENT member each time.
+        // Depth is a chain through members, not one member's tier span.
+        //
+        // WHY A COUNTER: V8_46_LadderGas.test.js proved depth is currently
+        // bounded by WEALTH — _executeAdditive only upgrades when
+        // escrow + withdrawable >= nextFee, and the crossing reserve is exactly
+        // 50% of the fee, so each link requires that root to have EARNED the
+        // rest. Fresh fixtures stop at two tiers; production reaches six because
+        // members accrue. A bound that depends on how rich the chain happens to
+        // be is not a bound. This makes it explicit and constant.
+        //
+        // TRANSIENT storage (EIP-1153, evmVersion cancun): ~100 gas per access
+        // and it CLEARS AT END OF TRANSACTION, so a revert mid-cascade cannot
+        // leave the counter stuck high and wedge every later cycle-out. A plain
+        // storage slot would have exactly that failure mode.
+        //
+        // Threading a depth argument instead would mean changing the signature
+        // of every function on that path — PairManager and the matrix included —
+        // for a contract with 35 bytes of EIP-170 headroom.
+        uint256 _d;
+        assembly { _d := tload(_CASCADE_DEPTH_SLOT) }
+        if (_d >= maxCascadeDepth) {
+            // Park rather than cascade further. The member has already been
+            // removed from the seat map by _cycleOutRoot, so park-not-exit is
+            // what keeps them in the system: the rescue machinery re-seats them
+            // in a LATER transaction, which is the whole point — the work still
+            // happens, it just stops happening all in one block.
+            try IFigureEightMatrixV8(matrixB).parkCycledOut(member, 0) {} catch {}
+            emit CascadeDepthCapped(member, tierIndex);
+            return;
+        }
+        assembly { tstore(_CASCADE_DEPTH_SLOT, add(_d, 1)) }
         _executeAdditive(matrixB, member, tierIndex, escrow, withdrawable, cycles);
+        assembly { tstore(_CASCADE_DEPTH_SLOT, _d) }
     }
 
     // --- Internal: V8.44 additive cycle-out engine ----------------------------
@@ -1187,13 +1309,10 @@ contract TierRouter is Ownable2Step {
                 // the member freed their MatB seat, so the later crossing worked.
                 //
                 // So duplicates must never form. "Already in this tier" has to
-                // mean the whole pair, not one half of it.
-                address dMatA = tierMatrixAAddr[nextIndex];
-                address dMatB = tierMatrixBAddr[nextIndex];
-                if (dMatA == address(0) ||
-                    (!IFigureEightMatrixV8(dMatA).isActiveInMatrix(member) &&
-                     (dMatB == address(0) ||
-                      !IFigureEightMatrixV8(dMatB).isActiveInMatrix(member)))) {
+                // mean the whole TIER — every pair, both halves — not one pair's
+                // two matrices. The first version of this guard read
+                // tierMatrixAAddr/BAddr, which is pair 1 and nothing else.
+                if (!IPairManagerV8(tierPairManagers[nextIndex]).holdsSeatIn(member)) {
                     (escrow, withdrawable) = _takeSeat(
                         matrixB, member, referrer, nextIndex, nextFee, 0, false, escrow, withdrawable
                     );

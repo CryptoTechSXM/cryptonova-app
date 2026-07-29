@@ -206,6 +206,32 @@ contract PairManagerV8 is Ownable2Step {
         emit EntryThresholdsSet(_deploy, _route);
     }
 
+    /// @notice V8.46: does `member` hold a seat ANYWHERE in this tier — any pair,
+    ///         either half?
+    ///
+    ///         Replaces four guards in TierRouter that each tested
+    ///         `tierMatrixAAddr[i]` — a SINGLE address, set once at deploy by an
+    ///         onlyOwner setter, so it is PAIR 1 FOREVER while pairCount() grows.
+    ///         T1 has four pairs and T2-T6 have two, so a member seated in pair
+    ///         2+ was invisible to every one of them: _manualUpgrade:901,
+    ///         hybridUpgrade:930, bulkUpgrade:1059 and _executeAdditive:1302.
+    ///         Live proof — Maximum_71 holds T1.3 MatB, which none of them see.
+    ///
+    ///         Lives here because this contract owns the pair list and has ~11k
+    ///         bytes spare, while TierRouter has none. One call replaces a
+    ///         storage read plus an external call at each site, so the router
+    ///         gets SMALLER while getting correct.
+    function holdsSeatIn(address member) external view returns (bool) {
+        uint256 n = pairs.length;
+        for (uint256 i = 0; i < n; i++) {
+            Pair storage pr = pairs[i];
+            if (IFigureEightMatrixV8PM(pr.matrixA).isActiveInMatrix(member)) return true;
+            if (pr.matrixB != address(0) &&
+                IFigureEightMatrixV8PM(pr.matrixB).isActiveInMatrix(member)) return true;
+        }
+        return false;
+    }
+
     /// @notice V8.46: index of a pair in this tier where `member` holds NEITHER
     ///         half, searching from just after `avoid`. Returns type(uint256).max
     ///         when every pair already holds them.

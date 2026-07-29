@@ -183,7 +183,7 @@ describe("V8.44 — UX batch (C2, G1, G2, G3, I3)", function () {
     await usdc.mint(other.address, FEE2);
     await usdc.connect(other).approve(await tr.getAddress(), FEE2);
     await expect(tr.connect(other).bulkUpgrade(1, { gasLimit: 16_000_000 }))
-      .to.be.revertedWith("TR: cross to MatB first, or wait for this tier's Whale Gate to open");
+      .to.be.revertedWithCustomError(tr, "TRGate");
   });
 
   it("UX4 (G3): hybridUpgrade draws free earnings first, wallet covers only the shortfall", async function () {

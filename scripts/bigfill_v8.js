@@ -811,17 +811,31 @@ async function main() {
     process.exit(1);
   }
 
-  // ── Validate ROUND_ROBIN addresses (all must be registered) ───────────────
+  // ── Validate ROUND_ROBIN addresses ────────────────────────────────────────
+  // V8.44: SKIP unregistered addresses instead of aborting the whole run (matches
+  // stress_keeper.js behaviour). On a fresh deploy most leaders have not registered
+  // yet; aborting made a long round-robin list unusable. Unregistered sponsors would
+  // silently resolve to defaultReferrer (W1) on-chain, so we drop them up front and
+  // rotate only across the ones that will actually earn the L1.
   if (ROUND_ROBIN_ADDRS.length > 0) {
-    console.log(`\n  Round-robin referrers (${ROUND_ROBIN_ADDRS.length}):`);
+    console.log(`\n  Round-robin referrers (${ROUND_ROBIN_ADDRS.length} supplied):`);
+    const _registered = [];
     for (const addr of ROUND_ROBIN_ADDRS) {
       const tier = await tierRouter.memberHighestTier(addr);
       if (tier === 0n) {
-        console.error(`  ❌  ROUND_ROBIN address ${addr} is NOT registered — aborting.`);
-        console.error(`     All round-robin accounts must be registered before bigfill starts.`);
-        process.exit(1);
+        console.log(`  [ ] ${addr} NOT registered — skipped`);
+        continue;
       }
       console.log(`    ✓ ${addr}  (tier ${tier})`);
+      _registered.push(addr);
+    }
+    // Rotate only across registered sponsors.
+    ROUND_ROBIN_ADDRS.length = 0;
+    ROUND_ROBIN_ADDRS.push(..._registered);
+    if (ROUND_ROBIN_ADDRS.length === 0) {
+      console.log(`  !  No round-robin address is registered yet — falling back to W1 for every wallet.`);
+    } else {
+      console.log(`  => ${ROUND_ROBIN_ADDRS.length} active sponsor(s) in rotation.`);
     }
   }
 

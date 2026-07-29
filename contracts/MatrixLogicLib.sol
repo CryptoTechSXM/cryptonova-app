@@ -286,6 +286,27 @@ library MatrixLogicLib {
             cfg.usdc.safeTransferFrom(msg.sender, address(this), cfg.entryFee);
         }
 
+        // V8.46: TAKING A SEAT CLEARS ANY PARK RECORD FOR THIS MATRIX.
+        //
+        // parkedAt was only ever cleared by _removeFromParkedQueue, which gives
+        // up silently if the member is not found in the parkedMembers array — so
+        // a re-seating path that misses that call leaves the timestamp behind
+        // forever. Live 2026-07-28: Kira reads as SEATED in T3.1 MatA and PARKED
+        // in T3.1 MatA at the same time, which is not a possible state.
+        //
+        // Members are not harmed (selfRescue checks !isInMatrix as well), but the
+        // parked QUEUE still lists them, so the co-pay keeper spends attempts
+        // rescuing people who are already sitting down and fails with
+        // "still in matrix" — swallowed at MatrixKeeper:558, so it never even
+        // shows up as an error. Wasted keeper work, invisible.
+        //
+        // Clearing it HERE, where the seat is actually taken, means no future
+        // path can reintroduce the residue by forgetting to call the cleaner.
+        if (self.parkedAt[member] > 0) {
+            _removeFromParkedQueue(self, member);
+            self.parkedAt[member] = 0;
+        }
+
         self.joinCountSinceRotation += 1;
         self.lastActivityTime[member] = block.timestamp;
 
