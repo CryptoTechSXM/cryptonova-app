@@ -16,6 +16,7 @@ evidence trail.
 | **4** | Pair guard (duplicate seats) | **BUILT, GREEN** | 415 tests pass; prevention + containment |
 | **5** | `bulkUpgrade` fee/seating loop mismatch | **NOT BUILT** | Latent overcharge; must ship WITH the skip fix |
 | **6** | Clear stale `parkedAt` on any successful seating | **NOT BUILT** | Cheap; stops the copay keeper wasting attempts |
+| **7** | Rescue debt can never repay once the member leaves | **NOT BUILT** | Members carry debt forever while holding the funds to clear it |
 
 ---
 
@@ -188,6 +189,77 @@ member (`selfRescue` also checks `!isInMatrix`) but the copay keeper wastes
 attempts rescuing seated members, failing with "still in matrix" — swallowed at
 MatrixKeeper:558. **The reliable test everywhere else is
 `parkedAt > 0 && !isActiveInMatrix`.**
+
+---
+
+## 7. Rescue debt has no repayment path once the member leaves that matrix
+
+Reported on the community call as *"Sherwyn's $1.68 loan not repaying despite
+multiple Tier 1 rotations"*. It is not a rate problem and not a keeper problem —
+there is no event left that can trigger repayment.
+
+`rescueDebt` is **per-matrix** (`MatrixLogicLib:115`) and clears exactly two ways:
+
+| Path | Site | Gate |
+|------|------|------|
+| Gradual, from a pool share | `_settlePool:450` | `if (share == 0) return;` sits ABOVE the debt block |
+| At cycle-out, from withdrawable | `_cycleOutRoot:548` | needs `withdrawable > 0` at that instant |
+
+Both require the member to be **active in that specific matrix**. A member who
+has moved on earns no pool share there and will never cycle out of it again, so
+the debt is frozen. Rotating anywhere else does nothing — the debt is not theirs
+globally, it belongs to a matrix they have left.
+
+`rescueRepayBps` is **10,000 (100%)**, so the whole of any pool share would go to
+the debt. The rate is not the problem; there is simply no share.
+
+### Measured on 0xe8Ad7bbA (2026-07-29, `member_ledger.js`)
+
+```
+T1.1 MatA   $2.07 owed · $1.00 withdrawable here · not seated
+T2.1 MatA   $2.75 owed · $35.00 withdrawable here · not seated
+```
+
+**And this is the sharp part: `withdrawCore` never looks at `rescueDebt`.** This
+member can withdraw the $35.00 sitting in T2.1 MatA while the $2.75 owed *in that
+same matrix* stays outstanding. The funds to clear the debt are in the same place
+as the debt, and the withdrawal path walks straight past them.
+
+### Fix
+
+One deduction in `withdrawCore`, after `_settlePool` has brought the balance
+current and before the payout:
+
+```solidity
+// after _settlePool(self, cfg, member), before computing `amt`
+uint256 debt = self.rescueDebt[member];
+if (debt > 0 && self.stabilityFund != address(0) && available > 0) {
+    uint256 repay = available >= debt ? debt : available;
+    self.rescueDebt[member] -= repay;
+    available               -= repay;
+    SafeERC20.forceApprove(cfg.usdc, self.stabilityFund, repay);
+    try IStabilityFund(self.stabilityFund).receiveDebtRepayment(repay) {} catch {}
+    emit RescueDebtRepaid(member, repay, self.rescueDebt[member]);
+}
+```
+
+Matches the design intent — a soft loan repaid from earnings — and guarantees
+repayment on the one action a member with a stranded debt WILL still take. No new
+state, no new event, and the existing `try/catch` policy around the SF is kept so
+an SF failure can never block a withdrawal.
+
+**Frontend note:** the member should be told. A withdrawal that quietly returns
+less than the quoted figure is the same class of problem as the $10 lock. Show
+the deduction: *"$35.00 available − $2.75 rescue loan repaid = $32.25 to your
+wallet."*
+
+**Tests:** debt clears on a withdrawal large enough to cover it; a partial
+withdrawal repays what it can and leaves the remainder; a withdrawal with zero
+debt is unchanged; an SF that reverts does not block the payout.
+
+**Not in scope:** making debt follow a member across matrices. That would need a
+router-level ledger and is a bigger design change — worth discussing for mainnet,
+but item 7 above removes the practical harm.
 
 ---
 
