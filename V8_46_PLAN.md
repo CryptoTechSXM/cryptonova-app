@@ -17,6 +17,15 @@ evidence trail.
 | **5** | `bulkUpgrade` fee/seating loop mismatch | **NOT BUILT** | Latent overcharge; must ship WITH the skip fix |
 | **6** | Clear stale `parkedAt` on any successful seating | **NOT BUILT** | Cheap; stops the copay keeper wasting attempts |
 | **7** | Rescue debt can never repay once the member leaves | **NOT BUILT** | Members carry debt forever while holding the funds to clear it |
+| **8** | Entering a tier where you hold commission destroys the balance | **NOT BUILT** | **The only item that can DELETE member funds. Ship before the funded push.** |
+
+**Numbering is chronological, not severity order.** By severity the running order is
+**8, 1, 2, 3, 4, 7, 5, 6** — item 8 was found last (2026-07-29 21:30 EDT) and is the
+only one where a member can lose money they already own, with no action by anyone
+else and no way to recover the value from state afterwards. Item 1 stays second
+because it is the only hole a stranger can use *on someone else*.
+
+**If V8.46 has to ship partially, ship 8 and 1.**
 
 ---
 
@@ -262,6 +271,162 @@ router-level ledger and is a bigger design change — worth discussing for mainn
 but item 7 above removes the practical harm.
 
 ---
+
+## 8. Entering a tier where you already hold commission DESTROYS the balance
+
+**Status: NOT BUILT. Highest severity found on 2026-07-29 — this one can delete
+member funds, and it is live right now.** Ranks above items 5 and 6, and arguably
+above everything except item 1.
+
+`MatrixLogicLib._register` builds a fresh struct whenever `hasEverJoined` is false:
+
+```solidity
+if (!self.members[member].hasEverJoined) {          // :313
+    self.totalJoined += 1;
+    address l1; /* … cross-pair referrer resolution … */
+    self.members[member] = Member({
+        id:              self.totalJoined,
+        referrer:        l1,
+        joinedAt:        block.timestamp,
+        withdrawable:    0,          // <-- DESTROYS AN EXISTING BALANCE
+        totalEarned:     0,
+        totalWithdrawn:  0,          // <-- DESTROYS WITHDRAWAL HISTORY
+        cyclesCompleted: 0,
+        isInMatrix:      false,
+        hasEverJoined:   true,
+        crossingReserve: 0
+    });
+}
+```
+
+The assumption is that `!hasEverJoined` means "no record exists yet". **It does
+not.** Two other code paths write to a member's record without ever setting that
+flag:
+
+1. **`_credit` (:928)** adds to `withdrawable` and `totalEarned` directly.
+   Referral commission is credited into the matrix where **your DOWNLINE**
+   entered (`_distributePayments` → `_credit`), so every upline accumulates real
+   balances in tiers they have never occupied. `hasEverJoined` stays false.
+2. **`withdrawCore` (:948)** gates on `require(available > 0)`, never on
+   membership, so a commission-only holder *can* withdraw — which increments
+   `totalWithdrawn` (:996) while `hasEverJoined` remains false.
+
+So the flag does not mean "no record"; it means "never took a seat here". The
+moment such a member finally enters that tier, the initialiser runs and their
+balance, their earnings and their withdrawal history are all overwritten with
+zero. The USDC stays in the matrix contract as unattributed surplus — the member
+simply no longer has a claim to it.
+
+### Measured on 0xe8Ad7bbA (2026-07-29)
+
+The owner reported "withdrew $1k twice but Total Withdrawn is wrong". Reconciling
+USDC inflows against the ledgers (`wallet_inflow.js`) gave **$1,970.00 received =
+$2,000.00 gross × 0.985**, against a stored total of **$1,947.50** — short exactly
+**$52.50**. Sixteen payouts, fifteen reconciled to the cent; one did not:
+
+| | |
+|---|---|
+| tx | `0xb11eee5801310dc5b1ce2b6df595e0ecb094f19d36a0ed2e6a56cff1e493fb27` |
+| matrix | T3.1 MatA `0x827B8f8D316919aAC3BB1f5D75A7351D1fA32828` |
+| call | `withdrawPartial(uint256)` selector `0x1211540c`, arg **$52.50** |
+| events | `WithdrawalFeeCharged $0.79` **and** `EarningsWithdrawn $51.71`, status SUCCESS |
+| withdrawal block | 44796516 (~21:40 UTC) |
+| **`joinedAt` now** | **1785367802 = 23:30:02 UTC — nearly two hours LATER** |
+| record now | `id 1136`, `isInMatrix true`, pos 104, `totalWithdrawn $0.00`, `totalEarned $1.25` |
+
+`withdrawCore` demonstrably ran and demonstrably incremented the counter; the
+seat taken at 23:30 zeroed it. T3.1 MatA was the only one of the sixteen the
+member subsequently entered for real, which is exactly why it was the only one
+affected.
+
+**The owner escaped fund loss only by luck of ordering** — he had already
+withdrawn, so `withdrawable` was $0 when the reset landed. Had he entered T3
+first, the $52.50 would have been *deleted rather than merely unrecorded*.
+
+### Fix
+
+Field-wise update instead of a fresh struct. Preserves anything `_credit` or a
+prior withdrawal already wrote:
+
+```solidity
+if (!self.members[member].hasEverJoined) {
+    self.totalJoined += 1;
+    address l1;
+    /* … cross-pair referrer resolution unchanged … */
+
+    // V8.46: UPDATE THE EXISTING RECORD, NEVER REPLACE IT.
+    // `!hasEverJoined` means "never took a seat here", NOT "no record exists".
+    // _credit(:928) writes withdrawable/totalEarned for a member who has never
+    // joined this matrix, and withdrawCore gates on `withdrawable > 0` rather
+    // than on membership, so such a holder can also have totalWithdrawn > 0.
+    // Constructing a new Member here destroyed live balances and history.
+    // Measured 2026-07-29 on 0xe8Ad7bbA: $52.50 of history erased in T3.1 MatA.
+    Member storage mm = self.members[member];
+    mm.id            = self.totalJoined;
+    if (mm.referrer == address(0)) mm.referrer = l1;
+    mm.joinedAt      = block.timestamp;
+    mm.hasEverJoined = true;
+    mm.isInMatrix    = false;   // the seat is taken further down this function
+    // DELIBERATELY UNTOUCHED: withdrawable, totalEarned, totalWithdrawn,
+    // cyclesCompleted, crossingReserve. Each is already 0 for a genuinely new
+    // member, and each must be PRESERVED for a commission-only holder.
+}
+```
+
+Notes:
+
+- **`referrer` is guarded, not overwritten.** A commission-only holder has
+  `referrer == address(0)` (the struct was never built), so the cross-pair
+  resolution still applies on first real entry — but an existing referrer is
+  never rewritten.
+- **Contract size is not a concern.** This is in `MatrixLogicLib`, which is
+  LINKED rather than embedded, so it costs `MatrixPairFactory` nothing. Field-wise
+  writes should be marginally smaller than the struct construction. Run
+  `scripts/sizes.js` anyway.
+- **`isInMatrix = false` is retained deliberately.** A re-entering commission
+  holder must not inherit a stale true from any earlier path.
+
+### Tests to write — `test/V8_46_CreditPreservation.test.js`
+
+- **C1** — downline entry credits an upline who has never joined that matrix;
+  assert `withdrawable > 0` and `hasEverJoined == false`. Then the upline
+  registers there. **Assert `withdrawable` is unchanged.** This is the fund-loss
+  case and it fails on V8.45.
+- **C2** — same setup, but the upline withdraws first, then registers. Assert
+  `totalWithdrawn` survives. This is the measured 0xe8Ad7bbA case.
+- **C3** — `totalEarned` survives the same transition.
+- **C4** — a genuinely new member (no prior credit) still gets `id` assigned,
+  `joinedAt` set, `hasEverJoined` true and zeros everywhere else. Guards against
+  the fix breaking normal registration.
+- **C5** — `crossingReserve` accrued before first entry survives.
+
+### Exposure — who is at risk right now
+
+Anyone with `hasEverJoined == false && withdrawable > 0` in any matrix loses that
+balance the moment they enter that tier. Since `_credit` targets uplines, the
+population is "every member whose direct went higher than they did" — most
+leaders on this testnet.
+
+**This matters for Thursday/Friday.** The plan is $30K/day of test funds and a
+full deploy Friday, i.e. a lot of members entering a lot of new tiers. Every one
+of those entries is a chance to wipe a commission balance.
+
+Mitigations, in order of preference:
+
+1. Ship item 8 in V8.46 before the funded push. Cheapest and complete.
+2. If V8.46 slips, tell members holding commission in un-joined tiers to
+   **withdraw before upgrading**. A withdrawn balance cannot be erased — only the
+   (recoverable) history is lost.
+3. Detector to build: `credit_at_risk.js` — for every known member, every matrix,
+   report `hasEverJoined == false && withdrawable > 0`, sorted by amount. Run it
+   on the VPS; at ~726 members × ~30 matrices it is too many reads for the free
+   public endpoint interactively.
+
+**Already-destroyed values are NOT recoverable from state** — they were
+overwritten. They can be reconstructed from logs where needed: sum
+`EarningsWithdrawn` for `totalWithdrawn`, and the credit events for `totalEarned`.
+No member is owed USDC as a result of the history loss on 0xe8Ad7bbA, because the
+money had already been paid out before the reset.
 
 ## Operational, not contract
 
