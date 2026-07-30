@@ -16,7 +16,7 @@ evidence trail.
 | **4** | Pair guard (duplicate seats) | **BUILT, GREEN** | 415 tests pass; prevention + containment |
 | **5** | `bulkUpgrade` fee/seating loop mismatch | **NOT BUILT** | Latent overcharge; must ship WITH the skip fix |
 | **6** | Clear stale `parkedAt` on any successful seating | **BUILT, GREEN** | Counter-integrity: inflates parked count (7,405 vs 2,762 real); pairs with #9 |
-| **7** | Rescue debt can never repay once the member leaves | **NOT BUILT** | Members carry debt forever while holding the funds to clear it |
+| **7** | Rescue debt can never repay once the member leaves | **BUILT, GREEN** | Members carry debt forever while holding the funds to clear it |
 | **8** | Entering a tier where you hold commission destroys the balance | **BUILT, GREEN** | **The only item that can DELETE member funds. Ship before the funded push.** |
 | **9** | Epoch MEMBER trigger counts seat-events, not people | **BUILT, GREEN** | Figure-8 loop inflated epoch pacing; corrupts the halving/tokenomics before mainnet |
 
@@ -331,6 +331,28 @@ debt is unchanged; an SF that reverts does not block the payout.
 **Not in scope:** making debt follow a member across matrices. That would need a
 router-level ledger and is a bigger design change — worth discussing for mainnet,
 but item 7 above removes the practical harm.
+
+---
+
+### BUILT 2026-07-30 — `test/stress_test_full.js` T7a/b/c (3/3 GREEN, full suite 430 passing)
+
+One block added to `withdrawCore` (MatrixLogicLib) right after `_settlePool`/the
+`available` read: if a `rescueDebt` remains (stranded — no pool share ever settles
+it because the member left that matrix), repay it from the withdrawable balance,
+full amount up to `available`, via the same SF `receiveDebtRepayment` try/catch
+idiom as `_settlePool`. **Caught a bug in the plan's own pseudocode:** it decremented
+only the local `available`, not the stored `self.members[member].withdrawable` —
+that would have left the repaid amount still withdrawable (double-spend). Fixed:
+both are decremented.
+
+Tests: T7a full debt repaid + remainder to wallet + `withdrawable` drained (no
+double-count); T7b debt > withdrawable repays what it can and leaves the rest;
+T7c zero-debt withdrawal unchanged. (SF-revert resilience is the shared try/catch
+idiom already exercised by `_settlePool`/`_cycleOutRoot`.)
+
+**Frontend note (with the V8.46 frontend sync):** show the deduction so a withdrawal
+never quietly returns less than quoted — e.g. "$35.00 available − $2.75 rescue loan
+repaid = $32.25 to your wallet." Same class as the $10-lock surprise.
 
 ---
 

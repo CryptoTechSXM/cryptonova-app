@@ -599,3 +599,76 @@ describe("S5: Gas estimate at MSIZE=15", function () {
     expect(cycleOutGasUsed).to.be.lte(3_000_000n);
   });
 });
+
+
+// ─── V8.46 item 7: stranded rescue debt is repaid on withdrawal ─────────────
+describe("V8.46 item 7 — withdrawal repays stranded rescue debt", function () {
+  this.timeout(60_000);
+
+  // Give w1 a withdrawable balance in matA (L1 + chain pay from fillers who name
+  // w1 as referrer), automation OFF so no reserve blocks a full withdrawal.
+  async function seedWithdrawable(ctx, fillers) {
+    const { tr, fund, w1, members, pm1Addr, matA } = ctx;
+    await fund(w1, T1_FEE, pm1Addr);
+    await tr.connect(w1).register(ethers.ZeroAddress);
+    await tr.connect(w1).setMemberOptions(true, false, false);   // disableUpgrade, no reentry, no double
+    for (let i = 0; i < fillers; i++) {
+      await fund(members[i], T1_FEE, pm1Addr);
+      await tr.connect(members[i]).register(w1.address);
+    }
+    return await matA.withdrawableOf(w1.address);
+  }
+
+  // Record a rescue debt on w1 in matA by impersonating matA's partner (matB).
+  async function addDebt(ctx, member, amount) {
+    const { matA, matBAddr } = ctx;
+    await hre.network.provider.send("hardhat_setBalance", [matBAddr, "0x16345785D8A0000"]);
+    await hre.network.provider.request({ method: "hardhat_impersonateAccount", params: [matBAddr] });
+    const matBSigner = await ethers.getSigner(matBAddr);
+    await matA.connect(matBSigner).addRescueDebt(member.address, amount);
+  }
+
+  it("T7a: repays the whole debt and pays the remainder to the wallet", async function () {
+    const ctx = await loadFixture(deployFixture);
+    const { matA, usdc, w1 } = ctx;
+    const wd = await seedWithdrawable(ctx, 4);
+    expect(wd).to.be.gt(0n);
+    const debt = wd / 2n;
+    await addDebt(ctx, w1, debt);
+    expect(await matA.rescueDebtOf(w1.address)).to.equal(debt);
+
+    const before = await usdc.balanceOf(w1.address);
+    // RescueDebtRepaid is declared in MatrixLogicLib (linked lib) so it is emitted at the
+    // matrix address but not in FigureEightMatrixV8's ABI — assert the repayment via STATE.
+    await matA.connect(w1).withdraw();
+
+    expect(await matA.rescueDebtOf(w1.address)).to.equal(0n);       // debt cleared
+    expect(await matA.withdrawableOf(w1.address)).to.equal(0n);      // fully drawn, no double-count
+    const got = (await usdc.balanceOf(w1.address)) - before;
+    expect(got).to.be.gt(0n);                                        // wallet received the remainder
+    expect(got).to.be.lte(wd - debt);                                // never more than remainder (minus fee)
+  });
+
+  it("T7b: debt larger than withdrawable repays what it can, leaves the rest", async function () {
+    const ctx = await loadFixture(deployFixture);
+    const { matA, w1 } = ctx;
+    const wd = await seedWithdrawable(ctx, 4);
+    const debt = wd + 5n * UNIT;                                     // debt exceeds withdrawable
+    await addDebt(ctx, w1, debt);
+
+    await matA.connect(w1).withdraw();
+    expect(await matA.rescueDebtOf(w1.address)).to.equal(debt - wd); // remainder of debt survives
+    expect(await matA.withdrawableOf(w1.address)).to.equal(0n);      // all withdrawable went to the debt
+  });
+
+  it("T7c: no debt -> normal withdrawal, no interference (regression)", async function () {
+    const ctx = await loadFixture(deployFixture);
+    const { matA, usdc, w1 } = ctx;
+    await seedWithdrawable(ctx, 4);
+    const before = await usdc.balanceOf(w1.address);
+    await matA.connect(w1).withdraw();
+    const got = (await usdc.balanceOf(w1.address)) - before;
+    expect(got).to.be.gt(0n);
+    expect(await matA.rescueDebtOf(w1.address)).to.equal(0n);
+  });
+});

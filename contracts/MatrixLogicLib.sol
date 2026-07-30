@@ -990,6 +990,28 @@ library MatrixLogicLib {
         uint256 available = self.members[member].withdrawable;
         require(available > 0, "F8V8: nothing to withdraw");
 
+        // V8.46 item 7: repay any STRANDED rescue debt from the withdrawable balance.
+        // A debt owed in a matrix the member has LEFT never settles — no pool share
+        // accrues there and they never cycle out of it again — so this withdrawal is the
+        // one action that can still clear it. Full repayment (mirrors the SF idiom in
+        // _settlePool); decrements the STORED withdrawable too so the repaid amount cannot
+        // be withdrawn twice; try/catch keeps an SF failure from ever blocking the payout.
+        {
+            uint256 debt = self.rescueDebt[member];
+            if (debt > 0 && self.stabilityFund != address(0)) {
+                uint256 repay = available >= debt ? debt : available;
+                if (repay > 0) {
+                    self.rescueDebt[member]           -= repay;
+                    self.members[member].withdrawable -= repay;
+                    available                         -= repay;
+                    SafeERC20.forceApprove(cfg.usdc, self.stabilityFund, repay);
+                    try IStabilityFund(self.stabilityFund).receiveDebtRepayment(repay) {}
+                    catch {}
+                    emit RescueDebtRepaid(member, repay, self.rescueDebt[member]);
+                }
+            }
+        }
+
         // V8.32 Task #63: hoist automationReserve early so crossNeeded check can be
         // skipped when all automation is disabled (reservedFor == 0 means member opted out).
         uint256 automationReserve = 0;
