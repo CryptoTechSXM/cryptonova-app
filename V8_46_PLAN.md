@@ -10,7 +10,7 @@ evidence trail.
 
 | # | Item | State | Why it ranks here |
 |---|------|-------|-------------------|
-| **1** | `performUpkeep` allowlist + `_doEvictParked` idle gate | **NOT BUILT** | The only hole a stranger can use *on someone else* |
+| **1** | `performUpkeep` allowlist + `_doEvictParked` idle gate | **BUILT, GREEN** | The only hole a stranger can use *on someone else* |
 | **2** | `register` / `registerWithCoupon` → router-only | **NOT BUILT** | 6 live bypasses measured; frontend half already shipped |
 | **3** | B — cascade depth cap | **BUILT, GREEN** | Members are hitting the gas ceiling in production |
 | **4** | Pair guard (duplicate seats) | **BUILT, GREEN** | 415 tests pass; prevention + containment |
@@ -107,6 +107,16 @@ Chainlink forwarder only if Chainlink is kept — see the operational note below
 **Tests to write:** an unauthorised `performUpkeep` reverts; an authorised one
 still processes every work type; eviction is a no-op before the timeout and
 succeeds after it; an evicted member can still `withdraw`.
+
+---
+
+### BUILT 2026-07-30 — `test/V8_46_KeeperAuth.test.js` (4/4 GREEN)
+
+- **Allowlist:** new `mapping(address=>bool) public upkeepCaller` + `setUpkeepCaller(addr,bool)` (onlyOwnerOrGovernance) + guard at top of `performUpkeep`: `owner() || governance || upkeepCaller[msg.sender]`. Tests: stranger reverts `MK: not authorized keeper`; owner + allowlisted EOA pass; de-allowlist re-blocks; setter is owner/gov-only.
+- **Idle gate:** `_doEvictParked` now requires `rotationCount()>0` AND `block.timestamp - parkedAt(member) >= extendedIdleTimeout` (7d), mirroring `_doReclaimSlot`. Tests: fresh park not evicted, evicted after 7d, never-rotated not evicted. Mock: `contracts/test/MockEvictMatrix.sol`.
+- **Interaction noted:** `_doEvictParked` is also called by `_doParkedRescue`'s zero-balance cleanup — the gate now gives a provably-unpayable member a 7-day grace before eviction instead of immediate. That path returns without advancing SF funds, so no drain in the interim; benign.
+
+**DEPLOY-CHECKLIST ADDITION (mandatory):** locking `performUpkeep` means the DigitalOcean keeper EOA `0xd419681BA72992636f05e256168681c939826B4b` MUST be allowlisted immediately after deploy (`keeper.setUpkeepCaller(0xd419681B..., true)`) or all keeper work halts. Chainlink registry can be left off (that upkeep is being cancelled).
 
 ---
 
@@ -488,6 +498,8 @@ security fix.
 ---
 
 ## Deploy gates
+
+- [ ] **Item 1:** `setUpkeepCaller(0xd419681B..., true)` on the new MatrixKeeper immediately post-deploy (else keepers halt)
 
 - [ ] Full suite green on Windows against real config
 - [ ] `scripts/sizes.js` — both TierRouter and MatrixPairFactory under 24,576

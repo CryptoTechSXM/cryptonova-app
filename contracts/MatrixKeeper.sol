@@ -204,6 +204,12 @@ contract MatrixKeeper is Ownable {
     ///         alongside owner -- neither replaces the other (owner keeps emergency backstop).
     address public governance;
 
+    /// @notice V8.46 item 1: allowlist of EOAs permitted to drive performUpkeep
+    ///         (the DigitalOcean keeper wallets; Chainlink forwarder if kept).
+    ///         owner() and governance are always allowed. Closes the open-door hole
+    ///         where anyone could hand-craft a WorkItem[] and drive the whole queue.
+    mapping(address => bool) public upkeepCaller;
+
     /// @notice V8.20/V8.21: SF parked-rescue coverage ladder, governable.
     ///         thresholds[i] = withdrawable/entryFee bps breakpoint (descending).
     ///         bpsLadder[i]  = SF coverage bps at that breakpoint (ascending).
@@ -255,6 +261,7 @@ contract MatrixKeeper is Ownable {
     event CommunityDistributed(address indexed cw);
     event WorkItemFailed(uint8 indexed workType, uint8 tierIndex, address addr1, address addr2);
     event GovernanceSet(address indexed governance);
+    event UpkeepCallerSet(address indexed caller, bool allowed);
     /// @dev V8.21: replaces SfRescueLadderUpdated -- presets, not free-form arrays.
     event SfRescueLadderPresetSet(uint8 preset, uint256 rungs, uint256 deepestBps);
 
@@ -288,6 +295,13 @@ contract MatrixKeeper is Ownable {
         if (_gov == address(0)) revert MK_ZeroAddress();
         governance = _gov;
         emit GovernanceSet(_gov);
+    }
+
+    /// @notice V8.46 item 1: authorize/deauthorize an EOA to call performUpkeep.
+    function setUpkeepCaller(address caller, bool allowed) external onlyOwnerOrGovernance {
+        if (caller == address(0)) revert MK_ZeroAddress();
+        upkeepCaller[caller] = allowed;
+        emit UpkeepCallerSet(caller, allowed);
     }
 
     function setPairManager(uint8 tierIndex, address pm) external onlyOwner {
@@ -530,6 +544,11 @@ contract MatrixKeeper is Ownable {
      * @notice V8.17: try/catch per work item so one failure never blocks the loop.
      */
     function performUpkeep(bytes calldata performData) external {
+        // V8.46 item 1: allowlist — was external with NO guard, so anyone could drive the queue.
+        require(
+            msg.sender == owner() || msg.sender == governance || upkeepCaller[msg.sender],
+            "MK: not authorized keeper"
+        );
         WorkItem[] memory items = abi.decode(performData, (WorkItem[]));
         uint256 chainLinkProcessed = 0;
         for (uint256 i = 0; i < items.length; i++) {
@@ -685,6 +704,11 @@ contract MatrixKeeper is Ownable {
     function _doEvictParked(address matrix, address member) internal {
         IFigureEightKeeper mat = IFigureEightKeeper(matrix);
         if (mat.parkedAt(member) == 0) return;
+        // V8.46 item 1: eviction had NO time gate — anyone could evict a freshly-parked
+        // member and lock them out of rescue re-entry (selfRescue/coPayRescue need parkedAt>0).
+        // Require a completed rotation and a full idle window first, mirroring _doReclaimSlot.
+        if (mat.rotationCount() == 0) return;
+        if (block.timestamp - mat.parkedAt(member) < extendedIdleTimeout) return;
         uint256 withdrawn = mat.getMemberTotalWithdrawn(member);
         mat.evictParked(member);
         emit ParkedMemberEvicted(matrix, member, withdrawn);
