@@ -11,7 +11,7 @@ evidence trail.
 | # | Item | State | Why it ranks here |
 |---|------|-------|-------------------|
 | **1** | `performUpkeep` allowlist + `_doEvictParked` idle gate | **BUILT, GREEN** | The only hole a stranger can use *on someone else* |
-| **2** | `register` / `registerWithCoupon` → router-only | **NOT BUILT** | 6 live bypasses measured; frontend half already shipped |
+| **2** | `register` / `registerWithCoupon` → router-only | **BUILT, GREEN** | 6 live bypasses measured; frontend half already shipped |
 | **3** | B — cascade depth cap | **BUILT, GREEN** | Members are hitting the gas ceiling in production |
 | **4** | Pair guard (duplicate seats) | **BUILT, GREEN** | 415 tests pass; prevention + containment |
 | **5** | `bulkUpgrade` fee/seating loop mismatch | **NOT BUILT** | Latent overcharge; must ship WITH the skip fix |
@@ -158,6 +158,15 @@ model that already does this correctly.
 **Frontend dependency:** `doLimboReEntry` calls `matA.register(referrer)`
 directly and needs a router-side replacement, or confirmation the path is dead
 (it only fires after `MatrixKeeper._doReclaimSlot`, which needs the 7-day timer).
+
+---
+
+### BUILT 2026-07-30 — full suite 424 passing, 0 regressions
+
+- **2a:** `FigureEightMatrixV8.register(address)` DELETED (commit cd28ac6). It was the measured bypass (selector `0x4420e486`, 6 txs / 8 seats / ~$20k). No contract or V8 test used it — legit entry is `TierRouter.register -> PairManager.registerFor -> enterFor` (pairManager-guarded). Bonus: freed factory bytecode, headroom 112 -> 423.
+- **2b:** `FigureEightMatrixV8.registerWithCoupon(address,bytes32)` DELETED. Same bypass class (needs a paid coupon, so weaker, but still skips TierRouter progression). Legit coupon path is `TierRouter.registerWithCoupon -> enterWithCouponFrom` (router-guarded, kept). `Coupon.test.js`'s 19 direct calls rerouted through a `couponEnter` helper that calls `enterWithCouponFrom` as an authorized `router` signer; all 35 coupon tests green.
+
+**FRONTEND DEPLOY DEPENDENCY (must ship with V8.46 frontend):** `doLimboReEntry()` (index.html) calls `matA.register(referrer)` — now DELETED, so that button will revert on V8.46. Since V8.33 `softParkIdle` PARKS reclaimed members (sets `parkedAt`, auto-rescued by the keeper), the parkedAt==0 "limbo" state can't occur on a fresh deploy — so replace the `matA.register()` call with `selfRescue()` (or remove the button). NOT a contract task; tracked for the frontend sync.
 
 ---
 
@@ -499,6 +508,7 @@ security fix.
 
 ## Deploy gates
 
+- [ ] **Item 2:** frontend `doLimboReEntry()` no longer calls the deleted `matA.register()` (use `selfRescue()` or remove the button)
 - [ ] **Item 1:** `setUpkeepCaller(0xd419681B..., true)` on the new MatrixKeeper immediately post-deploy (else keepers halt)
 
 - [ ] Full suite green on Windows against real config

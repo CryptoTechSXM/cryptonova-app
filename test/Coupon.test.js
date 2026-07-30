@@ -40,7 +40,7 @@ async function increaseTime(seconds) {
 // ── Fixture ────────────────────────────────────────────────────────────────────
 
 async function deployFixture() {
-    const [owner, devWallet, opsWallet, accountOne, issuer, member1, member2, rando] =
+    const [owner, devWallet, opsWallet, accountOne, issuer, member1, member2, rando, router] =
         await ethers.getSigners();
 
     // -- MockUSDC
@@ -119,6 +119,11 @@ async function deployFixture() {
     await matA.setPartner(await matB.getAddress());
     await matB.setPartner(await matA.getAddress());
 
+    // V8.46 item 2b: coupon entry is router-guarded now (registerWithCoupon removed).
+    // Authorize `router` (signer #8) to call enterWithCouponFrom in tests.
+    await matA.setTierRouter(router.address);
+    await matB.setTierRouter(router.address);
+
     // Wire coupon registry to MatA
     await matA.setCouponRegistry(await registry.getAddress());
 
@@ -144,6 +149,15 @@ async function deployFixture() {
 }
 
 // ── Tests ──────────────────────────────────────────────────────────────────────
+
+
+// V8.46 item 2b: the matrix's public registerWithCoupon() was removed (unguarded bypass).
+// Route coupon entries through the guarded enterWithCouponFrom, called by the fixture's
+// authorized `router` signer (index 8). Self-contained so no test needs `router` in scope.
+async function couponEnter(mat, member, referrer, codeHash) {
+  const router = (await ethers.getSigners())[8];
+  return mat.connect(router).enterWithCouponFrom(member.address, referrer, codeHash);
+}
 
 describe("CouponRegistry", function () {
 
@@ -210,7 +224,7 @@ describe("CouponRegistry", function () {
 
             const walletBefore = await usdc.balanceOf(member1.address);
 
-            await matA.connect(member1).registerWithCoupon(ethers.ZeroAddress, codeHash);
+            await couponEnter(matA, member1, ethers.ZeroAddress, codeHash);
 
             const walletAfter = await usdc.balanceOf(member1.address);
             // Member should not have spent anything
@@ -231,7 +245,7 @@ describe("CouponRegistry", function () {
             await registry.connect(issuer).issueCoupon(codeHash);
 
             await expect(
-                matA.connect(member1).registerWithCoupon(ethers.ZeroAddress, codeHash)
+                couponEnter(matA, member1, ethers.ZeroAddress, codeHash)
             ).to.emit(matA, "CouponApplied")
              .withArgs(member1.address, codeHash, toUSDC(10), 0n);
         });
@@ -246,7 +260,7 @@ describe("CouponRegistry", function () {
             await registry.connect(issuer).issueCoupon(codeHash);
 
             const walletBefore = await usdc.balanceOf(member1.address);
-            await matA.connect(member1).registerWithCoupon(ethers.ZeroAddress, codeHash);
+            await couponEnter(matA, member1, ethers.ZeroAddress, codeHash);
             const walletAfter = await usdc.balanceOf(member1.address);
 
             // Member should have paid the $5 shortfall
@@ -261,11 +275,11 @@ describe("CouponRegistry", function () {
             await registry.connect(issuer).issueCoupon(codeHash);
 
             // First use succeeds
-            await matA.connect(member1).registerWithCoupon(ethers.ZeroAddress, codeHash);
+            await couponEnter(matA, member1, ethers.ZeroAddress, codeHash);
 
             // Second use reverts
             await expect(
-                matA.connect(member2).registerWithCoupon(ethers.ZeroAddress, codeHash)
+                couponEnter(matA, member2, ethers.ZeroAddress, codeHash)
             ).to.be.revertedWith("CR: already used");
         });
 
@@ -274,14 +288,14 @@ describe("CouponRegistry", function () {
 
             const fakeHash = hashCode("NOT-ISSUED");
             await expect(
-                matA.connect(member1).registerWithCoupon(ethers.ZeroAddress, fakeHash)
+                couponEnter(matA, member1, ethers.ZeroAddress, fakeHash)
             ).to.be.revertedWith("CR: coupon not found");
         });
 
         it("rejects empty (zero) coupon hash at the matrix level", async function () {
             const { matA, member1 } = await deployFixture();
             await expect(
-                matA.connect(member1).registerWithCoupon(ethers.ZeroAddress, ethers.ZeroHash)
+                couponEnter(matA, member1, ethers.ZeroAddress, ethers.ZeroHash)
             ).to.be.revertedWith("F8V8: empty coupon hash");
         });
 
@@ -290,13 +304,13 @@ describe("CouponRegistry", function () {
 
             const h1 = hashCode("FIRST");
             await registry.connect(issuer).issueCoupon(h1);
-            await matA.connect(member1).registerWithCoupon(ethers.ZeroAddress, h1);
+            await couponEnter(matA, member1, ethers.ZeroAddress, h1);
 
             // Try to use another coupon while still in matrix
             const h2 = hashCode("SECOND");
             await registry.connect(issuer).issueCoupon(h2);
             await expect(
-                matA.connect(member1).registerWithCoupon(ethers.ZeroAddress, h2)
+                couponEnter(matA, member1, ethers.ZeroAddress, h2)
             ).to.be.revertedWith("F8V8: already in matrix");
         });
 
@@ -312,7 +326,7 @@ describe("CouponRegistry", function () {
 
             await usdc.connect(member1).approve(await matB.getAddress(), ethers.MaxUint256);
             await expect(
-                matB.connect(member1).registerWithCoupon(ethers.ZeroAddress, codeHash)
+                couponEnter(matB, member1, ethers.ZeroAddress, codeHash)
             ).to.be.revertedWith("F8V8: coupon registration must use MatA");
         });
     });
@@ -331,7 +345,7 @@ describe("CouponRegistry", function () {
             await increaseTime(30 * 24 * 3600 + 1);
 
             await expect(
-                matA.connect(member1).registerWithCoupon(ethers.ZeroAddress, codeHash)
+                couponEnter(matA, member1, ethers.ZeroAddress, codeHash)
             ).to.be.revertedWith("CR: expired");
         });
 
@@ -367,7 +381,7 @@ describe("CouponRegistry", function () {
 
             const codeHash = hashCode("USED-THEN-RECLAIM");
             await registry.connect(issuer).issueCoupon(codeHash);
-            await matA.connect(member1).registerWithCoupon(ethers.ZeroAddress, codeHash);
+            await couponEnter(matA, member1, ethers.ZeroAddress, codeHash);
 
             await increaseTime(30 * 24 * 3600 + 1);
             await expect(registry.connect(issuer).reclaimCoupon(codeHash))
@@ -429,7 +443,7 @@ describe("CouponRegistry", function () {
             const codeHash = hashCode("CANCEL-AFTER-USE");
             await registry.connect(issuer).issueCoupon(codeHash);
             // Member redeems it first
-            await matA.connect(member1).registerWithCoupon(ethers.ZeroAddress, codeHash);
+            await couponEnter(matA, member1, ethers.ZeroAddress, codeHash);
 
             await expect(registry.connect(issuer).cancelCoupon(codeHash))
                 .to.be.revertedWith("CR: already used");
@@ -443,7 +457,7 @@ describe("CouponRegistry", function () {
             await registry.connect(issuer).cancelCoupon(codeHash);
 
             await expect(
-                matA.connect(member1).registerWithCoupon(ethers.ZeroAddress, codeHash)
+                couponEnter(matA, member1, ethers.ZeroAddress, codeHash)
             ).to.be.revertedWith("CR: already used");
         });
 
@@ -452,7 +466,7 @@ describe("CouponRegistry", function () {
 
             const codeHash = hashCode("REDEEM-THEN-CANCEL");
             await registry.connect(issuer).issueCoupon(codeHash);
-            await matA.connect(member1).registerWithCoupon(ethers.ZeroAddress, codeHash);
+            await couponEnter(matA, member1, ethers.ZeroAddress, codeHash);
 
             await expect(registry.connect(issuer).cancelCoupon(codeHash))
                 .to.be.revertedWith("CR: already used");
@@ -473,7 +487,7 @@ describe("CouponRegistry", function () {
             await registry.connect(issuer).issueCoupon(codeHash);
 
             await expect(
-                matA.connect(member1).registerWithCoupon(ethers.ZeroAddress, codeHash)
+                couponEnter(matA, member1, ethers.ZeroAddress, codeHash)
             ).to.be.revertedWith("F8V8: coupon registry not set");
         });
 
@@ -487,7 +501,7 @@ describe("CouponRegistry", function () {
             const codeHash = hashCode("RE-ENABLED");
             await registry.connect(issuer).issueCoupon(codeHash);
 
-            await matA.connect(member1).registerWithCoupon(ethers.ZeroAddress, codeHash);
+            await couponEnter(matA, member1, ethers.ZeroAddress, codeHash);
             expect(await matA.isInMatrix(member1.address)).to.be.true;
         });
 
@@ -568,7 +582,7 @@ describe("CouponRegistry", function () {
             const { registry, matA, issuer, member1 } = await deployFixture();
             const codeHash = hashCode("AFTER-USE");
             await registry.connect(issuer).issueCoupon(codeHash);
-            await matA.connect(member1).registerWithCoupon(ethers.ZeroAddress, codeHash);
+            await couponEnter(matA, member1, ethers.ZeroAddress, codeHash);
             expect(await registry.isValid(codeHash)).to.be.false;
         });
 
@@ -596,7 +610,7 @@ describe("CouponRegistry", function () {
 
             const codeHash = hashCode("STILL-IN");
             await registry.connect(issuer).issueCoupon(codeHash);
-            await matA.connect(member1).registerWithCoupon(ethers.ZeroAddress, codeHash);
+            await couponEnter(matA, member1, ethers.ZeroAddress, codeHash);
 
             // member1 is still in matrix
             await expect(matA.connect(member1).selfRescue())

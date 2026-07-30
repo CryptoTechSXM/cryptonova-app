@@ -399,13 +399,9 @@ contract FigureEightMatrixV8 is Ownable2Step {
     //   / 8 seats / ~$20k on selector 0x4420e486. Legit entry is TierRouter.register ->
     //   PairManager.registerFor -> enterFor (pairManager-guarded). registerWithCoupon: item 2b.
 
-    /// @notice Register with an on-chain coupon code that covers part or all of the entry fee.
-    ///         Must be called on the MatA contract (the entry point) when using a coupon.
-    /// @param referrer       The member who referred this new member.
-    /// @param couponCodeHash keccak256(abi.encodePacked(plaintextCode)) — computed by the frontend.
-    function registerWithCoupon(address referrer, bytes32 couponCodeHash) external {
-        _couponEntry(msg.sender, referrer, couponCodeHash);
-    }
+    // V8.46 item 2b: registerWithCoupon() DELETED — same bypass class as register() (2a):
+    //   unguarded coupon entry into any tier, skipping TierRouter progression. Legit coupon
+    //   path is TierRouter.registerWithCoupon -> enterWithCouponFrom (router-guarded, below).
 
     /// @notice V8.31: TierRouter-authorised coupon entry.
     ///         Called by TierRouter.registerWithCoupon() so the TierRouter bookkeeping
