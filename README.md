@@ -1,3 +1,14 @@
+# ⚠️ SUPERSEDED REPO — frozen 2026-07-30
+
+This was the original CryptoNova frontend. Active work moved to:
+
+- **CryptoNova-Testnet-App** — live testnet dApp (crypto-nova.app family)
+- **CryptoNova-Mainnet-App** — mainnet .ai pages (cryptonova.ai family)
+
+Kept for history. Do not deploy from here.
+
+---
+
 # CryptoNova Frontend
 
 ## ⚠️ Must be served via HTTP — not opened as a file

@@ -301,24 +301,6 @@
     /* ── Switch network overlay (fixed, centered) ───────────────── */
     #network-banner { position: fixed; inset: 0; background: rgba(0,0,0,.65); z-index: 600; display: none; align-items: center; justify-content: center; padding: 20px; }
     #network-banner-card { background: var(--bg2); border: 2px solid rgba(245,158,11,.5); border-radius: 16px; padding: 32px 28px; max-width: 380px; width: 100%; text-align: center; }
-  
-    /* ── Launch gate ── */
-    #launch-gate {
-      display: none; position: fixed; inset: 0;
-      background: rgba(10,14,26,.94); backdrop-filter: blur(6px);
-      z-index: 9999; align-items: center; justify-content: center;
-      flex-direction: column; text-align: center; padding: 32px;
-    }
-    #launch-gate.visible { display: flex; }
-    #launch-gate h2 { font-size: 22px; color: var(--green); margin-bottom: 12px; }
-    #launch-gate p  { color: var(--text2); font-size: 14px; line-height: 1.7; max-width: 480px; }
-    #launch-gate .soon-pill {
-      margin-top: 20px; display: inline-block; padding: 6px 20px;
-      background: rgba(245,158,11,.15); border: 1px solid rgba(245,158,11,.4);
-      color: var(--yellow); border-radius: 20px; font-size: 12px;
-      font-weight: 600; letter-spacing: .5px;
-    }
-
     /* ── Countdown timer ──────────────────────────────────── */
     /* ── City timezone grid ──────────────────────────── */
     #cd-cities-wrap { margin: 10px auto 0; max-width: 400px; width: 100%; }
@@ -382,90 +364,112 @@
     </style>
 </head>
 <body>
-  <!-- ═══ MAINNET COMING SOON OVERLAY ═══════════════════════════════════════
-       Remove this entire block (or set display:none) once mainnet contracts
-       are deployed and ADDRS are filled in above.
-       ════════════════════════════════════════════════════════════════════ -->
-  <div id="mainnet-soon" style="
-    position:fixed;inset:0;z-index:9999;
-    background:linear-gradient(135deg,#0a0e1a 0%,#0d1225 100%);
-    display:flex;flex-direction:column;align-items:center;justify-content:center;
-    font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
-    color:#e2e8f0;text-align:center;padding:24px;
-  ">
-    <div style="font-size:48px;margin-bottom:20px">🚀</div>
-    <div style="font-size:28px;font-weight:800;background:linear-gradient(135deg,#22c55e,#3b82f6);-webkit-background-clip:text;-webkit-text-fill-color:transparent;margin-bottom:12px">
-      CryptoNova Mainnet
-    </div>
-    <div style="font-size:16px;color:#94a3b8;margin-bottom:32px;max-width:400px;line-height:1.6">
-      Launching <strong style="color:#e2e8f0">Friday June 19, 2026 · 12:00 PM Eastern</strong><br>
-      The matrix is almost ready.
-    </div>
-    <a href="https://crypto-nova.app" style="
-      background:linear-gradient(135deg,#22c55e,#16a34a);
-      color:#fff;text-decoration:none;padding:14px 32px;border-radius:12px;
-      font-weight:700;font-size:15px;
-    ">Try Testnet Now →</a>
-    <div style="margin-top:24px;font-size:13px;color:#64748b">
-      <a href="https://t.me/cnova_support_bot" style="color:#60a5fa;text-decoration:none">Telegram Support</a>
-      &nbsp;·&nbsp;
-      <a href="https://crypto-nova.app/faq" style="color:#60a5fa;text-decoration:none">FAQ</a>
-    </div>
+  <!-- ═══ LAUNCH GATE ══════════════════════════════════════════════════════════
+     Auto-hides at launch time. Remove canvas + div + script after mainnet deploy.
+     ════════════════════════════════════════════════════════════════════════ -->
+<canvas id="cn-cvs" style="position:fixed;inset:0;z-index:9998;pointer-events:none"></canvas>
+<div id="mainnet-soon" style="position:fixed;inset:0;z-index:9999;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:24px;background:radial-gradient(ellipse 80% 60% at 50% 40%,rgba(34,197,94,.08) 0%,transparent 70%),radial-gradient(ellipse 60% 40% at 70% 70%,rgba(59,130,246,.06) 0%,transparent 60%),linear-gradient(180deg,#060a14 0%,#080c18 100%);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;text-align:center;">
+  <style>
+    .cn-logo{font-size:12px;font-weight:600;letter-spacing:.18em;text-transform:uppercase;color:#4ade80;display:flex;align-items:center;gap:8px;margin-bottom:40px}
+    .cn-dot{width:8px;height:8px;border-radius:50%;background:#4ade80;box-shadow:0 0 8px #4ade80,0 0 20px rgba(74,222,128,.5);animation:cn-pulse 2s ease-in-out infinite}
+    @keyframes cn-pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.6;transform:scale(.85)}}
+    .cn-headline{font-size:clamp(28px,5vw,52px);font-weight:700;line-height:1.1;letter-spacing:-.02em;background:linear-gradient(135deg,#f0fdf4 0%,#4ade80 40%,#60a5fa 100%);-webkit-background-clip:text;-webkit-text-fill-color:transparent;margin-bottom:8px}
+    .cn-subline{font-size:16px;color:#64748b;margin-bottom:48px}
+    .cn-cd{display:flex;gap:16px;margin-bottom:52px}
+    .cn-cdbox{background:rgba(255,255,255,.04);border:1px solid rgba(74,222,128,.15);border-radius:14px;padding:18px 20px;min-width:80px;backdrop-filter:blur(8px);display:flex;flex-direction:column;align-items:center}
+    .cn-cdnum{font-size:36px;font-weight:700;line-height:1;font-variant-numeric:tabular-nums;background:linear-gradient(135deg,#f0fdf4,#4ade80);-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+    .cn-cdlbl{font-size:10px;color:#475569;letter-spacing:.1em;text-transform:uppercase;margin-top:6px}
+    .cn-cdsep{font-size:28px;color:#1e3a2f;align-self:center;padding-bottom:18px}
+    .cn-btn{display:inline-flex;align-items:center;gap:8px;background:linear-gradient(135deg,#22c55e,#16a34a);color:#fff;text-decoration:none;padding:14px 32px;border-radius:12px;font-size:15px;font-weight:600;box-shadow:0 0 24px rgba(34,197,94,.3),0 4px 16px rgba(0,0,0,.4);margin-bottom:16px}
+    .cn-btn2{display:inline-flex;align-items:center;gap:6px;color:#475569;font-size:13px;text-decoration:none}
+    .cn-footer{position:fixed;bottom:28px;left:50%;transform:translateX(-50%);display:flex;gap:24px}
+    .cn-footer a{font-size:12px;color:#334155;text-decoration:none;letter-spacing:.05em}
+  </style>
+
+  <div class="cn-logo"><div class="cn-dot"></div>CRYPTONOVA</div>
+  <div class="cn-headline">Mainnet is coming.</div>
+  <div class="cn-subline">Thursday June 25, 2026 &middot; 12:00 PM Eastern</div>
+
+  <div class="cn-cd">
+    <div class="cn-cdbox"><div class="cn-cdnum" id="sn-d">--</div><div class="cn-cdlbl">Days</div></div>
+    <div class="cn-cdsep">:</div>
+    <div class="cn-cdbox"><div class="cn-cdnum" id="sn-h">--</div><div class="cn-cdlbl">Hours</div></div>
+    <div class="cn-cdsep">:</div>
+    <div class="cn-cdbox"><div class="cn-cdnum" id="sn-m">--</div><div class="cn-cdlbl">Min</div></div>
+    <div class="cn-cdsep">:</div>
+    <div class="cn-cdbox"><div class="cn-cdnum" id="sn-s">--</div><div class="cn-cdlbl">Sec</div></div>
   </div>
 
+  <a href="https://t.me/+0tmvkrDs20Q1M2My" class="cn-btn" target="_blank" rel="noopener">
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="white"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm4.64 6.8l-1.69 7.97c-.12.58-.46.72-.93.45l-2.57-1.89-1.24 1.19c-.14.14-.25.25-.51.25l.18-2.62 4.7-4.24c.2-.18-.05-.28-.31-.1L7.4 14.67l-2.53-.79c-.55-.17-.56-.55.12-.81l9.88-3.81c.46-.17.86.11.77.54z"/></svg>
+    Get notified at launch
+  </a>
+  <a href="https://crypto-nova.app" class="cn-btn2">Or try the testnet now →</a>
 
-<!-- ══ LAUNCH GATE ══════════════════════════════════════════════════════════
-     index.html: opens 10:00 AM EDT (14:00 UTC) June 14 2026
-═══════════════════════════════════════════════════════════════════════════ -->
-<div id="launch-gate" style="display:none;position:fixed;inset:0;z-index:99999;background:#0a0a1a;display:flex;flex-direction:column;align-items:center;justify-content:center;font-family:'Inter',sans-serif;color:#fff;">
-  <div style="text-align:center;max-width:480px;padding:2rem;">
-    <div style="font-size:2.5rem;font-weight:800;background:linear-gradient(135deg,#7c3aed,#2563eb);-webkit-background-clip:text;-webkit-text-fill-color:transparent;margin-bottom:0.5rem;">CryptoNova</div>
-    <div style="color:#a78bfa;font-size:1rem;margin-bottom:2.5rem;letter-spacing:0.05em;">TESTNET LAUNCH</div>
-    <div style="color:#94a3b8;font-size:0.95rem;margin-bottom:1rem;">Opens in</div>
-    <div id="gate-countdown" style="font-size:3rem;font-weight:700;font-variant-numeric:tabular-nums;color:#fff;letter-spacing:0.05em;margin-bottom:2rem;">--:--:--</div>
-    <div style="color:#64748b;font-size:0.85rem;">Launching at <strong style="color:#a78bfa;">10:00 AM EDT</strong> · June 14, 2026</div>
+  <div class="cn-footer">
+    <a href="https://crypto-nova.app/faq">FAQ</a>
+    <a href="https://t.me/+0tmvkrDs20Q1M2My">Telegram</a>
+    <a href="https://crypto-nova.app/terms">Terms</a>
   </div>
 </div>
-
 <script>
+// ── Gate particles ──
 (function() {
-  var OPEN_AT = new Date('2026-06-14T14:00:00Z').getTime(); // 10:00 AM EDT
-  var gate = document.getElementById('launch-gate');
-  var countdown = document.getElementById('gate-countdown');
-
-  function tick() {
-    var now = Date.now();
-    if (now >= OPEN_AT) {
-      gate.style.display = 'none';
-      return;
-    }
-    gate.style.display = 'flex';
-    var diff = OPEN_AT - now;
-    var h = Math.floor(diff / 3600000);
-    var m = Math.floor((diff % 3600000) / 60000);
-    var s = Math.floor((diff % 60000) / 1000);
-    countdown.textContent =
-      String(h).padStart(2,'0') + ':' +
-      String(m).padStart(2,'0') + ':' +
-      String(s).padStart(2,'0');
+  var cvs = document.getElementById('cn-cvs');
+  if (!cvs) return;
+  var ctx = cvs.getContext('2d');
+  var W, H, stars = [];
+  function resize() {
+    W = cvs.width = window.innerWidth; H = cvs.height = window.innerHeight; stars = [];
+    for (var i = 0; i < 120; i++) stars.push({ x:Math.random()*W, y:Math.random()*H, r:Math.random()*1.4+0.3, a:Math.random(), speed:Math.random()*0.3+0.05, dir:Math.random()*Math.PI*2 });
   }
-
-  tick();
-  setInterval(tick, 1000);
+  function draw() {
+    ctx.clearRect(0,0,W,H);
+    for (var i = 0; i < stars.length; i++) {
+      var s = stars[i];
+      ctx.beginPath(); ctx.arc(s.x,s.y,s.r,0,Math.PI*2);
+      ctx.fillStyle = 'rgba('+(Math.random()>.7?'74,222,128':'148,163,184')+','+s.a+')';
+      ctx.fill();
+      s.a += (Math.random()-.5)*.02; s.a = Math.max(.1,Math.min(.9,s.a));
+      s.x += Math.cos(s.dir)*s.speed; s.y += Math.sin(s.dir)*s.speed;
+      if(s.x<0)s.x=W; if(s.x>W)s.x=0; if(s.y<0)s.y=H; if(s.y>H)s.y=0;
+    }
+    requestAnimationFrame(draw);
+  }
+  resize(); window.addEventListener('resize',resize); draw();
+})();
+// ── Gate countdown ──
+(function() {
+  var T = new Date('2026-06-25T16:00:00Z');
+  function pad(n){return String(n).padStart(2,'0');}
+  function tick() {
+    var diff = T - Date.now();
+    if (diff <= 0) {
+      ['mainnet-soon','cn-cvs'].forEach(function(id){var e=document.getElementById(id);if(e)e.style.display='none';});
+      clearInterval(timer); return;
+    }
+    var d=Math.floor(diff/86400000), h=Math.floor(diff%86400000/3600000),
+        m=Math.floor(diff%3600000/60000), s=Math.floor(diff%60000/1000);
+    document.getElementById('sn-d').textContent=pad(d);
+    document.getElementById('sn-h').textContent=pad(h);
+    document.getElementById('sn-m').textContent=pad(m);
+    document.getElementById('sn-s').textContent=pad(s);
+  }
+  var timer=setInterval(tick,1000); tick();
 })();
 </script>
 <!-- ══ END LAUNCH GATE ═══════════════════════════════════════════════════ -->
 
   <!-- ══ LAUNCH ANNOUNCEMENT BANNER ══════════════════════════════════════ -->
   <div id="launch-banner">
-    <div class="bn-title">&#x1F680; CryptoNova &mdash; Mainnet Launch Friday June 19</div>
+    <div class="bn-title">&#x1F680; CryptoNova &mdash; Mainnet Launch Thursday June 25</div>
     <div class="bn-cd">
       <span id="bn-h">00</span>h
       <span id="bn-m">00</span>m
       <span id="bn-s">00</span>s
     </div>
     <div class="bn-sep">|</div>
-    <div class="bn-date">Friday June 19 &bull; 12:00 PM Eastern</div>
+    <div class="bn-date">Thursday June 25 &bull; 12:00 PM Eastern</div>
     <div class="bn-live" id="bn-live">&#x1F7E2; We&rsquo;re Live &mdash; Register Now!</div>
   </div>
 
@@ -473,7 +477,7 @@
   <div id="launch-gate">
     <h2>&#x1F680; CryptoNova Matrix</h2>
     <p style="font-size:15px;font-weight:600;color:var(--text);margin-bottom:4px">
-      Mainnet Launch &mdash; Friday, June 19 at 12 PM ET
+      Mainnet Launch &mdash; Thursday, June 25 at 12 PM ET
     </p>
     <p style="max-width:440px">
       Register, earn, and redeem <strong style="color:var(--green)">CryptoNova Tokens</strong> across 10 live tiers.<br><br>
@@ -487,7 +491,7 @@
       <div class="cd-box"><span class="cd-num" id="cd-m">00</span><div class="cd-lbl">Minutes</div></div>
       <div class="cd-box"><span class="cd-num" id="cd-s">00</span><div class="cd-lbl">Seconds</div></div>
     </div>
-    <div class="launch-sub" id="cd-date-label">12:00 PM Eastern &bull; Friday, June 19 2026</div>
+    <div class="launch-sub" id="cd-date-label">12:00 PM Eastern &bull; Thursday, June 25 2026</div>
 
     <!-- City timezone grid -->
     <div id="cd-cities-wrap" style="margin-top:14px;max-width:400px;width:100%;text-align:left">
@@ -1812,10 +1816,10 @@ const CHAIN_ID = 8453;
 
 // ── Countdown to 12 PM (noon) Eastern Friday June 12 ────────────────────────
 (function initCountdown() {
-  // 12:00 PM EDT (noon Eastern) = 16:00 UTC on June 12 2026.
+  // 12:00 PM EDT (noon Eastern) = 16:00 UTC on June 25 2026.
   // This is a FIXED UTC timestamp — same countdown for every viewer worldwide.
   // To reschedule: update this ISO string.
-  const LAUNCH_UTC = new Date('2026-06-19T16:00:00Z'); // noon EDT = 16:00 UTC // noon EDT = 16:00 UTC
+  const LAUNCH_UTC = new Date('2026-06-25T16:00:00Z'); // noon EDT = 16:00 UTC
 
   // Major city local equivalents — shown below the countdown
   const CITY_ZONES = [
