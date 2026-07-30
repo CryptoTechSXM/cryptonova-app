@@ -17,7 +17,7 @@ evidence trail.
 | **5** | `bulkUpgrade` fee/seating loop mismatch | **NOT BUILT** | Latent overcharge; must ship WITH the skip fix |
 | **6** | Clear stale `parkedAt` on any successful seating | **NOT BUILT** | Cheap; stops the copay keeper wasting attempts |
 | **7** | Rescue debt can never repay once the member leaves | **NOT BUILT** | Members carry debt forever while holding the funds to clear it |
-| **8** | Entering a tier where you hold commission destroys the balance | **NOT BUILT** | **The only item that can DELETE member funds. Ship before the funded push.** |
+| **8** | Entering a tier where you hold commission destroys the balance | **BUILT, GREEN** | **The only item that can DELETE member funds. Ship before the funded push.** |
 
 **Numbering is chronological, not severity order.** By severity the running order is
 **8, 1, 2, 3, 4, 7, 5, 6** — item 8 was found last (2026-07-29 21:30 EDT) and is the
@@ -274,8 +274,20 @@ but item 7 above removes the practical harm.
 
 ## 8. Entering a tier where you already hold commission DESTROYS the balance
 
-**Status: NOT BUILT. Highest severity found on 2026-07-29 — this one can delete
-member funds, and it is live right now.** Ranks above items 5 and 6, and arguably
+**Status: BUILT, GREEN (2026-07-29). Highest severity found that day — this one
+can delete member funds, and it is live on V8.45 right now.**
+
+**Verified in BOTH directions, which is the only way this test file is worth
+anything.** Against the fix: 5/5 pass, and the full suite is **420 passing / 0
+failing** (415 before, so no regression on a path every other suite exercises).
+Against V8.45 with the library checked out from `HEAD~1`: **C1 $0.25 vs a $0.95
+floor, C2 $0.00 vs $0.95, C3 $0.25 vs $0.95 — all three fail, C4/C5 still pass.**
+C2 reproducing `totalWithdrawn == 0` is the exact on-chain signature read from
+T3.1 MatA, so the fixture is faithful rather than merely plausible.
+
+Sizes after the fix: `MatrixPairFactory` **24,464 / 112 headroom — unchanged**,
+`TierRouter` 24,456 / 120 untouched. Confirms the library-linking claim: the fix
+costs the two size-constrained contracts nothing. Ranks above items 5 and 6, and arguably
 above everything except item 1.
 
 `MatrixLogicLib._register` builds a fresh struct whenever `hasEverJoined` is false:
@@ -386,7 +398,7 @@ Notes:
 - **`isInMatrix = false` is retained deliberately.** A re-entering commission
   holder must not inherit a stale true from any earlier path.
 
-### Tests to write — `test/V8_46_CreditPreservation.test.js`
+### Tests — `test/V8_46_CreditPreservation.test.js` (WRITTEN, 5/5 GREEN)
 
 - **C1** — downline entry credits an upline who has never joined that matrix;
   assert `withdrawable > 0` and `hasEverJoined == false`. Then the upline
@@ -398,7 +410,23 @@ Notes:
 - **C4** — a genuinely new member (no prior credit) still gets `id` assigned,
   `joinedAt` set, `hasEverJoined` true and zeros everywhere else. Guards against
   the fix breaking normal registration.
-- **C5** — `crossingReserve` accrued before first entry survives.
+- **C5** — SHIPPED AS: the referrer guard still resolves an upline on first real
+  entry. Retargeted deliberately during the build. The original C5 (crossingReserve
+  survival) was worth less than testing the risk the FIX ITSELF introduces: the old
+  code assigned `referrer: l1` unconditionally, the new code writes it only when the
+  slot is empty. A commission-only holder has `referrer == address(0)` because the
+  struct was never built, so if that guard were wrong they would enter with NO
+  upline and lose their whole chain-pay position — a worse bug than the one being
+  fixed. C5 now asserts the guard lets the legitimate first write through.
+
+**Two assertions had to be corrected during the build, and both corrections
+matter:** C1 and C3 originally used `equal` and failed against the FIXED code at
+$1.20 vs $0.95. Taking a seat legitimately EARNS — the entrant picks up a pool
+share from their own entry. The claim under test is that the pre-existing credit
+was not destroyed, so the assertion is `gte` with the prior balance as the floor.
+That still fails on V8.45 ($0.25), so nothing was weakened. The fixture also had
+to call `setGlobalJoined(W1)`: without it `l1` resolved to `address(0)` for every
+entrant and every referrer assertion was vacuous — a green test proving nothing.
 
 ### Exposure — who is at risk right now
 
