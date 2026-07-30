@@ -49,8 +49,8 @@ bulkUpgrade's gate-closed revert for the FIRST tier is now the unified eligibili
 (V8Elevator test updated). All V8_44 + legacy suites re-run green after the diet.
 
 **Verification still owed (Windows / fresh testnet deploy):**
-1. Full suite on the REAL config (`npx hardhat test` — sandbox used a no-viaIR/wasm
-   sidecar compiler, artifacts-sandbox; TierRouter/Factory viaIR paths compiled OK).
+1. ✅ DONE 2026-07-25: full suite on the REAL config — **400 passing, 4 pending, 0
+   failing** (`npx hardhat test`, cancun, viaIR overrides; commits 83a9f19 + bf2dbf9).
 2. Fresh stress deploy: MatB rotationCount climbing on ALL pairs, 500+ rotations,
    zero stranded reserves (sum crossingReserve over non-seated, non-parked == 0).
 3. Gas gate: re-measure full-cascade registration at MSIZE=127 — pool loop removal

@@ -8,11 +8,93 @@ Read this file at the start of every session before touching contracts, scripts,
 
 | Item | Value |
 |------|-------|
-| Version | V8.31 |
+| Version | **V8.45** (deployed 2026-07-26 ~02:45 UTC — emergency fix, see incident below) |
 | Network | Base Sepolia |
-| Addresses file | `scripts/deployed_addresses_v8_31.json` |
-| `.env` ADDRESSES_FILE | `deployed_addresses_v8_31.json` |
-| Deployer | 0x5EaEfA3086F025099f224cBe64fc9b3787533BB4 |
+| Addresses file | `scripts/deployed_addresses_v8_45.json` (commit 3b4afc4) |
+| `.env` ADDRESSES_FILE | `deployed_addresses_v8_45.json` (Windows AND /root/keeper/.env) |
+| Deployer | **0xCd0Af6a4116f2062c1594aDf34c1821D45175506** (owner decision — see wallet rules) |
+| TierRouter | 0xC44c1A511DFAebE58D9BB719D087aB540224686A |
+| PairFactory | 0x71020540eAcAdAbD8877Bf3e467bFBB295EE8129 |
+| MatrixKeeper | 0x603db2d933F3B24Ce1aB23BFc2495622D5600C84 |
+| MatrixLogicLib | 0x51bd1BB1Abb4b8d7e87379F8cb2E70e6D6B66feF |
+| KEEPERS | **ALL 8 VPS cron jobs ACTIVE** since 2026-07-26 ~04:20 UTC (rescue, onramp, monitor, direct, frozen_matb, channel_pulse, system_keeper, **stress**). Owner green-lit stress after pre-checks passed: 68 real members registered, INTEGRITY OK, 32/39 round-robin leaders registered. Stress state was reset to offset 0 (backup: stress_state.v844.json). Owner rule stands for future deploys: stress stays OFF until members are in and the owner says go — and NEVER restore a crontab backup blindly, it re-enables stress silently. |
+| Integrity gate | `node /root/keeper/integrity_check.js` — **run after every deploy and at least hourly on day 1.** 2026-07-26 12:11 UTC after a full night live: **INTEGRITY OK**, T1 MatB **rot=841** (V8.43 froze at 0; V8.44 corrupted at 217), T2 MatB rot=86, T3 filling. Fix proven under load. |
+| Parked count is NOT a backlog | 2026-07-26 18:00: dashboard showed **408 parked**, which looks alarming but is a ROLLING WINDOW, not a queue. Diagnosis: `DRY_RUN=1 MAX=500 node copay_rescue.js` reported **17 eligible, 0 failed, 389 still in grace** — 95% had parked within the last hour. Stress keeper had done **16,228 self-rescues** and was running one every ~8s. Little's Law: parked ≈ park-rate × grace. At ~390 parks/hour with 1h grace, steady state IS ~400. Lever = grace period: 1h→~400, 30m→~200, 15m→~100, 5m→~35. Owner decided 2026-07-26 to observe a couple more hours before dropping to 900s (15m). **Diagnostic to distinguish steady-state from real backlog: watch the "still in grace" number — flat ≈ healthy, climbing = park rate outpacing rescue.** |
+| Live tuning 2026-07-26 | **parkedGracePeriod 86400 → 3600s (1h)** — the deploy script sets the mainnet-appropriate 24h, which left 114 members parked and looking "stuck" (all showed "in grace period" in rescue.log; nothing was broken). Testnet wants 1h so the rescue keeper visibly drains. **MAINNET: 6h per the V8.25 decision.** Also **ROUND_ROBIN trimmed 39 → 13 leaders** (owner list, W1 0x6512e9B5 included). Keeper re-reads .env each run — no restart needed. NOTE: the Windows bigfill wrapper `run_bigfill_rr.ps1` keeps its OWN 39-address list — trim separately if desired. |
+
+---
+
+## 🟠 OPEN BUG for V8.46 — `addRescueDebt` breaks keeper rescue of MatB-parked members
+
+**Found live 2026-07-26 (pre-existing, V8.43-era — NOT from the V8.45 work).**
+`MatrixLogicLib.forceCrossKeeper` records the SF loan with
+`IFigureEightMatrixV8Cross(destination).addRescueDebt(...)`, where `destination` is
+`chainNext` for a MatB. `addRescueDebt` requires `msg.sender == _state.partner`.
+With ONE pair that holds (MatB.chainNext == own MatA, whose partner is that MatB).
+**Once a second pair exists**, pair-0 MatB.chainNext points at pair-1 MatA — whose
+partner is pair-1 MatB — so the call reverts **`F8V8: only partner`** and
+MatrixKeeper skips the whole rescue batch. Symptom: MatA parked drains normally,
+MatB parked never does (T1 MatB stuck at 64 while MatA went 7→0).
+
+**Live workaround (no redeploy):** `/root/keeper/copay_rescue.js` uses the
+contract's OTHER rescue path, `coPayRescue()`, which records the debt LOCALLY
+(`self.rescueDebt[member] += shortfall`) and never makes the cross-contract call.
+Unauthenticated, SF-funded, identical economics. Verified 2026-07-26: 55/55
+rescues succeeded, 0 failed, integrity clean throughout. **Cron: every 10 min at
+minutes 2,12,22,32,42,52 with MAX=120.**
+- MAX matters: the script walks tiers in order, so a low cap is consumed entirely
+  by T1 and T2+ never gets serviced (seen live: T1 drained while T2 MatB climbed
+  to 156 parked). 120 covers all tiers in one pass.
+- Cost is negligible: **40 cascading rescues ≈ 0.002 ETH**. Keeper wallet
+  0xd419681B holds ~1.63 ETH = ~800 runs of headroom.
+- SF is self-sustaining under this load: it GREW $1,510 → $3,502 while rescuing,
+  because entry fees fund it faster than co-pays drain it.
+- No per-member cooldown (unlike manual_rescue.js's 24h one). Passive members can
+  be rescued repeatedly; acceptable while SF grows, but watch for a member whose
+  rescueDebt climbs without repayment — MatrixKeeper's zero-balance guard evicts
+  those (withdrawable==0 && reserve==0 && debt>0).
+
+**V8.46 proper fix (pick one):** (a) call `addRescueDebt` on the matrix the member
+actually lands in, or (b) let `addRescueDebt` accept any matrix registered to the
+same PairManager (`isPairMatrix[msg.sender]`), or (c) drop the cross-contract call
+and record the debt locally like `coPayRescue` does.
+
+---
+
+## 🔴 INCIDENT 2026-07-26 — V8.44 nested-entry BFS corruption (read before touching entry/rotation code)
+
+**Symptom:** members could not self-rescue; 3 bug reports in ~2h. T1 pair-0 MatB showed
+`occupancy 127` but only **83 real occupants** (drift +44), 44 empty seats including
+**position 1**, and one member at **phantom position 128**. Every entry reverted
+`F8V8: no root`; 42 members were stuck. MatA was untouched.
+
+**Root cause (V8.44 overflow rework, my change):** entering a FULL matrix calls
+`_cycleOutRoot`, which calls `handleCycleOut` → `TierRouter._executeAdditive` →
+`_takeSeat`, which — at pair saturation — seated the member back into **the same matrix
+that was mid-rotation** (`registerForMatB`). The nested entry consumed the freed slot and
+advanced `nextSlot`; the outer call then placed its member at the **stale** slot,
+overwriting the nested occupant or writing past `MATRIX_SIZE`. One orphan + `occupancy`
++1 per event; holes migrate down one position per rotation until position 1 empties and
+the matrix wedges permanently (no rescue, no registration, no admin path back).
+
+**V8.45 fix (MatrixLogicLib):**
+1. `enterMatrix` resolves the seat **after** the rotation via `_lowestFreeSlot()` (live
+   storage), never trusts a cached `nextSlot`, and **parks** the member (fee still
+   distributed, rescue path intact) if the cascade refilled every seat.
+2. `_cycleOutRoot` scans forward for the **lowest occupied** position instead of assuming
+   position 1 — so a gap at position 1 self-heals instead of wedging.
+3. Regression tests `V8_45_NestedEntry.test.js` — N1 asserts, after every registration and
+   crossing, that occupancy == real occupants, no duplicate seats, nothing above
+   MATRIX_SIZE; N2 empties position 1 and proves rotation still works.
+
+**Rules this bought (do not relearn the hard way):**
+- **`MatrixLogicLib` is linked at deploy time** — there is NO way to patch a live matrix.
+  Any library bug = full redeploy + matrix reset.
+- **Never cache storage across a call that can re-enter.** `_cycleOutRoot` calls out to
+  TierRouter which calls straight back in.
+- **Green unit tests are not proof.** V8.44 shipped with 400 passing tests; they covered
+  routing, never array integrity under nested entry. Pair any entry/rotation change with
+  an invariant test AND the on-chain integrity gate.
 
 **Check `.env` ADDRESSES_FILE before every deploy.** The wrong value caused V8.18 to overwrite V8.19 data.
 
@@ -22,9 +104,27 @@ Read this file at the start of every session before touching contracts, scripts,
 
 | Wallet | Role | Rule |
 |--------|------|------|
-| 0x5EaEfA3... | Active deployer | Use for all deploys and admin calls |
-| 0xCd0Af6... | BANNED for deploy | EIP-7702 delegated — will be rejected on-chain |
+| 0xCd0Af6... | **Active TESTNET deployer (owner decision 2026-07-25, V8.44+)** | Owns MockUSDC → direct mint. EIP-7702 delegated to MetaMask stateless delegator 0x63c0c19a… (signature-gated; verified via eth_getCode 2026-07-25). The old "rejected on-chain" note is STALE — deploys from it succeed. Accepted risk on TESTNET ONLY. |
+| 0x5EaEfA3... | Previous deployer (V8.31–V8.43) | Clean EOA. Cannot mint MockUSDC. Still holds prior-era balances — check before assuming funds moved. |
 | 0x6512e9... | W1 (accountOne) | Root member, first MatA position |
+
+**MAINNET RULE: fresh, NEVER-delegated deployer wallet. The 7702 exception above does not carry over.**
+
+**Before every deploy:** `npx hardhat run scripts/whoami.js --network baseSepolia` — prints
+signer + 7702 status; set `EXPECTED_DEPLOYER=0xCd0Af6a4116f2062c1594aDf34c1821D45175506`
+in `.env` so deploy_v8.js hard-aborts on any silent key swap.
+
+**KEEPERS RUN ON THE VPS ONLY (167.99.0.250, cron).** Windows Task Scheduler is
+RETIRED — nothing keeper-related is scheduled on the Windows machine. Control them
+with `crontab -e` / `crontab -l | grep -v "^#"` after
+`ssh -i C:\Users\CryptoTech\.ssh\do_keeper root@167.99.0.250`.
+
+**KEEPER ALIGNMENT (V8.44+):** owner-gated calls must be signed by the wallet that
+owns the deployment (0xCd0Af6 for V8.44) via `DEPLOYER_PRIVATE_KEY`; the separate
+keeper EOA (0xd419681B…, 1.6 ETH) only pays gas for the permissionless
+`performUpkeep`. Verify both with the address-print one-liner in KEEPER_VPS_CONFIG.md
+before re-enabling. Also confirm the stress ladder's funding USDC sits in the
+deployer wallet.
 
 **NEVER put private keys or credentials in PowerShell commands.** All keys live in `.env`. Only runtime params go on the command line (`HDR_OFFSET`, `COUNT`, `TIER`, `MSIZE`, etc.).
 
