@@ -331,18 +331,49 @@ library MatrixLogicLib {
                 }
             }
 
-            self.members[member] = Member({
-                id:              self.totalJoined,
-                referrer:        l1,
-                joinedAt:        block.timestamp,
-                withdrawable:    0,
-                totalEarned:     0,
-                totalWithdrawn:  0,
-                cyclesCompleted: 0,
-                isInMatrix:      false,
-                hasEverJoined:   true,
-                crossingReserve: 0   // V8.31: initialized to 0; populated by _distributePayments
-            });
+            // V8.46 ITEM 8 — UPDATE THE EXISTING RECORD, NEVER REPLACE IT.
+            //
+            // This used to be `self.members[member] = Member({... 0, 0, 0 ...})`,
+            // on the assumption that `!hasEverJoined` means "no record exists yet".
+            // IT DOES NOT. It means "never took a seat in THIS matrix". Two paths
+            // write real values to a member's record without ever setting the flag:
+            //
+            //   1. _credit (:928) adds to `withdrawable` and `totalEarned`.
+            //      Referral commission is credited into the matrix where the
+            //      member's DOWNLINE entered, so every upline accrues a genuine
+            //      claim in tiers they have never occupied.
+            //   2. withdrawCore (:948) gates on `require(available > 0)`, never on
+            //      membership, so such a holder can withdraw — which increments
+            //      `totalWithdrawn` while `hasEverJoined` is still false.
+            //
+            // Constructing a fresh struct here therefore DELETED live balances,
+            // earnings, withdrawal history and crossing reserve the moment a
+            // commission-only holder finally entered that tier. The USDC stayed in
+            // the matrix as unattributed surplus with no claim against it.
+            //
+            // MEASURED 2026-07-29 on 0xe8Ad7bbA: withdrew $52.50 gross from T3.1
+            // MatA at block 44796516 (~21:40 UTC) as a commission-only holder;
+            // entered that matrix at 23:30:02 UTC; `totalWithdrawn` read $0.00
+            // afterwards. Sixteen payouts totalled $2,000.00 gross but the ledgers
+            // summed to $1,947.50. The owner lost only the RECORD because he had
+            // already withdrawn — had he entered first, the money itself was gone.
+            //
+            // Fields are written individually and the value-bearing ones are left
+            // alone. They are already 0 for a genuinely new member (mapping
+            // default), so nothing is lost in the normal case.
+            Member storage rec = self.members[member];
+            rec.id            = self.totalJoined;
+            // Never overwrite a referrer that is already set; a commission-only
+            // holder has address(0) here because the struct was never built, so
+            // the cross-pair resolution above still applies on first real entry.
+            if (rec.referrer == address(0)) rec.referrer = l1;
+            rec.joinedAt      = block.timestamp;
+            rec.hasEverJoined = true;
+            // The seat itself is taken further down this function; never inherit a
+            // stale true from an earlier path.
+            rec.isInMatrix    = false;
+            // DELIBERATELY UNTOUCHED: withdrawable, totalEarned, totalWithdrawn,
+            // cyclesCompleted, crossingReserve.
         }
 
         // V8.45 CRITICAL FIX (live incident 2026-07-26, T1.0 MatB wedged):
