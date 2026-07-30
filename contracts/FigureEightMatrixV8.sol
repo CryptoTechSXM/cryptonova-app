@@ -393,14 +393,11 @@ contract FigureEightMatrixV8 is Ownable2Step {
 
     // --- Registration -------------------------------------------------------------
 
-    function register(address referrer) external {
-        _requireNotSeated(msg.sender);
-        _requirePartner();
-
-        address entry = isMatrixA ? address(this) : _state.partner;
-        usdc.safeTransferFrom(msg.sender, entry, ENTRY_FEE);
-        IFigureEightMatrixV8Cross(entry)._enterMatrix(msg.sender, referrer);
-    }
+    // V8.46 item 2: register() DELETED. It was external with NO guard — anyone holding the
+    //   fee could seat themselves in ANY tier's matrix, bypassing TierRouter (memberHighestTier
+    //   never advanced, whale-gate uncounted, progression skipped). bypass_scan measured 6 txs
+    //   / 8 seats / ~$20k on selector 0x4420e486. Legit entry is TierRouter.register ->
+    //   PairManager.registerFor -> enterFor (pairManager-guarded). registerWithCoupon: item 2b.
 
     /// @notice Register with an on-chain coupon code that covers part or all of the entry fee.
     ///         Must be called on the MatA contract (the entry point) when using a coupon.
