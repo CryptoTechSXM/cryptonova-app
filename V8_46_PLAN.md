@@ -15,7 +15,7 @@ evidence trail.
 | **3** | B — cascade depth cap | **BUILT, GREEN** | Members are hitting the gas ceiling in production |
 | **4** | Pair guard (duplicate seats) | **BUILT, GREEN** | 415 tests pass; prevention + containment |
 | **5** | `bulkUpgrade` fee/seating loop mismatch | **NOT BUILT** | Latent overcharge; must ship WITH the skip fix |
-| **6** | Clear stale `parkedAt` on any successful seating | **NOT BUILT** | Counter-integrity: inflates parked count (7,405 vs 2,762 real); pairs with #9 |
+| **6** | Clear stale `parkedAt` on any successful seating | **BUILT, GREEN** | Counter-integrity: inflates parked count (7,405 vs 2,762 real); pairs with #9 |
 | **7** | Rescue debt can never repay once the member leaves | **NOT BUILT** | Members carry debt forever while holding the funds to clear it |
 | **8** | Entering a tier where you hold commission destroys the balance | **BUILT, GREEN** | **The only item that can DELETE member funds. Ship before the funded push.** |
 | **9** | Epoch MEMBER trigger counts seat-events, not people | **BUILT, GREEN** | Figure-8 loop inflated epoch pacing; corrupts the halving/tokenomics before mainnet |
@@ -236,6 +236,30 @@ so the "wasted attempts" cost is real only in post-outage bursts, not steady sta
 Fix = clear `parkedAt` unconditionally on any successful seating. Same
 "counter lies about members" class as item 9 — ship the two together. Frontend must
 also stop reporting parked POSITIONS as parked MEMBERS.
+
+---
+
+### BUILT — already shipped in commit 5c7163a (alongside item 4), plan was stale
+
+`MatrixLogicLib.enterMatrix` (the ONE point every seat is taken — registration,
+upgrade, crossing, re-entry, rescue re-seat) clears the park record unconditionally
+at entry, tagged "V8.46: TAKING A SEAT CLEARS ANY PARK RECORD FOR THIS MATRIX":
+```solidity
+if (self.parkedAt[member] > 0) { _removeFromParkedQueue(self, member); self.parkedAt[member] = 0; }
+```
+If placement then fails (saturated pair), the member is re-parked with a fresh
+timestamp — so the invariant holds. Because it lives at the universal seat point,
+no future path can reintroduce the residue by forgetting the cleaner.
+
+**Coverage (already passing in the 427):** `test/V8_44_CycleOut.test.js` T3 asserts
+the clear directly — precondition `parkedAt(W1) > 0`, `selfRescue()` re-enters,
+then `expect(parkedAt(W1)).to.equal(0)` (lines 234-241); lines 223/269 assert the
+same on other re-entry paths. No new test needed — the behavior is locked in.
+
+**Frontend half is separate (not this contract item):** the dashboard still SUMS
+`getParkedCount()` across matrices and labels it "members" (7,405 vs 2,762 real) —
+that is finding A in the 2026-07-30 frontend display audit, tracked with the
+frontend sync, not here.
 
 ---
 
