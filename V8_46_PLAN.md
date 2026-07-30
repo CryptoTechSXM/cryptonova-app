@@ -18,6 +18,7 @@ evidence trail.
 | **6** | Clear stale `parkedAt` on any successful seating | **NOT BUILT** | Cheap; stops the copay keeper wasting attempts |
 | **7** | Rescue debt can never repay once the member leaves | **NOT BUILT** | Members carry debt forever while holding the funds to clear it |
 | **8** | Entering a tier where you hold commission destroys the balance | **BUILT, GREEN** | **The only item that can DELETE member funds. Ship before the funded push.** |
+| **9** | Epoch MEMBER trigger counts seat-events, not people | **NOT BUILT** | Figure-8 loop inflates epoch pacing; corrupts the halving/tokenomics before mainnet |
 
 **Numbering is chronological, not severity order.** By severity the running order is
 **8, 1, 2, 3, 4, 7, 5, 6** — item 8 was found last (2026-07-29 21:30 EDT) and is the
@@ -478,3 +479,64 @@ security fix.
       and a router-side replacement for `doLimboReEntry`
 - [ ] `bypass_scan_full.js` re-run post-deploy — must report 0 with the
       `TARGET=` self-test still passing against a historical positive
+
+
+## 9. Epoch MEMBER trigger counts seat-events, not unique members
+
+`CNOVAToken.mintReward()` runs `epochMemberCount += 1` on **every** call
+(CNOVAToken.sol:445). But `mintReward` is called from `MatrixLogicLib.enterMatrix`
+(:425) — the single seat routine every action funnels through: **registration,
+tier upgrade, crossing to Matrix B, re-entry after cycle-out, and rescue re-seat.**
+So the counter documented as "unique registrations since last advance" actually
+counts **seat events**, and the figure-8 self-sustaining loop (cycle-out -> re-entry
+-> upgrade -> double-seat -> cross to MatB) ticks it several times per member per lap.
+
+### Measured on V8.45 (2026-07-30, live chain read)
+
+- `epochMemberCount` = **8,330** in epoch 9 alone, vs **2,762** total unique members
+  ever. A unique-member counter cannot exceed total members — proof it is not
+  counting people.
+- **54,537** system cycles vs 2,762 members (~20x) — the re-entry/rotation volume
+  that inflates the counter.
+- Epoch-advance forensics: epochs 2-4 fired on **MINT**, epochs 5-9 on **MEMBER** —
+  every advance driven by the loop, not real growth. Full climb Genesis->Final
+  Frontier took ~4d8h under stress-keeper volume; `epochMemberLimit` was never
+  lowered (still 10,000) and no `forceAdvanceEpoch` was used (no TIME triggers).
+
+### Why it matters
+
+With this bug the loop races the epoch counter through the high-reward epochs
+(50 -> 40 -> 20 CNOVA) in days. That silently breaks the "early adopters earn the
+most" halving tokenomics the whitepaper/marketing promise. Cosmetic on testnet,
+but a launch-blocker for mainnet.
+
+### Fix (self-contained in CNOVAToken; every caller corrected at once)
+
+State (new):
+```solidity
+mapping(address => bool) public countedMember;  // V8.46: true unique-member gate
+```
+Replace CNOVAToken.sol:445 `epochMemberCount += 1;` with:
+```solidity
+if (!countedMember[to]) {
+    countedMember[to] = true;
+    epochMemberCount += 1;
+}
+```
+`countedMember` is LIFETIME, never reset per epoch — a member counted in epoch 3
+must not recount on a re-entry in epoch 9. `epochMemberCount` (which still resets
+each advance) then equals brand-new members whose first mint fell in the current
+epoch = "unique registrations since last advance", as documented. Gate lives in the
+token, so all tiers/pairs/re-entry paths are fixed without touching MatrixLogicLib.
+
+### Tests — `test/V8_46_EpochMemberCount.test.js` (TO WRITE)
+1. Register N distinct members -> `epochMemberCount == N`.
+2. Re-enter / rotate / upgrade the SAME members many times -> `epochMemberCount` unchanged.
+3. MEMBER-trigger advance fires only after `epochMemberLimit` UNIQUE members, never on re-seat volume.
+4. A member first counted in epoch K, re-entering in epoch K+1, does NOT increment epoch K+1's count.
+
+### Not in scope (separate dial, not a bug)
+The **MINT** trigger (1,000,000 CNOVA/epoch) is also loop-accelerated but tracks real
+token issuance backed by the treasury floor; tune via governable `epochMintLimit` if
+longer epochs are wanted. Decide separately from this correctness fix.
+
