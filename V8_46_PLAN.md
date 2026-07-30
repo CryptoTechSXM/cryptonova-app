@@ -15,16 +15,24 @@ evidence trail.
 | **3** | B — cascade depth cap | **BUILT, GREEN** | Members are hitting the gas ceiling in production |
 | **4** | Pair guard (duplicate seats) | **BUILT, GREEN** | 415 tests pass; prevention + containment |
 | **5** | `bulkUpgrade` fee/seating loop mismatch | **NOT BUILT** | Latent overcharge; must ship WITH the skip fix |
-| **6** | Clear stale `parkedAt` on any successful seating | **NOT BUILT** | Cheap; stops the copay keeper wasting attempts |
+| **6** | Clear stale `parkedAt` on any successful seating | **NOT BUILT** | Counter-integrity: inflates parked count (7,405 vs 2,762 real); pairs with #9 |
 | **7** | Rescue debt can never repay once the member leaves | **NOT BUILT** | Members carry debt forever while holding the funds to clear it |
 | **8** | Entering a tier where you hold commission destroys the balance | **BUILT, GREEN** | **The only item that can DELETE member funds. Ship before the funded push.** |
-| **9** | Epoch MEMBER trigger counts seat-events, not people | **NOT BUILT** | Figure-8 loop inflates epoch pacing; corrupts the halving/tokenomics before mainnet |
 
 **Numbering is chronological, not severity order.** By severity the running order is
-**8, 1, 2, 3, 4, 7, 5, 6** — item 8 was found last (2026-07-29 21:30 EDT) and is the
+**8, 1, 2, 9, 6, 3, 4, 7, 5** — item 8 was found last (2026-07-29 21:30 EDT) and is the
 only one where a member can lose money they already own, with no action by anyone
 else and no way to recover the value from state afterwards. Item 1 stays second
 because it is the only hole a stranger can use *on someone else*.
+
+**Items 9 and 6 are a counter-integrity cluster — bumped 2026-07-30.** Both make
+counters lie about members: #9 counts seat-events as epoch "members" (8,330 vs
+2,762 real), #6 leaves stale `parkedAt` so parked count reads 7,405 vs 2,762 real.
+Both cheap, both self-contained, ship together. NOTE (measured 2026-07-30): #6 is
+NOT a steady-state rescue-throttle — a 120-tx live sample of keeper 0xd419681B
+showed 0% revert, ~12 successful rescues/min. The revert-waste is real only in the
+burst right after a keeper outage; the standing damage is the inflated count, not
+lost rescues. Rank #6 for data integrity, not throughput.
 
 **If V8.46 has to ship partially, ship 8 and 1.**
 
@@ -199,6 +207,15 @@ member (`selfRescue` also checks `!isInMatrix`) but the copay keeper wastes
 attempts rescuing seated members, failing with "still in matrix" — swallowed at
 MatrixKeeper:558. **The reliable test everywhere else is
 `parkedAt > 0 && !isActiveInMatrix`.**
+
+**Primary impact is data integrity, not rescue throughput (measured 2026-07-30).**
+Parked count reads **7,405** against **2,762** real members — impossible for people,
+because stale entries count parked POSITIONS across tiers and never clear. A live
+120-tx sample of the keeper showed **0% revert / ~12 successful rescues per minute**,
+so the "wasted attempts" cost is real only in post-outage bursts, not steady state.
+Fix = clear `parkedAt` unconditionally on any successful seating. Same
+"counter lies about members" class as item 9 — ship the two together. Frontend must
+also stop reporting parked POSITIONS as parked MEMBERS.
 
 ---
 
@@ -479,64 +496,3 @@ security fix.
       and a router-side replacement for `doLimboReEntry`
 - [ ] `bypass_scan_full.js` re-run post-deploy — must report 0 with the
       `TARGET=` self-test still passing against a historical positive
-
-
-## 9. Epoch MEMBER trigger counts seat-events, not unique members
-
-`CNOVAToken.mintReward()` runs `epochMemberCount += 1` on **every** call
-(CNOVAToken.sol:445). But `mintReward` is called from `MatrixLogicLib.enterMatrix`
-(:425) — the single seat routine every action funnels through: **registration,
-tier upgrade, crossing to Matrix B, re-entry after cycle-out, and rescue re-seat.**
-So the counter documented as "unique registrations since last advance" actually
-counts **seat events**, and the figure-8 self-sustaining loop (cycle-out -> re-entry
--> upgrade -> double-seat -> cross to MatB) ticks it several times per member per lap.
-
-### Measured on V8.45 (2026-07-30, live chain read)
-
-- `epochMemberCount` = **8,330** in epoch 9 alone, vs **2,762** total unique members
-  ever. A unique-member counter cannot exceed total members — proof it is not
-  counting people.
-- **54,537** system cycles vs 2,762 members (~20x) — the re-entry/rotation volume
-  that inflates the counter.
-- Epoch-advance forensics: epochs 2-4 fired on **MINT**, epochs 5-9 on **MEMBER** —
-  every advance driven by the loop, not real growth. Full climb Genesis->Final
-  Frontier took ~4d8h under stress-keeper volume; `epochMemberLimit` was never
-  lowered (still 10,000) and no `forceAdvanceEpoch` was used (no TIME triggers).
-
-### Why it matters
-
-With this bug the loop races the epoch counter through the high-reward epochs
-(50 -> 40 -> 20 CNOVA) in days. That silently breaks the "early adopters earn the
-most" halving tokenomics the whitepaper/marketing promise. Cosmetic on testnet,
-but a launch-blocker for mainnet.
-
-### Fix (self-contained in CNOVAToken; every caller corrected at once)
-
-State (new):
-```solidity
-mapping(address => bool) public countedMember;  // V8.46: true unique-member gate
-```
-Replace CNOVAToken.sol:445 `epochMemberCount += 1;` with:
-```solidity
-if (!countedMember[to]) {
-    countedMember[to] = true;
-    epochMemberCount += 1;
-}
-```
-`countedMember` is LIFETIME, never reset per epoch — a member counted in epoch 3
-must not recount on a re-entry in epoch 9. `epochMemberCount` (which still resets
-each advance) then equals brand-new members whose first mint fell in the current
-epoch = "unique registrations since last advance", as documented. Gate lives in the
-token, so all tiers/pairs/re-entry paths are fixed without touching MatrixLogicLib.
-
-### Tests — `test/V8_46_EpochMemberCount.test.js` (TO WRITE)
-1. Register N distinct members -> `epochMemberCount == N`.
-2. Re-enter / rotate / upgrade the SAME members many times -> `epochMemberCount` unchanged.
-3. MEMBER-trigger advance fires only after `epochMemberLimit` UNIQUE members, never on re-seat volume.
-4. A member first counted in epoch K, re-entering in epoch K+1, does NOT increment epoch K+1's count.
-
-### Not in scope (separate dial, not a bug)
-The **MINT** trigger (1,000,000 CNOVA/epoch) is also loop-accelerated but tracks real
-token issuance backed by the treasury floor; tune via governable `epochMintLimit` if
-longer epochs are wanted. Decide separately from this correctness fix.
-
