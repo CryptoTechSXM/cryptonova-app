@@ -201,6 +201,12 @@ contract CNOVAToken is ERC20, ERC20Burnable, AccessControl {
 
     uint8   public currentEpoch;
     uint256 public epochMemberCount;  // unique registrations since last advance
+    /// @notice V8.46 item 9: LIFETIME gate so epochMemberCount counts PEOPLE, not seat
+    ///         events. mintReward runs on every seat (register, upgrade, crossing, re-entry,
+    ///         rescue re-seat), so the counter used to tick for members who already exist —
+    ///         the figure-8 loop inflated it far past reality (measured 8,330 vs 2,762 real
+    ///         members on V8.45). Never reset per epoch: a member counted once stays counted.
+    mapping(address => bool) public countedMember;
     uint256 public epochStartTime;    // timestamp of last epoch advance
     uint256 public epochStartMinted;  // totalMinted at last epoch advance
     uint256 public totalMinted;
@@ -441,8 +447,12 @@ contract CNOVAToken is ERC20, ERC20Burnable, AccessControl {
         }
         if (amount == 0) return 0;
 
-        totalMinted      += amount;
-        epochMemberCount += 1;
+        totalMinted += amount;
+        // V8.46 item 9: only NEW unique members advance the epoch MEMBER trigger.
+        if (!countedMember[to]) {
+            countedMember[to] = true;
+            epochMemberCount += 1;
+        }
 
         _mintVested(to, amount);
         emit TokensMinted(to, amount, currentEpoch + 1, tierIndex);

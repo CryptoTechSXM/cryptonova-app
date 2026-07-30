@@ -18,6 +18,7 @@ evidence trail.
 | **6** | Clear stale `parkedAt` on any successful seating | **NOT BUILT** | Counter-integrity: inflates parked count (7,405 vs 2,762 real); pairs with #9 |
 | **7** | Rescue debt can never repay once the member leaves | **NOT BUILT** | Members carry debt forever while holding the funds to clear it |
 | **8** | Entering a tier where you hold commission destroys the balance | **BUILT, GREEN** | **The only item that can DELETE member funds. Ship before the funded push.** |
+| **9** | Epoch MEMBER trigger counts seat-events, not people | **BUILT, GREEN** | Figure-8 loop inflated epoch pacing; corrupts the halving/tokenomics before mainnet |
 
 **Numbering is chronological, not severity order.** By severity the running order is
 **8, 1, 2, 9, 6, 3, 4, 7, 5** — item 8 was found last (2026-07-29 21:30 EDT) and is the
@@ -492,6 +493,47 @@ overwritten. They can be reconstructed from logs where needed: sum
 `EarningsWithdrawn` for `totalWithdrawn`, and the credit events for `totalEarned`.
 No member is owed USDC as a result of the history loss on 0xe8Ad7bbA, because the
 money had already been paid out before the reset.
+
+## 9. Epoch MEMBER trigger counts seat-events, not unique members
+
+`CNOVAToken.mintReward()` ran `epochMemberCount += 1` on EVERY call
+(CNOVAToken.sol). But `mintReward` is called from `MatrixLogicLib.enterMatrix` —
+the single seat routine every action funnels through: registration, tier upgrade,
+crossing to Matrix B, re-entry after cycle-out, rescue re-seat. So the counter
+documented as "unique registrations" actually counted SEAT EVENTS, and the figure-8
+self-sustaining loop ticked it several times per member per lap.
+
+### Measured on V8.45 (2026-07-30, live chain read)
+- `epochMemberCount` = **8,330** in epoch 9 alone vs **2,762** total unique members
+  ever — impossible for people, proof it was not counting them.
+- 54,537 system cycles vs 2,762 members (~20x) — the re-entry/rotation volume.
+- Epoch forensics: epochs 2-4 fired on MINT, 5-9 on MEMBER — every advance driven
+  by the loop, not real growth. Genesis->Final Frontier in ~4d8h under stress-keeper
+  volume; `epochMemberLimit` never lowered (still 10,000), no `forceAdvanceEpoch`.
+
+### Why it matters
+With this bug the loop races the epoch counter through the high-reward epochs
+(50 -> 40 -> 20 CNOVA) in days, silently breaking the "early adopters earn most"
+halving tokenomics. Cosmetic on testnet, launch-blocker for mainnet.
+
+### BUILT 2026-07-30 — `test/V8_46_EpochMemberCount.test.js` (3/3 GREEN, full suite 427 passing)
+`CNOVAToken.sol`: added `mapping(address=>bool) public countedMember` (LIFETIME,
+never reset per epoch) and gated the increment:
+```solidity
+if (!countedMember[to]) { countedMember[to] = true; epochMemberCount += 1; }
+```
+Gate lives in the token, so all tiers/pairs/re-entry paths are fixed at once.
+Tests: (1) three members re-seated 15x total keep count at 3; (2) one member
+re-minted 10x never advances the MEMBER trigger, four DISTINCT people do;
+(3) a member counted in epoch 0 is not recounted after advancing to epoch 1.
+Existing 5c epoch test unaffected (it uses distinct members).
+
+### Not in scope (separate dial, not a bug)
+The MINT trigger (1,000,000 CNOVA/epoch) is also loop-accelerated but tracks real
+token issuance backed by the treasury floor; tune via governable `epochMintLimit`
+if longer epochs are wanted. Decide separately from this correctness fix.
+
+---
 
 ## Operational, not contract
 
