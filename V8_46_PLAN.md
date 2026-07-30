@@ -14,7 +14,7 @@ evidence trail.
 | **2** | `register` / `registerWithCoupon` → router-only | **BUILT, GREEN** | 6 live bypasses measured; frontend half already shipped |
 | **3** | B — cascade depth cap | **BUILT, GREEN** | Members are hitting the gas ceiling in production |
 | **4** | Pair guard (duplicate seats) | **BUILT, GREEN** | 415 tests pass; prevention + containment |
-| **5** | `bulkUpgrade` fee/seating loop mismatch | **NOT BUILT** | Latent overcharge; must ship WITH the skip fix |
+| **5** | `bulkUpgrade` fee/seating loop mismatch | **BUILT** (5c7163a) | Fee loop now uses `holdsSeatIn` like the seating loop; test in V8Elevator |
 | **6** | Clear stale `parkedAt` on any successful seating | **BUILT, GREEN** | Counter-integrity: inflates parked count (7,405 vs 2,762 real); pairs with #9 |
 | **7** | Rescue debt can never repay once the member leaves | **BUILT, GREEN** | Members carry debt forever while holding the funds to clear it |
 | **8** | Entering a tier where you hold commission destroys the balance | **BUILT, GREEN** | **The only item that can DELETE member funds. Ship before the funded push.** |
@@ -208,13 +208,28 @@ creation code, so a matrix change silently inflates it.
 
 ---
 
-## 5. `bulkUpgrade` fee loop vs seating loop (NOT BUILT)
+## 5. `bulkUpgrade` fee loop vs seating loop (BUILT — commit 5c7163a, alongside item 4)
 
-The fee loop (:976-980) sums EVERY tier from `startIdx` to target; the seating
-loop (:984-989) `continue`s past tiers the member already holds. The member is
-charged for a tier they are not seated in. Latent today because the skip never
-fires — **becomes a live overcharge the moment the skip is fixed. Both must ship
-together.**
+**The bug:** the fee loop summed EVERY tier from `startIdx` to target while the
+seating loop `continue`d past tiers the member already held — so a skipped tier was
+still paid for and the router kept the difference. Latent only because the skip
+tested `tierMatrixAAddr[i]` (pair 1) and so almost never fired; fixing that guard
+(item 4's coupled `holdsSeatIn` fix, which iterates ALL pairs/both halves) is
+exactly what would have turned this into a live overcharge — which is why the two
+had to ship together.
+
+**The fix (TierRouter.bulkUpgrade):** the fee loop now uses the SAME condition as
+the seating loop — `if (IPairManagerV8(tierPairManagers[i]).holdsSeatIn(msg.sender))
+continue;` — so what a member is charged for and what they are seated in cannot
+diverge. A tier already held is neither billed nor re-seated.
+
+**Test (`test/V8Elevator.test.js`, "V8.46 item 5"):** registers a member at T1,
+seats them in T2 directly (impersonated TierRouter → `registerFor`, mimicking a
+crossing/double-seat that holds a seat below the member's highest tier), approves a
+full T2 fee so a pre-fix loop WOULD have charged, then `bulkUpgrade`s across T2 and
+asserts the `BulkUpgrade` fee arg is **0**, the wallet delta is **0**, and no second
+seat forms. Passes on the fix; the pre-fix code would have charged the full T2 fee.
+Ran green in the full V8Elevator file (142 passing, 0 failing).
 
 ---
 

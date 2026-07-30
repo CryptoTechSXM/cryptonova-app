@@ -1354,6 +1354,47 @@ describe("V8.35 — Whale Gate: bulkUpgrade + sequential manualUpgrade + per-tie
     expect(info.whaleGateEligible).to.be.true;
   });
 
+  // ── Part 4: V8.46 item 5 — charge only for tiers actually entered ────────────
+
+  it("V8.46 item 5: bulkUpgrade does NOT re-charge or re-seat a tier the member already holds (holdsSeatIn skip)", async function () {
+    const { tierRouter, usdc, pm2, admin, deployer, w1, reg } = await loadFixture(deployV8Fixture);
+
+    // w1 registers at T1 → memberHighestTier = 1, so a bulkUpgrade span begins at
+    // index 1 (T2). Open T2 eligibility the same way the happy-path bulk test does.
+    await reg(w1, ethers.ZeroAddress);
+    await tierRouter.connect(admin).setTierWhaleGateActive(5, true);
+
+    // Seat w1 in T2 DIRECTLY, without advancing the router's memberHighestTier —
+    // exactly the "holds a seat in a tier that is not yet their highest" case item 5
+    // addresses (a crossing / double-seat lands a member here in production).
+    // PairManagerV8.registerFor only accepts the TierRouter, so impersonate it.
+    const trAddr  = await tierRouter.getAddress();
+    const pm2Addr = await pm2.getAddress();
+    await ethers.provider.send("hardhat_setBalance", [trAddr, "0xde0b6b3a7640000"]);
+    await usdc.connect(deployer).mint(trAddr, T2_FEE);
+    const trSigner = await ethers.getImpersonatedSigner(trAddr);
+    await usdc.connect(trSigner).approve(pm2Addr, T2_FEE);
+    await pm2.connect(trSigner).registerFor(w1.address, ethers.ZeroAddress, 0);
+
+    expect(await pm2.holdsSeatIn(w1.address)).to.be.true; // w1 now holds the T2 seat
+
+    // Approve the router for a FULL T2 fee, so that a pre-fix (unconditional) fee
+    // loop WOULD have successfully charged — proving the zero charge below is the
+    // holdsSeatIn skip, not a reverted / short transfer.
+    await usdc.connect(w1).approve(trAddr, T2_FEE);
+    const balBefore = await usdc.balanceOf(w1.address);
+
+    // bulkUpgrade to T2 (targetTierIndex = 1). Span is exactly {T2}, already held →
+    // fee loop skips it (totalFee = 0) and the seating loop skips it (no re-seat).
+    await expect(tierRouter.connect(w1).bulkUpgrade(1))
+      .to.emit(tierRouter, "BulkUpgrade")
+      .withArgs(w1.address, 2n, 2n, 0n); // fromTier=2, toTier=2, totalFee = 0
+
+    const balAfter = await usdc.balanceOf(w1.address);
+    expect(balBefore - balAfter).to.equal(0n);            // NOT re-charged for the held tier
+    expect(await pm2.holdsSeatIn(w1.address)).to.be.true; // still exactly one seat, no revert
+  });
+
 });
 
 // ===============================================================================
