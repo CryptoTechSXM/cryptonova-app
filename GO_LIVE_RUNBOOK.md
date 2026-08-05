@@ -83,7 +83,7 @@ frontend until this says INTEGRITY OK.**
 scp -i C:\Users\CryptoTech\.ssh\do_keeper C:\CryptoNite-Smart-Contracts\CryptoNova\scripts\deployed_addresses_vX_XX.json root@167.99.0.250:/root/keeper/
 ```
 ```powershell
-scp -i C:\Users\CryptoTech\.ssh\do_keeper C:\CryptoNite-MT5-Bots\integrity_check.js root@167.99.0.250:/root/keeper/
+scp -i C:\Users\CryptoTech\.ssh\do_keeper C:\CryptoNova-Keepers\integrity_check.js root@167.99.0.250:/root/keeper/
 ```
 🌐VPS (after setting ADDRESSES_FILE in /root/keeper/.env):
 ```

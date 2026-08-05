@@ -51,3 +51,25 @@ scp -i C:\Users\CryptoTech\.ssh\do_keeper <local-file> root@167.99.0.250:/root/k
 all four use the estimateGas ladder (est×1.15 → ×1.05 → est), never static gas
 limits, because a full-matrix cascade needs ~15.5M and the public RPC caps tx gas
 near 17.8M. Logs: `/root/keeper/stress.log`, diagnostics `/root/keeper/diag_overflow.js`.
+
+## RPC allocation (QuickNode x10, set 2026-08-05 pre-V8.47-go-live)
+
+Keys live ONLY in .env files / index.html - this table maps by app name.
+Keeper scripts read BASE_SEPOLIA_RPC_URL (dotenv does NOT override an
+already-set env var, so a cron-line prefix pins a keeper to its own endpoint).
+
+| App (QuickNode) | Consumer |
+|---|---|
+| thrilling-newest-seed | VPS /root/keeper/.env default (rescue keeper + diagnostics) |
+| fluent-neat-moon | Windows deploy/ops machine (contracts repo .env) |
+| summer-silent-crater | monitor keeper (cron-line BASE_SEPOLIA_RPC_URL= prefix) |
+| autumn-rough-sky | stress keeper (cron-line prefix; enabled only at Phase 7.3) |
+| fabled-delicate-leaf | spare / bug_manager |
+| wiser-proportionate-forest | frontend fallback (RPC_FALLBACK) |
+| cosmopolitan-still-fire | frontend pool EP2 |
+| newest-cold-isle | frontend pool EP3 |
+| side-silent-sheet | frontend pool EP4 |
+| frequent-misty-meme | frontend primary (RPC_URL) |
+
+Frontend apps are publicly visible in index.html - set a referrer/domain
+allowlist on them in the QuickNode dashboard.
