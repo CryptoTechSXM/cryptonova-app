@@ -38,7 +38,7 @@ async function deploy(size = 4) {
     .deploy(cnovaAddr, usdcAddr, owner.address);
   const sf = await (await ethers.getContractFactory("StabilityFund"))
     .deploy(usdcAddr, owner.address);
-  const tr = await (await ethers.getContractFactory("TierRouter"))
+  const tr = await (await ethers.getContractFactory("TierRouter", { libraries: { TierRouterLib: (await (await ethers.getContractFactory("TierRouterLib")).deploy()).target } }))
     .deploy(usdcAddr, owner.address);
   const pm = await (await ethers.getContractFactory("PairManagerV8"))
     .deploy(usdcAddr, FEE, owner.address);

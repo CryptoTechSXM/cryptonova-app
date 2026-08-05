@@ -34,7 +34,7 @@ require("dotenv").config();
 // ADDRESSES_FILE: point to whichever deployment you want to stress-test.
 const ADDRESSES_FILE = path.join(
   __dirname,
-  process.env.ADDRESSES_FILE || "deployed_addresses_v8_43.json"
+  process.env.ADDRESSES_FILE || "deployed_addresses_v8_47.json"
 );
 
 // COUNT: for 127-seat matrices, 260 fills MatA + MatB (W1 seeds pos-1, 126 fill

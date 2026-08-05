@@ -29,7 +29,7 @@ async function deployKeeper() {
   const usdc = await (await ethers.getContractFactory("MockUSDC")).deploy(owner.address);
   const usdcAddr = await usdc.getAddress();
   const sf = await (await ethers.getContractFactory("StabilityFund")).deploy(usdcAddr, owner.address);
-  const tr = await (await ethers.getContractFactory("TierRouter")).deploy(usdcAddr, owner.address);
+  const tr = await (await ethers.getContractFactory("TierRouter", { libraries: { TierRouterLib: (await (await ethers.getContractFactory("TierRouterLib")).deploy()).target } })).deploy(usdcAddr, owner.address);
   const keeper = await (await ethers.getContractFactory("MatrixKeeper"))
     .deploy(await tr.getAddress(), await sf.getAddress());
   return { keeper, owner, keeperEOA, stranger, member };

@@ -477,18 +477,24 @@ library MatrixLogicLib {
         uint256 share = (k * dA1 - dAr) / W;
         if (share == 0) return;
 
-        // -- Gradual rescue-debt repayment (same policy as the V8.43 loop) ----
-        if (self.rescueDebt[member] > 0 && self.stabilityFund != address(0)) {
-            uint256 repayBps = IStabilityFund(self.stabilityFund).rescueRepayBps();
-            uint256 repay = share * repayBps / BPS_DENOM;
-            if (repay > self.rescueDebt[member]) repay = self.rescueDebt[member];
-            if (repay > 0) {
-                self.rescueDebt[member] -= repay;
-                share                   -= repay;
-                SafeERC20.forceApprove(cfg.usdc, self.stabilityFund, repay);
-                try IStabilityFund(self.stabilityFund).receiveDebtRepayment(repay) {}
-                catch {}
-                emit RescueDebtRepaid(member, repay, self.rescueDebt[member]);
+        // -- V8.47: member-level rescue-debt repayment ------------------------
+        // Repay against the member's SINGLE cross-tier debt held in the SF, at the
+        // banded clawback rate, out of this pool share. Because the debt is now a
+        // member-level balance (not this matrix's silo), ANY matrix at ANY tier the
+        // member earns in services the one debt — a loan issued in a matrix they
+        // later moved on from no longer strands.
+        if (self.stabilityFund != address(0)) {
+            uint256 owed = IStabilityFund(self.stabilityFund).memberDebtOf(member);
+            if (owed > 0) {
+                uint256 repay = share * IStabilityFund(self.stabilityFund).clawbackBpsFor(member) / BPS_DENOM;
+                if (repay > owed) repay = owed;
+                if (repay > 0) {
+                    share -= repay;
+                    SafeERC20.forceApprove(cfg.usdc, self.stabilityFund, repay);
+                    try IStabilityFund(self.stabilityFund).receiveDebtRepayment(member, repay) {}
+                    catch {}
+                    emit RescueDebtRepaid(member, repay, owed - repay);
+                }
             }
         }
         if (share > 0) {
@@ -510,10 +516,14 @@ library MatrixLogicLib {
         uint256 W = cfg.matrixSize * (cfg.matrixSize + 1) / 2 - 1;
         uint256 share = (k * dA1 - dAr) / W;
         if (share == 0) return 0;
-        if (self.rescueDebt[member] > 0 && self.stabilityFund != address(0)) {
-            uint256 repay = share * IStabilityFund(self.stabilityFund).rescueRepayBps() / BPS_DENOM;
-            if (repay > self.rescueDebt[member]) repay = self.rescueDebt[member];
-            share -= repay;
+        // V8.47: net of the member-level redirect estimate (banded clawback).
+        if (self.stabilityFund != address(0)) {
+            uint256 owed = IStabilityFund(self.stabilityFund).memberDebtOf(member);
+            if (owed > 0) {
+                uint256 repay = share * IStabilityFund(self.stabilityFund).clawbackBpsFor(member) / BPS_DENOM;
+                if (repay > owed) repay = owed;
+                share -= repay;
+            }
         }
         return share;
     }
@@ -571,23 +581,24 @@ library MatrixLogicLib {
         emit MemberCycledOut(root, self.members[root].cyclesCompleted, self.rotationCount, address(this));
 
         if (!cfg.isMatrixA && self.tierRouter != address(0)) {
-            // -- Rescue loan repayment at MatB cycle-out ----------------------------
-            // This is the primary repayment moment. The member just received their
-            // full pool distribution. Deduct any outstanding rescue debt before
-            // handing the net withdrawable to TierRouter for upgrade/exit.
+            // -- V8.47: member-level rescue-debt repayment at MatB cycle-out --------
+            // Primary repayment moment: the member just received their full pool
+            // distribution. Clear as much of their SINGLE cross-tier SF debt as their
+            // withdrawable covers before handing the net to TierRouter for upgrade/exit.
             // Soft -- never blocks the cycle-out, just reduces what carries forward.
-            uint256 cycleOutDebt = self.rescueDebt[root];
-            if (cycleOutDebt > 0 && self.stabilityFund != address(0)) {
+            uint256 cycleOutDebt = self.stabilityFund != address(0)
+                ? IStabilityFund(self.stabilityFund).memberDebtOf(root)
+                : 0;
+            if (cycleOutDebt > 0) {
                 uint256 bal = self.members[root].withdrawable;
                 if (bal > 0) {
                     uint256 repay = bal >= cycleOutDebt ? cycleOutDebt : bal;
-                    self.rescueDebt[root]           -= repay;
                     self.members[root].withdrawable -= repay;
                     SafeERC20.forceApprove(cfg.usdc, self.stabilityFund, repay);
                     // V8.39: try/catch — SF failure must not block cycle-out
-                    try IStabilityFund(self.stabilityFund).receiveDebtRepayment(repay) {}
+                    try IStabilityFund(self.stabilityFund).receiveDebtRepayment(root, repay) {}
                     catch {}
-                    emit RescueDebtRepaid(root, repay, self.rescueDebt[root]);
+                    emit RescueDebtRepaid(root, repay, cycleOutDebt - repay);
                 }
             }
             // V8.44 (item A): escrow = the member's crossing reserve. V8.43
@@ -719,18 +730,20 @@ library MatrixLogicLib {
         // After paying the crossing fee, any remaining withdrawable is used to
         // repay outstanding rescue debt to the SF (partial repayment is fine).
         // This does NOT block or re-park the member -- it's a soft recovery.
-        uint256 debt = self.rescueDebt[member];
-        if (debt > 0 && self.stabilityFund != address(0)) {
+        // V8.47: repay against the member-level SF ledger.
+        uint256 debt = self.stabilityFund != address(0)
+            ? IStabilityFund(self.stabilityFund).memberDebtOf(member)
+            : 0;
+        if (debt > 0) {
             uint256 remaining = self.members[member].withdrawable;
             if (remaining > 0) {
                 uint256 repay = remaining >= debt ? debt : remaining;
-                self.rescueDebt[member] -= repay;
                 self.members[member].withdrawable -= repay;
                 SafeERC20.forceApprove(cfg.usdc, self.stabilityFund, repay);
                 // V8.39: try/catch — SF failure must never block the crossing.
-                try IStabilityFund(self.stabilityFund).receiveDebtRepayment(repay) {}
+                try IStabilityFund(self.stabilityFund).receiveDebtRepayment(member, repay) {}
                 catch {}
-                emit RescueDebtRepaid(member, repay, self.rescueDebt[member]);
+                emit RescueDebtRepaid(member, repay, debt - repay);
             }
         }
     }
@@ -990,24 +1003,25 @@ library MatrixLogicLib {
         uint256 available = self.members[member].withdrawable;
         require(available > 0, "F8V8: nothing to withdraw");
 
-        // V8.46 item 7: repay any STRANDED rescue debt from the withdrawable balance.
-        // A debt owed in a matrix the member has LEFT never settles — no pool share
-        // accrues there and they never cycle out of it again — so this withdrawal is the
-        // one action that can still clear it. Full repayment (mirrors the SF idiom in
-        // _settlePool); decrements the STORED withdrawable too so the repaid amount cannot
-        // be withdrawn twice; try/catch keeps an SF failure from ever blocking the payout.
+        // V8.47: repay the member's SINGLE cross-tier rescue debt from the withdrawable
+        // balance on the way out. With the member-level ledger this covers the old
+        // "stranded in a left-behind matrix" case AND any other outstanding debt — this
+        // withdrawal clears up to `available` of it. Decrements the STORED withdrawable
+        // too so the repaid amount can't be withdrawn twice; try/catch keeps an SF
+        // failure from ever blocking the payout.
         {
-            uint256 debt = self.rescueDebt[member];
-            if (debt > 0 && self.stabilityFund != address(0)) {
+            uint256 debt = self.stabilityFund != address(0)
+                ? IStabilityFund(self.stabilityFund).memberDebtOf(member)
+                : 0;
+            if (debt > 0) {
                 uint256 repay = available >= debt ? debt : available;
                 if (repay > 0) {
-                    self.rescueDebt[member]           -= repay;
                     self.members[member].withdrawable -= repay;
                     available                         -= repay;
                     SafeERC20.forceApprove(cfg.usdc, self.stabilityFund, repay);
-                    try IStabilityFund(self.stabilityFund).receiveDebtRepayment(repay) {}
+                    try IStabilityFund(self.stabilityFund).receiveDebtRepayment(member, repay) {}
                     catch {}
-                    emit RescueDebtRepaid(member, repay, self.rescueDebt[member]);
+                    emit RescueDebtRepaid(member, repay, debt - repay);
                 }
             }
         }
@@ -1173,21 +1187,16 @@ library MatrixLogicLib {
 
         _removeFromParkedQueue(self, member);
 
-        // Record TOTAL SF advance (entry shortfall + crossing buffer) as a soft loan.
-        // V8.28 FIX: store debt on the DESTINATION (MatB), not the source (MatA).
-        // forceCrossKeeper crosses the member directly into MatB.  Storing debt on MatA
-        // meant MatB's _distributePool (50% deduction) and MatB cycle-out repayment
-        // never fired -- MatB's rescueDebt was always zero.  Moving debt to MatB ensures:
-        //   - 50% deduction fires on every MatB pool distribution share
-        //   - Lump-sum repayment fires at MatB cycle-out
-        // The RescueLoanIssued event is still emitted HERE (on MatA) for off-chain tracking.
+        // V8.47: record the TOTAL SF advance (entry shortfall + crossing buffer) on the
+        // MEMBER-LEVEL ledger held by the SF (the creditor). This replaces the V8.28
+        // per-matrix write to the DESTINATION matrix: because the debt is now one balance
+        // per member (not a matrix silo), it services from ANY tier the member earns in
+        // and can never be stranded on a matrix they move on from. The addRescueDebt
+        // cross-call is retired.
         uint256 totalLoan = sfContribution + crossingBuffer;
         if (totalLoan > 0) {
             emit RescueLoanIssued(member, totalLoan, "forceCrossKeeper");
-            // Destination mirrors _finalizeCrossing logic (partner for MatA, chainNext for MatB chain)
-            address destination = (!cfg.isMatrixA && self.chainNext != address(0))
-                ? self.chainNext : self.partner;
-            IFigureEightMatrixV8Cross(destination).addRescueDebt(member, totalLoan);
+            IStabilityFund(self.stabilityFund).increaseMemberDebt(member, cfg.tierIndex, totalLoan);
         }
 
         // Contract now holds full ENTRY_FEE: sfContribution (from SF) + memberShare (from withdrawable)
@@ -1217,8 +1226,9 @@ library MatrixLogicLib {
         if (shortfall > 0) {
             // SF transfers shortfall USDC to this contract to complete the entry fee.
             IStabilityFund(self.stabilityFund).payCoRescue(cfg.tierIndex, shortfall);
-            // Record as a soft loan -- repaid from member's future cycle-out earnings.
-            self.rescueDebt[member] += shortfall;
+            // V8.47: record on the member-level ledger (was per-matrix self.rescueDebt),
+            // so repayment can come from any tier / withdrawal, not just this matrix.
+            IStabilityFund(self.stabilityFund).increaseMemberDebt(member, cfg.tierIndex, shortfall);
             emit RescueLoanIssued(member, shortfall, "coPayRescue");
         }
 

@@ -606,6 +606,20 @@ contract FigureEightMatrixV8 is Ownable2Step {
         _state.rescueDebt[member] += amount;
     }
 
+    /// @notice V8.47 migration: owner sweeps a stranded pre-V8.47 per-matrix rescue
+    ///         debt off this matrix AFTER it has been re-booked on the SF member-level
+    ///         ledger (StabilityFund.increaseMemberDebt). Returns the amount cleared so
+    ///         the migration batch can assert it matches what it booked. Zeroing the
+    ///         local silo makes the migration idempotent — a second call clears 0.
+    event RescueDebtCleared(address indexed member, uint256 amount);
+    function clearRescueDebt(address member) external onlyOwner returns (uint256 cleared) {
+        cleared = _state.rescueDebt[member];
+        if (cleared > 0) {
+            _state.rescueDebt[member] = 0;
+            emit RescueDebtCleared(member, cleared);
+        }
+    }
+
     function freeWithdrawable(address member) external view returns (uint256) {
         // V8.44 (item D): include un-settled pool accrual.
         uint256 bal = _state.members[member].withdrawable

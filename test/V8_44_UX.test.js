@@ -34,7 +34,7 @@ async function deployTwoTiers() {
     .deploy(await cnova.getAddress(), await usdc.getAddress(), owner.address);
   const sf = await (await ethers.getContractFactory("StabilityFund"))
     .deploy(await usdc.getAddress(), owner.address);
-  const tr = await (await ethers.getContractFactory("TierRouter"))
+  const tr = await (await ethers.getContractFactory("TierRouter", { libraries: { TierRouterLib: (await (await ethers.getContractFactory("TierRouterLib")).deploy()).target } }))
     .deploy(await usdc.getAddress(), owner.address);
   const pm1 = await (await ethers.getContractFactory("PairManagerV8"))
     .deploy(await usdc.getAddress(), FEE1, owner.address);

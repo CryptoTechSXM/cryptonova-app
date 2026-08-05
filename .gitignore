@@ -15,3 +15,13 @@ coverage.json
 .DS_Store
 *.log
 monitor_state.json
+
+# Local-only artifacts (V8.47 cleanup, 2026-08-05)
+.env.bak
+.env.*.bak
+keeper_state.json
+logs/
+ea_coupons.txt
+*.unused
+keeper_env_template.txt
+archive/artifacts_locked_*/

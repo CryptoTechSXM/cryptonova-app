@@ -618,4 +618,115 @@ contract StabilityFund is Ownable2Step {
         usdc.safeTransfer(to, amount);
         emit FundWithdrawn(to, amount, reason);
     }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // V8.47 — member-level rescue-debt ledger ("debt follows the account")
+    // ═══════════════════════════════════════════════════════════════════════════
+    //
+    // In V8.46 a rescue loan was tracked per-matrix (mapping in each MatrixState),
+    // so a loan issued in a matrix the member later moved on from could never be
+    // collected and the SF silently carried it. V8.47 promotes the debt to a
+    // single member-level balance recorded HERE (the SF is the creditor+custodian),
+    // so any matrix at any tier can repay it, and an upgrade can fold it into cost.
+    //
+    // Conservation identity (SF-conservation invariant, test #1):
+    //   Σ_members memberDebt[m]  ==  totalRescueLoaned − totalRescueRepaid
+    // No wei of debt is ever created or destroyed by the ledger — only moved
+    // between "outstanding" and "repaid".
+
+    /// @notice Total outstanding rescue debt owed by a member across ALL tiers/matrices.
+    mapping(address => uint256) public memberDebt;
+    /// @notice Highest tier that issued outstanding debt for a member — drives the clawback band.
+    mapping(address => uint8)   public debtIssuingTier;
+
+    /// @notice Cumulative debt ever booked / ever repaid. The invariant ties these to memberDebt.
+    uint256 public totalRescueLoaned;
+    uint256 public totalRescueRepaid;
+
+    /// @notice Owner/DAO-tunable banded clawback rate, keyed to the issuing tier band.
+    ///         Default 90/80/70/60 (direction A: deeper tiers claw back hardest).
+    ///         Band 0 = T8–T10, 1 = T6–T7, 2 = T4–T5, 3 = T1–T3.
+    uint256[4] public clawbackBpsByBand = [uint256(9000), 8000, 7000, 6000];
+
+    event MemberDebtIncreased(address indexed member, uint8 tier, uint256 amount, uint256 newTotal);
+    event MemberDebtRepaid(address indexed member, uint256 amount, uint256 newTotal);
+    event ClawbackBandsSet(uint256 b0, uint256 b1, uint256 b2, uint256 b3);
+
+    /// @notice Total outstanding rescue debt for a member (explicit accessor used by
+    ///         matrices; mirrors the auto-getter on the public `memberDebt` mapping).
+    function memberDebtOf(address member) external view returns (uint256) {
+        return memberDebt[member];
+    }
+
+    /// @notice Book a rescue loan against a member's ledger. Called by an authorized
+    ///         matrix at loan-issue time (coPayRescue / forceCrossKeeper), and by the
+    ///         migration sweep for pre-V8.47 stranded per-matrix debt. Records the
+    ///         issuing tier (keeps the highest, which drives the clawback band).
+    ///         Booking does NOT move USDC — the SF already paid the rescue out via
+    ///         payCoRescue/payForceCross; this only records who owes it.
+    function increaseMemberDebt(address member, uint8 tier, uint256 amount) external {
+        // Authorized matrices book at loan-issue time; owner books during the one-time
+        // V8.47 migration sweep of pre-existing stranded per-matrix debt.
+        require(authorizedMatrices[msg.sender] || msg.sender == owner(), "SF: not authorized");
+        require(member != address(0),           "SF: zero member");
+        require(tier < MAX_TIERS,               "SF: invalid tier");
+        require(amount > 0,                      "SF: zero amount");
+
+        memberDebt[member]  += amount;
+        totalRescueLoaned   += amount;
+        if (tier > debtIssuingTier[member]) debtIssuingTier[member] = tier;
+
+        emit MemberDebtIncreased(member, tier, amount, memberDebt[member]);
+    }
+
+    /// @notice V8.47 member-keyed repayment. An authorized matrix approves `amount`
+    ///         USDC and calls this; the SF pulls the USDC (credited to totalBalance)
+    ///         and clears up to `amount` of the member's outstanding debt. Any excess
+    ///         over the member's outstanding debt still enters the SF as balance but
+    ///         does not drive the ledger negative (applied is capped at owed).
+    ///         Overload of the legacy receiveDebtRepayment(uint256) — existing callers
+    ///         that have not yet migrated keep working against the old signature.
+    function receiveDebtRepayment(address member, uint256 amount) external {
+        require(
+            authorizedMatrices[msg.sender] || msg.sender == tierRouter,
+            "SF: not authorized"
+        );
+        require(amount > 0,                     "SF: zero amount");
+
+        usdc.safeTransferFrom(msg.sender, address(this), amount);
+        totalBalance += amount;
+
+        uint256 owed    = memberDebt[member];
+        uint256 applied = amount > owed ? owed : amount;
+        if (applied > 0) {
+            memberDebt[member] -= applied;
+            totalRescueRepaid  += applied;
+            if (memberDebt[member] == 0) debtIssuingTier[member] = 0;
+            emit MemberDebtRepaid(member, applied, memberDebt[member]);
+        }
+
+        emit DebtRepaymentReceived(msg.sender, amount);
+    }
+
+    /// @notice The clawback rate (BPS of each earning redirected to repay) for a
+    ///         member, banded by the highest tier that issued their outstanding debt.
+    function clawbackBpsFor(address member) public view returns (uint256) {
+        return clawbackBpsByBand[_bandOf(debtIssuingTier[member])];
+    }
+
+    /// @dev Map a 0-indexed issuing tier (0=T1 … 9=T10) to a clawback band.
+    ///      Direction A: deeper tiers issue larger advances → claw back hardest.
+    function _bandOf(uint8 tier) internal pure returns (uint256) {
+        if (tier >= 7) return 0; // T8–T10 → band 0 (90%)
+        if (tier >= 5) return 1; // T6–T7  → band 1 (80%)
+        if (tier >= 3) return 2; // T4–T5  → band 2 (70%)
+        return 3;                // T1–T3  → band 3 (60%)
+    }
+
+    /// @notice Owner/DAO-tunable clawback bands. Each ≤ 10000 BPS.
+    function setClawbackBands(uint256[4] calldata bps) external onlyOwnerOrGovernance {
+        for (uint256 i = 0; i < 4; i++) require(bps[i] <= 10_000, "SF: bad bps");
+        clawbackBpsByBand = bps;
+        emit ClawbackBandsSet(bps[0], bps[1], bps[2], bps[3]);
+    }
 }

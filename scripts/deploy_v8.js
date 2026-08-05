@@ -53,7 +53,7 @@
  *   USDC_ADDRESS           Reuse existing USDC; omit to deploy MockUSDC
  *   MATRIX_SIZE            127 (default) | 15 (quick dev cycle)
  *   DEPLOY_TIERS           Comma-separated list e.g. "1,2" (default: "1,2,3,4,5,6,7,8,9,10")
- *   ADDRESSES_FILE         Output filename (default: deployed_addresses_v8_45.json)
+ *   ADDRESSES_FILE         Output filename (default: deployed_addresses_v8_47.json)
  *
  * Run: npx hardhat run scripts/deploy_v8.js --network baseSepolia
  */
@@ -67,7 +67,7 @@ require("dotenv").config();
 // ── Addresses output file ─────────────────────────────────────────────────────
 const ADDRESSES_FILE = path.join(
   __dirname,
-  process.env.ADDRESSES_FILE || "deployed_addresses_v8_45.json"
+  process.env.ADDRESSES_FILE || "deployed_addresses_v8_47.json"
 );
 
 // ── Config ────────────────────────────────────────────────────────────────────
@@ -100,7 +100,7 @@ const TIER_FEES = [
 //   l1Bps, chainBps, poolBps, treasuryBps, stabilityBps, devBps, opsBps, communityBps, buybackBps, liquidityBps
 //
 // [  l1, chain,  pool, treasury,   sf,  dev,  ops,  cw,  bbr,   lq] sum
-const SPLITS_ALL    = [ 500,  1350,  1800,     500,  300,  100,   50,  50,   50,   50]; // 4750 BPS of entryFee ✓
+const SPLITS_ALL    = [ 500,  1350,  1800,     500,  300,  100,   50,  100,   25,   25]; // V8.47: community 50→100, buyback/liquidity 50→25 (net-zero, sum 4750 ✓)
 
 // ── Chain pay BPS per level (6 slots, must sum to chainBps = 1350) ────────────
 const CHAIN_PAY_ALL = [270, 270, 270, 270, 270, 0];  // sum=1350 ✓
@@ -170,7 +170,7 @@ async function main() {
   const liquidityReserve = process.env.LIQUIDITY_RESERVE_ADDRESS || opsWallet;
 
   console.log("\n  V8.41 Deploy — FIFO pair routing (external→pair 0, graduates→pairIndex+1)");
-  console.log("  Remember: ADDRESSES_FILE=deployed_addresses_v8_45.json must be set in .env BEFORE this deploy (script writes there).");
+  console.log("  Remember: ADDRESSES_FILE=deployed_addresses_v8_47.json must be set in .env BEFORE this deploy (script writes there).");
   sep();
   console.log(`  Deployer        : ${deployerAddr}`);
   console.log(`  AccountOne      : ${accountOne}`);
@@ -232,14 +232,24 @@ async function main() {
   await (await stabilityFund.setBuybackReserve(bbrAddr)).wait();
   console.log("  ↳  StabilityFund.setBuybackReserve OK");
 
-  // ── 5. TierRouter ────────────────────────────────────────────────────────
+  // ── 5a. TierRouterLib (V8.47: linked lib holding TierRouter's extracted upgrade helpers)
+  sep("TierRouterLib");
+  const TierRouterLibF = await ethers.getContractFactory("TierRouterLib", deployer);
+  const tierRouterLib  = await deploy(TierRouterLibF, [], "TierRouterLib");
+  const trLibAddr      = await tierRouterLib.getAddress();
+
+  // ── 5. TierRouter (links TierRouterLib) ─────────────────────────────────────
   sep("TierRouter");
-  const TierRouter = await ethers.getContractFactory("TierRouter", deployer);
+  const TierRouter = await ethers.getContractFactory("TierRouter", {
+    libraries: { TierRouterLib: trLibAddr },
+  });
   const tierRouter  = await deploy(TierRouter, [usdcAddr, admin], "TierRouter");
   const trAddr = await tierRouter.getAddress();
 
   await (await stabilityFund.setTierRouter(trAddr)).wait();
   console.log("  ↳  StabilityFund.setTierRouter OK");
+  await (await tierRouter.setStabilityFund(sfAddr)).wait();  // V8.47 upgrade gate
+  console.log("  ↳  TierRouter.setStabilityFund OK");
 
   // ── 6. MatrixFactory (registry/wiring hub) ───────────────────────────────
   sep("MatrixFactory");

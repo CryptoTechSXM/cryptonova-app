@@ -73,7 +73,7 @@ async function deployV8Fixture() {
   );
 
   // ── 2. TierRouter  (usdc, admin) ──────────────────────────────────────────
-  const TierRouter = await ethers.getContractFactory("TierRouter");
+  const TierRouter = await ethers.getContractFactory("TierRouter", { libraries: { TierRouterLib: (await (await ethers.getContractFactory("TierRouterLib")).deploy()).target } });
   const tierRouter = await TierRouter.deploy(
     await usdc.getAddress(),
     admin.address

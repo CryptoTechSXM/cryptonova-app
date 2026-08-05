@@ -60,7 +60,7 @@ for (const v of OPTIONAL_WALLETS) {
   else ok(`${v} not set — will default to deployer address`);
 }
 
-const ADDR_FILE = process.env.ADDRESSES_FILE || "deployed_addresses_v8_43.json";
+const ADDR_FILE = process.env.ADDRESSES_FILE || "deployed_addresses_v8_47.json";
 console.log(`  ℹ  ADDRESSES_FILE = ${ADDR_FILE}`);
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -257,11 +257,11 @@ if (deployText) {
     fail("Velocity gate closure (setTierVelocityGreen + CLOSED) not found in deploy_v8.js");
   }
 
-  // Check ADDRESSES_FILE default is v8_29
-  if (deployText.includes("deployed_addresses_v8_43.json")) {
-    ok("deploy_v8.js output file: deployed_addresses_v8_43.json");
+  // Check deploy_v8.js writes to the CONFIGURED ADDRESSES_FILE (was a stale v8_43 hardcode).
+  if (deployText.includes(ADDR_FILE)) {
+    ok(`deploy_v8.js output file: ${ADDR_FILE}`);
   } else {
-    fail("deploy_v8.js does not output to deployed_addresses_v8_43.json");
+    fail(`deploy_v8.js does not output to ${ADDR_FILE} (set ADDRESSES_FILE in .env, align deploy_v8.js default)`);
   }
 
   // Chainlink gas limit should be 6M+

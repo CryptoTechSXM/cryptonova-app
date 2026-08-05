@@ -62,7 +62,7 @@ async function deployFixture() {
   const sf            = await StabilityFund.deploy(usdcAddr, admin.address);  // V8.7: SF v3 takes (usdc, admin)
   const sfAddr        = await sf.getAddress();
 
-  const TierRouter = await ethers.getContractFactory("TierRouter");
+  const TierRouter = await ethers.getContractFactory("TierRouter", { libraries: { TierRouterLib: (await (await ethers.getContractFactory("TierRouterLib")).deploy()).target } });
   const tr         = await TierRouter.deploy(usdcAddr, admin.address);
   const trAddr     = await tr.getAddress();
 
@@ -143,6 +143,11 @@ async function deployFixture() {
   await sf.connect(admin).setMatrixKeeper(keeper.address);
   await sf.connect(admin).setTierFee(0, T1_FEE);
   await sf.connect(admin).setTierFee(1, T2_FEE);
+  // V8.47: authorize the matrices in the SF (production deploy does this). Required so
+  // forceCrossKeeper can book a rescue loan on the member ledger (increaseMemberDebt) and
+  // withdrawCore can repay it (receiveDebtRepayment).
+  for (const a of [matAAddr, matBAddr, matA2Addr, matB2Addr])
+    await sf.connect(admin).setMatrixAuthorized(a, true);
   // Seed SF with $1000 (admin is SF owner)
   await usdc.mint(admin.address, 1_000n * UNIT);
   await usdc.connect(admin).approve(sfAddr, 1_000n * UNIT);
@@ -528,7 +533,7 @@ describe("S5: Gas estimate at MSIZE=15", function () {
     const treasury      = await CNOVATreasury.deploy(
       await cnova.getAddress(), usdcAddr, admin.address);
 
-    const TierRouter = await ethers.getContractFactory("TierRouter");
+    const TierRouter = await ethers.getContractFactory("TierRouter", { libraries: { TierRouterLib: (await (await ethers.getContractFactory("TierRouterLib")).deploy()).target } });
     const tr = await TierRouter.deploy(usdcAddr, admin.address);
     const trAddr = await tr.getAddress();
 
@@ -601,8 +606,8 @@ describe("S5: Gas estimate at MSIZE=15", function () {
 });
 
 
-// ─── V8.46 item 7: stranded rescue debt is repaid on withdrawal ─────────────
-describe("V8.46 item 7 — withdrawal repays stranded rescue debt", function () {
+// ─── V8.47: withdrawal repays MEMBER-LEVEL rescue debt (was V8.46 per-matrix) ──
+describe("V8.47 — withdrawal repays member-level rescue debt", function () {
   this.timeout(60_000);
 
   // Give w1 a withdrawable balance in matA (L1 + chain pay from fillers who name
@@ -619,30 +624,27 @@ describe("V8.46 item 7 — withdrawal repays stranded rescue debt", function () 
     return await matA.withdrawableOf(w1.address);
   }
 
-  // Record a rescue debt on w1 in matA by impersonating matA's partner (matB).
+  // V8.47: book a MEMBER-LEVEL rescue debt on the SF ledger (admin uses the owner path).
+  // withdrawCore now repays this single cross-tier balance, not a per-matrix silo.
   async function addDebt(ctx, member, amount) {
-    const { matA, matBAddr } = ctx;
-    await hre.network.provider.send("hardhat_setBalance", [matBAddr, "0x16345785D8A0000"]);
-    await hre.network.provider.request({ method: "hardhat_impersonateAccount", params: [matBAddr] });
-    const matBSigner = await ethers.getSigner(matBAddr);
-    await matA.connect(matBSigner).addRescueDebt(member.address, amount);
+    const { sf, admin } = ctx;
+    await sf.connect(admin).increaseMemberDebt(member.address, 0, amount);
   }
 
   it("T7a: repays the whole debt and pays the remainder to the wallet", async function () {
     const ctx = await loadFixture(deployFixture);
-    const { matA, usdc, w1 } = ctx;
+    const { sf, usdc, matA, w1 } = ctx;
     const wd = await seedWithdrawable(ctx, 4);
     expect(wd).to.be.gt(0n);
     const debt = wd / 2n;
     await addDebt(ctx, w1, debt);
-    expect(await matA.rescueDebtOf(w1.address)).to.equal(debt);
+    expect(await sf.memberDebt(w1.address)).to.equal(debt);
 
     const before = await usdc.balanceOf(w1.address);
-    // RescueDebtRepaid is declared in MatrixLogicLib (linked lib) so it is emitted at the
-    // matrix address but not in FigureEightMatrixV8's ABI — assert the repayment via STATE.
+    // withdrawCore redirects the member-level debt to the SF, then pays the remainder out.
     await matA.connect(w1).withdraw();
 
-    expect(await matA.rescueDebtOf(w1.address)).to.equal(0n);       // debt cleared
+    expect(await sf.memberDebt(w1.address)).to.equal(0n);            // member-ledger debt cleared
     expect(await matA.withdrawableOf(w1.address)).to.equal(0n);      // fully drawn, no double-count
     const got = (await usdc.balanceOf(w1.address)) - before;
     expect(got).to.be.gt(0n);                                        // wallet received the remainder
@@ -651,13 +653,13 @@ describe("V8.46 item 7 — withdrawal repays stranded rescue debt", function () 
 
   it("T7b: debt larger than withdrawable repays what it can, leaves the rest", async function () {
     const ctx = await loadFixture(deployFixture);
-    const { matA, w1 } = ctx;
+    const { sf, matA, w1 } = ctx;
     const wd = await seedWithdrawable(ctx, 4);
     const debt = wd + 5n * UNIT;                                     // debt exceeds withdrawable
     await addDebt(ctx, w1, debt);
 
     await matA.connect(w1).withdraw();
-    expect(await matA.rescueDebtOf(w1.address)).to.equal(debt - wd); // remainder of debt survives
+    expect(await sf.memberDebt(w1.address)).to.equal(debt - wd);     // remainder of debt survives on the ledger
     expect(await matA.withdrawableOf(w1.address)).to.equal(0n);      // all withdrawable went to the debt
   });
 

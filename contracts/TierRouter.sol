@@ -51,6 +51,7 @@ pragma solidity ^0.8.24;
 import "@openzeppelin/contracts/access/Ownable2Step.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import "./TierRouterLib.sol"; // V8.47: extracted upgrade-path leaf helpers + debt fold (linked)
 
 // ─── Interfaces ────────────────────────────────────────────────────────────────
 
@@ -87,6 +88,12 @@ interface IFigureEightMatrixV8 {
     function occupancy()                      external view returns (uint256);
     /// @notice V8.43: partner matrix (MatB's partner = its pair's MatA).
     function partner()                        external view returns (address);
+}
+
+/// @notice V8.47: minimal StabilityFund hooks for the upgrade-gate debt fold.
+interface ISFDebt {
+    function memberDebtOf(address member) external view returns (uint256);
+    function receiveDebtRepayment(address member, uint256 amount) external;
 }
 
 interface IPairManagerV8 {
@@ -244,6 +251,10 @@ contract TierRouter is Ownable2Step {
     ///         to authorize newly deployed matrices inline, in the same tx as
     ///         the triggering member registration.
     address public pairFactory;
+
+    /// @notice V8.47: StabilityFund address — used by the upgrade gate to read a
+    ///         member's outstanding rescue debt and fold it into the upgrade cost.
+    address public stabilityFund;
 
     // ─── V8.1: Velocity gate (keeper-maintained per tier) ─────────────────────
     mapping(uint8 => bool) public tierVelocityGreen;
@@ -460,6 +471,20 @@ contract TierRouter is Ownable2Step {
     function setFactory(address _factory) external onlyOwner {
         pairFactory = _factory;
     }
+
+    /// @notice V8.47: wire the StabilityFund so the upgrade gate can read and fold a
+    ///         member's outstanding rescue debt into the upgrade cost.
+    function setStabilityFund(address _sf) external onlyOwner {
+        if (_sf == address(0)) revert TRZero();
+        stabilityFund = _sf;
+    }
+
+    /// @dev V8.47 wallet-funded upgrade gate (manual / hybrid) — thin wrapper over the
+    ///      linked TierRouterLib (body extracted for EIP-170 headroom).
+    function _walletFold(address member) internal {
+        TierRouterLib.walletFold(stabilityFund, usdc, member);
+    }
+
 
     function registerMatrix(address matrix, uint8 tierIndex) external onlyOwnerOrFactory {
         if (matrix == address(0)) revert TRZero();
@@ -907,6 +932,9 @@ contract TierRouter is Ownable2Step {
 
         uint256 fee = tierEntryFees[targetTierIndex];
         usdc.safeTransferFrom(msg.sender, address(this), fee);
+        // V8.47 upgrade gate: also clear any outstanding rescue debt from the wallet so
+        // the member advances clean (reverts if they can't cover it).
+        _walletFold(msg.sender);
         usdc.forceApprove(tierPairManagers[targetTierIndex], fee);
 
         address referrer = memberReferrer[msg.sender];
@@ -950,6 +978,9 @@ contract TierRouter is Ownable2Step {
         if (fromWallet > 0) {
             usdc.safeTransferFrom(msg.sender, address(this), fromWallet);
         }
+        // V8.47 upgrade gate: also clear any outstanding rescue debt from the wallet so a
+        // hybrid upgrade can't advance past an unpaid debt.
+        _walletFold(msg.sender);
         usdc.forceApprove(tierPairManagers[targetTierIndex], fee);
         IPairManagerV8(tierPairManagers[targetTierIndex]).registerFor(
             msg.sender, memberReferrer[msg.sender], 0
@@ -972,21 +1003,11 @@ contract TierRouter is Ownable2Step {
         _recordEntry(targetTierIndex);
     }
 
-    /// @dev Pull up to `remaining` of the member's FREE (lock-respecting)
-    ///      earnings from one matrix into this router. Failures skip silently.
+    /// @dev Pull up to `remaining` of the member's FREE (lock-respecting) earnings from one
+    ///      matrix into this router. Thin wrapper over the linked TierRouterLib (extracted
+    ///      for EIP-170 headroom); failures skip silently.
     function _drawFreeEarnings(address mat, uint256 remaining) internal returns (uint256) {
-        if (mat == address(0) || remaining == 0) return remaining;
-        uint256 avail;
-        try IFigureEightMatrixV8(mat).freeWithdrawable(msg.sender) returns (uint256 a) {
-            avail = a;
-        } catch { return remaining; }
-        if (avail == 0) return remaining;
-        uint256 take = avail >= remaining ? remaining : avail;
-        try IFigureEightMatrixV8(mat).deductForUpgrade(msg.sender, 0, take) {
-            return remaining - take;
-        } catch {
-            return remaining;
-        }
+        return TierRouterLib.drawFreeEarnings(mat, msg.sender, remaining);
     }
 
     // ─── V8.44 (G2): bulk withdraw — sweep every matrix in one tx ────────────
@@ -1286,8 +1307,15 @@ contract TierRouter is Ownable2Step {
         if (upgradeOn && tierIndex < 9) {
             uint8   nextIndex = tierIndex + 1;
             uint256 nextFee   = tierEntryFees[nextIndex];
+            // V8.47 upgrade gate: fold any outstanding rescue debt into the cost. The
+            // member must cover the debt AND the next-tier fee; the upgrade repays the
+            // debt to the SF first so they advance CLEAN. If they can't cover both, the
+            // upgrade no-ops — their re-entry seat + the pool-share redirect keep draining
+            // the debt from earnings until they can.
+            uint256 upDebt = stabilityFund != address(0)
+                ? ISFDebt(stabilityFund).memberDebtOf(member) : 0;
             if (tierPairManagers[nextIndex] != address(0)
-                && escrow + withdrawable >= nextFee
+                && escrow + withdrawable >= nextFee + upDebt
                 && tierVelocityGreen[nextIndex]) {
                 // V8.46 PRIMARY FIX (2026-07-27) — PREVENT the duplicate seat.
                 // This guard used to check only the destination MatA. The member
@@ -1313,6 +1341,13 @@ contract TierRouter is Ownable2Step {
                 // two matrices. The first version of this guard read
                 // tierMatrixAAddr/BAddr, which is pair 1 and nothing else.
                 if (!IPairManagerV8(tierPairManagers[nextIndex]).holdsSeatIn(member)) {
+                    // V8.47: repay the folded debt from earnings first, then escrow, so
+                    // the member carries no rescue debt into the higher tier.
+                    if (upDebt > 0) {
+                        (escrow, withdrawable) = TierRouterLib.autoFold(
+                            stabilityFund, usdc, matrixB, member, upDebt, escrow, withdrawable
+                        );
+                    }
                     (escrow, withdrawable) = _takeSeat(
                         matrixB, member, referrer, nextIndex, nextFee, 0, false, escrow, withdrawable
                     );
@@ -1394,17 +1429,14 @@ contract TierRouter is Ownable2Step {
         uint256 escrow,
         uint256 withdrawable
     ) internal returns (uint256, uint256) {
-        uint256 fromEscrow = escrow >= fee ? fee : escrow;
-        uint256 fromW      = fee - fromEscrow;
-        IFigureEightMatrixV8(matrixB).deductForUpgrade(member, fromEscrow, fromW);
-        usdc.forceApprove(tierPairManagers[destTierIndex], fee);
-        if (toMatB) {
-            IPairManagerV8(tierPairManagers[destTierIndex]).registerForMatB(member, referrer, targetPairIndex);
-        } else {
-            IPairManagerV8(tierPairManagers[destTierIndex]).registerFor(member, referrer, targetPairIndex);
-        }
+        // Body extracted to the linked TierRouterLib for EIP-170 headroom; the entry-time
+        // log stays here (it touches router storage).
+        (escrow, withdrawable) = TierRouterLib.takeSeat(
+            tierPairManagers[destTierIndex], usdc, matrixB, member, referrer,
+            fee, targetPairIndex, toMatB, escrow, withdrawable
+        );
         _recordEntry(destTierIndex);
-        return (escrow - fromEscrow, withdrawable - fromW);
+        return (escrow, withdrawable);
     }
 
     /// @dev V8.44 overflow rework for same-tier seats. Below saturation the
@@ -1471,10 +1503,9 @@ contract TierRouter is Ownable2Step {
         // seconds, integrity clean across 19+ hours. This makes that permanent.
         // pairExpansionThreshold and its setter are now DELETED — nothing read
         // them once this became unconditional, and TierRouter needed the space.
-        target = IFigureEightMatrixV8(matrixB).pairIndex();
-        address ownMatA = IFigureEightMatrixV8(matrixB).partner();
-        toMatB = ownMatA != address(0)
-              && IFigureEightMatrixV8(ownMatA).isActiveInMatrix(member);
+        tierIndex; // unused; kept so the call sites and ABI are unchanged
+        // Body extracted to the linked TierRouterLib for EIP-170 headroom.
+        return TierRouterLib.sameTierTarget(matrixB, member);
     }
 
     /// @dev V8.21: generalized from the old T5-only `_checkT5FirstEntry` to

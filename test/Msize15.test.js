@@ -45,7 +45,7 @@ async function deployFixture() {
   const treasury      = await CNOVATreasury.deploy(cnovaAddr, usdcAddr, admin.address);
   const treasuryAddr  = await treasury.getAddress();
 
-  const TierRouter    = await ethers.getContractFactory("TierRouter");
+  const TierRouter    = await ethers.getContractFactory("TierRouter", { libraries: { TierRouterLib: (await (await ethers.getContractFactory("TierRouterLib")).deploy()).target } });
   const tierRouter    = await TierRouter.deploy(usdcAddr, admin.address);
   const trAddr        = await tierRouter.getAddress();
 
