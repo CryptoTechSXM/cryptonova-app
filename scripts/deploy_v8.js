@@ -242,6 +242,7 @@ async function main() {
   sep("TierRouter");
   const TierRouter = await ethers.getContractFactory("TierRouter", {
     libraries: { TierRouterLib: trLibAddr },
+    signer: deployer,
   });
   const tierRouter  = await deploy(TierRouter, [usdcAddr, admin], "TierRouter");
   const trAddr = await tierRouter.getAddress();
