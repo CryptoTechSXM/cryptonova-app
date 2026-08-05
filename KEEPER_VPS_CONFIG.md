@@ -73,3 +73,14 @@ already-set env var, so a cron-line prefix pins a keeper to its own endpoint).
 
 Frontend apps are publicly visible in index.html - set a referrer/domain
 allowlist on them in the QuickNode dashboard.
+
+## Referrer round-robin — TWO env vars (verified 2026-08-05)
+
+- `SPONSORS` — read by rr_keeper.js (the ACTIVE stress jobs A/B/C): cursor
+  rotation across the list, W1 fallback if empty. THIS is the one that must
+  be current before enabling stress.
+- `ROUND_ROBIN` — read by stress_keeper.js (legacy) and the Phase 7.2b
+  registered-leaders pre-check. Keep both lines identical.
+- Frontend DEFAULT_SPONSOR_POOL (index.html) = first 8 leaders of the same
+  list; contract _resolveRef falls back to W1 for unregistered sponsors, so
+  an outdated pool can't revert a registration.
