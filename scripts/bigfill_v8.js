@@ -321,12 +321,17 @@ async function simulateManualUpgrades({
   let notSelfFunded = 0;
   for (const w of walletList) {
     try {
-      const [inMatB, inTargetA] = await Promise.all([
+      const [inMatB, inTargetA, hTier] = await Promise.all([
         fromMatB.isActiveInMatrix(w.address).catch(() => false),
         toMatA.isActiveInMatrix(w.address).catch(() => false),
+        tierRouter.memberHighestTier(w.address).catch(() => 0n),
       ]);
       if (!inMatB)    continue;     // not yet in source tier's MatB — skip
       if (inTargetA)  continue;     // already in target tier's MatA — skip
+      // V8.47 wave-2 lesson: a member at/above the target tier still HOLDS their
+      // old MatB seat, so without this check they were re-selected every batch
+      // and the contract reverted each attempt (~40 wasted txs in wave 2).
+      if (Number(hTier) >= targetTierIndex + 1) continue;
 
       const ownUsdc = await usdc.balanceOf(w.address).catch(() => 0n);
       if (ownUsdc < fee) { notSelfFunded++; continue; } // can't self-upgrade — not eligible
@@ -1271,11 +1276,11 @@ async function main() {
     // Burn + withdraw sweep + CNOVA buy sweep — runs on every new matrix cycle
     if (sysCyc > prevSysCyc) {
       console.log(`\n  🔄 Cycle detected (${prevSysCyc} → ${sysCyc})`);
-      console.log(`  ↳ Running early-unlock burn sweep (simulate CNOVA sell)…`);
+      if (process.env.BURN_SIMULATE !== "false") { console.log(`  ↳ Running early-unlock burn sweep (simulate CNOVA sell)…`); }
       await burnSweep(wallets, cnova);
       console.log(`  ↳ Running withdraw sweep (USDC exit simulation)…`);
       await withdrawSweep(wallets, allMatrices);
-      console.log(`  ↳ Running CNOVA buy sweep (simulate purchases via DirectSale)…`);
+      if (Number(process.env.CNOVA_BUY_RATE ?? "0.25") > 0) { console.log(`  ↳ Running CNOVA buy sweep (simulate purchases via DirectSale)…`); }
       await cnovaBuySweep(wallets, directSale, usdc);
       // Self-rescue sweep on every cycle — most likely time wallets just got parked
       fNonce = await simulateSelfRescues({
@@ -1353,8 +1358,10 @@ async function main() {
   await snapshot("POST-REGISTRATION SNAPSHOT", { tierRouter, pm1, matA1, matB1, matA2, matB2, cnova, treasury, stabilityFund, w1Addr: W1_ADDR });
 
   // ── Final burn sweep — catch any remaining vest batches ───────────────────
-  sep("Final Burn Sweep");
-  console.log("  Running earlyUnlockAll() on all wallets with remaining vest batches…");
+  if (process.env.BURN_SIMULATE !== "false") {
+    sep("Final Burn Sweep");
+    console.log("  Running earlyUnlockAll() on all wallets with remaining vest batches…");
+  }
   await burnSweep(wallets, cnova);
 
   // ── Post-fill snapshot ────────────────────────────────────────────────────
