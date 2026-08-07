@@ -44,6 +44,26 @@ V8.47 upgrade gate no-ops when short and auto re-entry waits for new earnings
 Frontend currently reconstructs (b) client-side (`_claimableAll.heldNow`) and
 words the badge as "Reserve target $X · $Y held from current earnings".
 
+## 3. bulkWithdraw(uint256 amount) — one-signature PARTIAL withdrawals (owner UX decision 2026-08-08)
+
+Live test on wallet 0xaAda…3c15: a $168.04 typed/MAX withdrawal needed SEVEN
+wallet signatures (the frontend loops withdrawPartial per matrix), while
+Withdraw All is ONE signature via `TierRouter.bulkWithdraw()` (V8.44 G2 —
+no-arg full sweep only). Owner's call: EVERY withdrawal — MAX or typed amount —
+should source across tiers first and ask for ONE approval.
+
+**Fix**: add `bulkWithdraw(uint256 amount)` to TierRouter — walk the member's
+matrices (same order as the sweep), draw up to `amount` total via the
+withdrawCore path, stop when satisfied. Same eligibility/debt/hold semantics
+as the full sweep. Mind EIP-170 headroom (TierRouter is 142 bytes under —
+lean on TierRouterLib for the loop body).
+
+Frontend meanwhile (Testnet-App, shipped 2026-08-08): a full-amount request is
+auto-routed to the no-arg sweep (one signature), and the per-matrix partial
+loop now caps draws with the withdrawCore mirror instead of freeWithdrawable
+(which left $49.04 of $168.04 "unsourced"). Typed partials remain multi-
+signature until this router function ships.
+
 ## Context
 
 - Deploy version at discovery: deployed_addresses_v8_47.json, Base Sepolia.
