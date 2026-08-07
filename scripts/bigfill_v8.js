@@ -708,6 +708,22 @@ async function main() {
     ...(matB3 ? [{ matrix: matB3, label: "T3 MatB", addr: T3.matB }] : []),
   ];
 
+  // ── V8.48 shakedown (owner 2026-08-08): ALL tiers in play ──────────────────
+  // T4..T10 handles from the addresses file, so simulateSelfRescues() scans
+  // every tier's parked members and the upgrade ladder can climb past T3.
+  // Wallet-funded upgrades at every rung are the point of the $30k leader
+  // funding — they exercise the V8.47 debt-fold and higher-tier reserves.
+  const tierMats = { 2: { matA: matA2, matB: matB2 }, 3: { matA: matA3, matB: matB3 } };
+  for (let tn = 4; tn <= 10; tn++) {
+    const T = (addrs.tiers || {})[`T${tn}`];
+    if (!T || !T.matA) { tierMats[tn] = null; continue; }
+    const mA = await ethers.getContractAt("FigureEightMatrixV8", T.matA);
+    const mB = T.matB ? await ethers.getContractAt("FigureEightMatrixV8", T.matB) : null;
+    tierMats[tn] = { matA: mA, matB: mB };
+    allMatrices.push({ matrix: mA, label: `T${tn} MatA`, addr: T.matA });
+    if (mB) allMatrices.push({ matrix: mB, label: `T${tn} MatB`, addr: T.matB });
+  }
+
   // ── Discover factory-spawned T1 pairs via PairManager ──────────────────────
   // When T1.1 reaches 127/127 (both matrices), the factory autonomously spawns
   // T1.2 and sets activePairIndex = 1.  All subsequent registrations go to T1.2.
@@ -913,6 +929,26 @@ async function main() {
   // ── Pre-snapshot ───────────────────────────────────────────────────────────
   await snapshot("PRE-FILL SNAPSHOT", { tierRouter, pm1, matA1, matB1, matA2, matB2, cnova, treasury, stabilityFund, w1Addr: W1_ADDR });
 
+  // ── V8.48 shakedown: continue the upgrade ladder T3→T4 … T9→T10 ────────────
+  // Same simulator per rung — fee read on-chain per tier, the memberHighestTier
+  // guard inside skips completed rungs, self-funded wallets only.
+  async function upgradeLadderHigh(fNonceIn) {
+    let n = fNonceIn;
+    for (let tn = 4; tn <= 10; tn++) {
+      const prev = tierMats[tn - 1], cur = tierMats[tn];
+      if (!prev || !cur || !prev.matB || !cur.matA) continue;
+      const hopFee = await cur.matA.ENTRY_FEE().catch(() => 0n);
+      if (hopFee === 0n) continue;
+      n = await simulateManualUpgrades({
+        walletList: allWallets, tierRouter, fromMatB: prev.matB, toMatA: cur.matA,
+        usdc, usdcFunder, rawFunder, funderAddr, fNonce: n,
+        tierRouterAddr: addrs.tierRouter || addrs.TierRouter,
+        fee: hopFee, targetTierIndex: tn - 1, tierLabel: `T${tn}`,
+      });
+    }
+    return n;
+  }
+
   // ── Pre-run: rescue + upgrade ALL historical wallets ──────────────────────
   // Runs BEFORE new registrations so parked/eligible old wallets are handled
   // immediately without waiting for the registration loop to encounter them.
@@ -947,6 +983,7 @@ async function main() {
         fee: T3_FEE, targetTierIndex: 2, tierLabel: "T3",
       });
     }
+    fNonce = await upgradeLadderHigh(fNonce);   // V8.48 shakedown: T4..T10
   }
 
   // ── Fund wallets in slices (explicit nonces to avoid collision) ─────────────
@@ -1321,6 +1358,7 @@ async function main() {
       tierRouterAddr: addrs.tierRouter || addrs.TierRouter,
       fee: T3_FEE, targetTierIndex: 2, tierLabel: "T3",
     });
+    fNonce = await upgradeLadderHigh(fNonce);   // V8.48 shakedown: T4..T10
 
     // Withdraw sweep every 10 batches — simulate ongoing sell pressure
     if (batchNum % 10 === 0) {
