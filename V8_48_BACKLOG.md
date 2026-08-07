@@ -26,6 +26,13 @@ screenshots). The VIEW pre-dates two rules that live only in withdrawCore:
 shared internal both call), and consider a `netClaimableOf(member)` convenience
 view = what a full withdrawal would actually pay before the withdrawal fee.
 
+**ON-CHAIN CONSEQUENCE (found 2026-08-08)**: the contract itself consumes the
+broken view — `hybridUpgrade` draws earnings via `_drawFreeEarnings` →
+`TierRouterLib.drawFreeEarnings` → `freeWithdrawable()` (TierRouter:973). The
+under-report means hybrid upgrades draw LESS from earnings and pull MORE from
+the member's wallet than withdrawCore would actually allow. Fixing the view
+fixes this automatically — one fix, two effects.
+
 ## 2. Automation reserve only binds the highest tier — automation can be left underfunded
 
 `withdrawCore` applies `reservedFor` ONLY where `(memberHighestTier − 1) ==
