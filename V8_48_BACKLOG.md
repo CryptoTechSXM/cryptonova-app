@@ -341,6 +341,47 @@ fresh balance against a stale lock.
 - (a) does not repair the ledger, only its effects. Prefer (a) for V8.48;
   consider (b) after, or do both.
 
+### CONFIRMED WORSE 2026-08-08 (owner reproduced end-to-end)
+
+Owner redeemed the FULL locked balance. Resulting wallet state:
+
+    CNOVA Held            0.00
+    Transferable          0.00
+    Vesting (locked)  1,000.00   <-- GHOST: batches with no tokens behind them
+    USD Value at Floor   $0.00
+
+`earlyUnlock(batchIndex)` now REVERTS for every batch. Sequence: it pops the
+batch, then burns/transfers `penaltyAmt` from `msg.sender` - who holds 0
+tokens - so `_burn` reverts on insufficient balance and the whole tx rolls
+back. The batches can never be unlocked and never had tokens behind them.
+
+**Severity is higher than first logged.** Not merely an accounting drift:
+1. `lockedBalanceOf` (1000) > `balanceOf` (0) => `_update` computes
+   `available = 0` => the wallet CANNOT TRANSFER ANY CNOVA, including tokens
+   bought later via DirectSale that are minted unvested.
+2. `earlyUnlock` reverts on every batch - the documented escape hatch is dead
+   for this wallet.
+3. The UI truthfully reports 1,000 CNOVA vesting that does not exist.
+4. Self-heals only when each batch passes its `unlockAt` (Feb 2027), because
+   `lockedBalanceOf` stops counting expired batches. Until then the wallet is
+   effectively frozen for transfers.
+
+**This changes the fix.** Option (a) alone (cap `lockedBalanceOf` at
+`balanceOf`) clears the frozen-transfer symptom and the ghost display, but
+`earlyUnlock` STILL reverts because the orphan batches remain. V8.48 needs
+option (b) as well: reduce/prune vest batches inside `_update` on burn
+(soonest-unlocking first), so redeeming vested CNOVA consumes its batches.
+Do (a) for the immediate symptom AND (b) for correctness.
+
+**Frontend, meanwhile:** the "Unlock early" buttons and the Max Unlock action
+should be disabled when `balanceOf < penaltyAmt` rather than offering an
+action that always reverts. Currently the member gets a confirm dialog
+promising "100.01 CNOVA, transferable immediately" followed by an on-chain
+failure.
+
+**Operational note:** do not redeem vesting CNOVA on any wallet that matters
+until V8.48 ships. The test wallet is frozen for transfers until Feb 2027.
+
 ### Frontend corrected 2026-08-08 (was asserting the opposite)
 
 - Redeem panel vesting note: now "can be redeemed at floor right now, but
