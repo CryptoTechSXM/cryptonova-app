@@ -251,6 +251,105 @@ Current floor $0.011824 < $0.0125, so **the clamp releases at the halving** —
 confirming the "one epoch, not permanent" argument the decision rested on.
 Watch: if the floor passes $0.0125 before epoch 2, the clamp persists into it.
 
+## 7. earlyExitPenaltyBps is DEAD CODE on every V8 deploy
+
+Found 2026-08-08 from an owner screenshot: the Redeem panel showed
+"No early-exit penalty — you have passed 120 days of membership" on a
+deployment that was **three days old**.
+
+**Root cause:** `scripts/deploy_v8.js` never calls `setTier1Matrix()` or
+`setMemberTracker()`. Only the V6 / archived / figure8-test deploy scripts do.
+So `CNOVATreasury.tier1Matrix == address(0)` on every V8 deploy, and
+`earlyExitPenaltyBps` returns on its FIRST line (:243).
+
+**Belt and braces — it would still return 0 if wired:**
+- `setMemberTracker` is documented to point at the PairManager, and
+  `PairManager.memberJoinedAt()` is a stub: `return 0; // PairManager doesn't
+  track individual join timestamps` (:280).
+- `PairManagerV8` does not implement `memberJoinedAt` at all → the `try` at
+  :246 catches → returns 0.
+- Pointing it at T1 matA instead would charge pair-1 members and let every
+  pair-2+ member off free (`joinedAt == 0` on the wrong matrix). Unequal, and
+  it worsens as the factory spawns pairs.
+
+**Consequences (all live on V8.47):**
+1. The 4500/3000/1500/500/0 ladder has NEVER charged anyone.
+2. The penalty split in `redeemAtFloor` (80% → `usdcReserve`, 20% → Community
+   Wallet) sits inside `if (penalty > 0)` — it has never executed. The CW has
+   received nothing from exits; the Treasury no penalty top-up.
+3. **`setFreeMode()` also requires `tier1Matrix != address(0)` (:308), so
+   Universe Mode CANNOT be activated** — which in turn gates `addDexLiquidity`.
+4. Redemption is exactly floor-neutral. Correcting the 2026-08-08 floor
+   analysis: penalty recycling is NOT an upward force because it never runs.
+   The genuine upward forces are (a) higher-tier marginal ratios and
+   (b) `CNOVAToken.earlyUnlock` penalty BURNS — supply falls, reserve
+   unchanged, floor rises. `earlyUnlock` is self-contained and DOES work.
+
+**Copy corrected 2026-08-08** (was describing a mechanism that does not run):
+`faqPage.q21_a3`, `faqPage.g3_def`, `compPage.s5_p2`, and the Redeem panel's
+else branch in index.html (which invented "120 days" as the reason for a zero
+that has four possible causes).
+
+**V8.48 work — owner decision 2026-08-08: wire it properly.**
+- Add cross-pair join-date tracking so tenure is correct for members in ANY
+  T1 pair (PairManager needs a real `memberJoinedAt`, or the Treasury needs a
+  different source).
+- Call the setter in `deploy_v8.js` — and add it to `predeploy_check.js` so a
+  missing wire fails the gate instead of silently zeroing the penalty.
+- Restore the ladder copy only once it actually charges.
+- Decide separately whether Universe Mode should stay blocked meanwhile.
+
+## 8. Redeeming vesting CNOVA corrupts the vest ledger (locked > balance)
+
+PROVEN on-chain 2026-08-08 from an owner test redeem. Wallet held 1000 CNOVA,
+ALL of it in vest batches. A 1-CNOVA `redeemAtFloor` SUCCEEDED: balance went
+1000 -> 999 while `lockedBalanceOf` still returned 1000.
+
+### Two separate facts, both previously mis-stated on the site
+
+1. **Vesting does NOT block redemption.** `CNOVAToken._update` (:710) runs the
+   vesting guard only `if (from != address(0) && to != address(0))`. A burn has
+   `to == address(0)`, so it skips entirely. `redeemAtFloor` checks
+   `balanceOf`, never `unlockedBalanceOf`. The cliff blocks TRANSFERS (no
+   selling above floor before unlock); exit at floor is always open. The
+   carve-out looks deliberate and is defensible design - the site copy simply
+   never described it correctly.
+2. **Burning does NOT prune vest batches.** `lockedBalanceOf` (:532) sums
+   `_vestBatches`; only `earlyUnlock` removes them. So after redeeming from a
+   locked balance, `lockedBalanceOf` is STALE and can exceed `balanceOf`.
+
+### Consequence of (2) - this is the bug
+
+`unlockedBalanceOf` = `total > locked ? total - locked : 0`, and `_update`
+computes `available` the same way. Once locked > balance:
+- `unlockedBalanceOf` returns **0**
+- **every transfer reverts** with "CNOVA: tokens vesting -- wait for unlock"
+
+The wallet loses transferable allowance equal to whatever it redeemed from
+locked, until the batches naturally expire (180 days). Redeem the full locked
+amount and CNOVA bought LATER via DirectSale - minted unvested and supposed to
+be immediately transferable - is stranded too, because the guard compares a
+fresh balance against a stale lock.
+
+### Fix options for V8.48
+
+- (a) Cheapest and safest: cap the view -
+  `lockedBalanceOf` returns `min(sum(batches), balanceOf(wallet))`. One line,
+  no burn-path changes, makes `_update` correct immediately.
+- (b) Correct at source: reduce/prune vest batches inside `_update` on burn
+  (soonest-unlocking first). More faithful accounting, more surface area.
+- (a) does not repair the ledger, only its effects. Prefer (a) for V8.48;
+  consider (b) after, or do both.
+
+### Frontend corrected 2026-08-08 (was asserting the opposite)
+
+- Redeem panel vesting note: now "can be redeemed at floor right now, but
+  cannot be transferred or sold until it unlocks".
+- Max Unlock explainer: unlocking buys TRANSFERABILITY, not redeemability.
+- STILL TO DO: the earlier B3 copy fix the same day said locked CNOVA "cannot
+  be transferred or redeemed" - half right. `faqPage.q21_a3`, `faqPage.g3_def`
+  and `compPage.s5_p2` still carry that wording and need the same correction.
+
 ## Context
 
 - Deploy version at discovery: deployed_addresses_v8_47.json, Base Sepolia.
