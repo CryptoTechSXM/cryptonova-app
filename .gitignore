@@ -25,3 +25,8 @@ ea_coupons.txt
 *.unused
 keeper_env_template.txt
 archive/artifacts_locked_*/
+
+# device-VM cannot delete files - parked-for-deletion folders + scratch snapshots
+# stay out of git (same convention as CryptoNova-Testnet-App)
+_to_delete*/
+_bugs_snapshot*.md

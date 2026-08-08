@@ -1,101 +1,56 @@
 /**
- * topup_sf.js
- * Deposits USDC into the StabilityFund.
+ * topup_sf.js - top up the StabilityFund the INVARIANT-SAFE way.
  *
- * Funding source: W1 wallet (W1_PRIVATE_KEY in .env) — it has USDC from seed_w1.
- * Deployer (owner) is used only to authorize/deauthorize W1 as a matrix caller.
+ * Owner calls receiveLayer(tier 0, amount, layer 1), which pulls USDC from
+ * the deployer AND increments totalBalance in the same tx - so the V8.47
+ * SF-conservation invariant (SF USDC == totalBalance) keeps holding.
+ * NEVER top up with a raw ERC20 transfer (it leaves totalBalance stale -
+ * that is the exact bug seed_sf.js was written to clean up after).
  *
- * Usage: npx hardhat run scripts/topup_sf.js --network baseSepolia
+ * Reads the SF address from ADDRESSES_FILE in .env (version-aware, no
+ * hardcoded addresses - works for every deploy from v8_47 on).
+ *
+ * Run:
+ *   npx hardhat run scripts/topup_sf.js --network baseSepolia          ($1500 default)
+ *   $env:TOPUP_USDC="500"; npx hardhat run scripts/topup_sf.js --network baseSepolia
  */
-const hre = require('hardhat');
-const fs  = require('fs');
-const path = require('path');
+const hre = require("hardhat");
 const { ethers } = hre;
-
-const AMOUNT_USDC = '500'; // $500
-
-const SF_ABI  = [
-  'function setMatrixAuthorized(address matrix, bool authorized) external',
-  'function receiveLayer(uint8 tierIdx, uint256 amount, uint8 layer) external',
-  'function totalBalance() view returns (uint256)',
-  'function balanceByTier(uint8) view returns (uint256)',
-];
-const ERC20_ABI = [
-  'function approve(address spender, uint256 amount) external returns (bool)',
-  'function balanceOf(address) view returns (uint256)',
-];
-
-const sleep = ms => new Promise(r => setTimeout(r, ms));
+const fs = require("fs");
+const path = require("path");
 
 async function main() {
-  require('dotenv').config();
-  const addrsPath = path.join(__dirname, process.env.ADDRESSES_FILE || 'deployed_addresses_v8_30.json');
-  const addrs = JSON.parse(fs.readFileSync(addrsPath, 'utf8'));
+  const addrFile = path.join(__dirname, process.env.ADDRESSES_FILE || "deployed_addresses_v8_47.json");
+  const addrs = JSON.parse(fs.readFileSync(addrFile, "utf8"));
+  const sfAddr = addrs.stabilityFund;
+  const usdcAddr = addrs.usdc;
+  if (!sfAddr || !usdcAddr) throw new Error("stabilityFund/usdc missing in " + addrFile);
 
-  // Deployer is the SF owner (needed for setMatrixAuthorized)
-  const [signer] = await hre.ethers.getSigners();
+  const amountUsd = Number(process.env.TOPUP_USDC || "1500");
+  const amount = ethers.parseUnits(String(amountUsd), 6);
 
-  // W1 is the USDC source — it received $491 during seed_w1
-  const w1Key = process.env.W1_PRIVATE_KEY || process.env.SEED_W1_KEY;
-  if (!w1Key) {
-    console.error('❌  W1_PRIVATE_KEY not set in .env');
-    process.exit(1);
-  }
-  const w1Wallet = new ethers.Wallet(w1Key, ethers.provider);
+  const [owner] = await ethers.getSigners();
+  const sf = new ethers.Contract(sfAddr, [
+    "function receiveLayer(uint8,uint256,uint8) external",
+    "function totalBalance() view returns (uint256)",
+    "function owner() view returns (address)",
+  ], owner);
+  const usdc = new ethers.Contract(usdcAddr, [
+    "function balanceOf(address) view returns (uint256)",
+    "function approve(address,uint256) external returns (bool)",
+  ], owner);
 
-  console.log('Deployer (owner):', signer.address);
-  console.log('W1 (funder)     :', w1Wallet.address);
-  console.log('SF              :', addrs.stabilityFund);
-  console.log('USDC            :', addrs.usdc);
+  const fmt = v => "$" + ethers.formatUnits(v, 6);
+  console.log("Signer:", owner.address, "| SF owner:", await sf.owner());
+  console.log("SF:", sfAddr, "(" + path.basename(addrFile) + ")");
+  console.log("Before  totalBalance:", fmt(await sf.totalBalance()), " SF USDC:", fmt(await usdc.balanceOf(sfAddr)));
+  console.log("Topping up", fmt(amount), "via receiveLayer(t0, amount, L1)...");
 
-  const amount = ethers.parseUnits(AMOUNT_USDC, 6);
-  const usdc   = new ethers.Contract(addrs.usdc, ERC20_ABI, signer);
-  const sf     = new ethers.Contract(addrs.stabilityFund, SF_ABI, signer);
+  await (await usdc.approve(sfAddr, amount)).wait();
+  await (await sf.receiveLayer(0, amount, 1)).wait();
 
-  // Check W1 has enough USDC
-  const w1Bal = await usdc.balanceOf(w1Wallet.address);
-  console.log(`\nW1 USDC balance: $${ethers.formatUnits(w1Bal, 6)}`);
-  if (w1Bal < amount) {
-    console.error(`❌  W1 only has $${ethers.formatUnits(w1Bal, 6)} — need $${AMOUNT_USDC}`);
-    process.exit(1);
-  }
-
-  const beforeTotal = await sf.totalBalance();
-  const beforeT1    = await sf.balanceByTier(0);
-  console.log(`\nSF before — total: $${ethers.formatUnits(beforeTotal,6)}  T1: $${ethers.formatUnits(beforeT1,6)}`);
-
-  // Step 1: deployer authorizes W1 as a matrix caller temporarily
-  console.log('\nAuthorizing W1 as matrix caller…');
-  const authTx = await sf.setMatrixAuthorized(w1Wallet.address, true);
-  await authTx.wait();
-  console.log('Authorized ✅');
-  await sleep(8000);
-
-  // Step 2: W1 approves SF to pull USDC
-  console.log(`W1 approving SF for $${AMOUNT_USDC} USDC…`);
-  const approveTx = await usdc.connect(w1Wallet).approve(addrs.stabilityFund, amount);
-  await approveTx.wait();
-  console.log('Approved ✅');
-  await sleep(8000);
-
-  // Step 3: W1 deposits via receiveLayer (tierIdx=0 = T1, layer=1)
-  console.log(`W1 depositing $${AMOUNT_USDC} into SF via receiveLayer…`);
-  const depositTx = await sf.connect(w1Wallet).receiveLayer(0, amount, 1);
-  console.log('TX:', depositTx.hash);
-  await depositTx.wait();
-  console.log('Deposited ✅');
-  await sleep(8000);
-
-  // Step 4: deployer revokes W1's matrix authorization
-  console.log('Revoking W1 matrix authorization…');
-  const revokeTx = await sf.setMatrixAuthorized(w1Wallet.address, false);
-  await revokeTx.wait();
-  console.log('Revoked ✅');
-
-  const afterTotal = await sf.totalBalance();
-  const afterT1    = await sf.balanceByTier(0);
-  console.log(`\nSF after  — total: $${ethers.formatUnits(afterTotal,6)}  T1: $${ethers.formatUnits(afterT1,6)}`);
-  console.log('\n✅  StabilityFund funded successfully.');
+  const tb = await sf.totalBalance(), ub = await usdc.balanceOf(sfAddr);
+  console.log("After   totalBalance:", fmt(tb), " SF USDC:", fmt(ub));
+  console.log(tb <= ub ? "INVARIANT OK (totalBalance <= SF USDC)" : "WARNING: totalBalance > SF USDC - investigate");
 }
-
 main().catch(e => { console.error(e); process.exit(1); });

@@ -1,0 +1,11 @@
+{
+  "network": "baseSepolia",
+  "deployedAt": "2026-06-23T23:04:49.044Z",
+  "lpPool": "0xceEC4bC9E6a9E8fBFe6D2aeC8D1e23f1C8bb4310",
+  "usdc": "0x2D8B7b5eDec96bE441b6fb0D45D74a2BcE2C639a",
+  "cnova": "0xCD56D03706f90956602ed0E8415f172F72c6De21",
+  "seedUSDC": 2454.8,
+  "seedCNOVA": 50255,
+  "initPriceUSDC": 0.0488468809073724,
+  "note": "USDC/CNOVA constant-product AMM (x*y=k, 0.30% fee)"
+}
