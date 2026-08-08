@@ -71,6 +71,186 @@ loop now caps draws with the withdrawCore mirror instead of freeWithdrawable
 (which left $49.04 of $168.04 "unsourced"). Typed partials remain multi-
 signature until this router function ships.
 
+## 4. floorPrice() can DROP — "never down" is a comment, not a rule
+
+Found 2026-08-07 answering the owner's question "the floor cannot be revisited
+correct?". Verified against source; the answer is no.
+
+`CNOVATreasury.sol:213` — the $0.01 return is a **divide-by-zero guard only**
+(`if (supply == 0)`), dead forever after the first mint. The contract's own
+comment says so. Past that it is pure `(usdcReserve * 1e18) / supply` with no
+`MIN_FLOOR`, no clamp, no ratchet anywhere in the file.
+
+Line 209 asserts *"It can only ever go up — never down — by design."* This is
+the source of the website claim. **Nothing enforces it.**
+
+### Three leaks
+
+1. **`addDexLiquidity` (:365)** — `usdcReserve -= usdcAmount`, no CNOVA burned.
+   Owner-only + Universe Mode.
+2. **`emergencyWithdraw` (:384)** — same shape, `onlyOwner` is the only gate.
+   Its own comment says "Best practice: protect with a Timelock at deploy."
+   We did not deploy it behind a timelock.
+3. **Ordinary registrations** — LIVE NOW. Each join mints
+   (`MatrixLogicLib:425`) and deposits 500bps (`:819`). Marginal ratio:
+   T1 **$0.010000**, T2–T7 $0.012500, T8–T10 $0.015625. The floor moves
+   toward the marginal ratio of whatever just happened, so **T1 entries
+   dilute whenever the floor is above $0.01** — it is $0.011561 today.
+
+**Amplifier:** figure-8 re-entries mint again. `countedMember`
+(`CNOVAToken:452`) gates only the epoch MEMBER trigger, not the mint. Wave 3
+ran 1,448 T1 entry events from 576 members — dilution is per-ENTRY at ~2.5x
+per member, not per-join.
+
+### Two things that do NOT raise the floor (corrected)
+
+- **DirectSale is floor-NEUTRAL by design.** `CNOVADirectSale:295` deposits
+  `toTreasury = cnovaOut * floorE6` — exactly floor value — and diverts the
+  entire 1.25x–2x premium to SF and LQ. Purchases never raise the floor.
+  Site copy implies otherwise.
+- **Redemption is neutral-then-positive.** `redeemAtFloor` burns supply and
+  debits reserve at exactly the floor (ratio unchanged), then recycles 80% of
+  the exit penalty into `usdcReserve` with no matching mint. This is the ONLY
+  genuine upward force.
+
+### View divergence (separate small item)
+
+`DirectSale._floorPriceE6()` reads `usdc.balanceOf(treasury)`;
+`Treasury.floorPrice()` reads the `usdcReserve` accumulator. Equal today; any
+USDC reaching the treasury outside `depositReserve` makes them disagree.
+Fold into the item-1 view-parity work.
+
+### Decisions
+
+- **Owner side — DECIDED 2026-08-07:** hard `require(floorPrice() >=
+  floorBefore)` in both `addDexLiquidity` and `emergencyWithdraw`. No
+  override, no timelock escape. addDexLiquidity must then pair at or above
+  the floor ratio; emergencyWithdraw becomes unusable against reserve.
+- **Mint side — DECIDED 2026-08-08: OPTION A.** Cap the mint at the value
+  the registration's own treasury deposit backs at the current floor.
+  Owner's framing for the copy: *"starts at 50 CNOVA, then auto-corrects
+  as the floor rises."* Scheduled rewards and the epoch table are
+  UNCHANGED — the cap is a backing ceiling, not a new schedule.
+  Consequence to state plainly: minted amount x floor == treasury deposit
+  exactly whenever the cap binds, so the reward's BACKING VALUE is
+  constant ($0.50 per T1 entry) while the token COUNT falls as the floor
+  rises. This makes the launch equation ($0.50 / 50 = $0.01) a permanent
+  rule rather than a one-time coincidence.
+
+### Mint-side options + modelled results
+
+Model: `/home/claude/floor_model.py` (mechanics traced to source), chart
+`floor_options.png`. Start state R=$2,900.75 S=250,900 (floor $0.011561),
+5,000 new members at 2.5 entries each.
+
+| option | realistic mix (upgrades + 8% exits) | pure T1 wave |
+|---|---|---|
+| **C** no change | min **$0.011499 (−0.54%)** @ +3,000, recovers to +5.3% after the epoch-2 halving | **$0.010522, −8.99%, no recovery** |
+| **B** T1 split 500→625bps | never dips; +14.0% | +5.4% |
+| **A** cap mint at floor value | never dips; +9.7% | **exactly flat, 0.00%** |
+
+- **A** — in `mintReward`, after the tier multiplier:
+  `backed = deposit * 1e18 / floorPrice(); if (amount > backed) amount = backed;`
+  Mint runs BEFORE the deposit (`:425` vs `:819`), so the cap uses the
+  pre-deposit floor and the registration is **exactly** floor-neutral
+  (algebra: `(R+D)/(S+D/F) == F`), floor-positive when the schedule is under
+  the cap. Clamps 6.6% of mints, essentially all epoch-1 T1 (43.25 vs 50
+  CNOVA today, −13.5%). **Self-releases at the epoch-2 halving** — clamp
+  thresholds by epoch, T1: e1 $0.0100, e2 $0.0125, e3 $0.0250, e4 $0.0500,
+  e5 $0.1000, e6–9 $0.2000 (×1.25 for T2–T7, ×1.5625 for T8–T10).
+  Reuses the mechanism the token ALREADY ships for Final Frontier
+  (`CNOVAToken:434` mints inversely proportional to floor) — plumbing proven,
+  `treasuryRef` wired, already inside a try/catch at the call site.
+- **B** — T1 treasury split 500→625bps (NOT 250bps; 50 CNOVA × $0.0125 =
+  $0.625). 125bps must come out of T1 pool (1800→1675, −6.9%) or chain pay
+  (1350→1225, −9.3%) to hold the hard-required 4750bps invariant. Costs
+  $1,215 of member USDC over the modelled run. Permanent, not one epoch.
+- **C** — no mint-side change; rewrite site copy instead.
+
+### Blocked on this decision
+
+- Copy item **B1** (frontend audit, "absolute floor can never be revisited")
+  is UNAPPLIED pending the outcome. If A or B ships, the guarantee can be
+  stated plainly. If C ships, B1 must be rewritten to the real rule.
+- Group B copy items B2–B8 continue independently.
+
+### Shipping decision 2026-08-08
+
+Owner call: **ship all B1 copy to main NOW**, ahead of the V8.48 deploy.
+Rationale: testnet (no real funds), V8.48 expected within 48h.
+
+**Standing dependency created — V8.48 MUST ship BOTH floor items or the live
+copy becomes a false claim:**
+1. mint cap at floor value in `CNOVAToken.mintReward`
+2. `require(floorPrice() >= floorBefore)` in `CNOVATreasury.addDexLiquidity`
+   and `emergencyWithdraw`
+
+If either slips out of V8.48, the B1 copy must be rolled back the same day.
+Sites carrying the claim: compensation.html (s4_p2_b/s4_p2_a), faq.html
+(q20_a2, q21_a2, q21_a2b), index.html (dash.cnova_balance_tip,
+dash.cnova_wallet_note, dash.cnova_detail_note).
+
+## 5. B2 verification result (copy already corrected, contract unchanged)
+
+Verified against source 2026-08-08 — copy was false, contract is fine:
+- `TierRouter.pauseSystem(string)` :686 is `onlyOwner`; `checkInactivity()`
+  :650 auto-pauses at 30 days / 2 cycles (defaults :329-331), permissionless.
+- `whenNotPaused` is ONLY on register/upgrade (:710,722,740,806,904,915,955,
+  1049). `bulkWithdraw()` :1020 and all `FigureEightMatrixV8.withdraw*` are
+  UNGATED — **a pause cannot block withdrawals.** Good property, now stated.
+- No upgrade proxy anywhere (no Initializable/UUPS/ERC1967; delegatecall is
+  linked-library only). `FigureEightMatrixV8` has NO fee-split setter.
+- Governance 72h vote / 48h timelock / 2% quorum (:260-264).
+- **Audit's "~35 DAO params" was WRONG: PARAM_MAX_ID = 57, three retired
+  (3 escrow floor mult, 10 early-exit penalty, 36 boost-table scalar path)
+  = 54.** Copy says "more than 50" to avoid drift.
+
+## 6. B3 verification result
+
+- `CNOVAToken.vestDuration = 180 days` (:163, governable). Matrix-minted CNOVA
+  is CLIFF-vested — counts in balanceOf but is non-transferable until cliff.
+- **TWO separate penalties, both can apply to the same exit:**
+  (a) early UNLOCK of vested CNOVA — `maxPenaltyBps` default **5000 (50%)**,
+      slides linearly to 0 as the cliff approaches (:171, :353-361).
+  (b) `CNOVATreasury.earlyExitPenaltyBps` on redemption — **4500 / 3000 /
+      1500 / 500 / 0** at **30 / 60 / 90 / 120** days (:253-257). Audit's
+      ladder was CORRECT.
+- (b) measures tenure from `tier1Matrix.memberJoinedAt(member)`, NOT from
+  token receipt — and returns **0** if the T1 lookup fails or joinedAt == 0.
+- On redemption, 80% of penalty (b) recycles to `usdcReserve`, 20% to the
+  Community Wallet (:284-290).
+
+### On-chain verification 2026-08-08 (scripts/check_floor_sources.js)
+
+    floorPrice()        11824   $0.011824   <-- redemption pays this
+    balance/supply      11824   $0.011824   <-- old frontend formula
+    usdcReserve()   5811750000   $5811.75
+    balanceOf(T)    5811750000   $5811.75
+    totalSupply()      491500 CNOVA
+    DRIFT = 0
+
+**No divergence today.** Frontend commit d25b718 (all three floor displays now
+read `floorPrice()`) is DEFENSIVE, not a live-bug fix. The V8.48 view-parity
+item stays on the list but is not urgent.
+
+**Growth since the model (was $2,900.75 / 250,900 = $0.011561):**
+reserve +$2,911.00, supply +240,600 CNOVA → marginal ratio **$0.012099**,
+above the floor, so the floor ROSE to $0.011824 (+2.3%). Upgrade activity is
+carrying it — consistent with the model's mixed-growth case. The T1 dilution
+risk is unchanged, just currently masked by heavy upgrade volume; a pure
+onboarding wave would still walk it toward $0.01.
+
+**Option A clamp is DEEPER than quoted at decision time:**
+- at decision (floor $0.011561): 50 → 43.25 CNOVA, **−13.5%**
+- today (floor $0.011824):      50 → **42.29 CNOVA, −15.4%**
+The clamp deepens as the floor rises. Owner approved at −13.5%; flagged.
+
+**Epoch 1 is 49.1% done** (491,500 / 1,000,000 `epochMintLimit`). At epoch 2
+the base drops 50 → 40, lifting the T1 clamp threshold $0.0100 → $0.0125.
+Current floor $0.011824 < $0.0125, so **the clamp releases at the halving** —
+confirming the "one epoch, not permanent" argument the decision rested on.
+Watch: if the floor passes $0.0125 before epoch 2, the clamp persists into it.
+
 ## Context
 
 - Deploy version at discovery: deployed_addresses_v8_47.json, Base Sepolia.
