@@ -534,6 +534,51 @@ T1.1MatA->T1.1MatB->T1.2MatA->T1.2MatB->T1.3MatA->T1.3MatB->T1.1MatA.
   parked and rotates fast, so this should clear without intervention.
 - `adminForceRotateRoot` is available to accelerate T1.1 MatA if needed.
 
+### LIVE MITIGATION APPLIED 2026-08-09 — TEMPORARY, MUST BE REVERTED AFTER V8.48
+
+**T1 PairManager `routeEntryThreshold` raised 400 -> 1,000,000.**
+
+    contract  0xB76fACd6234e1a0510599CBd185289444D58E2D3  (T1 PairManager)
+    call      setEntryThresholds(375, 1000000)
+    tx        0xaaa1bbd1d633e11d6b384bcac950923a5744573f309c1c925b36ca5471a2387d
+    block     45256563   2026-08-09 13:16:54 UTC
+    by        0xCd0Af6a4116f2062c1594aDf34c1821D45175506 (owner)
+
+**Why:** `rescueReentry` (:286) tests `p.totalRegistered >= routeEntryThreshold`
+— a cumulative counter — so every mature pair read as permanently saturated and
+its rescued members were routed back into their own MatB forever. Raising the
+threshold above any reachable value makes the test false, so rescues return to
+own MatA. Same technique V8.46 used to prove the TierRouter fix.
+
+**Result — immediate and unambiguous:**
+
+    T1.1 MatA rotations   316 (frozen 24h+)  ->  323 -> 324 -> 327 in minutes
+    T1.1 MatB parked       85  ->  79 -> 78 -> 75   (draining into MatA)
+    T1.1 MatB rotations  3167 -> 3168 -> 3168 -> 3168 (stopped self-recycling)
+    T1.2 MatA rotations   289  ->  291
+
+**Side effect (accepted, and currently harmless):** `_findExternalPair` (:581)
+shares this knob, so ALL new registrations now route to pair 0 (T1.1 MatA).
+That is additive right now — each one rotates the previously frozen matrix. But
+newer pairs receive no externals while this holds, and pair expansion via
+`_tryAdvancePair` keys off the newest pair's MatB occupancy, which will not
+advance. **Do not leave this in place long-term.**
+
+**REVERT COMMAND (after the V8.48 rescueReentry fix ships):**
+
+    setEntryThresholds(375, 400)
+    // scripts/unfreeze_matA.js with NEW_ROUTE=400 APPLY=1
+
+**Related discovery:** `route_rr.js` — the round-robin keeper that PairManagerV8
+:156 says drives T1's routeEntryThreshold at runtime — has been DISABLED since
+2026-08-06 (`# TRIM-2026-08-06` in crontab), the same day `manual_rescue` was
+trimmed. The threshold stopped being walked, every pair stayed above it, and
+MatA starved. **Turning off route_rr is very likely what triggered the freeze**;
+the rescueReentry bug has existed since V8.44 but the keeper's threshold walk
+was masking it. Read route_rr.js before finalising the V8.48 fix so the contract
+does not end up depending on behaviour a keeper was quietly providing.
+
+
 ### Scope conclusion
 
 The fix is ONE BRANCH in `_finalizeCrossing` — let the MatB path fall through to
