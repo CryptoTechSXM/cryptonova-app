@@ -155,6 +155,42 @@ vs 400) are permanently excluded from new registrations. T1 is masked by the mit
 T4-T10 are under threshold and therefore not yet affected — they WILL be, at 400 entries
 each, with no code change required to trigger it.
 
+## ITEM 10 MEASURED IN MEMBERS — PARKED CENSUS 2026-08-09 19:00 UTC
+
+Rotation ratios say MatB churns faster than MatA. The parked census says who is paying
+for it. Both halves, every tier (`parked_census.js`):
+
+| tier | MatA parked | MatB parked | subtotal |
+|---|---:|---:|---:|
+| T1 | 24, 20, 0 | 62, 30, 0 | 136 |
+| T2 | 69, 0 | **209**, 0 | 278 |
+| T3 | 85, 0 | **165**, 0 | 250 |
+| T4 | 50 | 0 | 50 |
+| **TOTAL** | **248** | **466 (65%)** | **714** |
+
+**466 members parked in MatB.** A member cycles out of MatB, cannot fund the crossing,
+parks there — and `rescueReentry` at saturation re-seats them into that same MatB
+(PairManagerV8:286). Two-thirds of everyone parked sits in the half that was recycling
+them. This is item 10's cost expressed in people rather than rotation counts, and it is
+the same defect the owner identified from member behaviour on day two.
+
+**The rescue system itself is HEALTHY — verified, not assumed.** On-chain parked total
+(714) reconciles EXACTLY with `copay_rescue`'s "714 still in grace" (86400s window).
+Zero members are past grace awaiting a rescue that is not coming. `copay_rescue` runs
+every 10 minutes, advances real USDC (3 rescued / $16.53 in one run), reports 0 failed;
+`fastlane_rescue` and `evict_parked` are also scheduled. SF ~$10,900 and rising, ledger
+conserving to the cent, fully backed.
+
+Note for anyone re-deriving this: `rescue.log` is EMPTY and that is NOT a fault — no cron
+writes to it. The live rescuers are `copay_rescue.js`, `fastlane_rescue.js` and
+`evict_parked.js`. `rescue.log` is a stale log from a script no longer scheduled.
+
+**Expected effect of the 2026-08-09 17:07 threshold change:** with every tier's
+`routeEntryThreshold` unreachable, `rescueReentry` now takes the MatA branch everywhere,
+so those 466 are re-seated into MatA as they are rescued rather than back into MatB. The
+MatB share of parked members should fall. That is the metric to re-check tomorrow, and it
+is the same behaviour item 10 makes permanent.
+
 ## SIZE BASELINE — measured 2026-08-09, before any V8.48 code
 
 Deployed-bytecode size vs the EIP-170 limit of 24,576 bytes.
