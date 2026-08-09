@@ -391,6 +391,45 @@ until V8.48 ships. The test wallet is frozen for transfers until Feb 2027.
   be transferred or redeemed" - half right. `faqPage.q21_a3`, `faqPage.g3_def`
   and `compPage.s5_p2` still carry that wording and need the same correction.
 
+## 9. V8.47 changed the upgrade CHARGE — tooling was never updated
+
+Pattern worth generalising, found twice on 2026-08-08 in unrelated codebases.
+
+V8.47's upgrade gate charges **entry fee + outstanding SF rescue debt** in one
+transaction. Two independent callers still approved only the fee:
+
+- **Frontend** `_executeUpgrade` — fixed 2026-08-07 (`_upgradeDebtDue`), surfaced
+  by an owner screenshot showing a 26.6000 approval.
+- **`scripts/bigfill_v8.js`** — fixed 2026-08-08. Symptom was total: **0 of 12
+  T5 upgrades succeeded**, every one "transaction execution reverted", because
+  the wallets had just been self-rescued and therefore all carried debt.
+  After the fix: **12/12 T4 and 23/23 T5 succeeded.**
+
+Neither was a contract bug. Both were tooling carrying a pre-V8.47 assumption
+that nothing re-read after the contract changed.
+
+### Related, same run
+
+- `RESCUE_APPROVAL` was a flat $15 whose own comment said it was sized for T1,
+  while self-rescue had been extended to every tier (T3 needs up to $25, T5
+  $125). Now sized to the matrix's own `ENTRY_FEE()`.
+- Approve-then-read races: `.wait()` confirms on one node, the next read can hit
+  a node that is behind, so a just-approved allowance can read as $0.00 and the
+  static call reverts. Now polls until the allowance is visible.
+- `F8V8: already in matrix` / `still in matrix` are the VPS keepers
+  (copay_rescue, fastlane_rescue, both every 10 min) winning the race against
+  the bigfill sweep on the same parked queue. Benign; now a quiet skip.
+  NOTE: the standing "bigfill OR stress keeper, never both" rule predates these
+  two jobs and does not cover them — worth deciding whether it should.
+
+### Action for V8.48
+
+Extend the `predeploy_check.js` idea beyond wiring assertions: when a release
+changes what a member is CHARGED, grep every caller that builds an ERC20
+approval (frontend + scripts/ + /root/keeper/) and re-verify the amount. The
+wiring check catches "nothing calls this"; this catches "callers still believe
+the old price".
+
 ## Context
 
 - Deploy version at discovery: deployed_addresses_v8_47.json, Base Sepolia.
