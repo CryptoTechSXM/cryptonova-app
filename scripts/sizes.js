@@ -16,9 +16,15 @@ const fs   = require("fs");
 const path = require("path");
 
 const LIMIT = 24576;
+// AUDIT 2026-08-09: the watch list omitted CNOVATreasury and CNOVADirectSale,
+// both of which V8.48 modifies (floor require, _floorPriceE6). A contract the
+// gate does not watch can cross 24,576 bytes without the gate noticing.
+// Libraries are listed too: they are deployed separately and have their own limit.
 const WATCH = [
   "FigureEightMatrixV8", "TierRouter", "PairManagerV8", "MatrixPairFactory",
   "MatrixKeeper", "MatrixLogicLib", "StabilityFund", "CNOVAToken",
+  "CNOVATreasury", "CNOVADirectSale", "CommunityWallet", "OnrampRewardPool",
+  "TierRouterLib", "V8Governance", "CNOVABuybackReserve", "CouponRegistry",
 ];
 
 function findArtifact(name) {
