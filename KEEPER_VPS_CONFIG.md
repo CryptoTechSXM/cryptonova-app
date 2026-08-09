@@ -19,7 +19,7 @@ scp -i C:\Users\CryptoTech\.ssh\do_keeper <local-file> root@167.99.0.250:/root/k
 | Key | Value / note |
 |-----|--------------|
 | `BASE_SEPOLIA_RPC_URL` | Alchemy Base Sepolia endpoint (private URL — treat as secret) |
-| `ADDRESSES_FILE` | **must match the live deploy** → `deployed_addresses_v8_44.json` (was v8_43) |
+| `ADDRESSES_FILE` | **must match the live deploy.** Live value 2026-08-09: `deployed_addresses_v8_47.json`. See "Addresses pointer" below — on a release bump prefer moving the symlink to updating this. |
 | `KEEPER_PRIVATE_KEY` | `xxx` — signs keeper upkeep txs |
 | `DISTRIBUTOR_PRIVATE_KEY` | `xxx` — OnrampRewardPool distributor |
 | `DEPLOYER_PRIVATE_KEY` | `xxx` — **must be the wallet that OWNS the deployment** (V8.44: 0xCd0Af6a4116f2062c1594aDf34c1821D45175506) |
@@ -84,3 +84,62 @@ allowlist on them in the QuickNode dashboard.
 - Frontend DEFAULT_SPONSOR_POOL (index.html) = first 8 leaders of the same
   list; contract _resolveRef falls back to W1 for unregistered sponsors, so
   an outdated pool can't revert a registration.
+
+## Addresses pointer — hardening applied 2026-08-09
+
+**The problem found.** 53 keeper scripts hardcoded `process.env.ADDRESSES_FILE ||
+"deployed_addresses_v8_45.json"` — two releases stale. Seven more hardcoded an
+absolute path with NO env override at all (`require("/root/keeper/deployed_addresses_v8_46.json")`),
+which `.env` cannot reach. Every one of them was correct on the day only because a
+single `.env` line overrode it. Lose or reset that line and 49 scripts silently aim
+the owner key at dead contracts — no crash, just valid-looking addresses that are
+not the live protocol.
+
+**The fix.** One pointer, not 60 literals:
+
+```bash
+ln -sfn deployed_addresses_v8_47.json /root/keeper/deployed_addresses_current.json
+```
+
+Every fallback now reads `deployed_addresses_current.json`. Verified 2026-08-09
+with `ADDRESSES_FILE=` forced empty so the fallback fires:
+
+```
+resolved: deployed_addresses_current.json
+tierRouter: 0xE93A931b6C01f120962169a533614d1cC7b0AC9e
+T1 pm:      0xB76fACd6234e1a0510599CBd185289444D58E2D3
+```
+
+Both match `scripts/deployed_addresses_v8_47.json` in this repo exactly.
+
+**On every release bump, this is the whole procedure:**
+
+```bash
+ln -sfn deployed_addresses_v8_48.json /root/keeper/deployed_addresses_current.json
+```
+
+Do NOT reintroduce version literals into keeper source. If a script must pin an
+old release (a version-specific verifier), archive it instead — see
+`/root/keeper/archive_v846/`.
+
+**Archived 2026-08-09** (moved out of the active keeper directory):
+`preflight_v846.js`, `verify_v846.js` — V8.46-specific by name, would silently
+become "V8.46 checks" running against V8.48. `b_block.js` — never syntactically
+valid (top-level `await` outside async), so it has never run.
+
+**Backup of all 53 pre-rewrite scripts:** `/root/keeper/_backup_addrfile/`.
+Restore with `cp /root/keeper/_backup_addrfile/*.js /root/keeper/`.
+
+## HOLDING CONFIGURATION — do not drift before V8.48
+
+| item | state | why |
+|---|---|---|
+| `routeEntryThreshold` (T1) | `1000000` | Live mitigation. Every pair under threshold so pair 0 always wins, feeding T1.1 MatA. Released 254 frozen members; T1.1 MatA 316 -> 333 rotations. |
+| `route_rr.js` cron | commented out `# TRIM-2026-08-06` | |
+| `route_rr.js` kill switch | `/root/keeper/route_rr.OFF` present since 2026-08-09 | Blocks manual runs too. A dry run showed it wanted `route 1000000 -> 696`, which excludes T1.1 (3483 entries) and **refreezes the 254 members**. |
+
+**Cost of the mitigation:** at `route=1000000`, T1.2 and T1.3 MatA receive nothing.
+Live entry counts `[3483, 595, 8]`. It trades a T1.1 freeze for a T1.2/T1.3 freeze
+and is a holding position, not a resting state. `V8_48_SCOPE.md` item 10b is the
+real fix; items 16 and 17 unwind this AFTER 10b ships.
+
