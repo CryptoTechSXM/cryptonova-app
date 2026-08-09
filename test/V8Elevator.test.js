@@ -2941,19 +2941,35 @@ describe("V8.43 — additive toggles + two-threshold pair opening", function () 
     });
   });
 
-  describe("Factory early-deploy at deployEntryThreshold (125×3 rule)", function () {
-    it("deploys the next pair from cumulative entries, before MatB fills", async () => {
+  describe("Factory expansion triggers (V8.48 item 33)", function () {
+    // RETARGETED V8.48. This asserted the CUMULATIVE early-deploy rule:
+    // `newest.totalRegistered >= deployEntryThreshold` fires the factory. That trigger is
+    // gone — it is the same counter-versus-fixed-number test that produced the 10b freeze
+    // (totalRegistered only ever increments). It never wedged here only because addPair()
+    // makes the new empty pair the "newest" and resets the comparison: correct by accident.
+    //
+    // Expansion is now driven by OCCUPANCY, which cannot be misconfigured:
+    //   90% of the newest MatB  — the EARLY trigger, preserving deploy lead time so the
+    //                             next pair is wired before anyone needs it
+    //   newest pair FULL        — the backstop, guaranteeing the routing rule always has
+    //                             somewhere to put a member who cannot stay in their pair
+    //
+    // COVERAGE GAP, tracked as scope item 34: neither occupancy trigger is directly
+    // asserted anywhere. They need a fixture small enough to fill a pair — the O-series in
+    // V8_44_Overflow.test.js uses size-7 matrices and is the natural home.
+    it("a cumulative entry count no longer triggers expansion", async () => {
       const fx = await loadFixture(deployWithFactoryFixture);
-      const { pm1, admin, reg, s0, s1, s2 } = fx;
-      // deploy at 2 entries, route at 3 — mirrors 375/381 at test scale
-      await pm1.connect(admin).setEntryThresholds(2, 3);
+      const { pm1, admin, reg, s0, s1, s2, matA } = fx;
+      await pm1.connect(admin).setEntryThresholds(2, 3);   // both knobs now inert
 
       await reg(s0);
-      await reg(s1);                    // newest pair now has 2 entries
-      expect(await pm1.pairCount()).to.equal(1n, "trigger checks on NEXT entry");
+      await reg(s1);
+      await reg(s2);
 
-      await reg(s2);                    // _tryAdvancePair sees 2 ≥ 2 → factory fires
-      expect(await pm1.pairCount()).to.equal(2n, "pair 2 deployed early via entry trigger");
+      expect(await pm1.pairCount()).to.equal(1n,
+        "entries alone must not spawn a pair — expansion follows occupancy, not a counter");
+      expect(await matA.isActiveInMatrix(s2.address)).to.equal(true,
+        "and all three entered pair 0: one point of entry, never diluted");
     });
   });
 

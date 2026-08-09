@@ -747,9 +747,26 @@ contract PairManagerV8 is Ownable2Step {
         //      entries — deploy the next pair EARLY as a buffer, or
         //   b) newest MatB ≥ factoryExpandThresholdBps (90%) — V8.41 FIFO rule,
         //      kept as a safety net for low-churn pairs.
-        bool entryTrigger = newest.totalRegistered >= deployEntryThreshold;
-        bool matBTrigger  = matBSize > 0 && matBOcc * BPS_DENOM / matBSize >= factoryExpandThresholdBps;
-        if (!entryTrigger && !matBTrigger) return;
+        // V8.48 item 33 — spawn when the newest pair is FULL, not when a cumulative
+        // counter passes a configured number.
+        //
+        // The old trigger was `newest.totalRegistered >= deployEntryThreshold`. That is the
+        // same counter-versus-fixed-number test that produced the 10b freeze: totalRegistered
+        // only ever increments. It did not wedge here only because addPair() makes the new
+        // empty pair the "newest" and resets the comparison — correct by accident, not by
+        // design. Fullness is a fact the pair already knows, read from the matrices, and
+        // cannot be misconfigured.
+        //
+        // Both triggers are kept and either fires:
+        //   fullTrigger — nowhere left to sit in the newest pair. Guarantees the routing rule
+        //     always has somewhere to send a member who cannot stay in their own pair
+        //     (rescueReentry -> _freePairFor), so `_forceExpand()` stays unreachable.
+        //   matBTrigger — 90% of the newest MatB, i.e. EARLY. Deliberate: it leaves ~13 seats
+        //     of runway so the next pair is deployed and wired BEFORE anyone needs it, rather
+        //     than mid-cycle-out where a factory deploy would land on top of a cascade.
+        bool fullTrigger = _pairFull(pairs.length - 1);
+        bool matBTrigger = matBSize > 0 && matBOcc * BPS_DENOM / matBSize >= factoryExpandThresholdBps;
+        if (!fullTrigger && !matBTrigger) return;
 
         _expanding = true;
         // V8.39: wrap deployAndWire in try/catch — registration must not revert if factory fails.
