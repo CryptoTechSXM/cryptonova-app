@@ -512,9 +512,15 @@ async function simulateSelfRescues({ walletList, matrices, usdc, rawFunder, fund
       let _approved = false, _after = allowance;
       if (allowance < _needApprove) {
         await (await usdc.connect(conn).approve(addr, _needApprove)).wait();
-        await sleep(1);
         _approved = true;
-        _after = await usdc.allowance(w.address, addr);   // read back — do not assume
+        // Poll until the new allowance is VISIBLE to reads. Mined != readable on a
+        // load-balanced RPC, and the static call below reads through the same pool.
+        _after = 0n;
+        for (let _try = 0; _try < 6; _try++) {
+          await sleep(1);
+          _after = await usdc.allowance(w.address, addr);
+          if (_after >= _needApprove) break;
+        }
       }
       // TEMP INSTRUMENTATION 2026-08-08: the ENTRY_FEE-sized approval did not take
       // effect on some wallets (observed allowance $11.00 where $25 was expected).
@@ -537,7 +543,8 @@ async function simulateSelfRescues({ walletList, matrices, usdc, rawFunder, fund
           staticErr.shortMessage ||
           staticErr.message?.replace(/\n/g, ' ')?.slice(0, 200) ||
           'unknown reason';
-        if (reason.includes('not parked') || reason.includes('not a member')) {
+        if (reason.includes('not parked') || reason.includes('not a member') ||
+            reason.includes('already in matrix') || reason.includes('still in matrix')) {
           console.log(`  ℹ  ${w.address.slice(0, 10)}… keeper rescued first — all good`);
         } else {
           // Log wallet state to help diagnose
