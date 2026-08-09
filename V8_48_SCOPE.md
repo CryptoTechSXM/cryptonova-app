@@ -26,6 +26,11 @@ list; `V8_48_BACKLOG.md` holds the evidence for each.
 | 25 | ~~`adminForceRotateRoot` reverts at scale~~ **WITHDRAWN 2026-08-09 — NOT a live defect.** The "29%" was a LIFETIME ratio I presented as a current rate. Per-day distribution: 152 on 07-18, 90 on 07-19, **2,583 on 07-24 (91% of all of them, a single day)**, 2 on 08-02, and **nothing since**. 07-24 is the V8.44 go-live and 07-18/19 is the `occ=127/127 rot=0` signature the contract comments name — i.e. these are the incidents V8.44/V8.46 were built to fix, already fixed. The two most recent `ERROR` lines (08-03, 08-04) are QuickNode `50/second request limit reached`, not reverts. `frozen_matb_keeper.js` already guards with `staticCall` (:152) and `estimateGas` (:172). **Keep that guard when item 24 moves the trigger on-chain** — `checkUpkeep` has no equivalent, and that is the real carry-over. | — | withdrawn after verification |
 | 12a | **Extract `MatrixKeeperLib`** (same pattern as TierRouterLib / MatrixLogicLib). MatrixKeeper has 535 free bytes — item 12 does not fit. This is a prerequisite task, NOT a deferral of 12. | MatrixKeeper | size baseline below |
 
+| 26 | **SF L1 surplus redirect to CommunityWallet** (owner proposal 2026-08-09). Add `communityOverflowBps` (default **0** = no behaviour change at deploy) + `setCommunityOverflowBps` `onlyOwnerOrGovernance`. In `receiveLayer` layer==1 only: when `totalBalance >= sfTarget()` and `communityWallet != address(0)`, route `amount * communityOverflowBps / 10000` to CW via `ICommunityWallet.deposit` (SF must `forceApprove` CW first), remainder to SF as today. Add `totalRoutedToCommunity` + event. **Do NOT touch L3** — that overflow funds BuybackReserve, which supports the CNOVA floor (items 4/5/6). Evaluate `totalBalance` BEFORE crediting the deposit so the deposit cannot tip its own test. | StabilityFund (11,204 bytes free) | NEW |
+| 27 | **CommunityWallet cohort inversion — divide by `COHORT_SIZE`, not live count.** `distribute()` computes `perGenesis = genesisTotal / gCount` and `perPioneer = pioneerTotal / pCount` using LIVE lengths, so while the Pioneer cohort is partly filled each Pioneer out-earns each Genesis member. Live 2026-08-09: G=500, P=146 -> next distribution pays Genesis **$2.24** and Pioneer **$5.11**, 2.3x, on a wallet whose entire premise is rewarding early membership. Inverted for any Pioneer count below 334 (totalEnrolled < 834). Fix: divide both by `COHORT_SIZE` (500) so per-head value is fixed and unfilled seats simply roll over; keep `actualDist = perGenesis*gCount + perPioneer*pCount` so undistributed value stays in the pool. | CommunityWallet (16,749 bytes free) | NEW |
+| 28 | **Distribution expiry silently forfeits member money.** A distribution expires after `distributeInterval` (30d) and `_sweepExpired()` returns it to the pool. Members are told nothing. Exposure is $0.81 today but the 2026-09-04 distribution will be ~$1,865. Decide: keep expiry (and surface it loudly), or remove it. If kept, the frontend MUST show claimable amount + days remaining, and `claimable(address)` (:373) already provides the number. | CommunityWallet + frontend | NEW |
+| 29 | **`StabilityFund.sol:18` documents a carve rate that does not exist.** Header says *"L1: Per-entry stabilityBps carve (6% T1-T3, 5% T4-T10)"*. Deployed config is `SPLITS_ALL[4] = 300` bps — a flat **3% on all ten tiers** (`deploy_v8.js:103`, `tierSplits()` returns the same array for every tier). The comment is both tier-varying (it isn't) and ~2x the real rate. Modelling item 26 from it would have been 2x wrong. | StabilityFund (comment only) | NEW |
+
 ## Deploy / script changes
 
 | # | change | file |
@@ -190,6 +195,64 @@ writes to it. The live rescuers are `copay_rescue.js`, `fastlane_rescue.js` and
 so those 466 are re-seated into MatA as they are rescued rather than back into MatB. The
 MatB share of parked members should fall. That is the metric to re-check tomorrow, and it
 is the same behaviour item 10 makes permanent.
+
+## COMMUNITY WALLET — VERIFIED STATE AND TWO FALSE BELIEFS 2026-08-09
+
+Owner asked to verify two beliefs against code. **Both are false, and both match the
+OLD FRONTEND's gating** — removed in Batch 1 (`b1ddefd`), which is where the mental
+model came from. Recorded here so neither is re-derived.
+
+| belief | reality (code) |
+|---|---|
+| "Genesis get paid when we hit 500, Pioneer at 1000" | **No cohort-fullness gate exists.** `distribute()` requires only `totalEnrolled > 0` (:262); it divides by LIVE `genesisMembers.length` / `pioneerMembers.length`. `claim()` requires only `cohort[msg.sender] != COHORT_NONE`. **A distribution already ran 2026-08-05** with G=500, P=146. |
+| "Can claim once the 25th of the month hits" | **No calendar date anywhere.** `distribute()` gates on `block.timestamp >= lastDistributionTime + distributeInterval` — a ROLLING 30-day timer that drifts each cycle. Last 2026-08-05, next due **2026-09-04**. `claim()` has NO time gate at all. |
+
+Verified live state:
+
+| field | value |
+|---|---|
+| totalEnrolled | 646 / 1000 (Genesis **500**, Pioneer **146**) |
+| split | 60% Genesis / 40% Pioneer (frontend modal says 65/35 — still wrong, separate) |
+| distributeRatioBps | 5000 — 50% distributes, 50% rolls over |
+| distributeInterval | 30 days (NOT 25, NOT day-of-month) |
+| lastDistributionTime | 2026-08-05T05:09:42Z |
+| next due | **2026-09-04T05:09:42Z** |
+| CW USDC balance | $3,730.94 |
+| totalActivePending | $0.81 unclaimed |
+
+**Payout model for item 26** (constants read from source, not assumed). Blended SF carve
+**$1.08 per entry** at a plausible tier mix (T1 55%, T2 22%, T3 13%, T4 6%, T5 3%, T6 1%),
+100% of L1 redirected while SF >= target, both cohorts full:
+
+| members | cycles/mo | SF->CW /mo | Genesis ea | Pioneer ea |
+|---:|---:|---:|---:|---:|
+| 1,000 | 2 | $2,160 | $2.59 | $1.73 |
+| 2,500 | 2 | $5,400 | $6.48 | $4.32 |
+| 5,000 | 2 | $10,800 | $12.96 | $8.64 |
+| 5,000 | 4 | $21,600 | $25.92 | $17.28 |
+| 10,000 | 4 | $43,200 | $51.84 | $34.56 |
+
+Linear in members x cycles x redirect fraction. **Be honest in the announcement copy:**
+at today's scale this is a few dollars a month; it only becomes material at 5-10k active
+members.
+
+**The redirect is self-limiting, and the DAO dial already exists.** `sfTarget()` =
+`tierEntryFee[highestOpenTier-1] * sfTargetMultiplier` (currently **20**). Target ladder:
+T5 $5,000 -> T6 $10,000 -> T7 $20,000 -> T8 $50,000 -> T9 $100,000 -> T10 **$200,000**.
+As high tiers open the SF must hold far more before a cent redirects, so payouts throttle
+naturally. `setSfTargetMultiplierT1..T6` are ALREADY `onlyOwnerOrGovernance` — that
+multiplier, not a new threshold, is the lever the DAO votes on. Lower = more to members,
+higher = harder fund.
+
+**Current SF surplus:** target $5,000, balance $10,929.31, **$5,929.31 idle**, healthBps
+maxed at 10000. Owner decision 2026-08-09: **leave it** — T6 opening moves the target to
+$10,000 and T7 to $20,000, so growth absorbs it, and no privileged sweep function needs
+to be written or audited.
+
+**Why the existing overflow does nothing:** lifetime `totalRoutedToBuyback` = **$6.88**
+and `totalRoutedToSF` = **$0.77**. The entire sliding mechanism has governed $7.65 while
+$10,929 accumulated through L1/L5, which have no ceiling. The design is sound but attached
+to the wrong layer.
 
 ## SIZE BASELINE — measured 2026-08-09, before any V8.48 code
 
