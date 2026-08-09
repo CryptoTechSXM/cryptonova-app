@@ -22,6 +22,8 @@ list; `V8_48_BACKLOG.md` holds the evidence for each.
 | 10b | **`_findExternalPair` cumulative-counter exclusion — THIRD site of the V8.46 root cause, never fixed.** `pairs[i].totalRegistered < routeEntryThreshold` with a counter that only ever increments (:426). A pair that passes the threshold is excluded from new registrations FOREVER — its MatA stops receiving entries and freezes. Masked since 2026-07-27 by `route_rr.js`. Fix: `routingIdx = totalRegistrations % pairs.length` — round-robin. Equal share regardless of history, no monotonic trap, O(1) (deletes the loop), and exactly what `route_rr.js` imposes externally. Feeding a full MatA is safe: V8.41 root rotation frees the seat (regression S3). **NOT argmin** — cumulative totals across pairs born at different times are not comparable; live `[3483,595,8]` would send 587 consecutive entries to T1.3 and starve the other two. | PairManagerV8 :578-584 | NEW, verified 2026-08-09 — **live incident, see below** |
 | 11 | **selfRescue / coPayRescue surplus loss** — `crossingReserve` and `withdrawable` are zeroed UNCONDITIONALLY while `_finalizeCrossing` forwards only `entryFee`. Surplus is erased. Must credit the excess back to `withdrawable`. | MatrixLogicLib :1265-66 | NEW, verified 2026-08-09 |
 | 12 | `checkUpkeep` must DISCOVER WORK_PARKED_RESCUE, WORK_EVICT_PARKED (and GHOST/RECLAIM). Executable today but undiscoverable — retires 3 keepers. | MatrixKeeper | AUTOMATION_AUDIT.md |
+| 24 | **Keeper policy != contract policy on frozen MatB.** `_isFrozenMatB` (MatrixKeeper:633) requires full AND (never rotated OR `frozenMatBTimeout` = **6 hours** stale). `frozen_matb_keeper.js` rotates the moment a MatB reads full (`occ=127/127 nextSlot=128`), i.e. within 10 minutes. The protocol has been running on the KEEPER's policy for 6,726 rotations, which is why the contract's own failure gate ("if this ever fires regularly, the routing design has failed", :453) never tripped — on-chain it almost never fires. Decide the real policy and make ONE layer own it. | MatrixKeeper | NEW, verified 2026-08-09 |
+| 25 | **`adminForceRotateRoot` reverts at scale** — 2,827 `ERROR ... transaction execution reverted` against 6,751 successes in `frozen_matb.log` (~29% failure). Cause unknown; likely a rotation attempted when the root cannot cross (unfunded) . Needs diagnosis before item 24 changes the trigger, or the on-chain path inherits the same revert rate. | MatrixKeeper / MatrixLogicLib | NEW, verified 2026-08-09 |
 | 12a | **Extract `MatrixKeeperLib`** (same pattern as TierRouterLib / MatrixLogicLib). MatrixKeeper has 535 free bytes — item 12 does not fit. This is a prerequisite task, NOT a deferral of 12. | MatrixKeeper | size baseline below |
 
 ## Deploy / script changes
@@ -38,7 +40,7 @@ list; `V8_48_BACKLOG.md` holds the evidence for each.
 |---|---|
 | 16 | Revert the live mitigation: `setEntryThresholds(375, 400)` once #10 ships |
 | 17 | DELETE `route_rr.js` — **gated on 10b, NOT on 10.** It masks `_findExternalPair`, not `rescueReentry`. Deleting it after a 10-only fix re-freezes MatA in every mature pair — the 26 Jul state (T1.1=2129, T1.2=890, T1.3=101 vs threshold 381, two dead pairs). |
-| 18 | Trim `frozen_matb_keeper.js` — duplicates WORK_FORCE_ROTATE (pending log check) |
+| 18 | **REVERSED 2026-08-09 — DO NOT RETIRE `frozen_matb_keeper.js`.** The log check was run and the earlier "redundant" call was based on MY bad grep (searched lowercase `rotated`/`forced`; the log writes `Rotated`/`forcing`, so 2 matches meant my pattern missed, not that the keeper was idle). Actual: **6,751 successful rotations, total_rotations=6726, runs=38445**, still rotating T1.1/T2.1/T3.1 every 10 minutes. Retiring it would freeze every MatB in the protocol. Replaced by item 24. |
 | 19 | Retire `copay_rescue` / `fastlane_rescue` / `evict_parked` once #12 lands |
 | 20 | Run the protocol's own gate: **keepers OFF -> rotationCount must still climb** (MatrixKeeper.sol:455) |
 
@@ -113,6 +115,45 @@ unconditional-MatA cost before V8.46-C: fork replay of graduation tx `0xff488549
 `require(!isInMatrix)` at MatrixLogicLib:255, the empty catch at :513 swallowed it,
 **9 events, 6 members, $467.50 lost.** Item 10 must mirror
 `toMatB = isActiveInMatrix(member)`, not just "return MatA".
+
+## WHY PAIR A ROTATES SLOWER THAN PAIR B — ANSWERED 2026-08-09
+
+The owner reported on day two: *"members are not rotating fast enough in T1A or any
+pair A as fast as the B pair"* and stated the intended design: *"when T1B cycles out
+it should not go back to T1b it should go to T1A or T2A and continue up the ladder."*
+
+Measured live across all 10 tiers (`diag_matb_freeze2.js`, paced + retried so no
+failed read is mistaken for data):
+
+| pair | entries | thr | MatA rot | MatB rot | ratio | `rescueReentry` target |
+|---|---:|---:|---:|---:|---:|---|
+| T2.1 | 5986 | 400 | 581 | 5684 | **9.8x** | MatB (saturated) |
+| T1.1 | 3496 | **1000000** | 378 | 3210 | 8.5x (accrued BEFORE the mitigation) | **MatA** (mitigated) |
+| T3.1 | 1153 | 400 | 434 | 870 | 2.0x | MatB (saturated) |
+| T4.1 | 242 | 400 | 115 | 0 | — | MatA (under threshold) |
+
+**Mechanism, confirmed.** `PairManagerV8.rescueReentry` :286 re-seats a rescued member
+into own **MatB** once `totalRegistered >= routeEntryThreshold`. A member cycles out of
+MatB, cannot fund the crossing, parks, is rescued — and is put back into MatB. A closed
+loop. MatB churns, MatA crawls, and no one climbs the ladder. This is exactly the
+behaviour the owner described from watching members, before it was found in code.
+
+**The earlier hypothesis was WRONG and is recorded so it is not re-derived:** "MatA is
+starved of all feed, so MatB gets no crossings and goes inert." T2.1 and T3.1 are
+EXCLUDED by 10b yet their MatAs rotated 0.3h ago — cycle-out re-entry
+(`sameTierTarget` -> own MatA) still feeds them. 10b's harm is that NEW members never
+reach a mature pair (T2.2 has 35 entries, T3.2 has 3, while T2.1 has 5986); item 10's
+harm is the MatB recycle loop. Two distinct defects, both real, both in scope.
+
+**T1 is the control group.** It is the only tier carrying the mitigation
+(`routeEntryThreshold = 1000000`), which forces `rescueReentry` down the MatA branch —
+item 10's exact semantics. T1.1 MatA has gone 316 -> 333 -> 374 -> 378 today while its
+MatB held 126/127. The fix is proven on live members before a line of it is written.
+
+**Blast radius of 10b right now:** T2.1 (5986 entries vs threshold 400) and T3.1 (1153
+vs 400) are permanently excluded from new registrations. T1 is masked by the mitigation.
+T4-T10 are under threshold and therefore not yet affected — they WILL be, at 400 entries
+each, with no code change required to trigger it.
 
 ## SIZE BASELINE — measured 2026-08-09, before any V8.48 code
 
