@@ -79,7 +79,6 @@ async function deployPair() {
   await sf.setTierRouter(await tr.getAddress());
   // Saturate immediately so same-tier re-entries target the OWN pair's MatB —
   // the exact routing that produced the live corruption.
-  await pm.setEntryThresholds(1, 2);
   // V8.46 (2026-07-27): pairExpansionThreshold and its setter were DELETED.
   // The knob compared a cumulative lifetime counter against a value documented
   // as capacity, so every pair crossed it permanently and its MatA lost every

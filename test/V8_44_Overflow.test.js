@@ -10,6 +10,20 @@
  *  O4. DESIGN-LAW GATE (keepers OFF): with two pairs and pure member-driven
  *      flow (registrations + selfRescue only), BOTH MatBs' rotationCount
  *      climbs — cycling needs no keeper.
+ *
+ *  V8.48 item 34 — the two OCCUPANCY expansion triggers (item 33 replaced the
+ *  cumulative `deployEntryThreshold` rule with them, and nothing asserted either):
+ *
+ *  O5. EARLY trigger — newest MatB crosses factoryExpandThresholdBps (90% in
+ *      production) and the factory spawns the next pair WHILE THE CURRENT ONE
+ *      STILL HAS SEATS. The lead time is the point: the successor is deployed and
+ *      wired before anyone needs it, not mid-cycle-out on top of a cascade.
+ *  O6. FULL backstop — a pair that reaches MATRIX_SIZE in both halves always has a
+ *      successor, so the routing rule always has somewhere to send a member who
+ *      cannot stay in their own pair (rescueReentry -> _freePairFor).
+ *
+ *  These need a rig small enough to actually FILL a pair, which is why they live
+ *  here (size 7) rather than in V8Elevator (size 127 = 254 registrations).
  */
 const { ethers } = require("hardhat");
 const { expect } = require("chai");
@@ -91,6 +105,105 @@ async function deployTwoPairs(size) {
   };
 }
 
+/**
+ * ONE pair (pair 0) plus a fully wired MatrixPairFactory, so `_tryAdvancePair()`
+ * can really deploy pair 1 instead of being stubbed. Mirrors deployTwoPairs()
+ * exactly up to the point where the second pair would be added by hand.
+ *
+ * StabilityFund is deliberately NOT given to the factory (`setPeripherals` sf =
+ * address(0)): `sf.setMatrixAuthorized` is owner-gated and the factory is not the
+ * SF owner here, so passing it would make `deployAndWire` revert — and
+ * `_tryAdvancePair` swallows that revert in a try/catch, which would show up as
+ * "the trigger never fired" rather than as a wiring error. Pair 0 keeps its real
+ * SF; the spawned pair does not need one for these assertions.
+ */
+async function deployOnePairWithFactory(size) {
+  const sigs = await ethers.getSigners();
+  const [owner, W1, devOps] = sigs;
+
+  const usdc  = await (await ethers.getContractFactory("MockUSDC")).deploy(owner.address);
+  const cnova = await (await ethers.getContractFactory("CNOVAToken")).deploy(owner.address);
+  const [usdcAddr, cnovaAddr] = [await usdc.getAddress(), await cnova.getAddress()];
+  const treasury = await (await ethers.getContractFactory("CNOVATreasury"))
+    .deploy(cnovaAddr, usdcAddr, owner.address);
+  const sf = await (await ethers.getContractFactory("StabilityFund"))
+    .deploy(usdcAddr, owner.address);
+  const tr = await (await ethers.getContractFactory("TierRouter", { libraries: { TierRouterLib: (await (await ethers.getContractFactory("TierRouterLib")).deploy()).target } }))
+    .deploy(usdcAddr, owner.address);
+  const pm = await (await ethers.getContractFactory("PairManagerV8"))
+    .deploy(usdcAddr, FEE, owner.address);
+  const [tresAddr, sfAddr, trAddr, pmAddr] = [
+    await treasury.getAddress(), await sf.getAddress(),
+    await tr.getAddress(),       await pm.getAddress(),
+  ];
+
+  const dp = {
+    usdc: usdcAddr, cnova: cnovaAddr, treasury: tresAddr,
+    devWallet: devOps.address, opsWallet: devOps.address,
+    accountOne: W1.address, admin: owner.address,
+  };
+  const matrixLib = await (await ethers.getContractFactory("MatrixLogicLib")).deploy();
+  await matrixLib.waitForDeployment();
+  const matrixLibAddr = await matrixLib.getAddress();
+  const MX = await ethers.getContractFactory("FigureEightMatrixV8", {
+    libraries: { MatrixLogicLib: matrixLibAddr },
+  });
+
+  const a = await MX.deploy(dp, FEE, size, true,  0, SPLITS, CP_BPS);
+  const b = await MX.deploy(dp, FEE, size, false, 0, SPLITS, CP_BPS);
+  await a.setPartner(await b.getAddress());
+  await b.setPartner(await a.getAddress());
+  for (const m of [a, b]) {
+    await m.setPairManager(pmAddr);
+    await m.setTierRouter(trAddr);
+    await m.setStabilityFund(sfAddr);
+    await m.setMatrixKeeper(owner.address);
+    await treasury.setAuthorizedCaller(await m.getAddress(), true);
+    await sf.setMatrixAuthorized(await m.getAddress(), true);
+    await tr.registerMatrix(await m.getAddress(), 0);
+  }
+  await pm.addPair(await a.getAddress(), await b.getAddress());
+  await pm.setTierRouter(trAddr);
+  await pm.setActivePairIndex(0);
+
+  await tr.registerTier(0, pmAddr, FEE);
+  await tr.setTierMatrices(0, await a.getAddress(), await b.getAddress());
+  await sf.setMatrixKeeper(owner.address);
+  await sf.setTierFee(0, FEE);
+  await sf.setTierRouter(trAddr);
+
+  // ── the factory, wired for tier 1 (tierNum 1 == tierIndex 0) ──────────────
+  const factory = await (await ethers.getContractFactory("MatrixPairFactory", {
+    libraries: { MatrixLogicLib: matrixLibAddr },
+  })).deploy(owner.address, usdcAddr, cnovaAddr, tresAddr);
+  const factoryAddr = await factory.getAddress();
+
+  await factory.setWallets(devOps.address, devOps.address, W1.address);
+  await factory.setPeripherals(
+    ethers.ZeroAddress,   // sf — see note above
+    ethers.ZeroAddress,   // couponRegistry
+    trAddr,               // tierRouter
+    owner.address,        // matrixKeeper (so forceCross works on spawned pairs too)
+    ethers.ZeroAddress,   // governance
+    ethers.ZeroAddress,   // buybackReserve
+    ethers.ZeroAddress    // liquidityReserve
+  );
+  await factory.configureTier(1, FEE, size, SPLITS, CP_BPS);
+  await factory.registerPairManager(pmAddr, 1);
+
+  await pm.setFactory(factoryAddr);                       // _tryAdvancePair -> deployAndWire
+  await treasury.setFactory(factoryAddr);                 // deployAndWire -> setAuthorizedCaller
+  await tr.setFactory(factoryAddr);                       // deployAndWire -> registerMatrix
+  await cnova.grantRole(ethers.ZeroHash, factoryAddr);    // deployAndWire -> grantRole(MINTER_ROLE)
+
+  return {
+    usdc, cnova, treasury, sf, tr, pm, factory, owner, W1, devOps, sigs,
+    pmAddr, trAddr, factoryAddr,
+    matA: a, matB: b,
+    matAAddr: await a.getAddress(),
+  };
+}
+
 async function reg(ctx, signer, referrer) {
   await ctx.usdc.mint(signer.address, FEE);
   await ctx.usdc.connect(signer).approve(ctx.pmAddr, FEE);
@@ -123,6 +236,37 @@ async function fillPairZero(ctx, size) {
   return { cyclers, externals };
 }
 
+/** Fill pair-0 MatA only (size members, W1 first). Refs all → W1. */
+async function fillMatAOnly(ctx, size) {
+  const { sigs, W1 } = ctx;
+  const fillers = sigs.slice(10, 10 + size - 1);
+  await reg(ctx, W1, ethers.ZeroAddress);
+  for (const f of fillers) await reg(ctx, f, W1.address);
+  expect(await ctx.matA.occupancy()).to.equal(BigInt(size));
+  return {
+    cyclers:   [W1, ...fillers],
+    externals: sigs.slice(10 + size - 1, 10 + 3 * size),
+  };
+}
+
+/**
+ * One external registration into the (full) MatA rotates its root out; make sure
+ * that root ends up SEATED in MatB. A funded root crosses by itself — the
+ * force-cross is only for roots that parked at the crossing for want of the other
+ * half of the fee, which at this rig size is most of them.
+ */
+async function growMatBByOne(ctx, cyclers, externals, i) {
+  await reg(ctx, externals[i], ctx.W1.address);
+  const m = cyclers[i];
+  if (m && !(await ctx.matB.isActiveInMatrix(m.address))) {
+    await ownerForceCross(ctx, m.address);
+  }
+}
+
+async function combinedOccupancy(ctx) {
+  return (await ctx.matA.occupancy()) + (await ctx.matB.occupancy());
+}
+
 describe("V8.44 — overflow rework: own members return to own pair", function () {
   this.timeout(600_000);
 
@@ -143,8 +287,8 @@ describe("V8.44 — overflow rework: own members return to own pair", function (
     }
     expect(parked, "need a parked pair-0 MatA member").to.not.equal(null);
 
-    // Saturate pair 0: route threshold below its cumulative entry count.
-    await pm.connect(owner).setEntryThresholds(1, 10);
+    // V8.48 item 30: there is no longer a threshold to "saturate" a pair with. The
+    // assertions below hold on physical state alone, which is the point of deleting it.
 
     // --- O2 RETARGETED V8.48 (item 10b): ONE POINT OF ENTRY.
     // This asserted that a fresh external overflows to pair 2 once pair 0 saturates. New
@@ -198,9 +342,6 @@ describe("V8.44 — overflow rework: own members return to own pair", function (
     const SIZE = 4;
     const ctx = await deployTwoPairs(SIZE);
     const { pm, matA, matB, matA2, matB2, W1, sigs, owner, usdc } = ctx;
-
-    // Saturation thresholds scaled to the mini pair (SIZE*3 = 12 entries).
-    await pm.connect(owner).setEntryThresholds(SIZE * 3 - 2, SIZE * 3);
 
     // Pure member-driven churn: register fresh externals; whenever anyone
     // parks anywhere, they selfRescue (member action — NOT a keeper).
@@ -262,5 +403,354 @@ describe("V8.44 — overflow rework: own members return to own pair", function (
         }
       }
     }
+  });
+
+  // ───────────────────────────────────────────────────────────────────────────
+  // V8.48 item 34 — THE TWO OCCUPANCY EXPANSION TRIGGERS
+  //
+  // Item 33 replaced `newest.totalRegistered >= deployEntryThreshold` (a CUMULATIVE
+  // counter versus a configured number — the same shape that froze 254 members in
+  // T1.1 MatA on 2026-08-06) with two triggers read from the matrices themselves:
+  //
+  //   matBTrigger — newest MatB occupancy >= factoryExpandThresholdBps (90% live)
+  //   fullTrigger — newest pair at MATRIX_SIZE in both halves
+  //
+  // Neither was asserted anywhere: the test that covered the old cumulative rule was
+  // retargeted to prove the counter NO LONGER fires, which says nothing about what
+  // does. These two close that gap, on a rig small enough to actually fill a pair.
+  // ───────────────────────────────────────────────────────────────────────────
+
+  it("O5: EARLY trigger — the successor pair is deployed while pair 0 still has seats", async function () {
+    const SIZE = 7;
+    const ctx  = await deployOnePairWithFactory(SIZE);
+    const { pm, matA, matB, owner, W1 } = ctx;
+
+    // 4000 bps on a 7-seat MatB fires at 3 seats (3 * 10000 / 7 = 4285). Production
+    // runs 9000, which on 127 seats is 114/127 — 13 seats of runway. Same shape,
+    // scaled: what is being asserted is that expansion happens WITH ROOM TO SPARE,
+    // not that any particular number is the right one. The lead time is the whole
+    // point of keeping an early trigger at all — the next pair is deployed and wired
+    // before anyone needs it, rather than mid-cycle-out on top of a cascade.
+    await pm.connect(owner).setFactoryExpandThreshold(4_000n);
+    expect(await pm.pairCount(), "one pair to start").to.equal(1n);
+
+    const { cyclers, externals } = await fillMatAOnly(ctx, SIZE);
+
+    // Cross members into MatB until it is past the threshold. Driven by a live read
+    // rather than a fixed count: how many roots cross under their own funding versus
+    // park at the crossing is not the thing under test.
+    let i = 0;
+    while ((await matB.occupancy()) < 3n && i < externals.length) {
+      await growMatBByOne(ctx, cyclers, externals, i);
+      i++;
+    }
+    expect(await matB.occupancy(), "MatB is past 4000 bps").to.be.gte(3n);
+
+    // _tryAdvancePair only runs on an ENTRY, and it reads occupancy BEFORE seating —
+    // so the crossing that met the threshold cannot itself have fired the factory.
+    expect(await pm.pairCount(),
+      "nothing has registered since the threshold was met").to.equal(1n);
+
+    const trigger = externals[i];
+    await reg(ctx, trigger, W1.address);
+
+    expect(await pm.pairCount(), "the factory must spawn the successor pair").to.equal(2n);
+
+    // THE LEAD TIME: pair 0 is not yet full when its successor arrives.
+    expect(await combinedOccupancy(ctx),
+      "expansion must happen EARLY — pair 0 still has seats").to.be.lt(BigInt(2 * SIZE));
+
+    const p1    = await pm.pairs(1);
+    const matA2 = await ethers.getContractAt("FigureEightMatrixV8", p1.matrixA);
+    const matB2 = await ethers.getContractAt("FigureEightMatrixV8", p1.matrixB);
+    expect(await matA2.partner(), "spawned MatA wired to its MatB").to.equal(p1.matrixB);
+    expect(await matB2.partner(), "spawned MatB wired to its MatA").to.equal(p1.matrixA);
+    expect(await matA2.pairManager(), "spawned pair answers to this PairManager").to.equal(ctx.pmAddr);
+
+    // NO DILUTION. Spawning a pair must not open a second front door: the member
+    // whose entry triggered the expansion still enters pair 0, and pair 1 stays empty
+    // until an EXISTING member is routed into it.
+    expect(await matA.isActiveInMatrix(trigger.address),
+      "the triggering member enters pair 0 — one point of entry").to.equal(true);
+    expect(await matA2.occupancy(),
+      "a freshly spawned pair receives nothing from the front door").to.equal(0n);
+    expect(p1.totalRegistered).to.equal(0n);
+  });
+
+  it("O5b: NEGATIVE CONTROL — the identical drive with the trigger at 100% does NOT expand", async function () {
+    const SIZE = 7;
+    const ctx  = await deployOnePairWithFactory(SIZE);
+    const { pm, matB, owner, W1 } = ctx;
+
+    // Identical to O5 in every respect except the one number under test. Without
+    // this, O5 proves only that a pair APPEARED during a run that registered
+    // members — not that MatB occupancy crossing the threshold is what caused it.
+    // A detector that reports a positive has to be shown reporting a negative:
+    // bypass_scan_full.js printed "0 direct-entry seats" twice, confidently, with a
+    // proven positive sitting inside its own scanned range.
+    await pm.connect(owner).setFactoryExpandThreshold(10_000n);
+
+    const { cyclers, externals } = await fillMatAOnly(ctx, SIZE);
+    let i = 0;
+    while ((await matB.occupancy()) < 3n && i < externals.length) {
+      await growMatBByOne(ctx, cyclers, externals, i);
+      i++;
+    }
+    expect(await matB.occupancy(), "same MatB state that fired the factory in O5").to.be.gte(3n);
+
+    await reg(ctx, externals[i], W1.address);
+
+    expect(await pm.pairCount(),
+      "3/7 is under 100% — the THRESHOLD decides, not the drive").to.equal(1n);
+  });
+
+  it("O6: FULL-pair backstop — a pair at MATRIX_SIZE in both halves always gets a successor", async function () {
+    const SIZE = 7;
+    const ctx  = await deployOnePairWithFactory(SIZE);
+    const { pm, matA, matB, owner, W1 } = ctx;
+
+    // Early trigger pushed to its maximum so it cannot fire before the pair is
+    // physically full.
+    //
+    // THE HONEST LIMIT OF THIS ISOLATION, recorded rather than papered over:
+    // setFactoryExpandThreshold caps at BPS_DENOM and occupancy() can never exceed
+    // MATRIX_SIZE, so a full pair implies a full MatB implies 10000 bps — i.e.
+    // `fullTrigger` implies `matBTrigger` for EVERY legal setting, and can never be
+    // the sole cause of an expansion. `_pairFull` is DEFENCE IN DEPTH, not a second
+    // independent trigger. It earns its bytes in exactly one place: if occupancy ever
+    // drifts ABOVE MATRIX_SIZE (the V8.44 phantom-seat class — "occupancy drift +44"),
+    // MatB can read 6/7 while the pair sums to full, and only fullTrigger sees it.
+    // Worth knowing before anyone reclaims those bytes under the item-30 doctrine.
+    await pm.connect(owner).setFactoryExpandThreshold(10_000n);
+
+    const { cyclers, externals } = await fillMatAOnly(ctx, SIZE);
+
+    let i = 0;
+    while ((await combinedOccupancy(ctx)) < BigInt(2 * SIZE) && i < externals.length) {
+      await growMatBByOne(ctx, cyclers, externals, i);
+      i++;
+    }
+
+    expect(await combinedOccupancy(ctx), "pair 0 is physically full").to.equal(BigInt(2 * SIZE));
+    expect(await pm.pairCount(), "…and still has no successor").to.equal(1n);
+
+    // This is the member-facing invariant the backstop exists for: the routing rule
+    // must always have somewhere to send a member who cannot stay in their own pair
+    // (rescueReentry -> _freePairFor). A full protocol with no successor is a member
+    // parked for want of a seat.
+    await reg(ctx, externals[i], W1.address);
+    expect(await pm.pairCount(),
+      "an entry meeting a full pair must spawn the next one").to.equal(2n);
+
+    const p1 = await pm.pairs(1);
+    expect(p1.matrixA).to.not.equal(ethers.ZeroAddress);
+    expect(p1.matrixB).to.not.equal(ethers.ZeroAddress);
+
+    // And a free seat genuinely exists for the next member who must move.
+    const matA2 = await ethers.getContractAt("FigureEightMatrixV8", p1.matrixA);
+    expect(await matA2.occupancy()).to.be.lt(await matA2.MATRIX_SIZE());
+    expect(await pm.freePairFor(W1.address, 0),
+      "freePairFor now has a real destination").to.equal(1n);
+  });
+
+  // ───────────────────────────────────────────────────────────────────────────
+  // V8.48 item 34 (part B) — O4 STRENGTHENED.
+  //
+  // O4's pair-1 assertion had to be softened to "wired and standing by" because a
+  // 27-registration run generates no duplicates, so pair 1 legitimately received
+  // nothing and there was nothing honest to assert. That is a real gap: it leaves
+  // the SECOND HALF of the routing rule untested. The rule has two limbs —
+  //
+  //   new members       -> one door, pair 0, always
+  //   existing members  -> own pair, or the NEXT FREE PAIR when they already hold a
+  //                        seat here (PairManagerV8.freePairFor), or up a tier
+  //
+  // — and only the first was covered. This gate drives enough volume that the
+  // second limb actually fires, then proves BOTH limbs from the same event log:
+  // every member's FIRST routing is pair 0, and every routing INTO pair 1 belongs
+  // to a member who was already in the protocol.
+  // ───────────────────────────────────────────────────────────────────────────
+
+  it("O7: DESIGN-LAW GATE, strengthened — pair 1 fills from EXISTING members cycling, never from the front door", async function () {
+    const SIZE = 4;
+    const ctx  = await deployTwoPairs(SIZE);
+    const { pm, tr, matA, matB, matA2, matB2, W1, sigs, owner, usdc } = ctx;
+
+    await reg(ctx, W1, ethers.ZeroAddress);
+
+    // The member-driven route into a second pair is the DOUBLE seat
+    // (TierRouter:1382 -> PairManagerV8.freePairFor). It is gated on
+    // `cycles >= reentryMinCycles`; lower that to the minimum the enumerated DAO
+    // setter accepts (it refuses 0, so 1 is the floor).
+    await tr.connect(owner).setReentryMinCycles(1);
+    // (disableUpgrade, enableReentry, enableDouble) — note the FIRST flag is
+    // disable-upgrade, not enable-reentry. Upgrade is disabled deliberately: there
+    // is one tier on this rig, so an upgrade attempt is noise, and what is under
+    // test is the SAME-TIER second-pair route.
+    await tr.connect(W1).setMemberOptions(true, true, true);
+
+    // W1 refers everyone, so W1 is the member who actually accrues enough to fund a
+    // second seat. That is not a rigged shortcut — it is the funding constraint the
+    // protocol already documents: the crossing reserve covers exactly 50% of the
+    // next fee, and referral income is what closes the gap.
+    const wallets = sigs.slice(10, 160);
+    const allMats = [matA, matB, matA2, matB2];
+    const rescueParked = async () => {
+      for (const mat of allMats) {
+        const count = Number(await mat.getParkedCount());
+        for (let k = 0; k < count; k++) {
+          const addr   = await mat.getParkedMember(0);
+          const signer = sigs.find((s) => s.address === addr);
+          if (!signer) break;
+          await usdc.mint(signer.address, FEE);
+          await usdc.connect(signer).approve(await mat.getAddress(), FEE);
+          await mat.connect(signer).selfRescue({ gasLimit: 16_000_000 });
+        }
+      }
+    };
+
+    // Pure member-driven churn — registrations plus selfRescue, no keeper anywhere.
+    let wi = 0, reached = false;
+    for (let i = 0; i < 70 && !reached; i++) {
+      await reg(ctx, wallets[wi++], W1.address);
+      await rescueParked();
+      reached = ((await matA2.occupancy()) + (await matB2.occupancy())) > 0n;
+    }
+
+    // Diagnostic rather than a bare boolean: if the second limb never fires we want
+    // to know HOW FAR it got, not just that an expectation failed.
+    expect(reached,
+      `pair 1 never received a member after ${wi} registrations ` +
+      `(pair0 MatA ${await matA.occupancy()}/${SIZE}, MatB ${await matB.occupancy()}/${SIZE}, ` +
+      `MatA rot ${await matA.rotationCount()}, MatB rot ${await matB.rotationCount()})`
+    ).to.equal(true);
+
+    // ── Both limbs of the routing rule, read off the same event log ───────────
+    const routed  = await pm.queryFilter(pm.filters.MemberRouted());
+    const firstAt = new Map();
+    routed.forEach((ev, idx) => {
+      if (!firstAt.has(ev.args.member)) firstAt.set(ev.args.member, idx);
+    });
+
+    // LIMB 1 — ONE DOOR. Every member's first appearance is pair 0. New entries are
+    // never diluted across pairs: diverting them away from a full pair is what
+    // freezes it (MatrixLogicLib:407 — a full MatA only rotates when it RECEIVES an
+    // entry; 254 members, 2026-08-06).
+    for (const [member, idx] of firstAt) {
+      expect(routed[idx].args.pairId,
+        `member ${member} entered through pair ${routed[idx].args.pairId}, not the front door`
+      ).to.equal(0n);
+    }
+
+    // LIMB 2 — EXISTING MEMBERS POPULATE LATER PAIRS, through the real route.
+    const intoPair1 = routed
+      .map((ev, idx) => ({ ev, idx }))
+      .filter(({ ev }) => ev.args.pairId === 1n);
+
+    expect(intoPair1.length,
+      "pair 1 must have received at least one member from member-driven flow").to.be.gt(0);
+
+    for (const { ev, idx } of intoPair1) {
+      expect(idx, `${ev.args.member} was routed straight into pair 1 on its first appearance`)
+        .to.be.gt(firstAt.get(ev.args.member));
+    }
+
+    // And it is a real seat, not a bookkeeping entry.
+    expect((await matA2.occupancy()) + (await matB2.occupancy()),
+      "pair 1 holds live members").to.be.gt(0n);
+
+    // NAME THE ROUTE. "An existing member reached pair 1" is only half a claim —
+    // freePairFor has two callers (the DOUBLE at TierRouter:1382, and the duplicate
+    // branch of PairManagerV8.rescueReentry) and they emit the same MemberRouted
+    // event, so the log alone cannot tell them apart. DoubleEntryFired can.
+    //
+    // It must be the double here, and only the double: rescueReentry's branch needs
+    // a member who ALREADY holds a seat in the pair they are re-entering, which on a
+    // fresh deploy can only come from a prior second-pair seat. The first entry into
+    // pair 1 therefore has to be the double — this asserts that rather than assuming
+    // it. (TierRouterLib.sameTierTarget returns the member's OWN pairIndex, so there
+    // is no forward-graduation path that could have filled pair 1 instead.)
+    const doubles = await tr.queryFilter(tr.filters.DoubleEntryFired());
+    expect(doubles.length,
+      "pair 1 must have been fed by the DOUBLE seat (TierRouter:1382 -> freePairFor)"
+    ).to.be.gt(0);
+
+    const doubled = new Set(doubles.map((d) => d.args.member));
+    const inPair1 = [];
+    for (const m of doubled) {
+      if ((await matA2.isActiveInMatrix(m)) || (await matB2.isActiveInMatrix(m))) inPair1.push(m);
+    }
+    expect(inPair1.length,
+      "the doubled member is the one holding the pair-1 seat").to.be.gt(0);
+
+    // The V8.46 universal pair guard still holds while all this is happening: a
+    // member may hold a seat in TWO PAIRS, never in both halves of ONE pair. That is
+    // the invariant the whole second-pair route exists to respect.
+    for (const m of doubled) {
+      expect(
+        (await matA.isActiveInMatrix(m)) && (await matB.isActiveInMatrix(m)),
+        `${m} holds both halves of pair 0`).to.equal(false);
+      expect(
+        (await matA2.isActiveInMatrix(m)) && (await matB2.isActiveInMatrix(m)),
+        `${m} holds both halves of pair 1`).to.equal(false);
+    }
+
+    // The law O4 asserts must still hold while all of that happens.
+    expect(await matA.rotationCount(), "pair-0 MatA still cycling").to.be.gt(0n);
+    expect(await matB.rotationCount(), "pair-0 MatB still rotating WITHOUT any keeper").to.be.gt(0n);
+  });
+
+  it("O8: the routing VIEWS report the door new members actually use, even with pair 0 full", async function () {
+    // V8.48 — found while wiring the tier card. Three public views claimed to report
+    // "the routing target" via _findRoutingPair() ("oldest pair with a free MatA seat,
+    // else the newest"), but registrations go through _findExternalPair(), which returns
+    // 0. The two agree ONLY while pair 0's MatA has room — and a full pair 0 is the
+    // DESIGNED STEADY STATE, so the views went wrong precisely when the design worked.
+    //
+    // The frontend reads all three. It would have labelled the empty standby pair
+    // "taking new entries" and drawn the home card's seat bars from that pair's empty
+    // matrices — the "T1.2 reads 0/127 while the community fills T1.1" bug, reintroduced
+    // from the contract side. Not one of the three had a test.
+    const SIZE = 7;
+    const ctx  = await deployTwoPairs(SIZE);
+    const { pm, matA, matA2, W1, sigs } = ctx;
+
+    await fillMatAOnly(ctx, SIZE);
+    expect(await matA.occupancy(), "pair 0 MatA must be FULL — the state that broke them")
+      .to.equal(BigInt(SIZE));
+
+    // PROVE THIS TEST IS ON THE DIVERGENCE, not on a state where both rules agree.
+    // Recompute the DELETED rule here in the test — "oldest pair whose MatA still has a
+    // free seat, else the newest" — and assert it gives a DIFFERENT answer to the one
+    // the views must now report. Without this, O8 would still pass if someone
+    // reintroduced _findRoutingPair and the fixture happened to sit where the two rules
+    // coincide, which is any state where pair 0 has room. That is most states, so the
+    // odds of a silently-vacuous regression test here are high.
+    let legacyIdx = -1;
+    for (let p = 0; p < 2; p++) {
+      const m = p === 0 ? matA : matA2;
+      if ((await m.occupancy()) < (await m.MATRIX_SIZE())) { legacyIdx = p; break; }
+    }
+    expect(legacyIdx, "the deleted rule must point somewhere ELSE here, or this test proves nothing")
+      .to.equal(1);
+
+    const [, , activeId] = await pm.getActivePair();
+    expect(activeId, "getActivePair must name the door, not the first pair with a free seat")
+      .to.equal(0n);
+
+    const status = await pm.allPairsStatus();
+    expect(status[5][0], "allPairsStatus must flag pair 0 as active").to.equal(true);
+    expect(status[5][1], "…and must NOT flag the empty standby pair").to.equal(false);
+
+    const dist = await pm.routingDistribution();
+    expect(dist.sharesBps[0], "routingDistribution: 100% to pair 0").to.equal(10_000n);
+    expect(dist.sharesBps[1], "routingDistribution: nothing to pair 1").to.equal(0n);
+
+    // …and the views agree with what the contract actually DOES.
+    const newcomer = sigs[60];
+    await reg(ctx, newcomer, W1.address);
+    expect(await matA.isActiveInMatrix(newcomer.address),
+      "the new member really did enter pair 0").to.equal(true);
+    expect(await matA2.isActiveInMatrix(newcomer.address)).to.equal(false);
   });
 });

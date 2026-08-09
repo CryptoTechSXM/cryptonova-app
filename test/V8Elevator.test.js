@@ -2863,33 +2863,17 @@ describe("V8.43 — additive toggles + two-threshold pair opening", function () 
     });
   });
 
-  describe("PairManagerV8 — entry thresholds", function () {
-    it("setEntryThresholds validates bounds and owner-only access", async () => {
-      const { pm1, admin, w1 } = await loadFixture(deployV8Fixture);
-
-      await expect(pm1.connect(admin).setEntryThresholds(2, 3))
-        .to.emit(pm1, "EntryThresholdsSet").withArgs(2n, 3n);
-      expect(await pm1.deployEntryThreshold()).to.equal(2n);
-      expect(await pm1.routeEntryThreshold()).to.equal(3n);
-
-      await expect(pm1.connect(admin).setEntryThresholds(5, 3))
-        .to.be.revertedWith("PM8: deploy<=route required");
-      await expect(pm1.connect(w1).setEntryThresholds(2, 3)).to.be.reverted;
-    });
-
-    it("overflowActive: needs saturation AND an existing next pair", async () => {
-      const fx = await loadFixture(deployV8Fixture);
-      const { pm1, admin, reg, s0, s1 } = fx;
-      await pm1.connect(admin).setEntryThresholds(2, 2);
-
-      await reg(s0);
-      await reg(s1); // pair 0 totalRegistered = 2 ≥ routeEntryThreshold
-      expect(await pm1.overflowActive(0)).to.equal(false, "saturated but no pair 1 yet");
-
-      const { matA3, matB3 } = await deployExtraT1Pair(fx);
-      await pm1.connect(admin).addPair(await matA3.getAddress(), await matB3.getAddress());
-      expect(await pm1.overflowActive(0)).to.equal(true, "saturated + pair 1 exists");
-    });
+  describe("PairManagerV8 — entry routing (V8.48: no configured thresholds)", function () {
+    // DELETED V8.48 item 30: `setEntryThresholds` bounds/ownership, and `overflowActive`.
+    // Both the setter and the two values it wrote (`deployEntryThreshold`,
+    // `routeEntryThreshold`) are gone from the contract, along with `overflowActive()`
+    // — which was already dead code, called from nothing but these tests.
+    //
+    // They are not retargeted because there is nothing left to retarget them ONTO: they
+    // tested that a knob stored what you gave it and that a view derived from that knob
+    // agreed with it. Neither says anything about member-facing behaviour. The behaviour
+    // those numbers used to steer is covered by the tests below (entry routing) and by
+    // O5/O5b/O6/O7 in V8_44_Overflow.test.js (occupancy-driven expansion).
 
     // V8.48 item 10b — RETARGETED, deliberately. This asserted that a CONFIGURED number
     // decides saturation: setEntryThresholds(2, 2), two entries, expect overflow. That
@@ -2912,8 +2896,6 @@ describe("V8.43 — additive toggles + two-threshold pair opening", function () 
     it("external registrations stay in pair 0 while it still has room (V8.48: saturation is physical)", async () => {
       const fx = await loadFixture(deployV8Fixture);
       const { pm1, treasury, admin, reg, s0, s1, s2, matA } = fx;
-      await pm1.connect(admin).setEntryThresholds(2, 2);   // knob is inert for routing now
-
       await reg(s0);
       await reg(s1);
 
@@ -2930,12 +2912,11 @@ describe("V8.43 — additive toggles + two-threshold pair opening", function () 
         "a configured threshold must no longer be able to divert away from a pair with room");
     });
 
-    it("falls back to saturated pair 0 when no next pair exists (never strands)", async () => {
+    it("never strands an entry when only one pair exists", async () => {
       const { pm1, admin, reg, s0, s1, s2, matA } = await loadFixture(deployV8Fixture);
-      await pm1.connect(admin).setEntryThresholds(2, 2);
       await reg(s0);
       await reg(s1);
-      // pair 0 saturated, no pair 1 → pass-2 fallback keeps seating in pair 0
+      // Only one pair exists — there is nowhere else to go, and nowhere else is needed.
       await expect(reg(s2)).to.not.be.reverted;
       expect(await matA.isActiveInMatrix(s2.address)).to.equal(true);
     });
@@ -2960,8 +2941,6 @@ describe("V8.43 — additive toggles + two-threshold pair opening", function () 
     it("a cumulative entry count no longer triggers expansion", async () => {
       const fx = await loadFixture(deployWithFactoryFixture);
       const { pm1, admin, reg, s0, s1, s2, matA } = fx;
-      await pm1.connect(admin).setEntryThresholds(2, 3);   // both knobs now inert
-
       await reg(s0);
       await reg(s1);
       await reg(s2);

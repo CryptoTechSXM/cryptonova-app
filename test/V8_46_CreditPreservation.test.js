@@ -105,7 +105,6 @@ async function deployTier() {
   await tr.setTierMatrices(0, await matA.getAddress(), await matB.getAddress());
   await sf.setTierFee(0, FEE);
   await sf.setTierRouter(await tr.getAddress());
-  await pm.setEntryThresholds(1, 2);
   // W1 (accountOne) is the fallback sponsor for everyone. In production it IS a
   // registered member, so _register's l1 resolution (:324-331) finds it. Without
   // this the fixture silently produces referrer == address(0) for every entrant

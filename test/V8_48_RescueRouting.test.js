@@ -114,15 +114,15 @@ async function routeRescue(ctx, fromMatrixAddr, member, referrer) {
 describe("V8.48 item 10 — rescueReentry returns to own MatA", function () {
   this.timeout(600_000);
 
-  it("routes a rescued member to own MatA even when the pair is far past routeEntryThreshold", async function () {
+  it("routes a rescued member to own MatA regardless of the pair's cumulative entry count", async function () {
     const ctx = await deployPair(7);
-    // Drive totalRegistered above the threshold — the exact condition that used to
-    // divert every later rescue to MatB, permanently.
-    await ctx.pm.setEntryThresholds(1, 1);
+    // Drive totalRegistered up — the exact condition that used to divert every later
+    // rescue to MatB, permanently. The threshold it was compared against is deleted
+    // as of V8.48 item 30; the counter it read still exists, so this stays meaningful.
     await reg(ctx, ctx.W1, ethers.ZeroAddress);
     await reg(ctx, ctx.sigs[10], ctx.W1.address);
     const rec = await ctx.pm.pairs(0);
-    expect(rec[3]).to.be.gte(1n, "pair must be past the threshold for this to be meaningful");
+    expect(rec[3]).to.be.gte(2n, "pair must have real entry history for this to be meaningful");
 
     const victim = ctx.sigs[11];
     const dest = await routeRescue(ctx, ctx.aAddr, victim.address, ctx.W1.address);
@@ -135,7 +135,6 @@ describe("V8.48 item 10 — rescueReentry returns to own MatA", function () {
 
   it("a member who already holds a pair seat is rejected centrally, not steered to MatB", async function () {
     const ctx = await deployPair(7);
-    await ctx.pm.setEntryThresholds(1, 1);
     await reg(ctx, ctx.W1, ethers.ZeroAddress);          // W1 now seated in MatA
     expect(await ctx.a.isActiveInMatrix(ctx.W1.address)).to.equal(true);
 
@@ -165,21 +164,34 @@ describe("V8.48 item 10 — rescueReentry returns to own MatA", function () {
     await ethers.provider.send("hardhat_stopImpersonatingAccount", [ctx.aAddr]);
   });
 
-  it("routing no longer depends on routeEntryThreshold at all", async function () {
-    const ctx = await deployPair(7);
-    await reg(ctx, ctx.W1, ethers.ZeroAddress);
+  it("the cumulative entry counter does not steer rescues at either extreme", async function () {
+    // RETARGETED V8.48 item 30. This used to set routeEntryThreshold to 1 in one
+    // context and 1,000,000 in another and assert the destination was the same. The
+    // threshold is DELETED, so that comparison is no longer expressible — and a test
+    // that can only be written against a knob dies with the knob.
+    //
+    // What it was really protecting is still live and still worth a gate: rescue
+    // routing must not vary with `pair.totalRegistered`, the CUMULATIVE counter that
+    // only ever increments. That counter still exists (it drives nothing, but it is
+    // still written on every entry), so the invariant is tested directly by comparing
+    // a pair with real history against a nearly-empty one.
+    const busy = await deployPair(7);
+    await reg(busy, busy.W1, ethers.ZeroAddress);
+    for (let i = 10; i < 16; i++) await reg(busy, busy.sigs[i], busy.W1.address);
 
-    const victim = ctx.sigs[12];
-    await ctx.pm.setEntryThresholds(1, 1);               // 'saturated'
-    const low  = await routeRescue(ctx, ctx.aAddr, victim.address, ctx.W1.address);
+    const quiet = await deployPair(7);
+    await reg(quiet, quiet.W1, ethers.ZeroAddress);
 
-    const ctx2 = await deployPair(7);
-    await reg(ctx2, ctx2.W1, ethers.ZeroAddress);
-    await ctx2.pm.setEntryThresholds(375, 1_000_000);    // 'nowhere near saturated'
-    const high = await routeRescue(ctx2, ctx2.aAddr, ctx2.sigs[12].address, ctx2.W1.address);
+    const busyCount  = (await busy.pm.pairs(0))[3];
+    const quietCount = (await quiet.pm.pairs(0))[3];
+    expect(busyCount, "the two pairs must actually differ for this to compare anything")
+      .to.be.gt(quietCount * 3n);
 
-    expect(low).to.equal(ctx.aAddr);
-    expect(high).to.equal(ctx2.aAddr);
-    // Same answer at both extremes: the cumulative counter no longer steers rescues.
+    const hi = await routeRescue(busy,  busy.aAddr,  busy.sigs[20].address,  busy.W1.address);
+    const lo = await routeRescue(quiet, quiet.aAddr, quiet.sigs[20].address, quiet.W1.address);
+
+    expect(hi).to.equal(busy.aAddr);
+    expect(lo).to.equal(quiet.aAddr);
+    // Same answer at both extremes: entry history does not steer rescues.
   });
 });

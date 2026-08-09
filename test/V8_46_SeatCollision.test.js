@@ -100,7 +100,6 @@ async function deployTier() {
   await tr.setTierMatrices(0, await matA.getAddress(), await matB.getAddress());
   await sf.setTierFee(0, FEE);
   await sf.setTierRouter(await tr.getAddress());
-  await pm.setEntryThresholds(1, 2);
   return { usdc, tr, pm, matA, matB, owner, W1, pmAddr: await pm.getAddress() };
 }
 

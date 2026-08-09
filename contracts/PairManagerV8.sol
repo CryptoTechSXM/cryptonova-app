@@ -126,45 +126,36 @@ contract PairManagerV8 is Ownable2Step {
     uint256 public factoryExpandThresholdBps = 9_000;  // V8.41: 90% MatB occupancy triggers next pair
     uint256 public constant BPS_DENOM = 10_000;
 
-    // ─── V8.43: Two-threshold pair opening (owner rule 2026-07-22) ───────────
-    // Both thresholds count CUMULATIVE entries routed into a pair
-    // (pair.totalRegistered — every registration, re-entry and double seat):
-    //   deployEntryThreshold (125×3 = 375): deploy the next pair EARLY as a
-    //     buffer, so it exists before it's needed (factory deploy is heavy —
-    //     avoids a repeat of the July 19 frozen-MatB incident).
-    //   routeEntryThreshold (400): from here the pair's loop is saturated —
-    //     ALL overflow routes to the next pair: new externals, re-entries,
-    //     double-entry seats, and self-rescues.
-    // Loop capacity 127×4 = 508 should never be reached.
+    // ─── V8.48 item 30: THE TWO ENTRY THRESHOLDS ARE GONE ────────────────────
     //
-    // V8.46 (2026-07-28): route was 381 (127×3). The gap between deploy and
-    // route is the window the factory has to deploy the next pair, wire its
-    // partner and have it ready to receive — and at 375/381 that window was SIX
-    // ENTRIES, which under load is seconds. Pair expansion has already caused
-    // two incidents: the T1.2-at-254 freeze that needed adminForceRotateRoot,
-    // and the 2026-07-28 wedge where every upgrade guard went blind the moment
-    // a second pair existed. 375/400 gives 25 entries of headroom.
+    // `deployEntryThreshold` (375) and `routeEntryThreshold` (400) both counted
+    // CUMULATIVE entries into a pair (`pair.totalRegistered`) and compared them to a
+    // configured number. Both are deleted, along with their setter and
+    // `overflowActive()`. Nothing reads them any more:
     //
-    // Nothing depends on 381 being 127×3 — it was documentation, not logic.
+    //   entry routing  — `_findExternalPair()` returns 0. ONE DOOR. New members are
+    //                    never diluted across pairs (item 10b).
+    //   expansion      — `_tryAdvancePair()` reads LIVE OCCUPANCY: 90% of the newest
+    //                    MatB, or the newest pair full (item 33).
     //
-    // This value was ALREADY SET LIVE on T2–T10 via setEntryThresholds(375,400)
-    // on 2026-07-28 (block 44738582 onward). The source still said 381, so a
-    // redeploy would have silently reverted every one of those calls. Owner
-    // caught it. If you change this default, change it here AND on-chain, or the
-    // two disagree the moment anything redeploys.
+    // WHY DELETED RATHER THAN LEFT INERT. A cumulative counter only ever increments,
+    // so a pair that passed the threshold was excluded from new registrations FOREVER —
+    // even after its members cycled out and freed seats. A full MatA only rotates when
+    // it RECEIVES an entry (MatrixLogicLib:407), so exclusion meant no rotation, which
+    // meant every member in seats 2..127 stopped moving. `route_rr.js` was written on
+    // 2026-07-27 purely to walk the threshold around the pairs and mask this; when that
+    // keeper was switched off on 2026-08-06, 254 members froze in T1.1 MatA within three
+    // days.
     //
-    // T1 IS DIFFERENT: its routeEntryThreshold is driven at runtime by the
-    // round-robin keeper (route_rr.js), which walks it to spread new members
-    // across T1's pairs. This default is only T1's starting point.
-    uint256 public deployEntryThreshold = 375;
-    /// @notice DEAD as of V8.48 — nothing in the production path reads this. Entry
-    ///         routing (_findExternalPair) now compares LIVE occupancy against the pair's
-    ///         OWN capacity, so there is no threshold to configure. Retained only because
-    ///         `overflowActive()` still references it; both should be deleted together
-    ///         (see V8_48_SCOPE.md). Do NOT reintroduce it as a routing input: a cumulative
-    ///         counter compared to a fixed number is what excluded pairs permanently and
-    ///         froze 254 members on 2026-08-06.
-    uint256 public routeEntryThreshold  = 254;
+    // A knob that appears to steer routing but steers nothing is the same class of
+    // defect as the routing-pair label and the tier-card copy that told members a
+    // standby pair opens at 1,000,000 entries. V8.46 set the precedent by deleting
+    // `pairExpansionThreshold` outright once it was inert. Do NOT reintroduce either as
+    // a routing input.
+    //
+    // Capacity is read from the matrices, never configured — `_pairFull()` compares
+    // occupancy() to MATRIX_SIZE(). A configured capacity can only ever be set wrong.
+
 
     /// @notice V8.43: matrices belonging to this PM — allow-list for rescueOverflow().
     mapping(address => bool) public isPairMatrix;
@@ -177,8 +168,6 @@ contract PairManagerV8 is Ownable2Step {
     // V8.21
     event GovernanceSet(address indexed governance);
     event WithdrawalFeeBpsBroadcast(uint256 bps, uint256 pairsUpdated);
-    // V8.43
-    event EntryThresholdsSet(uint256 deployThreshold, uint256 routeThreshold);
 
     // ─── Constructor ──────────────────────────────────────────────────────────
 
@@ -203,14 +192,6 @@ contract PairManagerV8 is Ownable2Step {
     function setExpandThreshold(uint256 _bps) external onlyOwner {
         require(_bps > 0 && _bps <= BPS_DENOM, "PM8: invalid bps");
         expandThresholdBps = _bps;
-    }
-
-    /// @notice V8.43: adjust the two entry-count thresholds (deploy early / route overflow).
-    function setEntryThresholds(uint256 _deploy, uint256 _route) external onlyOwner {
-        require(_deploy > 0 && _route >= _deploy, "PM8: deploy<=route required");
-        deployEntryThreshold = _deploy;
-        routeEntryThreshold  = _route;
-        emit EntryThresholdsSet(_deploy, _route);
     }
 
     /// @notice V8.46: does `member` hold a seat ANYWHERE in this tier — any pair,
@@ -270,13 +251,6 @@ contract PairManagerV8 is Ownable2Step {
             return idx;
         }
         return type(uint256).max;
-    }
-
-    /// @notice V8.43: is pair `idx` saturated AND is a next pair available to overflow into?
-    function overflowActive(uint256 idx) public view returns (bool) {
-        return idx < pairs.length
-            && pairs[idx].totalRegistered >= routeEntryThreshold
-            && idx + 1 < pairs.length;
     }
 
     /// @notice V8.44 overflow rework (replaces V8.43 rescueOverflow, which
@@ -450,7 +424,7 @@ contract PairManagerV8 is Ownable2Step {
 
         _tryAdvancePair();
 
-        uint256 routingIdx = _findRoutingPair(); // V8.40: oldest pair with MatA space
+        uint256 routingIdx = _findExternalPair(); // V8.48: one door, same as registerDirectFor
         Pair storage p = pairs[routingIdx];
         address matA   = p.matrixA;
 
@@ -478,11 +452,11 @@ contract PairManagerV8 is Ownable2Step {
 
         _tryAdvancePair();
 
-        // V8.43: externals route to the oldest NON-SATURATED pair. MatA fullness
-        // is ignored on purpose — entering a full MatA triggers the natural root
-        // rotation (V8.41 mechanism) that keeps the pair's self-sustaining loop
-        // alive. Overflow to the next pair only at true saturation
-        // (routeEntryThreshold entries — 400 since V8.46, was 127×3 = 381).
+        // V8.48: ONE DOOR — _findExternalPair() returns 0. Entering a full MatA is
+        // correct, not a compromise: the entry rotates the root out, which crosses into
+        // the pair's own MatB and frees the seat for the entrant (V8.41 /
+        // MatrixLogicLib:407). Diverting new members away from a full pair is what
+        // FREEZES it.
         uint256 routingIdx = _findExternalPair();
         Pair storage p = pairs[routingIdx];
         address matA   = p.matrixA;
@@ -618,37 +592,38 @@ contract PairManagerV8 is Ownable2Step {
 
     // ─── Internal ─────────────────────────────────────────────────────────────
 
-    /// @notice V8.40: Oldest-first pair routing.
-    ///         Returns the index of the oldest pair whose MatA still has available seats.
-    ///         Falls back to the newest pair when ALL MatAs are at capacity (brief
-    ///         crossing-pending window that resolves within one keeper cycle).
-    ///
-    ///         Why: before V8.40, all new registrations went to the NEWEST pair (activePairIndex).
-    ///         This caused older pairs (T1.1, T1.2…) to go dark — their MatA starved of new
-    ///         members, so MatB members could never complete further cycles and got stuck.
-    ///         Now T1.1 always receives new members first; T1.2+ only when T1.1 MatA is full.
-    function _findRoutingPair() internal view returns (uint256) {
-        uint256 n = pairs.length;
-        for (uint256 i = 0; i < n; i++) {
-            address matA = pairs[i].matrixA;
-            if (IFigureEightMatrixV8PM(matA).occupancy() < IFigureEightMatrixV8PM(matA).MATRIX_SIZE()) {
-                return i;
-            }
-        }
-        return n - 1; // All MatAs at 127/127 — crossing pending; use newest as temp holder
-    }
+    // ─── V8.48: _findRoutingPair() DELETED — it was a SECOND routing rule ────
+    //
+    // It returned "the oldest pair whose MatA still has available seats, else the
+    // newest". After item 10b that is no longer where anybody goes: `registerDirectFor`
+    // routes through `_findExternalPair()`, which returns 0. ONE DOOR.
+    //
+    // The two rules AGREE only while pair 0's MatA has a free seat — and a full pair 0
+    // is the DESIGNED STEADY STATE, because concentrating the front door is what holds
+    // it at MATRIX_SIZE and keeps it rotating. So the moment the design works, the old
+    // rule returned pair 1 while every new member actually entered pair 0.
+    //
+    // That mattered because three PUBLIC VIEWS reported it as the routing target —
+    // getActivePair(), allPairsStatus().active[] and routingDistribution() — and the
+    // member-facing tier card reads all three. It would have labelled the empty standby
+    // pair "taking new entries" and drawn the home card's seat bars from that pair's
+    // empty matrices: the "T1.2 reads 0/127 while the community fills T1.1" bug the
+    // frontend comments already record, reintroduced from the contract side.
+    //
+    // Same shape as the routing-pair label in set_entry_thresholds.js, diag_overflow.js's
+    // hardcoded pair index and the tier card's threshold copy: an INSTRUMENT that
+    // disagrees with the mechanism it reports on. Each one made working code look broken
+    // or broken code look fine.
+    //
+    // One rule, one place: everything reads _findExternalPair().
 
-    /// @notice V8.43: external-registration routing — oldest pair whose CUMULATIVE
-    ///         entries are still under routeEntryThreshold (400 since V8.46). MatA fullness
-    ///         is ignored: a full MatA rotates its root on entry (V8.41), keeping
-    ///         the self-sustaining loop fed until true saturation. When every pair
-    ///         is saturated, the newest holds until the factory adds the next one.
+
     /// @notice V8.48 item 10b — ONE POINT OF ENTRY. Every new member enters pair 0's
     ///         MatA. Existing members circulate: own MatA -> own MatB -> own MatA, or on
     ///         to the next pair, or up a tier. New entries never divert.
     ///
-    ///         This replaced a first-match scan over `pairs[i].totalRegistered <
-    ///         routeEntryThreshold`. That counter is CUMULATIVE and only ever increments
+    ///         This replaced a first-match scan over each pair's CUMULATIVE entry count
+    ///         against a configured threshold. That counter only ever increments
     ///         (:292 and below), so a pair that crossed the threshold was excluded from new
     ///         registrations FOREVER, even after its members cycled out and freed seats. Its
     ///         MatA then had no entry source and froze -- and a full MatA only rotates when
@@ -660,7 +635,8 @@ contract PairManagerV8 is Ownable2Step {
     ///         around the pairs and mask this. When that keeper was switched off on
     ///         2026-08-06, 254 members froze in T1.1 MatA within three days. On 2026-08-09
     ///         T2.1 held 5,986 cumulative entries against a threshold of 400 and had been
-    ///         permanently excluded while T2.2 (35 entries) took everything.
+    ///         permanently excluded while T2.2 (35 entries) took everything. The threshold
+    ///         itself is deleted as of V8.48 item 30.
     ///
     ///         Feeding a full pair is correct, not a compromise: the entry rotates MatA's
     ///         root out, which crosses into the pair's own MatB and frees the seat for the
@@ -743,10 +719,6 @@ contract PairManagerV8 is Ownable2Step {
         uint256 matBOcc  = IFigureEightMatrixV8PM(newestMatB).occupancy();
         uint256 matBSize = IFigureEightMatrixV8PM(newestMatB).MATRIX_SIZE();
         // V8.43 two triggers (either fires):
-        //   a) newest pair has absorbed deployEntryThreshold (125×3) cumulative
-        //      entries — deploy the next pair EARLY as a buffer, or
-        //   b) newest MatB ≥ factoryExpandThresholdBps (90%) — V8.41 FIFO rule,
-        //      kept as a safety net for low-churn pairs.
         // V8.48 item 33 — spawn when the newest pair is FULL, not when a cumulative
         // counter passes a configured number.
         //
@@ -831,7 +803,7 @@ contract PairManagerV8 is Ownable2Step {
         returns (address matrixA, address matrixB, uint256 pairId, uint256 reg)
     {
         require(pairs.length > 0, "PM8: no pairs");
-        uint256 i = _findRoutingPair(); // V8.40: routing pair, not newest pair
+        uint256 i = _findExternalPair(); // V8.48: the door new members actually use
         return (pairs[i].matrixA, pairs[i].matrixB, i, pairs[i].totalRegistered);
     }
 
@@ -858,7 +830,7 @@ contract PairManagerV8 is Ownable2Step {
         registered = new uint256[](n);
         active     = new bool[](n);
 
-        uint256 routingIdx = _findRoutingPair(); // V8.40: mark routing target as active
+        uint256 routingIdx = _findExternalPair(); // V8.48: the door new members actually use
         for (uint256 i = 0; i < n; i++) {
             Pair storage p = pairs[i];
             matrixAs[i]   = p.matrixA;
@@ -902,7 +874,7 @@ contract PairManagerV8 is Ownable2Step {
         uint256 n = pairs.length;
         pairIds   = new uint256[](n);
         sharesBps = new uint256[](n);
-        uint256 routingIdx = _findRoutingPair(); // V8.40: shows actual routing target
+        uint256 routingIdx = _findExternalPair(); // V8.48: the door new members actually use
         for (uint256 i = 0; i < n; i++) {
             pairIds[i]   = i;
             sharesBps[i] = (i == routingIdx) ? BPS_DENOM : 0;

@@ -122,7 +122,6 @@ async function deployLadder(tierCount = TIERS) {
     }
     await pm.addPair(await matA.getAddress(), await matB.getAddress());
     await pm.setTierRouter(await tr.getAddress());
-    await pm.setEntryThresholds(1, 2);
     await tr.registerTier(t, await pm.getAddress(), fee);
     await tr.setTierMatrices(t, await matA.getAddress(), await matB.getAddress());
     await sf.setTierFee(t, fee);

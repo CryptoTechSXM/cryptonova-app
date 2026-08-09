@@ -14,7 +14,6 @@ import "./MatrixV8Interfaces.sol";
 ///         (the entry that keeps a full MatB churning). Only genuinely NEW
 ///         externals overflow forward (PairManagerV8._findExternalPair).
 interface IPairManagerOverflow {
-    function overflowActive(uint256 idx) external view returns (bool);
     function rescueReentry(address member, address referrer, uint256 fromPairIndex) external;
 }
 

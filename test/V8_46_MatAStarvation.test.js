@@ -85,7 +85,6 @@ async function deployPair(threshold) {
   await tr.setTierMatrices(0, await matA.getAddress(), await matB.getAddress());
   await sf.setTierFee(0, FEE);
   await sf.setTierRouter(await tr.getAddress());
-  await pm.setEntryThresholds(1, 2);
   // V8.46 (2026-07-27): the setter is gone — the starvation it caused is now
   // fixed in code rather than configured around. `threshold` is kept in the
   // fixture signature so the suite still reads as documentation of the original

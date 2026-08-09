@@ -56,7 +56,7 @@ entries thinly and no pair ever reaches MATRIX_SIZE, so nothing rotates anywhere
 
 ## V8.48 status
 
-**Implemented and green (447 passing, 7 pending, 0 failing):**
+**Implemented and green (450 passing, 7 pending, 0 failing):**
 
 | # | what |
 |---|---|
@@ -65,6 +65,10 @@ entries thinly and no pair ever reaches MATRIX_SIZE, so nothing rotates anywhere
 | 27 | `CommunityWallet.distribute()` divides by `COHORT_SIZE`, not live count. |
 | 31 | Duplicates route to `_freePairFor(member, fromPairIndex)`; `_forceExpand()` then a loud `PM8: no seat available for duplicate` as last resort. |
 | 33 | Factory expansion triggers on OCCUPANCY (newest pair full, or newest MatB >= 90%), not a cumulative counter. |
+| 34 | Both expansion triggers now asserted — O5 (early trigger PLUS the lead time: successor deployed while pair 0 still has seats), O5b (negative control), O6 (full-pair backstop), on a new factory-wired size-7 fixture. O7 replaces O4's softened "wired and standing by" with real duplicate volume, proving both limbs of the routing rule from one event log and NAMING the route via `DoubleEntryFired`. |
+| 30 | `deployEntryThreshold`, `routeEntryThreshold`, `setEntryThresholds`, `EntryThresholdsSet`, `overflowActive` all DELETED. Zero production reads, no governance wiring, no deploy-script call — verified before cutting. 36 test call sites across 11 files. |
+| 35 | **NEW — `_findRoutingPair()` deleted; it was a SECOND routing rule and three public views followed it.** See below. |
+| 36 | Frontend shipped with 30: threshold reads gone (incl. a `.catch(() => 381n)` that would have shown members a threshold that no longer exists), tier strip closes on SEATS REMAINING, −20 RPC calls per page load. Pushed to `admin` as `b7d92d1`. |
 
 **Withdrawn / reversed after verification:**
 
@@ -80,30 +84,50 @@ entries thinly and no pair ever reaches MATRIX_SIZE, so nothing rotates anywhere
 
 **Remaining, in the order I'd take them:**
 
-1. **34 — coverage gap I created.** Neither occupancy expansion trigger (90% MatB, newest
-   full) is asserted anywhere; the test that covered the old cumulative rule was
-   retargeted. Needs a fixture small enough to fill a pair — `V8_44_Overflow.test.js` uses
-   size-7 matrices and is the natural home. Also here: the stronger O4 gate the owner
-   asked for — drive enough volume that real duplicates appear and feed pair 1 through
-   `freePairFor`, instead of asserting pair 1 is merely "wired and standing by".
-2. **30 — delete the dead knobs.** `routeEntryThreshold` AND `deployEntryThreshold` are
-   both now inert; `setEntryThresholds(deploy, route)` is a setter whose both parameters do
-   nothing, plus `overflowActive()` which is dead code called only from tests. A knob that
-   appears to steer routing but steers nothing is the same lie we spent the day deleting.
-   Blast radius: the setter signature, `set_entry_thresholds.js` on the VPS, the frontend
-   tier card (already handles unbounded), `V8Elevator.test.js` overflowActive tests.
-3. **32 — backup keeper** watching for `PM8: no seat available for duplicate` and
+1. **32 — backup keeper** watching for `PM8: no seat available for duplicate` and
    triggering a spawn. Owner: *"a member eligible to cross should not be parked, a new pair
    should be spawned so they have space to sit."*
-4. **26 — SF L1 surplus -> CommunityWallet.** Fully specified with a payout model. Default
+2. **26 — SF L1 surplus -> CommunityWallet.** Fully specified with a payout model. Default
    bps 0 so deploying changes nothing until the DAO votes it on. Do NOT touch L3 — that
    overflow funds BuybackReserve, which supports the CNOVA floor.
-5. **28 — distribution expiry** silently forfeits member money back to the pool. Decide:
+3. **28 — distribution expiry** silently forfeits member money back to the pool. Decide:
    keep and surface loudly, or remove.
-6. The rest of the 29-item list in `V8_48_SCOPE.md`, including **12a MatrixKeeperLib**
+4. The rest of the 29-item list in `V8_48_SCOPE.md`, including **12a MatrixKeeperLib**
    extraction (MatrixKeeper has 535 free bytes and item 12 does not fit).
 
 ---
+
+## THREE THINGS FROM 2026-08-09 (evening) THAT THE CODE NO LONGER SHOWS
+
+**1. `fullTrigger` is SUBSUMED by `matBTrigger` — do not reclaim its bytes casually.**
+`setFactoryExpandThreshold` caps at `BPS_DENOM` and a matrix's occupancy can never exceed
+`MATRIX_SIZE`, so a full pair implies a full MatB implies 10000 bps. `_pairFull()` in
+`_tryAdvancePair` can therefore NEVER be the sole cause of an expansion. It is defence in
+depth, and it earns its bytes in exactly one case: if occupancy ever drifts ABOVE
+MATRIX_SIZE (the V8.44 phantom-seat class, "occupancy drift +44"), MatB reads 6/7 while the
+pair sums to full and only `fullTrigger` sees it. Item 30's doctrine says delete what
+steers nothing; this one steers something, but only in a failure mode. Reasoning is written
+into O6 in `V8_44_Overflow.test.js`.
+
+**2. Item 35 is invisible now that `_findRoutingPair` is deleted.** The bug was TWO ROUTING
+RULES: `_findRoutingPair()` ("oldest pair with a free MatA seat, else the newest") survived
+item 10b, which moved real routing to `_findExternalPair()` = constant 0. They agree only
+while pair 0's MatA has room — and **a full pair 0 is the designed steady state**, so the
+views went wrong precisely when the design started working. `getActivePair()`,
+`allPairsStatus().active[]` and `routingDistribution()` all reported the stale rule, the
+tier card reads all three, and the home card picks WHICH MATRICES TO DRAW from that flag —
+so T1.1 could hold 254 members while the card drew T1.2's empty ones. None of the three had
+a test. **The general lesson: after changing a routing rule, grep for every VIEW that claims
+to report it.** A view is an instrument, and this project has now caught four of them lying.
+
+**3. O5b and O8 are built to be ABLE to fail — do not "simplify" them.** O5b is a negative
+control: the identical drive with the threshold at 100%, proving the threshold CAUSED the
+expansion rather than merely co-occurring with it. O8 recomputes the DELETED rule inside the
+test and asserts it points at a different pair, so it proves it is standing on the
+divergence — without that, O8 would pass in any state where pair 0 has room, which is most
+states, and would keep passing if someone reintroduced `_findRoutingPair`. Both exist
+because `bypass_scan_full.js` twice printed a confident "0" with a proven positive inside
+its own range.
 
 ## Live protocol state — the holding configuration
 
@@ -172,6 +196,14 @@ unbounded, now 21 MB gzipped and capped at 7 days).
   replacement once corrupted it 602 KB -> 987 KB; use function-form replacement.
 - **Size wall:** TierRouter 142 bytes free, MatrixPairFactory 356, MatrixKeeper 535. Run
   `npx hardhat run scripts/sizes.js` after EVERY contract edit.
+- **The frontend repo is pure CRLF (9,380 line endings, zero bare LF).** Any scripted
+  edit to `index.html` must build its search strings with `\r\n` or every match silently
+  fails. Verified 2026-08-09 after a patch aborted on the first assert.
+- **Do not run bare `git status` in a connected repo from the Cowork bridge.** It creates
+  `.git/index.lock`, and the bridge CANNOT delete files — only move them — so the lock is
+  left behind and blocks the owner's next `git add`. Use `git --no-optional-locks status`.
+  One was left in CryptoNova-Testnet-App on 2026-08-09, renamed to
+  `.git/index.lock.STALE-safe-to-delete`; delete it when convenient.
 - **Tests that fail after a change are not automatically wrong.** Tonight the suite caught
   three bad designs. The question to ask each time: does this test protect a MEMBER-FACING
   INVARIANT (make the code pass it) or a MECHANISM we deliberately removed (retarget it,
