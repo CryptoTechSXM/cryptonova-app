@@ -80,6 +80,8 @@ const SELF_RESCUE_RATE  = Number(process.env.SELF_RESCUE_RATE ?? "0.5");
 // RESCUE_APPROVAL: max USDC approved per wallet to the matrix contract for selfRescue.
 // The contract only pulls what it needs; $15 covers any T1 shortfall with headroom.
 const RESCUE_APPROVAL   = BigInt(process.env.RESCUE_APPROVAL ?? "15000000"); // $15 USDC
+// TEMP 2026-08-08: RESCUE_DEBUG=1 prints the per-wallet approval decision.
+const RESCUE_DEBUG      = process.env.RESCUE_DEBUG === "1";
 // RESCUE_SCAN_EVERY: also run rescue scan every N batches (always runs on cycle detect).
 const RESCUE_SCAN_EVERY = Number(process.env.RESCUE_SCAN_EVERY ?? "5");
 
@@ -501,14 +503,25 @@ async function simulateSelfRescues({ walletList, matrices, usdc, rawFunder, fund
       // reverted with ERC20InsufficientAllowance. Approve this matrix's own
       // ENTRY_FEE, which covers any possible shortfall at any tier.
       let _needApprove = RESCUE_APPROVAL;
+      let _feeErr = '';
       try {
         const _entryFee = BigInt(await matrix.ENTRY_FEE());
         if (_entryFee > _needApprove) _needApprove = _entryFee;
-      } catch (_) {}
+      } catch (e) { _feeErr = ' ENTRY_FEE_READ_FAILED:' + (e.shortMessage || e.message || '?').slice(0, 60); }
       const allowance = await usdc.allowance(w.address, addr);
+      let _approved = false, _after = allowance;
       if (allowance < _needApprove) {
         await (await usdc.connect(conn).approve(addr, _needApprove)).wait();
         await sleep(1);
+        _approved = true;
+        _after = await usdc.allowance(w.address, addr);   // read back — do not assume
+      }
+      // TEMP INSTRUMENTATION 2026-08-08: the ENTRY_FEE-sized approval did not take
+      // effect on some wallets (observed allowance $11.00 where $25 was expected).
+      // Print the actual decision so the next run says WHY instead of us guessing.
+      if (RESCUE_DEBUG) {
+        console.log(`     · approve[${label}] ${w.address.slice(0,10)}… need=${fmt6(_needApprove)} ` +
+                    `before=${fmt6(allowance)} approved=${_approved} after=${fmt6(_after)} spender=${addr}${_feeErr}`);
       }
 
       // Dry-run first (staticCall) to surface the exact revert reason before
