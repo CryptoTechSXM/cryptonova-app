@@ -134,12 +134,78 @@ Restore with `cp /root/keeper/_backup_addrfile/*.js /root/keeper/`.
 
 | item | state | why |
 |---|---|---|
-| `routeEntryThreshold` (T1) | `1000000` | Live mitigation. Every pair under threshold so pair 0 always wins, feeding T1.1 MatA. Released 254 frozen members; T1.1 MatA 316 -> 333 rotations. |
+| `routeEntryThreshold` **ALL TIERS T1-T10** | `type(uint256).max` = `115792089237316195423570985008687907853269984665640564039457584007913129639935` | Set 2026-08-09 17:07 UTC across all ten tiers. |
+| `deployEntryThreshold` all tiers | `375` (unchanged) | Deliberately untouched — factory expansion still triggers normally. Only the ROUTE lever moved. |
+
+**Why max and not a big number.** This started at `1000000`. The owner asked what happens
+when entries pass it — the honest answer is the mitigation SILENTLY EXPIRES and the bug
+returns with no error and nothing in the logs. Note what increments the counter:
+`rescueReentry` also does `p.totalRegistered += 1` (:291), so rescues count too — T1.1
+showed 3,496 entries against only 378 MatA rotations, and T2.1 took +112 in twenty
+minutes. The counter tracks protocol activity, not headcount, so any finite sentinel is
+a timer nobody set deliberately. `1000000` encodes "saturate at a million"; what we mean
+is "never saturate". Same defect class as the fixed block-lookback windows fixed in the
+frontend the same day: correct when written, silently wrong later.
+
+Verified safe before setting: `setEntryThresholds` has no upper bound
+(`require(_deploy > 0 && _route >= _deploy)`); all three reads of `routeEntryThreshold`
+(:267, :286, :581) are COMPARISONS with no arithmetic, so no overflow; `overflowActive`
+(:265, the :267 reader) is dead code — declared in the MatrixLogicLib interface, defined
+in PairManagerV8, called from nowhere in production, only from two tests.
+
+**Frontend prerequisite (shipped first, admin 69a2f3e).** The Tiers card printed
+`thr.toLocaleString()` into member-facing copy — at max that is a 78-digit string, and
+even at 1,000,000 it told members *"T1.2 is already built and starts receiving at
+1,000,000 entries"*, which reads as "never" while being presented as a design parameter.
+Now: above a `THR_UNBOUNDED = 100000` bound it describes where entries are actually
+going, in words. V8.48's round-robin removes the saturation-threshold concept entirely,
+so that copy had to change regardless.
+
+**Revert (restores pre-2026-08-09 behaviour):** `DEPLOY=375 ROUTE=400 node set_entry_thresholds.js`
+for T2-T10, plus `DEPLOY=375 ROUTE=400 TIERS=T1 INCLUDE_T1=1 node set_entry_thresholds.js`.
+Every change is logged with its own revert line in `/root/keeper/threshold_changes.log`.
+
+**Measured effect within 20 minutes of the T2/T3 change:** T2.1 went 5,986 -> 6,098
+entries and T3.1 1,153 -> 1,194. Both had been receiving NOTHING (permanently excluded at
+route 400). Two independent instruments agreed: entry counts, and MatA rotation counts.
+
+### Two tooling defects found and fixed on the VPS 2026-08-09
+
+These live in `/root/keeper/` (not in git) — recorded here so they are not re-lost.
+
+1. **`set_entry_thresholds.js` reported the WRONG routing pair.** It used
+   `s[5].findIndex(x => x)` — `allPairsStatus`'s ACTIVE flag, which `addPair()` advances
+   to the newest EMPTY buffer pair. Registrations don't go there:
+   `_findExternalPair` (:578) takes the FIRST pair under threshold. So it named the
+   standby pair as the routing pair, and a threshold change that WORKED looked like it
+   had failed (it reported "routing pair T1.3 at 8 entries" while T1.1 was demonstrably
+   taking every entry). Patched to mirror the contract:
+   `let idx = s[4].findIndex(r => BigInt(r) < curR); if (idx < 0) idx = s[4].length - 1;`
+   This is the same bug the frontend fixed in V8.45 for `currentMatA()`.
+2. **`set_entry_thresholds.js` verifies its write with no retry** — see the note below.
+   Observed again on this run: T4, T8 and T10 printed `*** VERIFY MISMATCH ***` and all
+   three had confirmed in ~0.22s, while every tier taking ~4.3s verified clean. The
+   warning correlates with CONFIRMATION SPEED, not with failure.
 | `route_rr.js` cron | commented out `# TRIM-2026-08-06` | |
 | `route_rr.js` kill switch | `/root/keeper/route_rr.OFF` present since 2026-08-09 | Blocks manual runs too. A dry run showed it wanted `route 1000000 -> 696`, which excludes T1.1 (3483 entries) and **refreezes the 254 members**. |
 
-**Cost of the mitigation:** at `route=1000000`, T1.2 and T1.3 MatA receive nothing.
-Live entry counts `[3483, 595, 8]`. It trades a T1.1 freeze for a T1.2/T1.3 freeze
-and is a holding position, not a resting state. `V8_48_SCOPE.md` item 10b is the
-real fix; items 16 and 17 unwind this AFTER 10b ships.
+**Cost of the mitigation — corrected 2026-08-09 from live data.** The first version of
+this note said the mitigation starves the younger pairs outright. It does not:
+`rescueReentry` reads the SAME threshold, so at 1,000,000 every rescued member is
+re-seated into their OWN pair's MatA. T1.2's MatA rotated 300 -> 301 under the
+mitigation with no new registrations at all. The real cost is narrower: the youngest
+pair (T1.3 at 8/127, T2.2 at 35/127, T3.2 at 3/127) stops receiving NEW members and so
+stops filling. A partly-full matrix never rotates — `_cycleOutRoot` fires only at
+`occupancy >= matrixSize` (MatrixLogicLib:407) — so those members wait until their
+matrix reaches 127. Verified against source, not assumed.
+
+This is a holding position, not a resting state. `V8_48_SCOPE.md` item 10b (round-robin
+`_findExternalPair`) is the real fix; item 16 reverts these thresholds AFTER it ships.
+
+**Known tooling defect (2026-08-09):** `set_entry_thresholds.js` verifies its write
+IMMEDIATELY with no retry. On a fast confirmation the read lands on a pool node still
+behind and it prints `*** VERIFY MISMATCH ***` for a change that succeeded — observed
+on T3, verified 0.213s after the tx, while T2 (4.3s) read back clean. A delayed re-read
+showed both correct. Do not re-run a state change on that warning alone; re-read after
+~20s first.
 
