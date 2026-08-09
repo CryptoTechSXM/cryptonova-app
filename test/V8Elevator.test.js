@@ -2891,24 +2891,43 @@ describe("V8.43 — additive toggles + two-threshold pair opening", function () 
       expect(await pm1.overflowActive(0)).to.equal(true, "saturated + pair 1 exists");
     });
 
-    it("external registrations overflow to pair 1 once pair 0 is saturated", async () => {
+    // V8.48 item 10b — RETARGETED, deliberately. This asserted that a CONFIGURED number
+    // decides saturation: setEntryThresholds(2, 2), two entries, expect overflow. That
+    // mechanism is gone. Saturation is now PHYSICAL — a pair diverts only when both halves
+    // are at MATRIX_SIZE, read from the matrices rather than configured.
+    //
+    // Why the knob was removed: it compared a CUMULATIVE counter (totalRegistered, which
+    // only ever increments) against a fixed number, so a pair that crossed it was excluded
+    // from new registrations FOREVER, even after its members cycled out and freed seats. A
+    // full MatA only rotates when it RECEIVES an entry (MatrixLogicLib:407), so exclusion
+    // meant no rotation, which meant every member in seats 2..127 stopped moving. Live:
+    // 254 members froze in T1.1 MatA within three days of the masking keeper being switched
+    // off on 2026-08-06; on 2026-08-09 T2.1 held 5,986 entries against a threshold of 400
+    // and had been permanently excluded while T2.2 (35 entries) took everything.
+    //
+    // The invariant this test actually cared about — externals DO reach pair 1 — is covered
+    // by O1/O2 and the O4 design-law gate in V8_44_Overflow.test.js, on size-7 rigs where a
+    // pair can actually be filled. At the 127-seat fixture size that would need 254
+    // registrations.
+    it("external registrations stay in pair 0 while it still has room (V8.48: saturation is physical)", async () => {
       const fx = await loadFixture(deployV8Fixture);
-      const { pm1, treasury, admin, reg, s0, s1, s2 } = fx;
-      await pm1.connect(admin).setEntryThresholds(2, 2);
+      const { pm1, treasury, admin, reg, s0, s1, s2, matA } = fx;
+      await pm1.connect(admin).setEntryThresholds(2, 2);   // knob is inert for routing now
 
       await reg(s0);
-      await reg(s1); // pair 0 saturated (2 entries)
+      await reg(s1);
 
       const { matA3, matB3 } = await deployExtraT1Pair(fx);
       await pm1.connect(admin).addPair(await matA3.getAddress(), await matB3.getAddress());
-      // Authorize extra pair with treasury (deploy script does this; test helper skips it)
       await treasury.connect(admin).setAuthorizedCaller(await matA3.getAddress(), true);
       await treasury.connect(admin).setAuthorizedCaller(await matB3.getAddress(), true);
 
-      await reg(s2); // must route to pair 1 (_findExternalPair skips saturated pair 0)
-      expect(await matA3.isActiveInMatrix(s2.address)).to.equal(true, "s2 seated in T1.2 MatA");
-      const p1 = await pm1.pairs(1);
-      expect(p1.totalRegistered).to.equal(1n, "pair 1 counted the overflow entry");
+      await reg(s2);
+      expect(await matA.isActiveInMatrix(s2.address)).to.equal(true,
+        "pair 0 has free seats, so the entry belongs there — concentrating flow is what " +
+        "gets a pair to MATRIX_SIZE, below which nothing rotates at all");
+      expect(await matA3.isActiveInMatrix(s2.address)).to.equal(false,
+        "a configured threshold must no longer be able to divert away from a pair with room");
     });
 
     it("falls back to saturated pair 0 when no next pair exists (never strands)", async () => {

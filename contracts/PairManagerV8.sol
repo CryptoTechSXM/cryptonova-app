@@ -157,7 +157,14 @@ contract PairManagerV8 is Ownable2Step {
     // round-robin keeper (route_rr.js), which walks it to spread new members
     // across T1's pairs. This default is only T1's starting point.
     uint256 public deployEntryThreshold = 375;
-    uint256 public routeEntryThreshold  = 400;
+    /// @notice DEAD as of V8.48 — nothing in the production path reads this. Entry
+    ///         routing (_findExternalPair) now compares LIVE occupancy against the pair's
+    ///         OWN capacity, so there is no threshold to configure. Retained only because
+    ///         `overflowActive()` still references it; both should be deleted together
+    ///         (see V8_48_SCOPE.md). Do NOT reintroduce it as a routing input: a cumulative
+    ///         counter compared to a fixed number is what excluded pairs permanently and
+    ///         froze 254 members on 2026-08-06.
+    uint256 public routeEntryThreshold  = 254;
 
     /// @notice V8.43: matrices belonging to this PM — allow-list for rescueOverflow().
     mapping(address => bool) public isPairMatrix;
@@ -283,7 +290,37 @@ contract PairManagerV8 is Ownable2Step {
         require(fromPairIndex < pairs.length, "PM8: invalid pair index");
 
         Pair storage p = pairs[fromPairIndex];
-        address dest = p.totalRegistered >= routeEntryThreshold ? p.matrixB : p.matrixA;
+
+        // V8.48 item 10 — a rescued member ALWAYS returns to their own MatA.
+        //
+        // This used to read `p.totalRegistered >= routeEntryThreshold ? matrixB : matrixA`.
+        // totalRegistered is CUMULATIVE and only ever increments (:292 and below), so once
+        // a pair passed the threshold EVERY later rescue went to MatB, permanently. A member
+        // cycled out of MatB, could not fund the crossing, parked, was rescued -- and was put
+        // straight back into the same MatB. A closed loop: MatB churned while MatA crawled and
+        // nobody climbed the ladder.
+        //
+        // Measured live 2026-08-09 before this fix:
+        //   T2.1  MatA rot   581  |  MatB rot 5684   (9.8x)
+        //   T3.1  MatA rot   434  |  MatB rot  870   (2.0x)
+        //   parked census: 466 of 714 parked members (65%) were sitting in MatB.
+        //
+        // This is the THIRD site of the V8.46 cumulative-counter root cause. V8.46 fixed the
+        // cycle-out path (TierRouterLib.sameTierTarget) and DELETED pairExpansionThreshold,
+        // but missed this one and _findExternalPair (see 10b below).
+        //
+        // NO COLLISION BRANCH HERE, deliberately. An earlier draft of this fix mirrored
+        // TierRouterLib.sameTierTarget and sent the member to MatB when they already held a
+        // MatA seat -- the V8.46-C guard. That is DEAD CODE on this path: V8.46's UNIVERSAL
+        // PAIR GUARD (MatrixLogicLib:278, added 2026-07-28) rejects a seat in EITHER half of
+        // a pair --
+        //     require(!isInMatrix && (partner == 0 || !partner.isActiveInMatrix(member)))
+        // -- so a member seated in MatA cannot enter MatB either. Routing there would swap one
+        // revert for another. The duplicate problem is solved centrally at the chokepoint every
+        // seating path passes through, and MatrixKeeper:558 already treats
+        // "F8V8: already in matrix" as expected-and-swallowable on the parked-rescue path, so a
+        // rescue that would duplicate a seat is skipped cleanly rather than steered sideways.
+        address dest = p.matrixA;
 
         usdc.safeTransferFrom(msg.sender, dest, entryFee);
         IFigureEightMatrixV8PM(dest).enterFor(member, referrer);
@@ -575,12 +612,100 @@ contract PairManagerV8 is Ownable2Step {
     ///         is ignored: a full MatA rotates its root on entry (V8.41), keeping
     ///         the self-sustaining loop fed until true saturation. When every pair
     ///         is saturated, the newest holds until the factory adds the next one.
+    /// @notice V8.48 item 10b — ONE POINT OF ENTRY. Every new member enters pair 0's
+    ///         MatA. Existing members circulate: own MatA -> own MatB -> own MatA, or on
+    ///         to the next pair, or up a tier. New entries never divert.
+    ///
+    ///         This replaced a first-match scan over `pairs[i].totalRegistered <
+    ///         routeEntryThreshold`. That counter is CUMULATIVE and only ever increments
+    ///         (:292 and below), so a pair that crossed the threshold was excluded from new
+    ///         registrations FOREVER, even after its members cycled out and freed seats. Its
+    ///         MatA then had no entry source and froze -- and a full MatA only rotates when
+    ///         it RECEIVES an entry (MatrixLogicLib:407), so "no entries" means "no rotation"
+    ///         means every member in seats 2..127 stops moving. Second site of the V8.46
+    ///         cumulative-counter root cause, after TierRouterLib.sameTierTarget.
+    ///
+    ///         Live proof: `route_rr.js` was written 2026-07-27 purely to walk the threshold
+    ///         around the pairs and mask this. When that keeper was switched off on
+    ///         2026-08-06, 254 members froze in T1.1 MatA within three days. On 2026-08-09
+    ///         T2.1 held 5,986 cumulative entries against a threshold of 400 and had been
+    ///         permanently excluded while T2.2 (35 entries) took everything.
+    ///
+    ///         Feeding a full pair is correct, not a compromise: the entry rotates MatA's
+    ///         root out, which crosses into the pair's own MatB and frees the seat for the
+    ///         entrant (V8.41 / MatrixLogicLib:407; regression S3 in
+    ///         V8_46_MatAStarvation.test.js). If MatB is also full its own root cycles out in
+    ///         turn, so the pair keeps processing members indefinitely rather than filling up.
+    ///         Verified live 2026-08-09: T1.1 MatA sat at 127/127 and rotated 316 -> 378 in a
+    ///         single day precisely because it kept receiving entries.
+    ///
+    ///         NOT round-robin: spreading entries across pairs means no pair reaches
+    ///         MATRIX_SIZE, and below that nothing rotates at all, so nobody cycles. T1.3
+    ///         holding 8 members at rot=0 is what thin-spreading looks like.
+    ///
+    ///         THE MEASURE IS LIVE COMBINED OCCUPANCY, NOT A CUMULATIVE COUNTER. This is the
+    ///         same correction V8.46 made to the sibling function, and the parameter's own
+    ///         doc at :135 already described it that way. occupancy() falls as members cycle
+    ///         out and graduate, so a pair that overflows becomes eligible again -- the
+    ///         condition is REVERSIBLE, which is the entire defect: `totalRegistered` only
+    ///         ever increments, so exclusion was permanent.
+    ///
+    ///         Effect: ONE POINT OF ENTRY until that pair is PHYSICALLY full (both halves,
+    ///         occupancy == MATRIX_SIZE), then the next pair opens. Not a policy knob
+    ///         deciding when a pair has "had enough" -- a statement that there is literally
+    ///         nowhere left to sit, read from the matrices rather than configured.
+    ///         This also preserves the design law the O4 gate asserts (keepers OFF, every
+    ///         MatB still rotates): a pair that never receives externals never rotates, so
+    ///         strict one-door would have left pairs 1+ permanently inert.
+    /// @dev True when both halves of pair `i` are at MATRIX_SIZE. Capacity is read from
+    ///      the matrices, never configured — a knob here could only ever be set wrong, and
+    ///      a draft of this fix that hardcoded 254 (2 x 127) silently never diverted on the
+    ///      size-7 test rigs, which is precisely what the O4 gate caught.
+    function _pairFull(uint256 i) internal view returns (bool) {
+        Pair storage pr = pairs[i];
+        uint256 live = IFigureEightMatrixV8PM(pr.matrixA).occupancy();
+        uint256 cap  = IFigureEightMatrixV8PM(pr.matrixA).MATRIX_SIZE();
+        if (pr.matrixB != address(0)) {
+            live += IFigureEightMatrixV8PM(pr.matrixB).occupancy();
+            cap  += IFigureEightMatrixV8PM(pr.matrixB).MATRIX_SIZE();
+        }
+        return live >= cap;
+    }
+
     function _findExternalPair() internal view returns (uint256) {
         uint256 n = pairs.length;
+        if (n == 1) return 0;
+
+        // Two needs pull in opposite directions, and both are load-bearing:
+        //   a FULL pair needs a CONTINUING stream — a full MatA only rotates when it
+        //     receives an entry (MatrixLogicLib:407), so diverting away from it freezes
+        //     every member in seats 2..127. That is the 2026-08-06 incident.
+        //   a FILLING pair needs a CONCENTRATED stream — below MATRIX_SIZE nothing rotates
+        //     at all, so spreading entries thinly means nobody in any of them ever cycles.
+        //     That is T1.3 sitting at 8 members with rot=0.
+        // So: share the stream across every FULL pair (each entry rotates one of them) plus
+        // exactly ONE pair being filled. Nothing is starved and nothing is spread thin.
+        uint256 filling = type(uint256).max;
+        uint256 fullCount;
         for (uint256 i = 0; i < n; i++) {
-            if (pairs[i].totalRegistered < routeEntryThreshold) return i;
+            if (_pairFull(i)) fullCount++;
+            else if (filling == type(uint256).max) filling = i;
         }
-        return n - 1;
+
+        // Nothing full yet — concentrate everything on the oldest pair with room.
+        if (fullCount == 0) return filling;
+
+        uint256 slots = fullCount + (filling == type(uint256).max ? 0 : 1);
+        uint256 pick  = totalRegistrations % slots;   // advances every registration
+        uint256 seen;
+        for (uint256 i = 0; i < n; i++) {
+            if (_pairFull(i)) {
+                if (seen == pick) return i;
+                seen++;
+            }
+        }
+        // pick == fullCount → the pair currently being filled.
+        return filling == type(uint256).max ? n - 1 : filling;
     }
 
     /// @notice V8.41 FIFO: Factory deployment trigger.
