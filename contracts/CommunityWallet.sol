@@ -282,10 +282,30 @@ contract CommunityWallet is Ownable2Step, AccessControl {
         uint256 genesisTotal = (toDistribute * genesisBps)  / BPS_DENOM;
         uint256 pioneerTotal = toDistribute - genesisTotal;
 
-        uint256 perGenesis = gCount > 0 ? genesisTotal / gCount : 0;
-        uint256 perPioneer = pCount > 0 ? pioneerTotal / pCount : 0;
+        // V8.48: divide by COHORT_SIZE, NOT the live member count.
+        //
+        // Dividing by the live count made a PARTIALLY FILLED cohort's members richer,
+        // because that cohort's entire share was split among fewer people. Measured
+        // live 2026-08-09 with Genesis 500 / Pioneer 146, the 60/40 split paid each
+        // Pioneer $5.11 against each Genesis member's $2.24 -- 2.3x -- inverting the
+        // seniority this wallet exists to reward. The inversion held for ANY Pioneer
+        // count below 334 (totalEnrolled below 834), i.e. for the entire ramp.
+        //
+        // With a FIXED divisor a seat's value never depends on how many seats are
+        // occupied: Genesis is always genesisBps/COHORT_SIZE and Pioneer always
+        // pioneerBps/COHORT_SIZE, so Genesis holds its intended 1.5x at the default
+        // 60/40 from the first member to the thousandth. The share belonging to
+        // UNOCCUPIED seats is simply not paid out -- it stays in the pool and rolls
+        // into the next cycle, so it accrues to members over time instead of being
+        // concentrated on whoever happens to have enrolled early in a cohort.
+        //
+        // Future-proofing: this holds for every (gCount, pCount) pair including
+        // 0, a full 500, and any mid-ramp value, and it needs no re-tuning of
+        // genesisBps as members enrol. Do NOT reintroduce a live-count divisor.
+        uint256 perGenesis = genesisTotal / COHORT_SIZE;
+        uint256 perPioneer = pioneerTotal / COHORT_SIZE;
 
-        // Actual distributed (rounding dust stays in pool)
+        // Actual distributed. Unfilled-seat share AND rounding dust stay in the pool.
         uint256 actualDist = (perGenesis * gCount) + (perPioneer * pCount);
         if (actualDist == 0) return;
 
