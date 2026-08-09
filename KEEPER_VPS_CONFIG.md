@@ -182,10 +182,29 @@ These live in `/root/keeper/` (not in git) — recorded here so they are not re-
    taking every entry). Patched to mirror the contract:
    `let idx = s[4].findIndex(r => BigInt(r) < curR); if (idx < 0) idx = s[4].length - 1;`
    This is the same bug the frontend fixed in V8.45 for `currentMatA()`.
-2. **`set_entry_thresholds.js` verifies its write with no retry** — see the note below.
-   Observed again on this run: T4, T8 and T10 printed `*** VERIFY MISMATCH ***` and all
-   three had confirmed in ~0.22s, while every tier taking ~4.3s verified clean. The
-   warning correlates with CONFIRMATION SPEED, not with failure.
+2. **`set_entry_thresholds.js` verified its write with no retry — FIXED.** T4, T8 and T10
+   printed `*** VERIFY MISMATCH ***` on writes that had succeeded; all three confirmed in
+   ~0.22s while every tier taking ~4.3s verified clean. The warning correlated with
+   CONFIRMATION SPEED, not failure. Now retries the read 5x over ~6s before warning, and
+   the warning text says to re-read manually before re-running. The hazard was never the
+   false alarm — it was re-running a state-changing command that had already worked.
+3. **`diag_overflow.js` — two bugs, one hiding the other. FIXED.** It hardcoded
+   `getPairAt(3)` (T1.4) from the V8.45/46 deployment; V8.47 redeployed 2026-08-05 and T1
+   has 3 pairs, so every run reverted `PM8: idx out of range` and produced nothing.
+   Parameterised (TIER / PAIR, defaults to auto-select). That exposed a SECOND bug that
+   had never executed: it called `getParkedMember(0)` assuming a parked member existed,
+   panicking `ARRAY_RANGE_ERROR(50)` on a MatA with none. Now reports parked count per
+   pair first and auto-selects a pair that has any.
+4. **No log rotation existed at all — FIXED.** `/root/keeper/rescue.log` had reached
+   **124 MB** and was unbounded; 31 logs totalling ~150 MB. Added
+   `/etc/logrotate.d/cryptonova-keeper` (daily, keep 7, compress, `copytruncate` because
+   the keepers append via `>>` from cron). `delaycompress` was deliberately REMOVED — it
+   exists for processes holding an open fd, which `copytruncate` makes moot, and it just
+   deferred the space saving a full cycle. First pass took rescue.log 124 MB -> 21 MB
+   gzipped; disk 3.5G -> 3.3G used.
+
+**Live parked population, measured 2026-08-09:** T1 parked per MatA = **[24, 19, 0]** —
+43 members cycled out who could not fund the crossing and are waiting on rescue.
 | `route_rr.js` cron | commented out `# TRIM-2026-08-06` | |
 | `route_rr.js` kill switch | `/root/keeper/route_rr.OFF` present since 2026-08-09 | Blocks manual runs too. A dry run showed it wanted `route 1000000 -> 696`, which excludes T1.1 (3483 entries) and **refreezes the 254 members**. |
 
