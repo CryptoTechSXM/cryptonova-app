@@ -75,6 +75,45 @@ new registration, so T1.2 and T1.3 MatA are now starved — live entry counts
 - `route_rr.js` cron trimmed 2026-08-06 AND kill switch `route_rr.OFF` set 2026-08-09
 - Item 16 reverts the threshold; item 17 deletes the script — both AFTER 10b ships
 
+## TOPOLOGY RE-VERIFIED FROM SOURCE 2026-08-09 (third pass)
+
+Earlier in this work I diagnosed the pair topology wrong twice before landing on
+`rescueReentry`. Re-read end to end rather than trusted from memory:
+
+| path | code | threshold read? | status |
+|---|---|---|---|
+| cycle-out re-entry | `handleCycleOut` -> `_sameTierTarget` -> `TierRouterLib.sameTierTarget` | **no** | **CORRECT.** Own MatA unconditionally; `toMatB` only when the member already occupies own MatA. V8.46 DELETED `pairExpansionThreshold` and its setter. |
+| rescue re-seat | `PairManagerV8.rescueReentry` :286 | **yes** — `routeEntryThreshold` | **BROKEN — item 10** |
+| new registration | `PairManagerV8._findExternalPair` :578 | **yes** — `routeEntryThreshold` | **BROKEN — item 10b** |
+
+Two survivors of the V8.46 root cause, not three. Nothing else reads a cumulative
+counter to make a routing decision.
+
+**Item 10 is ALREADY RUNNING LIVE, unintentionally.** `rescueReentry` compares
+`totalRegistered >= routeEntryThreshold`, and the mitigation set that threshold to
+1,000,000. No pair has a million cumulative entries, so the comparison is false
+everywhere and **every rescued member is being re-seated into own MatA right now** —
+exactly the behaviour item 10 makes permanent.
+
+Evidence collected 2026-08-09 while running that way:
+
+| metric | value |
+|---|---|
+| T1.1 MatA rotations | 316 -> 333 -> **374**, still climbing |
+| T1.1 MatB occupancy | 126/127 — did NOT starve |
+| T1.2 MatB occupancy | 127/127 — did NOT starve |
+| frozen members released | 254 |
+
+The one real risk in item 10 was starving MatB of its rescue feed. That risk is now
+measured rather than argued: MatB stayed full while MatA resumed rotating.
+
+**The collision guard is NOT optional.** `_sameTierTarget`'s comments record what
+unconditional-MatA cost before V8.46-C: fork replay of graduation tx `0xff488549...`
+(block 44702114) — member already held a T4.1 MatA seat, re-entry hit
+`require(!isInMatrix)` at MatrixLogicLib:255, the empty catch at :513 swallowed it,
+**9 events, 6 members, $467.50 lost.** Item 10 must mirror
+`toMatB = isActiveInMatrix(member)`, not just "return MatA".
+
 ## SIZE BASELINE — measured 2026-08-09, before any V8.48 code
 
 Deployed-bytecode size vs the EIP-170 limit of 24,576 bytes.
