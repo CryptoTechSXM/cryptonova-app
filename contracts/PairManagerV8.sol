@@ -256,6 +256,10 @@ contract PairManagerV8 is Ownable2Step {
     ///         Starting AFTER `avoid` means the member's own pair is tried last,
     ///         so a double lands somewhere else whenever anywhere else is free.
     function freePairFor(address member, uint256 avoid) external view returns (uint256) {
+        return _freePairFor(member, avoid);
+    }
+
+    function _freePairFor(address member, uint256 avoid) internal view returns (uint256) {
         uint256 n = pairs.length;
         for (uint256 i = 0; i < n; i++) {
             uint256 idx = (avoid + 1 + i) % n;
@@ -320,15 +324,42 @@ contract PairManagerV8 is Ownable2Step {
         // seating path passes through, and MatrixKeeper:558 already treats
         // "F8V8: already in matrix" as expected-and-swallowable on the parked-rescue path, so a
         // rescue that would duplicate a seat is skipped cleanly rather than steered sideways.
-        address dest = p.matrixA;
+        // A member cannot hold two seats in one pair (V8.46 universal pair guard,
+        // MatrixLogicLib:278 -- it rejects a seat in EITHER half). Before this, a duplicate
+        // reaching MatB position 1 reverted here, and rescueReentry is called with NO
+        // try/catch at MatrixLogicLib:773 -- so the revert took the whole cycle-out with it
+        // and the pair STOPPED DEAD. TierRouter:1372 records the same failure:
+        // "a duplicate stops its pair dead the moment its holder reaches position 1
+        // (T3.1 and T4.1 both had to be repaired live on 2026-07-28)".
+        //
+        // Same rule TierRouter:1382 already uses for double entry: take the next pair where
+        // this member holds nothing. The 90% factory trigger keeps a standby pair open, so
+        // there is normally somewhere to go.
+        uint256 destPair = fromPairIndex;
+        if (IFigureEightMatrixV8PM(p.matrixA).isActiveInMatrix(member) ||
+            (p.matrixB != address(0) &&
+             IFigureEightMatrixV8PM(p.matrixB).isActiveInMatrix(member))) {
+            destPair = _freePairFor(member, fromPairIndex);
+            if (destPair == type(uint256).max) {
+                // Seated in EVERY existing pair. A member eligible to cross must not be
+                // parked for want of a seat -- spawn a pair so there is somewhere to sit.
+                // Normally unreachable: the 90% factory trigger keeps a standby pair open.
+                // Wrapped like _tryAdvancePair so a factory failure cannot revert a
+                // member's cycle-out.
+                _forceExpand();
+                destPair = _freePairFor(member, fromPairIndex);
+                require(destPair != type(uint256).max, "PM8: no seat available for duplicate");
+            }
+        }
+        address dest = pairs[destPair].matrixA;
 
         usdc.safeTransferFrom(msg.sender, dest, entryFee);
         IFigureEightMatrixV8PM(dest).enterFor(member, referrer);
 
-        p.totalRegistered  += 1;
-        totalRegistrations += 1;
+        pairs[destPair].totalRegistered += 1;
+        totalRegistrations              += 1;
 
-        emit MemberRouted(member, fromPairIndex, dest);
+        emit MemberRouted(member, destPair, dest);
     }
 
     /// @notice V8.44 overflow rework: TierRouter seats a same-tier re-entry
@@ -672,40 +703,14 @@ contract PairManagerV8 is Ownable2Step {
         return live >= cap;
     }
 
-    function _findExternalPair() internal view returns (uint256) {
-        uint256 n = pairs.length;
-        if (n == 1) return 0;
-
-        // Two needs pull in opposite directions, and both are load-bearing:
-        //   a FULL pair needs a CONTINUING stream — a full MatA only rotates when it
-        //     receives an entry (MatrixLogicLib:407), so diverting away from it freezes
-        //     every member in seats 2..127. That is the 2026-08-06 incident.
-        //   a FILLING pair needs a CONCENTRATED stream — below MATRIX_SIZE nothing rotates
-        //     at all, so spreading entries thinly means nobody in any of them ever cycles.
-        //     That is T1.3 sitting at 8 members with rot=0.
-        // So: share the stream across every FULL pair (each entry rotates one of them) plus
-        // exactly ONE pair being filled. Nothing is starved and nothing is spread thin.
-        uint256 filling = type(uint256).max;
-        uint256 fullCount;
-        for (uint256 i = 0; i < n; i++) {
-            if (_pairFull(i)) fullCount++;
-            else if (filling == type(uint256).max) filling = i;
-        }
-
-        // Nothing full yet — concentrate everything on the oldest pair with room.
-        if (fullCount == 0) return filling;
-
-        uint256 slots = fullCount + (filling == type(uint256).max ? 0 : 1);
-        uint256 pick  = totalRegistrations % slots;   // advances every registration
-        uint256 seen;
-        for (uint256 i = 0; i < n; i++) {
-            if (_pairFull(i)) {
-                if (seen == pick) return i;
-                seen++;
-            }
-        }
-        // pick == fullCount → the pair currently being filled.
-        return filling == type(uint256).max ? n - 1 : filling;
+    function _findExternalPair() internal pure returns (uint256) {
+        // ONE POINT OF ENTRY. Every new member enters pair 0's MatA, always. New entries
+        // are never diluted across pairs: concentrating them is what keeps pair 0 at
+        // MATRIX_SIZE and rotating, and a full MatA only rotates when it RECEIVES an entry
+        // (MatrixLogicLib:407). Later pairs are populated by EXISTING members cycling --
+        // own MatA by default, the next free pair when the member already holds a seat here
+        // (see rescueReentry) -- and by upgrades. Not by splitting the front door.
+        return 0;
     }
 
     /// @notice V8.41 FIFO: Factory deployment trigger.
@@ -717,6 +722,16 @@ contract PairManagerV8 is Ownable2Step {
     ///         is full and crossings begin. By the time MatB hits 90% (114/127 seats),
     ///         there are still 13 seats of buffer before the first graduation fires —
     ///         ample time for the factory deploy to settle on-chain.
+    /// @dev Deploy one pair on demand, ignoring the usual triggers. Used only when a
+    ///      member who must move has nowhere left to sit. try/catch mirrors
+    ///      _tryAdvancePair: expansion is best-effort and must never revert a member's flow.
+    function _forceExpand() internal {
+        if (_expanding || pairFactory == address(0)) return;
+        _expanding = true;
+        try IMatrixPairFactory(pairFactory).deployAndWire(address(this)) {} catch {}
+        _expanding = false;
+    }
+
     function _tryAdvancePair() internal {
         // Reentrancy guard: factory's addPair() calls back here indirectly.
         if (_expanding) return;

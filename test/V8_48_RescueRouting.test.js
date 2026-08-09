@@ -150,10 +150,17 @@ describe("V8.48 item 10 — rescueReentry returns to own MatA", function () {
     await ctx.usdc.mint(ctx.aAddr, FEE);
     await ctx.usdc.connect(asMatrix).approve(ctx.pmAddr, FEE);
 
+    // V8.48: a duplicate is no longer rejected -- it is ROUTED to the next pair where the
+    // member holds nothing (freePairFor, the same call TierRouter:1382 makes). Before this,
+    // the re-entry reverted, and rescueReentry is called with NO try/catch at
+    // MatrixLogicLib:773, so the revert took the entire cycle-out with it and the pair
+    // STOPPED DEAD -- see TierRouter:1372 on T3.1 and T4.1 being repaired live 2026-07-28.
+    // With only ONE pair deployed and no factory wired there is nowhere to go and no way to
+    // spawn, so it fails LOUDLY rather than stranding the member.
     await expect(
       ctx.pm.connect(asMatrix).rescueReentry(ctx.W1.address, ctx.W1.address, 0,
         { gasLimit: 16_000_000 })
-    ).to.be.revertedWith("F8V8: already in matrix");
+    ).to.be.revertedWith("PM8: no seat available for duplicate");
 
     await ethers.provider.send("hardhat_stopImpersonatingAccount", [ctx.aAddr]);
   });

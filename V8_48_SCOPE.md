@@ -32,9 +32,13 @@ list; `V8_48_BACKLOG.md` holds the evidence for each.
 | 29 | **`StabilityFund.sol:18` documents a carve rate that does not exist.** Header says *"L1: Per-entry stabilityBps carve (6% T1-T3, 5% T4-T10)"*. Deployed config is `SPLITS_ALL[4] = 300` bps — a flat **3% on all ten tiers** (`deploy_v8.js:103`, `tierSplits()` returns the same array for every tier). The comment is both tier-varying (it isn't) and ~2x the real rate. Modelling item 26 from it would have been 2x wrong. | StabilityFund (comment only) | NEW |
 
 | 30 | **Delete `routeEntryThreshold` and `overflowActive`.** After 10/10b nothing in the production path reads either — `overflowActive` was already called from nowhere but tests. V8.46 set the precedent by deleting `pairExpansionThreshold` outright once inert. A governance knob that appears to steer routing but steers nothing is the same class of lie as the routing-pair label and the tier-card threshold copy. Blast radius: `setEntryThresholds` signature, `set_entry_thresholds.js` on the VPS, the frontend tier card (already handles unbounded), `V8Elevator.test.js` overflowActive tests. | PairManagerV8 | NEW |
-| 31 | **Double-entry members have no route to the next pair.** A member cannot hold two seats in one pair (V8.46 universal pair guard), and `rescueReentry` is called with NO try/catch at MatrixLogicLib:773 — so when a double reaches MatB position 1 the re-entry reverts and takes the whole cycle-out with it. `TierRouter:1372` already documents the consequence: *"a duplicate stops its pair dead the moment its holder reaches position 1 (T3.1 and T4.1 both had to be repaired live on 2026-07-28)"*. Likely a large share of what `frozen_matb_keeper.js` force-rotates 6,726 times. Fix: mirror TierRouter:1382 — `freePairFor(member, fromPairIndex)`. **OPEN DECISION:** when the member is seated in EVERY pair (`freePairFor` returns `uint256.max`), park them in the matrix they cycled out of (keeps the pair turning, strands nobody, existing rescue machinery handles parked members) vs revert (wedges the pair) vs skip silently (strands the fee behind a live approval). Owner recommendation pending. | PairManagerV8 | NEW |
+| 31 | ✅ **IMPLEMENTED 2026-08-09.** `rescueReentry` routes a member already seated in the pair to `_freePairFor(member, fromPairIndex)` — the same call TierRouter:1382 makes. Seated in EVERY pair: calls `_forceExpand()` (try/catch) and retries, then fails loudly with `PM8: no seat available for duplicate` rather than stranding. Counters and `MemberRouted` credit the DESTINATION pair. Removes the mechanism TierRouter:1372 documents — *"a duplicate stops its pair dead the moment its holder reaches position 1"* — because rescueReentry is called with NO try/catch at MatrixLogicLib:773, so that revert took the whole cycle-out with it. ORIGINAL: **Double-entry members have no route to the next pair.** A member cannot hold two seats in one pair (V8.46 universal pair guard), and `rescueReentry` is called with NO try/catch at MatrixLogicLib:773 — so when a double reaches MatB position 1 the re-entry reverts and takes the whole cycle-out with it. `TierRouter:1372` already documents the consequence: *"a duplicate stops its pair dead the moment its holder reaches position 1 (T3.1 and T4.1 both had to be repaired live on 2026-07-28)"*. Likely a large share of what `frozen_matb_keeper.js` force-rotates 6,726 times. Fix: mirror TierRouter:1382 — `freePairFor(member, fromPairIndex)`. **OPEN DECISION:** when the member is seated in EVERY pair (`freePairFor` returns `uint256.max`), park them in the matrix they cycled out of (keeps the pair turning, strands nobody, existing rescue machinery handles parked members) vs revert (wedges the pair) vs skip silently (strands the fee behind a live approval). Owner recommendation pending. | PairManagerV8 | NEW |
 
-## Deploy / script changes## Deploy / script changes
+| 32 | **Backup keeper: detect `PM8: no seat available for duplicate` and spawn a pair.** The contract already tries `_forceExpand()` itself (try/catch, so it can never revert a member's cycle-out), but a factory failure still leaves the member unseated. Owner: *"a member eligible to cross or enter a new pair should not be parked, a new pair should be spawned so they have space to sit."* Keeper watches for the revert and triggers expansion out-of-band. Should be unreachable — the 90% factory trigger keeps a standby pair open. | /root/keeper/ | NEW |
+| 33 | **Spawn a pair when the newest is FULL** (owner approved, not yet implemented). `_tryAdvancePair` fires on `newest.totalRegistered >= deployEntryThreshold` (cumulative — same family as 10b) or newest MatB >= 90%. Replace the cumulative trigger with `_pairFull(pairs.length - 1)`; keep 90% as the early warning that preserves deploy lead time. Makes `deployEntryThreshold` dead, joining `routeEntryThreshold` in item 30. | PairManagerV8 | NEW |
+| 34 | **Strengthen the O4 gate: drive real duplicate volume.** O4's pair-1 assertion was retargeted to "wired and standing by" because a 27-registration run generates no duplicates, so pair 1 legitimately receives nothing. Owner wants the stronger version: enough volume that duplicates actually appear and feed pair 1 through the REAL route (`freePairFor`), proving the member-driven law end to end rather than asserting idleness. Must preserve no-dilution — new members still enter pair 0 only. | test/V8_44_Overflow.test.js | NEW |
+
+## Deploy / script changes
 
 | # | change | file |
 |---|---|---|
@@ -84,6 +88,31 @@ new registration, so T1.2 and T1.3 MatA are now starved — live entry counts
 - `routeEntryThreshold = 1000000` (the mitigation)
 - `route_rr.js` cron trimmed 2026-08-06 AND kill switch `route_rr.OFF` set 2026-08-09
 - Item 16 reverts the threshold; item 17 deletes the script — both AFTER 10b ships
+
+## THE ROUTING RULE — OWNER'S SPEC, STATED THREE TIMES 2026-08-09
+
+Encode this and do not drift from it. Every wrong turn tonight came from violating it.
+
+**NEW MEMBERS HAVE ONE ENTRY POINT. Never dilute new entries across pairs.**
+`_findExternalPair()` returns 0. Always. Concentrating the front door is what holds pair 0
+at MATRIX_SIZE and keeps it rotating — a full MatA only rotates when it RECEIVES an entry
+(MatrixLogicLib:407), so diverting new members away from a full pair FREEZES it. That is
+the 2026-08-06 incident, 254 members.
+
+**EXISTING MEMBERS CYCLE, and that is what populates later pairs:**
+
+| route | when | code |
+|---|---|---|
+| A -> B -> A **same pair** | default | `TierRouterLib.sameTierTarget` -> own MatA; `rescueReentry` -> own MatA |
+| A -> B -> A **2nd pair** | member already holds a seat in this pair (V8.46 universal pair guard forbids two seats in one pair) | `_freePairFor(member, fromPairIndex)` |
+| A -> B -> A **upgrade pair** | tier upgrade | TierRouter upgrade path |
+
+Three attempts at `_findExternalPair` were rejected for violating the first rule, each
+caught by a test rather than by reasoning: round-robin (dilutes; no pair reaches
+MATRIX_SIZE so nothing rotates), share-across-full-pairs-plus-one-filling (dilutes),
+divert-at-physical-fullness (freezes the pair it diverts from). **The answer was never a
+routing formula for new entries — it was one door, plus giving CYCLING members the
+2nd-pair route they were missing.**
 
 ## TOPOLOGY RE-VERIFIED FROM SOURCE 2026-08-09 (third pass)
 

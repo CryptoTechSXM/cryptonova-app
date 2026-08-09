@@ -146,11 +146,21 @@ describe("V8.44 — overflow rework: own members return to own pair", function (
     // Saturate pair 0: route threshold below its cumulative entry count.
     await pm.connect(owner).setEntryThresholds(1, 10);
 
-    // --- O2: fresh external must overflow to pair 1 (route threshold hit)
+    // --- O2 RETARGETED V8.48 (item 10b): ONE POINT OF ENTRY.
+    // This asserted that a fresh external overflows to pair 2 once pair 0 saturates. New
+    // members are no longer diluted across pairs: they always enter pair 0's MatA.
+    // Concentrating the front door is what holds pair 0 at MATRIX_SIZE and keeps it
+    // rotating -- a full MatA only rotates when it RECEIVES an entry (MatrixLogicLib:407),
+    // so diverting new members away from a full pair is what FREEZES it (254 members,
+    // 2026-08-06). Later pairs fill from members CYCLING -- own MatA, or the next free pair
+    // when the member already holds a seat here -- and from upgrades, never from splitting
+    // new entries.
     const ext = sigs[40];
     await reg(ctx, ext, W1.address);
-    expect(await matA2.isActiveInMatrix(ext.address), "externals must overflow to pair 2 at saturation").to.equal(true);
-    expect(await matA.isActiveInMatrix(ext.address)).to.equal(false);
+    expect(await matA.isActiveInMatrix(ext.address),
+      "new members always enter pair 0's MatA — one point of entry").to.equal(true);
+    expect(await matA2.isActiveInMatrix(ext.address),
+      "a new member must NOT be diverted to a later pair").to.equal(false);
 
     // --- O1: W1 (funded: >= $5 earnings + $5 reserve) cycles out of full MatB.
     // With pair0 saturated at PM level, the rescueReentry / registerForMatB
@@ -227,10 +237,20 @@ describe("V8.44 — overflow rework: own members return to own pair", function (
     const rotA0 = await matA.rotationCount();
     expect(rotA0, "pair-0 MatA must be cycling").to.be.gt(0n);
     expect(rotB0, "pair-0 MatB must rotate WITHOUT any keeper").to.be.gt(0n);
-    // pair 1 receives external overflow after saturation; its MatB needs more
-    // total volume to fill — require its MatA to be receiving flow at minimum.
-    const pair1Active = (await matA2.occupancy()) > 0n || rotB1 > 0n;
-    expect(pair1Active, "pair-1 must be receiving overflow externals").to.equal(true);
+    // RETARGETED V8.48 (item 10b). The law in this gate's title is "both MatBs rotate
+    // from PURE MEMBER-DRIVEN FLOW" — that the protocol cycles without keepers. It used to
+    // be checked by requiring pair 1 to receive OVERFLOW EXTERNALS, but new members are no
+    // longer diluted across pairs; pair 1 fills from members cycling and from duplicates
+    // (freePairFor), which this 27-registration run does not generate. An EMPTY STANDBY
+    // pair is not a frozen pair — the law is about members who are waiting, and pair 1 has
+    // none. What must hold, and is asserted above without any keeper, is that pair 0's MatA
+    // AND MatB both keep rotating. Here we assert pair 1 is genuinely standing by: wired to
+    // its partner and able to receive, so nothing is stranded when flow does reach it.
+    expect(await matA2.partner(), "pair-1 MatA must be wired to its MatB")
+      .to.equal(await matB2.getAddress());
+    expect(await matB2.partner(), "pair-1 MatB must be wired to its MatA")
+      .to.equal(await matA2.getAddress());
+    expect(await matA2.occupancy(), "pair-1 is standby: idle, not frozen").to.equal(0n);
 
     // Zero stranded reserves: every wallet that is out of a matrix and not
     // parked must hold no crossingReserve in that matrix.
