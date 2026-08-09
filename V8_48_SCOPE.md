@@ -19,6 +19,7 @@ list; `V8_48_BACKLOG.md` holds the evidence for each.
 | 8 | `lockedBalanceOf` returns `min(sum(batches), balanceOf(wallet))` | CNOVAToken | §8 |
 | 9 | Prune/reduce vest batches on BURN inside `_update` | CNOVAToken | §8 |
 | 10 | `rescueReentry` returns own MatA — mirror `TierRouterLib.sameTierTarget` incl. the V8.46-C collision guard | PairManagerV8 | §10 |
+| 10b | **`_findExternalPair` cumulative-counter exclusion — THIRD site of the V8.46 root cause, never fixed.** `pairs[i].totalRegistered < routeEntryThreshold` with a counter that only ever increments (:426). A pair that passes the threshold is excluded from new registrations FOREVER — its MatA stops receiving entries and freezes. Masked since 2026-07-27 by `route_rr.js`. Fix: `routingIdx = totalRegistrations % pairs.length` — round-robin. Equal share regardless of history, no monotonic trap, O(1) (deletes the loop), and exactly what `route_rr.js` imposes externally. Feeding a full MatA is safe: V8.41 root rotation frees the seat (regression S3). **NOT argmin** — cumulative totals across pairs born at different times are not comparable; live `[3483,595,8]` would send 587 consecutive entries to T1.3 and starve the other two. | PairManagerV8 :578-584 | NEW, verified 2026-08-09 — **live incident, see below** |
 | 11 | **selfRescue / coPayRescue surplus loss** — `crossingReserve` and `withdrawable` are zeroed UNCONDITIONALLY while `_finalizeCrossing` forwards only `entryFee`. Surplus is erased. Must credit the excess back to `withdrawable`. | MatrixLogicLib :1265-66 | NEW, verified 2026-08-09 |
 | 12 | `checkUpkeep` must DISCOVER WORK_PARKED_RESCUE, WORK_EVICT_PARKED (and GHOST/RECLAIM). Executable today but undiscoverable — retires 3 keepers. | MatrixKeeper | AUTOMATION_AUDIT.md |
 | 12a | **Extract `MatrixKeeperLib`** (same pattern as TierRouterLib / MatrixLogicLib). MatrixKeeper has 535 free bytes — item 12 does not fit. This is a prerequisite task, NOT a deferral of 12. | MatrixKeeper | size baseline below |
@@ -36,7 +37,7 @@ list; `V8_48_BACKLOG.md` holds the evidence for each.
 | # | action |
 |---|---|
 | 16 | Revert the live mitigation: `setEntryThresholds(375, 400)` once #10 ships |
-| 17 | DELETE `route_rr.js` — it existed to mask #10 |
+| 17 | DELETE `route_rr.js` — **gated on 10b, NOT on 10.** It masks `_findExternalPair`, not `rescueReentry`. Deleting it after a 10-only fix re-freezes MatA in every mature pair — the 26 Jul state (T1.1=2129, T1.2=890, T1.3=101 vs threshold 381, two dead pairs). |
 | 18 | Trim `frozen_matb_keeper.js` — duplicates WORK_FORCE_ROTATE (pending log check) |
 | 19 | Retire `copay_rescue` / `fastlane_rescue` / `evict_parked` once #12 lands |
 | 20 | Run the protocol's own gate: **keepers OFF -> rotationCount must still climb** (MatrixKeeper.sol:455) |
@@ -48,6 +49,31 @@ list; `V8_48_BACKLOG.md` holds the evidence for each.
 | 21 | Disable "Unlock early" / "Max Unlock" when `balanceOf < penaltyAmt` — currently offers an action that always reverts (§8) |
 | 22 | Remove the interim self-rescue surplus warning once #11 ships |
 | 23 | Restore the exit-penalty ladder copy once #7 makes it real |
+
+## 10b IS NOT THEORETICAL — IT ALREADY FIRED
+
+Timeline, established 2026-08-09 from the VPS crontab and `route_rr.js` state:
+
+| when | what |
+|---|---|
+| 2026-07-27 | `route_rr.js` written to work around `_findExternalPair`. Live T1 was `[2129, 890, 101]` against threshold 381 — two pairs already dead. |
+| 2026-08-06 | cron line commented out (`# TRIM-2026-08-06`). The mask is removed. Nothing else changes. |
+| 2026-08-08/09 | **254 members frozen in T1.1 MatA.** Owner reports pair-A not rotating; member ticket (Sherwyn) says the same. |
+| 2026-08-09 | Mitigated with `setEntryThresholds(_, 1000000)` — every pair under threshold, so pair 0 always wins. T1.1 MatA 316 -> 333 rotations, 254 members released. |
+
+Three days between removing the workaround and the freeze. The mitigation treated
+the symptom; `_findExternalPair` is the cause and was not identified until the
+keeper source was read on 2026-08-09.
+
+**The mitigation is not a resting state.** At `route=1000000` pair 0 takes every
+new registration, so T1.2 and T1.3 MatA are now starved — live entry counts
+`[3483, 595, 8]`. It traded a T1.1 freeze for a T1.2/T1.3 freeze. This is why
+10b ships in V8.48 rather than living on as a threshold value.
+
+**Current holding configuration (must not drift before V8.48):**
+- `routeEntryThreshold = 1000000` (the mitigation)
+- `route_rr.js` cron trimmed 2026-08-06 AND kill switch `route_rr.OFF` set 2026-08-09
+- Item 16 reverts the threshold; item 17 deletes the script — both AFTER 10b ships
 
 ## SIZE BASELINE — measured 2026-08-09, before any V8.48 code
 
@@ -62,18 +88,31 @@ Deployed-bytecode size vs the EIP-170 limit of 24,576 bytes.
 | FigureEightMatrixV8 | 14,212 | 10,364 | 1 | clear |
 | PairManagerV8 | 13,528 | 11,048 | 7, 10 | clear |
 | StabilityFund | 13,372 | 11,204 | — | clear |
+| V8Governance | 12,179 | 12,397 | — | clear |
 | CNOVAToken | 12,878 | 11,698 | 4, 8, 9 | clear |
-| CNOVATreasury | not measured | — | 5 | **measure before editing** |
-| CNOVADirectSale | not measured | — | 6 | **measure before editing** |
+| CNOVADirectSale | 8,832 | 15,744 | 6 | clear |
+| CommunityWallet | 7,827 | 16,749 | — | clear |
+| CNOVATreasury | 7,138 | 17,438 | 5 | clear |
+| CNOVABuybackReserve | 6,392 | 18,184 | — | clear |
+| CouponRegistry | 4,271 | 20,305 | — | clear |
+| OnrampRewardPool | 3,745 | 20,831 | — | clear |
+| TierRouterLib | 3,085 | **21,491** | 2, 3 | the destination — 21 KB of room |
 
-Three of the ten contracts in this release are within 600 bytes of the limit,
-and two of the three carry scope items. That is the single largest schedule
-risk in V8.48 — bigger than any individual defect.
+All 16 watched contracts fit today. But three are within 600 bytes of the
+limit, and two of the three carry scope items (TierRouter: 2, 3 — MatrixKeeper:
+12). That is the single largest schedule risk in V8.48 — bigger than any
+individual defect on the list.
+
+The good news the baseline buys us: **every other contract in the release is
+under 13 KB.** Items 4/5/6/7/8/9/10/11 all land in contracts with 10 KB+ of
+headroom and carry effectively zero size risk. The size problem is not a
+release-wide problem — it is exactly two contracts, and both have a library
+already built or planned to absorb the overflow (TierRouterLib at 3,085 bytes
+has 21 KB free; MatrixKeeperLib per item 12a does not exist yet).
 
 `scripts/sizes.js` WATCH list was itself incomplete: it omitted CNOVATreasury
 and CNOVADirectSale, both of which V8.48 modifies (items 5 and 6). Extended
-8 -> 16 contracts. Re-run to fill the two "not measured" rows before item 4/5/6
-work begins.
+8 -> 16 contracts, and the gate now covers every contract the release touches.
 
 **Rule for this release:** run `scripts/sizes.js` after EVERY contract edit, not
 at the end. On a 142-byte budget, discovering the overflow at deploy time costs
@@ -93,7 +132,13 @@ before-baseline first.
 ## Suggested order (dependency, not priority)
 
 1. **Sizes baseline** — `scripts/sizes.js`, record every contract.
-2. **#10 rescueReentry** — the live defect; smallest change, proven template.
+2. **#10b `_findExternalPair` + #10 `rescueReentry` — SHIP TOGETHER.** 10 alone is
+   unsafe: it redirects rescued members from MatB to MatA, and rescues are MatB's
+   dominant feed today (T1 MatA rot 761 vs MatB 3,216). 10b is what makes 10 safe —
+   it restores new-registration flow to every pair's MatA, so MatA rotation climbs,
+   so crossings climb, so MatB is fed through its DESIGNED channel
+   (`_finalizeCrossing` MatA -> partner) instead of through a bug's side effect.
+   Fixing either one alone starves the other half.
 3. **#11 surplus** — money loss, self-contained, same file.
 4. **#4/#5/#6 floor set** — one-liners, already decided, already live in copy.
 5. **#8/#9 vest ledger** — self-contained in CNOVAToken.
