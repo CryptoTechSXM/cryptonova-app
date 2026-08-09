@@ -430,6 +430,125 @@ approval (frontend + scripts/ + /root/keeper/) and re-verify the amount. The
 wiring check catches "nothing calls this"; this catches "callers still believe
 the old price".
 
+## 10. CRITICAL — saturated pairs trap their members; chainNext is dead code
+
+Found 2026-08-09 from the owner's observation that "members in T1A are not
+rotating". Verified in source AND on-chain. This is the most severe finding of
+the audit and should gate the V8.48 release.
+
+### The defect
+
+`MatrixLogicLib._finalizeCrossing` (:769):
+
+    if (!cfg.isMatrixA && self.pairManager != address(0)) {
+        ... IPairManagerOverflow(self.pairManager).rescueReentry(member, ref, pIdx);
+        return;                                  // <-- ALWAYS returns here
+    }
+    address destination = (!cfg.isMatrixA && self.chainNext != address(0))
+        ? self.chainNext : self.partner;         // <-- unreachable from MatB
+
+A PairManager is always set in production, so the `chainNext` branch NEVER
+executes for MatB. Its own comment admits it: "chainNext is only a legacy
+fallback for deployments without a PairManager."
+
+`PairManagerV8.rescueReentry` (:285) then does:
+
+    dest = p.totalRegistered >= routeEntryThreshold ? p.matrixB : p.matrixA;
+
+So at saturation a pair's MatB cycle-outs are seated back into THE SAME MatB.
+
+### Consequence
+
+Each pair is a CLOSED system. Nothing ever crosses between pairs:
+- new registrations -> routing pair's MatA only (`registerDirectFor` :424)
+- MatA cycle-out    -> own MatB (`self.partner`)
+- MatB cycle-out    -> own MatB once saturated (never leaves)
+
+**A saturated pair's MatA receives NOTHING and freezes permanently.** Members
+seated there can never cycle again — not slowly, never.
+
+### Live evidence 2026-08-09 (scripts/diag_pair_starvation.js)
+
+    routeEntryThreshold = 400   active routing pair = T1.3
+
+    T1.1  registered 3427/400  SATURATED
+         MatA  occ 127  rotations   316  parked  0   <-- FROZEN (315 -> 316 in 24h)
+         MatB  occ 127  rotations  3160  parked 85   <-- circulating in place
+    T1.2  registered  588/400  SATURATED
+         MatA  occ 127  rotations   289  parked 11   <-- FROZEN
+         MatB  occ 126  rotations   322  parked 39
+    T1.3  registered    8/400  below threshold
+         MatA  occ   8  rotations     0
+         MatB  occ   0  rotations     0
+
+T1.1 MatB rotated 3,160 times; its configured chainNext target (T1.2 MatA) sits
+at 289 — and those 289 came from T1.2's OWN registrations while it was the
+routing pair. **Zero cross-pair movement has ever occurred.**
+
+**254 members (127 in T1.1 MatA + 127 in T1.2 MatA) are permanently frozen.**
+Member ticket: Sherwyn 0x7d3c94885d2022200934d4908bca7b47905bbcf6, seat 12 of
+T1.1 MatA. Previously answered as "~11 rotations out" — that answer was WRONG
+and rests on the dead chainNext reading; it must be corrected.
+
+### Fix (owner's proposal, and the wiring already exists)
+
+Owner 2026-08-09: "T1A is the only way in, but when T1B cycles out it should go
+to a pair A and continue up the ladder." Correct. `chainNext` is ALREADY
+configured as a complete ring: T1.1MatA->T1.1MatB->T1.2MatA->T1.2MatB->
+T1.3MatA->T1.3MatB->T1.1MatA. The fix is to let the MatB branch USE it.
+
+**Do NOT simply revert to V8.43.** That version forwarded saturated-pair rescues
+to pair N+1 and starved the new pairs' MatBs (comment cites MatA rot 254-291
+with MatB rot 0 on pairs 2-5). A COMPLETE ring avoids this — each MatB is fed by
+its own MatA, each MatA by the previous pair's MatB — but the ring must be
+unbroken, and the factory must wire chainNext on every new pair it spawns
+(VERIFY: does MatrixPairFactory set chainNext, and does it re-point the last
+pair's MatB back to pair 1 when a new pair is added?).
+
+### Open questions — ANSWERED 2026-08-09
+
+**1. Does the factory wire chainNext, and re-point the ring on expansion? YES.**
+`PairManagerV8.addPair` (:480) already does all of it:
+
+    if (pairId == 0) { chainHead = matA; lastChainB = matB;
+                       matB.setChainNext(matA); }
+    else { lastChainB.setChainNext(matrixA);              // prev B -> new A
+           matrixA.setChainAuthorized(lastChainB, true);
+           matrixB.setChainNext(chainHead);               // new B  -> first A
+           chainHead.setChainAuthorized(matrixB, true);
+           lastChainB = matrixB; }
+
+It maintains the ring on every spawn AND grants the cross-matrix `_enterMatrix`
+permission (`chainAuthorized`, enforced at MatrixLogicLib:250). Confirmed live:
+T1.1MatA->T1.1MatB->T1.2MatA->T1.2MatB->T1.3MatA->T1.3MatB->T1.1MatA.
+**Nothing needs building. The ring exists, is permissioned, and self-maintains —
+`_finalizeCrossing` simply never reads it.**
+
+**2. Does restoring the ring unfreeze the existing 254? YES, in this order.**
+- T1.1 MatB cycle-outs enter T1.2 MatA (full) -> each arrival rotates it ->
+  **T1.2 MatA unfreezes immediately**
+- cascade continues into T1.2 MatB, then T1.3 MatA (occ 8/127) where it parks
+  until that fills
+- **T1.1 MatA is LAST**: needs T1.3 MatA to reach 127 and T1.3 MatB to fill and
+  begin cycling — roughly **246 crossings**. T1.1 MatB has 127 seated + 85
+  parked and rotates fast, so this should clear without intervention.
+- `adminForceRotateRoot` is available to accelerate T1.1 MatA if needed.
+
+### Scope conclusion
+
+The fix is ONE BRANCH in `_finalizeCrossing` — let the MatB path fall through to
+`chainNext` instead of short-circuiting into `rescueReentry`. All supporting
+infrastructure (ring wiring, chainAuthorized permissions, fee approval pattern)
+is already present and proven.
+
+Remaining design decision: what `rescueReentry` should still be used for. It was
+added in V8.44 to stop frozen MatBs, but with a complete ring each MatB is fed
+by its own MatA and each MatA by the previous pair's MatB, so the starvation it
+guarded against cannot recur while the ring is unbroken. Options: (a) delete the
+short-circuit entirely, (b) keep rescueReentry only for the PARKED/idle path and
+send normal cycle-outs through chainNext.
+
+
 ## Context
 
 - Deploy version at discovery: deployed_addresses_v8_47.json, Base Sepolia.
