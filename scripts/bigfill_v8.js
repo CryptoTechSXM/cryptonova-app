@@ -376,10 +376,27 @@ async function simulateManualUpgrades({
         fNonce++;
       }
 
-      // Approve TierRouter to spend the target tier's fee
+      // Approve TierRouter for fee + outstanding rescue debt.
+      // AUDIT 2026-08-08: this approved only `fee`, so every upgrade reverted for
+      // members carrying rescue debt — i.e. everyone the self-rescue step had just
+      // processed (observed: 12/12 T5 upgrades failed). V8.47's upgrade gate folds
+      // SF.memberDebtOf(member) into the same transaction. Identical to the
+      // frontend defect fixed 2026-08-07 via _upgradeDebtDue.
+      // NOTE: simulateManualUpgrades is a TOP-LEVEL function — main()'s SF_ADDR is
+      // NOT in scope here. Resolve from the addresses file, which IS module-scope.
+      let _debtDue = 0n;
+      try {
+        const _sfAddr = require(ADDRESSES_FILE).stabilityFund;
+        if (_sfAddr) {
+          _debtDue = BigInt(await new ethers.Contract(
+            _sfAddr, ['function memberDebtOf(address) view returns (uint256)'],
+            ethers.provider).memberDebtOf(w.address));
+        }
+      } catch (_) { _debtDue = 0n; }
+      const _need = fee + _debtDue;
       const allowance = await usdc.allowance(w.address, tierRouterAddr);
-      if (allowance < fee) {
-        await (await usdc.connect(conn).approve(tierRouterAddr, fee)).wait();
+      if (allowance < _need) {
+        await (await usdc.connect(conn).approve(tierRouterAddr, _need)).wait();
       }
 
       await (await tierRouter.connect(conn).manualUpgrade(targetTierIndex, { gasLimit: 15_000_000 })).wait();
@@ -478,9 +495,19 @@ async function simulateSelfRescues({ walletList, matrices, usdc, rawFunder, fund
       }
 
       // Approve matrix to pull shortfall (contract pulls only what it needs).
+      // AUDIT 2026-08-08: RESCUE_APPROVAL is a flat $15 and its own comment says
+      // it was sized for T1. Self-rescue now runs on every tier, where the
+      // shortfall can reach fee - reserve (T3 $25, T5 $125), so higher tiers
+      // reverted with ERC20InsufficientAllowance. Approve this matrix's own
+      // ENTRY_FEE, which covers any possible shortfall at any tier.
+      let _needApprove = RESCUE_APPROVAL;
+      try {
+        const _entryFee = BigInt(await matrix.ENTRY_FEE());
+        if (_entryFee > _needApprove) _needApprove = _entryFee;
+      } catch (_) {}
       const allowance = await usdc.allowance(w.address, addr);
-      if (allowance < RESCUE_APPROVAL) {
-        await (await usdc.connect(conn).approve(addr, RESCUE_APPROVAL)).wait();
+      if (allowance < _needApprove) {
+        await (await usdc.connect(conn).approve(addr, _needApprove)).wait();
         await sleep(1);
       }
 
@@ -509,7 +536,24 @@ async function simulateSelfRescues({ walletList, matrices, usdc, rawFunder, fund
             walletState = ` [joined=${m.hasEverJoined} inMatrix=${m.isInMatrix} parkedAt=${parkedTs} withdrawable=${fmt6(m.withdrawable)} reserve=${fmt6(m.crossingReserve)} walletUSDC=${fmt6(usdcW)}]`;
           } catch { walletState = ' [state query failed]'; }
           const rawHex = staticErr.data ?? staticErr.error?.data ?? staticErr.info?.error?.data ?? null;
-          const rawHexStr = rawHex ? ` | RAW=${String(rawHex).slice(0, 130)}` : '';
+          // AUDIT 2026-08-08: RAW was truncated at 130 chars, which cut off the
+          // allowance/needed words — the only numbers that say WHY it failed.
+          // Decode the two OZ errors this path actually produces.
+          let rawHexStr = rawHex ? ` | RAW=${String(rawHex).slice(0, 200)}` : '';
+          try {
+            if (rawHex) {
+              const _i = new ethers.Interface([
+                'error ERC20InsufficientBalance(address sender, uint256 balance, uint256 needed)',
+                'error ERC20InsufficientAllowance(address spender, uint256 allowance, uint256 needed)',
+              ]);
+              const _d = _i.parseError(rawHex);
+              if (_d?.name === 'ERC20InsufficientAllowance') {
+                rawHexStr = ` | ALLOWANCE TOO LOW: spender=${_d.args[0]} allowance=${fmt6(_d.args[1])} needed=${fmt6(_d.args[2])}`;
+              } else if (_d?.name === 'ERC20InsufficientBalance') {
+                rawHexStr = ` | WALLET TOO POOR: balance=${fmt6(_d.args[1])} needed=${fmt6(_d.args[2])}`;
+              }
+            }
+          } catch (_) {}
           console.warn(`  ⚠ selfRescue ${label} ${w.address.slice(0, 10)}… STATIC CALL REVERT: ${reason}${walletState}${rawHexStr}`);
         }
         skipped++;
