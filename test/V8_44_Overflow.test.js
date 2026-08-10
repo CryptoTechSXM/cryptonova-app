@@ -753,4 +753,69 @@ describe("V8.44 — overflow rework: own members return to own pair", function (
       "the new member really did enter pair 0").to.equal(true);
     expect(await matA2.isActiveInMatrix(newcomer.address)).to.equal(false);
   });
+
+  // ───────────────────────────────────────────────────────────────────────────
+  // V8.48 — THE 2ND-PAIR ROUTE ON THE ORDINARY RE-ENTRY PATH.
+  //
+  // Owner's rule: A -> B -> A **2nd pair** when the member already holds a seat in
+  // this pair. It was live on rescueReentry (item 31) and on the double
+  // (TierRouter:1382) but NOT on ordinary re-entry: sameTierTarget steered an
+  // already-seated member to their own MatB, which V8.46's universal pair guard
+  // refuses outright, so the re-entry reverted and the member PARKED — for want of a
+  // seat that existed one pair over.
+  // ───────────────────────────────────────────────────────────────────────────
+
+  async function callRegisterFor(ctx, member, targetPair) {
+    await ethers.provider.send("hardhat_impersonateAccount", [ctx.trAddr]);
+    await ethers.provider.send("hardhat_setBalance", [ctx.trAddr, "0x56BC75E2D63100000"]);
+    const asRouter = await ethers.getSigner(ctx.trAddr);
+    await ctx.usdc.mint(ctx.trAddr, FEE);
+    await ctx.usdc.connect(asRouter).approve(ctx.pmAddr, FEE);
+    const rc = await (await ctx.pm.connect(asRouter)
+      .registerFor(member, ctx.W1.address, targetPair, { gasLimit: 16_000_000 })).wait();
+    await ethers.provider.send("hardhat_stopImpersonatingAccount", [ctx.trAddr]);
+    const ev = rc.logs
+      .map(l => { try { return ctx.pm.interface.parseLog(l); } catch { return null; } })
+      .filter(Boolean).find(e => e.name === "MemberRouted");
+    expect(ev, "MemberRouted not emitted").to.not.equal(undefined);
+    return ev.args.pairId;
+  }
+
+  it("O9: re-entry into a pair the member already occupies takes the 2ND-PAIR route, never parks", async function () {
+    const ctx = await deployTwoPairs(4);
+    const { matA, matA2, W1 } = ctx;
+
+    await reg(ctx, W1, ethers.ZeroAddress);
+    expect(await matA.isActiveInMatrix(W1.address),
+      "W1 holds a seat in pair 0 — the duplicate condition").to.equal(true);
+
+    // TierRouter's re-entry passes the member's OWN pair (sameTierTarget). Pre-fix this
+    // aimed at pair 0's MatB and the universal pair guard refused it.
+    const dest = await callRegisterFor(ctx, W1.address, 0);
+
+    expect(dest, "must be routed to the next pair where the member holds nothing").to.equal(1n);
+    expect(await matA2.isActiveInMatrix(W1.address), "…and actually seated there").to.equal(true);
+
+    // The V8.46 invariant still holds: two PAIRS yes, both halves of one pair never.
+    expect((await matA.isActiveInMatrix(W1.address)) && (await ctx.matB.isActiveInMatrix(W1.address)),
+      "must not hold both halves of pair 0").to.equal(false);
+  });
+
+  it("O9b: CONTROL — a member who holds nothing in the target pair still seats THERE", async function () {
+    // Without this, O9 would pass if registerFor simply always diverted, which would
+    // break the DEFAULT route (A -> B -> A same pair) and quietly dilute every re-entry
+    // into the next pair. The branch must fire ONLY on a real duplicate.
+    const ctx = await deployTwoPairs(4);
+    const { matA, matA2, W1, sigs } = ctx;
+
+    await reg(ctx, W1, ethers.ZeroAddress);
+    const fresh = sigs[30];
+    expect(await matA.isActiveInMatrix(fresh.address), "holds nothing anywhere").to.equal(false);
+
+    const dest = await callRegisterFor(ctx, fresh.address, 0);
+
+    expect(dest, "no duplicate, so the target pair stands — own pair by default").to.equal(0n);
+    expect(await matA.isActiveInMatrix(fresh.address)).to.equal(true);
+    expect(await matA2.isActiveInMatrix(fresh.address), "must NOT have been diverted").to.equal(false);
+  });
 });

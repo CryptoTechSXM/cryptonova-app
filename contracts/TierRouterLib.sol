@@ -31,14 +31,33 @@ interface ILSF {
 library TierRouterLib {
     using SafeERC20 for IERC20;
 
-    /// @notice Re-entry ALWAYS returns to the member's own MatA; toMatB only when the
-    ///         member already occupies their own MatA (figure-eight self-sustain).
+    /// @notice Re-entry ALWAYS returns to the member's own MatA. A -> B -> A.
+    ///
+    ///         V8.48: `toMatB` is now ALWAYS false. It used to be set when the member
+    ///         already occupied their own MatA, sending the re-entry to their own MatB
+    ///         instead — but V8.46's UNIVERSAL PAIR GUARD (MatrixLogicLib:278) refuses a
+    ///         seat when the member holds the PARTNER, so that destination could never
+    ///         succeed. The re-entry reverted, V8.46-C caught it, and the member PARKED —
+    ///         for want of a seat that existed one pair over.
+    ///
+    ///         Item 10 reached exactly this conclusion for the sibling path and recorded
+    ///         it in V8_48_SCOPE.md: *"steering an already-seated member to MatB swaps one
+    ///         revert for another"*. `rescueReentry` was fixed then; this was not, so the
+    ///         owner's SECOND ROUTE (A -> B -> A **2nd pair**, taken when the member
+    ///         already holds a seat in this pair) existed on the rescue path and on the
+    ///         double, but never on ordinary re-entry.
+    ///
+    ///         The duplicate case is now handled ONE LEVEL DOWN, in
+    ///         PairManagerV8.registerFor — the single chokepoint every TierRouter seating
+    ///         passes through — so re-entry, double and upgrade are all covered by one
+    ///         guard rather than three patched call sites. Same doctrine as the V8.46 seat
+    ///         guard. `registerForMatB` is unreachable as a result; see V8_48_SCOPE.md.
     function sameTierTarget(address matrixB, address member)
         external view returns (bool toMatB, uint256 target)
     {
-        target = ILMat(matrixB).pairIndex();
-        address ownMatA = ILMat(matrixB).partner();
-        toMatB = ownMatA != address(0) && ILMat(ownMatA).isActiveInMatrix(member);
+        member;                                   // duplicate handling moved to registerFor
+        target = ILMat(matrixB).pairIndex();      // own pair
+        toMatB = false;                           // own MatA. Always.
     }
 
     /// @notice Draw a member's FREE earnings from one matrix toward `remaining`, returning

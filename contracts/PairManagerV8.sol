@@ -480,13 +480,19 @@ contract PairManagerV8 is Ownable2Step {
      * @param member   The member being entered
      * @param referrer Sponsor address (locked in TierRouter)
      */
-    /// @notice V8.41 FIFO: TierRouter passes the explicit target pair index.
-    ///         - Upgrades (new tier): pass 0 — first pair of the destination tier.
-    ///         - Re-entries / double-entry (same tier): pass srcPairIndex + 1 —
-    ///           graduate from T1.x MatB → T1.(x+1) MatA.
-    ///         If targetPairIndex is out of range, falls back to the newest pair
-    ///         so handleCycleOut never reverts (safety net only — 90% MatB trigger
-    ///         should always have the next pair deployed before it is needed).
+    /// @notice TierRouter passes the explicit target pair index.
+    ///         - Re-entry (same tier):  the member's OWN pair  (TierRouterLib.sameTierTarget)
+    ///         - Double  (same tier):   freePairFor()          (TierRouter:1382)
+    ///         - Upgrade (next tier):   0, the destination tier's first pair
+    ///         If targetPairIndex is out of range, falls back to the newest pair so
+    ///         handleCycleOut never reverts (safety net only — the 90% MatB trigger should
+    ///         always have the next pair deployed before it is needed).
+    ///
+    ///         V8.48: the stale V8.41 note here said re-entries pass `srcPairIndex + 1` to
+    ///         "graduate from T1.x MatB -> T1.(x+1) MatA". That FORWARD-graduation rule is
+    ///         long gone — V8.46 made re-entry return to the member's own pair — and it
+    ///         directly contradicted both the code and the routing rule. Corrected rather
+    ///         than left, because the next person to read it would have believed it.
     function registerFor(address member, address referrer, uint256 targetPairIndex) external {
         require(msg.sender == tierRouter, "PM8: not tierRouter");
         require(pairs.length > 0,         "PM8: no pairs");
@@ -495,6 +501,45 @@ contract PairManagerV8 is Ownable2Step {
 
         // Safety: clamp to newest pair if caller passes a stale/invalid index
         if (targetPairIndex >= pairs.length) targetPairIndex = pairs.length - 1;
+
+        // V8.48 — THE 2ND-PAIR ROUTE, placed at the CHOKEPOINT.
+        //
+        // Owner's routing rule, stated repeatedly:
+        //     A -> B -> A same pair     default
+        //     A -> B -> A 2nd pair      the member already holds a seat in this pair
+        //     A -> B -> A upgrade pair  tier upgrade
+        //
+        // The middle route existed on rescueReentry (item 31) and on the double
+        // (TierRouter:1382) but NOT on ordinary re-entry. There, sameTierTarget steered an
+        // already-seated member to their own MatB — a destination V8.46's universal pair
+        // guard (MatrixLogicLib:278) refuses outright, because it rejects a seat when the
+        // member holds the PARTNER. So the re-entry reverted, V8.46-C caught it, and the
+        // member PARKED. Exactly the outcome the owner ruled out: "a member eligible to
+        // cross should not be parked, a new pair should be spawned so they have space to
+        // sit."
+        //
+        // Handling it HERE rather than in sameTierTarget covers re-entry, double AND
+        // upgrade with ONE guard instead of three patched call sites — the same reasoning
+        // that put the V8.46 seat guard at the single point a seat is actually taken. For
+        // the double and upgrade this is a no-op: the double already passes a free pair,
+        // and upgrades are gated tier-wide by holdsSeatIn() before they get here.
+        //
+        // No dilution risk: this cannot fire for a NEW member. It requires an existing
+        // seat, and new members reach the matrix through registerDirectFor, not this.
+        Pair storage tgt = pairs[targetPairIndex];
+        if (IFigureEightMatrixV8PM(tgt.matrixA).isActiveInMatrix(member) ||
+            (tgt.matrixB != address(0) &&
+             IFigureEightMatrixV8PM(tgt.matrixB).isActiveInMatrix(member))) {
+            uint256 alt = _freePairFor(member, targetPairIndex);
+            if (alt == type(uint256).max) {
+                // Seated in EVERY pair. Spawn one rather than park them. try/catch inside
+                // _forceExpand, so a factory failure cannot revert the cycle-out.
+                _forceExpand();
+                alt = _freePairFor(member, targetPairIndex);
+                require(alt != type(uint256).max, "PM8: no seat available for duplicate");
+            }
+            targetPairIndex = alt;
+        }
 
         Pair storage p = pairs[targetPairIndex];
         address matA   = p.matrixA;
