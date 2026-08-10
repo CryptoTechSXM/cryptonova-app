@@ -110,6 +110,27 @@ contract StabilityFund is Ownable2Step {
     // V8.9: community carve now lives in SplitConfig at matrix level — default 0 here.
     uint256 public communityCarveOutBps = 0;
 
+    /// @notice V8.48 item 26 — SURPLUS-ONLY community redirect (owner proposal 2026-08-09).
+    ///
+    ///         DISTINCT FROM communityCarveOutBps ABOVE, deliberately. That one carves a
+    ///         slice of EVERY L1 deposit unconditionally. This one fires ONLY while the
+    ///         fund is at or above sfTarget(). Together they express a policy the DAO can
+    ///         actually tune: "the community gets nothing until the Stability Fund is
+    ///         healthy, and a share of everything after that". Set both and they stack —
+    ///         the carve is taken first, then this applies to what remains.
+    ///
+    ///         DEFAULT 0 = NO BEHAVIOUR CHANGE AT DEPLOY. Nothing moves until governance
+    ///         votes a rate in.
+    ///
+    ///         L3 IS DELIBERATELY UNTOUCHED — that overflow funds BuybackReserve, which
+    ///         supports the CNOVA floor (scope items 4/5/6). Do not extend this to it.
+    uint256 public communityOverflowBps = 0;
+
+    /// @notice Lifetime USDC routed to the CommunityWallet from this contract, by BOTH
+    ///         the unconditional carve and the surplus redirect. The carve had no
+    ///         accounting at all before V8.48 — money left and nothing recorded it.
+    uint256 public totalRoutedToCommunity;
+
     // ── Sliding formula target ────────────────────────────────────────────────
     /// @notice V8.21: sfTarget is now a DERIVED view (see the `sfTarget()`
     ///         function below), not a plain storage slot -- ABI shape is
@@ -182,6 +203,11 @@ contract StabilityFund is Ownable2Step {
     event CommunityCarveOutBpsSet(uint256 bps);
     event WithdrawalFeeRouted(uint8 indexed tier, uint256 toSF, uint256 toBuyback, uint256 healthBps);
     event GovernanceSet(address indexed governance);
+    /// @notice V8.48 item 26. `sfBalanceAtCheck` and `target` are the values the surplus
+    ///         test actually used, so the decision is auditable after the fact rather than
+    ///         inferred from a balance that has since moved.
+    event CommunityOverflowRouted(uint8 indexed tierIdx, uint256 amount, uint256 sfBalanceAtCheck, uint256 target);
+    event CommunityOverflowBpsSet(uint256 bps);
     // V8.21
     event SfTargetMultiplierSet(uint8 indexed tierIndex, uint256 multiplier);
     event SfTargetAutoModeSet(bool enabled);
@@ -360,6 +386,19 @@ contract StabilityFund is Ownable2Step {
         emit CommunityCarveOutBpsSet(bps);
     }
 
+    /// @notice V8.48 item 26: share of each L1 deposit redirected to the CommunityWallet
+    ///         WHILE the fund is at or above target. Same enumerated menu as the carve
+    ///         (0-5%) so governance cannot fat-finger a large number.
+    function setCommunityOverflowBps(uint256 bps) external onlyOwnerOrGovernance {
+        require(
+            bps == 0 || bps == 100 || bps == 200 ||
+            bps == 300 || bps == 400 || bps == 500,
+            "SF: invalid overflow bps"
+        );
+        communityOverflowBps = bps;
+        emit CommunityOverflowBpsSet(bps);
+    }
+
     // ── Health formula ────────────────────────────────────────────────────────
 
     /// @notice V8.21: the EFFECTIVE current SF health target (6-dec USDC).
@@ -475,10 +514,37 @@ contract StabilityFund is Ownable2Step {
                 if (carve > 0) {
                     amount -= carve;
                     usdc.forceApprove(communityWallet, carve);
-                    try ICommunityWallet(communityWallet).deposit(carve) {}
+                    try ICommunityWallet(communityWallet).deposit(carve) {
+                        totalRoutedToCommunity += carve;   // V8.48: this was untracked
+                    }
                     catch {
                         // CommunityWallet rejected deposit — keep in SF instead
                         amount += carve;
+                        usdc.forceApprove(communityWallet, 0);
+                    }
+                }
+            }
+
+            // V8.48 item 26 — SURPLUS REDIRECT.
+            //
+            // totalBalance is read HERE, before this deposit is credited below, so the
+            // incoming amount cannot tip its own test. Without that ordering a deposit
+            // arriving at exactly the target would qualify itself, and the fund would
+            // start leaking to the community one deposit early.
+            if (layer == 1 && communityWallet != address(0) && communityOverflowBps > 0
+                && totalBalance >= sfTarget()) {
+                uint256 target = sfTarget();
+                uint256 over   = (amount * communityOverflowBps) / 10_000;
+                if (over > 0) {
+                    amount -= over;
+                    usdc.forceApprove(communityWallet, over);
+                    try ICommunityWallet(communityWallet).deposit(over) {
+                        totalRoutedToCommunity += over;
+                        emit CommunityOverflowRouted(tierIdx, over, totalBalance, target);
+                    } catch {
+                        // Same failure policy as the carve: never lose the money, keep it
+                        // in the SF and clear the approval.
+                        amount += over;
                         usdc.forceApprove(communityWallet, 0);
                     }
                 }
