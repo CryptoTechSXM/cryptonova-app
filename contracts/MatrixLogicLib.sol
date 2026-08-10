@@ -210,6 +210,33 @@ library MatrixLogicLib {
     event OrphanFeePooled(uint256 poolShare, address destination, string source);
     event OrphanFeeRouted(uint256 amount, uint256 acct1Share, uint256 poolShare, uint256 founderShare, string source);
     event EarningsWithdrawn(address indexed member, uint256 amount);
+
+    /// @notice V8.48 item 37 — EVERY credit says WHERE IT CAME FROM.
+    ///
+    ///         Before this, `_credit` moved money and emitted NOTHING, so two of the four
+    ///         earning paths were invisible to any consumer: the 2.5% direct earn on entry
+    ///         and the L1 referral payment. Chain pay and pool share emitted, so the
+    ///         dashboard could attribute exactly those two and no others — a member watched
+    ///         their balance rise with no way to learn why. Worse, an ORPHANED L1 (no
+    ///         referrer) emitted `OrphanFeeRouted`, so the FAILURE case was observable while
+    ///         the success case was silent.
+    ///
+    ///         `ChainPayDistributed` and `PoolShareCredited` are DELIBERATELY KEPT: the
+    ///         frontend and the VPS keepers read them today, and removing them in the same
+    ///         release would break live tooling. Retire them only once the frontend has
+    ///         migrated to this stream.
+    event EarningsCredited(
+        address indexed member,
+        address indexed payer,
+        uint8   indexed source,
+        uint256 amount
+    );
+
+    uint8 internal constant SRC_DIRECT_ENTRY = 1;  // 2.5% carve on the member's own entry
+    uint8 internal constant SRC_L1_REFERRAL  = 2;  // paid to the entrant's referrer
+    uint8 internal constant SRC_CHAIN_PAY    = 3;  // up to 6 levels above the entrant
+    uint8 internal constant SRC_POOL_SHARE   = 4;  // settled rotation pool
+    uint8 internal constant SRC_ORPHAN_ACCT1 = 5;  // orphaned fee routed to accountOne
     event PoolDistributed(uint256 totalPool, uint256 cycleNumber);
     event PoolShareCredited(address indexed member, uint256 position, uint256 amount);
     event StabilityContribution(uint8 indexed tier, uint256 amount, uint8 layer);
@@ -497,7 +524,7 @@ library MatrixLogicLib {
             }
         }
         if (share > 0) {
-            _credit(self, member, share);
+            _credit(self, member, share, SRC_POOL_SHARE, address(0));
             emit PoolShareCredited(member, self.matrixPos[member], share);
         }
     }
@@ -863,13 +890,13 @@ library MatrixLogicLib {
         // are expressed as fractions of entryFee (not of the 45% sub-pool).
         // Sum check: 5000 (cross) + 250 (instant) + 4750 (splits) = 10000
         m.crossingReserve += cfg.entryFee * CROSSING_RESERVE_BPS / BPS_DENOM;
-        _credit(self, newMember, cfg.entryFee * DIRECT_EARN_BPS / BPS_DENOM);
+        _credit(self, newMember, cfg.entryFee * DIRECT_EARN_BPS / BPS_DENOM, SRC_DIRECT_ENTRY, newMember);
         uint256 payBase = cfg.entryFee;
 
         // All BPS splits below apply to payBase (= entryFee in V8.32); values sum to 4750 BPS of entryFee.
         uint256 l1Amt = payBase * cfg.splitL1Bps / BPS_DENOM;
         if (m.referrer != address(0)) {
-            _credit(self, m.referrer, l1Amt);
+            _credit(self, m.referrer, l1Amt, SRC_L1_REFERRAL, newMember);
         } else {
             _routeOrphanFee(self, cfg, l1Amt, "L1");
         }
@@ -952,7 +979,7 @@ library MatrixLogicLib {
         if (amount == 0) return;
 
         uint256 acct1Share = amount * 20 / 100;
-        _credit(self, self.accountOne, acct1Share);
+        _credit(self, self.accountOne, acct1Share, SRC_ORPHAN_ACCT1, address(0));
 
         uint256 remaining = amount - acct1Share;
 
@@ -971,7 +998,7 @@ library MatrixLogicLib {
                 cfg.usdc.safeTransfer(cfg.devWallet, founderShare);
                 self.noReferrerFounderRouted += founderShare;
             } else {
-                _credit(self, self.accountOne, founderShare);
+                _credit(self, self.accountOne, founderShare, SRC_ORPHAN_ACCT1, address(0));
             }
         }
 
@@ -992,9 +1019,9 @@ library MatrixLogicLib {
         if (self.stabilityFund != address(0)) {
             SafeERC20.forceApprove(cfg.usdc, self.stabilityFund, amount);
             try IStabilityFund(self.stabilityFund).receiveLayer(cfg.tierIndex, amount, 1) {}
-                catch { _credit(self, self.accountOne, amount); }
+                catch { _credit(self, self.accountOne, amount, SRC_ORPHAN_ACCT1, address(0)); }
         } else {
-            _credit(self, self.accountOne, amount);
+            _credit(self, self.accountOne, amount, SRC_ORPHAN_ACCT1, address(0));
         }
         emit OrphanFeePooled(amount, self.communityWallet != address(0) ? self.communityWallet : self.stabilityFund, source);
     }
@@ -1022,17 +1049,26 @@ library MatrixLogicLib {
             address ancestor = self.posToMember[parentPos];
             if (ancestor != address(0)) {
                 uint256 amt = payBase * self.chainPayBps[lvl] / BPS_DENOM;
-                _credit(self, ancestor, amt);
+                _credit(self, ancestor, amt, SRC_CHAIN_PAY, newMember);
                 emit ChainPayDistributed(ancestor, newMember, lvl + 1, amt);
             }
             parentPos = parentPos / 2;
         }
     }
 
-    function _credit(MatrixState storage self, address recipient, uint256 amount) internal {
+    function _credit(
+        MatrixState storage self,
+        address recipient,
+        uint256 amount,
+        uint8   source,
+        address payer
+    ) internal {
         if (recipient == address(0) || amount == 0) return;
         self.members[recipient].withdrawable += amount;
         self.members[recipient].totalEarned  += amount;
+        // V8.48 item 37: the credit and its provenance are emitted together, so a
+        // breakdown can never disagree with a balance.
+        emit EarningsCredited(recipient, payer, source, amount);
         // V8.33: Earning from chain pay, direct earn, or pool distributions resets the idle
         // timer.  Without this, passively-earning members (others filling slots below them)
         // are incorrectly flagged as idle and reclaimed -- they ARE active, new joins are
