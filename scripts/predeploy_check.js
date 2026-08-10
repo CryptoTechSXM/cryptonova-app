@@ -37,6 +37,16 @@ function fail(msg) { console.error(`  ✗  ${msg}`); failed++; }
 function sep(title) { console.log(`\n── ${title} ${"─".repeat(Math.max(0, 60 - title.length))}`); }
 
 // ── Helper: read file text ─────────────────────────────────────────────────
+// V8.48: several checks below must distinguish a live CALL from a comment that
+// merely names the old function. Strip line and block comments first — otherwise
+// the tombstone comments documenting a removal trip the check that verifies it.
+function stripComments(txt) {
+  return String(txt)
+    .replace(/\/\*[\s\S]*?\*\//g, "")   // block comments
+    .replace(/^[ \t]*\/\/[^\n]*$/gm, "")  // whole-line // comments (leaves https:// alone)
+    .replace(/^[ \t]*\*[^\n]*$/gm, "");   // continuation lines of /** */ blocks
+}
+
 function read(relPath) {
   const full = path.join(ROOT, relPath);
   if (!fs.existsSync(full)) { fail(`File not found: ${relPath}`); return ""; }
@@ -196,18 +206,36 @@ if (creditSourceTxt) {
 // 7. index.html — TierRouter ABI uses uint256 for tierEntryFees
 // ─────────────────────────────────────────────────────────────────────────────
 sep("index.html — TierRouter ABI");
-const htmlPath = path.join(ROOT, "..", "..", "..", "..", "..", "CryptoNova-App", "index.html");
-// Try the mount path
-const htmlPaths = [
-  htmlPath,
-  "/sessions/happy-amazing-curie/mnt/CryptoNova-App/index.html"
-];
-let htmlTxt = "";
-for (const p of htmlPaths) {
-  if (fs.existsSync(p)) { htmlTxt = fs.readFileSync(p, "utf8"); break; }
+// V8.48: this used to hardcode a single session mount (/sessions/happy-amazing-curie/…)
+// and point at CryptoNova-App. Both were stale, so every frontend check below
+// silently SKIPPED — which is the exact failure mode the CODE<->FRONTEND PARITY
+// rule exists to prevent. Resolve the mount at runtime and prefer the app that is
+// actually being deployed.
+const APP_DIRS = ["CryptoNova-Testnet-App", "CryptoNova-App", "CryptoNova-Mainnet-App"];
+function findIndexHtml() {
+  const roots = [];
+  // walk up from ROOT looking for a dir that contains one of APP_DIRS
+  let cur = ROOT;
+  for (let i = 0; i < 8; i++) { roots.push(cur); cur = path.dirname(cur); }
+  // plus whatever session mount we happen to be running under
+  try {
+    for (const s of fs.readdirSync("/sessions")) roots.push(path.join("/sessions", s, "mnt"));
+  } catch (_) { /* not on a mounted session — fine */ }
+  const envPath = process.env.FRONTEND_INDEX_HTML;
+  if (envPath && fs.existsSync(envPath)) return envPath;
+  for (const r of roots) {
+    for (const a of APP_DIRS) {
+      const c = path.join(r, a, "index.html");
+      if (fs.existsSync(c)) return c;
+    }
+  }
+  return "";
 }
+const htmlFile = findIndexHtml();
+let htmlTxt = htmlFile ? fs.readFileSync(htmlFile, "utf8") : "";
+if (htmlFile) console.log(`  \u2139  frontend: ${htmlFile}`);
 if (!htmlTxt) {
-  console.log("  ℹ  index.html not found from script dir — skipping ABI check");
+  fail("index.html NOT FOUND — every frontend parity check below was skipped. Set FRONTEND_INDEX_HTML=<path> or fix APP_DIRS.");
 } else {
   if (htmlTxt.includes("tierEntryFees(uint8)")) {
     fail("TIER_ROUTER_ABI uses uint8 for tierEntryFees — causes execution reverted. Change to uint256.");
@@ -880,7 +908,7 @@ if (deployTxt) {
   }
 
   // V8Governance.sol: all 24 new scalar params + the boost-table array param
-  if (govTxtV20 && govTxtV20.includes("PARAM_CW_DISTRIBUTE_INTERVAL") &&
+  if (govTxtV20 && govTxtV20.includes("PARAM_CW_DISTRIBUTION_DAY") &&
       govTxtV20.includes("PARAM_CNOVA_BOOST_TABLE") && govTxtV20.includes("function proposeBoostTable(")) {
     ok("V8Governance.sol: V8.20 second-wave params (15-39) + proposeBoostTable() found");
   } else {
@@ -921,7 +949,7 @@ if (deployTxt) {
     fail("CNOVAToken.sol: setBoostTable() MISSING — PARAM_CNOVA_BOOST_TABLE has no target function");
   }
   if (cwTxtV20 && cwTxtV20.includes("function setGenesisBps(") && cwTxtV20.includes("function setDistributeRatio(") &&
-      cwTxtV20.includes("function setDistributeInterval(")) {
+      cwTxtV20.includes("function setDistributionDayOfMonth(")) {
     ok("CommunityWallet.sol: GOVERNOR_ROLE setters confirmed present (pre-existing)");
   } else {
     fail("CommunityWallet.sol: GOVERNOR_ROLE setters MISSING");
@@ -954,6 +982,112 @@ if (deployTxt) {
     fail("deploy_v8.js: CNOVAToken GOVERNOR_ROLE grant MISSING — CNOVA governance proposals will revert (role never granted)");
   }
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 18. V8.48 — CommunityWallet calendar distribution (the 25th of every month)
+// ─────────────────────────────────────────────────────────────────────────────
+// distributeInterval was a ROLLING 30-day window: each distribution pushed the
+// next one 30 days out from whenever the keeper happened to fire, so the date
+// drifted every month and never landed on the 25th. V8.48 replaces it with real
+// civil-calendar arithmetic. These checks exist because a partial revert of that
+// change compiles cleanly and only shows up as a wrong date to members.
+sep("V8.48 — CommunityWallet monthly calendar");
+{
+  const cwTxt   = read("contracts/CommunityWallet.sol");
+  const govTxt  = read("contracts/V8Governance.sol");
+  const mkTxt   = read("contracts/MatrixKeeper.sol");
+
+  if (cwTxt && !/\bdistributeInterval\b/.test(stripComments(cwTxt))) {
+    ok("CommunityWallet.sol: distributeInterval fully removed (no code references outside comments)");
+  } else {
+    fail("CommunityWallet.sol: distributeInterval still referenced in CODE — the rolling window is back, dates will drift off the 25th");
+  }
+  if (cwTxt && cwTxt.includes("uint8 public distributionDayOfMonth") &&
+      cwTxt.includes("function setDistributionDayOfMonth(")) {
+    ok("CommunityWallet.sol: distributionDayOfMonth + governor setter present");
+  } else {
+    fail("CommunityWallet.sol: distributionDayOfMonth / setDistributionDayOfMonth MISSING");
+  }
+  if (cwTxt && cwTxt.includes("function nextDistributionTime()") && cwTxt.includes("public view")) {
+    ok("CommunityWallet.sol: nextDistributionTime() is public (single source of truth for the frontend)");
+  } else {
+    fail("CommunityWallet.sol: nextDistributionTime() MISSING or not public — frontend countdown has nothing to read");
+  }
+  if (cwTxt && cwTxt.includes("_civil(") && cwTxt.includes("_fromCivil(")) {
+    ok("CommunityWallet.sol: civil-date helpers (_civil/_fromCivil) present");
+  } else {
+    fail("CommunityWallet.sol: _civil/_fromCivil MISSING — no calendar arithmetic, distribution cannot land on a fixed date");
+  }
+  if (cwTxt && cwTxt.includes("lastDistributionMonth") &&
+      cwTxt.includes('"CW: already distributed this month"')) {
+    ok("CommunityWallet.sol: once-per-month guard (lastDistributionMonth) present");
+  } else {
+    fail("CommunityWallet.sol: once-per-month guard MISSING — distribute() could fire repeatedly after the 25th");
+  }
+  // The day cap is what keeps February from silently skipping a month.
+  if (cwTxt && cwTxt.includes('require(day >= 1 && day <= 28')) {
+    ok("CommunityWallet.sol: distribution day capped at 28 (the date exists in February)");
+  } else {
+    fail("CommunityWallet.sol: day cap of 28 MISSING — a day of 29-31 would skip short months entirely");
+  }
+  // Governance param 39 was repointed; the old target no longer exists, so a
+  // stale route here compiles but reverts when a passed proposal is executed.
+  if (govTxt && govTxt.includes("PARAM_CW_DISTRIBUTION_DAY") &&
+      govTxt.includes("setDistributionDayOfMonth(uint8(value))") &&
+      !govTxt.includes("t.setDistributeInterval(value)")) {
+    ok("V8Governance.sol: param 39 repointed to setDistributionDayOfMonth (V8.48)");
+  } else {
+    fail("V8Governance.sol: param 39 still routes to the DELETED setDistributeInterval — a passed proposal would revert on execute");
+  }
+  if (mkTxt && mkTxt.includes("distributeReady()")) {
+    ok("MatrixKeeper.sol: still gates on distributeReady() (now calendar-based)");
+  } else {
+    fail("MatrixKeeper.sol: distributeReady() gate MISSING — monthly distribution won't auto-trigger");
+  }
+  // Frontend parity, the harder kind: the cohort split is PROSE in index.html. On
+  // 2026-08-10 one panel said Genesis 60% and another said 65%, against a contract
+  // default of 6000 bps. Nothing catches a wrong number in a sentence except a check
+  // that reads both and compares them.
+  if (cwTxt && htmlTxt) {
+    const bpsM = cwTxt.match(/genesisBps\s*=\s*([\d_]+)\s*;/);
+    if (!bpsM) {
+      fail("CommunityWallet.sol: could not read the genesisBps default — cohort-split parity is unverified");
+    } else {
+      const gPct = Number(bpsM[1].replace(/_/g, "")) / 100;
+      const pPct = 100 - gPct;
+      // Every percentage the page attributes to Genesis, wherever it is phrased.
+      const claims = [];
+      const pats = [
+        /Genesis[^.<]{0,40}\(#1[\u2013-]500\)[^%]{0,60}?(\d{1,3})%/g,
+        /Genesis Members<\/strong>\s*\(#1[\u2013-]500\)[\s\S]{0,80}?<strong>(\d{1,3})%<\/strong>/g,
+      ];
+      for (const re of pats) { let m; while ((m = re.exec(htmlTxt)) !== null) claims.push(Number(m[1])); }
+      if (claims.length === 0) {
+        console.log("  \u2139  index.html: no Genesis cohort percentage found in prose — nothing to compare");
+      } else if (claims.every((c) => c === gPct)) {
+        ok(`index.html: every Genesis cohort claim says ${gPct}% and matches genesisBps (${claims.length} place(s))`);
+      } else {
+        fail(`index.html: Genesis cohort prose says ${[...new Set(claims)].join("% / ")}% but the contract pays ${gPct}% (Pioneer ${pPct}%) \u2014 members are reading a number the contract does not honour`);
+      }
+    }
+  }
+
+  // Frontend parity: the countdown must read the contract's own next date, not
+  // recompute an interval client-side.
+  if (htmlTxt) {
+    if (htmlTxt.includes("nextDistributionTime")) {
+      ok("index.html: reads nextDistributionTime() (code<->frontend parity)");
+    } else {
+      fail("index.html: does NOT read nextDistributionTime() — the member-facing date is not the contract's date");
+    }
+    if (/distributeInterval\s*\(/.test(stripComments(htmlTxt))) {
+      fail("index.html: still calls distributeInterval() — that function no longer exists, the countdown will fall back to a fabricated value");
+    } else {
+      ok("index.html: no distributeInterval() call remains");
+    }
+  }
+}
+
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Summary

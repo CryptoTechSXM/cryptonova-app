@@ -132,6 +132,38 @@ automatically" is accurate.
    sometimes $0.00 on a live balance. **That is a broken contract view, not missing money.**
 
 
+## COMMUNITY WALLET — "when do I get paid?" (answer changed 2026-08-10)
+
+**Answer members now: the 25th of every month.** As of V8.48 that is what the contract
+does, not just what the site says.
+
+Be careful with this one, because the honest history matters if anyone quotes an older
+answer back at you:
+
+- Until 2026-08-07 the WEBSITE had a "day of month >= 25" gate. The CONTRACT never did.
+- The contract ran on a rolling 30-day timer measured from whenever the previous
+  distribution actually fired. That drifts: 4 Sep, ~4 Oct, ~3 Nov — about five days a
+  year. So "the 25th" was a real belief with nothing behind it.
+- V8.48 makes it real. `distributionDayOfMonth = 25`, at most one distribution per
+  calendar month, and the day is capped at 28 so February always has the date.
+
+Three things members ask next:
+
+**"How do I know the date is right?"** The dashboard reads `nextDistributionTime()`
+straight off the contract. It is not a countdown the website computes — if the site and
+the chain ever disagreed, the site would be the one that is wrong, and this is exactly
+why we removed the second copy of the rule.
+
+**"What if I do not claim?"** Each distribution EXPIRES on the next monthly date.
+Unclaimed USDC is swept back into the pool and shared with everyone on the following
+run. `claim()` itself has no time gate, but the share it would pay does. Say "claim
+within the month", not "claim whenever".
+
+**"What is my split?"** Genesis (#1–500) 60%, Pioneer (#501–1,000) 40%, of the 50% that
+distributes each month; the other 50% rolls over and compounds. If you see 65/35
+anywhere, that was a stale line in the site fixed on 2026-08-10 — 60/40 is what the
+contract pays.
+
 ## Sources
 
 - `contracts/MatrixLogicLib.sol` — `_distributePayments`, `_cycleOutRoot`,

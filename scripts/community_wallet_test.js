@@ -4,15 +4,21 @@
  * End-to-end testnet verification of CommunityWallet.sol.
  * Runs against V8.10 deployed contracts on Base Sepolia.
  *
+ * V8.48: distribution is a CALENDAR DATE (the 25th of every month), not a rolling
+ * 30-day interval. distributeInterval and setDistributeInterval no longer exist, so
+ * the old "shorten the interval to 2 minutes, then restore it" trick is gone with
+ * them — there is no interval left to shorten. The testnet path is forceDistribute(),
+ * which bypasses the calendar gate and, deliberately, does NOT consume the month's
+ * real slot: QA on the 3rd still leaves the genuine run on the 25th intact.
+ *
  * Steps:
- *   1. Report current CW state (balance, enrolled count, next distribute time)
+ *   1. Report current CW state (balance, enrolled count, NEXT DISTRIBUTION DATE)
  *   2. Enroll test wallets via enrollBatch() (owner-only)
- *   3. Reduce distributeInterval to 2 minutes (governor-only)
- *   4. Wait for interval, then call distribute()
- *   5. Report claimable amounts per wallet
- *   6. Call claim() for wallets we control (deployer + W1)
- *   7. Verify USDC received
- *   8. Restore interval to 30 days (optional)
+ *   3. Reach a distributable state — distribute() if the date has arrived,
+ *      otherwise forceDistribute() (admin, testnet-only)
+ *   4. Report claimable amounts per wallet
+ *   5. Call claim() for wallets we control (deployer + W1), verify USDC received
+ *   6. Re-report the next distribution date
  *
  * Usage:
  *   cd C:\CryptoNite-Smart-Contracts\CryptoNova
@@ -53,8 +59,10 @@ const CW_ABI = [
   'function totalEnrolled() view returns (uint256)',
   'function genesisCount() view returns (uint256)',
   'function pioneerCount() view returns (uint256)',
-  'function distributeInterval() view returns (uint256)',
+  'function nextDistributionTime() view returns (uint256)',
+  'function distributionDayOfMonth() view returns (uint8)',
   'function lastDistributionTime() view returns (uint256)',
+  'function lastDistributionMonth() view returns (uint256)',
   'function distributeReady() view returns (bool)',
   'function availablePool() view returns (uint256)',
   'function claimable(address member) view returns (uint256)',
@@ -62,7 +70,8 @@ const CW_ABI = [
   'function distributionCount() view returns (uint256)',
   // Write
   'function enrollBatch(address[] calldata members) external',
-  'function setDistributeInterval(uint256 interval) external',
+  'function setDistributionDayOfMonth(uint8 day) external',
+  'function forceDistribute() external',
   'function distribute() external',
   'function claim() external returns (uint256)',
   // Events
@@ -115,15 +124,19 @@ async function main() {
   const totalEnrolled = await cw.totalEnrolled();
   const genesisCount  = await cw.genesisCount();
   const pioneerCount  = await cw.pioneerCount();
-  const interval      = await cw.distributeInterval();
+  const nextDistTime  = await cw.nextDistributionTime();
+  const dayOfMonth    = await cw.distributionDayOfMonth();
   const lastDist      = await cw.lastDistributionTime();
   const distCount     = await cw.distributionCount();
   const pool          = await cw.availablePool();
   const ready         = await cw.distributeReady();
 
   const now = BigInt(Math.floor(Date.now() / 1000));
-  const nextDist = lastDist + interval;
-  const secsUntil = nextDist > now ? nextDist - now : 0n;
+  // Do NOT recompute the schedule here. nextDistributionTime() is the contract's own
+  // answer and the only one the frontend is allowed to show; a second implementation
+  // in this script would be a second source of truth, which is precisely how "claim on
+  // the 25th" became a belief the contract never supported.
+  const secsUntil = nextDistTime > now ? nextDistTime - now : 0n;
 
   console.log(`  USDC balance:       ${fmt(cwBal)}`);
   console.log(`  Available pool:     ${fmt(pool)}`);
@@ -131,11 +144,13 @@ async function main() {
   console.log(`  Genesis members:    ${genesisCount} / 500`);
   console.log(`  Pioneer members:    ${pioneerCount} / 500`);
   console.log(`  Distributions run:  ${distCount}`);
-  console.log(`  Interval:           ${Number(interval) / 60} minutes`);
+  console.log(`  Distribution day:   the ${dayOfMonth}th of every month`);
   console.log(`  Last distributed:   ${lastDist === 0n ? 'never' : new Date(Number(lastDist) * 1000).toISOString()}`);
   console.log(`  Distribute ready:   ${ready}`);
+  console.log(`  Next distribution:  ${new Date(Number(nextDistTime) * 1000).toISOString()}`);
   if (secsUntil > 0n) {
-    console.log(`  Next distribute in: ${Number(secsUntil)} seconds`);
+    const d = Number(secsUntil) / 86400;
+    console.log(`                      (in ${d >= 1 ? d.toFixed(1) + ' days' : (Number(secsUntil) / 3600).toFixed(1) + ' hours'})`);
   }
 
   // Check cohort for each test wallet
@@ -173,31 +188,37 @@ async function main() {
     console.log(`  Total enrolled now: ${await cw.totalEnrolled()}`);
   }
 
-  // ── STEP 3: Reduce distributeInterval to 2 minutes ────────────────────────
-  sep('STEP 3 — Set distributeInterval to 2 minutes (testing only)');
+  // ── STEP 3: Reach a distributable state ───────────────────────────────────
+  //
+  // V8.48: there is no interval to shorten any more. Either the calendar date has
+  // arrived, or we use the admin/testnet bypass. Nothing else can make distribute()
+  // succeed, and nothing here should try to fake the date.
+  sep('STEP 3 — Reach a distributable state');
 
-  const currentInterval = await cw.distributeInterval();
-  const TWO_MINUTES = 120n;
-
-  if (currentInterval <= TWO_MINUTES) {
-    console.log('  ✅  Already at short interval — skipping');
-  } else {
-    const tx = await cw.setDistributeInterval(TWO_MINUTES, { gasLimit: 100_000n });
-    console.log(`  TX: ${tx.hash}`);
-    await tx.wait(1);
-    console.log(`  ✅  distributeInterval set to 2 minutes`);
-  }
-
-  // Check if distribute is ready
   const readyNow = await cw.distributeReady();
-  if (!readyNow) {
-    const last = await cw.lastDistributionTime();
-    const now2 = BigInt(Math.floor(Date.now() / 1000));
-    const newInterval = await cw.distributeInterval();
-    const waitSecs = Number((last + newInterval) - now2) + 5;
-    if (waitSecs > 0) {
-      console.log(`  ⏳  Waiting ${waitSecs}s for interval to pass...`);
-      await sleep(waitSecs * 1000);
+  if (readyNow) {
+    console.log('  \u2705  distributeReady() is TRUE — the monthly date has arrived, no bypass needed.');
+  } else {
+    const nd = await cw.nextDistributionTime();
+    console.log(`  distributeReady() is FALSE — next real distribution ${new Date(Number(nd) * 1000).toISOString()}`);
+    console.log('  Using forceDistribute() (admin, testnet chains only).');
+    try {
+      const tx = await cw.forceDistribute({ gasLimit: 800_000n });
+      console.log(`  TX: ${tx.hash}`);
+      await tx.wait(1);
+      // Verify rather than assume: a reverted-but-mined tx and a no-op both look
+      // like success from the tx hash alone.
+      const after = await cw.distributionCount();
+      console.log(`  \u2705  forceDistribute() confirmed — distributionCount now ${after}`);
+      const ndAfter = await cw.nextDistributionTime();
+      if (ndAfter === nd) {
+        console.log('  \u2705  the real monthly slot is intact (next date unchanged) — as designed.');
+      } else {
+        console.log(`  \u26a0\ufe0f   next date MOVED to ${new Date(Number(ndAfter) * 1000).toISOString()} — a forced run should not consume the month.`);
+      }
+    } catch (e) {
+      console.log(`  \u274c  forceDistribute() failed: ${e.shortMessage || e.message}`);
+      console.log('     (it is DEFAULT_ADMIN_ROLE-gated and rejects non-testnet chain ids)');
     }
   }
 
@@ -221,7 +242,9 @@ async function main() {
 
     const isReady = await cw.distributeReady();
     if (!isReady) {
-      console.log('  ⚠️   distributeReady() returned false — interval not elapsed yet.');
+      const nd2 = await cw.nextDistributionTime();
+      console.log(`  \u2139   distributeReady() is false — next distribution ${new Date(Number(nd2) * 1000).toISOString()}.`);
+      console.log('     Either this month has already distributed, or the date has not arrived.');
     } else {
       const tx = await cw.distribute({ gasLimit: 500_000n });
       console.log(`  TX: ${tx.hash}`);
@@ -286,18 +309,19 @@ async function main() {
     console.log('  Add W1_PRIVATE_KEY to .env to test member claim().');
   }
 
-  // ── STEP 7: Restore interval to 30 days ──────────────────────────────────
-  sep('STEP 7 — Restore distributeInterval to 30 days');
-
-  const THIRTY_DAYS = BigInt(30 * 24 * 60 * 60);
-  const curInterval = await cw.distributeInterval();
-  if (curInterval >= THIRTY_DAYS) {
-    console.log('  Already at 30 days — no change needed.');
-  } else {
-    const tx = await cw.setDistributeInterval(THIRTY_DAYS, { gasLimit: 100_000n });
-    console.log(`  TX: ${tx.hash}`);
-    await tx.wait(1);
-    console.log('  ✅  distributeInterval restored to 30 days');
+  // ── STEP 7: (removed in V8.48) ───────────────────────────────────────────
+  //
+  // This step used to restore distributeInterval to 30 days after shrinking it to 2
+  // minutes for the test. Neither the shrink nor the restore exists any more: the
+  // schedule is a governed calendar day, not a duration this script may edit. If the
+  // date itself ever needs to change it goes through governance param 39
+  // (PARAM_CW_DISTRIBUTION_DAY), never through a test script.
+  sep('STEP 7 — Schedule (read-only)');
+  {
+    const day  = await cw.distributionDayOfMonth();
+    const next = await cw.nextDistributionTime();
+    console.log(`  Distribution day: the ${day}th of every month (governed, 1-28)`);
+    console.log(`  Next scheduled:   ${new Date(Number(next) * 1000).toISOString()}`);
   }
 
   // ── Final report ──────────────────────────────────────────────────────────
