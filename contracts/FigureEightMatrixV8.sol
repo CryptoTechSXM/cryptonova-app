@@ -620,31 +620,57 @@ contract FigureEightMatrixV8 is Ownable2Step {
         }
     }
 
+    /// @notice V8.48 item 1 — LINE-FOR-LINE MIRROR OF withdrawCore.
+    ///
+    ///         MEASURED DIVERGENCE BEFORE THIS FIX (2026-08-10, six-account cohort on
+    ///         Base Sepolia): this view summed to 0.00 for 0x1C56C6 while that member
+    ///         withdrew 124.99 USD in two transactions minutes later. Across the cohort it
+    ///         under-reported by 199, 191 and 178 USD on the three largest accounts, and
+    ///         returned a flat zero on three live balances.
+    ///
+    ///         THREE WAYS IT DIVERGED, all corrected below:
+    ///
+    ///         1. CROSSING RESERVE. It locked ENTRY_FEE - crossingReserve in EVERY matrix.
+    ///            withdrawCore locks it ONLY when automationReserve > 0 — i.e. only in the
+    ///            member's HIGHEST tier, because that is the sole place the reserve is read.
+    ///            In every other matrix the real withdrawal path has no lock at all, so the
+    ///            view was reporting money as trapped that the member could take instantly.
+    ///            This single difference was most of the gap.
+    ///
+    ///         2. RESCUE DEBT. withdrawCore repays outstanding StabilityFund debt off the
+    ///            top before anything else. This view did not model debt at all, so it
+    ///            OVER-reported for indebted members even while under-reporting overall.
+    ///
+    ///         3. IMPOSSIBILITY. withdrawCore REVERTS ("balance fully reserved for
+    ///            automation") where this returned a number. Now both agree on zero.
+    ///
+    ///         The frontend had already diagnosed this and stopped trusting the view —
+    ///         index.html computes its headline itself and carries the note "Contract
+    ///         backlog for next redeploy: make the freeWithdrawable VIEW mirror". That
+    ///         workaround can be removed once this ships.
+    ///
+    ///         RULE FOR ANYONE EDITING EITHER: a view that describes an action must be
+    ///         changed in the same commit as that action, and V8_48_Withdrawable.test.js
+    ///         asserts the two agree. This bug existed because nobody ever compared them.
     function freeWithdrawable(address member) external view returns (uint256) {
-        // V8.44 (item D): include un-settled pool accrual.
-        uint256 bal = _state.members[member].withdrawable
-            + MatrixLogicLib.pendingPoolOf(_state, _cfg(), member);
-        if (bal == 0) return 0;
-        if (_state.members[member].isInMatrix) {
-            // V8.31: crossing cost = ENTRY_FEE, funded from crossingReserve first then withdrawable.
-            // Only lock the withdrawable portion needed beyond the reserve.
-            uint256 crossNeeded = ENTRY_FEE > _state.members[member].crossingReserve
-                ? ENTRY_FEE - _state.members[member].crossingReserve
-                : 0;
-            if (crossNeeded > 0) {
-                if (bal <= crossNeeded) return 0;
-                bal -= crossNeeded;
-            }
-        }
-        if (_state.tierRouter != address(0)) {
-            uint8 highest = ITierRouter(_state.tierRouter).memberHighestTier(member);
-            if (highest > 0 && (highest - 1) == tierIndex) {
-                uint256 res = ITierRouter(_state.tierRouter).reservedFor(member);
-                if (res >= bal) return 0;
-                bal -= res;
-            }
-        }
-        return bal;
+        return _claimable(member);
+    }
+
+    /// @notice V8.48 item 1 — what actually LANDS IN THE WALLET: claimable minus the
+    ///         withdrawal fee. freeWithdrawable() is what you may withdraw; this is what
+    ///         you receive. The dashboard already shows both ("Fee: 0.0750 · You receive:
+    ///         4.9250") by computing the fee itself; this makes it readable on-chain.
+    function netClaimableOf(address member) external view returns (uint256) {
+        uint256 gross = _claimable(member);
+        if (gross == 0) return 0;
+        return gross - (gross * _state.withdrawalFeeBps / 10_000);
+    }
+
+    /// @dev Body lives in MatrixLogicLib.claimableOf — see the note there. Keeping it
+    ///      out of this contract keeps MatrixPairFactory (which EMBEDS this bytecode)
+    ///      under EIP-170; it had 108 bytes of headroom when this was inlined here.
+    function _claimable(address member) internal view returns (uint256) {
+        return MatrixLogicLib.claimableOf(_state, _cfg(), member);
     }
 
     function getMemberTotalWithdrawn(address member) external view returns (uint256) { return _state.members[member].totalWithdrawn; }

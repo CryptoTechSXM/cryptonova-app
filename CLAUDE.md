@@ -132,6 +132,13 @@ deployer wallet.
 
 ## PowerShell rules
 
+**Never put `$` in a double-quoted PowerShell string.** `"...\$199..."` does NOT escape it —
+backslash is not an escape character in PowerShell, and `$199` is parsed as a variable
+reference, so it expands to nothing. A commit message written that way silently loses every
+figure in it (happened 2026-08-10: "under-reports by up to \$199" committed as
+"under-reports by up to \"). PowerShell escapes with a BACKTICK: `` `$199 ``. Simplest fix
+for commit messages: use single quotes, or write "199 USD" and avoid the symbol entirely.
+
 - **NEVER chain commands with `&&`** — PowerShell does not support it. Always separate commands.
 - **One command at a time.** Give one command, wait for output + no-error confirmation, then give the next. Never give multiple steps at once.
 - Run scripts with hardhat, not node: `npx hardhat run scripts/X.js --network baseSepolia`

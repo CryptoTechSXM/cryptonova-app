@@ -504,8 +504,63 @@ library MatrixLogicLib {
 
     /// @notice V8.44 (item D): view of a member's un-settled pool accrual
     ///         (net of the rescue-debt redirect estimate).
-    function pendingPoolOf(MatrixState storage self, ImmutableConfig memory cfg, address member)
+    /// @notice V8.48 item 1 — the claimable balance, mirroring withdrawCore's deduction
+    ///         order exactly. Lives HERE rather than in FigureEightMatrixV8 because
+    ///         MatrixPairFactory EMBEDS the matrix creation bytecode: +286 bytes on the
+    ///         matrix cost the factory 248 and left it with 108 bytes of EIP-170 headroom.
+    ///         A library is LINKED, so this costs the factory nothing.
+    ///
+    ///         Order (must match withdrawCore):
+    ///           settle-equivalent -> debt off the top -> crossing lock (ONLY when
+    ///           automation is active) -> automation reserve.
+    function claimableOf(MatrixState storage self, ImmutableConfig memory cfg, address member)
         external view returns (uint256)
+    {
+        // GROSS pool, not pendingPoolOf. withdrawCore applies the clawback inside
+        // _settlePool and then repays the REMAINING debt from the full balance, so the
+        // net effect is the whole debt deducted ONCE from the gross. Using the netted
+        // figure here and then subtracting the full debt would take the clawback twice.
+        uint256 bal = self.members[member].withdrawable + _poolShareGross(self, cfg, member);
+        if (bal == 0) return 0;
+
+        if (self.stabilityFund != address(0)) {
+            uint256 debt = IStabilityFund(self.stabilityFund).memberDebtOf(member);
+            if (debt >= bal) return 0;
+            bal -= debt;
+        }
+
+        uint256 automationReserve = 0;
+        if (self.tierRouter != address(0)) {
+            uint8 highest = ITierRouter(self.tierRouter).memberHighestTier(member);
+            if (highest > 0 && (highest - 1) == cfg.tierIndex) {
+                automationReserve = ITierRouter(self.tierRouter).reservedFor(member);
+            }
+        }
+
+        if (self.members[member].isInMatrix && automationReserve > 0) {
+            uint256 crossNeeded = cfg.entryFee > self.members[member].crossingReserve
+                ? cfg.entryFee - self.members[member].crossingReserve
+                : 0;
+            if (crossNeeded > 0) {
+                if (bal <= crossNeeded) return 0;
+                bal -= crossNeeded;
+            }
+        }
+
+        if (automationReserve > 0) {
+            if (automationReserve >= bal) return 0;
+            bal -= automationReserve;
+        }
+        return bal;
+    }
+
+    /// @dev Accrued pool share BEFORE the debt clawback estimate. Split out for V8.48
+    ///      item 1: claimableOf needs the GROSS figure, because withdrawCore applies the
+    ///      clawback during _settlePool and then repays the REMAINING debt from the whole
+    ///      balance — a full-debt deduction on top of an already-netted pool would remove
+    ///      the clawback portion twice.
+    function _poolShareGross(MatrixState storage self, ImmutableConfig memory cfg, address member)
+        internal view returns (uint256)
     {
         uint256 k = self.poolK[member];
         if (k == 0) return 0;
@@ -513,7 +568,13 @@ library MatrixLogicLib {
         if (dA1 == 0) return 0;
         uint256 dAr = self.poolAr - self.poolArSnap[member];
         uint256 W = cfg.matrixSize * (cfg.matrixSize + 1) / 2 - 1;
-        uint256 share = (k * dA1 - dAr) / W;
+        return (k * dA1 - dAr) / W;
+    }
+
+    function pendingPoolOf(MatrixState storage self, ImmutableConfig memory cfg, address member)
+        external view returns (uint256)
+    {
+        uint256 share = _poolShareGross(self, cfg, member);
         if (share == 0) return 0;
         // V8.47: net of the member-level redirect estimate (banded clawback).
         if (self.stabilityFund != address(0)) {

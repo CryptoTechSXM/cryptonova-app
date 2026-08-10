@@ -190,9 +190,26 @@ describe("V8.44 — UX batch (C2, G1, G2, G3, I3)", function () {
     const ctx = await deployTwoTiers();
     const { usdc, tr, matA1, matA2, owner, W1, sigs } = ctx;
     await reg(ctx, W1, ethers.ZeroAddress);
-    for (let i = 0; i < 6; i++) await reg(ctx, sigs[10 + i], W1.address); // L1 earnings → W1
+    // FOUR referrals, not six — SETUP ADJUSTED FOR V8.48 ITEM 1, assertion unchanged.
+    //
+    // This test needs W1's free earnings to fall SHORT of the fee, because the shortfall
+    // is the entire thing hybridUpgrade exists to cover. Six referrals used to produce
+    // that, but only because freeWithdrawable applied the crossing-reserve lock even to a
+    // member who had opted OUT of automation — the comment below ("frees earnings beyond
+    // the crossing lock") describes exactly that now-corrected behaviour.
+    //
+    // Item 1 made the view mirror withdrawCore, which does NOT lock the crossing reserve
+    // when automation is off. So six referrals now yield $7.852 against a $7.00 fee and
+    // there is no shortfall left to test. Four keeps a comfortable one.
+    //
+    // THE ASSERTIONS BELOW ARE UNTOUCHED. This test protects a real member-facing
+    // invariant — earnings are spent first, the wallet pays only the difference — and that
+    // invariant did not change. Only the fixture's ability to construct the scenario did.
+    // The setup guard on line ~202 is what caught this, loudly, instead of the test
+    // quietly passing on a case it was no longer exercising.
+    for (let i = 0; i < 4; i++) await reg(ctx, sigs[10 + i], W1.address); // L1 earnings → W1
 
-    // Disable W1's automation so reservedFor = 0 (frees earnings beyond the crossing lock)
+    // Disable W1's automation so reservedFor = 0 (with item 1, this frees the FULL balance)
     await tr.connect(W1).setMemberOptions(true, false, false);
     // Open the T2-T5 gate so W1 is upgrade-eligible without a cycle
     await tr.connect(owner).setTierWhaleGateActive(5, true);
