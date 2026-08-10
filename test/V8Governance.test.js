@@ -78,7 +78,10 @@ async function deployFixture() {
 
   // Placeholder stabilityFund address -- governance tests never trigger a real
   // parked rescue, so MatrixKeeper just needs a non-zero address here.
-  const matrixKeeper = await (await ethers.getContractFactory("MatrixKeeper")).deploy(
+  const matrixKeeper = await (await ethers.getContractFactory("MatrixKeeper", {
+    // V8.48 item 12a: the discovery scan lives in MatrixKeeperLib and must be linked.
+    libraries: { MatrixKeeperLib: (await (await ethers.getContractFactory("MatrixKeeperLib")).deploy()).target },
+  })).deploy(
     await tierRouter.getAddress(), admin.address
   );
 

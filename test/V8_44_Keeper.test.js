@@ -43,7 +43,10 @@ async function deployWithKeeper(size) {
     await tr.getAddress(),       await pm.getAddress(),
   ];
 
-  const keeper = await (await ethers.getContractFactory("MatrixKeeper"))
+  const keeper = await (await ethers.getContractFactory("MatrixKeeper", {
+    // V8.48 item 12a: the discovery scan lives in MatrixKeeperLib and must be linked.
+    libraries: { MatrixKeeperLib: (await (await ethers.getContractFactory("MatrixKeeperLib")).deploy()).target },
+  }))
     .deploy(trAddr, sfAddr);
   const keeperAddr = await keeper.getAddress();
 

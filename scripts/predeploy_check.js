@@ -584,7 +584,11 @@ if (trText) {
 }
 
 if (mkText) {
-  if (mkText.includes("WORK_DISTRIBUTE_CW") && mkText.includes("distributeReady")) {
+  // V8.48 item 12a: the CW gate moved into MatrixKeeperLib with the rest of the scan.
+  // Search BOTH files — the trigger still exists, it just no longer lives where this
+  // check was looking. (This check caught the move, which is the point of it.)
+  const mkScanText = mkText + read("contracts/MatrixKeeperLib.sol");
+  if (mkScanText.includes("WORK_DISTRIBUTE_CW") && mkScanText.includes("distributeReady")) {
     ok("MatrixKeeper.sol: WORK_DISTRIBUTE_CW + distributeReady() check found in checkUpkeep()");
   } else {
     fail("MatrixKeeper.sol: WORK_DISTRIBUTE_CW/distributeReady missing — monthly CW distribution won't trigger via Chainlink");
@@ -1039,10 +1043,12 @@ sep("V8.48 — CommunityWallet monthly calendar");
   } else {
     fail("V8Governance.sol: param 39 still routes to the DELETED setDistributeInterval — a passed proposal would revert on execute");
   }
-  if (mkTxt && mkTxt.includes("distributeReady()")) {
-    ok("MatrixKeeper.sol: still gates on distributeReady() (now calendar-based)");
+  // V8.48 item 12a moved this gate into MatrixKeeperLib along with the rest of the scan.
+  const keeperScan = (mkTxt || "") + read("contracts/MatrixKeeperLib.sol");
+  if (keeperScan.includes("distributeReady()")) {
+    ok("keeper: still gates on distributeReady() (now calendar-based, in MatrixKeeperLib)");
   } else {
-    fail("MatrixKeeper.sol: distributeReady() gate MISSING — monthly distribution won't auto-trigger");
+    fail("keeper: distributeReady() gate MISSING from BOTH MatrixKeeper.sol and MatrixKeeperLib.sol — monthly distribution won't auto-trigger");
   }
   // Frontend parity, the harder kind: the cohort split is PROSE in index.html. On
   // 2026-08-10 one panel said Genesis 60% and another said 65%, against a contract
@@ -1085,6 +1091,74 @@ sep("V8.48 — CommunityWallet monthly calendar");
     } else {
       ok("index.html: no distributeInterval() call remains");
     }
+  }
+}
+
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 19. V8.48 item 12a — MatrixKeeperLib extraction + library linkage
+// ─────────────────────────────────────────────────────────────────────────────
+// A keeper deployed WITHOUT its library linked does not fail loudly: every
+// checkUpkeep reverts, Chainlink reads that as "no work", and the whole automation
+// layer goes quiet with nothing in any log to say so. These checks exist because
+// that failure is silent by nature.
+sep("V8.48 item 12a — MatrixKeeperLib");
+{
+  const libTxt    = read("contracts/MatrixKeeperLib.sol");
+  const mkTxt12a  = read("contracts/MatrixKeeper.sol");
+
+  if (libTxt && libTxt.includes("library MatrixKeeperLib") && libTxt.includes("function discover(")) {
+    ok("MatrixKeeperLib.sol: library present with discover()");
+  } else {
+    fail("MatrixKeeperLib.sol: MISSING or has no discover() — the extraction is incomplete");
+  }
+  // external/public, NOT internal: an internal library function is INLINED back into the
+  // caller and buys exactly zero bytes. This is the check that the extraction is real.
+  if (libTxt && /function\s+discover\s*\([\s\S]{0,400}?\bexternal\b/.test(libTxt)) {
+    ok("MatrixKeeperLib.discover() is external (delegatecall — code lives in the library)");
+  } else {
+    fail("MatrixKeeperLib.discover() is not external — an internal library function is inlined back into MatrixKeeper and frees NO bytecode");
+  }
+  if (mkTxt12a && mkTxt12a.includes('import "./MatrixKeeperLib.sol"') &&
+      mkTxt12a.includes("MatrixKeeperLib.discover(cfg, lastGhostTime)")) {
+    ok("MatrixKeeper.sol: checkUpkeep delegates to MatrixKeeperLib.discover()");
+  } else {
+    fail("MatrixKeeper.sol: checkUpkeep does not call MatrixKeeperLib.discover() — the scan is still inline");
+  }
+  // The snapshot must carry all sixteen ScanCfg fields. A missing one is a compile
+  // error, but a field assigned to the WRONG source compiles fine — that is what
+  // V8_48_KeeperScan.test.js's mutation probe is for. Here we only check it is built.
+  const missing = ["idleSlotTimeout:", "extendedIdleTimeout:", "parkedGracePeriod:",
+                   "rescueRatioBps:", "frozenMatBTimeout:", "sfThresholds:", "sfLadder:",
+                   "pairManagers:", "links:"]
+    .filter((f) => !(mkTxt12a && mkTxt12a.includes(f)));
+  if (missing.length === 0) {
+    ok("MatrixKeeper.sol: ScanCfg snapshot assigns every scan input");
+  } else {
+    fail(`MatrixKeeper.sol: ScanCfg snapshot is missing ${missing.join(" ")} — checkUpkeep would read a zero for each`);
+  }
+
+  if (deployTxt.includes('getContractFactory("MatrixKeeperLib"') &&
+      deployTxt.includes("libraries: { MatrixKeeperLib: keeperLibAddr }")) {
+    ok("deploy_v8.js: MatrixKeeperLib deployed and LINKED into MatrixKeeper");
+  } else {
+    fail("deploy_v8.js: MatrixKeeperLib not deployed/linked — every checkUpkeep would revert and Chainlink would silently do nothing");
+  }
+  // Linked-library addresses are required to verify on Basescan and are otherwise
+  // unrecoverable after the deploy transcript scrolls away.
+  if (deployTxt.includes("MatrixKeeperLib: keeperLibAddr") &&
+      deployTxt.includes("MatrixLogicLib:  matrixLibAddr") &&
+      deployTxt.includes("TierRouterLib:   trLibAddr")) {
+    ok("deploy_v8.js: all three linked-library addresses are written to the addresses file");
+  } else {
+    fail("deploy_v8.js: linked-library addresses are NOT saved — Basescan verification of the linked contracts will need them and they are not recoverable later");
+  }
+  // The frozen reference copy is test-only. If it ever reaches a deploy script the
+  // 24kB pre-refactor keeper ships to mainnet alongside the real one.
+  if (deployTxt.includes("MatrixKeeperPrev")) {
+    fail("deploy_v8.js references MatrixKeeperPrev — that is a TEST-ONLY frozen copy and must never be deployed");
+  } else {
+    ok("MatrixKeeperPrev stays out of the deploy path (test-only frozen reference)");
   }
 }
 

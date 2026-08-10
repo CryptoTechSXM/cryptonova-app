@@ -417,7 +417,18 @@ async function main() {
 
   // ── 8. MatrixKeeper ──────────────────────────────────────────────────────
   sep("MatrixKeeper");
-  const MatrixKeeper = await ethers.getContractFactory("MatrixKeeper", deployer);
+  // V8.48 item 12a: the discovery scan lives in MatrixKeeperLib and MUST be linked.
+  // Without this the factory throws at getContractFactory time rather than producing a
+  // broken keeper, which is the failure mode we want — a keeper deployed with an
+  // unlinked library reverts on every checkUpkeep and Chainlink simply goes quiet.
+  const KeeperLib     = await ethers.getContractFactory("MatrixKeeperLib", deployer);
+  const keeperLib     = await deploy(KeeperLib, [], "MatrixKeeperLib");
+  const keeperLibAddr = await keeperLib.getAddress();
+
+  const MatrixKeeper = await ethers.getContractFactory("MatrixKeeper", {
+    libraries: { MatrixKeeperLib: keeperLibAddr },
+    signer: deployer,
+  });
   const keeper       = await deploy(MatrixKeeper, [trAddr, sfAddr], "MatrixKeeper");
   const keeperAddr   = await keeper.getAddress();
 
@@ -603,6 +614,15 @@ async function main() {
       stabilityFund: sfAddr, buybackReserve: bbrAddr, tierRouter: trAddr,
       matrixFactory: mfAddr, pairFactory: pairFactoryAddr,
       matrixKeeper: keeperAddr,
+      // V8.48 item 12a: LINKED LIBRARY ADDRESSES. Three contracts now ship with a linked
+      // library and none of the addresses were being recorded — Basescan verification of a
+      // linked contract REQUIRES them, and after the fact they are only recoverable by
+      // reading the deploy transcript or diffing bytecode. Record them at deploy time.
+      libraries: {
+        MatrixLogicLib:  matrixLibAddr,     // FigureEightMatrixV8, MatrixPairFactory
+        TierRouterLib:   trLibAddr,         // TierRouter
+        MatrixKeeperLib: keeperLibAddr,     // MatrixKeeper
+      },
       v8Governance: govAddr, communityWallet: cwAddr,
       liquidityReserve, directSale: dsAddr, couponRegistry: crAddr,
       tiers: tierAddresses,

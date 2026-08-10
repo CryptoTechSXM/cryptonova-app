@@ -30,7 +30,10 @@ async function deployKeeper() {
   const usdcAddr = await usdc.getAddress();
   const sf = await (await ethers.getContractFactory("StabilityFund")).deploy(usdcAddr, owner.address);
   const tr = await (await ethers.getContractFactory("TierRouter", { libraries: { TierRouterLib: (await (await ethers.getContractFactory("TierRouterLib")).deploy()).target } })).deploy(usdcAddr, owner.address);
-  const keeper = await (await ethers.getContractFactory("MatrixKeeper"))
+  const keeper = await (await ethers.getContractFactory("MatrixKeeper", {
+    // V8.48 item 12a: the discovery scan lives in MatrixKeeperLib and must be linked.
+    libraries: { MatrixKeeperLib: (await (await ethers.getContractFactory("MatrixKeeperLib")).deploy()).target },
+  }))
     .deploy(await tr.getAddress(), await sf.getAddress());
   return { keeper, owner, keeperEOA, stranger, member };
 }
