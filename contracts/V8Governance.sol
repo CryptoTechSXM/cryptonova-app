@@ -145,7 +145,7 @@ interface IGovernanceTarget {
     //    grant to V8Governance never existed at all until this deploy)
     function setGenesisBps(uint256 v) external;
     function setDistributeRatio(uint256 v) external;
-    function setDistributeInterval(uint256 v) external;
+    function setDistributionDayOfMonth(uint8 v) external;   // V8.48: was setDistributeInterval(uint256)
 }
 
 contract V8Governance is Ownable {
@@ -222,7 +222,7 @@ contract V8Governance is Ownable {
     // ── V8.20 second wave: CommunityWallet (GOVERNOR_ROLE) ────────────────────
     uint8 public constant PARAM_CW_GENESIS_BPS             = 37;
     uint8 public constant PARAM_CW_DISTRIBUTE_RATIO_BPS    = 38;
-    uint8 public constant PARAM_CW_DISTRIBUTE_INTERVAL     = 39;
+    uint8 public constant PARAM_CW_DISTRIBUTION_DAY        = 39;   // V8.48: was PARAM_CW_DISTRIBUTE_INTERVAL
     // ── V8.22: StabilityFund per-tier SF target multiplier ────────────────────
     /// @dev Reverses the V8.21 decision (sfTargetMultiplier was owner-only-array
     ///      only). Each tier gets its own id so the DAO can move one tier's
@@ -404,7 +404,7 @@ contract V8Governance is Ownable {
         // ── V8.20 second wave: CommunityWallet (GOVERNOR_ROLE) ─────────────────
         _allowedValues[PARAM_CW_GENESIS_BPS]              = [5000, 6000, 7000, 8000, 9000];
         _allowedValues[PARAM_CW_DISTRIBUTE_RATIO_BPS]     = [1000, 2500, 5000, 7500, 9000];
-        _allowedValues[PARAM_CW_DISTRIBUTE_INTERVAL]      = [7 days, 30 days, 90 days, 180 days, 365 days];
+        _allowedValues[PARAM_CW_DISTRIBUTION_DAY]         = [1, 10, 15, 20, 25];   // day of month, <=28
         // ── V8.22: StabilityFund per-tier SF target multiplier ────────────────
         // Same menu for all 10 -- the DAO picks whatever's appropriate for
         // each tier independently; no enforced ordering between tiers.
@@ -723,8 +723,8 @@ contract V8Governance is Ownable {
             t.setGenesisBps(value);
         } else if (paramId == PARAM_CW_DISTRIBUTE_RATIO_BPS) {
             t.setDistributeRatio(value);
-        } else if (paramId == PARAM_CW_DISTRIBUTE_INTERVAL) {
-            t.setDistributeInterval(value);
+        } else if (paramId == PARAM_CW_DISTRIBUTION_DAY) {
+            t.setDistributionDayOfMonth(uint8(value));
         // ── V8.22: StabilityFund per-tier SF target multiplier ────────────────
         } else if (paramId == PARAM_SF_MULT_T1) {
             t.setSfTargetMultiplierT1(value);

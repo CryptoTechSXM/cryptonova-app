@@ -46,8 +46,21 @@ describe("V8.48 item 27 — CommunityWallet cohort split", function () {
   }
 
   async function runDistribution() {
-    // distribute() gates on lastDistributionTime + distributeInterval (30d).
-    await ethers.provider.send("evm_increaseTime", [31 * DAY]);
+    // V8.48: distribute() gates on a CALENDAR DATE (the 25th) plus one-per-month, not on
+    // a rolling interval. A fixed +31 days is no longer a valid way to reach it — 31 days
+    // from an arbitrary start lands on an arbitrary day of the month, and any day before
+    // the 25th reverts "CW: before the monthly date".
+    //
+    // Jump to the contract's OWN nextDistributionTime() instead of computing a date here.
+    // A test that recomputes the schedule is a second, independent answer to the same
+    // question, and this project has already paid for one of those: a `day-of-month >= 25`
+    // gate lived in the frontend until 2026-08-07 and produced a belief the contract never
+    // supported. The contract is the single source of truth, in tests too.
+    const nextT = Number(await cw.nextDistributionTime());
+    const nowT  = (await ethers.provider.getBlock("latest")).timestamp;
+    if (nextT > nowT) {
+      await ethers.provider.send("evm_setNextBlockTimestamp", [nextT]);
+    }
     await ethers.provider.send("evm_mine", []);
     await cw.distribute();
     const d = await cw.distributions(0);

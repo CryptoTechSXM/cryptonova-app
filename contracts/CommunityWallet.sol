@@ -72,7 +72,31 @@ contract CommunityWallet is Ownable2Step, AccessControl {
     uint256 public genesisBps         = 6_000;   // 60% to Genesis cohort
     uint256 public pioneerBps         = 4_000;   // 40% to Pioneer cohort
     uint256 public distributeRatioBps = 5_000;   // 50% distributes, 50% rolls over
-    uint256 public distributeInterval = 30 days; // Chainlink upkeep cadence
+    /// @notice V8.48 — DISTRIBUTION IS A CALENDAR DATE, NOT AN INTERVAL (owner, 2026-08-10).
+    ///
+    ///         Was `distributeInterval = 30 days`, a ROLLING window from the last
+    ///         distribution. That drifts: 4 Sep, ~4 Oct, ~3 Nov — never landing on a fixed
+    ///         day, sliding ~5 days a year. It is also hard to tell a community: "roughly
+    ///         every 30 days, check the site" versus "the 25th of every month".
+    ///
+    ///         Range is capped at 28 so the date exists in February. Anything above 28
+    ///         would silently skip months.
+    uint8 public distributionDayOfMonth = 25;
+
+    /// @notice Monotonic year*12 + month of the last distribution. Guarantees AT MOST ONE
+    ///         distribution per calendar month, independent of how long the month is —
+    ///         which a day-count check alone cannot do (the 25th and the 31st are both
+    ///         ">= 25", and without this a second distribution could fire six days later).
+    uint256 public lastDistributionMonth;
+
+    /// @dev V8.48 testnet-only bypass for forceDistribute(). Before the calendar change
+    ///      forceDistribute() worked by zeroing lastDistributionTime, because that was
+    ///      what distribute() gated on. distribute() now gates on the calendar instead,
+    ///      so that reset became a no-op and forceDistribute() reverted on any day before
+    ///      the 25th -- silently, since no test covered it. This flag is the explicit
+    ///      bypass; it is set and cleared within a single admin call and is never true
+    ///      between transactions.
+    bool private _forcing;
 
     // =========================================================================
     // Member registry
@@ -134,7 +158,7 @@ contract CommunityWallet is Ownable2Step, AccessControl {
     event ExpiredSwept(uint256 indexed distId, uint256 unclaimedReturned);
     event GenesisBpsSet(uint256 bps);
     event DistributeRatioSet(uint256 bps);
-    event DistributeIntervalSet(uint256 interval);
+    event DistributionDayOfMonthSet(uint8 day);
 
     // =========================================================================
     // Constructor
@@ -244,7 +268,7 @@ contract CommunityWallet is Ownable2Step, AccessControl {
     /**
      * @notice Execute a monthly distribution.
      *
-     *         Callable by anyone after distributeInterval has elapsed.
+     *         Callable by anyone on or after distributionDayOfMonth, once per month.
      *         Designed to be called by Chainlink Automation — add
      *         `distributeReady()` to MatrixKeeper's checkUpkeep condition.
      *
@@ -252,13 +276,11 @@ contract CommunityWallet is Ownable2Step, AccessControl {
      *           1. Sweep expired prior distributions (unclaimed → pool)
      *           2. Compute pool = USDC balance - current pending claims
      *           3. Distribute distributeRatioBps% of pool to enrolled members
-     *           4. Record expiry window (distributeInterval from now)
+     *           4. Record expiry window (the NEXT monthly distribution date)
      */
     function distribute() external {
-        require(
-            block.timestamp >= lastDistributionTime + distributeInterval,
-            "CW: too soon"
-        );
+        // V8.48: calendar gate + claim-window end, computed together (see _gateAndExpiry).
+        (uint256 _monthIdx, uint256 _expiresAt) = _gateAndExpiry();
         require(totalEnrolled > 0, "CW: no members enrolled");
 
         // Step 1 — sweep expired
@@ -269,7 +291,8 @@ contract CommunityWallet is Ownable2Step, AccessControl {
         uint256 available = balance > totalActivePending
             ? balance - totalActivePending : 0;
 
-        lastDistributionTime = block.timestamp;
+        lastDistributionTime  = block.timestamp;
+        lastDistributionMonth = _monthIdx;
         if (available == 0) return; // nothing to distribute; time still advances
 
         uint256 toDistribute = (available * distributeRatioBps) / BPS_DENOM;
@@ -314,7 +337,10 @@ contract CommunityWallet is Ownable2Step, AccessControl {
             perGenesis:   perGenesis,
             perPioneer:   perPioneer,
             totalAmount:  actualDist,
-            expiresAt:    block.timestamp + distributeInterval,
+            // V8.48: claimable until the NEXT distribution is due — same calendar that
+            // schedules distributions, so there is never a gap where a share has expired
+            // but its replacement has not arrived, nor an overlap with two live at once.
+            expiresAt:    _expiresAt,
             totalClaimed: 0
         }));
         totalActivePending += actualDist;
@@ -330,9 +356,10 @@ contract CommunityWallet is Ownable2Step, AccessControl {
     /**
      * @notice Claim all available (non-expired) distribution shares.
      *
-     *         Members have distributeInterval (default 30 days) from each
-     *         distribution to claim. After that window, the share expires
-     *         and returns to the pool on the next _sweepExpired() call.
+     *         Members have until the NEXT monthly distribution date to claim each
+     *         share (V8.48: the 25th by default). After that the share expires and
+     *         returns to the pool on the next _sweepExpired() call — where it is
+     *         REDISTRIBUTED to the other members, not taken by the protocol.
      *
      * @return totalAmount  USDC transferred to msg.sender.
      */
@@ -379,10 +406,73 @@ contract CommunityWallet is Ownable2Step, AccessControl {
     /// @notice Returns true when distribute() is ready to fire.
     ///         Add to MatrixKeeper.checkUpkeep() conditions.
     function distributeReady() external view returns (bool) {
-        return (
-            totalEnrolled > 0 &&
-            block.timestamp >= lastDistributionTime + distributeInterval
-        );
+        if (totalEnrolled == 0) return false;
+        (uint256 y, uint256 m, uint256 d) = _civil(block.timestamp);
+        return d >= distributionDayOfMonth && (y * 12 + m) > lastDistributionMonth;
+    }
+
+    // ── Calendar helpers (Howard Hinnant's civil-date algorithms) ────────────
+    //
+    // Solidity has no date type. These are the standard, well-audited conversions and
+    // they are exact for every date after 1970 — no leap-year table, no approximation.
+    // Kept internal and pure so they cannot be a source of state drift.
+
+    /// @dev unix timestamp -> (year, month, day) UTC.
+    function _civil(uint256 ts) internal pure returns (uint256 y, uint256 m, uint256 d) {
+        uint256 z   = ts / 86400 + 719468;
+        uint256 era = z / 146097;
+        uint256 doe = z - era * 146097;
+        uint256 yoe = (doe - doe / 1460 + doe / 36524 - doe / 146096) / 365;
+        uint256 doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+        uint256 mp  = (5 * doy + 2) / 153;
+        d = doy - (153 * mp + 2) / 5 + 1;
+        m = mp < 10 ? mp + 3 : mp - 9;
+        y = yoe + era * 400 + (m <= 2 ? 1 : 0);
+    }
+
+    /// @dev (year, month, day) UTC -> unix timestamp at 00:00.
+    function _fromCivil(uint256 y, uint256 m, uint256 d) internal pure returns (uint256) {
+        unchecked {
+            y -= m <= 2 ? 1 : 0;
+            uint256 era = y / 400;
+            uint256 yoe = y - era * 400;
+            uint256 doy = (153 * (m > 2 ? m - 3 : m + 9) + 2) / 5 + d - 1;
+            uint256 doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
+            return (era * 146097 + doe - 719468) * 86400;
+        }
+    }
+
+    /// @dev Gate + expiry in one call. distribute() is already near the stack limit, so
+    ///      the three date parts stay in THIS frame and only two values cross back —
+    ///      inlining them blew the stack ("Stack too deep", 2026-08-10).
+    function _gateAndExpiry() internal view returns (uint256 monthIdx, uint256 expiresAt) {
+        (uint256 y, uint256 m, uint256 d) = _civil(block.timestamp);
+        monthIdx = y * 12 + m;
+        // BOTH conditions are required: day alone would let a second distribution fire on
+        // the 26th; the month check alone would let one fire on the 1st.
+        // _forcing is the testnet-only escape hatch (see forceDistribute).
+        if (!_forcing) {
+            require(d >= distributionDayOfMonth, "CW: before the monthly date");
+            require(monthIdx > lastDistributionMonth, "CW: already distributed this month");
+        }
+        if (m == 12) { y += 1; m = 1; } else { m += 1; }
+        expiresAt = _fromCivil(y, m, distributionDayOfMonth);
+    }
+
+    /// @notice THE single source of truth for when the next distribution is due.
+    ///         The frontend MUST read this rather than recomputing calendar logic —
+    ///         a second, independent answer to this question is exactly how "claim on the
+    ///         25th" became a belief with no basis in the contract (removed from
+    ///         index.html 2026-08-07; it had a `day-of-month >= 25` gate the contract
+    ///         never had).
+    function nextDistributionTime() public view returns (uint256) {
+        (uint256 y, uint256 m, ) = _civil(block.timestamp);
+        if (lastDistributionMonth < y * 12 + m) {
+            uint256 thisMonth = _fromCivil(y, m, distributionDayOfMonth);
+            return block.timestamp < thisMonth ? thisMonth : block.timestamp;
+        }
+        if (m == 12) { y += 1; m = 1; } else { m += 1; }
+        return _fromCivil(y, m, distributionDayOfMonth);
     }
 
     // =========================================================================
@@ -464,30 +554,39 @@ contract CommunityWallet is Ownable2Step, AccessControl {
     }
 
     /**
-     * @notice Update the distribution interval and claim expiry window.
-     *         Range: 7 days–365 days.
+     * @notice V8.48: set the calendar day distributions fire on. Capped at 28 so the
+     *         date exists in February — a value of 29-31 would silently skip months.
      */
-    function setDistributeInterval(uint256 interval) external onlyRole(GOVERNOR_ROLE) {
-        require(
-            interval >= 7 days && interval <= 365 days,
-            "CW: interval out of range"
-        );
-        distributeInterval = interval;
-        emit DistributeIntervalSet(interval);
+    function setDistributionDayOfMonth(uint8 day) external onlyRole(GOVERNOR_ROLE) {
+        require(day >= 1 && day <= 28, "CW: day must be 1-28");
+        distributionDayOfMonth = day;
+        emit DistributionDayOfMonthSet(day);
     }
     // =========================================================================
     // Testnet helpers (admin only - for QA before mainnet)
     // =========================================================================
 
     /**
-     * @notice Force a distribution immediately, bypassing the interval guard.
-     *         Admin-only. Use on testnet to verify the distribute->claim flow
-     *         without waiting 30 days. Should NOT be called on mainnet.
+     * @notice Force a distribution immediately, bypassing the calendar gate.
+     *         Admin-only, testnet-only. Use to verify the distribute->claim flow
+     *         without waiting for the 25th.
+     *
+     *         lastDistributionMonth is RESTORED afterwards on purpose: a forced run
+     *         must not consume the month's real slot, or QA on the 3rd would block the
+     *         genuine distribution on the 25th and we would be testing a system that
+     *         no longer behaves like the one we ship.
      */
     function forceDistribute() external onlyRole(DEFAULT_ADMIN_ROLE) {
-        require(block.chainid == 84532, "CW: testnet only");
-        lastDistributionTime = 0; // reset so distribute() time check passes
+        // Allowlist, never a denylist: Base Sepolia (84532) and the Hardhat/local chain
+        // (31337). 31337 is here so the bypass is REACHABLE FROM THE TEST SUITE — this
+        // function silently stopped working under the V8.48 calendar change precisely
+        // because no test could call it. It can never match a production chain id.
+        require(block.chainid == 84532 || block.chainid == 31337, "CW: testnet only");
+        uint256 prevMonth = lastDistributionMonth;
+        _forcing = true;
         this.distribute();
+        _forcing = false;
+        lastDistributionMonth = prevMonth;
     }
 
 
