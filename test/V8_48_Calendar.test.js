@@ -35,6 +35,35 @@ async function at(ts) {
 // Seconds for a given UTC calendar date.
 const utc = (y, m, d, hh = 12) => Math.floor(Date.UTC(y, m - 1, d, hh) / 1000);
 
+const now = async () => (await ethers.provider.getBlock("latest")).timestamp;
+
+// EVERY DATE IN THIS FILE IS RELATIVE, NOT ABSOLUTE.
+//
+// The whole suite shares one in-process Hardhat node, and its clock only ever moves
+// FORWARD — other files jump years ahead. A hardcoded `utc(2026, 9, 25)` therefore
+// passes in isolation and fails the moment a test that ran earlier pushed the chain
+// past it ("Timestamp X is lower than the previous block's timestamp"), which is a
+// failure about test ordering, not about the calendar. These helpers anchor each
+// test to wherever the chain actually is.
+
+// The (year, month) `ahead` whole months after the current block, so day 1..28 of it
+// is always in the future.
+async function monthAhead(ahead = 1) {
+  const d = new Date((await now()) * 1000);
+  let y = d.getUTCFullYear(), m = d.getUTCMonth() + 1 + ahead;
+  while (m > 12) { m -= 12; y += 1; }
+  return { y, m };
+}
+
+// The next occurrence of a specific month (e.g. December, January) strictly ahead.
+async function nextMonthNumbered(target) {
+  const d = new Date((await now()) * 1000);
+  let y = d.getUTCFullYear();
+  const m = d.getUTCMonth() + 1;
+  if (m >= target) y += 1;
+  return { y, m: target };
+}
+
 describe("V8.48 — CommunityWallet monthly calendar (the 25th)", function () {
   let usdc, cw, owner;
 
@@ -69,10 +98,11 @@ describe("V8.48 — CommunityWallet monthly calendar (the 25th)", function () {
   // ── the gate ──────────────────────────────────────────────────────────────
   it("reverts before the 25th and succeeds on it", async function () {
     await deploy();
-    await at(utc(2026, 9, 24));
+    const { y, m } = await monthAhead();
+    await at(utc(y, m, 24));
     await expect(cw.distribute()).to.be.revertedWith("CW: before the monthly date");
 
-    await at(utc(2026, 9, 25));
+    await at(utc(y, m, 25));
     await expect(cw.distribute()).to.not.be.reverted;
 
     const d = civil((await ethers.provider.getBlock("latest")).timestamp);
@@ -81,18 +111,20 @@ describe("V8.48 — CommunityWallet monthly calendar (the 25th)", function () {
 
   it("fires at most once per calendar month — the 26th does not open a second window", async function () {
     await deploy();
-    await at(utc(2026, 9, 25));
+    const { y, m } = await monthAhead();
+    await at(utc(y, m, 25));
     await cw.distribute();
     expect(await cw.distributionCount()).to.equal(1);
 
     // A day-of-month check ALONE would pass here: the 26th is also ">= 25".
-    await at(utc(2026, 9, 26));
+    await at(utc(y, m, 26));
     await expect(cw.distribute()).to.be.revertedWith("CW: already distributed this month");
-    await at(utc(2026, 9, 30));
+    await at(utc(y, m, 28));
     await expect(cw.distribute()).to.be.revertedWith("CW: already distributed this month");
 
     // Next month re-opens it.
-    await at(utc(2026, 10, 25));
+    const nx = m === 12 ? { y: y + 1, m: 1 } : { y, m: m + 1 };
+    await at(utc(nx.y, nx.m, 25));
     await expect(cw.distribute()).to.not.be.reverted;
     expect(await cw.distributionCount()).to.equal(2);
   });
@@ -100,8 +132,8 @@ describe("V8.48 — CommunityWallet monthly calendar (the 25th)", function () {
   // ── the schedule does not drift ───────────────────────────────────────────
   it("lands on the 25th for twelve consecutive months, including February", async function () {
     await deploy();
-    // Start in November so the run crosses a year boundary AND February.
-    let y = 2026, m = 11;
+    // Start at the next November so the run crosses a year boundary AND February.
+    let { y, m } = await nextMonthNumbered(11);
     const days = [];
     for (let i = 0; i < 12; i++) {
       await at(utc(y, m, 25));
@@ -122,31 +154,36 @@ describe("V8.48 — CommunityWallet monthly calendar (the 25th)", function () {
   it("nextDistributionTime() points at the 25th before it, and at NEXT month's 25th after", async function () {
     await deploy();
 
-    await at(utc(2026, 9, 10));
-    let nxt = civil(await cw.nextDistributionTime());
-    expect([nxt.y, nxt.m, nxt.d]).to.deep.equal([2026, 9, 25], "before the 25th: this month");
+    const { y, m } = await monthAhead();
+    const nx = m === 12 ? { y: y + 1, m: 1 } : { y, m: m + 1 };
 
-    await at(utc(2026, 9, 25));
+    await at(utc(y, m, 10));
+    let nxt = civil(await cw.nextDistributionTime());
+    expect([nxt.y, nxt.m, nxt.d]).to.deep.equal([y, m, 25], "before the 25th: this month");
+
+    await at(utc(y, m, 25));
     await cw.distribute();
     nxt = civil(await cw.nextDistributionTime());
-    expect([nxt.y, nxt.m, nxt.d]).to.deep.equal([2026, 10, 25], "after distributing: next month");
+    expect([nxt.y, nxt.m, nxt.d]).to.deep.equal([nx.y, nx.m, 25], "after distributing: next month");
   });
 
   it("nextDistributionTime() rolls the YEAR over in December", async function () {
     await deploy();
-    await at(utc(2026, 12, 25));
+    const { y } = await nextMonthNumbered(12);
+    await at(utc(y, 12, 25));
     await cw.distribute();
     const nxt = civil(await cw.nextDistributionTime());
-    expect([nxt.y, nxt.m, nxt.d]).to.deep.equal([2027, 1, 25]);
+    expect([nxt.y, nxt.m, nxt.d]).to.deep.equal([y + 1, 1, 25]);
   });
 
   it("the claim window ends on the NEXT monthly date, not 30 days out", async function () {
     await deploy();
-    await at(utc(2026, 1, 25));   // January -> expiry must be 25 Feb (31 days), not +30
+    const { y } = await nextMonthNumbered(1);  // January -> expiry must be 25 Feb (31 days), not +30
+    await at(utc(y, 1, 25));
     await cw.distribute();
     const d0 = await cw.distributions(0);
     const exp = civil(d0.expiresAt);
-    expect([exp.y, exp.m, exp.d]).to.deep.equal([2026, 2, 25],
+    expect([exp.y, exp.m, exp.d]).to.deep.equal([y, 2, 25],
       "a +30 day window would expire 24 Feb and cut the claim period a day short");
   });
 
@@ -158,7 +195,8 @@ describe("V8.48 — CommunityWallet monthly calendar (the 25th)", function () {
     await expect(cw.setDistributionDayOfMonth(0)).to.be.revertedWith("CW: day must be 1-28");
 
     await cw.setDistributionDayOfMonth(1);
-    await at(utc(2026, 9, 1));
+    const { y, m } = await monthAhead();
+    await at(utc(y, m, 1));
     await expect(cw.distribute()).to.not.be.reverted;
     expect(civil((await ethers.provider.getBlock("latest")).timestamp).d).to.equal(1);
   });
@@ -172,13 +210,15 @@ describe("V8.48 — CommunityWallet monthly calendar (the 25th)", function () {
   // ── distributeReady: what Chainlink actually gates on ─────────────────────
   it("distributeReady() tracks the calendar, not an elapsed interval", async function () {
     await deploy();
-    await at(utc(2026, 9, 24));
+    const { y, m } = await monthAhead();
+    const nx = m === 12 ? { y: y + 1, m: 1 } : { y, m: m + 1 };
+    await at(utc(y, m, 24));
     expect(await cw.distributeReady()).to.equal(false, "not ready on the 24th");
-    await at(utc(2026, 9, 25));
+    await at(utc(y, m, 25));
     expect(await cw.distributeReady()).to.equal(true, "ready on the 25th");
     await cw.distribute();
     expect(await cw.distributeReady()).to.equal(false, "not ready again the same month");
-    await at(utc(2026, 10, 25));
+    await at(utc(nx.y, nx.m, 25));
     expect(await cw.distributeReady()).to.equal(true, "ready again next month");
   });
 
@@ -190,7 +230,8 @@ describe("V8.48 — CommunityWallet monthly calendar (the 25th)", function () {
   // it. These two tests exist so that cannot recur.
   it("forceDistribute() works before the 25th", async function () {
     await deploy();
-    await at(utc(2026, 9, 3));
+    const { y, m } = await monthAhead();
+    await at(utc(y, m, 3));
     await expect(cw.distribute()).to.be.revertedWith("CW: before the monthly date");
     await expect(cw.forceDistribute()).to.not.be.reverted;
     expect(await cw.distributionCount()).to.equal(1);
@@ -198,11 +239,12 @@ describe("V8.48 — CommunityWallet monthly calendar (the 25th)", function () {
 
   it("a forced run does NOT consume the month's real slot", async function () {
     await deploy();
-    await at(utc(2026, 9, 3));
+    const { y, m } = await monthAhead();
+    await at(utc(y, m, 3));
     await cw.forceDistribute();
 
     // The genuine monthly distribution must still be available on the 25th.
-    await at(utc(2026, 9, 25));
+    await at(utc(y, m, 25));
     expect(await cw.distributeReady()).to.equal(true,
       "QA on the 3rd must not cancel the real distribution on the 25th");
     await expect(cw.distribute()).to.not.be.reverted;
@@ -212,12 +254,13 @@ describe("V8.48 — CommunityWallet monthly calendar (the 25th)", function () {
   it("forceDistribute() is admin-only and leaves no bypass set between calls", async function () {
     await deploy();
     const [, stranger] = await ethers.getSigners();
-    await at(utc(2026, 9, 3));
+    const { y, m } = await monthAhead();
+    await at(utc(y, m, 3));
     await expect(cw.connect(stranger).forceDistribute()).to.be.reverted;
 
     await cw.forceDistribute();
     // If the bypass flag leaked, this would succeed instead of reverting.
-    await at(utc(2026, 9, 4));
+    await at(utc(y, m, 4));
     await expect(cw.distribute()).to.be.revertedWith("CW: before the monthly date");
   });
 });
