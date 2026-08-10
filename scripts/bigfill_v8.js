@@ -126,6 +126,133 @@ function makeWallets(count, startOffset) {
   return wallets;
 }
 
+// ── LADDER CLIMB (owner rule 2026-08-10) ─────────────────────────────────────
+//
+//   Reg + climb ladder to highest possible tier
+//   self rescue
+//   upgrade eligible and climb ladder to highest possible tier
+//
+// TierRouter already has the primitive: bulkUpgrade(targetTierIndex) — V8.35, ONE
+// transaction through multiple tiers, seating the member in each tier's MatA.
+//
+// TWO THINGS BOUND IT, AND NEITHER IS THE MEMBER'S BALANCE:
+//
+// 1. THE WHALE GATE. TierRouter._isTierUnlockedForManualEntry: T2-T5 share T5's
+//    gate, T6-T10 each need their own. Measured 2026-08-10: T5 OPEN, T6-T10 SHUT,
+//    so the ceiling is T5 today. Computed from the chain every run, never
+//    hardcoded — the day T6 opens this climbs further with no edit.
+//
+// 2. GAS. bulkUpgrade seats the member in EVERY tier in one transaction, and each
+//    seating can trigger a rotation cascade (measured 12.9M quiet / 18.5M
+//    cascading for ONE upgrade). T2->T5 is four of them in a single tx, which may
+//    not fit under the block limit.
+//
+// bulkUpgrade is ALL-OR-NOTHING: aim one tier too high and it reverts TRGate,
+// climbing NOTHING. So we never guess — we estimateGas, and if the full climb
+// doesn't fit we take the biggest chunk that does and GO AGAIN. Chunking beats
+// stepping down: after reaching T3, the T5 gate still satisfies eligibility for
+// T4, so a second call continues the climb. The member still reaches the ceiling;
+// it just takes two transactions instead of one.
+// Per-member reachable target, 0-based index. THIS IS NOT THE SYSTEM CEILING.
+//
+// CORRECTED 2026-08-10 from live evidence: W1 climbed T5 -> T6 on a run where the
+// T6 gate reads SHUT. The gate is only ONE of THREE eligibility paths
+// (TierRouter._upgradeEligible): a completed cycle in the previous tier, or a seat
+// in the previous tier's MatB, ALSO qualify — and they apply to the FIRST tier of a
+// climb. Only tiers BEYOND the first are gate-only.
+//
+// So a member who has cycled can always advance one tier regardless of the gates,
+// and the gates decide how much further they go in the same transaction. My first
+// version used a single system-wide ceiling of T5 and would have refused to climb
+// W1 at all ("already at ceiling") while manualUpgrade was quietly taking it to T6.
+function maxTargetIdx(highest, gates) {
+  let target = highest;                       // 0-based index of tier (highest+1)
+  while (target + 1 <= 9) {
+    const nextTierNum = target + 2;           // tierNum for index target+1
+    const open = nextTierNum <= 5 ? gates[5] : gates[nextTierNum];
+    if (!open) break;
+    target++;
+  }
+  return target > 9 ? 9 : target;
+}
+
+async function readGates(tierRouter) {
+  const g = {};
+  try { for (let t = 2; t <= 10; t++) g[t] = await tierRouter.isWhaleGateActiveForTier(t); }
+  catch (e) {
+    console.warn(`  ⚠ whale-gate read FAILED (${e.shortMessage || e.message?.slice(0,80)}) — skipping climb`);
+    return null;
+  }
+  return g;
+}
+
+async function readCeilingIdx(tierRouter) {
+  // Returns the 0-based index of the highest tier reachable in a climb.
+  let ceilingNum = 1;
+  try {
+    if (await tierRouter.isWhaleGateActiveForTier(5)) {
+      ceilingNum = 5;                                   // T2-T5 share T5's gate
+      for (let t = 6; t <= 10; t++) {
+        if (await tierRouter.isWhaleGateActiveForTier(t)) ceilingNum = t; else break;
+      }
+    }
+  } catch (e) {
+    // NEVER collapse a failed read into "gate shut" — that reads as a design state
+    // rather than a broken instrument. Say so and climb nothing this run.
+    console.warn(`  ⚠ whale-gate read FAILED (${e.shortMessage || e.message?.slice(0,80)}) — skipping climb`);
+    return null;
+  }
+  return ceilingNum - 1;
+}
+
+async function climbLadder({ tierRouter, tierRouterAddr, usdc, fees, w, conn, gates, gasCap }) {
+  if (!gates) return { reached: null, climbed: 0, note: "gate read failed" };
+  let highest = Number(await tierRouter.memberHighestTier(w.address));   // 1-based
+  const startedAt = highest;
+  if (highest >= 10) return { reached: highest, climbed: 0, note: "already at T10" };
+  // Recomputed EVERY iteration: each tier gained changes what is reachable next.
+  let ceilingIdx = maxTargetIdx(highest, gates);
+
+  // Approve the whole remaining climb once. bulkUpgrade pulls totalFee in one
+  // safeTransferFrom, and V8.46 charges ONLY for tiers actually entered, so an
+  // over-approval is never over-spent.
+  let needed = 0n;
+  for (let i = highest; i <= ceilingIdx && i < 10; i++) needed += fees[i];
+  try {
+    if ((await usdc.allowance(w.address, tierRouterAddr)) < needed) {
+      await (await usdc.connect(conn).approve(tierRouterAddr, needed)).wait();
+    }
+  } catch (e) {
+    return { reached: highest, climbed: 0, note: `approve failed: ${e.shortMessage || "unknown"}` };
+  }
+
+  let note = "";
+  while (highest <= ceilingIdx) {
+    let target = ceilingIdx, est = null;
+    while (target >= highest) {
+      try {
+        const g = await tierRouter.connect(conn).bulkUpgrade.estimateGas(target);
+        if (g <= gasCap) { est = g; break; }
+        note = `gas ${(Number(g) / 1e6).toFixed(1)}M > cap`;
+      } catch (e) {
+        note = e.shortMessage || e.reason || "estimate reverted";
+      }
+      target--;                                  // chunk smaller and try again
+    }
+    if (est === null) break;                     // not even one tier fits / not eligible
+    try {
+      await (await tierRouter.connect(conn).bulkUpgrade(target, { gasLimit: (est * 13n) / 10n })).wait();
+    } catch (e) {
+      note = `send failed: ${e.shortMessage || "unknown"}`;
+      break;
+    }
+    highest    = target + 1;
+    ceilingIdx = maxTargetIdx(highest, gates);   // a new tier can open new reach
+    if (highest >= 10) break;
+  }
+  return { reached: highest, climbed: highest - startedAt, note };
+}
+
 // ── Watched Wallet Reporter ───────────────────────────────────────────────────
 // Queries a list of addresses and prints a compact status table.
 // Call after batches to track key wallets (W1, test accounts, etc.) during a fill run.
@@ -311,6 +438,7 @@ async function cnovaBuySweep(walletList, directSale, usdc) {
 async function simulateManualUpgrades({
   walletList, tierRouter, fromMatB, toMatA, usdc, usdcFunder, rawFunder,
   funderAddr, fNonce, tierRouterAddr, fee, targetTierIndex, tierLabel,
+  gates, gasCap, fees,
 }) {
   if (UPGRADE_RATE <= 0) return fNonce;
   if (!fromMatB || !toMatA) return fNonce;   // this tier hop not deployed yet
@@ -404,6 +532,24 @@ async function simulateManualUpgrades({
       await (await tierRouter.connect(conn).manualUpgrade(targetTierIndex, { gasLimit: 15_000_000 })).wait();
       console.log(`  ✓ manualUpgrade ${tierLabel}  ${w.address.slice(0, 10)}…`);
       upgraded++;
+
+      // OWNER RULE: "upgrade eligible and climb ladder to highest possible tier".
+      //
+      // The manualUpgrade above stays as the FIRST step deliberately — it calls
+      // TierRouter._walletFold, which clears outstanding rescue debt so the member
+      // advances CLEAN (V8.47). bulkUpgrade does NOT fold debt, so leading with it
+      // would carry debt up the ladder. One tier clean, then climb the rest.
+      if (gates && fees) {
+        const climb = await climbLadder({
+          tierRouter, tierRouterAddr, usdc, fees, w, conn, gates, gasCap,
+        });
+        if (climb.climbed > 0) {
+          console.log(`     ↑ climbed to T${climb.reached} (+${climb.climbed} tier${climb.climbed === 1 ? "" : "s"})` +
+            (climb.note ? ` — stopped: ${climb.note}` : ""));
+        } else if (climb.note && climb.note !== "already at ceiling") {
+          console.log(`     · no further climb — ${climb.note}`);
+        }
+      }
     } catch (e) {
       const msg = e.shortMessage || e.message?.slice(0, 100) || 'unknown';
       // "TR: cross to MatB first" = not eligible yet — quiet skip
@@ -438,7 +584,7 @@ async function simulateManualUpgrades({
 //
 // matrices: array of { matrix, label, addr } for all deployed tiers.
 // Returns updated fNonce.
-async function simulateSelfRescues({ walletList, matrices, usdc, rawFunder, funderAddr, fNonce }) {
+async function simulateSelfRescues({ walletList, matrices, usdc, usdcFunder, rawFunder, funderAddr, fNonce }) {
   if (SELF_RESCUE_RATE <= 0) return fNonce;
 
   // Scan all wallets across all matrices to find parked members.
@@ -533,6 +679,8 @@ async function simulateSelfRescues({ walletList, matrices, usdc, rawFunder, fund
       // Dry-run first (staticCall) to surface the exact revert reason before
       // spending gas on a doomed transaction.  Ethers v6 staticCall throws with
       // the decoded revert string; we log that and bail rather than submitting.
+      let _shortfall = 0n;    // set when the revert decodes as ERC20InsufficientBalance
+      let _recovered = false; // set when a USDC top-up makes the dry run pass
       try {
         await matrix.connect(conn).selfRescue.staticCall({ gasLimit: 15_000_000 });
       } catch (staticErr) {
@@ -571,13 +719,90 @@ async function simulateSelfRescues({ walletList, matrices, usdc, rawFunder, fund
                 rawHexStr = ` | ALLOWANCE TOO LOW: spender=${_d.args[0]} allowance=${fmt6(_d.args[1])} needed=${fmt6(_d.args[2])}`;
               } else if (_d?.name === 'ERC20InsufficientBalance') {
                 rawHexStr = ` | WALLET TOO POOR: balance=${fmt6(_d.args[1])} needed=${fmt6(_d.args[2])}`;
+                _shortfall = _d.args[2] - _d.args[1];   // needed - balance
               }
             }
           } catch (_) {}
-          console.warn(`  ⚠ selfRescue ${label} ${w.address.slice(0, 10)}… STATIC CALL REVERT: ${reason}${walletState}${rawHexStr}`);
+
+          // ── USDC TOP-UP AND RETRY (2026-08-10) ──────────────────────────────
+          //
+          // Measured on the 810-wallet historical sweep: 9 of 24 rescues failed,
+          // EVERY ONE of them "WALLET TOO POOR" and short by roughly $1.70 —
+          // balance $2.24 against needed $3.91. ~37% of the sweep, which on 304
+          // parked wallets is ~110 members.
+          //
+          // The cause was structural, not transient: this function topped up ETH
+          // (via rawFunder, below) but never USDC. New wallets get their reserve
+          // at registration; HISTORICAL wallets are drained by cycling and never
+          // refilled. So those members failed identically on EVERY run, for ever,
+          // and stayed parked — self-rescue silently doing ~two-thirds of its job.
+          //
+          // The exact deficit is already in the decoded revert, so top up that
+          // plus a small buffer and re-run the dry run. Only retries when we KNOW
+          // the reason was balance; every other revert still bails as before.
+          if (_shortfall > 0n && (usdcFunder || usdc)) {
+            const topUp   = _shortfall + 2_000_000n;   // deficit + $2 buffer
+            const before  = await usdc.balanceOf(w.address).catch(() => null);
+            let   sent    = false, how = "", topErr = null;
+
+            console.log(`     · USDC top-up ${w.address.slice(0, 10)}… +${fmt6(topUp)} (short ${fmt6(_shortfall)})`);
+
+            // 1) transfer from the funder wallet
+            if (usdcFunder) {
+              try {
+                await (await usdcFunder.transfer(w.address, topUp, { nonce: fNonce++ })).wait();
+                sent = true; how = "funder transfer";
+              } catch (e) {
+                topErr = e;
+                // resync the nonce — a failed send leaves our counter ahead of chain
+                try { fNonce = Number(await ethers.provider.getTransactionCount(funderAddr, "pending")); } catch (_) {}
+              }
+            }
+
+            // 2) MockUSDC is owner-mintable on testnet. If the funder is dry (or is the
+            //    deployer with no USDC of its own, which is what happens when
+            //    FILL_FUNDER_KEY is unset) mint the shortfall instead of giving up.
+            if (!sent) {
+              try {
+                await (await usdc.mint(w.address, topUp)).wait();
+                sent = true; how = "mint";
+              } catch (e2) { topErr = topErr || e2; }
+            }
+
+            // 3) VERIFY IT LANDED. The first version trusted the send and went straight
+            //    to the retry — so when the transfer silently failed, the log said
+            //    "top-up +$3.71" and the very next line still read walletUSDC=$2.23.
+            //    A top-up that reports success while the balance is unchanged is worse
+            //    than one that fails loudly. Never trust the send; read the balance.
+            const after = await usdc.balanceOf(w.address).catch(() => null);
+            const landed = (before !== null && after !== null) ? (after > before) : sent;
+
+            if (!landed) {
+              const why = topErr
+                ? (topErr.shortMessage || topErr.reason || topErr.message?.split("\n")[0]?.slice(0, 160) || "no reason given")
+                : "send reported success but balance did not change";
+              console.warn(`  ⚠ top-up DID NOT LAND for ${w.address.slice(0, 10)}… — ${why}` +
+                (before !== null ? ` [balance still ${fmt6(after ?? before)}]` : ""));
+            } else {
+              try {
+                await matrix.connect(conn).selfRescue.staticCall({ gasLimit: 15_000_000 });
+                _recovered = true;            // dry run passes now — fall through and send
+                console.log(`       ✓ topped up via ${how} → ${fmt6(after)}`);
+              } catch (retryErr) {
+                console.warn(`  ⚠ selfRescue ${label} ${w.address.slice(0, 10)}… still reverts after a LANDED top-up ` +
+                  `(${fmt6(after)}): ${retryErr.reason || retryErr.shortMessage || retryErr.message?.slice(0, 120) || "unknown"}`);
+              }
+            }
+          }
+
+          if (!_recovered) {
+            console.warn(`  ⚠ selfRescue ${label} ${w.address.slice(0, 10)}… STATIC CALL REVERT: ${reason}${walletState}${rawHexStr}`);
+          }
         }
-        skipped++;
-        continue; // skip the actual send — it would definitely fail
+        if (!_recovered) {
+          skipped++;
+          continue; // skip the actual send — it would definitely fail
+        }
       }
 
       // Static call passed — submit the real transaction.
@@ -854,10 +1079,52 @@ async function main() {
   // Default reserve is a flat $100 USDC (covers T1+T2+T3 = $85 with headroom);
   // override with FUND_AMOUNT_USDC env var if tiers/fees change. Manual upgrade
   // never tops anyone up from the funder — see simulateManualUpgrades().
+  // V8.48 / 2026-08-10 — FUND FOR THE CLIMB THE GATES ACTUALLY ALLOW.
+  //
+  // Was a flat $100, sized for "T1 signup + up to T2/T3" ($85). The owner's rule is
+  // now reg + climb to the HIGHEST AVAILABLE tier, and at the real fee table
+  // (T1 $10, T2 $25, T3 $50, T4 $100, T5 $250) a climb to the current T5 ceiling
+  // costs $435. Funded at $100 a wallet stalls at T3 — capped by money, never
+  // reaching the gate that is actually supposed to stop it, which would have looked
+  // exactly like a broken climb.
+  //
+  // Derived from the LIVE ceiling + LIVE fees, so it tracks the gates: the day T6
+  // opens this funds $935 without an edit. Override with FUND_AMOUNT_USDC.
+  const CLIMB_GATES       = await readGates(tierRouter);
+  const CLIMB_CEILING_IDX = await readCeilingIdx(tierRouter);   // display + funding only
+  const CLIMB_FEES = [];
+  for (let i = 0; i < 10; i++) CLIMB_FEES.push(await tierRouter.tierEntryFees(i));
+  let CLIMB_COST = 0n;
+  for (let i = 0; i <= (CLIMB_CEILING_IDX ?? 0); i++) CLIMB_COST += CLIMB_FEES[i];
   const TIER_FEE_SUM = T1_FEE + T2_FEE + T3_FEE;
   const FUND_AMOUNT  = process.env.FUND_AMOUNT_USDC
     ? ethers.parseUnits(process.env.FUND_AMOUNT_USDC, 6)
-    : ethers.parseUnits("100", 6);
+    : (CLIMB_COST > 0n ? CLIMB_COST + (CLIMB_COST / 10n) : ethers.parseUnits("100", 6));
+
+  // Gas cap for one bulkUpgrade chunk.
+  //
+  // 2026-08-10: first version took 60% of the BLOCK gas limit and produced a cap of
+  // 720M on Base Sepolia — a number no single transaction will ever reach, so the
+  // cap never binds and the chunking never chunks. The block limit is the wrong
+  // reference: what actually bounds a transaction here is far lower. This project's
+  // own measurements are a single upgrade at 12.9M quiet / 18.5M cascading, and the
+  // existing scripts send with 15-17.8M limits.
+  //
+  // So: clamp to something grounded in what has actually been observed, and keep
+  // the block limit only as an upper sanity bound. A cap that can never bind is the
+  // same class of defect as a threshold set to uint256.max — it looks like a control
+  // and controls nothing.
+  const _blk = await ethers.provider.getBlock("latest");
+  const _blkCap = _blk?.gasLimit ? (BigInt(_blk.gasLimit) * 60n) / 100n : 30_000_000n;
+  const CLIMB_GAS_CAP = process.env.CLIMB_GAS_CAP
+    ? BigInt(process.env.CLIMB_GAS_CAP)
+    : (_blkCap < 30_000_000n ? _blkCap : 30_000_000n);
+
+  console.log(`  Climb ceiling:  ${CLIMB_CEILING_IDX === null ? "UNKNOWN (gate read failed)" : "T" + (CLIMB_CEILING_IDX + 1)}` +
+              `  · full climb ${fmt6(CLIMB_COST)}  · gas cap ${(Number(CLIMB_GAS_CAP) / 1e6).toFixed(1)}M`);
+  if (FUND_AMOUNT < CLIMB_COST) {
+    console.log(`  ⚠  FUND_AMOUNT (${fmt6(FUND_AMOUNT)}) < full climb (${fmt6(CLIMB_COST)}) — wallets will stall on MONEY before the gate stops them.`);
+  }
   if (FUND_AMOUNT < TIER_FEE_SUM) {
     console.log(`  ⚠  FUND_AMOUNT (${fmt6(FUND_AMOUNT)}) is less than T1+T2+T3 fees (${fmt6(TIER_FEE_SUM)}) — some wallets won't be able to self-fund all the way to T3.`);
   }
@@ -1006,6 +1273,7 @@ async function main() {
       n = await simulateManualUpgrades({
         walletList: allWallets, tierRouter, fromMatB: prev.matB, toMatA: cur.matA,
         usdc, usdcFunder, rawFunder, funderAddr, fNonce: n,
+        gates: CLIMB_GATES, gasCap: CLIMB_GAS_CAP, fees: CLIMB_FEES,
         tierRouterAddr: addrs.tierRouter || addrs.TierRouter,
         fee: hopFee, targetTierIndex: tn - 1, tierLabel: `T${tn}`,
       });
@@ -1020,12 +1288,13 @@ async function main() {
     sep(`Pre-run sweep — ${historicalCount} historical wallets (rescue + upgrade)`);
     fNonce = await simulateSelfRescues({
       walletList: allWallets, matrices: allMatrices, usdc: usdcContract,
-      rawFunder, funderAddr, fNonce,
+      usdcFunder, rawFunder, funderAddr, fNonce,
     });
     if (matA2) {
       fNonce = await simulateManualUpgrades({
         walletList: allWallets, tierRouter, fromMatB: matB1, toMatA: matA2,
         usdc, usdcFunder, rawFunder, funderAddr, fNonce,
+        gates: CLIMB_GATES, gasCap: CLIMB_GAS_CAP, fees: CLIMB_FEES,
         tierRouterAddr: addrs.tierRouter || addrs.TierRouter,
         fee: T2_FEE, targetTierIndex: 1, tierLabel: "T2 (from T1.1 MatB)",
       });
@@ -1034,6 +1303,7 @@ async function main() {
         fNonce = await simulateManualUpgrades({
           walletList: allWallets, tierRouter, fromMatB: activeMatB1, toMatA: matA2,
           usdc, usdcFunder, rawFunder, funderAddr, fNonce,
+          gates: CLIMB_GATES, gasCap: CLIMB_GAS_CAP, fees: CLIMB_FEES,
           tierRouterAddr: addrs.tierRouter || addrs.TierRouter,
           fee: T2_FEE, targetTierIndex: 1, tierLabel: "T2 (from T1.2 MatB)",
         });
@@ -1043,6 +1313,7 @@ async function main() {
       fNonce = await simulateManualUpgrades({
         walletList: allWallets, tierRouter, fromMatB: matB2, toMatA: matA3,
         usdc, usdcFunder, rawFunder, funderAddr, fNonce,
+        gates: CLIMB_GATES, gasCap: CLIMB_GAS_CAP, fees: CLIMB_FEES,
         tierRouterAddr: addrs.tierRouter || addrs.TierRouter,
         fee: T3_FEE, targetTierIndex: 2, tierLabel: "T3",
       });
@@ -1386,7 +1657,7 @@ async function main() {
       // Self-rescue sweep on every cycle — most likely time wallets just got parked
       fNonce = await simulateSelfRescues({
         walletList: allWallets, matrices: allMatrices, usdc: usdcContract,
-        rawFunder, funderAddr, fNonce,
+        usdcFunder, rawFunder, funderAddr, fNonce,
       });
       prevSysCyc = sysCyc;
     }
@@ -1433,7 +1704,7 @@ async function main() {
     if (batchNum % RESCUE_SCAN_EVERY === 0) {
       fNonce = await simulateSelfRescues({
         walletList: allWallets, matrices: allMatrices, usdc: usdcContract,
-        rawFunder, funderAddr, fNonce,
+        usdcFunder, rawFunder, funderAddr, fNonce,
       });
     }
 
