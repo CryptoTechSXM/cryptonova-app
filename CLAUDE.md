@@ -158,6 +158,35 @@ deployer wallet.
 
 ---
 
+## CODE↔FRONTEND PARITY — audit on EVERY deploy (owner rule 2026-08-10)
+
+**Code is truth. The website must SAY the same truth.** A member never reads the
+contract; they read the site. A site that disagrees with the contract is not a
+cosmetic bug — it is the protocol lying to the people in it, and it has misled the
+owner too (two owner beliefs, "Genesis get paid at 500" and "claim on the 25th",
+came from the old buggy UI, not from the contract).
+
+**Before every deploy, for every member-facing number and claim on the site, name the
+contract source that backs it.** No source = it does not ship. Track in
+`PARITY_AUDIT.md`.
+
+Three divergences found in ONE session (2026-08-09/10) — this is not a rare failure:
+
+| site said | contract said | how it happened |
+|---|---|---|
+| "next pair opens at N entries" | no such threshold exists | read a knob that steered nothing, behind `.catch(() => 381n)` |
+| "T1.3 is taking new entries" | entries go to T1.1 | read `active[]`, which is a DIFFERENT routing rule than the one registrations use |
+| earnings breakdown by tier | 2 of 4 earning paths emit no event | `_credit()` is silent, so L1 + direct-earn cannot be attributed |
+
+Failure modes to check for specifically:
+1. **A frontend `.catch(() => <value>)` on a contract read.** A failed read must never
+   come back wearing a plausible number. Print `READ FAILED` or omit it.
+2. **The frontend recomputing something the contract already answers.** Two
+   independent answers to one question WILL disagree on screen.
+3. **A view that reports on a mechanism it does not share.** `allPairsStatus().active[]`
+   used `_findRoutingPair` while registrations used `_findExternalPair`.
+4. **Copy describing a knob or threshold.** Every one of these has gone stale.
+
 ## setTierMatrices — required after EVERY deploy
 
 `registerTier()` sets PairManager address + entry fee only.
