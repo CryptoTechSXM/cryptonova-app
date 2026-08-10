@@ -94,6 +94,44 @@ source. **Until that ships, do not promise members a source breakdown.**
 
 ---
 
+---
+
+## VERIFIED BY LIVE WITHDRAWAL 2026-08-10 — read before answering "can I withdraw?"
+
+A real withdrawal was performed on `0x1C56C6` (testnet) to settle these by MEASUREMENT
+rather than by reading code.
+
+**1. Withdrawals work. They do not revert.** $5.00 then $119.99 went through cleanly. An
+earlier prediction that the automation reserve would block it was WRONG: that reserve
+applies ONLY in the member's highest-tier matrix, so every other matrix withdraws freely.
+
+**2. The withdrawal fee is 1.5%.** $5.00 withdrawn = $0.0750 fee, $4.9250 received.
+
+**3. Withdrawing SETTLES pending pool first.** Lifetime earned read $74.52 before and
+**$174.48** after; pool share went $16.05 -> $116.01. Nothing was created — ~$100 of pool
+was already owed and simply not yet credited.
+
+   **Consequence: "Total Earned" UNDERSTATES for any member who has not withdrawn
+   recently.** If a member says "I've earned more than that", they are probably right.
+
+**4. The Stability Fund clawback does exactly what the loan panel says.** $15.25 borrowed,
+$15.25 repaid, **$0.00 owed** after withdrawing. The panel's "it repays itself
+automatically" is accurate.
+
+**5. KNOWN CONTRACT BUG — `freeWithdrawable()` under-reports (scope item 1).**
+
+| account | view says | actually claimable |
+|---|---|---|
+| `0x09D160` | $33.15 | $340.23 |
+| `0xa2f6FB` | $18.41 | $313.01 |
+| `0x7a245E` | $85.55 | $268.28 |
+
+   **The DASHBOARD is correct** — it computes the headline itself rather than trusting that
+   view. Believe a number a member quotes from the site. Anyone reading `freeWithdrawable`
+   directly off a block explorer or third-party tool gets a number that is far too low,
+   sometimes $0.00 on a live balance. **That is a broken contract view, not missing money.**
+
+
 ## Sources
 
 - `contracts/MatrixLogicLib.sol` — `_distributePayments`, `_cycleOutRoot`,
