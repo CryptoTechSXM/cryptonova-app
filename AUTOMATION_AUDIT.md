@@ -80,7 +80,26 @@ work surface, and classify. Every claim below is from source, not inference.
 > **0 of 96 sampled parked members are self-funded.** Every one needs SF money and every
 > one correctly waits the full 24 hours.
 >
-> ### THE FINDING WORTH KEEPING — THEY ARE ALL *JUST* SHORT
+> ### ⚠️ THE SECTION BELOW OVERSTATED ITS EVIDENCE — CORRECTED 2026-08-11
+>
+> The six rows quoted below were not a sample of the parked population. The census
+> that produced them printed a member ONLY when their effective contribution was
+> **>= 90% of the fee**, capped at six entries. They are the top of a filter, and they
+> were then written up as though they described everyone ("the system is a few percent
+> away"). The distribution below 90% was never measured.
+>
+> What is actually established: **at least six parked members are within 2-9% of
+> funding their own re-entry**, and **0 of 96 sampled are at or above 100%**. Whether
+> the median parked member sits at 95% or at 40% is unknown, and the economics question
+> turns entirely on that.
+>
+> `scripts/diag_parked_truth.js` now records EVERY ratio and prints percentiles, a
+> histogram, and a table of how many members each extra point of
+> `CROSSING_RESERVE_BPS` would lift over the line. It also samples evenly across each
+> parked array rather than the two ends — head-and-tail sampling is right for spotting
+> a stale queue and wrong for a distribution. Re-run it before acting on any of this.
+>
+> ### THE FINDING WORTH KEEPING — SIX MEMBERS ARE *JUST* SHORT
 >
 > The near misses cluster hard against the threshold:
 >
@@ -98,13 +117,11 @@ work surface, and classify. Every claim below is from source, not inference.
 > of a fee in withdrawable earnings and stop just under the 50% that would let them
 > re-enter on their own. Not one crosses it.
 >
-> That is not a coincidence and it is a better question than item 12 was: **the system
-> is a few percent of accumulated earnings away from parked members being able to
-> self-rescue without the Stability Fund lending them anything at all.** Every rescue
-> currently on the books is a loan that a slightly different reserve ratio, or slightly
-> longer time in seat before parking, would make unnecessary. Worth understanding before
-> tuning `CROSSING_RESERVE_BPS` or the SF rescue ladder — and worth re-running
-> `scripts/diag_parked_truth.js` after any change that moves either.
+> For THESE six, a few percent of accumulated earnings separates a self-funded re-entry
+> from a Stability Fund loan. That is worth understanding before tuning
+> `CROSSING_RESERVE_BPS` or the SF rescue ladder — but how much of the population it
+> describes is exactly what the corrected census above has to answer first. Do not size
+> a change off six filtered rows.
 
 ## The central finding
 

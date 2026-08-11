@@ -216,7 +216,8 @@ async function main() {
   console.log("\n  ── SELF-FUNDED CENSUS (does item 12 apply to anyone?) ──");
   {
     let selfFunded = 0, needsLoan = 0, checked = 0;
-    const near = [];
+    const near = [], ratios = [], reservePct = [];
+    const ECON_SAMPLE = Number(process.env.ECON_SAMPLE || 20);
     for (let t = 0; t < n; t++) {
       if (only && !only.includes(t + 1)) continue;
       const pmAddr = await k.pairManagerForTier(t);
@@ -232,10 +233,13 @@ async function main() {
           if (cnt === 0) continue;
           const fee = await mx.ENTRY_FEE().catch(() => 0n);
           if (fee === 0n) continue;
-          const half = Math.max(1, Math.floor(SAMPLE / 2));
+          // EVENLY SPACED, not the two ends. The staleness pass above samples the head
+          // and tail on purpose — that is where an uncompacted array shows itself. For a
+          // DISTRIBUTION those ends are the wrong sample: they are the oldest and newest
+          // entries, not a cross-section. Spread across the whole array instead.
+          const want = Math.min(ECON_SAMPLE, cnt);
           const idxs = new Set();
-          for (let q = 0; q < Math.min(half, cnt); q++) idxs.add(q);
-          for (let q = Math.max(0, cnt - half); q < cnt; q++) idxs.add(q);
+          for (let j = 0; j < want; j++) idxs.add(Math.floor((j * cnt) / want));
           for (const q of idxs) {
             const mem = await mx.getParkedMember(q).catch(() => ethers.ZeroAddress);
             if (!mem || mem === ethers.ZeroAddress) continue;
@@ -245,13 +249,18 @@ async function main() {
             ]);
             const eff = wd + rs;
             checked++;
+            // RECORD EVERY RATIO. The first version of this census printed only entries
+            // at >= 90% of the fee, capped at six — and those six were then quoted as if
+            // they were the distribution ("the system is a few percent away"). They were
+            // the top of a filter. Keep every value and let the histogram answer.
+            const pct = fee > 0n ? Number((eff * 1000n) / fee) / 10 : 0;
+            ratios.push(pct);
+            reservePct.push(fee > 0n ? Number((rs * 1000n) / fee) / 10 : 0);
             if (eff >= fee) {
               selfFunded++;
-              if (near.length < 6) near.push(`SELF-FUNDED T${t + 1} p${i}${lbl} ${mem.slice(0, 10)}… ${usd(wd)}+${usd(rs)} = ${usd(eff)} >= fee ${usd(fee)}`);
+              if (near.length < 6) near.push(`SELF-FUNDED T${t + 1} p${i}${lbl} ${usd(wd)}+${usd(rs)} = ${usd(eff)} >= fee ${usd(fee)}`);
             } else {
               needsLoan++;
-              const pct = fee > 0n ? Number(eff * 100n / fee) : 0;
-              if (pct >= 90 && near.length < 6) near.push(`near miss   T${t + 1} p${i}${lbl} ${mem.slice(0, 10)}… ${usd(eff)} = ${pct}% of fee ${usd(fee)}`);
             }
           }
         }
@@ -259,6 +268,33 @@ async function main() {
     }
     console.log(`    sampled ${checked}   SELF-FUNDED ${selfFunded}   needs an SF loan ${needsLoan}`);
     for (const x of near) console.log(`      ${x}`);
+
+    // THE DISTRIBUTION — this is the number the economics question actually needs.
+    if (ratios.length) {
+      ratios.sort((x, y) => x - y);
+      const q = (f) => ratios[Math.min(ratios.length - 1, Math.floor(ratios.length * f))].toFixed(1);
+      console.log(`\n    (withdrawable + reserve) as % of entry fee`);
+      console.log(`      min ${ratios[0].toFixed(1)}%  p10 ${q(0.10)}%  p25 ${q(0.25)}%  MEDIAN ${q(0.50)}%  p75 ${q(0.75)}%  p90 ${q(0.90)}%  max ${ratios[ratios.length - 1].toFixed(1)}%`);
+      const buckets = [[0,50],[50,70],[70,80],[80,90],[90,95],[95,100],[100,1e9]];
+      console.log("\n      histogram:");
+      for (const [lo, hi] of buckets) {
+        const c = ratios.filter((r) => r >= lo && r < hi).length;
+        const label = hi > 1e8 ? ">=100% (self-funded)" : `${lo}-${hi}%`;
+        const bar = "#".repeat(Math.round((c / ratios.length) * 40));
+        console.log(`        ${label.padEnd(22)} ${String(c).padStart(4)}  ${bar}`);
+      }
+      const rs0 = reservePct.length ? reservePct.reduce((a2, b2) => a2 + b2, 0) / reservePct.length : 0;
+      console.log(`\n      crossing reserve averages ${rs0.toFixed(1)}% of fee (CROSSING_RESERVE_BPS)`);
+      // How much more reserve would close the gap for each slice of the population?
+      console.log("\n      if CROSSING_RESERVE_BPS rose, share of parked members who could self-fund:");
+      for (const extra of [0, 5, 10, 15, 20, 25]) {
+        const c = ratios.filter((r) => r + extra >= 100).length;
+        console.log(`        +${String(extra).padStart(2)} points (${(rs0 + extra).toFixed(0)}% reserve): ${String(c).padStart(4)} of ${ratios.length}  (${Math.round((c / ratios.length) * 100)}%)`);
+      }
+      console.log("\n      NB: raising the reserve takes those points from the DISTRIBUTED half of");
+      console.log("      the fee — the same pot that pays chain-pay, pool shares and referrals.");
+      console.log("      This table is the benefit side only; the cost side is a separate model.");
+    }
     console.log();
     if (checked === 0) {
       console.log("    Nothing sampled — inconclusive.");
