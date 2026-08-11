@@ -247,3 +247,32 @@ Must pass 173/173 (V8.31). Never deploy on a failing test suite.
 ## Address backup rule (CRITICAL)
 
 Commit `deployed_addresses_vX_XX.json` immediately after every deploy. This is the only record of which contracts were deployed. Without it, the entire session of deploy work is unrecoverable if anything goes wrong.
+
+## VERIFY THE PREMISE BEFORE IMPLEMENTING A SCOPE ITEM (2026-08-11)
+
+A backlog entry is a CLAIM about the code, and claims go stale or start wrong.
+Before writing anything, check the premise against source AND chain:
+
+- `git log -S "<symbol>"` — when did this actually enter or leave the code?
+- Read the file at the commit that MADE the claim, not just at HEAD.
+- If the claim is about live behaviour, read the live contract. A doc that
+  disagrees with a view function is the doc's problem.
+
+Item 12 asserted `checkUpkeep` could not discover parked rescues. It had
+discovered them since V8.10 — including in the very commit that wrote the claim.
+Item 41 was the mirror: a belief about "the 25th" the contract never supported.
+Both cost a session. Both were one `git log -S` away.
+
+**Corollary — prove a behaviour change changes behaviour for someone real.**
+Item 12's fix compiled, kept all 486 tests green, and released nobody: 0 of 96
+sampled members met its condition. Green is not evidence of effect.
+
+**Corollary — a filtered list is not a distribution.** The same session's census
+printed parked members only at >= 90% of the entry fee, capped at six, and those
+six were then written up as though they described everyone. Measuring properly
+moved the median from an assumed ~95% to 84.2%. When quoting a statistic, state
+what was sampled and what was excluded.
+
+**Corollary — the right sample depends on the question.** Head-and-tail sampling
+finds a stale queue; it cannot describe a population. Reusing one sampler for both
+is how that bias got in.
