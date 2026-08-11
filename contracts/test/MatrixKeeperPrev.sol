@@ -18,10 +18,13 @@ pragma solidity ^0.8.26;
 //  only WHEN the keeper acts. Hand-written scenarios would have to guess which
 //  field was mis-wired. Comparing the two implementations does not have to guess.
 //
-//  DELETE THIS WITH ITEM 12.
-//  Item 12 makes checkUpkeep discover its own matrices — it CHANGES the scan's
-//  behaviour on purpose, at which point this file's assertion becomes false by
-//  design and the file is landfill. It is deliberately in contracts/test/ so it
+//  SUPERSEDED 2026-08-11 — the "delete with item 12" note was wrong. KEEP THIS.
+//  Item 12 shipped as a CONDITIONAL split grace, not a rewrite of the scan: set
+//  selfFundedGracePeriod == parkedGracePeriod and behaviour collapses to the old
+//  path exactly, which is what V8_48_KeeperScan.test.js now pins. So the equivalence
+//  assertion still holds and still earns its keep. Retire this when the 12a
+//  extraction is old enough that compiling a frozen pre-refactor keeper is no longer
+//  worth it — not on item 12's account. It is deliberately in contracts/test/ so it
 //  never reaches a deploy script.
 //
 

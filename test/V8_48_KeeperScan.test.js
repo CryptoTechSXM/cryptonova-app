@@ -53,8 +53,17 @@
  *   worth as much as the test. If item 12 keeps this harness, these three are where to
  *   start.
  *
- * DELETE THIS FILE WITH ITEM 12, along with MatrixKeeperPrev.sol. Item 12 changes the
- * scan's behaviour deliberately, and this assertion becomes false by design.
+ * ~~DELETE THIS FILE WITH ITEM 12~~ — SUPERSEDED 2026-08-11. KEEP IT.
+ *
+ *   That instruction assumed item 12 would change the scan's behaviour outright, making
+ *   equivalence false by design. It shipped differently: the split grace is CONDITIONAL,
+ *   and setting selfFundedGracePeriod == parkedGracePeriod collapses it back to the old
+ *   behaviour exactly. This file now pins those two together in setup(), so it still
+ *   proves what it was written to prove — that item 12a's extraction was behaviour-
+ *   preserving — while V8_48_SplitGrace.test.js covers the new branch separately.
+ *
+ *   Retire this file (and MatrixKeeperPrev.sol) when the 12a refactor is old enough that
+ *   a frozen pre-refactor keeper is no longer worth compiling, NOT on item 12's account.
  */
 const { ethers } = require("hardhat");
 const { expect } = require("chai");
