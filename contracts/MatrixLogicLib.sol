@@ -1316,8 +1316,13 @@ library MatrixLogicLib {
         // Pure SF loan: SF covers the full shortfall. No deployer USDC required.
         uint256 shortfall = cfg.entryFee > effectiveContrib ? cfg.entryFee - effectiveContrib : 0;
 
+        // V8.48 item 11 — same erasure as selfRescue, same fix. A member rescued by the
+        // co-pay keeper whose own balances already covered the fee borrows NOTHING
+        // (shortfall == 0) and previously lost the excess anyway.
+        uint256 surplus = effectiveContrib > cfg.entryFee ? effectiveContrib - cfg.entryFee : 0;
+
         self.members[member].crossingReserve = 0;
-        self.members[member].withdrawable = 0;
+        self.members[member].withdrawable = surplus;
 
         if (shortfall > 0) {
             // SF transfers shortfall USDC to this contract to complete the entry fee.
@@ -1358,8 +1363,24 @@ library MatrixLogicLib {
         uint256 effectiveContrib = reserve + withdrawable;
         uint256 shortfall = cfg.entryFee > effectiveContrib ? cfg.entryFee - effectiveContrib : 0;
 
+        // V8.48 item 11 — THE SURPLUS BELONGS TO THE MEMBER.
+        //
+        // Both balances used to be zeroed unconditionally while _finalizeCrossing
+        // forwards only cfg.entryFee, so anything above the fee was ERASED. Not spent,
+        // not locked — deleted, with the USDC left sitting in this contract and the
+        // member's claim on it gone.
+        //
+        // It fires whenever reserve + withdrawable EXCEEDS the fee, which is exactly
+        // the self-funded rescue: fastlane_rescue.js, 2026-08-11, two real cases —
+        // $5.00 + $5.438759 against a $10.00 fee ($0.44 erased) and $12.50 + $14.76495
+        // against $25.00 ($2.26 erased). Roughly one an hour on the live chain.
+        //
+        // Return the excess to withdrawable. The USDC backing it never left this
+        // contract — only entryFee is forwarded — so the credit is fully backed.
+        uint256 surplus = effectiveContrib > cfg.entryFee ? effectiveContrib - cfg.entryFee : 0;
+
         self.members[member].crossingReserve = 0;
-        self.members[member].withdrawable = 0;
+        self.members[member].withdrawable = surplus;
 
         if (shortfall > 0) {
             // Member pays their own shortfall directly -- no debt, no SF involvement.
