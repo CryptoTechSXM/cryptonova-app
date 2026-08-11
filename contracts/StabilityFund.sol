@@ -15,8 +15,19 @@ pragma solidity ^0.8.24;
  *
  * FUNDING LAYERS (V8.7)
  * ─────────────────────────────────────────────────────────────────────────────
- *  L1: Per-entry stabilityBps carve (6% T1-T3, 5% T4-T10)
+ *  L1: Per-entry stabilityBps carve -- A FLAT 3% ON ALL TEN TIERS.
  *      --> FigureEightMatrixV8._distributeEntry() via receiveLayer(tier, amt, 1)
+ *
+ *      V8.48 item 29: this line used to read "6% T1-T3, 5% T4-T10". It was wrong
+ *      twice over -- tier-VARYING when the rate is flat, and roughly DOUBLE the real
+ *      figure. The deployed value is SPLITS_ALL[4] = 300 bps (deploy_v8.js:103), and
+ *      tierSplits(tierNum) returns that same array for every tier, so there is no
+ *      per-tier variation to describe.
+ *
+ *      It is not a harmless comment. Item 26 (SF surplus redirect to the
+ *      CommunityWallet) was nearly modelled off it, which would have sized the carve
+ *      at 2x reality. DO NOT restate the rate here when it changes -- the number
+ *      lives in deploy_v8.js and a copy in a header is a copy that goes stale.
  *
  *  L3: Withdrawal fee -- DYNAMIC SLIDING DESTINATION
  *      --> FigureEightMatrixV8.withdraw() calls receiveLayer(tier, amt, 3)
