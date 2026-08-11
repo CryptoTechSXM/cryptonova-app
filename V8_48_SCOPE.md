@@ -5,6 +5,41 @@ and not defer to later versions, we keep pushing back deploy bcuz we defer, cost
 is building."* Every finding below ships in V8.48. This file is the execution
 list; `V8_48_BACKLOG.md` holds the evidence for each.
 
+## ⛔ DEPLOY GATE — VERIFIED AGAINST SOURCE 2026-08-11
+
+Owner rule: **do not deploy while anything deploy-requiring is unfinished.** Every row
+below was grepped against `contracts/` rather than trusted from this file — two items
+were already implemented and still marked open, and item 11 turned out to be LIVE money
+loss that item 12 would have accelerated.
+
+### STILL OPEN — each one blocks the deploy
+
+| item | what | file |
+|---|---|---|
+| 3 | `bulkWithdraw(uint256 amount)` — one-signature PARTIAL withdrawals. Today a partial walks matrix-by-matrix, one signature each; that loop is where Deborah's failed $50 lived. | TierRouter(Lib) |
+| 4 | `mintReward` has NO cap against `floorPrice()`. The only `floorPrice()` read is the final-epoch base calculation — the guard the item asks for is absent. | CNOVAToken |
+| 5 | No `floorBefore` guard in `addDexLiquidity` / `emergencyWithdraw`. Zero occurrences. | CNOVATreasury |
+| 6 | `_floorPriceE6()` does not read `usdcReserve`. Zero occurrences. | CNOVADirectSale |
+| 7 | No cross-pair `memberJoinedAt`, so `earlyExitPenaltyBps` cannot work. Zero occurrences. | PairManagerV8 |
+| 8 | `lockedBalanceOf` sums vest batches with NO `min(..., balanceOf(wallet))`, so it can report more locked than the wallet holds. | CNOVAToken |
+| 9 | No vest-batch prune on BURN inside `_update`. | CNOVAToken |
+| 40 | `selfRescueWithPermit` — the CONTRACT half. The frontend half shipped 2026-08-11; without this a clear-all is still 2 transactions per position. | FigureEightMatrixV8 |
+
+### NEEDS AN OWNER DECISION BEFORE IT CAN BE BUILT
+
+| item | the decision |
+|---|---|
+| 2 | `reservedHeldFor(member)` getter **or** bind the reserve across all tiers. Two different designs; not Claude's call. |
+| 28 | Distribution expiry: keep it and surface it loudly, or remove it. Exposure is $0.81 today and ~$1,865 on the next run. |
+
+### ALREADY DONE — was marked open, verified present in source
+
+| item | evidence |
+|---|---|
+| 26 | `communityOverflowBps` present in `StabilityFund.sol` (4 refs) — shipped `bb081e0`. |
+| 33 | `_pairFull(pairs.length - 1)` is the live spawn trigger in `_tryAdvancePair`, with its own V8.48 item 33 comment. |
+| 30 | `deployEntryThreshold` survives only in two COMMENTS — no code references. Properly removed. |
+
 ## Contract changes
 
 | # | change | contract | source |
