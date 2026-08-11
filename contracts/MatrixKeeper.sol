@@ -122,7 +122,20 @@ contract MatrixKeeper is Ownable {
     uint256 public idleSlotTimeout     = 259_200;   // V8.33: 3 days (was 43200 = 12h)
     uint256 public extendedIdleTimeout = 604_800;   // V8.33: 7 days (was 86400 = 24h)
     uint256 public maxItemsPerUpkeep   = 15;
-    uint256 public parkedGracePeriod   = 6 hours;  // V8.25: mainnet default 6h; testnet owner can set as low as 5 min
+    uint256 public parkedGracePeriod   = 6 hours;
+
+    /// @notice V8.48 item 12 — floor for a rescue that costs the Stability Fund NOTHING
+    ///         (the member's own withdrawable + crossing reserve covers the fee).
+    ///
+    ///         parkedGracePeriod protects members from unwanted LOANS. A self-funded
+    ///         rescue is not a loan, so that protection does not apply — the member just
+    ///         waits, 24h at the live setting, and then gets a loan anyway because the
+    ///         copay path does not re-check self-funding after the wait.
+    ///
+    ///         5 minutes, matching fastlane_rescue.js's MIN_AGE. It is a race guard, not
+    ///         a policy window: it stops a rescue being queued in the same minute a
+    ///         member is mid-registration or mid-upgrade.
+    uint256 public selfFundedGracePeriod = 5 minutes;  // V8.25: mainnet default 6h; testnet owner can set as low as 5 min
     uint256 public rescueRatioBps      = 7_000;
     /// @notice V8.44 (item E): how long a FULL MatB may sit without rotating
     ///         before the keeper force-rotates it. Generous on purpose — the
@@ -292,6 +305,16 @@ contract MatrixKeeper is Ownable {
         emit ConfigUpdated("parkedGracePeriod", v);
     }
     /// @notice V8.20: DAO-governable. Allowed: 5000,6000,7000,8000,9000,9500.
+    /// @notice V8.48 item 12. Enumerated like every other keeper setter. Capped at 1
+    ///         hour: this is a race guard, and anything longer is a loan-protection
+    ///         window, which is what parkedGracePeriod is for.
+    function setSelfFundedGracePeriod(uint256 v) external onlyOwnerOrGovernance {
+        require(v == 0 || v == 60 || v == 300 || v == 900 || v == 1800 || v == 3600,
+            "MK: invalid self-funded grace (0/60/300/900/1800/3600)");
+        selfFundedGracePeriod = v;
+        emit ConfigUpdated("selfFundedGracePeriod", v);
+    }
+
     function setRescueRatioBps(uint256 v) external onlyOwnerOrGovernance {
         require(
             v == 5_000 || v == 6_000 || v == 7_000 ||
@@ -385,6 +408,7 @@ contract MatrixKeeper is Ownable {
             idleSlotTimeout:     idleSlotTimeout,
             extendedIdleTimeout: extendedIdleTimeout,
             parkedGracePeriod:   parkedGracePeriod,
+            selfFundedGracePeriod: selfFundedGracePeriod,
             rescueRatioBps:      rescueRatioBps,
             configuredTierCount: configuredTierCount,
             tierRouter:          tierRouter,

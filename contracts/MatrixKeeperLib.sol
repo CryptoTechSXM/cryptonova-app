@@ -147,6 +147,7 @@ library MatrixKeeperLib {
         uint256 idleSlotTimeout;
         uint256 extendedIdleTimeout;
         uint256 parkedGracePeriod;
+        uint256 selfFundedGracePeriod;
         uint256 rescueRatioBps;
         uint8   configuredTierCount;
         address tierRouter;
@@ -334,6 +335,38 @@ library MatrixKeeperLib {
         return count;
     }
 
+    /**
+     * @dev What should happen to this parked member, ignoring how long they have waited?
+     *      Returns the Stability Fund's share of the re-entry (ZERO when the member funds
+     *      it themselves) and whether they should be evicted instead of rescued.
+     *      Its own frame purely for stack room — see the note at the call site.
+     */
+    function _triageParked(IFigureEightKeeper mat, address member, ScanCfg memory cfg)
+        internal view returns (uint256 sfShare, bool evict)
+    {
+        uint256 withdrawn    = mat.getMemberTotalWithdrawn(member);
+        uint256 withdrawable = mat.withdrawableOf(member);
+        // V8.31: crossing reserve reduces SF shortfall — include it in effective contribution.
+        uint256 reserve      = mat.crossingReserveOf(member);
+        uint256 fee          = mat.ENTRY_FEE();
+        uint256 totalEarned  = withdrawn + withdrawable;
+        uint256 withdrawRatio = totalEarned > 0 ? withdrawn * 10_000 / totalEarned : 0;
+        // Has taken out most of what they earned — evict rather than lend them more.
+        if (withdrawRatio > cfg.rescueRatioBps) return (0, true);
+
+        uint256 effectiveContrib = reserve + withdrawable;
+        uint256 sfBps = _rescueBpsFor(cfg.sfThresholds, cfg.sfLadder, effectiveContrib, fee);
+        // Off the bottom of the ladder — the fund will not cover someone this thin.
+        if (sfBps == type(uint256).max) return (0, true);
+
+        // THE LINE ITEM 12 TURNS ON. maxShortfall is 0 exactly when the member's own
+        // withdrawable + crossing reserve already covers the fee, so sfShare is 0 and the
+        // rescue costs the fund nothing. Identical to fastlane_rescue.js's `wd + rs < fee`.
+        uint256 maxShortfall = fee > effectiveContrib ? fee - effectiveContrib : 0;
+        sfShare = fee * sfBps / 10_000;
+        if (sfShare > maxShortfall) sfShare = maxShortfall;
+    }
+
     function _checkParked(address matAddr, uint8 tierIdx, uint256 idx, ScanCfg memory cfg)
         internal view
         returns (address parkedMember, uint8 workType)
@@ -343,30 +376,60 @@ library MatrixKeeperLib {
         parkedMember = mat.getParkedMember(idx);
         uint256 ts = mat.parkedAt(parkedMember);
         if (ts == 0) return (address(0), type(uint8).max);
-        if (block.timestamp - ts < cfg.parkedGracePeriod) return (address(0), type(uint8).max);
 
-        // Declare sfShare before the computation block so it survives into the SF-balance
-        // check. The block frees withdrawn/withdrawable/reserve/fee/totalEarned/withdrawRatio/
-        // effectiveContrib/sfBps/maxShortfall from the EVM stack, keeping peak depth ≤ 8.
-        uint256 sfShare;
+        // V8.48 item 12: THE GRACE CHECK MOVED BELOW THE AMOUNT COMPUTATION, ON PURPOSE.
+        //
+        // It used to sit here, before anything was known about the member, so ONE grace
+        // period governed two situations that are not alike:
+        //
+        //   a rescue the member funds THEMSELVES, out of their own withdrawable plus
+        //   crossing reserve, costing the Stability Fund nothing; and
+        //
+        //   a rescue that draws SF money — a LOAN, clawed back from their future
+        //   earnings, which they never asked for.
+        //
+        // parkedGracePeriod exists for the second. fastlane_rescue.js says so outright:
+        // "grace exists to protect members from unwanted LOANS". A member who needs no
+        // loan is protected from nothing and simply waits — 24 hours at the live setting
+        // — for money already theirs, and is then given a loan anyway, because
+        // copay_rescue does not re-check self-funding after the wait.
+        //
+        // MEASURED, live, 2026-08-11 fastlane.log: two zero-debt rescues at 00:03 —
+        // $5.00 reserve + $5.44 earnings vs a $10 fee, and $12.50 + $14.76 vs $25 — then
+        // eleven runs at zero. RARE, roughly one an hour against ~900 parked, but real.
+        // Rare is why a point-in-time census saw none of them and why the first attempt
+        // at this change was reverted: fastlane clears them within ten minutes, so a
+        // snapshot samples the residue, not the population.
+        //
+        // The distinction is already computed one block down: maxShortfall, and so
+        // sfShare, is exactly zero when the member covers the fee themselves — the same
+        // condition fastlane tests as `wd + rs < fee`. This reorders existing arithmetic
+        // and invents no rule. Set selfFundedGracePeriod == parkedGracePeriod and the
+        // behaviour collapses to what it was, which is how the pre-refactor equivalence
+        // test still holds.
 
-        {   // ---- amount-computation block ----------------------------------------
-            uint256 withdrawn    = mat.getMemberTotalWithdrawn(parkedMember);
-            uint256 withdrawable = mat.withdrawableOf(parkedMember);
-            // V8.31: crossing reserve reduces SF shortfall — include it in effective contribution.
-            uint256 reserve      = mat.crossingReserveOf(parkedMember);
-            uint256 fee          = mat.ENTRY_FEE();
-            uint256 totalEarned  = withdrawn + withdrawable;
-            uint256 withdrawRatio = totalEarned > 0 ? withdrawn * 10_000 / totalEarned : 0;
-            if (withdrawRatio > cfg.rescueRatioBps) return (parkedMember, WORK_EVICT_PARKED);
-            uint256 effectiveContrib = reserve + withdrawable;
-            uint256 sfBps = _rescueBpsFor(cfg.sfThresholds, cfg.sfLadder, effectiveContrib, fee);
-            if (sfBps == type(uint256).max) return (parkedMember, WORK_EVICT_PARKED);
-            uint256 maxShortfall = fee > effectiveContrib ? fee - effectiveContrib : 0;
-            sfShare = fee * sfBps / 10_000;
-            if (sfShare > maxShortfall) sfShare = maxShortfall;
-        }   // withdrawn, withdrawable, reserve, fee, totalEarned, withdrawRatio,
-            // effectiveContrib, sfBps, maxShortfall freed here
+        // A block scope held the old peak stack depth at 8; adding the evict branch did
+        // not, and it blew the stack. Extracted to its own frame rather than enabling
+        // viaIR — same call as CommunityWallet._gateAndExpiry, and for the same reason:
+        // viaIR compiles today and leaves the function one local from the same failure.
+        (uint256 sfShare, bool evict) = _triageParked(mat, parkedMember, cfg);
+
+        uint256 age = block.timestamp - ts;
+
+        // EVICTION KEEPS THE FULL GRACE PERIOD. Eviction removes a member who has already
+        // taken out most of what they earned; there is no "costs the fund nothing"
+        // version of it, and nothing about it is urgent.
+        if (evict) {
+            if (age < cfg.parkedGracePeriod) return (address(0), type(uint8).max);
+            return (parkedMember, WORK_EVICT_PARKED);
+        }
+
+        // sfShare == 0 means the member funds their own re-entry. The short floor is not
+        // a grace period; it stops a rescue being queued in the same minute a member is
+        // mid-registration or mid-upgrade — the race fastlane guards with MIN_AGE=300.
+        if (age < (sfShare == 0 ? cfg.selfFundedGracePeriod : cfg.parkedGracePeriod)) {
+            return (address(0), type(uint8).max);
+        }
 
         uint256 sfBal   = IStabilityFundKeeper(cfg.stabilityFund).balanceByTier(tierIdx);
         // Fall back to total SF balance if tier bucket cannot cover the rescue share.

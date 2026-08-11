@@ -1164,6 +1164,53 @@ sep("V8.48 item 12a — MatrixKeeperLib");
 
 
 // ─────────────────────────────────────────────────────────────────────────────
+// 20. V8.48 item 12 — grace applies to LOANS, not to a member's own money
+// ─────────────────────────────────────────────────────────────────────────────
+// A self-funded rescue costs the Stability Fund nothing, so parkedGracePeriod (24h
+// live) must not apply to it. Collapsing this back to one window is invisible: the
+// contract keeps working, members just wait a day for money already theirs and are
+// then given a loan they never needed, because the copay path does not re-check
+// self-funding after the wait.
+sep("V8.48 item 12 — split grace (self-funded vs loan)");
+{
+  const libTxt12 = read("contracts/MatrixKeeperLib.sol");
+  const mkTxt12  = read("contracts/MatrixKeeper.sol");
+
+  if (mkTxt12 && mkTxt12.includes("uint256 public selfFundedGracePeriod") &&
+      mkTxt12.includes("function setSelfFundedGracePeriod(")) {
+    ok("MatrixKeeper.sol: selfFundedGracePeriod + governed setter present");
+  } else {
+    fail("MatrixKeeper.sol: selfFundedGracePeriod MISSING — self-funded members wait the full loan window");
+  }
+  if (mkTxt12 && mkTxt12.includes("selfFundedGracePeriod: selfFundedGracePeriod")) {
+    ok("MatrixKeeper.sol: selfFundedGracePeriod reaches the ScanCfg snapshot");
+  } else {
+    fail("MatrixKeeper.sol: selfFundedGracePeriod NOT in the ScanCfg snapshot — the library would read zero, making every self-funded rescue instant");
+  }
+  // The whole change is this ternary. Without it the field exists and does nothing.
+  if (libTxt12 && /sfShare == 0 \? cfg\.selfFundedGracePeriod : cfg\.parkedGracePeriod/.test(libTxt12)) {
+    ok("MatrixKeeperLib.sol: grace is chosen by sfShare (zero-cost rescue vs loan)");
+  } else {
+    fail("MatrixKeeperLib.sol: the sfShare-based grace choice is GONE — one window governs both again, which is the defect item 12 fixed");
+  }
+  // Eviction must NOT get the short window.
+  if (libTxt12 && /if \(evict\) \{[\s\S]{0,200}?age < cfg\.parkedGracePeriod/.test(libTxt12)) {
+    ok("MatrixKeeperLib.sol: eviction still waits the FULL parkedGracePeriod");
+  } else {
+    fail("MatrixKeeperLib.sol: eviction is not gated on parkedGracePeriod — evicting a member early is not a zero-cost action");
+  }
+  if (mkTxt12 && mkTxt12.includes("v == 0 || v == 60 || v == 300 || v == 900 || v == 1800 || v == 3600")) {
+    ok("MatrixKeeper.sol: selfFundedGracePeriod is enumerated and capped at 1h");
+  } else {
+    fail("MatrixKeeper.sol: selfFundedGracePeriod is not enumerated — a long value silently turns it back into a second loan window");
+  }
+  // The keepers stay ON as backup (owner decision 2026-08-11). Flag if that changes
+  // without the on-chain path having been observed to agree.
+  ok("NOTE: fastlane_rescue.js + copay_rescue.js remain LIVE as backup by owner decision — retire only after on-chain discovery is observed doing the same work");
+}
+
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Summary
 // ─────────────────────────────────────────────────────────────────────────────
 console.log("\n" + "═".repeat(62));

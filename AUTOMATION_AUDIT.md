@@ -78,10 +78,36 @@ work surface, and classify. Every claim below is from source, not inference.
 > *they are cleared before a snapshot can see them*, and the 84.2% median describes the
 > RESIDUAL population fastlane leaves behind, not the population at park time.
 >
-> The revert of item 12's split grace was therefore made on evidence that does not
-> support it either way. **The decisive read is `fastlane.log` on the VPS**: if it reports
-> real rescues run after run, self-funded members exist, fastlane has been doing
-> on-chain-able work every 10 minutes, and the split grace should go back in.
+> ### SETTLED — `fastlane.log`, 2026-08-11. THE SPLIT GRACE IS BACK IN.
+>
+> Two zero-debt rescues at 00:03:
+>
+> ```
+> FAST-LANE T1.1 MatA 0x145805E8…  reserve $5.0  + earnings $5.438759 >= fee $10.0
+> FAST-LANE T2.1 MatA 0x09D160F2…  reserve $12.5 + earnings $14.76495 >= fee $25.0
+> ```
+>
+> then THIRTEEN consecutive runs at `0 fast-laned`, through 02:03. So self-funded
+> parked members are **real but rare** — roughly one an hour against ~900 parked, and
+> cleared within ten minutes of appearing. Both censuses (01:28, 01:45) sampled inside
+> that dead stretch. The zero was censoring, not absence.
+>
+> **What those members experience without an on-chain path:** they wait the full 24h,
+> and then `copay_rescue` lends them SF money anyway, because the copay path does not
+> re-check self-funding after the wait. A day of waiting AND an unnecessary loan clawed
+> back from future earnings — for members whose own balance already covered the fee.
+>
+> V8.48 item 12 now applies `parkedGracePeriod` only when `sfShare > 0`, and a 300s race
+> guard (`selfFundedGracePeriod`, governed, enumerated, matching fastlane's `MIN_AGE`)
+> otherwise. 11 tests in `V8_48_SplitGrace.test.js`, against mocks — the state is
+> unreachable in a real fixture, where members park at ~80% of the fee and their
+> withdrawable freezes.
+>
+> **The keepers stay ON as backup** (owner decision). The races are harmless: a rescue
+> the keeper already performed reverts `"still in matrix"` inside `performUpkeep`'s
+> try/catch and emits `WorkItemFailed`. Retire them only after the on-chain path is
+> observed doing the same work — the argument for retiring is not volume, it is that
+> correct behaviour currently depends on one cron job on one VPS.
 >
 > ### WHAT WAS BUILT, MEASURED, AND THROWN AWAY
 >

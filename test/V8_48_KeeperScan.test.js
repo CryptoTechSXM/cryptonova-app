@@ -162,6 +162,17 @@ describe("V8.48 item 12a — MatrixKeeperLib extraction is behaviour-preserving"
     // which is what `bothKeepers` below exists to enforce.
     for (const k of [keeperNew, keeperOld]) await k.setPairManager(0, pmAddr);
 
+    // V8.48 item 12 deliberately CHANGES behaviour: a parked member who funds their own
+    // re-entry clears selfFundedGracePeriod instead of parkedGracePeriod. The frozen
+    // reference keeper has no such concept, so equivalence only holds where the two
+    // windows are equal — pin them together explicitly rather than relying on this
+    // fixture never producing a self-funded member. (It does not: members here park at
+    // roughly 80% of the fee. But "the test passes because the state is unreachable" is
+    // exactly the blind spot that made the first version of this file worthless, and it
+    // should not be load-bearing a second time.)
+    for (const k of [keeperNew]) await k.setSelfFundedGracePeriod(0);
+    for (const k of [keeperNew, keeperOld]) await k.setParkedGracePeriod(0);
+
     return {
       usdc, tr, pm, sf, matA, matB, keeperNew, keeperOld, owner, W1, devOps, sigs,
       pmAddr, matAAddr, matBAddr,
@@ -356,6 +367,9 @@ describe("V8.48 item 12a — MatrixKeeperLib extraction is behaviour-preserving"
     // grace period must move BOTH keepers the same way.
     for (const g of [0, 300, 6 * 3600, 30 * 86400]) {   // 0 or 5min..30d
       await both((k) => k.setParkedGracePeriod(g));
+      // keep the self-funded window pinned to the loan window so the two keepers stay
+      // comparable; the split itself is covered by V8_48_SplitGrace.test.js
+      await ctx.keeperNew.setSelfFundedGracePeriod(g === 0 ? 0 : (g >= 3600 ? 3600 : 300));
       await assertIdentical(`parkedGracePeriod=${g}`);
     }
     await both((k) => k.setParkedGracePeriod(6 * 3600));
