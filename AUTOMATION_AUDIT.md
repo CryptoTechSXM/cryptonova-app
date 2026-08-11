@@ -48,26 +48,40 @@ work surface, and classify. Every claim below is from source, not inference.
 > **Nothing is broken.** On-chain discovery never fires because the off-chain keeper
 > gets there first, by design, at exactly the policy boundary the contract defines.
 >
-> ### TWO CORRECTIONS TO SECTION C BELOW
+> ### ~~TWO CORRECTIONS TO SECTION C~~ — RETRACTED, I READ A STALE FILE
 >
-> Section C names three keepers that could be retired if discovery existed. Checked
-> against `crontab_v8_45_staggered.txt`:
+> I first checked the keepers against `crontab_v8_45_staggered.txt` IN THIS REPO and
+> reported that `fastlane_rescue.js` was not scheduled and `evict_parked.js` did not
+> exist, concluding the audit's "three keepers" were really one. **Both claims were
+> wrong.** That file is a config artifact and does not match the VPS.
 >
-> - `copay_rescue.js` — **live**, every 10 minutes. Reads `parkedGracePeriod()` off the
->   keeper contract and honours it.
-> - `fastlane_rescue.js` — **NOT SCHEDULED.** It is not in the crontab at all.
-> - `evict_parked.js` — **DOES NOT EXIST** in `CryptoNova-Keepers`.
+> `crontab -l` on cryptonova-keeper, 2026-08-11:
 >
-> So the "three keepers" this audit set out to retire are one keeper. Two of the three
-> have not been running.
+> - `copay_rescue.js` — **LIVE**, `4-59/10` (every 10 min). Honours `parkedGracePeriod()`.
+> - `fastlane_rescue.js` — **LIVE**, `3-59/10` (every 10 min). Last line of the crontab.
+> - `evict_parked.js` — **LIVE**, `*/30` with `TIER=T1 LIVE=1 BUDGET=280`. It exists on
+>   the VPS even though it is absent from the `CryptoNova-Keepers` folder in this repo.
 >
-> ### AND ONE THING TO CHECK ON THE VPS
+> All three run. Section C's list was right.
 >
-> `route_rr.js` IS scheduled in that crontab file (`8-59/10`), while section D below says
-> it was trimmed 2026-08-06 and **"Do not re-enable — fix the contract instead"** because
-> it was masking the `rescueReentry` bug. The file in this repo may simply predate the
-> trim — but if the LIVE crontab matches it, that masking is active again. Worth one
-> `crontab -l` on the VPS.
+> `route_rr.js` is **NOT** live — `TRIM-2026-08-06`, commented out, as section D says.
+> That concern was unfounded; the repo file simply predates the trim.
+>
+> **A repo file is not live state.** This is the same error as item 12 and item 41, made
+> while documenting them. See the rule in `CLAUDE.md`.
+>
+> ### WHAT THIS DOES TO THE SELF-FUNDED CENSUS
+>
+> It censors it. `fastlane_rescue.js` rescues exactly the members whose
+> `withdrawable + crossingReserve >= entryFee` — the self-funded ones — every ten
+> minutes. So "0 of 240 sampled are self-funded" CANNOT distinguish *none exist* from
+> *they are cleared before a snapshot can see them*, and the 84.2% median describes the
+> RESIDUAL population fastlane leaves behind, not the population at park time.
+>
+> The revert of item 12's split grace was therefore made on evidence that does not
+> support it either way. **The decisive read is `fastlane.log` on the VPS**: if it reports
+> real rescues run after run, self-funded members exist, fastlane has been doing
+> on-chain-able work every 10 minutes, and the split grace should go back in.
 >
 > ### WHAT WAS BUILT, MEASURED, AND THROWN AWAY
 >
