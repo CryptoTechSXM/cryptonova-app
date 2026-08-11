@@ -248,6 +248,16 @@ Must pass 173/173 (V8.31). Never deploy on a failing test suite.
 
 Commit `deployed_addresses_vX_XX.json` immediately after every deploy. This is the only record of which contracts were deployed. Without it, the entire session of deploy work is unrecoverable if anything goes wrong.
 
+## WHO THESE DOCS ARE FOR (2026-08-11)
+
+Two people touch this code: the owner and Claude. There is no team, no incoming
+contributor, no "someone six months from now". Every comment, doc and handoff is
+addressed to **a future session of Claude, plus the owner** — write for a reader who
+has the whole codebase available and none of this conversation.
+
+Practically: say what was measured and where to re-measure it. Skip the defensive
+framing aimed at a hypothetical third party — it costs words and helps no one.
+
 ## VERIFY THE PREMISE BEFORE IMPLEMENTING A SCOPE ITEM (2026-08-11)
 
 A backlog entry is a CLAIM about the code, and claims go stale or start wrong.
