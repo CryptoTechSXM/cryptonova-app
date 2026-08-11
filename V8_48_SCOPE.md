@@ -21,8 +21,8 @@ loss that item 12 would have accelerated.
 | 5 | No `floorBefore` guard in `addDexLiquidity` / `emergencyWithdraw`. Zero occurrences. | CNOVATreasury |
 | 6 | `_floorPriceE6()` does not read `usdcReserve`. Zero occurrences. | CNOVADirectSale |
 | 7 | No cross-pair `memberJoinedAt`, so `earlyExitPenaltyBps` cannot work. Zero occurrences. | PairManagerV8 |
-| 8 | `lockedBalanceOf` sums vest batches with NO `min(..., balanceOf(wallet))`, so it can report more locked than the wallet holds. | CNOVAToken |
-| 9 | No vest-batch prune on BURN inside `_update`. | CNOVAToken |
+| ~~8~~ | ✅ **DONE 2026-08-11.** Clamped to `balanceOf`. Measured note: removing the clamp does NOT fail the tests, because item 9 keeps batches within the balance and every burn reaches `_update` — it is a guard against a FUTURE path that moves balances without touching batches, which is exactly how this bug arrived. | CNOVAToken |
+| ~~9~~ | ✅ **DONE 2026-08-11 (508 passing).** Burns bypass the vest guard by design (`to == address(0)`), so batches outlived the tokens and `available` pinned to ZERO — the wallet could not move ANY tokens, including unlocked ones acquired later, until the stale batches matured. `_reduceVestAfterBurn` now brings the ledger down, reducing the LATEST-unlocking batches first so the holder keeps those closest to maturing, and pops emptied slots so the 200-batch cap is not leaked. Four mutations killed, including one proving the `lockedSum <= bal` guard is load-bearing (without it, burning ordinary UNLOCKED tokens underflows and reverts). Also corrected `burnFrom`'s doc, which claimed "vesting lock still applies" — it never did. | CNOVAToken |
 | 40 | `selfRescueWithPermit` — the CONTRACT half. The frontend half shipped 2026-08-11; without this a clear-all is still 2 transactions per position. | FigureEightMatrixV8 |
 
 ### NEEDS AN OWNER DECISION BEFORE IT CAN BE BUILT

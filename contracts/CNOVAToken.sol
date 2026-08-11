@@ -508,7 +508,14 @@ contract CNOVAToken is ERC20, ERC20Burnable, AccessControl {
 
     /**
      * @notice Burn tokens. BURNER_ROLE bypasses allowance (Treasury buyback-burn).
-     *         Vesting lock still applies -- only unlocked tokens can be burned.
+     *
+     *         V8.48 item 9: this used to claim "Vesting lock still applies -- only
+     *         unlocked tokens can be burned." IT DOES NOT. _burn reaches _update with
+     *         `to == address(0)`, and that branch skips the vesting require entirely,
+     *         so LOCKED tokens can be burned — by the holder via ERC20Burnable.burn,
+     *         and by BURNER_ROLE here. That is left as-is (a buyback-burn must not be
+     *         blocked by a vest schedule); what changed is that the burn now REDUCES
+     *         the vest batches, so the ledger cannot outlive the tokens.
      */
     function burnFrom(address from, uint256 amount)
         public
@@ -537,6 +544,19 @@ contract CNOVAToken is ERC20, ERC20Burnable, AccessControl {
                 locked += batches[i].amount;
             }
         }
+        // V8.48 item 8 — NEVER REPORT MORE LOCKED THAN THE WALLET HOLDS.
+        //
+        // Batches record what was minted, not what is still there. A burn does not
+        // touch them (see _update: `to == address(0)` skipped the guard entirely), so
+        // after burning, this sum could exceed balanceOf and every consumer of it read
+        // a wallet as more encumbered than it can possibly be.
+        //
+        // Item 9 below keeps the batches themselves honest. This clamp is the belt to
+        // that braces: whatever the batches say, a wallet cannot have more locked than
+        // it owns, and any future path that mutates balances without touching batches
+        // cannot reintroduce the nonsense.
+        uint256 bal = balanceOf(wallet);
+        if (locked > bal) locked = bal;
     }
 
     /// @notice Transferable (unlocked) CNOVA balance.
@@ -714,6 +734,55 @@ contract CNOVAToken is ERC20, ERC20Burnable, AccessControl {
             require(available >= value, "CNOVA: tokens vesting -- wait for unlock");
         }
         super._update(from, to, value);
+
+        // V8.48 item 9 — A BURN MUST SHRINK THE VEST LEDGER.
+        //
+        // Burns bypass the guard above by design (`to == address(0)`), so a holder can
+        // destroy tokens that a vest batch still claims are locked. The batches then
+        // outlive the balance, and the consequence is not cosmetic: `available` above
+        // pins to 0, so the wallet can no longer move ANY tokens — including unlocked
+        // ones acquired later — until the stale batches expire on their own.
+        //
+        // Item 8's clamp stops the VIEW being absurd but cannot fix this on its own:
+        // once new tokens arrive, the clamp simply re-locks them against batches for
+        // tokens that no longer exist. The ledger itself has to come down.
+        if (to == address(0) && from != address(0)) _reduceVestAfterBurn(from);
+    }
+
+    /**
+     * @dev Bring `wallet`'s locked batches back within its balance after a burn.
+     *      Reduces from the END first: batches are appended in time order, so the last
+     *      entries unlock LATEST — taking those down first leaves the holder the
+     *      batches closest to unlocking, which is the outcome that favours them.
+     *
+     *      Cost is bounded by MAX_VEST_BATCHES (200) and matches what _update already
+     *      pays on every transfer, which walks the same array via lockedBalanceOf. The
+     *      reduction loop itself exits as soon as the excess is covered — one or two
+     *      iterations in the ordinary case, not two hundred.
+     */
+    function _reduceVestAfterBurn(address wallet) internal {
+        VestBatch[] storage batches = _vestBatches[wallet];
+        uint256 len = batches.length;
+        if (len == 0) return;
+
+        uint256 lockedSum;
+        for (uint256 i = 0; i < len; i++) {
+            if (block.timestamp < batches[i].unlockAt) lockedSum += batches[i].amount;
+        }
+        uint256 bal = balanceOf(wallet);
+        if (lockedSum <= bal) return;          // nothing burned out from under the locks
+
+        uint256 excess = lockedSum - bal;
+        for (uint256 i = len; i > 0 && excess > 0; i--) {
+            VestBatch storage b = batches[i - 1];
+            if (block.timestamp >= b.unlockAt) continue;   // already unlocked, not in lockedSum
+            uint256 amt = b.amount;
+            if (amt <= excess) { excess -= amt; b.amount = 0; }
+            else { b.amount = uint128(amt - excess); excess = 0; }
+        }
+        // Reclaim the cap slots we just emptied. Only trailing zeroes are popped, so
+        // the ordering the reduction relies on is preserved.
+        while (batches.length > 0 && batches[batches.length - 1].amount == 0) batches.pop();
     }
 
     // =========================================================================
