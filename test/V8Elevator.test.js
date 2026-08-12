@@ -645,20 +645,32 @@ describe("CNOVAToken V8.1 — tier multiplier + epoch triggers", function () {
   // ── 5d. Time trigger ─────────────────────────────────────────────────────
   describe("5d. Epoch advance — TIME trigger", function () {
 
+    // V8.48: these two used to hardcode 30 days, which was the default at the
+    // time. When the default moved to 180 days the first silently stopped
+    // testing the trigger -- 30 days no longer crosses it, so the advance it
+    // asserted would never have happened. Both now read the limit off the
+    // contract, so they follow policy instead of duplicating it.
     it("epoch advances after epochTimeLimit elapses with no activity", async function () {
       const { cnova, minter, alice } = await loadFixture(deployCNOVAFixture);
 
       expect(await cnova.currentEpoch()).to.equal(0);
 
-      await time.increase(30 * 24 * 3600 + 1);
+      const limit = await cnova.epochTimeLimit();
+      // Just SHORT of the window: nothing must advance yet. Without this half
+      // the test passes on any limit at all, including zero.
+      await time.increase(Number(limit) - 3600);
+      await cnova.connect(minter).mintReward(alice.address, 0);
+      expect(await cnova.currentEpoch(), "must not advance before the window").to.equal(0);
 
+      await time.increase(3600 + 1);
       await cnova.connect(minter).mintReward(alice.address, 0);
       expect(await cnova.currentEpoch()).to.equal(1);
     });
 
     it("epochLeadingTrigger returns TIME when no activity", async function () {
       const { cnova } = await loadFixture(deployCNOVAFixture);
-      await time.increase(25 * 24 * 3600);
+      const limit = await cnova.epochTimeLimit();
+      await time.increase(Math.floor(Number(limit) * 0.8));
       const TRIGGER_TIME = 2;
       expect(await cnova.epochLeadingTrigger()).to.equal(TRIGGER_TIME);
     });

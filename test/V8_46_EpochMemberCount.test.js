@@ -62,8 +62,12 @@ describe("V8.46 item 9 — epochMemberCount counts unique members, not seat even
     await cnova.connect(minter).mintReward(alice.address, 0);
     expect(await cnova.epochMemberCount()).to.equal(1);
 
-    // advance to the next epoch via the TIME trigger
-    await time.increase(30 * 24 * 3600 + 1);
+    // Advance to the next epoch via the TIME trigger.
+    // V8.48: this read `30 * 24 * 3600 + 1`, the default at the time. When the
+    // default moved to 180 days the increase no longer crossed the window, the
+    // epoch never advanced, and the assertion below caught it. Read the limit
+    // off the contract so this test follows policy instead of restating it.
+    await time.increase(Number(await cnova.epochTimeLimit()) + 1);
     await cnova.connect(minter).mintReward(bob.address, 0);    // advance -> epoch 1, reset; bob counted
     expect(await cnova.currentEpoch()).to.equal(1);
     expect(await cnova.epochMemberCount()).to.equal(1);        // bob only

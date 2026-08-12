@@ -1,6 +1,6 @@
-# V8.48 HANDOFF — updated 2026-08-11 (read this first, then V8_48_SCOPE.md)
+# V8.48 HANDOFF — updated 2026-08-12 (read this first, then V8_48_SCOPE.md)
 
-**508 passing · predeploy_check 110 · both repos clean · DO NOT DEPLOY YET.**
+**514 passing · 7 pending · 0 failing · DO NOT DEPLOY YET.**
 
 Audience: a future session of Claude, plus the owner. Nobody else touches this code.
 
@@ -34,6 +34,20 @@ in both directions (two items were done and still marked open).
 - **item 2** — `reservedHeldFor(member)` getter **or** bind the reserve across all tiers.
 - **item 28** — distribution expiry: keep and surface it loudly, or remove it. $0.81 exposed today, ~$1,865 on the next run.
 
+**Item 42 (epoch policy) is CLOSED — decided and shipped 2026-08-12.** Do not reopen it
+as an open decision; the numbers and the reasoning are in the item-42 row of
+`V8_48_SCOPE.md`. The short version: `epochMemberLimit` 10,000 → **1,000**,
+`epochTimeLimit` 30 days → **180 days**, `epochMintLimit` **unchanged at 1,000,000**,
+declared defaults changed rather than a post-deploy transaction because `deploy_v8.js`
+never sets them.
+
+**The one thing to carry forward from item 42 even if you never touch epochs again:**
+`mintReward` fires on EVERY seat — register, upgrade, crossing, re-entry, rescue
+re-seat — while `countedMember` counts a person ONCE, EVER. Measured live: 27,776 seat
+events across **671 unique members**, 41 seats each. Any future reasoning that treats
+"a member" and "an entry" as the same quantity is wrong by a factor of ~41. That is
+what made `epochMemberLimit = 10,000` unreachable, and it is not specific to epochs.
+
 ---
 
 ## DONE THIS SESSION (all pushed)
@@ -48,6 +62,27 @@ bricks the wallet).
 Frontend, already live: **39** (seat position + rotations-to-cycle + sampled rate),
 **40 frontend** (one-click clear-all), **41b** (the 65/35 modal), and the withdraw
 fixes below.
+
+Contract, awaiting deploy (2026-08-12): **42** (epoch policy — see above).
+
+---
+
+## NEXT UP, ALREADY SCOPED
+
+**Frontend epoch transparency.** The dashboard reads `currentEpochNumber` and
+`epochRewards` and shows the era name, but it does NOT read `epochMembersRemaining`,
+`epochMintRemaining`, `epochTimeRemaining` or `epochLeadingTrigger` — so a member can
+see they are in Aurora Zenith but not how close the next halving is. That is the piece
+the owner needs before telling the community about the new policy: *"once the code and
+the frontend align I give the information to the community."* No deploy required.
+
+**And a live fabricated-fallback bug found while checking that:** `index.html:6410`
+reads `cnova.currentEpochNumber().catch(() => 1)`, so a dropped RPC call renders
+"Epoch 1 — Nebula Genesis" as fact and marks Epoch 1 `ACTIVE` in the reward-schedule
+rows at `:6564`. This is the SAME defect the audit note at `:3447` says was already
+fixed once at `:3451` — fixed in one place, still live in another. Same class as items
+30 and 39. Grep for `.catch(() =>` returning a VALUE rather than null before assuming
+these two are the last of them.
 
 ---
 

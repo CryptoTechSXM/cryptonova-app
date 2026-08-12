@@ -97,26 +97,77 @@ contract CNOVAToken is ERC20, ERC20Burnable, AccessControl {
 
     uint8 public constant TOTAL_EPOCHS = 9;
 
+    // ─────────────────────────────────────────────────────────────────────────
+    // EPOCH POLICY -- V8.48, set from MEASURED testnet data on 2026-08-12.
+    //
+    // THE MEASUREMENT (scripts/model_epoch_policy.js, V8.47 set on Base Sepolia)
+    //   27,776 TokensMinted events across 671 unique members -- 41 seats per
+    //   person, 164 tier-multiplier units per person. mintReward fires on EVERY
+    //   seat (register, upgrade, crossing, re-entry, rescue re-seat) while
+    //   `countedMember` below counts a person ONCE, EVER. The two triggers are
+    //   therefore denominated in quantities that differ by ~41x.
+    //
+    //   The consequence, straight off the chain: epochs 2, 3 and 4 cost
+    //   2,150,000 CNOVA and were bought by 26 new members. All three advances
+    //   were TRIGGER_MINT. MEMBER has never fired. It never could -- see below.
+    //
+    //   Nothing was leaking: predicted treasury inflow (seats x fee x 5%) came
+    //   to $69,063 against an actual usdcReserve of $69,051, a ratio of 1.000.
+    //   Every seat paid a real entry fee. Cycling is how members earn and it is
+    //   fully funded. The defect was only in how the epoch schedule counted it.
+    // ─────────────────────────────────────────────────────────────────────────
+
     // --- Trigger A: CNOVA minted per epoch ---
-    // Default: 1,000,000 CNOVA. Protects against T7-heavy activity burning
-    // through supply without advancing the epoch counter.
-    // At T7 epoch-1: fires after just 250 entries (4000 CNOVA each).
-    // At T1 epoch-1: fires after 20,000 entries (50 CNOVA each).
-    // DAO can lower this to tighten halvings or raise it to extend each epoch.
-    uint256 public epochMintLimit = 1_000_000 * 1e18;  // governable
+    // 1,000,000 CNOVA. DO NOT RAISE THIS. It is the supply budget for the whole
+    // bonus era: 8 fixed epochs x 1,000,000 caps pre-Final-Frontier emission at
+    // 8,000,000 of MAX_SUPPLY and guarantees Final Frontier the rest.
+    //
+    // Why that guarantee is load-bearing. Final Frontier mints
+    //     rewardPct * TREASURY_PER_ENTRY / (100 * floorPrice)
+    // = $0.375 of CNOVA per $0.50 of treasury inflow -- constant in dollars,
+    // shrinking in tokens as the floor rises. Supply therefore grows as the
+    // treasury to the power 0.75, so the runway is set by where the bonus era
+    // leaves supply:
+    //     ends at  8,000,000 -> treasury may grow 3.6x before MAX_SUPPLY
+    //     ends at 20,000,000 -> treasury may grow 6.7%
+    // The second is not a shorter runway, it is none. And mintReward TRUNCATES
+    // at MAX_SUPPLY (see the hard cap below) -- it does not revert. Members
+    // would silently receive zero. Raising this limit to 2.5M or 5M, both of
+    // which the governance menu permits, ends Final Frontier on arrival.
+    uint256 public epochMintLimit = 1_000_000 * 1e18;  // governable -- but see above
 
     // --- Trigger B: Unique member registrations per epoch ---
-    // Default: 10,000 unique registrations. Classic growth-based trigger.
-    // Works well when most activity is T1-T3 where each entry mints < 200 CNOVA.
-    // DAO can set to 14 for testnet (shows all 9 epochs in one fill cycle).
-    uint256 public epochMemberLimit = 10_000;           // governable
+    // V8.48: 10,000 -> 1,000.
+    //
+    // 10,000 was mathematically dead. With MINT pinned at 1,000,000 and the
+    // Genesis rate at 50, MEMBER can only fire first if members average under
+    //     1,000,000 / (10,000 * 50) = 2 multiplier units each
+    // -- one T1 seat and barely a second, in a matrix built to cycle. It showed
+    // the community a progress bar that could not move.
+    //
+    // The crossover at 1,000 is 20 units/member. Testnet measured 164 under bot
+    // churn against matrices that fill in hours; real users are estimated at
+    // 10-40, so this is the value at which MEMBER becomes the trigger that
+    // actually fires. It carries NO supply risk either way -- MINT caps the
+    // epoch regardless -- so all this controls is how many people share the
+    // bonus rates: the first 1,000 at 50x, the next 1,000 at 40x, then 20x,
+    // 10x, 5x, and ~8,000 members through the fixed schedule.
+    //
+    // 1,000 is on the V8Governance menu for PARAM_CNOVA_EPOCH_MEMBER_LIMIT
+    // ([100, 500, 1000, 5000, 10000, 50000, 100000]). Keep it that way: a value
+    // set by admin but absent from the menu is one the DAO can never restore.
+    uint256 public epochMemberLimit = 1_000;            // governable
 
     // --- Trigger C: Time elapsed since epoch start ---
-    // Default: 30 days. Slow-start protection.
-    // Epoch advances even with zero activity after this window.
-    // Early adopters always have the advantage of having joined during a
-    // higher-reward epoch -- even if the advance was time-triggered.
-    uint256 public epochTimeLimit = 30 days;            // governable
+    // V8.48: 30 days -> 180 days.
+    //
+    // At 30 days the entire nine-epoch schedule expires in eight months whether
+    // or not a single person joins, spending the Genesis bonus on the calendar
+    // instead of on early members -- the opposite of what it exists for. At 180
+    // days TIME is what it should be: a dormancy backstop, so a project left
+    // idle cannot hold Genesis rates open indefinitely for a later revival.
+    // There is no supply cost to the longer window; MINT is still the cap.
+    uint256 public epochTimeLimit = 180 days;           // governable
 
     // --- Trigger type constants (emitted in EpochAdvanced event) ---
     uint8 public constant TRIGGER_MINT   = 0;  // mint limit reached
