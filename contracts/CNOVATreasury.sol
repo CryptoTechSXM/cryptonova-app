@@ -341,6 +341,15 @@ contract CNOVATreasury is Ownable2Step, ReentrancyGuard {
         require(isUniverseMode, "Treasury: Universe Mode required");
         require(router != address(0), "Treasury: zero router");
         require(usdcAmount <= usdcReserve, "Treasury: not enough reserve");
+        // V8.48 item 5 — owner-decided 2026-08-07: HARD floor guard, no override,
+        // no timelock escape. The floor's public promise is "it can only ever go
+        // up — never down — by design" (floorPrice() doc above); this makes that
+        // promise a contract invariant rather than an intention. CONSEQUENCE,
+        // decided with eyes open: since floor = usdcReserve / supply and this
+        // function spends reserve without reducing supply, any usdcAmount > 0
+        // fails the check below — reserve-funded DEX liquidity is intentionally
+        // impossible until a design routes NON-reserve funds to it.
+        uint256 floorBefore = floorPrice();
 
         // Transfer tokens to self for the call (CNOVA from owner, USDC from reserve)
         cnova.transferFrom(msg.sender, address(this), cnovaAmount);
@@ -363,6 +372,8 @@ contract CNOVATreasury is Ownable2Step, ReentrancyGuard {
 
         // Deduct USDC used from tracked reserve
         usdcReserve -= usdcAmount;
+
+        require(floorPrice() >= floorBefore, "Treasury: floor would drop");
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -381,7 +392,15 @@ contract CNOVATreasury is Ownable2Step, ReentrancyGuard {
     ) external onlyOwner nonReentrant {
         require(to != address(0), "Treasury: zero to");
         require(amount <= usdcReserve, "Treasury: exceeds reserve");
+        // V8.48 item 5 — owner-decided 2026-08-07: HARD floor guard, no override.
+        // Once CNOVA supply exists, any reserve withdrawal lowers the floor, so
+        // this function is INTENTIONALLY unusable against member-backing reserve
+        // ("emergencyWithdraw becomes unusable against reserve" — the decision,
+        // verbatim). It still works in the window before the first mint: with
+        // supply 0, floorPrice() returns the constant seed on both reads.
+        uint256 floorBefore = floorPrice();
         usdcReserve -= amount;
+        require(floorPrice() >= floorBefore, "Treasury: floor would drop");
         usdc.safeTransfer(to, amount);
         emit EmergencyWithdraw(to, amount, reason);
     }

@@ -24,16 +24,16 @@ describe("V8.46 item 9 — epochMemberCount counts unique members, not seat even
   it("counts each member once, no matter how many times they are re-seated", async function () {
     const { cnova, minter, alice, bob, carol } = await deployToken();
 
-    await cnova.connect(minter).mintReward(alice.address, 0);
-    await cnova.connect(minter).mintReward(bob.address, 0);
-    await cnova.connect(minter).mintReward(carol.address, 0);
+    await cnova.connect(minter).mintReward(alice.address, 0, 0);
+    await cnova.connect(minter).mintReward(bob.address, 0, 0);
+    await cnova.connect(minter).mintReward(carol.address, 0, 0);
     expect(await cnova.epochMemberCount()).to.equal(3);
 
     // the figure-8 loop: re-seat the SAME three many times across tiers
     for (let i = 0; i < 5; i++) {
-      await cnova.connect(minter).mintReward(alice.address, 0);
-      await cnova.connect(minter).mintReward(bob.address, 1);
-      await cnova.connect(minter).mintReward(carol.address, 2);
+      await cnova.connect(minter).mintReward(alice.address, 0, 0);
+      await cnova.connect(minter).mintReward(bob.address, 1, 0);
+      await cnova.connect(minter).mintReward(carol.address, 2, 0);
     }
     expect(await cnova.epochMemberCount()).to.equal(3);           // unchanged — no double count
     expect(await cnova.countedMember(alice.address)).to.equal(true);
@@ -44,22 +44,22 @@ describe("V8.46 item 9 — epochMemberCount counts unique members, not seat even
     await cnova.connect(admin).setEpochMemberLimit(3);
 
     // re-mint one member 10× — one unique person — must NOT advance the epoch
-    for (let i = 0; i < 10; i++) await cnova.connect(minter).mintReward(alice.address, 0);
+    for (let i = 0; i < 10; i++) await cnova.connect(minter).mintReward(alice.address, 0, 0);
     expect(await cnova.currentEpoch()).to.equal(0);
     expect(await cnova.epochMemberCount()).to.equal(1);
 
-    await cnova.connect(minter).mintReward(bob.address, 0);    // count -> 2
-    await cnova.connect(minter).mintReward(carol.address, 0);  // count -> 3
+    await cnova.connect(minter).mintReward(bob.address, 0, 0);    // count -> 2
+    await cnova.connect(minter).mintReward(carol.address, 0, 0);  // count -> 3
     expect(await cnova.currentEpoch()).to.equal(0);            // advance triggers on the NEXT mint
 
-    await cnova.connect(minter).mintReward(dave.address, 0);   // _tryAdvance sees 3 >= 3 -> epoch 1
+    await cnova.connect(minter).mintReward(dave.address, 0, 0);   // _tryAdvance sees 3 >= 3 -> epoch 1
     expect(await cnova.currentEpoch()).to.equal(1);
   });
 
   it("a member counted in one epoch is NOT recounted after an advance (lifetime gate)", async function () {
     const { cnova, minter, alice, bob } = await deployToken();
 
-    await cnova.connect(minter).mintReward(alice.address, 0);
+    await cnova.connect(minter).mintReward(alice.address, 0, 0);
     expect(await cnova.epochMemberCount()).to.equal(1);
 
     // Advance to the next epoch via the TIME trigger.
@@ -68,12 +68,12 @@ describe("V8.46 item 9 — epochMemberCount counts unique members, not seat even
     // epoch never advanced, and the assertion below caught it. Read the limit
     // off the contract so this test follows policy instead of restating it.
     await time.increase(Number(await cnova.epochTimeLimit()) + 1);
-    await cnova.connect(minter).mintReward(bob.address, 0);    // advance -> epoch 1, reset; bob counted
+    await cnova.connect(minter).mintReward(bob.address, 0, 0);    // advance -> epoch 1, reset; bob counted
     expect(await cnova.currentEpoch()).to.equal(1);
     expect(await cnova.epochMemberCount()).to.equal(1);        // bob only
 
     // alice re-enters in epoch 1 — already counted for life, must not tick again
-    await cnova.connect(minter).mintReward(alice.address, 0);
+    await cnova.connect(minter).mintReward(alice.address, 0, 0);
     expect(await cnova.epochMemberCount()).to.equal(1);        // still just bob
   });
 });

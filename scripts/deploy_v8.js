@@ -553,6 +553,13 @@ async function main() {
   await (await cnova.grantRole(DIRECT_SALE_ROLE, dsAddr)).wait();
   console.log(`  ↳  DIRECT_SALE_ROLE granted to CNOVADirectSale`);
 
+  // V8.48 item 6: every purchase deposits its floor-backing portion through
+  // treasury.depositReserve() (the floor reads usdcReserve, and a plain transfer
+  // would dilute it). depositReserve is onlyMatrix — WITHOUT this authorization
+  // every buyCNOVA reverts "Treasury: caller not matrix".
+  await (await treasury.setAuthorizedCaller(dsAddr, true)).wait();
+  console.log(`  ↳  Treasury.setAuthorizedCaller(directSale) OK (item 6)`);
+
   await (await directSale.setGovernance(govAddr)).wait();
   console.log(`  ↳  CNOVADirectSale.setGovernance OK`);
 

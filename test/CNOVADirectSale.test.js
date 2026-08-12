@@ -54,7 +54,14 @@ function computePurchase({ usdcAmount, supply, treasuryBal, multBps, sfBal, lqBa
 }
 
 async function deployFixture() {
-  const [deployer, admin, treasury, sf, lq, buyerA, buyerB, other] =
+  // V8.48 item 6: `treasury` used to be a bare SIGNER and the floor was faked by
+  // minting USDC straight to its address — which is exactly the balanceOf-vs-
+  // usdcReserve divergence item 6 closed. The fixture now deploys the REAL
+  // CNOVATreasury, seeds the floor through depositReserve(), and returns
+  // `treasury` as an address-only shim so the many `.address` reads below (and
+  // the JS purchase mirror, which reads balanceOf) are untouched — with every
+  // inflow going through depositReserve, balanceOf == usdcReserve here.
+  const [deployer, admin, _unusedTreasurySigner, sf, lq, buyerA, buyerB, other] =
     await ethers.getSigners();
 
   const usdcToken = await (await ethers.getContractFactory("MockUSDC")).deploy(deployer.address);
@@ -63,13 +70,18 @@ async function deployFixture() {
   const usdcAddr  = await usdcToken.getAddress();
   const cnovaAddr = await cnovaToken.getAddress();
 
+  const treasuryC = await (await ethers.getContractFactory("CNOVATreasury"))
+    .deploy(cnovaAddr, usdcAddr, admin.address);
+  const treasuryAddr = await treasuryC.getAddress();
+  const treasury = { address: treasuryAddr };   // address-only shim (see note above)
+
   const SF_TARGET = usdc(500);
   const LQ_TARGET = usdc(1000);
 
   const sale = await (await ethers.getContractFactory("CNOVADirectSale")).deploy(
     usdcAddr,
     cnovaAddr,
-    treasury.address,
+    treasuryAddr,
     sf.address,
     lq.address,
     SF_TARGET,
@@ -88,7 +100,14 @@ async function deployFixture() {
   const DIRECT_SALE_ROLE = await cnovaToken.DIRECT_SALE_ROLE();
   await cnovaToken.connect(admin).grantRole(DIRECT_SALE_ROLE, admin.address);
   await cnovaToken.connect(admin).mintForSale(admin.address, cnova(500_000));
-  await usdcToken.connect(deployer).mint(treasury.address, usdc(25_000));
+  // Seed the $25,000 floor through the treasury's OWN accounting.
+  await treasuryC.connect(admin).setAuthorizedCaller(deployer.address, true);
+  await usdcToken.connect(deployer).mint(deployer.address, usdc(25_000));
+  await usdcToken.connect(deployer).approve(treasuryAddr, usdc(25_000));
+  await treasuryC.connect(deployer).depositReserve(usdc(25_000));
+  // V8.48 item 6: each purchase deposits its floor-backing via depositReserve(),
+  // so the sale must be an authorized treasury caller (deploy_v8.js does the same).
+  await treasuryC.connect(admin).setAuthorizedCaller(saleAddr, true);
 
   // Direct sale needs DIRECT_SALE_ROLE to mint purchased CNOVA (V8.23: mintForSale).
   await cnovaToken.connect(admin).grantRole(DIRECT_SALE_ROLE, saleAddr);

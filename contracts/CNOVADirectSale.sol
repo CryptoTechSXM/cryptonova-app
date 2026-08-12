@@ -6,6 +6,14 @@ import "@openzeppelin/contracts/utils/Pausable.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 
+/// @dev V8.48 item 6: the ONE floor formula — CNOVATreasury's own view — and the
+///      ONE deposit path that the formula can see (depositReserve is onlyMatrix,
+///      so the deploy must setAuthorizedCaller(thisSale) or purchases revert).
+interface ITreasuryFloor {
+    function floorPrice() external view returns (uint256);
+    function depositReserve(uint256 amount_) external;
+}
+
 /// @dev Minimal interface for CNOVAToken — only what this contract needs.
 interface ICNOVAMintable {
     /// @notice V8.23: replaces mintDirect — requires DIRECT_SALE_ROLE (not MINTER_ROLE).
@@ -187,8 +195,17 @@ contract CNOVADirectSale is Ownable2Step, Pausable {
         // Pull USDC from buyer
         usdc.safeTransferFrom(msg.sender, address(this), usdcAmount);
 
-        // Route USDC
-        if (toTreasury > 0) usdc.safeTransfer(treasury,         toTreasury);
+        // Route USDC.
+        // V8.48 item 6: the floor reads the treasury's usdcReserve ACCUMULATOR now,
+        // so the floor-backing portion must arrive via depositReserve() — the old
+        // plain transfer would mint cnovaOut of supply against an unmoved reserve
+        // and DILUTE the floor on every sale, the opposite of the documented
+        // "floor-neutral by design". (This was invisible while the floor read
+        // balanceOf; fixing item 6 made it load-bearing.)
+        if (toTreasury > 0) {
+            usdc.forceApprove(treasury, toTreasury);
+            ITreasuryFloor(treasury).depositReserve(toTreasury);
+        }
         if (toSF       > 0) usdc.safeTransfer(stabilityFund,    toSF);
         if (toLQ       > 0) usdc.safeTransfer(liquidityReserve, toLQ);
 
@@ -317,13 +334,16 @@ contract CNOVADirectSale is Ownable2Step, Pausable {
     }
 
     function _floorPriceE6() internal view returns (uint256) {
-        uint256 supply       = cnova.totalSupply();
-        if (supply == 0) return 0;
-        uint256 treasuryBal  = usdc.balanceOf(treasury);
-        if (treasuryBal == 0) return 0;
-        // (6-dec USDC) per (1 full CNOVA) — scaled by 1e18 for integer precision
-        // = treasuryBal(6dec) * 1e18 / supply(18dec)
-        return treasuryBal * CNOVA_DEC / supply;
+        // V8.48 item 6: read the treasury's OWN floorPrice() — the usdcReserve
+        // accumulator — instead of usdc.balanceOf(treasury). The two were equal
+        // only by luck: any USDC reaching the treasury outside depositReserve()
+        // (a direct transfer, a mistaken send) inflated balanceOf and this view
+        // quoted a HIGHER floor than the treasury itself would honour on
+        // redemption. One formula lives in one place now; this contract keeps
+        // only its original supply-0 gate so pre-launch buys still revert with
+        // "floor price is zero (no supply yet)" exactly as before.
+        if (cnova.totalSupply() == 0) return 0;
+        return ITreasuryFloor(treasury).floorPrice();
     }
 
     function _tierIndex(uint256 supply) internal view returns (uint256) {

@@ -392,7 +392,9 @@ contract FigureEightMatrix is Ownable2Step {
         _distributePayments(member);
 
         // Mint CNOVA reward
-        try cnova.mintReward(member, 0) {} catch {}  // V6/V7 single-tier: always T1 (index 0)
+        // V8.48: mintReward gained a deposit6 backing param — legacy path passes 0
+        // (no reserve deposit made here = nothing backed = mints 0 against a V8.48 token).
+        try cnova.mintReward(member, 0, 0) {} catch {}  // V6/V7 single-tier: always T1 (index 0)
 
         emit MemberEntered(member, matrixPos[member], members[member].id, address(this));
     }

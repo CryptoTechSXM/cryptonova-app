@@ -288,7 +288,10 @@ contract CryptoNovaMatrixV6 is Ownable2Step, ReentrancyGuard {
         _distributePayments(member);
 
         // ── Mint CNOVA ────────────────────────────────────────────────────────
-        cnova.mintReward(member, 0);  // V6: single-tier, T1 multiplier (index 0)
+        // V8.48: mintReward gained a deposit6 backing param. This LEGACY contract is
+        // never deployed against the V8.48 token; deposit 0 = mints 0 by the strict
+        // backing rule, which is correct for a path that made no reserve deposit.
+        cnova.mintReward(member, 0, 0);  // V6: single-tier, T1 multiplier (index 0)
 
         emit MemberEnteredMatrix(member, members[member].isInMatrix ? matrixPos[member] : 0, members[member].id);
     }

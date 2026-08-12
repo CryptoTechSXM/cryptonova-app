@@ -546,28 +546,28 @@ describe("CNOVAToken V8.1 — tier multiplier + epoch triggers", function () {
 
     it("T1 (index 0) earns 50 CNOVA in epoch 1", async function () {
       const { cnova, minter, alice } = await loadFixture(deployCNOVAFixture);
-      await cnova.connect(minter).mintReward(alice.address, 0);
+      await cnova.connect(minter).mintReward(alice.address, 0, 0);
       expect(await cnova.balanceOf(alice.address))
         .to.equal(ethers.parseUnits("50", 18));
     });
 
     it("T4 (index 3) earns 8× base = 400 CNOVA in epoch 1", async function () {
       const { cnova, minter, alice } = await loadFixture(deployCNOVAFixture);
-      await cnova.connect(minter).mintReward(alice.address, 3);
+      await cnova.connect(minter).mintReward(alice.address, 3, 0);
       expect(await cnova.balanceOf(alice.address))
         .to.equal(ethers.parseUnits("400", 18));   // 50 * 8
     });
 
     it("T7 (index 6) earns 80× base = 4000 CNOVA in epoch 1", async function () {
       const { cnova, minter, alice } = await loadFixture(deployCNOVAFixture);
-      await cnova.connect(minter).mintReward(alice.address, 6);
+      await cnova.connect(minter).mintReward(alice.address, 6, 0);
       expect(await cnova.balanceOf(alice.address))
         .to.equal(ethers.parseUnits("4000", 18));  // 50 * 80
     });
 
     it("all minted tokens are locked (vested) immediately after mint", async function () {
       const { cnova, minter, alice } = await loadFixture(deployCNOVAFixture);
-      await cnova.connect(minter).mintReward(alice.address, 6);
+      await cnova.connect(minter).mintReward(alice.address, 6, 0);
       const bal    = await cnova.balanceOf(alice.address);
       const locked = await cnova.lockedBalanceOf(alice.address);
       expect(locked).to.equal(bal);
@@ -575,7 +575,7 @@ describe("CNOVAToken V8.1 — tier multiplier + epoch triggers", function () {
 
     it("vested tokens cannot be transferred", async function () {
       const { cnova, minter, alice, bob } = await loadFixture(deployCNOVAFixture);
-      await cnova.connect(minter).mintReward(alice.address, 0);
+      await cnova.connect(minter).mintReward(alice.address, 0, 0);
       await expect(
         cnova.connect(alice).transfer(bob.address, ethers.parseUnits("1", 18))
       ).to.be.revertedWith("CNOVA: tokens vesting -- wait for unlock");
@@ -585,11 +585,11 @@ describe("CNOVAToken V8.1 — tier multiplier + epoch triggers", function () {
       const { cnova, minter, alice } = await loadFixture(deployCNOVAFixture);
       // T8=7, T9=8, T10=9 are now valid; only index >= 10 should revert
       await expect(
-        cnova.connect(minter).mintReward(alice.address, 10)
+        cnova.connect(minter).mintReward(alice.address, 10, 0)
       ).to.be.revertedWith("CNOVA: invalid tier");
       // Spot-check: T8 (index 7) should NOT revert
       await expect(
-        cnova.connect(minter).mintReward(alice.address, 7)
+        cnova.connect(minter).mintReward(alice.address, 7, 0)
       ).to.not.be.reverted;
     });
 
@@ -606,11 +606,11 @@ describe("CNOVAToken V8.1 — tier multiplier + epoch triggers", function () {
       expect(await cnova.currentEpoch()).to.equal(0);
 
       for (let i = 0; i < 25; i++) {
-        await cnova.connect(minter).mintReward(alice.address, 6);
+        await cnova.connect(minter).mintReward(alice.address, 6, 0);
       }
       expect(await cnova.currentEpoch()).to.equal(0);
 
-      await cnova.connect(minter).mintReward(alice.address, 6);
+      await cnova.connect(minter).mintReward(alice.address, 6, 0);
       expect(await cnova.currentEpoch()).to.equal(1);
 
       const batches = await cnova.vestBatchesOf(alice.address);
@@ -629,14 +629,14 @@ describe("CNOVAToken V8.1 — tier multiplier + epoch triggers", function () {
 
       expect(await cnova.currentEpoch()).to.equal(0);
 
-      await cnova.connect(minter).mintReward(alice.address, 0);
+      await cnova.connect(minter).mintReward(alice.address, 0, 0);
       expect(await cnova.currentEpoch()).to.equal(0);
 
-      await cnova.connect(minter).mintReward(bob.address, 0);
+      await cnova.connect(minter).mintReward(bob.address, 0, 0);
       expect(await cnova.currentEpoch()).to.equal(0);
 
       const [extra1] = await ethers.getSigners().then(s => s.slice(5));
-      await cnova.connect(minter).mintReward(extra1.address, 0);
+      await cnova.connect(minter).mintReward(extra1.address, 0, 0);
       expect(await cnova.currentEpoch()).to.equal(1);
     });
 
@@ -659,11 +659,11 @@ describe("CNOVAToken V8.1 — tier multiplier + epoch triggers", function () {
       // Just SHORT of the window: nothing must advance yet. Without this half
       // the test passes on any limit at all, including zero.
       await time.increase(Number(limit) - 3600);
-      await cnova.connect(minter).mintReward(alice.address, 0);
+      await cnova.connect(minter).mintReward(alice.address, 0, 0);
       expect(await cnova.currentEpoch(), "must not advance before the window").to.equal(0);
 
       await time.increase(3600 + 1);
-      await cnova.connect(minter).mintReward(alice.address, 0);
+      await cnova.connect(minter).mintReward(alice.address, 0, 0);
       expect(await cnova.currentEpoch()).to.equal(1);
     });
 
@@ -690,7 +690,7 @@ describe("CNOVAToken V8.1b — early withdrawal penalty", function () {
     it("at day 0: 50% released, 50% burned, tokens unlocked", async function () {
       const { cnova, minter, alice } = await loadFixture(deployCNOVAFixture);
 
-      await cnova.connect(minter).mintReward(alice.address, 0);
+      await cnova.connect(minter).mintReward(alice.address, 0, 0);
       const minted = ethers.parseUnits("50", 18);
 
       expect(await cnova.lockedBalanceOf(alice.address)).to.equal(minted);
@@ -710,7 +710,7 @@ describe("CNOVAToken V8.1b — early withdrawal penalty", function () {
 
     it("emits EarlyUnlock event with correct values", async function () {
       const { cnova, minter, alice } = await loadFixture(deployCNOVAFixture);
-      await cnova.connect(minter).mintReward(alice.address, 0);
+      await cnova.connect(minter).mintReward(alice.address, 0, 0);
       const minted = ethers.parseUnits("50", 18);
 
       await expect(cnova.connect(alice).earlyUnlock(0))
@@ -725,7 +725,7 @@ describe("CNOVAToken V8.1b — early withdrawal penalty", function () {
     it("at 90 days (half of 180): penalty ~25%, released ~75%", async function () {
       const { cnova, minter, alice } = await loadFixture(deployCNOVAFixture);
 
-      await cnova.connect(minter).mintReward(alice.address, 0);
+      await cnova.connect(minter).mintReward(alice.address, 0, 0);
       const minted = ethers.parseUnits("50", 18);
 
       await time.increase(90 * 24 * 3600);
@@ -748,7 +748,7 @@ describe("CNOVAToken V8.1b — early withdrawal penalty", function () {
     it("after 180 days: no penalty, full amount retained", async function () {
       const { cnova, minter, alice } = await loadFixture(deployCNOVAFixture);
 
-      await cnova.connect(minter).mintReward(alice.address, 0);
+      await cnova.connect(minter).mintReward(alice.address, 0, 0);
       const minted = ethers.parseUnits("50", 18);
 
       await time.increase(181 * 24 * 3600);
@@ -769,11 +769,11 @@ describe("CNOVAToken V8.1b — early withdrawal penalty", function () {
 
       await cnova.connect(admin).setEpochTimeLimit(365 * 24 * 3600);
 
-      await cnova.connect(minter).mintReward(alice.address, 0);
+      await cnova.connect(minter).mintReward(alice.address, 0, 0);
       await time.increase(30 * 24 * 3600);
-      await cnova.connect(minter).mintReward(alice.address, 0);
+      await cnova.connect(minter).mintReward(alice.address, 0, 0);
       await time.increase(30 * 24 * 3600);
-      await cnova.connect(minter).mintReward(alice.address, 0);
+      await cnova.connect(minter).mintReward(alice.address, 0, 0);
 
       const totalMinted = ethers.parseUnits("150", 18);
       expect(await cnova.balanceOf(alice.address)).to.equal(totalMinted);
@@ -799,7 +799,7 @@ describe("CNOVAToken V8.1b — early withdrawal penalty", function () {
 
       await cnova.connect(admin).setPenaltyDestination(bob.address);
 
-      await cnova.connect(minter).mintReward(alice.address, 0);
+      await cnova.connect(minter).mintReward(alice.address, 0, 0);
       const minted = ethers.parseUnits("50", 18);
 
       await cnova.connect(alice).earlyUnlock(0);
@@ -819,7 +819,7 @@ describe("CNOVAToken V8.1b — early withdrawal penalty", function () {
 
       await cnova.connect(admin).setMaxPenaltyBps(0);
 
-      await cnova.connect(minter).mintReward(alice.address, 0);
+      await cnova.connect(minter).mintReward(alice.address, 0, 0);
       const minted = ethers.parseUnits("50", 18);
 
       await cnova.connect(alice).earlyUnlock(0);

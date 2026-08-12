@@ -446,9 +446,11 @@ library MatrixLogicLib {
             }
         }
 
-        _distributePayments(self, cfg, member);
+        // V8.48 item 4: the reserve deposit this seat just made prices its own
+        // mint cap — pass the EXACT amount deposited, never a reconstruction.
+        uint256 _reserveDeposit = _distributePayments(self, cfg, member);
 
-        try cfg.cnova.mintReward(member, cfg.tierIndex) {} catch {}
+        try cfg.cnova.mintReward(member, cfg.tierIndex, _reserveDeposit) {} catch {}
 
         emit MemberEntered(member, self.matrixPos[member], self.members[member].id, address(this));
 
@@ -878,7 +880,9 @@ library MatrixLogicLib {
         _distributePayments(self, cfg, newMember);
     }
 
-    function _distributePayments(MatrixState storage self, ImmutableConfig memory cfg, address newMember) internal {
+    /// @dev V8.48 item 4: returns the treasury-reserve deposit this entry made, so
+    ///      the caller can pass it to mintReward as the mint's backing value.
+    function _distributePayments(MatrixState storage self, ImmutableConfig memory cfg, address newMember) internal returns (uint256) {
         Member storage m = self.members[newMember];
 
         // V8.32: 50/2.5/47.5 pre-split.  Before the BPS array runs, carve the entry fee into:
@@ -907,46 +911,67 @@ library MatrixLogicLib {
         SafeERC20.forceApprove(cfg.usdc, address(cfg.treasury), treasuryAmt);
         cfg.treasury.depositReserve(treasuryAmt);
 
-        uint256 poolAmt = payBase * cfg.splitPoolBps / BPS_DENOM;
-        self.poolAccumulator += poolAmt;
-
-        uint256 stabilityAmt = payBase * cfg.splitStabilityBps / BPS_DENOM;
-        if (stabilityAmt > 0) {
-            _forwardToStabilityFund(self, cfg, stabilityAmt, 1);
+        // V8.48 item 4: `treasuryAmt` now lives to the end of the function (it is
+        // the return value), which pushed this frame past the EVM's 16-slot stack
+        // ("Stack too deep" at the community block). Each split below is therefore
+        // SCOPED — its local dies at the closing brace. Same doctrine as item 12's
+        // _triageParked extraction: remove locals, never enable viaIR for this.
+        {
+            uint256 poolAmt = payBase * cfg.splitPoolBps / BPS_DENOM;
+            self.poolAccumulator += poolAmt;
         }
 
-        uint256 buybackAmt = payBase * cfg.splitBuybackBps / BPS_DENOM;
-        if (buybackAmt > 0) {
-            _forwardToBuybackReserve(self, cfg, buybackAmt);
-        }
-
-        uint256 liquidityAmt = payBase * cfg.splitLiquidityBps / BPS_DENOM;
-        if (liquidityAmt > 0 && self.liquidityReserve != address(0)) {
-            cfg.usdc.safeTransfer(self.liquidityReserve, liquidityAmt);
-        } else if (liquidityAmt > 0 && cfg.devWallet != address(0)) {
-            cfg.usdc.safeTransfer(cfg.devWallet, liquidityAmt);
-        }
-
-        uint256 devAmt = payBase * cfg.splitDevBps / BPS_DENOM;
-        if (devAmt > 0 && cfg.devWallet != address(0)) {
-            cfg.usdc.safeTransfer(cfg.devWallet, devAmt);
-        }
-
-        uint256 opsAmt = payBase * cfg.splitOpsBps / BPS_DENOM;
-        if (opsAmt > 0 && cfg.opsWallet != address(0)) {
-            cfg.usdc.safeTransfer(cfg.opsWallet, opsAmt);
-        }
-
-        uint256 communityAmt = payBase * cfg.splitCommunityBps / BPS_DENOM;
-        if (communityAmt > 0) {
-            if (self.communityWallet != address(0)) {
-                SafeERC20.forceApprove(cfg.usdc, self.communityWallet, communityAmt);
-                try ICommunityWalletV8(self.communityWallet).deposit(communityAmt) {}
-                catch { cfg.usdc.safeTransfer(cfg.devWallet, communityAmt); }
-            } else if (cfg.devWallet != address(0)) {
-                cfg.usdc.safeTransfer(cfg.devWallet, communityAmt);
+        {
+            uint256 stabilityAmt = payBase * cfg.splitStabilityBps / BPS_DENOM;
+            if (stabilityAmt > 0) {
+                _forwardToStabilityFund(self, cfg, stabilityAmt, 1);
             }
         }
+
+        {
+            uint256 buybackAmt = payBase * cfg.splitBuybackBps / BPS_DENOM;
+            if (buybackAmt > 0) {
+                _forwardToBuybackReserve(self, cfg, buybackAmt);
+            }
+        }
+
+        {
+            uint256 liquidityAmt = payBase * cfg.splitLiquidityBps / BPS_DENOM;
+            if (liquidityAmt > 0 && self.liquidityReserve != address(0)) {
+                cfg.usdc.safeTransfer(self.liquidityReserve, liquidityAmt);
+            } else if (liquidityAmt > 0 && cfg.devWallet != address(0)) {
+                cfg.usdc.safeTransfer(cfg.devWallet, liquidityAmt);
+            }
+        }
+
+        {
+            uint256 devAmt = payBase * cfg.splitDevBps / BPS_DENOM;
+            if (devAmt > 0 && cfg.devWallet != address(0)) {
+                cfg.usdc.safeTransfer(cfg.devWallet, devAmt);
+            }
+        }
+
+        {
+            uint256 opsAmt = payBase * cfg.splitOpsBps / BPS_DENOM;
+            if (opsAmt > 0 && cfg.opsWallet != address(0)) {
+                cfg.usdc.safeTransfer(cfg.opsWallet, opsAmt);
+            }
+        }
+
+        {
+            uint256 communityAmt = payBase * cfg.splitCommunityBps / BPS_DENOM;
+            if (communityAmt > 0) {
+                if (self.communityWallet != address(0)) {
+                    SafeERC20.forceApprove(cfg.usdc, self.communityWallet, communityAmt);
+                    try ICommunityWalletV8(self.communityWallet).deposit(communityAmt) {}
+                    catch { cfg.usdc.safeTransfer(cfg.devWallet, communityAmt); }
+                } else if (cfg.devWallet != address(0)) {
+                    cfg.usdc.safeTransfer(cfg.devWallet, communityAmt);
+                }
+            }
+        }
+
+        return treasuryAmt;   // V8.48 item 4: this entry's reserve deposit
     }
 
     function _forwardToStabilityFund(MatrixState storage self, ImmutableConfig memory cfg, uint256 amount, uint8 layer) internal {

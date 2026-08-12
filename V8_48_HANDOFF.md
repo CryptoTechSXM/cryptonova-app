@@ -23,11 +23,9 @@ in both directions (two items were done and still marked open).
 
 | item | what is missing | file |
 |---|---|---|
-| 4 | `mintReward` has no cap against `floorPrice()`. | CNOVAToken |
-| 5 | no `floorBefore` guard in `addDexLiquidity` / `emergencyWithdraw`. | CNOVATreasury |
-| 6 | `_floorPriceE6()` must read `usdcReserve`, not `balanceOf(treasury)`. | CNOVADirectSale |
 | 7 | cross-pair `memberJoinedAt` so `earlyExitPenaltyBps` can work. | PairManagerV8 |
 | 40 | `selfRescueWithPermit` — the CONTRACT half. Frontend half shipped. | FigureEightMatrixV8 |
+| PARKED | **OWNER-RAISED 2026-08-12, blocks the deploy until answered:** parked members are growing and the owner suspects a rescue self-loop (rescue → re-seat with SF debt → cycle out underfunded → park again). The stress bots alone do not explain it. MEASURE before theorizing: `scripts/diag_parked_growth.js` — queue trajectory, repeat-park counts per member (the loop signature), SF loan-vs-repaid trajectory. | investigation |
 
 **Two need an OWNER DECISION before they can be built — do not guess these:**
 - **item 2** — `reservedHeldFor(member)` getter **or** bind the reserve across all tiers.
@@ -68,7 +66,13 @@ sat on `admin` for two days while the handoff said "already live" — members we
 still filing reports against bugs that were already fixed. That wrong word cost
 half a session and the members two days.
 
-Contract, awaiting deploy (2026-08-12): **42** (epoch policy — see above), and
+Contract, awaiting deploy (2026-08-12): **42** (epoch policy — see above),
+**4 + 5 + 6** (the floor-price cluster, 528 passing — mint capped at each seat's
+own reserve deposit, hard no-override floor guards on both treasury owner
+functions, one floor formula; closing item 6 exposed and fixed a LATENT
+DILUTION BUG — DirectSale delivered floor-backing by plain transfer, invisible
+to usdcReserve, and deploy_v8.js now MUST authorize the sale as a treasury
+caller or every purchase reverts; details in the item-6 scope row), and
 **3** (`bulkWithdraw(uint256)` — the one-signature partial withdrawal, 520 passing;
 includes an EIP-170 refactor: both sweep loops now live in TierRouterLib after the
 overload put TierRouter 148 bytes over the deploy limit WITH a green suite — the

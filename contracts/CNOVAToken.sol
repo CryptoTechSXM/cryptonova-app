@@ -462,9 +462,15 @@ contract CNOVAToken is ERC20, ERC20Burnable, AccessControl {
      *
      * @param  to         Recipient address.
      * @param  tierIndex  0 = T1 ... 9 = T10.
+     * @param  deposit6   V8.48 (item 4): the USDC (6-dec) THIS seat just deposited
+     *                    into the treasury reserve — the caller knows it exactly
+     *                    (payBase * splitTreasuryBps, MatrixLogicLib), so it is
+     *                    passed rather than duplicated here as a fee table that
+     *                    would drift (the two-copies-of-a-constant lesson).
+     *                    A seat that deposited nothing backs nothing and mints 0.
      * @return amount     CNOVA minted (0 if cap reached or all epochs done).
      */
-    function mintReward(address to, uint8 tierIndex)
+    function mintReward(address to, uint8 tierIndex, uint256 deposit6)
         external
         onlyRole(MINTER_ROLE)
         returns (uint256 amount)
@@ -491,6 +497,32 @@ contract CNOVAToken is ERC20, ERC20Burnable, AccessControl {
 
         // Apply tier multiplier
         amount = base * tierMultipliers[tierIndex];
+
+        // V8.48 item 4 — OPTION A, owner-decided 2026-08-08: cap the mint at the
+        // value THIS seat's own treasury deposit backs at the current floor.
+        //   backed tokens * floor == deposit, exactly, whenever the cap binds —
+        // so the reward's BACKING VALUE is constant while the token count falls
+        // as the floor rises ("starts at 50 CNOVA, then auto-corrects").
+        // The schedule and epoch table are UNCHANGED; this is a backing ceiling,
+        // not a new schedule, and it self-releases at each halving.
+        // ORDERING NOTE (corrects the modelling in V8_48_BACKLOG.md, which
+        // assumed mint-before-deposit): _distributePayments deposits BEFORE this
+        // runs, so the floor read here already includes this seat's own deposit.
+        // Consequence, stated precisely: when the cap binds, the entry leaves
+        // the floor slightly ABOVE where it stood BEFORE the entry — algebra:
+        // (R+D)/(S + D/F1) > R/S where F1 = (R+D)/S. (Relative to the intra-tx
+        // post-deposit peak F1 the mint dilutes back down, as any mint must;
+        // what is guaranteed is that no seat leaves the floor lower than it
+        // found it, which is the promise the site copy makes.)
+        // treasuryRef unset = no floor to price against = cap not applied (same
+        // guard the Final Frontier branch above has always used).
+        if (address(treasuryRef) != address(0)) {
+            uint256 floorNow = treasuryRef.floorPrice();
+            if (floorNow > 0) {
+                uint256 backed = (deposit6 * 1e18) / floorNow;
+                if (amount > backed) amount = backed;
+            }
+        }
 
         // Hard cap
         if (totalMinted + amount > MAX_SUPPLY) {

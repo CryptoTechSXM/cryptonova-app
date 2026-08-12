@@ -145,7 +145,7 @@ describe("V8.48 — epoch policy invariants", function () {
 
     // T10 in epoch 1 wants 640 * 50 = 32,000 CNOVA. It gets 100 wei, quietly.
     const before = await cnova.balanceOf(alice.address);
-    await expect(cnova.connect(minter).mintReward(alice.address, 9),
+    await expect(cnova.connect(minter).mintReward(alice.address, 9, 0),
       "truncation must not revert — that is precisely what makes it invisible").to.not.be.reverted;
     expect((await cnova.balanceOf(alice.address)) - before,
       "the member asked for 32,000 CNOVA and received 100 wei").to.equal(100n);
@@ -153,7 +153,7 @@ describe("V8.48 — epoch policy invariants", function () {
 
     // And from here on every member receives nothing at all, still silently.
     const atCap = await cnova.balanceOf(alice.address);
-    await expect(cnova.connect(minter).mintReward(alice.address, 0)).to.not.be.reverted;
+    await expect(cnova.connect(minter).mintReward(alice.address, 0, 0)).to.not.be.reverted;
     expect((await cnova.balanceOf(alice.address)) - atCap,
       "past the cap every reward is zero and nothing tells the member").to.equal(0n);
   });
@@ -168,7 +168,7 @@ describe("V8.48 — epoch policy invariants", function () {
     expect(await cnova.epochTimeLimit()).to.be.gt(0n);
 
     expect(await cnova.currentEpoch()).to.equal(0);
-    await cnova.connect(minter).mintReward(alice.address, 0);
+    await cnova.connect(minter).mintReward(alice.address, 0, 0);
     expect(await cnova.currentEpoch(), "one ordinary T1 entry must not advance anything").to.equal(0);
     expect(await cnova.epochMemberCount(), "and it must count as exactly one member").to.equal(1n);
   });
