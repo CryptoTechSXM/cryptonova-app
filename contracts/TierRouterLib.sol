@@ -7,6 +7,8 @@ import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 interface ILPair {
     function registerFor(address member, address referrer, uint256 targetPairIndex) external;
     function registerForMatB(address member, address referrer, uint256 targetPairIndex) external;
+    function pairCount() external view returns (uint256);
+    function getPairAt(uint256 idx) external view returns (address, address);
 }
 
 interface ILMat {
@@ -15,6 +17,8 @@ interface ILMat {
     function pairIndex() external view returns (uint256);
     function partner() external view returns (address);
     function isActiveInMatrix(address member) external view returns (bool);
+    function routerWithdrawFor(address member, uint256 amount) external;
+    function withdrawableOf(address member) external view returns (uint256);
 }
 
 interface ILSF {
@@ -71,6 +75,74 @@ library TierRouterLib {
         if (avail == 0) return remaining;
         uint256 take = avail >= remaining ? remaining : avail;
         try ILMat(mat).deductForUpgrade(member, 0, take) { return remaining - take; }
+        catch { return remaining; }
+    }
+
+    /// @notice V8.48 (item 3): draw up to `remaining` of `member`'s FREE earnings from
+    ///         every matrix of ONE tier, paid TO THE MEMBER, returning the amount still
+    ///         outstanding. Runs delegatecalled inside TierRouter, so the matrices see
+    ///         the router as caller and routerWithdrawFor's _onlyTierRouter passes.
+    ///         Soft on failure, same doctrine as drawFreeEarnings above: an unreadable
+    ///         pair manager or matrix is SKIPPED — one bad matrix must not sink the
+    ///         whole withdrawal, which is the exact defect this function retires from
+    ///         the dapp's per-matrix loop. Each take is capped at freeWithdrawable(),
+    ///         the item-1 withdrawCore mirror that returns 0 anywhere withdrawCore
+    ///         would revert, so the expected path never trips the try/catch — the
+    ///         catch is for the unforeseen, not the routine.
+    function drawTierToMember(address pm, address member, uint256 remaining)
+        external returns (uint256)
+    {
+        if (pm == address(0) || remaining == 0) return remaining;
+        uint256 n;
+        try ILPair(pm).pairCount() returns (uint256 c) { n = c; } catch { return remaining; }
+        for (uint256 p = 0; p < n; p++) {
+            if (remaining == 0) break;
+            address mA;
+            address mB;
+            try ILPair(pm).getPairAt(p) returns (address a, address b) { mA = a; mB = b; }
+            catch { continue; }
+            remaining = _drawMatrixToMember(mA, member, remaining);
+            remaining = _drawMatrixToMember(mB, member, remaining);
+        }
+        return remaining;
+    }
+
+    /// @notice V8.48: the V8.44 FULL sweep's tier loop, relocated here verbatim from
+    ///         TierRouter.bulkWithdraw()/_sweepMatrix when the item-3 overload pushed
+    ///         the router past EIP-170 (24,724 bytes). Same semantics: every matrix
+    ///         with any raw balance gets a full routerWithdrawFor(member, 0); zero
+    ///         balances and failures are skipped silently.
+    function sweepTierToMember(address pm, address member) external {
+        if (pm == address(0)) return;
+        uint256 n;
+        try ILPair(pm).pairCount() returns (uint256 c) { n = c; } catch { return; }
+        for (uint256 p = 0; p < n; p++) {
+            address mA;
+            address mB;
+            try ILPair(pm).getPairAt(p) returns (address a, address b) { mA = a; mB = b; }
+            catch { continue; }
+            _sweepMatrixToMember(mA, member);
+            _sweepMatrixToMember(mB, member);
+        }
+    }
+
+    function _sweepMatrixToMember(address mat, address member) internal {
+        if (mat == address(0)) return;
+        try ILMat(mat).withdrawableOf(member) returns (uint256 bal) {
+            if (bal == 0) return;
+        } catch { return; }
+        try ILMat(mat).routerWithdrawFor(member, 0) {} catch {}
+    }
+
+    function _drawMatrixToMember(address mat, address member, uint256 remaining)
+        internal returns (uint256)
+    {
+        if (mat == address(0) || remaining == 0) return remaining;
+        uint256 avail;
+        try ILMat(mat).freeWithdrawable(member) returns (uint256 a) { avail = a; } catch { return remaining; }
+        if (avail == 0) return remaining;
+        uint256 take = avail >= remaining ? remaining : avail;
+        try ILMat(mat).routerWithdrawFor(member, take) { return remaining - take; }
         catch { return remaining; }
     }
 

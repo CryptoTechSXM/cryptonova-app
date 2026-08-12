@@ -23,7 +23,6 @@ in both directions (two items were done and still marked open).
 
 | item | what is missing | file |
 |---|---|---|
-| 3 | `bulkWithdraw(uint256 amount)` — one-signature PARTIAL withdrawals. The per-matrix loop this replaces is where Deborah's failed $50 lived. | TierRouter(Lib) |
 | 4 | `mintReward` has no cap against `floorPrice()`. | CNOVAToken |
 | 5 | no `floorBefore` guard in `addDexLiquidity` / `emergencyWithdraw`. | CNOVATreasury |
 | 6 | `_floorPriceE6()` must read `usdcReserve`, not `balanceOf(treasury)`. | CNOVADirectSale |
@@ -59,11 +58,23 @@ to one measured member), **11** (rescue no longer erases the surplus — LIVE lo
 **37**, **41** (distribution on the 25th), **8 + 9** (burning locked CNOVA no longer
 bricks the wallet).
 
-Frontend, already live: **39** (seat position + rotations-to-cycle + sampled rate),
-**40 frontend** (one-click clear-all), **41b** (the 65/35 modal), and the withdraw
-fixes below.
+Frontend, **LIVE TO MEMBERS since 2026-08-12** (`main` promoted to `17b6c02`,
+Vercel production deploy verified Ready): **39** (seat position +
+rotations-to-cycle + sampled rate), **40 frontend** (one-click clear-all), **41b**
+(the 65/35 modal), **41/28 frontend + 42 frontend** (founder countdown + epoch
+panel — schedule reads are feature-detected across the V8.47→V8.48 cutover, see
+THE DEPLOY MODEL below), and the withdraw fixes below. Before that promotion these
+sat on `admin` for two days while the handoff said "already live" — members were
+still filing reports against bugs that were already fixed. That wrong word cost
+half a session and the members two days.
 
-Contract, awaiting deploy (2026-08-12): **42** (epoch policy — see above).
+Contract, awaiting deploy (2026-08-12): **42** (epoch policy — see above), and
+**3** (`bulkWithdraw(uint256)` — the one-signature partial withdrawal, 520 passing;
+includes an EIP-170 refactor: both sweep loops now live in TierRouterLib after the
+overload put TierRouter 148 bytes over the deploy limit WITH a green suite — the
+test network allows oversized contracts, so a green run is not a size gate. The
+frontend switch to the single call is a POST-DEPLOY task; details in the item-3
+row of `V8_48_SCOPE.md`, including the ethers-v6 overload-ambiguity caveat).
 
 ---
 
@@ -163,16 +174,20 @@ frontend (epoch countdown + the `catch(() => 1)` fix). If it is still uncommitte
 when you read this, it was never pushed — check `git log --oneline -1` against
 `item 42 frontend`. Nothing else is part-done.
 
-**Fabricated-fallback sites still live in `index.html`** — a value-returning
-`.catch()` renders a confident wrong number. Two are DISPLAY bugs, two are worse:
+**Fabricated-fallback GATING sites — FIXED 2026-08-12, commit `6ced4f1`, LIVE on
+`main` (Vercel production verified Ready).** What shipped, per site:
 
-| line | read | why it matters |
-|---|---|---|
-| 4205, 4987 | `tierCycles(...).catch(() => 0n)` | feeds UPGRADE GATING, not display. A dropped read reads as "0 cycles" and can wrongly LOCK a member out of an upgrade. |
-| 6301 | `memberHighestTier(...).catch(() => 1)` | same class, same consequence — mis-gates an upgrade. |
+| was | now |
+|---|---|
+| `tierCycles(...).catch(() => 0n)` on the T2 upgrade card — a dropped read rendered "Locked until your first T1 cycle completes" | retryRead ×3; still unknown → explicit "could not verify — this does NOT mean you are locked", approve stays enabled (an approve is harmless; the CONTRACT judges eligibility — same policy as the 2026-08-07 debt-unreadable approve fix) |
+| the second `tierCycles(...).catch(() => 0n)` (t1CyclesTR) | was DEAD CODE — nothing consumed it. Deleted. |
+| `memberHighestTier(...).catch(() => 1)` + two `tierEntryFees(...).catch(() => 0n)` in the automation-reserve breakdown — a dropped read relabeled everything "T1" and could fire the settings-mismatch warning with fabricated numbers | retryRead each; any unknown → show the contract's held TOTAL (known at that point) with "breakdown unverifiable right now", never an invented breakdown |
 
-Each needs its own "could not verify" UI state and its own test. Do not batch-swap
-them to `null` without checking what each caller does with the null.
+No dedicated frontend tests exist for these (the repo has no JS test harness — the
+existing guard style is predeploy_check.js static asserts); the checks run were
+node --check on all inline JS plus a scope check on retryRead (same-block, hoisted).
+The FULL failure-as-zero sweep of index.html is still open (2026-08-07 audit note) —
+these three were only the ones that gated actions.
 
 **Verified and closed this session, so you do not redo it:** the frontend has no
 `epochMemberLimit`/`epochTimeLimit` hardcodes; `deploy_v8.js` never sets the three
@@ -243,10 +258,69 @@ mechanism as Deborah's failed $50. Same member as item 39's cycle question.
 transaction was marked as complete."* Frequency: Consistent. **This is the two-tx
 path item 40's contract half (`selfRescueWithPermit`) collapses into one signature.**
 
-**FIRST QUESTION FOR THE NEXT SESSION, do not skip it:** both reports are dated
-2026-08-11, the same day the withdraw fixes (per-matrix try/catch, gas estimate,
-balance-delta receipt, withdraw history) and the clear-all sequencer shipped. The
-timestamps alone do not say whether these members were on the old build or the new
-one. Establish that BEFORE treating either as evidence for or against the fixes —
-reading a report from the old build as a failure of the new one, or the reverse,
-would send the whole session the wrong way.
+**ANSWERED 2026-08-12 — both reports were the OLD build, necessarily:** the
+withdraw fixes only ever reached `admin`, and members are served `main` (verified
+in the Vercel dashboard, see THE DEPLOY MODEL below). Neither report is evidence
+against the fixes; the fixes had simply never reached a member. Full findings and
+the retraction that preceded them are in the 2026-08-12 sections below — read them
+before touching anything withdraw-related. **Since the same day's promotion of
+`main` to `17b6c02` (~18:00 UTC), members ARE on the fixed build** — a withdraw
+report dated after that is evidence about the NEW code (mind the cached-tab
+caveat, and for CryptoJan22 specifically the 7702 relay section below).
+
+---
+
+## THE DEPLOY MODEL — verified in the Vercel dashboard, 2026-08-12
+
+Not inferred; read off the screen with the owner's Vercel account, project
+`cryptonova-testnet-app`:
+
+- **Production tracks `main`.** The Production environment carries
+  `v8.crypto-nova.app`, `www.crypto-nova.app`, `crypto-nova.app`,
+  `cryptonova-testnet-app.vercel.app` (+2 more). **Members see `main`. Only
+  `main`.**
+- A push to `admin` produces a PREVIEW deployment on an auto-generated URL.
+  It is not member-facing. The push ladder `admin → preview → main` is therefore
+  a real staging ladder, and nothing is "live" until it lands on `main`.
+- **RESOLVED later the same day: `main` was promoted to `17b6c02` (2026-08-12)**
+  after an on-chain probe (`scripts/probe_v847_getters.js`) confirmed every getter
+  the new UI reads exists on deployed V8.47 — except the two item-41 getters
+  (`nextDistributionTime`, `distributionDayOfMonth`), which the founder countdown
+  now FEATURE-DETECTS: V8.48 getter first, else `lastDistributionTime +
+  distributeInterval` (the V8.47 truth), else an honest "schedule unavailable".
+  Remove that fallback (and the `distributeInterval` ABI line) after V8.48 ships.
+- KNOWN, ACCEPTED until the V8.48 deploy: page prose says distributions happen on
+  the 25th (V8.48 policy) while the countdown shows the deployed contract's real
+  rolling date (2026-09-04). The countdown is the true one. If a member reports
+  this mismatch, it is that, not a new bug.
+- Consequence for docs: when writing "shipped" or "live", say WHICH BRANCH.
+  A past session wrote "already live" for admin-only pushes and this session
+  initially reasoned from it.
+- Before ANY future admin → main promotion, re-run the same check: does anything
+  on admin read a getter that exists only in the undeployed contract tree?
+  `scripts/probe_v847_getters.js` is the template — probe the CHAIN, not the
+  source tree; the tree is always the next version.
+
+## CRYPTOJAN22 IS A METAMASK SMART ACCOUNT (EIP-7702) — found 2026-08-12
+
+Her wallet 0x79470c63… is delegated to MetaMask's Delegation Framework
+(basescan shows "Authority … Delegated to 0x63c0c19a…"). Her withdrawals are NOT
+transactions she sends: a MetaMask relayer (0xC066ac5D… on 2026-08-11) calls
+**Redeem Delegations** on the DelegationManager (0xdb9B1e94…), which executes the
+matrix calls. Verified: her EOA's last self-sent tx is Aug 7, yet four withdrawal
+legs ran Aug 11 03:23 UTC and paid her $60.33 net.
+
+What this means and what it cost:
+
+- **`EarningsWithdrawn(member=X)` does not mean X sent the tx. Check `tx.from`.**
+  This session first claimed her legs carried "new-build gas fingerprints" —
+  the gas limits belonged to MetaMask's relayer, not to any build of index.html.
+  The claim was retracted the same day. `scripts/diag_withdraw_timeline.js` now
+  prints `tx.from` and flags relayed legs so it cannot mislead this way again.
+- **Her "It took forever" is relay-queue latency**, and "tried max again but it
+  did not go through" can die inside MetaMask's relay with the dapp never told.
+  The per-matrix withdraw loop (one signature per leg) multiplies this. One more
+  reason item 3 (`bulkWithdraw` partial — ONE tx) is the real fix for her class
+  of account, not just a UX nicety.
+- Unknown, worth measuring before designing around it: how many members are
+  7702-delegated. (@Lavern-Gay uses Rabby and is not this case.)

@@ -71,8 +71,9 @@ interface IFigureEightMatrixV8 {
     function parkCycledOut(address member, uint256 shortfall) external;
     /// @notice V8.44: release un-consumed crossing reserve on clean graduation.
     function releaseReserve(address member) external;
-    /// @notice V8.44 (G2): full withdrawal of member's balance, paid to member.
-    function routerWithdrawFor(address member) external;
+    /// @notice V8.44 (G2) / V8.48 (item 3): withdrawal of member's balance, paid
+    ///         to member. amount 0 = full sweep; non-zero = that much, gross.
+    function routerWithdrawFor(address member, uint256 amount) external;
     /// @notice V8.44 (G3): balance available beyond crossing/automation locks.
     function freeWithdrawable(address member) external view returns (uint256);
     function escrowOf(address member)         external view returns (uint256);
@@ -1017,26 +1018,44 @@ contract TierRouter is Ownable2Step {
     ///         per-matrix partial withdraw stays available. Matrices where the
     ///         balance is zero or fully locked are skipped silently; each
     ///         matrix applies its own withdrawal fee and lock guards.
+    /// @dev V8.48: pair loop and per-matrix calls moved into TierRouterLib
+    ///      (sweepTierToMember) — adding the item-3 partial overload put this
+    ///      contract 148 bytes OVER the EIP-170 limit (24,724), so both sweep
+    ///      paths now share the library's loop. Behaviour is identical; UX5
+    ///      and BP5 assert it.
     function bulkWithdraw() external {
         if (!globalJoined[msg.sender]) revert TRState();
         for (uint8 t = 0; t < MAX_TIERS; t++) {
-            address pmAddr = tierPairManagers[t];
-            if (pmAddr == address(0)) continue;
-            uint256 n = IPairManagerV8(pmAddr).pairCount();
-            for (uint256 p = 0; p < n; p++) {
-                (address mA, address mB) = IPairManagerV8(pmAddr).getPairAt(p);
-                _sweepMatrix(mA);
-                _sweepMatrix(mB);
-            }
+            TierRouterLib.sweepTierToMember(tierPairManagers[t], msg.sender);
         }
     }
 
-    function _sweepMatrix(address mat) internal {
-        if (mat == address(0)) return;
-        try IFigureEightMatrixV8(mat).withdrawableOf(msg.sender) returns (uint256 bal) {
-            if (bal == 0) return;
-        } catch { return; }
-        try IFigureEightMatrixV8(mat).routerWithdrawFor(msg.sender) {} catch {}
+    /// @notice V8.48 (item 3): PARTIAL bulk withdraw — draw up to `amount` (gross;
+    ///         each matrix takes its 1.5% fee out of what it pays) of FREE earnings
+    ///         across every matrix of every tier, in ONE signature. This replaces
+    ///         the dapp's per-matrix loop, where a member signed once per matrix and
+    ///         some legs landed while others failed — "clicked max, only 50% went
+    ///         through" (CryptoJan22, 2026-08-11); Deborah's failed $50 (2026-08-10).
+    ///         Draw order matches the full sweep: lowest tier first, pair 0 first,
+    ///         MatA before MatB — and withdrawCore repays any outstanding SF rescue
+    ///         debt out of the FIRST draws, exactly as a direct withdrawal would.
+    ///         Each draw is capped at that matrix's freeWithdrawable() — the item-1
+    ///         line-for-line withdrawCore mirror — so a drawn matrix cannot revert
+    ///         on amount, and a matrix that fails anyway is SKIPPED, never allowed
+    ///         to sink the sweep. A PARTIAL fill is SUCCESS: what could move,
+    ///         moved; the rest stays in place (balances settle continuously).
+    ///         Reverts only when NOTHING could be drawn, so a member never pays gas
+    ///         for a no-op reported as done.
+    function bulkWithdraw(uint256 amount) external {
+        if (!globalJoined[msg.sender]) revert TRState();
+        if (amount == 0) revert TRZero();
+        uint256 remaining = amount;
+        for (uint8 t = 0; t < MAX_TIERS; t++) {
+            if (remaining == 0) break;
+            remaining = TierRouterLib.drawTierToMember(
+                tierPairManagers[t], msg.sender, remaining);
+        }
+        if (remaining == amount) revert TRState();
     }
 
     // ─── V8.35: Bulk upgrade — single tx through multiple tiers ──────────────

@@ -471,13 +471,18 @@ contract FigureEightMatrixV8 is Ownable2Step {
         MatrixLogicLib.withdrawCore(_state, _cfg(), msg.sender, recipient, 0, true);
     }
 
-    /// @notice V8.44 (G2): TierRouter's bulkWithdraw sweep — full withdrawal of
+    /// @notice V8.44 (G2): TierRouter's bulkWithdraw sweep — withdrawal of
     ///         `member`'s balance in THIS matrix, paid TO the member. All the
     ///         usual guards (crossing lock, automation reserve, withdrawal fee)
     ///         apply exactly as in a direct withdraw().
-    function routerWithdrawFor(address member) external {
+    /// @param  amount V8.48 (item 3): 0 = full sweep (the original V8.44
+    ///         behaviour); non-zero = withdraw exactly `amount` gross — the
+    ///         per-matrix leg of TierRouter.bulkWithdraw(uint256). Signature
+    ///         changed pre-deploy: V8.48 is a fresh deploy, no on-chain caller
+    ///         holds the old selector.
+    function routerWithdrawFor(address member, uint256 amount) external {
         _onlyTierRouter();
-        MatrixLogicLib.withdrawCore(_state, _cfg(), member, member, 0, true);
+        MatrixLogicLib.withdrawCore(_state, _cfg(), member, member, amount, amount == 0);
     }
 
     // --- V8.44 graceful exit (I3 / BUGS.md option b) ---------------------------

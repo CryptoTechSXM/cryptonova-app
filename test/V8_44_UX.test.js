@@ -248,7 +248,9 @@ describe("V8.44 — UX batch (C2, G1, G2, G3, I3)", function () {
     const expectedNet = bal - (bal * feeBps) / 10_000n;
 
     const before = await usdc.balanceOf(W1.address);
-    await tr.connect(W1).bulkWithdraw({ gasLimit: 16_000_000 });
+    // V8.48 item 3 added a bulkWithdraw(uint256) overload, so the bare name is
+    // ambiguous to ethers v6 — the full signature selects the V8.44 no-arg sweep.
+    await tr.connect(W1)["bulkWithdraw()"]({ gasLimit: 16_000_000 });
     const got = (await usdc.balanceOf(W1.address)) - before;
 
     expect(got, "swept net of withdrawal fee").to.equal(expectedNet);
