@@ -16,18 +16,59 @@ loss that item 12 would have accelerated.
 
 | item | what | file |
 |---|---|---|
+| 2 | **BUILD (decided 2026-08-12): bind the automation reserve across ALL tiers** — waterfall hold, highest first. Verify first where automation spends from; the hold must live where the spend can reach it. | TierRouter(Lib) / MatrixLogicLib |
 | 7 | No cross-pair `memberJoinedAt`, so `earlyExitPenaltyBps` cannot work. Zero occurrences. | PairManagerV8 |
 | ~~8~~ | ✅ **DONE 2026-08-11.** Clamped to `balanceOf`. Measured note: removing the clamp does NOT fail the tests, because item 9 keeps batches within the balance and every burn reaches `_update` — it is a guard against a FUTURE path that moves balances without touching batches, which is exactly how this bug arrived. | CNOVAToken |
 | ~~9~~ | ✅ **DONE 2026-08-11 (508 passing).** Burns bypass the vest guard by design (`to == address(0)`), so batches outlived the tokens and `available` pinned to ZERO — the wallet could not move ANY tokens, including unlocked ones acquired later, until the stale batches matured. `_reduceVestAfterBurn` now brings the ledger down, reducing the LATEST-unlocking batches first so the holder keeps those closest to maturing, and pops emptied slots so the 200-batch cap is not leaked. Four mutations killed, including one proving the `lockedSum <= bal` guard is load-bearing (without it, burning ordinary UNLOCKED tokens underflows and reverts). Also corrected `burnFrom`'s doc, which claimed "vesting lock still applies" — it never did. | CNOVAToken |
 | 40 | `selfRescueWithPermit` — the CONTRACT half. The frontend half shipped 2026-08-11; without this a clear-all is still 2 transactions per position. | FigureEightMatrixV8 |
+
+### THE PARKED LOOP — MEASURED 2026-08-12, BLOCKS THE DEPLOY (owner-raised)
+
+`scripts/diag_parked_growth.js`, full-window scan (V8.47 deploy → block 45,397,200,
+~7.8 days, zero failed ranges). Three findings, one per section of the output:
+
+1. **TRAJECTORY.** 23,069 parks; queue net-growth ~+125/day (991 live: T2 299,
+   T3 290, T1 175 — the HIGHER tiers dominate, so shortfalls and loans are big).
+   Park rate accelerating: 1,849/day (first half) → 3,302/day (last 3 days).
+   Events-vs-live bookkeeping: cumulative net +1,460 vs 991 live — ~469 queue
+   exits happen via paths that emit no Self/CoPay/Evict event (exitSeat,
+   keeper reclaim); noted so nobody chases it as a hole later.
+2. **LOOP SIGNATURE.** 650 unique parkers out of ~671 members total. Histogram:
+   1x: 8 · 2x: 14 · 3-5x: 77 · 6-10x: 28 · **11+x: 523**. Repeat share **99.8%**.
+   Parking is not an edge case; it is the member lifecycle. Mechanism: earnings
+   per cycle ≈ 34% of fee, crossing reserve 50% → structural ~16% shortfall at
+   every cycle-out (the long-measured 84% cluster) → park → rescue → repeat.
+3. **FINANCING — the actual exponential.** SF daily net-outstanding delta:
+   $7 → $13 → $44 → $459 → $1,707 → **$4,632**. Outstanding **$6,952** (contract
+   counters; event totals were ~$30 short — dropped ranges, counters win), 91%
+   accrued in the last 48h. 08-12 alone: loaned $8,481, repaid $3,849. Every
+   copay loan repays FIRST from the member's next earnings, widening their next
+   shortfall — debt compounds per member. On mainnet this is the SF underwriting
+   ~16% of every re-entry, forever, at an accelerating rate.
+
+**OPEN before designing the fix — do these FIRST:**
+- **The 08-12 mix flip:** self-rescues 4,584 → 84 in one day while copay jumped
+  to 741 and loans spiked. Bot wallets out of USDC, or fastlane down? Check the
+  VPS (`fastlane.log`, `crontab -l`) — the repo is not the source of truth.
+- **Debt concentration:** rank memberDebt (status-page Top Borrowers / SF events)
+  — is the $6,952 spread thin or carried by a few compounding accounts?
+
+**DECISION LEVERS (owner's call, numbers first — the item-42 method):**
+(a) `CROSSING_RESERVE_BPS` — `diag_parked_truth.js` tabulates how many members
+each extra point lifts to self-funding; (b) rescue-loan terms — cap, cooldown, or
+an INSOLVENCY FLOOR: no new loan when existing debt already guarantees the next
+shortfall; (c) eviction policy — ZERO evictions have ever fired (evict_parked
+never ran); decide whether the bottom of the queue gets a relief valve. The bots
+amplify the FREQUENCY, but the mechanism is structural and ships to mainnet
+with V8.48 unless a lever moves.
 
 ### NEEDS AN OWNER DECISION BEFORE IT CAN BE BUILT
 
 | item | the decision |
 |---|---|
 | ~~42~~ | ✅ **RESOLVED 2026-08-12** — epoch policy decided and shipped. See item 42 in the contract-changes table below. |
-| 2 | `reservedHeldFor(member)` getter **or** bind the reserve across all tiers. Two different designs; not Claude's call. |
-| 28 | Distribution expiry: keep it and surface it loudly, or remove it. Exposure is $0.81 today and ~$1,865 on the next run. |
+| ~~2~~ | ✅ **DECIDED 2026-08-12: option (a) — BIND the reserve across all tiers** (waterfall, highest first; V8_48_BACKLOG.md §2). Now a deploy-blocking BUILD item, moved to the open table above. Chosen knowing the parked-loop interaction: a truly-held reserve funds automation-ON members' re-entry at cycle-out. |
+| ~~28~~ | ✅ **DECIDED 2026-08-12: KEEP the 30-day expiry — CLOSED, no contract change.** The surfacing half (claim deadline date + urgency warning) shipped to members with the 2026-08-12 main promotion. Sweep-back to the pool is now the stated rule; ~$1,865 recycles 2026-09-04 unless claimed. |
 
 ### ALREADY DONE — was marked open, verified present in source
 
