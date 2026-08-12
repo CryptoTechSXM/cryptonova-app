@@ -23,17 +23,21 @@ in both directions (two items were done and still marked open).
 
 | item | what is missing | file |
 |---|---|---|
-| 2 | **BUILD (decided 2026-08-12): bind the automation reserve across ALL tiers** — waterfall hold, highest tier first, so `reservedFor` is actually held, not promised (live example that decided it: target $450, held $32.40). BEFORE designing, map where automation SPENDS from (drawFreeEarnings / hybridUpgrade / cycle-out funding paths) — the waterfall must hold money where automation can reach it, and the cross-matrix reads in withdrawCore need a gas-sane shape. | TierRouter(Lib) / MatrixLogicLib |
+| 2 | **BUILD (decided 2026-08-12, corrected same day): `reservedHeldFor(member)` getter — behavior UNCHANGED.** Owner chose to keep high-tier-only reserve semantics after pros/cons (the waterfall rewrite of withdrawCore was rejected as too risky pre-deploy). Small item: an on-chain view returning what is ACTUALLY held toward the reserve target right now (the frontend's `_claimableAll.heldNow` reconstruction, moved on chain — mirror THAT logic, and keep the item-1 discipline: the view must equal what withdrawCore actually enforces). | TierRouter(Lib) |
 | 7 | cross-pair `memberJoinedAt` so `earlyExitPenaltyBps` can work. | PairManagerV8 |
 | 40 | `selfRescueWithPermit` — the CONTRACT half. Frontend half shipped. | FigureEightMatrixV8 |
 | PARKED | **OWNER-RAISED 2026-08-12, MEASURED same day (`scripts/diag_parked_growth.js`, complete scan, no holes) — the loop is REAL and it is the system's steady state.** 23,069 park events in 7.8 days from **650 unique members** (the network has ~671 — 97% of everyone): 35 parks/member average, 523 members (80%) parked 11+ times, top wallets ~90 parks (~11/day). **REPEAT SHARE 99.8%.** The QUEUE grows ~linearly (+125/day net, 991 live); what grows EXPONENTIALLY is the SF FINANCING: daily net-outstanding delta $7 → $13 → $44 → $459 → $1,707 → **$4,632**; outstanding $6,952, 91% of it accrued in the last 48h; today loaned $8,481 vs repaid $3,849. Mechanism: cycle out ~16% short (the 84% cluster) → park → rescue → the loan eats next earnings first → bigger shortfall next cycle. **TWO ANOMALIES OPEN:** (1) on 08-12 the mix FLIPPED — self-rescues collapsed 4,584→84 while copay jumped to 741 (bot wallets dry? fastlane keeper down? VPS is the source of truth — check fastlane.log); (2) ZERO evictions ever, consistent with evict_parked never running — the queue has no bottom-end relief valve. **The levers are ECONOMIC (owner decides, numbers first, item-42 style):** crossing-reserve bps (diag_parked_truth.js already tabulates how many members each extra point lifts over the line), rescue-loan terms / an insolvency floor (stop lending to accounts whose debt guarantees the next shortfall), eviction policy. Blocks the deploy until decided. | measured — decision pending |
 
 **Both open decisions were DECIDED by the owner 2026-08-12:**
-- **item 2 — DECIDED: BIND the reserve across all tiers** (waterfall, highest tier
-  first, per the option-(a) framing in V8_48_BACKLOG.md §2). Now a BUILD item and
-  a deploy blocker — see the blockers table. Note the interaction the owner chose
-  it with: for automation-ON members a truly-held reserve means the re-entry fee
-  exists at cycle-out, which directly attacks the parked loop for that cohort.
+- **item 2 — DECIDED (corrected same day after a full pros/cons pass): STAY
+  HIGH-TIER + add `reservedHeldFor(member)` getter** (option (b) in
+  V8_48_BACKLOG.md §2). A first picker answer said "bind across all tiers"; the
+  owner then said he had not understood the item, asked for pros and cons, and
+  chose to keep today's soft semantics — the waterfall's cross-matrix rewrite of
+  withdrawCore right before a deploy was the deciding con. Automation stays
+  best-effort (upgrade no-ops, re-entry waits — by design); the chain gains one
+  small getter reporting what is ACTUALLY held so UIs stop reconstructing it.
+  The parked loop is to be attacked with the parked-specific levers instead.
 - **item 28 — DECIDED: KEEP the 30-day expiry — CLOSED.** No contract change; the
   loud surfacing (date + amber/red deadline warning under Total Claimable) shipped
   to members with the 2026-08-12 main promotion. Unclaimed shares sweep to the

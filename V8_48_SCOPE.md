@@ -16,7 +16,7 @@ loss that item 12 would have accelerated.
 
 | item | what | file |
 |---|---|---|
-| 2 | **BUILD (decided 2026-08-12): bind the automation reserve across ALL tiers** — waterfall hold, highest first. Verify first where automation spends from; the hold must live where the spend can reach it. | TierRouter(Lib) / MatrixLogicLib |
+| 2 | **BUILD (decided 2026-08-12, corrected): `reservedHeldFor(member)` view — behavior unchanged.** What is ACTUALLY held toward the reserve target now (on-chain version of the frontend's `_claimableAll.heldNow`); must equal what withdrawCore enforces (item-1 discipline). | TierRouter(Lib) |
 | 7 | No cross-pair `memberJoinedAt`, so `earlyExitPenaltyBps` cannot work. Zero occurrences. | PairManagerV8 |
 | ~~8~~ | ✅ **DONE 2026-08-11.** Clamped to `balanceOf`. Measured note: removing the clamp does NOT fail the tests, because item 9 keeps batches within the balance and every burn reaches `_update` — it is a guard against a FUTURE path that moves balances without touching batches, which is exactly how this bug arrived. | CNOVAToken |
 | ~~9~~ | ✅ **DONE 2026-08-11 (508 passing).** Burns bypass the vest guard by design (`to == address(0)`), so batches outlived the tokens and `available` pinned to ZERO — the wallet could not move ANY tokens, including unlocked ones acquired later, until the stale batches matured. `_reduceVestAfterBurn` now brings the ledger down, reducing the LATEST-unlocking batches first so the holder keeps those closest to maturing, and pops emptied slots so the 200-batch cap is not leaked. Four mutations killed, including one proving the `lockedSum <= bal` guard is load-bearing (without it, burning ordinary UNLOCKED tokens underflows and reverts). Also corrected `burnFrom`'s doc, which claimed "vesting lock still applies" — it never did. | CNOVAToken |
@@ -67,7 +67,7 @@ with V8.48 unless a lever moves.
 | item | the decision |
 |---|---|
 | ~~42~~ | ✅ **RESOLVED 2026-08-12** — epoch policy decided and shipped. See item 42 in the contract-changes table below. |
-| ~~2~~ | ✅ **DECIDED 2026-08-12: option (a) — BIND the reserve across all tiers** (waterfall, highest first; V8_48_BACKLOG.md §2). Now a deploy-blocking BUILD item, moved to the open table above. Chosen knowing the parked-loop interaction: a truly-held reserve funds automation-ON members' re-entry at cycle-out. |
+| ~~2~~ | ✅ **DECIDED 2026-08-12 — CORRECTED SAME DAY: option (b) — stay high-tier + `reservedHeldFor(member)` getter.** A first picker answer chose (a) "bind across all tiers"; the owner then said he had not understood the item and asked for pros/cons, and chose (b): keeping today's soft semantics (automation waits when underfunded) over a cross-matrix withdrawCore rewrite right before the deploy. Record kept so no future session "restores" decision (a) from the earlier commit message. |
 | ~~28~~ | ✅ **DECIDED 2026-08-12: KEEP the 30-day expiry — CLOSED, no contract change.** The surfacing half (claim deadline date + urgency warning) shipped to members with the 2026-08-12 main promotion. Sweep-back to the pool is now the stated rule; ~$1,865 recycles 2026-09-04 unless claimed. |
 
 ### ALREADY DONE — was marked open, verified present in source
