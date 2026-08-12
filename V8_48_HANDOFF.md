@@ -131,3 +131,122 @@ built on claims that were false when written. And verify the effect LANDED: `fd7
 claimed a fix that only existed in the build container.
 
 Push ladder is branches on one remote: `admin` → `preview` → `main`.
+
+---
+
+## READ THIS BEFORE YOU INVESTIGATE ANYTHING (added 2026-08-12)
+
+**1. `git status` may show five files you did not touch. They are NOT dirty.**
+`archive/windows_keeper/corescue.bat`, `contracts/test/CryptoNovaCommunityWallet.sol`
+and `scripts/deployed_addresses_v8_30/31/40.json` appear MODIFIED when git runs
+inside the Claude sandbox, and CLEAN when the owner runs git on Windows. Cause:
+the owner's global `core.autocrlf=true` is invisible to the sandbox, which reads
+only the repo-local config (unset), so the sandbox sees whole-file CRLF rewrites
+that do not exist. `git diff --ignore-cr-at-eol` returns zero lines for all five.
+**Do not revert them, do not commit them, do not add a `.gitattributes`** — the
+last would renormalise the whole repo right before a deploy. A session already
+spent time on this and raised it to the owner as a real finding. It is not one.
+
+**2. Stage by explicit path, never `git add -A`,** for the reason above.
+
+**3. The owner runs every command.** Claude edits files directly; the owner
+executes anything that runs (tests, git, deploys, chain reads). Neither sandbox
+can reach Base Sepolia — the proxy returns 403 — so every on-chain number in
+these docs came from the owner running a script and pasting the output.
+
+---
+
+## LOOSE ENDS, NAMED (2026-08-12) — none of these are silently in flight
+
+**Uncommitted right now:** `CryptoNova-Testnet-App/index.html` carries the item-42
+frontend (epoch countdown + the `catch(() => 1)` fix). If it is still uncommitted
+when you read this, it was never pushed — check `git log --oneline -1` against
+`item 42 frontend`. Nothing else is part-done.
+
+**Fabricated-fallback sites still live in `index.html`** — a value-returning
+`.catch()` renders a confident wrong number. Two are DISPLAY bugs, two are worse:
+
+| line | read | why it matters |
+|---|---|---|
+| 4205, 4987 | `tierCycles(...).catch(() => 0n)` | feeds UPGRADE GATING, not display. A dropped read reads as "0 cycles" and can wrongly LOCK a member out of an upgrade. |
+| 6301 | `memberHighestTier(...).catch(() => 1)` | same class, same consequence — mis-gates an upgrade. |
+
+Each needs its own "could not verify" UI state and its own test. Do not batch-swap
+them to `null` without checking what each caller does with the null.
+
+**Verified and closed this session, so you do not redo it:** the frontend has no
+`epochMemberLimit`/`epochTimeLimit` hardcodes; `deploy_v8.js` never sets the three
+epoch limits (which is why item 42 changed the DECLARED DEFAULTS); and the
+`currentEpochNumber().catch(() => 1)` in the CNOVA modal is fixed.
+
+**Unverified external claim, still unverified:** native USDC on Base supports
+EIP-2612. Item 40's contract half depends on it. Nobody has checked.
+
+---
+
+## SESSION HEALTH NOTE — why this handoff exists (2026-08-12)
+
+This session ran long and through one compaction, and the last stretch produced
+three claims that had to be retracted: a "519 passing" prediction that assumed a
+test file had not been collected (it had — 514 was correct), the CRLF finding
+above, and `model_epoch_policy.js` v1, which read `tierPairManagers(uint8)` when
+TierRouter declares `address[MAX_TIERS] public tierPairManagers` — wrong selector,
+every call reverted, and a `.catch(() => ZeroAddress)` turned each revert into a
+plausible zero. Ten zeros made the average climb 1.0x, and 1.0x is exactly the
+assumption under which every candidate policy reports "SMOOTH". **The script
+fabricated the answer it was asked to test.**
+
+The pattern in all three: a value-returning fallback, or an inference stated
+without rerunning the check. The owner's standing rule in memory covers it — *if
+you cannot recall, verify or validate something, RERUN it rather than assert it* —
+and it was written before this session, which is the point. Re-read
+`/preferences.md` periodically, not only at the start.
+
+---
+
+## THE FRONTEND REPO PUSHES TO ITSELF (found 2026-08-12)
+
+`CryptoNova-Testnet-App` receives automated commits on `origin/admin` from the live
+site's bug-report endpoint — it appends each submission to `BUGS.md` and commits.
+So the local clone falls behind on its own and `git push origin admin` is rejected
+with "fetch first" for no reason you did anything wrong. **Always `git fetch origin`
+and rebase before pushing the frontend.** A session lost time treating this as a
+mystery divergence. It is not: check `git log --oneline HEAD..origin/admin` and if
+the commits read `bug-report(<date>)`, they only touch `BUGS.md` and a rebase is
+conflict-free. Confirm with `git diff --numstat HEAD origin/admin -- index.html`
+before assuming it.
+
+**Related trap:** running `git status` or `git diff` against this repo from the
+Claude sandbox is slow enough to hit the 45s tool timeout, and a killed git leaves
+`.git/index.lock` behind. The sandbox CANNOT delete it (no unlink permission), so
+the owner's next git command fails with "Another git process seems to be running".
+It is a corpse, not a live process — `Remove-Item .git\index.lock -Force`. Better:
+do not run git against the frontend repo from the sandbox at all; ask the owner.
+
+---
+
+## TWO UNREAD MEMBER REPORTS — arrived via the bug endpoint 2026-08-11
+
+Nobody had read these; they were found only because a push bounced. **Check BUGS.md
+for more on every session** — reports land in the repo without notifying anyone.
+
+**CryptoJan22** (MetaMask, `0x79470c63b5421e333ab4149b3206d55a39c17532`, 10:46 GMT):
+*"decided to do a withdrawal. It took forever and after clicking max only 50% went
+through. i tried max again but it did not go through."* Expected *"at least a reason
+for the failure."* Frequency: Consistent. **This is item 3 in a member's own words** —
+a partial withdrawal walks matrix-by-matrix with one signature each, some legs land
+and some do not, and the member sees half their money move unexplained. Same
+mechanism as Deborah's failed $50. Same member as item 39's cycle question.
+
+**@Lavern-Gay** (Rabby, `0x737c3309c3d6f5702c8f4bb81494568f8d0d1be5`, 23:14 GMT):
+*"I had to click both Approval and Self-Rescue several times, even though the
+transaction was marked as complete."* Frequency: Consistent. **This is the two-tx
+path item 40's contract half (`selfRescueWithPermit`) collapses into one signature.**
+
+**FIRST QUESTION FOR THE NEXT SESSION, do not skip it:** both reports are dated
+2026-08-11, the same day the withdraw fixes (per-matrix try/catch, gas estimate,
+balance-delta receipt, withdraw history) and the clear-all sequencer shipped. The
+timestamps alone do not say whether these members were on the old build or the new
+one. Establish that BEFORE treating either as evidence for or against the fixes —
+reading a report from the old build as a failure of the new one, or the reverse,
+would send the whole session the wrong way.
