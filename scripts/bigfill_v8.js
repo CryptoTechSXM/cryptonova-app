@@ -34,7 +34,7 @@ require("dotenv").config();
 // ADDRESSES_FILE: point to whichever deployment you want to stress-test.
 const ADDRESSES_FILE = path.join(
   __dirname,
-  process.env.ADDRESSES_FILE || "deployed_addresses_v8_47.json"
+  process.env.ADDRESSES_FILE || "deployed_addresses_v8_48.json" // V8.48 (2026-08-13): bumped with deploy_v8.js — pre-deploy runs now fail LOUDLY on the missing file instead of silently driving the old deployment
 );
 
 // COUNT: for 127-seat matrices, 260 fills MatA + MatB (W1 seeds pos-1, 126 fill

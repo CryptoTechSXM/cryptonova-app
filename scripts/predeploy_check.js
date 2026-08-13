@@ -70,7 +70,7 @@ for (const v of OPTIONAL_WALLETS) {
   else ok(`${v} not set — will default to deployer address`);
 }
 
-const ADDR_FILE = process.env.ADDRESSES_FILE || "deployed_addresses_v8_47.json";
+const ADDR_FILE = process.env.ADDRESSES_FILE || "deployed_addresses_v8_48.json"; // V8.48 (2026-08-13): bumped with deploy_v8.js/seed_w1/bigfill
 console.log(`  ℹ  ADDRESSES_FILE = ${ADDR_FILE}`);
 
 // ─────────────────────────────────────────────────────────────────────────────
