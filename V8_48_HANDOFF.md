@@ -1,10 +1,10 @@
 # V8.48 HANDOFF — updated 2026-08-13 (read this first, then V8_48_SCOPE.md)
 
-**553 passing · 7 pending · 0 failing · DO NOT DEPLOY YET (items 7 + 40 remain).**
+**556 passing · 7 pending · 0 failing · DO NOT DEPLOY YET — ITEM 7 IS THE LAST BLOCKER.**
 
-(Full suite run 2026-08-13 after the 45/46/47 package: 540 + 13 GhostFloor tests =
-553. When you update this number, run the suite first — an earlier headline went
-stale by predicting instead of running.)
+(Full suite run 2026-08-13: 540 + 13 GhostFloor + 3 Permit = 556. When you update
+this number, run the suite first — an earlier headline went stale by predicting
+instead of running.)
 
 Audience: a future session of Claude, plus the owner. Nobody else touches this code.
 
@@ -28,7 +28,7 @@ in both directions (two items were done and still marked open).
 | item | what is missing | file |
 |---|---|---|
 | 7 | cross-pair `memberJoinedAt` so `earlyExitPenaltyBps` can work. | PairManagerV8 |
-| 40 | `selfRescueWithPermit` — the CONTRACT half. Frontend half shipped. | FigureEightMatrixV8 |
+| ~~40~~ | ✅ **DONE 2026-08-13 (556 passing).** `selfRescueWithPermit` shipped (lib-side body, 3 tests) AND the mainnet claim VERIFIED: native Base USDC IS EIP-2612 (`scripts/probe_base_usdc_permit.js`). Details in the scope's item-40 row. | FigureEightMatrixV8 |
 | PARKED | **OWNER-RAISED 2026-08-12, MEASURED same day (`scripts/diag_parked_growth.js`, complete scan, no holes) — the loop is REAL and it is the system's steady state.** 23,069 park events in 7.8 days from **650 unique members** (the network has ~671 — 97% of everyone): 35 parks/member average, 523 members (80%) parked 11+ times, top wallets ~90 parks (~11/day). **REPEAT SHARE 99.8%.** The QUEUE grows ~linearly (+125/day net, 991 live); what grows EXPONENTIALLY is the SF FINANCING: daily net-outstanding delta $7 → $13 → $44 → $459 → $1,707 → **$4,632**; outstanding $6,952, 91% of it accrued in the last 48h; today loaned $8,481 vs repaid $3,849. Mechanism: cycle out ~16% short (the 84% cluster) → park → rescue → the loan eats next earnings first → bigger shortfall next cycle. **ANOMALY 1 RESOLVED 2026-08-13 (VPS checked + owner statement):** fastlane is HEALTHY (scans ~990 parked every 10 min, fast-lanes the rare self-funded ~1/hour — it rescued Deborah's 0x0ddb6a96 at 00:33 on 08-13), and there are NO bot-driving jobs on the VPS at all. The self-rescue volume came from BIGFILL, which runs from the OWNER'S WINDOWS MACHINE (owner statement — see the new CLAUDE.md section "WHERE TRAFFIC COMES FROM"); when it stopped around 08-12 the driver vanished, parked members aged past the 24h grace, and copay loans took over — the flip is the bigfill stop UNMASKING the debt loop, not a keeper outage. copay.log 2026-08-13: SF $36.9k and rising intra-run, $1500/run budget of which only $16–42 is used, ~973/990 in grace at any instant. **ANOMALY 2 CONFIRMED STILL LIVE:** ZERO evictions ever — the evict cron guard (`pgrep -f evict_loop.sh`) still matches its own parent shell, so evict_parked.js never fires (and per the standing warning, do NOT just fix the guard — the keeper borrows the matrixKeeper slot and skips the rescueRatioBps check). **NEW FINDING (needs a diag + scope item): 16 PERSISTENT parked-queue GHOSTS** — the same 16 wallets revert "F8V8: already in matrix" on every copay run (including the keeper signer 0xd419681B itself, parked in T2.1 MatB) — members seated in a matrix while still occupying a parked-queue slot. The 2026-08-11 "queue is clean, 0 stale" claim is no longer true. **ALL MEASUREMENTS DONE + OWNER DECISIONS 2026-08-13** (bigfill confirmed stopped 24h+; queue stable at 988; SF $36,930; outstanding $7,288 across 412 borrowers, THIN — top 10% hold only 38.5%; 64 wallets already owe ≥ a full cycle's earnings, $1,917 = 26% of book). **(a) RESERVE DECISION LANDED 2026-08-13: `CROSSING_RESERVE_BPS` STAYS 5_000, stays a constant.** `scripts/model_reserve_bps.js` (built + run same day, strict reads, plumbing verified on-chain first) killed the lever: **dynamic lift 0% at EVERY candidate 5500–7500** vs the static table's 44–49% — under pro-rata rescale the required earnings ratio RISES with the reserve (50.0% → 52.8%) while measured medians sit at 21.8–34%, and the cost for zero lift at 70% would have been member $/100 $39 → $23.63 and treasury $5 → $2.89. Full numbers in the scope's parked-loop DECISIONS block. (b)+(c) — ✅ **THE 45+46+47 PACKAGE IS BUILT (2026-08-13, 553 passing, `V8_48_GhostFloor.test.js` 13 tests): seat clears BOTH pair halves' park records; insolvency floor (default 3400 bps, PARAM 59, `"SF: insolvency floor"`) with member-aware `payCoRescue`/`payForceCross`; two-branch valve (ghost = dequeue-only, insolvent = evict with reserve released). THE PARKED LOOP NO LONGER BLOCKS THE DEPLOY.** Full detail in the scope's item 45/46/47 rows, incl. the VPS deploy-day notes (copay will log floor reverts by design; DELETE the evict_parked cron line — the chain routes evictions now). | ✅ resolved — 7 + 40 are the last blockers |
 
 **Both open decisions were DECIDED by the owner 2026-08-12:**
@@ -68,6 +68,12 @@ what made `epochMemberLimit = 10,000` unreachable, and it is not specific to epo
 
 ## DONE 2026-08-13
 
+- **Item 40 CONTRACT HALF (556 passing):** `selfRescueWithPermit` — one transaction
+  per parked position (Lavern-Gay's two-click report retired at the contract level).
+  Lib-side body (factory 348 bytes headroom after), manualUpgradeWithPermit's exact
+  try/catch pattern, `V8_48_Permit.test.js` (3) incl. the griefed-permit scenario.
+  **Mainnet claim VERIFIED same day**: native Base USDC is EIP-2612. Frontend
+  permit switch is a post-deploy task (scope item-40 row).
 - **THE 45+46+47 PACKAGE (553 passing):** prevention (seat clears both pair halves,
   `clearParkRecord` partner-gated), insolvency floor (SF, default 3400, PARAM 59,
   owner policy verbatim in the scope's item-46 row), two-branch eviction valve
@@ -158,10 +164,10 @@ row of `V8_48_SCOPE.md`, including the ethers-v6 overload-ambiguity caveat).
 ## NEXT UP — ORDER FOR THE NEXT SESSION (updated 2026-08-13 after the reserve
 decision landed; supersedes the list below)
 
-1. **Items 7 and 40 — the LAST deploy blockers.** 7: cross-pair `memberJoinedAt`
-   (PairManagerV8) so `earlyExitPenaltyBps` can work. 40: `selfRescueWithPermit`
-   contract half — check `DOMAIN_SEPARATOR()`/`nonces()` on Base USDC FIRST (the
-   one still-unverified external claim).
+1. **Item 7 — THE LAST DEPLOY BLOCKER.** Cross-pair `memberJoinedAt`
+   (PairManagerV8) so `earlyExitPenaltyBps` can work. Verify the premise first
+   (what reads `earlyExitPenaltyBps`, and what should "joined" mean across pairs —
+   first seat ever, or per-pair?). Item 40 is DONE (see above).
 2. **Frontend, no deploy needed:** the epoch-transparency panel (probe 2026-08-13:
    all four epoch getters EXIST on live V8.47 — no feature-detect) and the
    `catch(() => 1)` epoch fallback fix at index.html:6410.
@@ -239,8 +245,10 @@ these two are the last of them.
   see none. A rare state is not an absent one.
 - **`MockUSDC` lives in `contracts/test/`** — the root `contracts/MockUSDC.sol` is a
   5-line tombstone. Do not "fix" the missing permit there.
-- Unverified external claim: **native USDC on Base supports EIP-2612.** Item 40's
-  permit half depends on it. Check `DOMAIN_SEPARATOR()` on the Base USDC address.
+- ✅ **VERIFIED 2026-08-13: native USDC on Base mainnet IS EIP-2612** (version 2;
+  `DOMAIN_SEPARATOR()` and `nonces()` both answer — `scripts/probe_base_usdc_permit.js`
+  against 0x833589fC… on chain 8453). That was the LAST unverified external claim
+  in these docs.
 
 ---
 
@@ -307,8 +315,9 @@ these three were only the ones that gated actions.
 epoch limits (which is why item 42 changed the DECLARED DEFAULTS); and the
 `currentEpochNumber().catch(() => 1)` in the CNOVA modal is fixed.
 
-**Unverified external claim, still unverified:** native USDC on Base supports
-EIP-2612. Item 40's contract half depends on it. Nobody has checked.
+**~~Unverified external claim~~ — VERIFIED 2026-08-13:** native USDC on Base
+supports EIP-2612 (see STANDING FACTS). Checked at last; nothing depends on an
+unmeasured claim anymore.
 
 ---
 

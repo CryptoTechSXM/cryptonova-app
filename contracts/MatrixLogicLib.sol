@@ -1434,6 +1434,34 @@ library MatrixLogicLib {
     ///         No SF loan. No debt. No intermediary required.
     ///         Anyone can call this -- only msg.sender is rescued (prevents griefing).
     function selfRescue(MatrixState storage self, ImmutableConfig memory cfg) external {
+        _selfRescue(self, cfg);
+    }
+
+    /// @notice V8.48 item 40: selfRescue with an EIP-2612 permit folded in, so the
+    ///         approve becomes a free off-chain signature and each parked position
+    ///         costs ONE transaction instead of two (Lavern-Gay's report, 2026-08-11:
+    ///         "I had to click both Approval and Self-Rescue several times"). Mirrors
+    ///         TierRouter.manualUpgradeWithPermit exactly, including the try/catch:
+    ///         a griefed or already-consumed permit must not brick the rescue when
+    ///         the allowance is already in place — and if neither the permit nor a
+    ///         standing allowance covers the shortfall, the transfer inside
+    ///         _selfRescue reverts with the token's own error, never a silent pass.
+    ///         Runs under delegatecall, so address(this) IS the matrix — the same
+    ///         spender _selfRescue's safeTransferFrom draws on.
+    function selfRescueWithPermit(
+        MatrixState storage self,
+        ImmutableConfig memory cfg,
+        uint256 value,
+        uint256 deadline,
+        uint8 v, bytes32 r, bytes32 s
+    ) external {
+        try IERC20PermitLike(address(cfg.usdc)).permit(
+            msg.sender, address(this), value, deadline, v, r, s
+        ) {} catch {}
+        _selfRescue(self, cfg);
+    }
+
+    function _selfRescue(MatrixState storage self, ImmutableConfig memory cfg) internal {
         address member = msg.sender;
         require(self.members[member].hasEverJoined,  "F8V8: not a member");
         require(!self.members[member].isInMatrix,    "F8V8: still in matrix");

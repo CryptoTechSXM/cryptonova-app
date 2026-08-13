@@ -573,6 +573,18 @@ contract FigureEightMatrixV8 is Ownable2Step {
         MatrixLogicLib.selfRescue(_state, _cfg());
     }
 
+    /// @notice V8.48 item 40: selfRescue with the USDC approval folded in as an
+    ///         EIP-2612 permit signature — one transaction per parked position
+    ///         instead of two. Body in the linked library (factory embeds this
+    ///         contract's creation code; the library costs it nothing).
+    function selfRescueWithPermit(
+        uint256 value,
+        uint256 deadline,
+        uint8 v, bytes32 r, bytes32 s
+    ) external {
+        MatrixLogicLib.selfRescueWithPermit(_state, _cfg(), value, deadline, v, r, s);
+    }
+
     function evictParked(address member) external {
         require(msg.sender == _state.matrixKeeper, "F8V8: not keeper");
         MatrixLogicLib.evictParked(_state, member);

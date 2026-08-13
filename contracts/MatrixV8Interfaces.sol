@@ -55,6 +55,19 @@ interface IStabilityFund {
     function clawbackBpsFor(address member) external view returns (uint256);
 }
 
+/// @notice V8.48 item 40: EIP-2612 permit surface, used by
+///         MatrixLogicLib.selfRescueWithPermit (same shape TierRouter declares
+///         locally for manualUpgradeWithPermit). MockUSDC implements it
+///         (contracts/test/MockUSDC.sol, ERC20Permit since V8.44 G1); native USDC
+///         on Base mainnet must be probed before mainnet relies on it —
+///         scripts/probe_base_usdc_permit.js.
+interface IERC20PermitLike {
+    function permit(
+        address owner, address spender, uint256 value,
+        uint256 deadline, uint8 v, bytes32 r, bytes32 s
+    ) external;
+}
+
 /// @notice Interface for CouponRegistry — used by MatrixLogicLib to redeem coupons during registration.
 interface ICouponRegistry {
     function redeemCoupon(bytes32 codeHash, address newMember) external returns (uint256 amount);
