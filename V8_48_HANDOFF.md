@@ -119,7 +119,22 @@ row of `V8_48_SCOPE.md`, including the ethers-v6 overload-ambiguity caveat).
 
 ---
 
-## NEXT UP, ALREADY SCOPED
+## NEXT UP — ORDER FOR THE NEXT SESSION (set 2026-08-13, supersedes the list below)
+
+1. **`scripts/model_reserve_bps.js`** — the cost side of the crossing-reserve
+   decision (owner picked "model first"). Per candidate (55/60/65/70/75%): what
+   happens to per-entry member earnings, the protocol splits (treasury/floor,
+   SF inflow, buyback), and DYNAMIC self-funding (new-regime earnings, not
+   today's balances). Verify the split plumbing in `_distributePayments` before
+   modeling — and re-read the SESSION HEALTH note first: model_epoch_policy v1
+   fabricated its own answer with a wrong selector behind a value fallback.
+2. **Item 45 diag** — the 16 parked-queue ghosts (which path re-seats without
+   dequeuing?). Cheap, and 46/47 depend on knowing.
+3. **Items 46 + 47** — insolvency floor + eviction valve, designed as a package.
+4. Items 7 and 40 (the remaining old blockers), then the epoch-transparency
+   frontend below.
+
+## NEXT UP, ALREADY SCOPED (2026-08-12 — now AFTER the list above)
 
 **Frontend epoch transparency.** The dashboard reads `currentEpochNumber` and
 `epochRewards` and shows the era name, but it does NOT read `epochMembersRemaining`,
