@@ -1211,6 +1211,46 @@ sep("V8.48 item 12 — split grace (self-funded vs loan)");
 
 
 // ─────────────────────────────────────────────────────────────────────────────
+// V8.48 items 7 + 13 — member tracker: joinedAt exists AND the deploy wires it
+// ─────────────────────────────────────────────────────────────────────────────
+// Two halves that are useless apart: PairManagerV8.memberJoinedAt (the penalty
+// ladder's clock, and totalMembers() = unique PEOPLE for the Universe Mode gate)
+// and deploy_v8.js calling treasury.setMemberTracker(T1 pm). The setter was never
+// called in any deploy before V8.48 — earlyExitPenaltyBps read 0 for everyone and
+// setFreeMode reverted. A deploy that ships one half without the other recreates
+// exactly that, silently.
+sep("V8.48 items 7+13 — treasury member tracker wiring");
+{
+  const pmTxt7 = read("contracts/PairManagerV8.sol");
+  if (pmTxt7 && pmTxt7.includes("mapping(address => uint256) public memberJoinedAt") &&
+      pmTxt7.includes("function _recordJoin(")) {
+    ok("PairManagerV8: memberJoinedAt mapping + _recordJoin present");
+  } else {
+    fail("PairManagerV8: memberJoinedAt/_recordJoin MISSING — earlyExitPenaltyBps reads 0 for everyone");
+  }
+  if (pmTxt7 && /function totalMembers\(\)[^}]*return uniqueMembers/.test(pmTxt7)) {
+    ok("PairManagerV8: totalMembers() returns uniqueMembers (PEOPLE, not entries — the Universe gate depends on this)");
+  } else {
+    fail("PairManagerV8: totalMembers() does not return uniqueMembers — the 500-member Universe gate would count entry churn (~41x inflation, the item-42 class)");
+  }
+  // Every totalRegistrations increment must have a _recordJoin beside it, or some
+  // path's members never get a joinedAt (their penalty clock never starts).
+  const incs7  = (pmTxt7.match(/totalRegistrations\s+\+= 1;/g) || []).length;
+  const joins7 = (pmTxt7.match(/_recordJoin\(/g) || []).length - 1; // minus the definition
+  if (incs7 > 0 && joins7 >= incs7) {
+    ok(`PairManagerV8: _recordJoin at all ${incs7} routing sites`);
+  } else {
+    fail(`PairManagerV8: ${joins7} _recordJoin call(s) for ${incs7} routing increments — a path is missing its joinedAt stamp`);
+  }
+  if (deployTxt.includes("treasury.setMemberTracker(pmAddr)")) {
+    ok("deploy_v8.js: treasury.setMemberTracker(T1 PairManager) wired (item 13 — never called before V8.48)");
+  } else {
+    fail("deploy_v8.js: setMemberTracker NOT called — earlyExitPenaltyBps returns 0 and setFreeMode reverts, the exact pre-V8.48 state");
+  }
+}
+
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Summary
 // ─────────────────────────────────────────────────────────────────────────────
 console.log("\n" + "═".repeat(62));

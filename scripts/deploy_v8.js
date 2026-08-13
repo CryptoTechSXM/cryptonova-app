@@ -399,6 +399,18 @@ async function main() {
     await (await treasury.setAuthorizedCaller(matBAddr, true)).wait();
     console.log(`       Treasury.setAuthorizedCaller T${tierNum} OK`);
 
+    // V8.48 items 7+13: wire the treasury's member tracker to the T1 PairManager.
+    // NEVER CALLED before this line existed — so earlyExitPenaltyBps read 0 for
+    // everyone (no early-exit penalty ever applied) and setFreeMode (Universe
+    // Mode) reverted "member tracker not set". PM8 now serves both consumers
+    // honestly: memberJoinedAt(member) = first T1 routing (the penalty ladder's
+    // clock) and totalMembers() = UNIQUE people (the 500-member gate — it must
+    // never count entries; see PairManagerV8.totalMembers).
+    if (tierNum === 1) {
+      await (await treasury.setMemberTracker(pmAddr)).wait();
+      console.log(`       Treasury.setMemberTracker(T1 PairManager) OK (items 7+13)`);
+    }
+
     // Configure this tier in MatrixPairFactory.
     // When the active pair hits 80% occupancy, factory.deployAndWire() fires
     // and uses these params to construct the next MatA+MatB pair.

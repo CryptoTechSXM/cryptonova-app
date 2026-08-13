@@ -81,6 +81,34 @@ contract PairManagerV8 is Ownable2Step {
     uint256 public activePairIndex;
     uint256 public totalRegistrations;
 
+    // ── V8.48 item 7: MEMBER vs ENTRY, finally separated at this layer ────────
+    //
+    // totalRegistrations increments on EVERY routing — register, rescue re-entry,
+    // MatB placement, doubles — so it is an ENTRY counter, ~41x the people count
+    // (the item-42 measurement: 27,776 seats across 671 members). Two consumers
+    // needed a PERSON-denominated answer and had none:
+    //   - CNOVATreasury.earlyExitPenaltyBps: "days since FIRST T1 registration"
+    //     drives the redeem-at-floor penalty ladder — memberJoinedAt did not
+    //     exist here, so the treasury's try/catch read 0 and every penalty was 0.
+    //   - CNOVATreasury.setFreeMode: the 500-MEMBER Universe Mode gate read
+    //     totalMembers() == totalRegistrations — it would have opened on entry
+    //     CHURN, not adoption (~12 real members' worth of re-entries suffice).
+    //
+    // memberJoinedAt is written ONCE, at a member's first routing through this
+    // PairManager, by every path that seats someone; re-entries are no-ops. The
+    // public mapping's auto-getter is exactly the IMatrixMemberCount signature
+    // the treasury already calls.
+    mapping(address => uint256) public memberJoinedAt;
+    /// @notice Count of UNIQUE members ever routed through this PairManager.
+    uint256 public uniqueMembers;
+
+    function _recordJoin(address member) internal {
+        if (memberJoinedAt[member] == 0) {
+            memberJoinedAt[member] = block.timestamp;
+            uniqueMembers += 1;
+        }
+    }
+
     IERC20  public immutable usdc;
     uint256 public immutable entryFee;
 
@@ -332,6 +360,7 @@ contract PairManagerV8 is Ownable2Step {
 
         pairs[destPair].totalRegistered += 1;
         totalRegistrations              += 1;
+        _recordJoin(member); // V8.48 item 7 — no-op unless this is their first routing
 
         emit MemberRouted(member, destPair, dest);
     }
@@ -356,6 +385,7 @@ contract PairManagerV8 is Ownable2Step {
 
         p.totalRegistered  += 1;
         totalRegistrations += 1;
+        _recordJoin(member); // V8.48 item 7
 
         emit MemberRouted(member, targetPairIndex, matB);
         _checkExpansion();
@@ -433,6 +463,7 @@ contract PairManagerV8 is Ownable2Step {
 
         p.totalRegistered  += 1;
         totalRegistrations += 1;
+        _recordJoin(msg.sender); // V8.48 item 7
 
         emit MemberRouted(msg.sender, routingIdx, matA);
         _checkExpansion();
@@ -467,6 +498,7 @@ contract PairManagerV8 is Ownable2Step {
 
         p.totalRegistered  += 1;
         totalRegistrations += 1;
+        _recordJoin(member); // V8.48 item 7
 
         emit MemberRouted(member, routingIdx, matA);
         _checkExpansion();
@@ -550,6 +582,7 @@ contract PairManagerV8 is Ownable2Step {
 
         p.totalRegistered  += 1;
         totalRegistrations += 1;
+        _recordJoin(member); // V8.48 item 7
 
         emit MemberRouted(member, targetPairIndex, matA);
         _checkExpansion();
@@ -832,7 +865,13 @@ contract PairManagerV8 is Ownable2Step {
         return (pairs[idx].matrixA, pairs[idx].matrixB);
     }
 
-    function totalMembers() external view returns (uint256) { return totalRegistrations; }
+    /// @notice V8.48 item 7: PEOPLE, not entries. This used to return
+    ///         totalRegistrations, which counts every routing (~41x the people —
+    ///         re-entries, rescues, MatB placements all increment it), and it
+    ///         gates Universe Mode at "500+ members" in CNOVATreasury.setFreeMode:
+    ///         entry churn alone would have opened an IRREVERSIBLE mode. Entry
+    ///         counts remain available as totalRegistrations / totalRegistered.
+    function totalMembers() external view returns (uint256) { return uniqueMembers; }
 
     function getChainInfo() external view returns (address head, address lastB) {
         return (chainHead, lastChainB);
