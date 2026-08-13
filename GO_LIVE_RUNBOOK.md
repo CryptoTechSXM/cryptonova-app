@@ -76,6 +76,17 @@ npx hardhat run scripts/check_state.js --network baseSepolia
 ```
 🖥️PS — expect T1 MatA occ=1 (W1 at root), all else 0.
 
+**1.3c AUTHORIZE THE KEEPER EOA — EVERY DEPLOY (added 2026-08-13).**
+`deploy_v8.js` does NOT do this. Since V8.46 item 1, `performUpkeep` is allowlisted
+(`upkeepCaller`), so on a fresh deployment the VPS keeper reverts with
+`MK: not authorized keeper` on every run — and because the revert data is empty it
+looks like out-of-gas, so the keeper silently halves its batch cap and never recovers.
+```powershell
+npx hardhat run scripts/set_upkeep_caller.js --network baseSepolia
+```
+The read-back may print `false FAILED` (stale block right after the tx) — re-run it;
+`upkeepCaller before: true` is the truth. Verify with `node scripts\diag_keeper_work.js`.
+
 **1.4 MANDATORY INTEGRITY GATE (added after the 2026-07-26 incident).**
 Copy the addresses file + checker to the VPS and run it. **Nothing goes to the
 frontend until this says INTEGRITY OK.**

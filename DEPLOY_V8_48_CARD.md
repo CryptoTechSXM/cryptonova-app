@@ -89,6 +89,21 @@ if the reused testnet token predates that, item 40's one-signature self-rescue w
 correctly fall back to approve+selfRescue on testnet (mainnet native USDC IS EIP-2612,
 verified 2026-08-13). Not a blocker either way — but know which path members are on.
 
+**1.3c — AUTHORIZE THE KEEPER EOA (found the hard way on deploy day 2026-08-13).**
+`deploy_v8.js` does NOT authorize the VPS keeper wallet on the freshly deployed
+MatrixKeeper. V8.46 item 1 added the `upkeepCaller` allowlist to `performUpkeep`
+but the deploy script was never updated to match, so on EVERY fresh deployment the
+keeper discovers work, sends `performUpkeep`, and gets `MK: not authorized keeper`.
+The keeper reads the empty revert as out-of-gas and halves its batch cap (2 -> 1 -> 1)
+forever. Nothing is damaged; nothing works either.
+```powershell
+npx hardhat run scripts/set_upkeep_caller.js --network baseSepolia
+```
+Expect `upkeepCaller after: true AUTHORIZED OK`. **KNOWN QUIRK: the read-back can
+print `false FAILED` because it reads a stale block right after the tx.** Re-run the
+same script — `upkeepCaller before: true` / "Already authorized" is the real answer.
+Confirm with `node scripts\diag_keeper_work.js` -> "FULL BATCH: would SUCCEED".
+
 **1.4 MANDATORY INTEGRITY GATE.** As written — nothing reaches the frontend until
 `integrity_check.js` says INTEGRITY OK.
 
@@ -187,6 +202,27 @@ and evictions actually occurring (they never have, in any version).
 4. Re-run `diag_ghost_parked.js` and `diag_parked_growth.js` for fresh post-deploy numbers.
 
 ---
+
+## DEPLOY-DAY LOG — 2026-08-13 (what actually happened)
+
+| step | outcome |
+|---|---|
+| 0.2 keepers off | `crontab -e` saved nothing ("No modification made") — used a `sed` one-liner instead; backup at `/root/keeper/crontab.pre_v848.bak` |
+| 0.5 `.env` | ALREADY `deployed_addresses_v8_48.json` — the flagged blocker was fixed before deploy day |
+| 1.1 deploy | clean; `setMemberTracker` + DirectSale treasury-caller both fired. **Two STALE BANNER LINES in deploy_v8.js** say "V8.41 Deploy" and "ADDRESSES_FILE=…v8_47.json must be set" — cosmetic only (the code default is v8_48); fix in 7b |
+| 1.2 commit | contracts repo pushes to branch **`v8.1`**, NOT `admin` — the admin/preview/main ladder is the FRONTEND repo only |
+| 1.3b probe | `scripts/probe_v848_getters.js` (new) — 11/11 getters + defaults correct; `bulkWithdraw`/`selfRescueWithPermit` present. Testnet USDC has **NO permit** -> two-step self-rescue is CORRECT on testnet |
+| 1.3c keeper auth | **MISSING STEP FOUND — see 1.3c above.** Cost ~30 min of reverting keeper runs |
+| 3.1 addrs | 275 replacements over 11 files; predeploy re-run 114/114 after |
+| 4 human test | reg / version / reserve badge / governance = PASS. **Partial withdraw = PASS (one signature, `bulkWithdraw` in the wallet popup, funds landed).** Self-rescue + bulk-upgrade-with-debt DEFERRED to the tester hour — a fresh chain has no parked members and no loans to test against |
+
+**Two display defects found on deploy day (funds correct in both — not blockers):**
+1. **Partial withdraw does not refresh the dashboard** — the money moves, the numbers
+   stay stale until a manual refresh. `66ecdff` added post-action refresh for
+   upgrade/rescue but not for the withdraw path.
+2. **Raw RPC error dumped into an alert()** — a Cloudflare 502 from `sepolia.base.org`
+   during registration rendered a wall of raw HTML/JS in a browser popup. Needs the
+   same honest-error treatment the withdraw path got.
 
 ## OPEN, NON-BLOCKING (carried into the deploy knowingly)
 
