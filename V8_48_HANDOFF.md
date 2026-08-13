@@ -56,6 +56,15 @@
 >    deleted.
 > 3. The keeper authorization above.
 >
+> ## ➡️ NEXT VERSION: `V8_49_SCOPE.md` (opened 2026-08-13, same evening)
+>
+> **Its item 1 is a ⛔ policy/code mismatch found by the owner on deploy day and
+> verified in the contracts: eviction fires on the SAME 24h clock as rescue
+> (`MatrixKeeperLib.sol:458`), but owner policy is 3–5 days. No eviction-specific
+> grace exists. It matters NOW because V8.48 is the first version where evictions
+> can actually fire at all** (on-chain valve + the keeper finally authorized).
+> Read that file before planning anything else.
+>
 > ## OPEN — TOP OF THE POST-DEPLOY LIST
 >
 > - **🔴 THE WALLET RPC (owner's question, and it may be the big one).** The site
