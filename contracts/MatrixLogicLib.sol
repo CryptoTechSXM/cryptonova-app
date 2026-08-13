@@ -251,6 +251,15 @@ library MatrixLogicLib {
     ///         USDC balance/allowance. Silence here is the healthy state.
     event CycleOutFailed(address indexed member, uint8 tierIndex);
     event MemberEvicted(address indexed member, uint256 totalWithdrawn);
+    /// @notice V8.48 item 47: a parked-queue record was cleared for a member who is
+    ///         actually SEATED (a "ghost" — stale queue residue, measured 41 live on
+    ///         2026-08-13). Dequeue only: no funds moved, no seat touched. Distinct
+    ///         from MemberEvicted so the two are never conflated in any consumer.
+    event GhostDequeued(address indexed member, uint256 staleParkedAt);
+    /// @notice V8.48 item 47: an evicted member's crossing reserve was released to
+    ///         their withdrawable (involuntary exit — no exitSeat penalty). Their SF
+    ///         debt stays booked and repays off the top of the next withdrawal.
+    event EvictionReserveReleased(address indexed member, uint256 amount);
     event CoPayRescue(address indexed member, uint256 sfShare, uint256 memberWalletShare, uint256 withdrawableUsed);
     /// @notice Emitted when a member self-rescues by paying their own shortfall (no debt).
     event SelfRescue(address indexed member, uint256 shortfallPaid, uint256 withdrawableUsed);
@@ -331,6 +340,22 @@ library MatrixLogicLib {
         if (self.parkedAt[member] > 0) {
             _removeFromParkedQueue(self, member);
             self.parkedAt[member] = 0;
+        }
+
+        // V8.48 item 45: ...AND THE PARTNER HALF'S RECORD TOO.
+        //
+        // The V8.46 clear above is matrix-LOCAL, and every MatB rescue destination
+        // is the pair's MatA (item 10) — so a member parked in MatB and rescued
+        // into MatA kept a live MatB queue slot forever. Measured 2026-08-13
+        // (diag_ghost_parked.js): 41 ghosts, 39 of them exactly this shape; every
+        // copay run burned attempts on them, reverting "already in matrix".
+        //
+        // try/catch, deliberately: a failing partner call must never cost a member
+        // their seat — on failure the residue simply remains (the pre-fix state)
+        // and item 47's valve dequeues it later. This is residue cleanup, not a
+        // safety invariant; the seat itself must not depend on it.
+        if (self.partner != address(0)) {
+            try IFigureEightMatrixV8Cross(self.partner).clearParkRecord(member) {} catch {}
         }
 
         self.joinCountSinceRotation += 1;
@@ -1388,7 +1413,11 @@ library MatrixLogicLib {
 
         if (shortfall > 0) {
             // SF transfers shortfall USDC to this contract to complete the entry fee.
-            IStabilityFund(self.stabilityFund).payCoRescue(cfg.tierIndex, shortfall);
+            // V8.48 item 46: the member travels with the request — the SF enforces
+            // the insolvency floor there and reverts "SF: insolvency floor" for a
+            // member whose debt already guarantees the next shortfall. The keeper
+            // routes those members to the eviction valve instead (item 47).
+            IStabilityFund(self.stabilityFund).payCoRescue(member, cfg.tierIndex, shortfall);
             // V8.47: record on the member-level ledger (was per-matrix self.rescueDebt),
             // so repayment can come from any tier / withdrawal, not just this matrix.
             IStabilityFund(self.stabilityFund).increaseMemberDebt(member, cfg.tierIndex, shortfall);
@@ -1512,12 +1541,60 @@ library MatrixLogicLib {
         emit MemberExitedSeat(member, pos, r, penalty);
     }
 
+    /// @notice V8.48 item 45: partner-side half of the seat-clears-the-pair rule.
+    ///         Called by the PARTNER matrix from its enterMatrix the moment it seats
+    ///         this member; clears any parked-queue residue they left HERE. Guarded
+    ///         to the partner only — nobody else may dequeue somebody.
+    function clearParkRecordFor(MatrixState storage self, address member) external {
+        require(msg.sender == self.partner, "F8V8: only partner");
+        if (self.parkedAt[member] > 0) {
+            uint256 staleTs = self.parkedAt[member];
+            _removeFromParkedQueue(self, member);
+            self.parkedAt[member] = 0;  // belt and braces — _remove clears it only when found
+            emit GhostDequeued(member, staleTs);
+        }
+    }
+
+    /// @notice V8.48 item 47: the eviction valve, two branches (owner policy 2026-08-13).
+    ///
+    ///         GHOST — the member is actually SEATED (here or in the partner half):
+    ///         the queue entry is stale residue, measured at 41 live on 2026-08-13.
+    ///         Dequeue only. No funds move, no seat is touched. The pre-V8.48 code
+    ///         REVERTED on this state ("F8V8: member is in matrix"), which is why
+    ///         ghosts could never be cleaned by any path.
+    ///
+    ///         EVICTION — a genuinely parked member the keeper has decided to remove
+    ///         (insolvency floor tripped, rescue-ratio exceeded, or idle): out of the
+    ///         queue, and their crossing reserve is RELEASED to withdrawable in full.
+    ///         This exit is involuntary, so no exitSeat-style penalty — the reserve is
+    ///         their own money, and stranding it was the adminReleaseStrandedReserve
+    ///         class of bug. Their SF debt stays booked and repays off the top of the
+    ///         next withdrawal (withdrawCore), which is what finally drains the book.
+    ///         Re-entry afterwards costs the full fee: "not a free ride forever".
     function evictParked(MatrixState storage self, address member) external {
         require(self.parkedAt[member] > 0,          "F8V8: member not parked");
-        require(!self.members[member].isInMatrix,   "F8V8: member is in matrix");
 
+        // GHOST branch — seated in this matrix or in the partner half.
+        if (self.members[member].isInMatrix
+            || (self.partner != address(0)
+                && IFigureEightMatrixV8Cross(self.partner).isActiveInMatrix(member))) {
+            uint256 staleTs = self.parkedAt[member];
+            _removeFromParkedQueue(self, member);
+            self.parkedAt[member] = 0;
+            emit GhostDequeued(member, staleTs);
+            return;
+        }
+
+        // EVICTION branch.
         uint256 withdrawn = self.members[member].totalWithdrawn;
         _removeFromParkedQueue(self, member);
+
+        uint256 r = self.members[member].crossingReserve;
+        if (r > 0) {
+            self.members[member].crossingReserve = 0;
+            self.members[member].withdrawable   += r;
+            emit EvictionReserveReleased(member, r);
+        }
 
         emit MemberEvicted(member, withdrawn);
     }

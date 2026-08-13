@@ -26,7 +26,15 @@ interface ITierRouter {
 
 interface IStabilityFund {
     function receiveLayer(uint8 tierIdx, uint256 amount, uint8 layer) external;
-    function payCoRescue(uint8 tierIdx, uint256 sfShare) external;
+    /// @notice V8.48 item 46: takes the MEMBER so the SF can enforce the insolvency
+    ///         floor at the one place the loan money actually moves. The old
+    ///         member-less signature is gone — a lender that does not know who it
+    ///         is lending to cannot refuse anyone.
+    function payCoRescue(address member, uint8 tierIdx, uint256 sfShare) external;
+    /// @notice V8.48 item 46: is this member still under the insolvency floor?
+    ///         false = their outstanding debt already guarantees the next shortfall,
+    ///         no new loan will be issued, and the eviction valve (item 47) applies.
+    function loanEligible(address member, uint8 tierIdx) external view returns (bool);
     /// @notice Legacy per-matrix repayment. Called by an authorized matrix after
     ///         approving `amount` USDC. SF pulls the USDC and increments totalBalance.
     function receiveDebtRepayment(uint256 amount) external;
@@ -70,4 +78,11 @@ interface IFigureEightMatrixV8Cross {
     ///         a seat in that pair, and every guard in V8.45 tested only one half
     ///         — which is how 67 duplicate seats formed in five days.
     function isActiveInMatrix(address member) external view returns (bool);
+    /// @notice V8.48 item 45: clear this member's parked-queue record here, called
+    ///         by the PARTNER matrix when it seats them. The V8.46 dequeue-on-seat
+    ///         (enterMatrix) is matrix-local, and every MatB rescue destination is
+    ///         the pair's MatA — measured 2026-08-13: 39 of 41 live ghosts were
+    ///         "parked in MatB, seated in the same pair's MatA". Seat-side clearing
+    ///         of BOTH halves kills that class at the source.
+    function clearParkRecord(address member) external;
 }

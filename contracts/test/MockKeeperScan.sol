@@ -55,9 +55,19 @@ contract MockMatrixK {
     function getParkedCount() external view returns (uint256) { return _parked.length; }
     function getParkedMember(uint256 i) external view returns (address) { return _parked[i]; }
 
+    // ── V8.48 items 45/47: ghost surface. Default = nobody seated, no partner —
+    //    the ghost branch is INERT unless a test arms it, which is what keeps the
+    //    item-12a equivalence suite (KeeperScan) meaningful: both keeper versions
+    //    see identical answers in the default world.
+    mapping(address => bool) public seated;
+    address public partner;
+    function setSeated(address m, bool s) external { seated[m] = s; }
+    function setPartner(address p) external { partner = p; }
+    function isInMatrix(address m) external view returns (bool) { return seated[m]; }
+    function isActiveInMatrix(address m) external view returns (bool) { return seated[m]; }
+
     // ── remaining IFigureEightKeeper surface: inert stubs ─────────────────────
     function lastActivityTime(address) external view returns (uint256) { return block.timestamp; }
-    function isInMatrix(address) external pure returns (bool) { return false; }
     function isParked(address) external pure returns (bool) { return true; }
     function matrixPos(address) external pure returns (uint256) { return 0; }
     function posToMember(uint256) external pure returns (address) { return address(0); }
@@ -95,10 +105,18 @@ contract MockTierRouterK {
 contract MockStabilityFundK {
     uint256 public totalBalance;
     mapping(uint8 => uint256) public balanceByTier;
+    // V8.48 item 46: per-member floor flag. Default ELIGIBLE (floor inert) so the
+    // equivalence suite's default world is unchanged; a test arms it per member.
+    mapping(address => bool) public floored;
     constructor(uint256 bal) { totalBalance = bal; }
     function setTier(uint8 t, uint256 v) external { balanceByTier[t] = v; }
     function setTotal(uint256 v) external { totalBalance = v; }
+    function setFloored(address m, bool f) external { floored[m] = f; }
+    function loanEligible(address m, uint8) external view returns (bool) { return !floored[m]; }
     function payGhostEntry(uint8, address) external {}
     function activateLayer(uint8, bool) external {}
+    // Both signatures: the PREV (pre-12a) keeper calls the 3-arg form, the V8.48
+    // keeper calls the member-aware 4-arg form. One mock serves both worlds.
     function payForceCross(uint8, address, uint256) external {}
+    function payForceCross(address, uint8, address, uint256) external {}
 }

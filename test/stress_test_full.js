@@ -320,9 +320,10 @@ describe("S2: Parked wallet rescue", function () {
     expect(await matA.getParkedCount()).to.equal(0n);
 
     // SF.payForceCross interface check: succeeds (keeper role, SF has $1000 seeded)
+    // V8.48 item 46: member-aware signature — w1 has no debt, so the floor passes.
     const sfBal = await sf.totalBalance();
     expect(sfBal).to.be.gte(T1_FEE);
-    await sf.connect(keeper).payForceCross(0, await matA.getAddress(), T1_FEE);
+    await sf.connect(keeper).payForceCross(w1.address, 0, await matA.getAddress(), T1_FEE);
   });
 
   it("forceCrossKeeper reverts if called by non-keeper", async function () {

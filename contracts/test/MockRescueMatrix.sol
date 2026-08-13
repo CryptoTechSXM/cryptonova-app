@@ -8,7 +8,8 @@ interface ISF {
     function receiveDebtRepayment(address member, uint256 amount) external;
     function clawbackBpsFor(address member) external view returns (uint256);
     function memberDebt(address member) external view returns (uint256);
-    function payCoRescue(uint8 tierIdx, uint256 sfShare) external;
+    // V8.48 item 46: member-aware, so the SF can enforce the insolvency floor.
+    function payCoRescue(address member, uint8 tierIdx, uint256 sfShare) external;
 }
 
 /// @dev Test stand-in for a live matrix: an SF-authorized caller that can book
@@ -50,7 +51,8 @@ contract MockRescueMatrix {
     }
 
     /// Pull a co-rescue payout from the SF (models SF funding a rescue entry).
-    function pullCoRescue(uint8 tier, uint256 amount) external {
-        sf.payCoRescue(tier, amount);
+    /// V8.48 item 46: carries the member so the floor is exercised end-to-end.
+    function pullCoRescue(address member, uint8 tier, uint256 amount) external {
+        sf.payCoRescue(member, tier, amount);
     }
 }

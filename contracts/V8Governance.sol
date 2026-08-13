@@ -127,6 +127,8 @@ interface IGovernanceTarget {
     function setSfTargetMultiplierT8(uint256 v) external;
     function setSfTargetMultiplierT9(uint256 v) external;
     function setSfTargetMultiplierT10(uint256 v) external;
+    // ── V8.48 item 46: SF insolvency floor ───────────────────────────────────
+    function setInsolvencyFloorBps(uint256 v) external;
     // ── V8.20: second wave -- CNOVABuybackReserve ────────────────────────────
     function setTriggerThreshold(uint256 v) external;
     function setMaxSlippageBps(uint256 v) external;
@@ -266,8 +268,15 @@ contract V8Governance is Ownable {
     ///         menu can never be voted back, the item-42 lesson).
     uint8 public constant PARAM_PROPOSAL_FEE               = 58;
 
+    /// @notice V8.48 item 46 (owner policy 2026-08-13): the SF insolvency floor —
+    ///         expected per-cycle earnings as BPS of the loan tier's fee; a member
+    ///         whose debt reaches it gets no new SF loans and the item-47 valve
+    ///         evicts them. Default 3400 (the measured ~34% median). 0 on the menu
+    ///         = floor disabled, the escape hatch.
+    uint8 public constant PARAM_SF_INSOLVENCY_FLOOR        = 59;
+
     /// @dev Highest assigned param id -- update whenever a new param is added.
-    uint8 public constant PARAM_MAX_ID                     = PARAM_PROPOSAL_FEE;
+    uint8 public constant PARAM_MAX_ID                     = PARAM_SF_INSOLVENCY_FLOOR;
 
     // ── Governance config (self-governable) ───────────────────────────────────
     uint256 public votingPeriod   = 72 hours;
@@ -443,6 +452,9 @@ contract V8Governance is Ownable {
         _allowedValues[PARAM_SF_MULT_T10] = [5, 10, 15, 20, 30, 40, 50, 75, 100, 150];
         // V8.32 param #50: rescue loan repayment BPS — 10%→100% in 10% steps
         _allowedValues[PARAM_SF_RESCUE_REPAY_BPS] = [1000, 2000, 3000, 4000, 5000, 6000, 7000, 8000, 9000, 10000];
+        // V8.48 item 46: insolvency floor — 0 = disabled (escape hatch), default 3400
+        // (measured ~34% median per-cycle earnings), both on the menu (item-42 lesson).
+        _allowedValues[PARAM_SF_INSOLVENCY_FLOOR] = [0, 1700, 2500, 3400, 5000, 6800, 10000];
         // V8.33: extended idle timeout -- 0.5d/1d/2d/3d/4d/5d/6d/7d/14d
         _allowedValues[PARAM_EXTENDED_IDLE_TIMEOUT] = [43200, 86400, 172800, 259200, 345600, 432000, 518400, 604800, 1209600];
         // V8.35: per-tier whale gate thresholds (1–50 pioneers)
@@ -792,6 +804,9 @@ contract V8Governance is Ownable {
         // ── V8.32: StabilityFund rescue repayment BPS ─────────────────────────
         } else if (paramId == PARAM_SF_RESCUE_REPAY_BPS) {
             t.setRescueRepayBps(value);
+        // ── V8.48 item 46: StabilityFund insolvency floor ─────────────────────
+        } else if (paramId == PARAM_SF_INSOLVENCY_FLOOR) {
+            t.setInsolvencyFloorBps(value);
         // ── V8.33: MatrixKeeper extended idle timeout ──────────────────────────
         } else if (paramId == PARAM_EXTENDED_IDLE_TIMEOUT) {
             t.setExtendedIdleTimeout(value);

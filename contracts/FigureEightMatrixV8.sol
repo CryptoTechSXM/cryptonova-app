@@ -578,6 +578,13 @@ contract FigureEightMatrixV8 is Ownable2Step {
         MatrixLogicLib.evictParked(_state, member);
     }
 
+    /// @notice V8.48 item 45: partner-called half of "a seat clears the whole
+    ///         pair's park records". Access control (only the partner matrix)
+    ///         lives in the library body.
+    function clearParkRecord(address member) external {
+        MatrixLogicLib.clearParkRecordFor(_state, member);
+    }
+
     // --- Views ----------------------------------------------------------------
 
     function isParked(address member) external view returns (bool) {

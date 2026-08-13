@@ -52,7 +52,10 @@ interface IStabilityFundKeeper {
     function activateLayer(uint8 layer, bool active) external;
     function balanceByTier(uint8 tier) external view returns (uint256);
     function totalBalance() external view returns (uint256);
-    function payForceCross(uint8 tierIdx, address sourceMatrix, uint256 fee) external;
+    /// @dev V8.48 item 46: member added so the SF can enforce the insolvency floor.
+    function payForceCross(address member, uint8 tierIdx, address sourceMatrix, uint256 fee) external;
+    /// @dev V8.48 item 46: discovery routes floor-tripped members to eviction.
+    function loanEligible(address member, uint8 tierIdx) external view returns (bool);
 }
 
 interface IFigureEightKeeper {
@@ -84,6 +87,10 @@ interface IFigureEightKeeper {
     function nextSlot() external view returns (uint256);
     function lastRotationTimestamp() external view returns (uint256);
     function keeperForceRotateRoot() external;
+    // V8.48 items 45/47: ghost detection — a parked record whose holder is seated
+    // in the pair's OTHER half is stale residue, not a member awaiting rescue.
+    function partner() external view returns (address);
+    function isActiveInMatrix(address member) external view returns (bool);
 }
 
 interface ICommunityWalletKeeper {
@@ -341,9 +348,22 @@ library MatrixKeeperLib {
      *      it themselves) and whether they should be evicted instead of rescued.
      *      Its own frame purely for stack room — see the note at the call site.
      */
-    function _triageParked(IFigureEightKeeper mat, address member, ScanCfg memory cfg)
+    function _triageParked(IFigureEightKeeper mat, address member, uint8 tierIdx, ScanCfg memory cfg)
         internal view returns (uint256 sfShare, bool evict)
     {
+        // V8.48 item 45: GHOST — a parked record whose holder is actually SEATED in
+        // either half of the pair (measured 2026-08-13: 41 live, 39 of them parked
+        // in MatB while seated in the same pair's MatA). Rescue would revert
+        // "already in matrix" forever; route to the valve, which DEQUEUES ONLY.
+        // Scoped so `partner` does not raise this frame's peak stack depth.
+        {
+            if (mat.isInMatrix(member)) return (0, true);
+            address partner = mat.partner();
+            if (partner != address(0) && IFigureEightKeeper(partner).isActiveInMatrix(member)) {
+                return (0, true);
+            }
+        }
+
         uint256 withdrawn    = mat.getMemberTotalWithdrawn(member);
         uint256 withdrawable = mat.withdrawableOf(member);
         // V8.31: crossing reserve reduces SF shortfall — include it in effective contribution.
@@ -365,6 +385,15 @@ library MatrixKeeperLib {
         uint256 maxShortfall = fee > effectiveContrib ? fee - effectiveContrib : 0;
         sfShare = fee * sfBps / 10_000;
         if (sfShare > maxShortfall) sfShare = maxShortfall;
+
+        // V8.48 item 46: the INSOLVENCY FLOOR. A member who would need SF money but
+        // whose outstanding debt already guarantees the next shortfall gets no more
+        // loans (owner policy 2026-08-13) — route to the eviction valve instead.
+        // Self-funded members (sfShare == 0) borrow nothing and are never floored.
+        if (sfShare > 0
+            && !IStabilityFundKeeper(cfg.stabilityFund).loanEligible(member, tierIdx)) {
+            return (0, true);
+        }
     }
 
     function _checkParked(address matAddr, uint8 tierIdx, uint256 idx, ScanCfg memory cfg)
@@ -412,7 +441,7 @@ library MatrixKeeperLib {
         // not, and it blew the stack. Extracted to its own frame rather than enabling
         // viaIR — same call as CommunityWallet._gateAndExpiry, and for the same reason:
         // viaIR compiles today and leaves the function one local from the same failure.
-        (uint256 sfShare, bool evict) = _triageParked(mat, parkedMember, cfg);
+        (uint256 sfShare, bool evict) = _triageParked(mat, parkedMember, tierIdx, cfg);
 
         uint256 age = block.timestamp - ts;
 

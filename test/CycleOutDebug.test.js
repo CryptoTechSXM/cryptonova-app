@@ -187,10 +187,11 @@ describe("CycleOutDebug", function () {
 
     // ── Phase 3: Keeper rescue ────────────────────────────────────────────────
     // Production flow: MatrixKeeper.performUpkeep() calls _doParkedRescue() which does:
-    //   1. sf.payForceCross(tierIdx, sourceMatrix, fee)  — SF sends ENTRY_FEE to matA
+    //   1. sf.payForceCross(member, tierIdx, sourceMatrix, fee)  — SF sends ENTRY_FEE to matA
     //   2. matA.forceCrossKeeper(member)                 — matA uses those funds to cross
     // Here we call both steps directly with owner acting as keeper.
-    await sf.connect(owner).payForceCross(0, matAAddr, FEE);
+    // V8.48 item 46: the member travels with the funding call (insolvency floor).
+    await sf.connect(owner).payForceCross(W1.address, 0, matAAddr, FEE);
     // V8.11: sfContribution=FEE (SF covers 100% in this test scenario)
     await matA.connect(owner).forceCrossKeeper(W1.address, FEE, 0n);
 

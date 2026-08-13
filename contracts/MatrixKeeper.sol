@@ -574,7 +574,11 @@ contract MatrixKeeper is Ownable {
         }
         if (sfAvail < sfShare) return;   // can't even cover the entry shortfall -- bail
 
-        if (totalSfNeeded > 0) IStabilityFundKeeper(stabilityFund).payForceCross(tierIdx, matrix, totalSfNeeded);
+        // V8.48 item 46: member travels with the funding call so the SF can enforce
+        // the insolvency floor at the lender. Discovery already routes floored
+        // members to eviction, so this reverting here means checkUpkeep and the SF
+        // disagree — surface it, do not swallow it.
+        if (totalSfNeeded > 0) IStabilityFundKeeper(stabilityFund).payForceCross(member, tierIdx, matrix, totalSfNeeded);
         mat.forceCrossKeeper(member, sfShare, crossingBuffer);
         emit ParkedRescued(matrix, member, tierIdx);
     }
@@ -582,11 +586,23 @@ contract MatrixKeeper is Ownable {
     function _doEvictParked(address matrix, address member) internal {
         IFigureEightKeeper mat = IFigureEightKeeper(matrix);
         if (mat.parkedAt(member) == 0) return;
-        // V8.46 item 1: eviction had NO time gate — anyone could evict a freshly-parked
-        // member and lock them out of rescue re-entry (selfRescue/coPayRescue need parkedAt>0).
-        // Require a completed rotation and a full idle window first, mirroring _doReclaimSlot.
-        if (mat.rotationCount() == 0) return;
-        if (block.timestamp - mat.parkedAt(member) < extendedIdleTimeout) return;
+
+        // V8.48 items 45/47: a GHOST (parked record whose holder is seated in either
+        // half of the pair) BYPASSES the time gates — the matrix-level valve will
+        // only dequeue the stale record for a seated member, which is harmless at
+        // any age, and 41 of these were live on 2026-08-13 burning copay attempts.
+        bool ghost = mat.isInMatrix(member);
+        if (!ghost) {
+            address partner = mat.partner();
+            ghost = partner != address(0) && IFigureEightKeeper(partner).isActiveInMatrix(member);
+        }
+        if (!ghost) {
+            // V8.46 item 1: eviction had NO time gate — anyone could evict a freshly-parked
+            // member and lock them out of rescue re-entry (selfRescue/coPayRescue need parkedAt>0).
+            // Require a completed rotation and a full idle window first, mirroring _doReclaimSlot.
+            if (mat.rotationCount() == 0) return;
+            if (block.timestamp - mat.parkedAt(member) < extendedIdleTimeout) return;
+        }
         uint256 withdrawn = mat.getMemberTotalWithdrawn(member);
         mat.evictParked(member);
         emit ParkedMemberEvicted(matrix, member, withdrawn);

@@ -1,10 +1,10 @@
 # V8.48 HANDOFF — updated 2026-08-13 (read this first, then V8_48_SCOPE.md)
 
-**540 passing · 7 pending · 0 failing · DO NOT DEPLOY YET.**
+**553 passing · 7 pending · 0 failing · DO NOT DEPLOY YET (items 7 + 40 remain).**
 
-(The previous headline said 514 — STALE when written. The true 2026-08-12 baseline
-was 528, recorded in the scope's items 4/5/6 row; +6 for item 2 = 534, verified by
-running the new suite alone. When you update this number, run the suite first.)
+(Full suite run 2026-08-13 after the 45/46/47 package: 540 + 13 GhostFloor tests =
+553. When you update this number, run the suite first — an earlier headline went
+stale by predicting instead of running.)
 
 Audience: a future session of Claude, plus the owner. Nobody else touches this code.
 
@@ -29,7 +29,7 @@ in both directions (two items were done and still marked open).
 |---|---|---|
 | 7 | cross-pair `memberJoinedAt` so `earlyExitPenaltyBps` can work. | PairManagerV8 |
 | 40 | `selfRescueWithPermit` — the CONTRACT half. Frontend half shipped. | FigureEightMatrixV8 |
-| PARKED | **OWNER-RAISED 2026-08-12, MEASURED same day (`scripts/diag_parked_growth.js`, complete scan, no holes) — the loop is REAL and it is the system's steady state.** 23,069 park events in 7.8 days from **650 unique members** (the network has ~671 — 97% of everyone): 35 parks/member average, 523 members (80%) parked 11+ times, top wallets ~90 parks (~11/day). **REPEAT SHARE 99.8%.** The QUEUE grows ~linearly (+125/day net, 991 live); what grows EXPONENTIALLY is the SF FINANCING: daily net-outstanding delta $7 → $13 → $44 → $459 → $1,707 → **$4,632**; outstanding $6,952, 91% of it accrued in the last 48h; today loaned $8,481 vs repaid $3,849. Mechanism: cycle out ~16% short (the 84% cluster) → park → rescue → the loan eats next earnings first → bigger shortfall next cycle. **ANOMALY 1 RESOLVED 2026-08-13 (VPS checked + owner statement):** fastlane is HEALTHY (scans ~990 parked every 10 min, fast-lanes the rare self-funded ~1/hour — it rescued Deborah's 0x0ddb6a96 at 00:33 on 08-13), and there are NO bot-driving jobs on the VPS at all. The self-rescue volume came from BIGFILL, which runs from the OWNER'S WINDOWS MACHINE (owner statement — see the new CLAUDE.md section "WHERE TRAFFIC COMES FROM"); when it stopped around 08-12 the driver vanished, parked members aged past the 24h grace, and copay loans took over — the flip is the bigfill stop UNMASKING the debt loop, not a keeper outage. copay.log 2026-08-13: SF $36.9k and rising intra-run, $1500/run budget of which only $16–42 is used, ~973/990 in grace at any instant. **ANOMALY 2 CONFIRMED STILL LIVE:** ZERO evictions ever — the evict cron guard (`pgrep -f evict_loop.sh`) still matches its own parent shell, so evict_parked.js never fires (and per the standing warning, do NOT just fix the guard — the keeper borrows the matrixKeeper slot and skips the rescueRatioBps check). **NEW FINDING (needs a diag + scope item): 16 PERSISTENT parked-queue GHOSTS** — the same 16 wallets revert "F8V8: already in matrix" on every copay run (including the keeper signer 0xd419681B itself, parked in T2.1 MatB) — members seated in a matrix while still occupying a parked-queue slot. The 2026-08-11 "queue is clean, 0 stale" claim is no longer true. **ALL MEASUREMENTS DONE + OWNER DECISIONS 2026-08-13** (bigfill confirmed stopped 24h+; queue stable at 988; SF $36,930; outstanding $7,288 across 412 borrowers, THIN — top 10% hold only 38.5%; 64 wallets already owe ≥ a full cycle's earnings, $1,917 = 26% of book). **(a) RESERVE DECISION LANDED 2026-08-13: `CROSSING_RESERVE_BPS` STAYS 5_000, stays a constant.** `scripts/model_reserve_bps.js` (built + run same day, strict reads, plumbing verified on-chain first) killed the lever: **dynamic lift 0% at EVERY candidate 5500–7500** vs the static table's 44–49% — under pro-rata rescale the required earnings ratio RISES with the reserve (50.0% → 52.8%) while measured medians sit at 21.8–34%, and the cost for zero lift at 70% would have been member $/100 $39 → $23.63 and treasury $5 → $2.89. Full numbers in the scope's parked-loop DECISIONS block. (b)+(c) — insolvency floor + eviction relief valve SCOPED AS A PACKAGE (scope items 46+47): floor without eviction strands floored members forever. **Still blocks the deploy until 45 (diag) + 46 + 47 are built.** | 46+47 build pending |
+| PARKED | **OWNER-RAISED 2026-08-12, MEASURED same day (`scripts/diag_parked_growth.js`, complete scan, no holes) — the loop is REAL and it is the system's steady state.** 23,069 park events in 7.8 days from **650 unique members** (the network has ~671 — 97% of everyone): 35 parks/member average, 523 members (80%) parked 11+ times, top wallets ~90 parks (~11/day). **REPEAT SHARE 99.8%.** The QUEUE grows ~linearly (+125/day net, 991 live); what grows EXPONENTIALLY is the SF FINANCING: daily net-outstanding delta $7 → $13 → $44 → $459 → $1,707 → **$4,632**; outstanding $6,952, 91% of it accrued in the last 48h; today loaned $8,481 vs repaid $3,849. Mechanism: cycle out ~16% short (the 84% cluster) → park → rescue → the loan eats next earnings first → bigger shortfall next cycle. **ANOMALY 1 RESOLVED 2026-08-13 (VPS checked + owner statement):** fastlane is HEALTHY (scans ~990 parked every 10 min, fast-lanes the rare self-funded ~1/hour — it rescued Deborah's 0x0ddb6a96 at 00:33 on 08-13), and there are NO bot-driving jobs on the VPS at all. The self-rescue volume came from BIGFILL, which runs from the OWNER'S WINDOWS MACHINE (owner statement — see the new CLAUDE.md section "WHERE TRAFFIC COMES FROM"); when it stopped around 08-12 the driver vanished, parked members aged past the 24h grace, and copay loans took over — the flip is the bigfill stop UNMASKING the debt loop, not a keeper outage. copay.log 2026-08-13: SF $36.9k and rising intra-run, $1500/run budget of which only $16–42 is used, ~973/990 in grace at any instant. **ANOMALY 2 CONFIRMED STILL LIVE:** ZERO evictions ever — the evict cron guard (`pgrep -f evict_loop.sh`) still matches its own parent shell, so evict_parked.js never fires (and per the standing warning, do NOT just fix the guard — the keeper borrows the matrixKeeper slot and skips the rescueRatioBps check). **NEW FINDING (needs a diag + scope item): 16 PERSISTENT parked-queue GHOSTS** — the same 16 wallets revert "F8V8: already in matrix" on every copay run (including the keeper signer 0xd419681B itself, parked in T2.1 MatB) — members seated in a matrix while still occupying a parked-queue slot. The 2026-08-11 "queue is clean, 0 stale" claim is no longer true. **ALL MEASUREMENTS DONE + OWNER DECISIONS 2026-08-13** (bigfill confirmed stopped 24h+; queue stable at 988; SF $36,930; outstanding $7,288 across 412 borrowers, THIN — top 10% hold only 38.5%; 64 wallets already owe ≥ a full cycle's earnings, $1,917 = 26% of book). **(a) RESERVE DECISION LANDED 2026-08-13: `CROSSING_RESERVE_BPS` STAYS 5_000, stays a constant.** `scripts/model_reserve_bps.js` (built + run same day, strict reads, plumbing verified on-chain first) killed the lever: **dynamic lift 0% at EVERY candidate 5500–7500** vs the static table's 44–49% — under pro-rata rescale the required earnings ratio RISES with the reserve (50.0% → 52.8%) while measured medians sit at 21.8–34%, and the cost for zero lift at 70% would have been member $/100 $39 → $23.63 and treasury $5 → $2.89. Full numbers in the scope's parked-loop DECISIONS block. (b)+(c) — ✅ **THE 45+46+47 PACKAGE IS BUILT (2026-08-13, 553 passing, `V8_48_GhostFloor.test.js` 13 tests): seat clears BOTH pair halves' park records; insolvency floor (default 3400 bps, PARAM 59, `"SF: insolvency floor"`) with member-aware `payCoRescue`/`payForceCross`; two-branch valve (ghost = dequeue-only, insolvent = evict with reserve released). THE PARKED LOOP NO LONGER BLOCKS THE DEPLOY.** Full detail in the scope's item 45/46/47 rows, incl. the VPS deploy-day notes (copay will log floor reverts by design; DELETE the evict_parked cron line — the chain routes evictions now). | ✅ resolved — 7 + 40 are the last blockers |
 
 **Both open decisions were DECIDED by the owner 2026-08-12:**
 - **item 2 — DECIDED 2026-08-12, ✅ BUILT 2026-08-13 (534 passing, 6-test suite
@@ -68,6 +68,18 @@ what made `epochMemberLimit = 10,000` unreachable, and it is not specific to epo
 
 ## DONE 2026-08-13
 
+- **THE 45+46+47 PACKAGE (553 passing):** prevention (seat clears both pair halves,
+  `clearParkRecord` partner-gated), insolvency floor (SF, default 3400, PARAM 59,
+  owner policy verbatim in the scope's item-46 row), two-branch eviction valve
+  (`GhostDequeued` vs `MemberEvicted` + `EvictionReserveReleased`), keeper discovery
+  routing (floored/ghost → valve; self-funded never floored), sizes all fit
+  (factory 532 headroom after the wrapper). Signature ripple: `payCoRescue` and
+  `payForceCross` are member-aware — 7 contracts, 3 mocks, 2 old suites touched.
+  One post-build repair recorded in `MockEvictMatrix.sol`: the keeper's try/catch
+  swallowed a mock-incomplete revert and read as "gate held" — extend a mock's
+  surface whenever the keeper grows a new view, or the failure hides.
+  **Still to ship with it: the item-46 FRONTEND surface** (dashboard says why no
+  loan came) — listed under NEXT UP.
 - **`main` PROMOTED TO `41aaa2e` (~late UTC 2026-08-13), truncation-checked on the
   REMOTE refs, both end `</body></html>`.** Members now have: the **per-wallet
   withdrawal history** (owner-reported same day: v1 used ONE browser-wide
@@ -146,14 +158,19 @@ row of `V8_48_SCOPE.md`, including the ethers-v6 overload-ambiguity caveat).
 ## NEXT UP — ORDER FOR THE NEXT SESSION (updated 2026-08-13 after the reserve
 decision landed; supersedes the list below)
 
-1. **Item 45 diag** — the 16 parked-queue ghosts (which path re-seats without
-   dequeuing?). Cheap, and 46/47 depend on knowing.
-2. **Items 46 + 47** — insolvency floor + eviction valve, designed as a package.
-3. Items 7 and 40 (the remaining old blockers), then the epoch-transparency
-   frontend below.
+1. **Items 7 and 40 — the LAST deploy blockers.** 7: cross-pair `memberJoinedAt`
+   (PairManagerV8) so `earlyExitPenaltyBps` can work. 40: `selfRescueWithPermit`
+   contract half — check `DOMAIN_SEPARATOR()`/`nonces()` on Base USDC FIRST (the
+   one still-unverified external claim).
+2. **Frontend, no deploy needed:** the epoch-transparency panel (probe 2026-08-13:
+   all four epoch getters EXIST on live V8.47 — no feature-detect) and the
+   `catch(() => 1)` epoch fallback fix at index.html:6410.
+3. **Frontend, ships with the V8.48 deploy:** the item-46 surface (dashboard says
+   "no loan — insolvency floor; self-rescue or eviction follows") + the other
+   post-deploy switches already listed in the item-2/3/43 scope rows.
 
-(Step 1 of the previous list — `model_reserve_bps.js` — is DONE and the decision
-is recorded above. Do not rebuild it; re-RUN it if fresh numbers are needed.)
+(The 45/46/47 package, model_reserve_bps.js and diag_ghost_parked.js are DONE —
+re-RUN the diags for fresh numbers, do not rebuild.)
 
 ## NEXT UP, ALREADY SCOPED (2026-08-12 — now AFTER the list above)
 

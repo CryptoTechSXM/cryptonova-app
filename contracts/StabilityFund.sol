@@ -623,7 +623,10 @@ contract StabilityFund is Ownable2Step {
         emit DiscountPaid(member, discount, totalBalance);
     }
 
+    /// @dev V8.48 item 46: takes the MEMBER so the insolvency floor is enforced at
+    ///      the lender, whoever drives the rescue. See loanEligible() below.
     function payForceCross(
+        address member,
         uint8   tierIdx,
         address sourceMatrix,
         uint256 fee
@@ -632,6 +635,7 @@ contract StabilityFund is Ownable2Step {
         require(tierIdx < MAX_TIERS,         "SF: invalid tier");
         require(sourceMatrix != address(0),  "SF: zero matrix");
         require(fee > 0,                     "SF: zero fee");
+        require(loanEligible(member, tierIdx), "SF: insolvency floor");
         require(totalBalance >= fee + stabilityFloor, "SF: below floor");
 
         if (balanceByTier[tierIdx] >= fee) {
@@ -655,10 +659,13 @@ contract StabilityFund is Ownable2Step {
      *         repaid from future cycle-out earnings.
      *         Only callable by an authorizedMatrix.
      */
-    function payCoRescue(uint8 tierIdx, uint256 sfShare) external {
+    function payCoRescue(address member, uint8 tierIdx, uint256 sfShare) external {
         require(authorizedMatrices[msg.sender], "SF: not authorized matrix");
         require(tierIdx < MAX_TIERS,            "SF: invalid tier");
         require(sfShare > 0,                    "SF: zero share");
+        // V8.48 item 46: the insolvency floor. The old member-less signature could
+        // not refuse anyone — a lender must know who it is lending to.
+        require(loanEligible(member, tierIdx),  "SF: insolvency floor");
         require(totalBalance >= sfShare + stabilityFloor, "SF: below floor");
 
         if (balanceByTier[tierIdx] >= sfShare) {
@@ -736,6 +743,55 @@ contract StabilityFund is Ownable2Step {
     event MemberDebtIncreased(address indexed member, uint8 tier, uint256 amount, uint256 newTotal);
     event MemberDebtRepaid(address indexed member, uint256 amount, uint256 newTotal);
     event ClawbackBandsSet(uint256 b0, uint256 b1, uint256 b2, uint256 b3);
+
+    // ── V8.48 item 46: the INSOLVENCY FLOOR ───────────────────────────────────
+    //
+    // Owner policy, his words (2026-08-13): "evict them when their fees are maybe
+    // more than the fees they are collecting… It is not a free ride for ever — the
+    // idea is to help them, but if they are not getting any referrals they would be
+    // evicted bcuz the loan no longer covers their coverage %."
+    //
+    // Mechanics: a copay loan repays FIRST out of the member's next earnings, so
+    // once outstanding debt >= expected per-cycle earnings, every further loan is
+    // arithmetically unrepayable — the book can only grow (measured 2026-08-13:
+    // 64 wallets, $1,917, 26% of the outstanding book, per-member debt growing
+    // linearly every cycle). The floor stops lending at exactly that line; the
+    // eviction valve (item 47, MatrixLogicLib.evictParked) is where floored
+    // members leave the queue — withdrawable intact, reserve released, debt still
+    // booked and repaid off the top of their next withdrawal.
+    //
+    // The estimate: expected per-cycle earnings ≈ tier fee x insolvencyFloorBps.
+    // Default 3400 bps = the measured ~34% median (model_reserve_bps.js /
+    // diag_parked_growth.js, 2026-08-13). DAO-governable (PARAM 59); 0 disables
+    // the floor entirely — the escape hatch, on the menu like every default.
+    // Members can ALWAYS selfRescue past the floor — it gates only SF LENDING.
+
+    /// @notice Expected per-cycle earnings as BPS of the loan tier's entry fee.
+    ///         The floor refuses a new loan when memberDebt >= fee x this / 10000.
+    ///         0 = floor disabled (every member stays loan-eligible).
+    uint256 public insolvencyFloorBps = 3_400;
+
+    event InsolvencyFloorBpsSet(uint256 bps);
+
+    function setInsolvencyFloorBps(uint256 bps) external onlyOwnerOrGovernance {
+        require(bps <= 10_000, "SF: floor bps > 100%");
+        insolvencyFloorBps = bps;
+        emit InsolvencyFloorBpsSet(bps);
+    }
+
+    /// @notice V8.48 item 46: may this member take a new SF rescue loan at this tier?
+    ///         false = insolvency floor tripped. Read by the rescue paths (hard
+    ///         enforcement in payCoRescue/payForceCross), by keeper discovery
+    ///         (routes floored members to the eviction valve), and by the frontend
+    ///         (the dashboard must SAY why no loan came — parity rule).
+    ///         A tier with no registered fee cannot form an estimate — eligible.
+    function loanEligible(address member, uint8 tierIdx) public view returns (bool) {
+        if (insolvencyFloorBps == 0) return true;
+        if (tierIdx >= MAX_TIERS) return false;
+        uint256 fee = tierEntryFees[tierIdx];
+        if (fee == 0) return true;
+        return memberDebt[member] < fee * insolvencyFloorBps / 10_000;
+    }
 
     /// @notice Total outstanding rescue debt for a member (explicit accessor used by
     ///         matrices; mirrors the auto-getter on the public `memberDebt` mapping).
