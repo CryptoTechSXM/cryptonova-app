@@ -1312,10 +1312,12 @@ if (!htmlTxt) {
 
   // 2. Names the frontend legitimately declares that live OUTSIDE this repo.
   const EXTERNAL_OK = new Set([
-    // ERC20 + EIP-2612 (USDC)
+    // ERC20 + EIP-2612 (USDC) + EIP-5267 — all inherited from OpenZeppelin, so
+    // they exist on the compiled contracts but never appear in the repo's own
+    // .sol text this check parses.
     "name", "symbol", "decimals", "totalSupply", "balanceOf", "transfer",
     "approve", "allowance", "transferFrom", "permit", "nonces",
-    "DOMAIN_SEPARATOR", "version", "Transfer", "Approval",
+    "DOMAIN_SEPARATOR", "version", "Transfer", "Approval", "eip712Domain",
     // Multicall3
     "aggregate", "aggregate3", "tryAggregate", "blockAndAggregate",
   ]);
