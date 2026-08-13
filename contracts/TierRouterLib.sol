@@ -19,6 +19,7 @@ interface ILMat {
     function isActiveInMatrix(address member) external view returns (bool);
     function routerWithdrawFor(address member, uint256 amount) external;
     function withdrawableOf(address member) external view returns (uint256);
+    function reservedHeldOf(address member) external view returns (uint256);
 }
 
 interface ILSF {
@@ -105,6 +106,23 @@ library TierRouterLib {
             remaining = _drawMatrixToMember(mB, member, remaining);
         }
         return remaining;
+    }
+
+    /// @notice V8.48 item 2: sum reservedHeldOf across every matrix of ONE tier.
+    ///         TierRouter.reservedHeldFor calls this with the member's HIGHEST tier —
+    ///         the only tier where withdrawCore enforces the reserve, so the only one
+    ///         that can hold anything. STRICT, no try/catch: this is a view, and a
+    ///         failed read coming back as 0 is exactly the fabricated-fallback class
+    ///         the 2026-08-12 session note bans. A revert must reach the caller as a
+    ///         revert, never as a plausible zero.
+    function heldTierForMember(address pm, address member) external view returns (uint256 held) {
+        if (pm == address(0)) return 0;
+        uint256 n = ILPair(pm).pairCount();
+        for (uint256 p = 0; p < n; p++) {
+            (address mA, address mB) = ILPair(pm).getPairAt(p);
+            if (mA != address(0)) held += ILMat(mA).reservedHeldOf(member);
+            if (mB != address(0)) held += ILMat(mB).reservedHeldOf(member);
+        }
     }
 
     /// @notice V8.48: the V8.44 FULL sweep's tier loop, relocated here verbatim from

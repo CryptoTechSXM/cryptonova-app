@@ -545,16 +545,48 @@ library MatrixLogicLib {
     function claimableOf(MatrixState storage self, ImmutableConfig memory cfg, address member)
         external view returns (uint256)
     {
+        (uint256 bal, ) = _claimableAndHeld(self, cfg, member);
+        return bal;
+    }
+
+    /// @notice V8.48 item 2 (owner decision 2026-08-12: keep high-tier-only semantics,
+    ///         add the getter) — what the crossing lock + automation reserve ACTUALLY
+    ///         withhold from `member` in THIS matrix right now. The on-chain version of
+    ///         the frontend's `_claimableAll.heldNow` reconstruction, so UIs stop
+    ///         rebuilding it client-side. Zero outside the member's highest tier and
+    ///         zero when automation is off, because those are exactly the places
+    ///         withdrawCore enforces nothing. The DEBT portion of a balance is
+    ///         deliberately NOT counted: withdrawCore repays SF debt BEFORE the holds
+    ///         apply, so that money is held toward repayment, not toward the reserve
+    ///         target. Shares one internal with claimableOf — the item-1 discipline:
+    ///         a view that describes an enforcement must be computed BY that
+    ///         enforcement's arithmetic, never alongside it.
+    function reservedHeldOf(MatrixState storage self, ImmutableConfig memory cfg, address member)
+        external view returns (uint256)
+    {
+        (, uint256 held) = _claimableAndHeld(self, cfg, member);
+        return held;
+    }
+
+    /// @dev The single source claimableOf and reservedHeldOf both read. `bal` is what
+    ///      withdrawCore would pay (pre-fee); `held` is what the crossing lock +
+    ///      automation reserve withhold. Invariant, asserted in
+    ///      V8_48_ReservedHeld.test.js: after a FULL withdrawal, the member's remaining
+    ///      stored withdrawable equals `held` as read beforehand — the two outputs
+    ///      partition the post-debt balance.
+    function _claimableAndHeld(MatrixState storage self, ImmutableConfig memory cfg, address member)
+        internal view returns (uint256 bal, uint256 held)
+    {
         // GROSS pool, not pendingPoolOf. withdrawCore applies the clawback inside
         // _settlePool and then repays the REMAINING debt from the full balance, so the
         // net effect is the whole debt deducted ONCE from the gross. Using the netted
         // figure here and then subtracting the full debt would take the clawback twice.
-        uint256 bal = self.members[member].withdrawable + _poolShareGross(self, cfg, member);
-        if (bal == 0) return 0;
+        bal = self.members[member].withdrawable + _poolShareGross(self, cfg, member);
+        if (bal == 0) return (0, 0);
 
         if (self.stabilityFund != address(0)) {
             uint256 debt = IStabilityFund(self.stabilityFund).memberDebtOf(member);
-            if (debt >= bal) return 0;
+            if (debt >= bal) return (0, 0);
             bal -= debt;
         }
 
@@ -571,16 +603,21 @@ library MatrixLogicLib {
                 ? cfg.entryFee - self.members[member].crossingReserve
                 : 0;
             if (crossNeeded > 0) {
-                if (bal <= crossNeeded) return 0;
+                // withdrawCore: require(available > crossNeeded). At or below it,
+                // NOTHING is payable and the whole post-debt balance is held.
+                if (bal <= crossNeeded) return (0, bal);
                 bal -= crossNeeded;
+                held = crossNeeded;
             }
         }
 
         if (automationReserve > 0) {
-            if (automationReserve >= bal) return 0;
+            // withdrawCore: require(automationReserve < available). At or below it,
+            // the crossing hold plus everything remaining is held.
+            if (automationReserve >= bal) return (0, held + bal);
             bal -= automationReserve;
+            held += automationReserve;
         }
-        return bal;
     }
 
     /// @dev Accrued pool share BEFORE the debt clawback estimate. Split out for V8.48

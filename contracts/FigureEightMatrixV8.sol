@@ -671,6 +671,17 @@ contract FigureEightMatrixV8 is Ownable2Step {
         return gross - (gross * _state.withdrawalFeeBps / 10_000);
     }
 
+    /// @notice V8.48 item 2 — what the crossing lock + automation reserve withhold from
+    ///         `member` in THIS matrix right now. freeWithdrawable() and this view
+    ///         PARTITION the post-debt balance (view + enforcement share one internal in
+    ///         MatrixLogicLib). Zero outside the member's highest tier and zero when
+    ///         automation is off. TierRouter.reservedHeldFor(member) sums this across
+    ///         the highest tier — UIs should read THAT; this per-matrix view exists so
+    ///         the sum is auditable.
+    function reservedHeldOf(address member) external view returns (uint256) {
+        return MatrixLogicLib.reservedHeldOf(_state, _cfg(), member);
+    }
+
     /// @dev Body lives in MatrixLogicLib.claimableOf — see the note there. Keeping it
     ///      out of this contract keeps MatrixPairFactory (which EMBEDS this bytecode)
     ///      under EIP-170; it had 108 bytes of headroom when this was inlined here.

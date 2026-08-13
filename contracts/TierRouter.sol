@@ -1742,6 +1742,22 @@ contract TierRouter is Ownable2Step {
         return total;
     }
 
+    /// @notice V8.48 item 2 (owner decision 2026-08-12, corrected same day: STAY
+    ///         high-tier-only + this getter; the waterfall rewrite of withdrawCore was
+    ///         rejected as too risky pre-deploy). What is ACTUALLY held toward
+    ///         reservedFor(member)'s target right now — the on-chain version of the
+    ///         frontend's `_claimableAll.heldNow`, so UIs stop reconstructing it from
+    ///         five reads per matrix. Sums reservedHeldOf across the matrices of the
+    ///         member's HIGHEST tier, the only place withdrawCore enforces the reserve.
+    ///         Best-effort semantics are UNCHANGED: this can read well below
+    ///         reservedFor(member) when lower-tier balances were withdrawn — that gap
+    ///         is the design (automation waits for new earnings), not a bug.
+    function reservedHeldFor(address member) external view returns (uint256) {
+        uint8 highest = memberHighestTier[member];
+        if (highest == 0) return 0;
+        return TierRouterLib.heldTierForMember(tierPairManagers[highest - 1], member);
+    }
+
     function inactivityStatus() external view returns (
         bool    paused,
         bool    guardEnabled,
