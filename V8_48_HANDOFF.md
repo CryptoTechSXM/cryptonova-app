@@ -68,6 +68,20 @@ what made `epochMemberLimit = 10,000` unreachable, and it is not specific to epo
 
 ## DONE 2026-08-13
 
+- **`main` PROMOTED TO `41aaa2e` (~late UTC 2026-08-13), truncation-checked on the
+  REMOTE refs, both end `</body></html>`.** Members now have: the **per-wallet
+  withdrawal history** (owner-reported same day: v1 used ONE browser-wide
+  localStorage key, so switching accounts showed another wallet's withdrawals —
+  "cross-pollination"; v2 keys by connected account, one-time payee-match
+  migration, per-wallet clear); the **withdraw-all pre-check fix** (Sherwyn's
+  08-13 report, see OPEN MEMBER ISSUES); and **items 43 frontend + 44**
+  (governance fee UI + param explanations/search) riding the same promotion.
+  Pre-promotion probe re-run per THE DEPLOY MODEL: `proposalFee` and the two
+  item-41 CW getters MISSING on V8.47 exactly as feature-detected; all sanity
+  rows EXIST. **Probe bonus finding: `epochMembersRemaining` /
+  `epochMintRemaining` / `epochTimeRemaining` / `epochLeadingTrigger` all EXIST
+  on live V8.47** — the epoch-transparency panel (NEXT UP) needs NO deploy and
+  NO feature-detect.
 - **`scripts/model_reserve_bps.js` built + run, reserve decision LANDED** — keep
   5_000, keep it a constant; the reserve knob cannot create self-funders (dynamic
   lift 0% at every candidate — details in the scope's parked-loop DECISIONS block
@@ -170,6 +184,25 @@ these two are the last of them.
   self-diagnosing. Her real headline is item 1: `freeWithdrawable` shows $92.62
   against $296.77 actually claimable.
 - **CryptoJan22 / Sherwyn — "why so few cycles?"** Answered by item 39. Not defects.
+- **Sherwyn (0x7d3c9488, Rabby), 2026-08-13 02:40 GMT — "Withdraw all triggers the
+  contract but no reaction in wallet… CNova worked. Same on other wallets."**
+  Post-promotion report, so evidence about the NEW build. Four real defects found
+  in `doWithdraw()`'s pre-signature stretch and FIXED same day (on `main` since
+  `41aaa2e`): (1) ~34 SERIAL `getMember` reads before the signature request, each
+  behind `.catch(() => null)` — on a busy RPC the loop hangs (spinner, no wallet
+  popup — his exact symptom) ; (2) if every read failed, a member with money was
+  told "Nothing to withdraw." (fabricated read GATING an action, 6ced4f1 class);
+  (3) a failed `estimateGas` was swallowed into a static 6M-gas doomed send;
+  (4) the custom-recipient loop silently skipped unreadable matrices. Now:
+  batched+retried reads with a progress line, honest "could not verify — does NOT
+  mean you have nothing" state, estimate failure stops with the decoded reason,
+  skips are reported. **NOT CONFIRMED as his exact cause** (no console capture);
+  the progress/error states make his next attempt self-diagnosing. "CNova worked"
+  fits: the CNOVA claim path has no read fan-out ahead of the signature.
+- **Owner, 2026-08-13 — withdrawal history "cross-pollination" between accounts on
+  one machine.** Display-only, no funds involved: the v1 history panel used one
+  browser-wide localStorage key. Per-wallet v2 shipped and promoted same day (see
+  DONE above). If a member reports seeing someone else's withdrawals, it was this.
 
 ---
 

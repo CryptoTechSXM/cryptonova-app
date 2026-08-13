@@ -38,6 +38,12 @@ const PROBES = [
   ["communityWallet", "distributeInterval (V8.47 original)", "function distributeInterval() view returns (uint256)"],
   ["communityWallet", "distributionDayOfMonth (V8.48 item 41)", "function distributionDayOfMonth() view returns (uint8)"],
   ["communityWallet", "nextDistributionTime (V8.48 item 41)", "function nextDistributionTime() view returns (uint256)"],
+  // 2026-08-13: item 43's frontend (governance.html, commit 32f719d) reads the
+  // proposal fee. Expected MISSING on V8.47 — the UI feature-detects and shows the
+  // no-fee notice; this row exists so the promotion check is a MEASUREMENT, not a
+  // memory of how the UI was written.
+  ["v8Governance", "quorumBps (sanity — should EXIST)", "function quorumBps() view returns (uint256)"],
+  ["v8Governance", "proposalFee (V8.48 item 43 — UI feature-detects)", "function proposalFee() view returns (uint256)"],
 ];
 
 (async () => {
