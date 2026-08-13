@@ -1,5 +1,98 @@
 # V8.48 HANDOFF — updated 2026-08-13 (read this first, then V8_48_SCOPE.md)
 
+> # ⛳ V8.48 IS DEPLOYED AND LIVE — 2026-08-13
+>
+> Everything below the next divider is the PRE-deploy handoff, kept for the
+> reasoning. **The deploy itself is DONE.** Current state:
+>
+> - **Contracts live on Base Sepolia**, `scripts/deployed_addresses_v8_48.json`
+>   (committed, contracts repo branch **`v8.1`** — NOT `admin`; the
+>   admin→preview→main ladder is the FRONTEND repo only). Deploy ran clean:
+>   `setMemberTracker` (items 7+13) and the DirectSale treasury-caller grant
+>   (item 6) both fired.
+> - **Integrity gate PASSED** on the fresh chain (W1 alone at T1 MatA root).
+> - **`scripts/probe_v848_getters.js` (NEW): 11/11 getters + declared defaults
+>   verified ON CHAIN** — floor 3400, overflow 10000, SF mult 10, proposal fee
+>   100e18, day-of-month 25, epochs 1000/180d/1M, `reservedHeldFor`,
+>   `loanEligible`, `bulkWithdraw(uint256)`, `selfRescueWithPermit`.
+>   **The reused testnet USDC has NO EIP-2612** → self-rescue is the two-step
+>   approve+rescue on testnet BY DESIGN. Mainnet native USDC does support it.
+> - **Frontend cut over** (275 replacements, 11 files), `predeploy_check` re-run
+>   114/114 after. `main` = **`66e8f28`**.
+> - **Keepers live, 11 cron lines.** `frozen_matb_keeper` and `evict_parked`
+>   DELETED from cron (items 24 + 47 — the chain owns both now). Stress OFF.
+>
+> ## ⚠️ THE ONE THAT COST TIME — READ BEFORE THE NEXT DEPLOY
+>
+> **`deploy_v8.js` does NOT authorize the keeper EOA.** V8.46 item 1 put an
+> `upkeepCaller` allowlist on `performUpkeep` and the deploy script was never
+> updated to match. So on the fresh deployment the keeper found work, sent
+> `performUpkeep`, and got `MK: not authorized keeper` — and because that revert
+> arrives with EMPTY data, the keeper read it as out-of-gas and halved its batch
+> cap (2→1→1) forever. Nothing damaged; nothing working either.
+> **Fix: `npx hardhat run scripts/set_upkeep_caller.js --network baseSepolia`.**
+> Now written into `GO_LIVE_RUNBOOK.md` as step 1.3c and the deploy card.
+> **Quirk: the script's read-back printed `false FAILED` — a stale-block read
+> right after the tx. Re-running it showed `before: true`. Rerun, don't believe
+> the first answer.** `scripts/diag_keeper_work.js` (NEW) decodes what the keeper
+> discovers and simulates performUpkeep — that is what found this.
+>
+> ## THREE MEMBER-FACING FIXES SHIPPED DURING THE DEPLOY WINDOW
+>
+> 1. **Withdrawal did not refresh the dashboard** (owner caught it in Phase 4).
+>    `_staggeredDashRefresh()` (three re-reads: 2s/8s/20s) was written 2026-08-06
+>    for Kira's upgrade/rescue report and wired into 8 sites — **all three
+>    withdraw paths kept the old single 3.5s read**, which the same commit's own
+>    comment calls unreliable when the pool lags the tx block. Members saw the OLD
+>    balance and clicked Withdraw again. Now 12 call sites. **This is the third
+>    time this exact "fixed in one place, still live in another" pattern has
+>    appeared (items 30, 39, the epoch `.catch`). A sweep for un-propagated fixes
+>    is worth a session of its own.**
+> 2. **Withdrawal history survived the deployment change** (owner spotted stale
+>    V8.47 records mid-cutover: *"received $737.78 of $3,291.13 — 17 matrix
+>    failed"*, naming matrices that no longer exist). The v2 key was per-WALLET
+>    but not per-DEPLOYMENT. Key now carries a deployment tag; v1 migration
+>    disabled (every v1 record predates the cutover). Old records hidden, not
+>    deleted.
+> 3. The keeper authorization above.
+>
+> ## OPEN — TOP OF THE POST-DEPLOY LIST
+>
+> - **🔴 THE WALLET RPC (owner's question, and it may be the big one).** The site
+>   READS through a healthy 5-endpoint QuickNode pool. But `wallet_addEthereumChain`
+>   at **index.html:2834 and :2903** configures members' wallets with
+>   **`rpcUrls: ['https://sepolia.base.org']`** — the public endpoint. So every
+>   member whose wallet our site set up SENDS TRANSACTIONS through it. A Cloudflare
+>   502 from it during registration is what produced the raw-HTML alert on deploy
+>   day. **Prime suspect for the long-running "❌ Transaction failed on-chain —
+>   hard-refresh" report class, which is the single most common member complaint in
+>   BUGS.md.** NOT changed on deploy day: it governs how every NEW member adds the
+>   network, and verifying it needs a wallet that has never had Base Sepolia
+>   configured. **Owner decision needed with it:** a QuickNode URL in a member's
+>   wallet is used for ALL their Base Sepolia activity, burning quota the owner
+>   pays for — consider a dedicated endpoint kept out of the site pool so one
+>   member cannot degrade the dashboard for everyone.
+> - **Raw RPC error dumped into `alert()`** — the 502 rendered a wall of raw
+>   HTML/JS in a browser popup during registration. Needs the honest-error
+>   treatment the withdraw path already got.
+> - **`uBal` display fabrication** — `usdc2.balanceOf(...).catch(() => 0n)` at
+>   index.html:5581 shows **$0.00 USDC** if that read drops. Display-only (the
+>   approve button enables unconditionally and the contract judges), so it is D2
+>   class, not action-gating. Verified during the deploy-day sweep: **130
+>   value-returning catches remain; none found gating an action.**
+> - **Stale banner text in `deploy_v8.js`** — prints "V8.41 Deploy" and
+>   "ADDRESSES_FILE=…v8_47.json must be set". Cosmetic (code default is v8_48 and
+>   `.env` overrides), but it reads as a live warning on deploy day. Fix in 7b.
+> - **NEXT UP #2 IS STALE:** the `catch(() => 1)` epoch fallback at index.html:6410
+>   is ALREADY FIXED (now `.catch(() => null)` with a full comment). Only the
+>   epoch-transparency PANEL remains from that item.
+> - **Deferred from Phase 4 — never tested against a live chain:** self-rescue
+>   while parked, and bulk upgrade while carrying rescue debt (O1: approve must be
+>   Σfees + debt). A fresh chain has no parked members and no loans; these need
+>   traffic. **Test them during bigfill.**
+>
+> ---
+
 **565 passing · 7 pending · 0 failing · EVERY NUMBERED BLOCKER IS BUILT — AND
 BOTH PRE-DEPLOY AUDITS (38 + 15) ARE DONE AND CLEAN.**
 
