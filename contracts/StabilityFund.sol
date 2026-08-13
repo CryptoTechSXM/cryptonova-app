@@ -130,12 +130,20 @@ contract StabilityFund is Ownable2Step {
     ///         healthy, and a share of everything after that". Set both and they stack —
     ///         the carve is taken first, then this applies to what remains.
     ///
-    ///         DEFAULT 0 = NO BEHAVIOUR CHANGE AT DEPLOY. Nothing moves until governance
-    ///         votes a rate in.
+    ///         DEFAULT 10_000 (V8.48, owner decision 2026-08-13): once the fund is at
+    ///         target, EVERY incremental L1 dollar is surplus by definition — the fund
+    ///         does not need it — and the owner decided it belongs to the community:
+    ///         "100% of surplus go to CW and we can DAO vote to change it after."
+    ///         DAO-votable via PARAM_SF_COMMUNITY_OVERFLOW (60). This default also
+    ///         SUPERSEDES the 2026-08-07 "SF intake lever" decision (dial the 3% carve
+    ///         itself): reducing intake and forwarding at-target inflow reach the same
+    ///         steady state, and this one was already built and needs no fanout across
+    ///         the live matrices. Recorded so the older decision reads as CLOSED BY
+    ///         CHOICE, not lost.
     ///
     ///         L3 IS DELIBERATELY UNTOUCHED — that overflow funds BuybackReserve, which
     ///         supports the CNOVA floor (scope items 4/5/6). Do not extend this to it.
-    uint256 public communityOverflowBps = 0;
+    uint256 public communityOverflowBps = 10_000;
 
     /// @notice Lifetime USDC routed to the CommunityWallet from this contract, by BOTH
     ///         the unconditional carve and the surplus redirect. The carve had no
@@ -406,12 +414,15 @@ contract StabilityFund is Ownable2Step {
     }
 
     /// @notice V8.48 item 26: share of each L1 deposit redirected to the CommunityWallet
-    ///         WHILE the fund is at or above target. Same enumerated menu as the carve
-    ///         (0-5%) so governance cannot fat-finger a large number.
+    ///         WHILE the fund is at or above target. Enumerated, and since the owner's
+    ///         2026-08-13 decision the menu runs to 100% — at-target inflow is surplus,
+    ///         and 10_000 ("all of it, to the community") is the declared default.
+    ///         Menu mirrored in V8Governance PARAM_SF_COMMUNITY_OVERFLOW (60).
     function setCommunityOverflowBps(uint256 bps) external onlyOwnerOrGovernance {
         require(
-            bps == 0 || bps == 100 || bps == 200 ||
-            bps == 300 || bps == 400 || bps == 500,
+            bps == 0 || bps == 100 || bps == 250 || bps == 500 ||
+            bps == 1_000 || bps == 2_500 || bps == 5_000 ||
+            bps == 7_500 || bps == 10_000,
             "SF: invalid overflow bps"
         );
         communityOverflowBps = bps;

@@ -129,6 +129,8 @@ interface IGovernanceTarget {
     function setSfTargetMultiplierT10(uint256 v) external;
     // ── V8.48 item 46: SF insolvency floor ───────────────────────────────────
     function setInsolvencyFloorBps(uint256 v) external;
+    // ── V8.48: SF surplus-to-community dial (item 26's setter, param 60) ─────
+    function setCommunityOverflowBps(uint256 v) external;
     // ── V8.20: second wave -- CNOVABuybackReserve ────────────────────────────
     function setTriggerThreshold(uint256 v) external;
     function setMaxSlippageBps(uint256 v) external;
@@ -275,8 +277,17 @@ contract V8Governance is Ownable {
     ///         = floor disabled, the escape hatch.
     uint8 public constant PARAM_SF_INSOLVENCY_FLOOR        = 59;
 
+    /// @notice V8.48 (owner decision 2026-08-13): the SF surplus-to-community dial,
+    ///         finally DAO-votable. setCommunityOverflowBps existed with an
+    ///         onlyOwnerOrGovernance gate but NO param id — governance had no path
+    ///         to it, so "DAO tunable" was owner-only in practice (the item-43
+    ///         "fee that never existed" class, caught in the 2026-08-13 sweep of a
+    ///         recovered 2026-08-07 decision). Default 10_000 = 100% of at-target
+    ///         L1 inflow to the CommunityWallet; the DAO can dial it down.
+    uint8 public constant PARAM_SF_COMMUNITY_OVERFLOW      = 60;
+
     /// @dev Highest assigned param id -- update whenever a new param is added.
-    uint8 public constant PARAM_MAX_ID                     = PARAM_SF_INSOLVENCY_FLOOR;
+    uint8 public constant PARAM_MAX_ID                     = PARAM_SF_COMMUNITY_OVERFLOW;
 
     // ── Governance config (self-governable) ───────────────────────────────────
     uint256 public votingPeriod   = 72 hours;
@@ -455,6 +466,9 @@ contract V8Governance is Ownable {
         // V8.48 item 46: insolvency floor — 0 = disabled (escape hatch), default 3400
         // (measured ~34% median per-cycle earnings), both on the menu (item-42 lesson).
         _allowedValues[PARAM_SF_INSOLVENCY_FLOOR] = [0, 1700, 2500, 3400, 5000, 6800, 10000];
+        // V8.48: surplus-to-community dial — MUST mirror StabilityFund's setter
+        // enumeration exactly; default 10000 and 0 both on the menu.
+        _allowedValues[PARAM_SF_COMMUNITY_OVERFLOW] = [0, 100, 250, 500, 1000, 2500, 5000, 7500, 10000];
         // V8.33: extended idle timeout -- 0.5d/1d/2d/3d/4d/5d/6d/7d/14d
         _allowedValues[PARAM_EXTENDED_IDLE_TIMEOUT] = [43200, 86400, 172800, 259200, 345600, 432000, 518400, 604800, 1209600];
         // V8.35: per-tier whale gate thresholds (1–50 pioneers)
@@ -807,6 +821,9 @@ contract V8Governance is Ownable {
         // ── V8.48 item 46: StabilityFund insolvency floor ─────────────────────
         } else if (paramId == PARAM_SF_INSOLVENCY_FLOOR) {
             t.setInsolvencyFloorBps(value);
+        // ── V8.48: StabilityFund surplus-to-community dial ────────────────────
+        } else if (paramId == PARAM_SF_COMMUNITY_OVERFLOW) {
+            t.setCommunityOverflowBps(value);
         // ── V8.33: MatrixKeeper extended idle timeout ──────────────────────────
         } else if (paramId == PARAM_EXTENDED_IDLE_TIMEOUT) {
             t.setExtendedIdleTimeout(value);

@@ -1,9 +1,9 @@
 # V8.48 HANDOFF — updated 2026-08-13 (read this first, then V8_48_SCOPE.md)
 
-**560 passing · 7 pending · 0 failing · EVERY NUMBERED BLOCKER IS BUILT.**
+**563 passing · 7 pending · 0 failing · EVERY NUMBERED BLOCKER IS BUILT.**
 
-(Full suite run 2026-08-13: 540 + 13 GhostFloor + 3 Permit + 4 JoinedAt = 560.
-When you update this number, run the suite first.)
+(Full suite run 2026-08-13: 540 + 13 GhostFloor + 3 Permit + 4 JoinedAt +
+3 CommunityOverflow = 563. When you update this number, run the suite first.)
 
 **DEPLOY IS NOT YET "GO" — the gate question was re-asked (the rule that caught
 item 11); remaining before the runbook:**
@@ -81,6 +81,17 @@ what made `epochMemberLimit = 10,000` unreachable, and it is not specific to epo
 
 ## DONE 2026-08-13
 
+- **SURPLUS → COMMUNITY, ARMED (563 passing) — and a LOST OWNER DECISION recovered.**
+  The 2026-08-07 "SF intake lever" decision never reached any scope doc (its
+  addendum file was never created — the device bridge was down that day); it
+  survived only in session memory and was recovered in an end-of-session sweep.
+  Owner superseded it: item 26's redirect armed at **100%** (`communityOverflowBps`
+  default 10_000, menu widened from its 5% cap, **PARAM 60** so the DAO can dial
+  it down — the setter had a governance gate but no param id, so "DAO tunable"
+  was fiction until now). First-ever tests for item 26 shipped with it. LESSON,
+  same family as "check BUGS.md every session": decisions recorded outside the
+  repo (memory, chat) MUST land in the scope the same day, or they die with the
+  session that heard them.
 - **Item 7 + 13 + 14 (560 passing) — the LAST numbered blocker:** `memberJoinedAt`
   first-join clock (all five PM routing sites), `totalMembers()` now counts
   PEOPLE — it was `totalRegistrations`, an entry counter, gating the IRREVERSIBLE

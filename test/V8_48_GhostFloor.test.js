@@ -458,7 +458,11 @@ describe("V8.48 items 45+46+47 — ghosts, the insolvency floor, and the evictio
       const gov = await (await ethers.getContractFactory("V8Governance"))
         .deploy(await cnova.getAddress(), owner.address, owner.address);
       expect(await gov.PARAM_SF_INSOLVENCY_FLOOR()).to.equal(59);
-      expect(await gov.PARAM_MAX_ID()).to.equal(59);
+      // NOT equal(59): MAX_ID moves every time a param is added (param 60 arrived
+      // the same day and broke the first version of this line — a change detector
+      // that explains nothing, the exact item-42 anti-pattern). The invariant that
+      // matters: the id is assigned and MAX_ID covers it.
+      expect(await gov.PARAM_MAX_ID()).to.be.gte(59);
       const menu = (await gov.getAllowedValues(59)).map(Number);
       // The declared default must be votable-back-to, and 0 is the escape hatch —
       // a value absent from the menu can never be voted back (item-42 lesson).
