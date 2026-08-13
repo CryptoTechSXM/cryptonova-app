@@ -248,6 +248,24 @@ Must pass 173/173 (V8.31). Never deploy on a failing test suite.
 
 Commit `deployed_addresses_vX_XX.json` immediately after every deploy. This is the only record of which contracts were deployed. Without it, the entire session of deploy work is unrecoverable if anything goes wrong.
 
+## WHERE TRAFFIC COMES FROM — TWO MACHINES, DO NOT MIX THEM UP (owner statement 2026-08-13)
+
+Sessions have flip-flopped on this; the owner has now said it plainly. There are TWO
+sources of on-chain activity and they live on DIFFERENT machines:
+
+1. **KEEPERS run on the VPS** (167.99.0.250, cron) — rescue/copay/fastlane, onramp,
+   monitor, integrity, frozen MatB, etc. This was already the rule above; it stands.
+2. **BIGFILL (bot entry/cycle traffic) runs from the OWNER'S WINDOWS MACHINE**
+   (`run_bigfill_rr.ps1` in the contracts repo), started and stopped MANUALLY by the
+   owner. It is NOT on the VPS — there are no stress/drip cron jobs there (verified
+   2026-08-13: crontab has none; stress.log and organic_drip.log are empty).
+
+Consequence: before reasoning about a change in traffic (entries, self-rescues,
+parks), ASK THE OWNER whether bigfill was running on their machine that day. The
+2026-08-12 "self-rescues collapsed 4,584 → 84" anomaly was exactly this — nothing on
+the VPS changed; the driver lived on the Windows machine. Pick ONE source of truth
+per activity type and check it first: VPS for keepers, the owner for bigfill.
+
 ## WHO THESE DOCS ARE FOR (2026-08-11)
 
 Two people touch this code: the owner and Claude. There is no team, no incoming
