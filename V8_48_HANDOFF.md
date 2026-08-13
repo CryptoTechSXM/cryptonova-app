@@ -31,8 +31,16 @@ this number, run the suite first.)
    (comp/faq "V8.43", buy/liq/terms "V8.31", en.json "V8.11" ×3, index "V8.47",
    bot header) + remove index's distributeInterval fallback + item-41 CW
    feature-detects + add the item-46 "why no loan" surface (NEXT UP #3).
-5. **Re-run predeploy_check (must PASS after the cutover batch lands), then
-   GO_LIVE_RUNBOOK.md + the deploy protocol (CLAUDE.md) govern the rest.**
+5. ✅ **ALL OF THE ABOVE IS DONE (2026-08-13 evening). `predeploy_check` = 114/114
+   PASS, suite = 565 passing. THE CUTOVER + FUNCTIONAL BATCHES ARE COMMITTED ON
+   `admin` (`4dddfcf`, `30ec605`) — promoting `admin` → `main` in runbook Phase 6
+   IS the cutover; nothing member-facing remains to be written on deploy day.**
+   **→ NEXT ACTION IS THE DEPLOY ITSELF: read `DEPLOY_V8_48_CARD.md` (the runbook
+   with the V8.48 specifics filled in) alongside GO_LIVE_RUNBOOK.md.**
+   ⚠️ **FIRST BLOCKER ON DEPLOY DAY: `.env` line 69 still says
+   `ADDRESSES_FILE=deployed_addresses_v8_47.json` — change it to v8_48 or the
+   deploy OVERWRITES the live V8.47 address record** (every script default was
+   bumped in code; .env overrides them all).
 ALSO DONE 2026-08-13: deploy_v8.js ADDRESSES_FILE default bumped v8_47→v8_48 —
 the old default would have OVERWRITTEN the live V8.47 address record.
 
