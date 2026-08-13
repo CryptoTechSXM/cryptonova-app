@@ -6,11 +6,12 @@
 When you update this number, run the suite first.)
 
 **DEPLOY IS NOT YET "GO" — the gate question was re-asked (the rule that caught
-item 11) and three non-numbered items remain before the runbook:**
-1. **Item 24 (OWNER DECISION, possibly contract-touching):** frozen-MatB policy —
-   the keeper rotates at 10 minutes, the contract's own gate says 6 hours; 6,726
-   rotations ran on the keeper's policy. Decide the real policy, make ONE layer
-   own it. If the answer changes the contract, it is deploy-requiring.
+item 11); remaining before the runbook:**
+1. ~~Item 24~~ ✅ **DECIDED + DONE 2026-08-13: the contract owns frozen-MatB
+   rotation at 15 minutes** (was a 6h "backstop" while the VPS script did the
+   real work at 10 min). **VPS deploy-day action: delete the frozen_matb_keeper
+   cron line** — it joins evict_parked on the retire list; on-chain automation
+   owns both now.
 2. **Item 38:** `PARITY_AUDIT.md` — one row per member-facing claim with its
    contract source. The owner's own deploy gate; does not exist yet.
 3. **Item 15:** re-verify every ERC20 approval amount (frontend + scripts +

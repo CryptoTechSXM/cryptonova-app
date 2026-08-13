@@ -412,8 +412,11 @@ describe("V8.48 item 12a — MatrixKeeperLib extraction is behaviour-preserving"
       expect(dn, `${label}: performData BYTES differ`).to.equal(do_);
       return decodeItems(dn);
     };
-    // Distinct values on purpose: both fields default to 6 hours, so a swap between them
-    // is a no-op at defaults and proves nothing.
+    // Distinct values on purpose: when this test was written BOTH fields defaulted to
+    // 6 hours, so a swap between them was a no-op at defaults and proved nothing.
+    // (V8.48 item 24 moved frozenMatBTimeout's default to 15 min — the defaults now
+    // differ on their own, but the explicit values stay: this test must not depend
+    // on what the defaults happen to be.)
     await pair((k) => k.setParkedGracePeriod(30 * 86_400));   // 30d
     await pair((k) => k.setFrozenMatBTimeout(300));           // 5min
     let items = await same("frozen: grace 30d, frozen-timeout 5min");

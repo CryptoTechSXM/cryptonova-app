@@ -197,12 +197,19 @@ library MatrixKeeperLib {
             );
         }
 
-        // V8.44 (item E): frozen-MatB backstop scan — a FULL MatB that hasn't
-        // rotated within frozenMatBTimeout (or NEVER rotated: the July 19
+        // V8.44 (item E) / V8.48 item 24: frozen-MatB scan — a FULL MatB that
+        // hasn't rotated within frozenMatBTimeout (or NEVER rotated: the July 19
         // occ=127/127 rot=0 signature) gets a keeperForceRotateRoot work item.
-        // Backstop only: V8.44 contract-driven flow keeps MatBs churning; if
-        // this ever fires regularly, the routing design has failed (test gate:
-        // keepers OFF → rotationCount must still climb).
+        //
+        // NO LONGER "backstop only". The old comment said "if this ever fires
+        // regularly, the routing design has failed" — but a full MatB only
+        // rotates when it RECEIVES an entry (cycle-then-place), so whenever
+        // inflow pauses, prompt force-rotation is what keeps members cycling.
+        // All 6,726 historical force-rotations came from the VPS script at ~10
+        // minutes; the owner decided 2026-08-13 the contract owns that policy
+        // (frozenMatBTimeout default 15 minutes). Regular firing during quiet
+        // inflow is the mechanism WORKING. The design-law gate that still holds:
+        // a MatB receiving entries must rotate WITHOUT this scan.
         for (uint8 t = 0; t < cfg.configuredTierCount && count < cfg.maxItems; t++) {
             address pm = cfg.pairManagers[t];
             if (pm == address(0)) continue;

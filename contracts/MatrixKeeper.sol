@@ -137,10 +137,17 @@ contract MatrixKeeper is Ownable {
     ///         member is mid-registration or mid-upgrade.
     uint256 public selfFundedGracePeriod = 5 minutes;  // V8.25: mainnet default 6h; testnet owner can set as low as 5 min
     uint256 public rescueRatioBps      = 7_000;
-    /// @notice V8.44 (item E): how long a FULL MatB may sit without rotating
-    ///         before the keeper force-rotates it. Generous on purpose — the
-    ///         contract-driven flow should rotate it long before this fires.
-    uint256 public frozenMatBTimeout   = 6 hours;
+    /// @notice V8.44 (item E) / V8.48 item 24 (owner decision 2026-08-13): how long
+    ///         a FULL MatB may sit without rotating before on-chain automation
+    ///         force-rotates it. Was 6 hours framed as a "backstop the design
+    ///         should never need" — but ALL 6,726 force-rotations in the
+    ///         protocol's history came from the VPS script rotating at ~10
+    ///         minutes: prompt rotation of a quiet full MatB IS the lived
+    ///         policy members' cycling speed depends on. The CONTRACT now owns
+    ///         it at 15 minutes; the VPS frozen_matb_keeper is retired at the
+    ///         V8.48 deploy (delete its cron line — do not run two policies).
+    ///         Owner/governance-settable, 5 min – 30 days.
+    uint256 public frozenMatBTimeout   = 15 minutes;
     /// @notice V8.33: Ghost entries are disabled by default.  Ghost entries drain the SF to
     ///         fill empty slots with fake positions.  At launch, empty slots should fill with
     ///         real members.  DAO can flip on if the matrix genuinely stalls.
