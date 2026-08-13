@@ -53,7 +53,7 @@
  *   USDC_ADDRESS           Reuse existing USDC; omit to deploy MockUSDC
  *   MATRIX_SIZE            127 (default) | 15 (quick dev cycle)
  *   DEPLOY_TIERS           Comma-separated list e.g. "1,2" (default: "1,2,3,4,5,6,7,8,9,10")
- *   ADDRESSES_FILE         Output filename (default: deployed_addresses_v8_47.json)
+ *   ADDRESSES_FILE         Output filename (default: deployed_addresses_v8_48.json)
  *
  * Run: npx hardhat run scripts/deploy_v8.js --network baseSepolia
  */
@@ -67,7 +67,9 @@ require("dotenv").config();
 // ── Addresses output file ─────────────────────────────────────────────────────
 const ADDRESSES_FILE = path.join(
   __dirname,
-  process.env.ADDRESSES_FILE || "deployed_addresses_v8_47.json"
+  // V8.48 (2026-08-13): bumped from v8_47 — the old default would have silently
+  // OVERWRITTEN the live V8.47 address record on deploy day.
+  process.env.ADDRESSES_FILE || "deployed_addresses_v8_48.json"
 );
 
 // ── Config ────────────────────────────────────────────────────────────────────

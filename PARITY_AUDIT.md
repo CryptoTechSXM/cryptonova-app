@@ -207,7 +207,7 @@ Charge sites verified in the contracts, then every approve in frontend + scripts
 | registerWithCoupon | the T1 matrix | `ENTRY_FEE − couponCovered` | `FigureEightMatrixV8:431` |
 | manualUpgrade | TierRouter | fee **+ memberDebtOf** | `TierRouter:935` + `_walletFold` → `TierRouterLib:193` |
 | hybridUpgrade | TierRouter | (fee − free earnings) **+ memberDebtOf** | `TierRouter:980` + `:984` |
-| bulkUpgrade | TierRouter | Σ fees(start..target), **NO debt fold** | `TierRouter:1105` (no `_walletFold` — see observation O1) |
+| bulkUpgrade | TierRouter | Σ fees(start..target) **+ memberDebtOf** (aligned 2026-08-13, owner decision O1) | `TierRouter` bulkUpgrade + `_walletFold`; tests `V8_48_BulkGate.test.js` |
 | manualUpgradeWithPermit | (permit to TierRouter) | must cover fee + debt | `TierRouter:917` |
 | selfRescue | the parked MATRIX | shortfall | `MatrixLogicLib:1506` |
 | selfRescueWithPermit (V8.48) | (permit to the matrix) | shortfall | `MatrixLogicLib:1458` |
@@ -234,7 +234,7 @@ Charge sites verified in the contracts, then every approve in frontend + scripts
 
 **Observations for the scope (not approval bugs):**
 
-- **O1:** `bulkUpgrade` does NOT `_walletFold` — a debted member can bulk-upgrade past an unpaid loan while `manualUpgrade`/`hybridUpgrade` refuse. Debt still settles on withdraw/pool payouts, so no money is lost, but the "advances clean" policy is inconsistent across the three upgrade paths. Owner call whether to align it in V8.48 or note-and-ship.
+- **O1 — ✅ RESOLVED 2026-08-13 (owner: "align in v8.48"):** `bulkUpgrade` now runs `_walletFold` like the other two upgrade paths — a debted member advances clean or not at all. Shipped as one package: the contract gate (TierRouter), the frontend approve (Σfees + debt, refuses on unreadable debt), bigfill's bulk approve (folds memberDebtOf), and `V8_48_BulkGate.test.js` (B1 fold-clean, B2 fees-only-allowance reverts). Suite re-run pending with the owner.
 - **O2:** index.html's coupon-issue approve hardcodes `T1_FEE` while `couponAmount` is an owner-settable contract value (currently equal). If `setCouponAmount` is ever used, the approve under/over-shoots. Low risk; the ABI already carries `couponAmount()` — switch the approve to read it when the coupon UI is next touched.
 
 ---

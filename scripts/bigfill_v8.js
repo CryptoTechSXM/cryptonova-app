@@ -218,6 +218,18 @@ async function climbLadder({ tierRouter, tierRouterAddr, usdc, fees, w, conn, ga
   // over-approval is never over-spent.
   let needed = 0n;
   for (let i = highest; i <= ceilingIdx && i < 10; i++) needed += fees[i];
+  // V8.48 item 15/O1 (owner: "align in v8.48"): bulkUpgrade now runs the same
+  // _walletFold debt gate as manualUpgrade — fold memberDebtOf into the approve,
+  // exactly like this script's manualUpgrade path already does (same
+  // resolve-from-addresses-file pattern; see the AUDIT 2026-08-08 note there).
+  try {
+    const _sfAddr = require(ADDRESSES_FILE).stabilityFund;
+    if (_sfAddr && _sfAddr !== ethers.ZeroAddress) {
+      needed += BigInt(await new ethers.Contract(
+        _sfAddr, ["function memberDebtOf(address) view returns (uint256)"],
+        ethers.provider).memberDebtOf(w.address));
+    }
+  } catch (_) { /* SF unreadable → approve fees only; bulkUpgrade will revert loudly if debt exists */ }
   try {
     if ((await usdc.allowance(w.address, tierRouterAddr)) < needed) {
       await (await usdc.connect(conn).approve(tierRouterAddr, needed)).wait();

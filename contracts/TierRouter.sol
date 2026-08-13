@@ -1103,6 +1103,11 @@ contract TierRouter is Ownable2Step {
             totalFee += tierEntryFees[i];
         }
         if (totalFee > 0) usdc.safeTransferFrom(msg.sender, address(this), totalFee);
+        // V8.48 item 15/O1 (owner decision 2026-08-13: "align in v8.48"): the same
+        // V8.47 upgrade gate as manualUpgrade/hybridUpgrade — clear any outstanding
+        // rescue debt from the wallet so a bulk upgrade can't advance past an unpaid
+        // loan. Before this, bulkUpgrade was the one upgrade path without the gate.
+        _walletFold(msg.sender);
 
         // Register in each tier sequentially in the same tx
         address referrer = memberReferrer[msg.sender];

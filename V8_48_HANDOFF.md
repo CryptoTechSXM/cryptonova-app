@@ -1,23 +1,40 @@
 # V8.48 HANDOFF — updated 2026-08-13 (read this first, then V8_48_SCOPE.md)
 
-**563 passing · 7 pending · 0 failing · EVERY NUMBERED BLOCKER IS BUILT.**
+**565 passing · 7 pending · 0 failing · EVERY NUMBERED BLOCKER IS BUILT — AND
+BOTH PRE-DEPLOY AUDITS (38 + 15) ARE DONE AND CLEAN.**
 
-(Full suite run 2026-08-13: 540 + 13 GhostFloor + 3 Permit + 4 JoinedAt +
-3 CommunityOverflow = 563. When you update this number, run the suite first.)
+(Full suite run 2026-08-13 evening: 563 + 2 BulkGate = 565. When you update
+this number, run the suite first.)
 
-**DEPLOY IS NOT YET "GO" — the gate question was re-asked (the rule that caught
-item 11); remaining before the runbook:**
+**DEPLOY IS NOT YET "GO" — remaining before/at the runbook:**
 1. ~~Item 24~~ ✅ **DECIDED + DONE 2026-08-13: the contract owns frozen-MatB
    rotation at 15 minutes** (was a 6h "backstop" while the VPS script did the
    real work at 10 min). **VPS deploy-day action: delete the frozen_matb_keeper
    cron line** — it joins evict_parked on the retire list; on-chain automation
    owns both now.
-2. **Item 38:** `PARITY_AUDIT.md` — one row per member-facing claim with its
-   contract source. The owner's own deploy gate; does not exist yet.
-3. **Item 15:** re-verify every ERC20 approval amount (frontend + scripts +
-   keepers) against what V8.48 actually charges.
-Then: predeploy_check must PASS, and GO_LIVE_RUNBOOK.md + the deploy protocol
-(CLAUDE.md) govern the rest. Post-deploy frontend batch is listed in NEXT UP.
+2. ~~Item 38~~ ✅ **DONE 2026-08-13:** `PARITY_AUDIT.md` at repo root (audit RUN,
+   26 text defects found; live-truth Batch A shipped to `admin` same day) +
+   the mechanical ABI↔contract gate in predeploy_check.js. Owner ran the gate:
+   **114/114 PASS**. See the item-38 scope row.
+3. ~~Item 15~~ ✅ **DONE 2026-08-13:** approvals sweep in PARITY_AUDIT.md §ITEM 15.
+   A1/A2/A3 fixed; **O1 owner-decided ("align in v8.48") and BUILT: bulkUpgrade
+   now runs _walletFold** (contract + frontend approve + bigfill + 2 tests,
+   565 passing). See the item-15 scope row.
+4. **THE CUTOVER BATCH (frontend+bot text that must flip WITH the deploy,
+   because live V8.47 still matches the old words):** epoch triggers 30d→180d /
+   10k→1,000 members (comp s4_p2, faq g11+q9, en.json ×3, bot), distributions
+   "every 30 days"→the 25th (comp s6_p3, bot), bot 375/381 threshold copy →
+   seats-remaining, gov p40–49 hints 20x→10x (+ en.json copies), gov param-39
+   hint interval→day-of-month, params 59/60 into the gov picker, THEN the
+   address/version pass: write `update_addrs_v8_48.py` covering ALL pages
+   INCLUDING api/telegram-qa.js (CLAUDE.md mandate) + gate/banner strings
+   (comp/faq "V8.43", buy/liq/terms "V8.31", en.json "V8.11" ×3, index "V8.47",
+   bot header) + remove index's distributeInterval fallback + item-41 CW
+   feature-detects + add the item-46 "why no loan" surface (NEXT UP #3).
+5. **Re-run predeploy_check (must PASS after the cutover batch lands), then
+   GO_LIVE_RUNBOOK.md + the deploy protocol (CLAUDE.md) govern the rest.**
+ALSO DONE 2026-08-13: deploy_v8.js ADDRESSES_FILE default bumped v8_47→v8_48 —
+the old default would have OVERWRITTEN the live V8.47 address record.
 
 Audience: a future session of Claude, plus the owner. Nobody else touches this code.
 
@@ -81,6 +98,15 @@ what made `epochMemberLimit = 10,000` unreachable, and it is not specific to epo
 
 ## DONE 2026-08-13
 
+- **ITEMS 38 + 15 + O1 (565 passing) — the pre-deploy audits, run and clean.**
+  PARITY_AUDIT.md created + audited (26 text defects; Batch A live-truth fixes
+  pushed to `admin`: b6a5deb, d724076, 94e80ac); mechanical ABI↔contract gate
+  added to predeploy_check.js (owner ran it: 114/114 PASS); approvals sweep
+  (A1 graduated re-entry fee+debt, A2 co-pay fiction removed, A3 W1 script);
+  **O1 owner-decided and built: bulkUpgrade runs _walletFold** — contract +
+  dashboard approve + bigfill + `V8_48_BulkGate.test.js`. deploy_v8.js
+  ADDRESSES_FILE default bumped to v8_48 (was silently overwriting v8_47's
+  record). Full detail: scope rows 38 and 15.
 - **SURPLUS → COMMUNITY, ARMED (563 passing) — and a LOST OWNER DECISION recovered.**
   The 2026-08-07 "SF intake lever" decision never reached any scope doc (its
   addendum file was never created — the device bridge was down that day); it
@@ -194,9 +220,9 @@ row of `V8_48_SCOPE.md`, including the ethers-v6 overload-ambiguity caveat).
 ## NEXT UP — ORDER FOR THE NEXT SESSION (updated 2026-08-13 after the reserve
 decision landed; supersedes the list below)
 
-1. **PRE-DEPLOY, in order (see the headline block):** item 24 decision (owner),
-   item 38 PARITY_AUDIT.md, item 15 approvals sweep, then predeploy_check +
-   GO_LIVE_RUNBOOK. Item 7 is DONE (see above).
+1. **PRE-DEPLOY (updated 2026-08-13 evening): items 24, 38, 15 ALL DONE — what
+   remains is the CUTOVER BATCH (headline block, point 4), then re-run
+   predeploy_check, then GO_LIVE_RUNBOOK.**
 2. **Frontend, no deploy needed:** the epoch-transparency panel (probe 2026-08-13:
    all four epoch getters EXIST on live V8.47 — no feature-detect) and the
    `catch(() => 1)` epoch fallback fix at index.html:6410.
