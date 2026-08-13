@@ -39,10 +39,23 @@ async function main() {
     process.exit(0);
   }
   if (w1Cycles < 1n) { console.error("  W1 has no T1 cycles yet — cannot upgrade"); process.exit(1); }
-  if (w1Usdc < t2fee) { console.error("  W1 insufficient USDC for T2 fee"); process.exit(1); }
 
-  console.log(`\n  Approving TierRouter for $${Number(t2fee) / 1e6} USDC...`);
-  await (await usdc.approve(addrs.tierRouter, t2fee)).wait();
+  // V8.48 item 15 (2026-08-13): manualUpgrade pulls fee + outstanding rescue debt
+  // (_walletFold, the V8.47 gate). Approving the fee alone reverts on allowance
+  // whenever W1 carries a debt — fold memberDebtOf into the approve, like
+  // bigfill_v8.js:513 and the dashboard's approveUSDCForUpgrade already do.
+  let debt = 0n;
+  if (addrs.stabilityFund) {
+    debt = BigInt(await new ethers.Contract(
+      addrs.stabilityFund, ["function memberDebtOf(address) view returns (uint256)"],
+      ethers.provider).memberDebtOf(w1Wallet.address));
+  }
+  const totalDue = BigInt(t2fee) + debt;
+  if (debt > 0n) console.log(`  Outstanding rescue debt: $${Number(debt) / 1e6} (charged with the fee)`);
+  if (w1Usdc < totalDue) { console.error(`  W1 insufficient USDC: needs $${Number(totalDue) / 1e6} (fee + debt)`); process.exit(1); }
+
+  console.log(`\n  Approving TierRouter for $${Number(totalDue) / 1e6} USDC...`);
+  await (await usdc.approve(addrs.tierRouter, totalDue)).wait();
 
   console.log(`  Calling manualUpgrade(${T2_INDEX}) from W1...`);
   const tx = await tr.manualUpgrade(T2_INDEX);

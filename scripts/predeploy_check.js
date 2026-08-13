@@ -1086,10 +1086,27 @@ sep("V8.48 — CommunityWallet monthly calendar");
     } else {
       fail("index.html: does NOT read nextDistributionTime() — the member-facing date is not the contract's date");
     }
-    if (/distributeInterval\s*\(/.test(stripComments(htmlTxt))) {
-      fail("index.html: still calls distributeInterval() — that function no longer exists, the countdown will fall back to a fabricated value");
-    } else {
-      ok("index.html: no distributeInterval() call remains");
+    // V8.48 (2026-08-13): the countdown FEATURE-DETECTS across the V8.47→V8.48
+    // cutover — nextDistributionTime() first, else distributeInterval() (the
+    // V8.47 truth), else an honest "schedule unavailable". That fallback is
+    // OWNER-ACCEPTED until the V8.48 deploy lands and is null-guarded, so a
+    // guarded call is transitional, not a failure. A call WITHOUT `.catch(() =>
+    // null)` on the same statement is still a hard fail — that is the fabricated
+    // -fallback class this check was written for.
+    {
+      const stripped = stripComments(htmlTxt);
+      const calls = [...stripped.matchAll(/distributeInterval\s*\(\s*\)/g)]
+        // skip the ABI declaration line ('function distributeInterval() …')
+        .filter((m) => !/function\s*$/.test(stripped.slice(Math.max(0, m.index - 20), m.index)));
+      const unguarded = calls.filter((m) =>
+        !/\.catch\(\s*\(\s*\)\s*=>\s*null\s*\)/.test(stripped.slice(m.index, m.index + 160)));
+      if (unguarded.length > 0) {
+        fail(`index.html: ${unguarded.length} distributeInterval() call(s) WITHOUT a null-catch — on V8.48 that read reverts and the countdown wears a fabricated value`);
+      } else if (calls.length > 0) {
+        console.log(`  ℹ  index.html: ${calls.length} null-guarded distributeInterval() call (V8.47 fallback) — REMOVE with its ABI line after the V8.48 cutover`);
+      } else {
+        ok("index.html: no distributeInterval() call remains (post-cutover state)");
+      }
     }
   }
 }
@@ -1249,6 +1266,105 @@ sep("V8.48 items 7+13 — treasury member tracker wiring");
   }
 }
 
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 20. V8.48 item 38 — frontend ABI ↔ contract surface (the mechanical half of
+//     PARITY_AUDIT.md). Every `function`/`event` the frontend DECLARES in a
+//     human-readable ABI string must exist in the V8.48 contract tree. This is
+//     the item-30 class: routeEntryThreshold was deleted from the contract, the
+//     frontend kept declaring and calling it behind a `.catch(() => 381n)`, and
+//     members were shown a threshold that existed nowhere. Nothing but a
+//     cross-read catches that, because the swallowed revert looks like a value.
+//     For events we also compare the INDEXED layout — the 2026-07-29
+//     MemberRegistered bug was an event that existed but was declared with the
+//     wrong params indexed, so filters silently matched nothing.
+// ─────────────────────────────────────────────────────────────────────────────
+sep("item 38 — frontend ABI ↔ contract surface");
+if (!htmlTxt) {
+  fail("item 38 ABI check SKIPPED — index.html not found (see above)");
+} else {
+  // 1. Build the contract surface from every top-level .sol (test/ mocks are
+  //    not deployed and must not satisfy a frontend reference).
+  const CONTRACTS_DIR = path.join(ROOT, "contracts");
+  const surfaceFns    = new Set();   // external/public functions + public var getters
+  const surfaceEvents = {};          // name -> [ [indexedFlagPerParam, ...], ... ]
+  const solFiles = fs.readdirSync(CONTRACTS_DIR).filter((f) => f.endsWith(".sol"));
+  for (const f of solFiles) {
+    const txt = stripComments(fs.readFileSync(path.join(CONTRACTS_DIR, f), "utf8"));
+    // functions with external/public visibility
+    for (const m of txt.matchAll(/function\s+([A-Za-z_]\w*)\s*\(([^)]*)\)[^;{]*?\b(external|public)\b/g)) {
+      surfaceFns.add(m[1]);
+    }
+    // public state variables (auto-getters), incl. constant/immutable/override
+    for (const m of txt.matchAll(/\bpublic\s+(?:constant\s+|immutable\s+|override\s+)*([A-Za-z_]\w*)\s*(?:=|;)/g)) {
+      surfaceFns.add(m[1]);
+    }
+    // events, with per-param indexed layout
+    for (const m of txt.matchAll(/event\s+([A-Za-z_]\w*)\s*\(([^)]*)\)/g)) {
+      const layout = m[2].trim() === "" ? [] :
+        m[2].split(",").map((p) => /\bindexed\b/.test(p));
+      (surfaceEvents[m[1]] = surfaceEvents[m[1]] || []).push(layout);
+    }
+  }
+  if (surfaceFns.size < 100) {
+    fail(`item 38: contract surface implausibly small (${surfaceFns.size} names) — parser broke, treat every result below as unverified`);
+  }
+
+  // 2. Names the frontend legitimately declares that live OUTSIDE this repo.
+  const EXTERNAL_OK = new Set([
+    // ERC20 + EIP-2612 (USDC)
+    "name", "symbol", "decimals", "totalSupply", "balanceOf", "transfer",
+    "approve", "allowance", "transferFrom", "permit", "nonces",
+    "DOMAIN_SEPARATOR", "version", "Transfer", "Approval",
+    // Multicall3
+    "aggregate", "aggregate3", "tryAggregate", "blockAndAggregate",
+  ]);
+  // Known V8.47-only fallback, feature-detected in index.html and scheduled for
+  // removal AFTER the V8.48 cutover (handoff NEXT UP). Warn, don't fail — check
+  // 18 already fails on a live CALL to it once the cutover lands.
+  const TRANSITION_OK = new Set(["distributeInterval"]);
+
+  // 3. Every function/event the frontend declares in a human-readable ABI string.
+  const missing = [];
+  const transitional = [];
+  let declared = 0;
+  // NOTE the [ \t]* (not \s*): the quote must open the ABI string on the SAME
+  // line as the keyword. With \s*, a comment ending in 'B' two blank lines above
+  // a plain `function selectMatrix(…)` definition matched as an ABI declaration
+  // — found and fixed during the first dry-run of this check, 2026-08-13.
+  for (const m of htmlTxt.matchAll(/["'`][ \t]*(function|event)\s+([A-Za-z_]\w*)\s*\(([^)]*)\)/g)) {
+    const kind = m[1], nm = m[2];
+    declared++;
+    if (kind === "function") {
+      if (surfaceFns.has(nm) || EXTERNAL_OK.has(nm)) continue;
+      if (TRANSITION_OK.has(nm)) { transitional.push(nm); continue; }
+      missing.push(`function ${nm}`);
+    } else {
+      if (EXTERNAL_OK.has(nm)) continue;
+      const decls = surfaceEvents[nm];
+      if (!decls) { missing.push(`event ${nm}`); continue; }
+      const layout = m[3].trim() === "" ? [] :
+        m[3].split(",").map((p) => /\bindexed\b/.test(p));
+      const matches = decls.some((d) =>
+        d.length === layout.length && d.every((v, i) => v === layout[i]));
+      if (!matches) {
+        missing.push(`event ${nm} — indexed layout [${layout.join(",")}] matches no contract declaration (contract: ${decls.map((d) => `[${d.join(",")}]`).join(" / ")})`);
+      }
+    }
+  }
+  if (declared === 0) {
+    fail("item 38: found NO ABI declarations in index.html — parser broke or the ABI style changed; the check verified nothing");
+  } else if (missing.length === 0) {
+    ok(`index.html: all ${declared} ABI declarations exist in the V8.48 contracts (${solFiles.length} files, ${surfaceFns.size} surface names)`);
+    for (const t of [...new Set(transitional)]) {
+      console.log(`  ℹ  transitional: '${t}' declared for the V8.47 fallback — REMOVE after the V8.48 cutover`);
+    }
+  } else {
+    for (const miss of [...new Set(missing)]) {
+      fail(`index.html declares ${miss} — absent from every V8.48 contract. Members will see a swallowed revert wearing a value (item-30 class).`);
+    }
+  }
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Summary
