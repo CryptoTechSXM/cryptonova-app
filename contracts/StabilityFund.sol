@@ -153,7 +153,9 @@ contract StabilityFund is Ownable2Step {
     ///         current highest open tier has a registered entryFee, the
     ///         effective target auto-scales with how far the system has
     ///         organically progressed: tierEntryFees[idx] * sfTargetMultiplier[idx]
-    ///         (e.g. T1 entry fee x10, T2 x20, T3 x30... by default). This is
+    ///         (flat 10x across all tiers by default — V8.48; the "x10/x20/x30
+    ///         ladder" this comment once described was V8.21 and never shipped
+    ///         past V8.26's flat 20x). This is
     ///         the "auto-increasing as tiers climb" behavior requested by the
     ///         user, replacing the old flat $300 default that never moved on
     ///         its own.
@@ -230,10 +232,16 @@ contract StabilityFund is Ownable2Step {
         usdc             = IERC20(_usdc);
         _manualSfTarget  = 300_000_000; // $300 default fallback (used pre-tierRouter-wiring)
 
-        // V8.26: flat 20x multiplier across all tiers by default.
-        // DAO can vote to change any tier independently via PARAM_SF_MULT_T1..T10.
+        // V8.48 (owner decision 2026-08-13): flat 10x multiplier across all tiers
+        // by default — halved from V8.26's flat 20x. Declared default, not a
+        // post-deploy transaction (deploy_v8.js never sets these — item-42
+        // doctrine), and 10 is on the PARAM_SF_MULT_T1..T10 governance menu, so
+        // the DAO can move any tier independently, including back to 20.
+        // Consequence: sfTarget() halves at every tier, so healthBps() reaches
+        // 100% sooner, the L3 withdrawal-fee slider tips toward BuybackReserve
+        // earlier, and item 26's surplus redirect arms at half the old balance.
         for (uint8 i = 0; i < MAX_TIERS; i++) {
-            sfTargetMultiplier[i] = 20;
+            sfTargetMultiplier[i] = 10;
         }
     }
 
