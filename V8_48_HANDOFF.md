@@ -1,6 +1,6 @@
 # V8.48 HANDOFF — updated 2026-08-13 (read this first, then V8_48_SCOPE.md)
 
-**534 passing · 7 pending · 0 failing · DO NOT DEPLOY YET.**
+**540 passing · 7 pending · 0 failing · DO NOT DEPLOY YET.**
 
 (The previous headline said 514 — STALE when written. The true 2026-08-12 baseline
 was 528, recorded in the scope's items 4/5/6 row; +6 for item 2 = 534, verified by
@@ -65,6 +65,24 @@ events across **671 unique members**, 41 seats each. Any future reasoning that t
 what made `epochMemberLimit = 10,000` unreachable, and it is not specific to epochs.
 
 ---
+
+## DONE 2026-08-13
+
+- **Item 2 shipped** (534 passing at that point): `reservedHeldFor(member)` — see the
+  scope's item-2 row and the blockers table above.
+- **Item 43 — THE PROPOSAL FEE, MADE REAL (540 passing):** owner asked "there was a
+  fee for submitting a proposal but seems gone." Verified: it NEVER existed on chain —
+  V8.34 built only the frontend fiction (a `.catch` inventing 100e18), removed by the
+  2026-08-07 audit. Owner then decided: introduce it for real. Burn CNOVA, default
+  100e18, DAO menu [0, 2.5, 5, 10, 25, 50, 100, 250, 500, 1000]e18 (param 58, 0 = the
+  vote-it-free escape hatch). Both propose paths charge; voting stays free (pinned by
+  test PF6). `V8_48_ProposalFee.test.js` (6). **Frontend half TO SHIP, feature-detected**
+  (live V8.47 has no `proposalFee()` getter) — see the item-43 scope row.
+- **Item 44 — governance UX to `admin`** (member requests): plain-language "what this
+  means" on all 55 params (form + every proposal card) and a live param search. NOT
+  member-facing until an admin → main promotion (re-run the getter probe first, per
+  THE DEPLOY MODEL below — the UX work itself reads no new getters, but item 43's
+  frontend half will).
 
 ## DONE THIS SESSION (all pushed)
 

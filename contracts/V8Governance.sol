@@ -64,6 +64,9 @@ import "@openzeppelin/contracts/access/Ownable.sol";
 interface ICNOVAToken {
     function balanceOf(address account) external view returns (uint256);
     function totalSupply() external view returns (uint256);
+    /// @dev V8.48 proposal fee: allowance-path burn (governance holds no BURNER_ROLE,
+    ///      so the proposer must approve first — explicit consent, one approve tx).
+    function burnFrom(address from, uint256 amount) external;
 }
 
 interface IGovernanceTarget {
@@ -253,8 +256,18 @@ contract V8Governance is Ownable {
     uint8 public constant PARAM_WHALE_GATE_T9               = 56;
     uint8 public constant PARAM_WHALE_GATE_T10              = 57;
 
+    /// @notice V8.48 (owner decision 2026-08-13): the proposal fee, made REAL and
+    ///         DAO-votable. History matters here: V8.34 shipped the FRONTEND and the
+    ///         test fixture for a "100 CNOVA burned on propose" fee, but the contract
+    ///         half was never built — proposalFee() did not exist, the UI's read always
+    ///         reverted, and a .catch dressed the revert up as 100e18 until the
+    ///         2026-08-07 audit removed the fiction. This id completes what V8.34
+    ///         started. Menu includes 0 (the escape hatch — a value absent from the
+    ///         menu can never be voted back, the item-42 lesson).
+    uint8 public constant PARAM_PROPOSAL_FEE               = 58;
+
     /// @dev Highest assigned param id -- update whenever a new param is added.
-    uint8 public constant PARAM_MAX_ID                     = PARAM_WHALE_GATE_T10;
+    uint8 public constant PARAM_MAX_ID                     = PARAM_PROPOSAL_FEE;
 
     // ── Governance config (self-governable) ───────────────────────────────────
     uint256 public votingPeriod   = 72 hours;
@@ -262,6 +275,11 @@ contract V8Governance is Ownable {
     uint256 public execExpiry     = 72 hours;
     /// @notice Quorum as BPS of CNOVA total supply (default 200 = 2%)
     uint256 public quorumBps      = 200;
+    /// @notice V8.48: CNOVA burned from the proposer on EVERY proposal (propose() and
+    ///         proposeBoostTable() both). Anti-spam; voting stays free. Default 100e18 —
+    ///         the number V8.34's UI always claimed. DAO-votable via PARAM_PROPOSAL_FEE;
+    ///         0 is on the menu so proposing can be voted free again.
+    uint256 public proposalFee    = 100e18;
 
     // ── Core contracts ────────────────────────────────────────────────────────
     address public cnovaToken;
@@ -319,6 +337,8 @@ contract V8Governance is Ownable {
     event ProposalCancelled(uint256 indexed id);
     event AllowedValuesSet(uint8 indexed paramId, uint256[] values);
     event BoostTableProposed(uint256 indexed id, uint256[] thresholds, uint256[] rates);
+    /// @notice V8.48: emitted on every fee-bearing proposal. Absent when proposalFee == 0.
+    event ProposalFeeBurned(uint256 indexed id, address indexed proposer, uint256 amount);
 
     // ── Custom errors ─────────────────────────────────────────────────────────
     error GOV_NotActive();
@@ -370,6 +390,9 @@ contract V8Governance is Ownable {
         _allowedValues[PARAM_VOTING_PERIOD]           = [48 hours, 72 hours, 96 hours, 168 hours];
         _allowedValues[PARAM_TIMELOCK_PERIOD]         = [24 hours, 48 hours, 72 hours];
         _allowedValues[PARAM_QUORUM_BPS]              = [100, 200, 300, 500];
+        // V8.48: owner's menu 2026-08-13, plus 0 as the vote-it-free escape hatch.
+        _allowedValues[PARAM_PROPOSAL_FEE]            = [0, 2.5e18, 5e18, 10e18, 25e18,
+                                                         50e18, 100e18, 250e18, 500e18, 1000e18];
         // V8.21: 0=Conservative, 1=Default, 2=Generous, 3=Maximum -- see
         // MatrixKeeper.setSfRescueLadderPreset() for the exact numbers.
         _allowedValues[PARAM_SF_RESCUE_LADDER]        = [0, 1, 2, 3];
@@ -474,7 +497,8 @@ contract V8Governance is Ownable {
         if (paramId == PARAM_EARLY_EXIT_PENALTY_BPS) revert GOV_InvalidParam();
         bool isSelfParam = (paramId == PARAM_VOTING_PERIOD ||
                             paramId == PARAM_TIMELOCK_PERIOD ||
-                            paramId == PARAM_QUORUM_BPS);
+                            paramId == PARAM_QUORUM_BPS ||
+                            paramId == PARAM_PROPOSAL_FEE);
         if (target == address(0) && !isSelfParam) revert GOV_ZeroAddress();
         if (!_isAllowed(paramId, newValue)) revert GOV_ValueNotAllowed();
 
@@ -484,6 +508,11 @@ contract V8Governance is Ownable {
         if (ICNOVAToken(cnovaToken).balanceOf(msg.sender) < minTokens) revert GOV_NoVotingPower();
 
         proposalId = ++proposalCount;
+        // V8.48: fee AFTER every validation (a wallet failing the checks above learns
+        // that without needing an allowance) and BEFORE the storage write. `supply`
+        // was read pre-burn, so quorum is overstated by fee*quorumBps/10k — dust,
+        // and in the conservative direction.
+        _chargeProposalFee(proposalId);
         uint256 quorum = supply * quorumBps / 10_000;
 
         proposals[proposalId] = Proposal({
@@ -530,6 +559,7 @@ contract V8Governance is Ownable {
         if (ICNOVAToken(cnovaToken).balanceOf(msg.sender) < supply / 10_000) revert GOV_NoVotingPower();
 
         proposalId = ++proposalCount;
+        _chargeProposalFee(proposalId);   // V8.48: boost-table proposals pay the same fee
 
         proposalBoostThresholds[proposalId] = thresholds;
         proposalBoostRates[proposalId]       = rates;
@@ -547,6 +577,17 @@ contract V8Governance is Ownable {
 
         emit ProposalCreated(proposalId, msg.sender, PARAM_CNOVA_BOOST_TABLE, target, 0, description);
         emit BoostTableProposed(proposalId, thresholds, rates);
+    }
+
+    /// @dev V8.48: burn the proposal fee from the proposer. Allowance path only —
+    ///      this contract holds no BURNER_ROLE, so the proposer consents via approve.
+    ///      Vest-locked CNOVA burns fine and the vest ledger follows (items 8+9).
+    ///      A revert here reverts the whole proposal — nobody pays without proposing.
+    function _chargeProposalFee(uint256 proposalId) internal {
+        uint256 fee = proposalFee;
+        if (fee == 0) return;
+        ICNOVAToken(cnovaToken).burnFrom(msg.sender, fee);
+        emit ProposalFeeBurned(proposalId, msg.sender, fee);
     }
 
     /**
@@ -668,6 +709,8 @@ contract V8Governance is Ownable {
             timelockPeriod = value;
         } else if (paramId == PARAM_QUORUM_BPS) {
             quorumBps = value;
+        } else if (paramId == PARAM_PROPOSAL_FEE) {
+            proposalFee = value;
         } else if (paramId == PARAM_SF_RESCUE_LADDER) {
             t.setSfRescueLadderPreset(value);
         // ── V8.20 second wave: TierRouter ─────────────────────────────────────
