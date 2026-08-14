@@ -4,6 +4,44 @@ Read this file at the start of every session before touching contracts, scripts,
 
 ---
 
+## STANDING DESIGN POLICY — THE STABILITY FUND AND THE PARKED CLOCKS (owner, 2026-08-13)
+
+Owner statement, on V8.48 deploy day, correcting a session that proposed the opposite:
+
+> "The SF always grows organically... we do not seed SF, it grows organically.
+> 24hrs of registrations before automated rescue kicks in on testnet and 48hrs on
+> mainnet — that is by design, to have members rescue themselves before SF takes over.
+> Eviction should not happen for 3 to 5 days."
+
+**THE STABILITY FUND IS NEVER SEEDED OR TOPPED UP TO MAKE RESCUES HAPPEN.** It fills
+from fee splits and that is the whole design. A fresh deployment therefore starts with
+an almost-empty fund, `copay_rescue.js` stands down under its own `SF_FLOOR` (default
+$250), and **parked members simply wait — that is CORRECT, not an outage.** On deploy
+day 2026-08-13 a session read "SF $67, 24 parked, keeper standing down" as a launch
+emergency and proposed running `topup_sf.js`. It is not an emergency. Do not propose it.
+(`topup_sf.js` exists for genuine operational top-ups and is invariant-safe via
+`receiveLayer` — never a raw ERC20 transfer, which is the bug `seed_sf.js` cleaned up
+after. But reach for it only when the OWNER asks.)
+
+**The grace ladder, and which knob is which:**
+
+| clock | what it governs | where it comes from | testnet | mainnet |
+|---|---|---|---|---|
+| `selfFundedGracePeriod` | member covers their own re-entry — the rescue costs the fund NOTHING | contract default **5 min**; `deploy_v8.js` NEVER sets it | 5 min OK | **must be 6h — nothing sets it, so a mainnet deploy silently ships 5 min** |
+| `parkedGracePeriod` | SF-FUNDED rescue, i.e. a LOAN the member never asked for | `deploy_v8.js` sets it (`PARKED_GRACE_SECS`, default 86400) | 24h | **172800 (48h)** |
+| eviction | removing a floored / too-thin / high-withdrawal member | **NO SEPARATE PARAM — shares `parkedGracePeriod`** | 24h (wrong) | (wrong) |
+
+**The last row is a KNOWN GAP, not the design:** owner policy is 3-5 days and the
+contract has no eviction clock of its own (`MatrixKeeperLib.sol:458`). It is **V8.49
+item 1** — see `V8_49_SCOPE.md`. It matters from V8.48 onward because V8.48 is the
+first version where evictions can fire AT ALL (on-chain valve + the keeper EOA finally
+authorized; `evict_parked.js` never once ran in any earlier version). Do NOT "fix" it
+by raising `parkedGracePeriod` — one knob drives both clocks, so that breaks the 24h
+rescue design. `predeploy_check.js` now prints all three clocks and turns them into
+hard failures under `MAINNET=1`.
+
+---
+
 ## Active deployment
 
 | Item | Value |
