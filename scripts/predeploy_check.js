@@ -1369,6 +1369,75 @@ if (!htmlTxt) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// GRACE TIMINGS — what this deploy will ACTUALLY ship (added 2026-08-13, the
+// evening V8.48 went live, after the owner's policy was checked against the code)
+//
+// Owner policy: members get time to rescue THEMSELVES before the SF steps in —
+// 24h on testnet, 48h on mainnet — and eviction should not happen for 3-5 days.
+// Three separate clocks decide that, they ship from three different places, and
+// two of them can silently ship a TESTNET value to MAINNET:
+//
+//   parkedGracePeriod      contract default 6h  -> deploy_v8.js SETS it (86400 = 24h,
+//                          override with PARKED_GRACE_SECS). Mainnet needs 172800.
+//   selfFundedGracePeriod  contract default 5 MINUTES -> deploy_v8.js NEVER SETS IT.
+//                          The declaration itself says "mainnet default 6h; testnet
+//                          owner can set as low as 5 min" — so a mainnet deploy ships
+//                          5 minutes unless someone remembers a post-deploy tx.
+//   evictionGracePeriod    DOES NOT EXIST YET (V8.49 item 1). Until it does, eviction
+//                          runs on parkedGracePeriod — 24h, NOT the 3-5 days intended.
+//
+// Set MAINNET=1 to turn the advisory lines into hard failures.
+// ─────────────────────────────────────────────────────────────────────────────
+{
+  console.log("\n── grace timings — the three clocks that decide rescue vs eviction ──");
+  const isMainnet = process.env.MAINNET === "1" || /mainnet/i.test(process.env.HARDHAT_NETWORK || "");
+  const gate = isMainnet ? fail : (m) => console.log(`  ℹ  ${m}`);
+
+  const dep  = read("scripts/deploy_v8.js")        || "";
+  const mkG  = read("contracts/MatrixKeeper.sol")  || "";
+  const libG = read("contracts/MatrixKeeperLib.sol") || "";
+
+  // 1. parkedGracePeriod — deploy must set it explicitly, never rely on the 6h default
+  const parkedSecs = Number(process.env.PARKED_GRACE_SECS || 86400);
+  if (/setParkedGracePeriod\(/.test(dep)) {
+    ok(`deploy_v8.js sets parkedGracePeriod explicitly (this run: ${parkedSecs}s = ${parkedSecs/3600}h)`);
+  } else {
+    fail("deploy_v8.js does NOT set parkedGracePeriod — it would ship the 6h contract default");
+  }
+  if (isMainnet && parkedSecs < 172800) {
+    fail(`MAINNET: parkedGracePeriod ${parkedSecs}s is below the 48h policy — set PARKED_GRACE_SECS=172800`);
+  } else if (isMainnet) {
+    ok(`MAINNET: parkedGracePeriod ${parkedSecs}s meets the 48h policy`);
+  }
+
+  // 2. selfFundedGracePeriod — the silent one. Nothing in the deploy path touches it.
+  const sfgDefault = (mkG.match(/uint256\s+public\s+selfFundedGracePeriod\s*=\s*([^;]+);/) || [,"?"])[1].trim();
+  if (/setSelfFundedGracePeriod\(/.test(dep)) {
+    ok("deploy_v8.js sets selfFundedGracePeriod explicitly");
+  } else {
+    gate(`selfFundedGracePeriod is NEVER set by deploy_v8.js — it ships at the contract default (${sfgDefault}). ` +
+         `Fine on testnet, WRONG on mainnet (the declaration says mainnet default 6h). ` +
+         `Either add the setter call to the deploy or run it as a post-deploy tx.`);
+  }
+
+  // 3. evictionGracePeriod — V8.49 item 1. Assert the day it lands so it cannot regress.
+  const hasEvictGrace = /evictionGracePeriod/.test(mkG) && /evictionGracePeriod/.test(libG);
+  if (hasEvictGrace) {
+    ok("evictionGracePeriod exists in MatrixKeeper + MatrixKeeperLib (V8.49 item 1 shipped)");
+    if (!/if\s*\(age\s*<\s*cfg\.evictionGracePeriod\)/.test(libG)) {
+      fail("evictionGracePeriod is declared but the EVICT BRANCH still gates on parkedGracePeriod — the clocks are not actually separated");
+    } else {
+      ok("MatrixKeeperLib: the evict branch gates on evictionGracePeriod, not parkedGracePeriod");
+    }
+  } else if (/if\s*\(age\s*<\s*cfg\.parkedGracePeriod\)\s*return[^\n]*\n\s*return\s*\(parkedMember,\s*WORK_EVICT_PARKED\)/.test(libG.replace(/\r/g, ""))) {
+    gate("KNOWN GAP (V8.49 item 1): eviction gates on parkedGracePeriod — the SAME clock as rescue. " +
+         "Owner policy is 3-5 days; this ships 24h. V8.48 is the first version where evictions can fire at all.");
+  } else {
+    console.log("  ℹ  eviction branch shape not recognised — re-read MatrixKeeperLib before trusting this section");
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Summary
 // ─────────────────────────────────────────────────────────────────────────────
 console.log("\n" + "═".repeat(62));
