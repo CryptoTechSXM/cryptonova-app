@@ -83,6 +83,80 @@ Points to settle when building it:
   drives both clocks, so it would push SF rescue out to 3–5 days and break the 24h
   design. That is exactly why a second param is needed.
 
+### 🔧 BUILD PLAN — written 2026-08-15, NOT YET BUILT (item 1b's contract half is done)
+
+**Read this before touching `MatrixKeeperLib`. The obvious implementation breaks two
+existing test fixtures in ways that look like the change is wrong.**
+
+**1. `_triageParked` must return a REASON CODE, not a bool.** It currently returns
+`(uint256 sfShare, bool evict)`, so by the time `_checkParked` applies a clock, a
+harmless GHOST and an insolvent member are indistinguishable — and the whole point is
+to clock them differently. Use `uint8`, NOT an extra return value: that function's own
+comments (MatrixKeeperLib.sol:447-450) record that adding the evict branch already blew
+the stack once and had to be extracted to its own frame. `bool` → `uint8` is the same
+one slot, so it costs nothing:
+```solidity
+uint8 constant EVICT_NONE = 0;  // rescue
+uint8 constant EVICT_GHOST = 1; // seated in either half — dequeue only, harms nobody
+uint8 constant EVICT_RATIO = 2; // withdrawRatio > rescueRatioBps
+uint8 constant EVICT_LADDER = 3;// off the bottom of the rescue ladder
+uint8 constant EVICT_FLOOR = 4; // item 46 insolvency floor
+```
+Then in `_checkParked`:
+```solidity
+if (reason != EVICT_NONE) {
+    uint256 gate = reason == EVICT_GHOST ? cfg.parkedGracePeriod : cfg.evictionGracePeriod;
+    if (age < gate) return (address(0), type(uint8).max);
+    return (parkedMember, WORK_EVICT_PARKED);
+}
+```
+
+**2. THE GHOST CLOCK — decided 2026-08-15, and deliberately the CONSERVATIVE option.**
+The scope above left this open. **Ghosts KEEP today's `parkedGracePeriod`; only cases
+2–4 get the new longer clock.** Reasoning: this changes ghost behaviour not at all,
+so the new param introduces exactly ONE behavioural difference to reason about
+(real evictions get slower) instead of two. A ghost dequeue costs the member nothing
+and giving it a shorter-than-today clock is a separate, optional improvement — and
+item 45 is already driving ghosts toward zero (**measured 2026-08-15: 0 ghosts among
+52 parked**, against 16 persistent ones on the old chain). One line to change if the
+owner disagrees.
+
+**3. `evictionGracePeriod`: new `MatrixKeeper` state var, default `4 days` (345_600),**
+threaded through `ScanCfg` (add after `selfFundedGracePeriod`, and wire it in the
+struct literal at MatrixKeeper.sol ~:418 — a field wired to the wrong neighbour
+compiles clean and only changes WHEN the keeper acts, which is the exact mutation
+`V8_48_KeeperScan` exists to catch). Enumerated setter; **put 86_400 on the menu** so
+the clock can be collapsed back to today's 24h behaviour, and the default on the menu
+too (item-42 lesson). Suggested: `86400 / 172800 / 259200 / 345600 / 432000 / 604800`.
+
+**4. Governance: `PARAM_MK_EVICTION_GRACE = 62`** — all five sites, same as param 61:
+constant, interface entry, `_allowedValues`, `_applyParam` branch, `PARAM_MAX_ID`.
+
+**5. ⚠️ TWO EXISTING FIXTURES WILL BREAK — this is the part that eats a session if you
+meet it by surprise:**
+- **`V8_48_GhostFloor.test.js`** sets `PARKED_GRACE = 24h` and asserts
+  `WORK_EVICT_PARKED` after `time.increase(PARKED_GRACE + 5)` (around :417, :428, :437).
+  The GHOST case (GF-D3) still passes by design. The ratio/ladder/floor cases will NOT —
+  they now need the 4-day clock. Fix by setting `evictionGracePeriod` explicitly in that
+  fixture's `setup()`, not by weakening the assertions.
+- **`V8_48_KeeperScan.test.js`** proves byte-identical `performData` against the frozen
+  pre-refactor keeper. A new clock is a REAL behavioural divergence. Same remedy the
+  file already uses for item 12's split grace (see its header): pin
+  `evictionGracePeriod == parkedGracePeriod` in `setup()` so the comparison stays
+  honest, and say so in the header — the harness proves the 12a EXTRACTION was
+  behaviour-preserving, not that no later item ever changed behaviour.
+
+**6. `predeploy_check.js`:** assert the declared default is 345_600 AND that
+`deploy_v8.js` sets both grace periods for mainnet (`parkedGracePeriod` 172_800 and
+`evictionGracePeriod` 3–5 days) — the scope above already calls for this and it is the
+only thing standing between testnet defaults and a mainnet deploy.
+
+**7. New test file `V8_49_EvictionClock.test.js`:** a member past 24h but under 4 days
+is NOT evicted for ratio/ladder/floor; the same member IS at 4 days; a ghost is still
+evicted at the parked clock; the governance menu matches the setter both directions;
+setting `evictionGracePeriod == parkedGracePeriod` reproduces pre-V8.49 behaviour
+exactly (the collapse property — it is what keeps the KeeperScan harness meaningful).
+
 ### Until V8.49 ships — the interim position (owner chose: fix properly, watch daily)
 
 Watch for the first eviction ever recorded: `MemberEvicted` / `GhostDequeued` events,

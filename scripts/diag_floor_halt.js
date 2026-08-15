@@ -318,6 +318,53 @@ async function readArray(c, fn) {
     }
   }
 
+  // ── BASELINE LOG (V8.49, 2026-08-15) ──────────────────────────────────────
+  // THE POINT OF THIS: the 2026-08-13 parked-growth investigation measured the
+  // OLD V8.47 chain (+125 parked/day, 99.8% repeat share, exponential SF
+  // financing). Those numbers do not describe V8.48 and cannot be recovered
+  // later — a snapshot samples the residue, not the population. Every run
+  // appends one row here, so the growth RATE becomes measurable, and so there
+  // is a genuine before/after when V8.49 lands the buffer removal.
+  // Append-only, never rewritten. Safe to run as often as you like.
+  try {
+    const fs   = require("fs");
+    const out  = path.join(__dirname, "..", "logs", "parked_baseline.csv");
+    const head = "iso,block,parked,halt_risk,self_funded,evict_floor,evict_other," +
+                 "rescue,sf_balance_usd,stability_floor_usd,advance_total_usd," +
+                 "buffer_total_usd,shortfall_total_usd,debt_total_usd,buffer_bps,floor_bps\n";
+    if (!fs.existsSync(path.dirname(out))) fs.mkdirSync(path.dirname(out), { recursive: true });
+    if (!fs.existsSync(out)) fs.writeFileSync(out, head);
+    const n = v => (Number(v) / 1e6).toFixed(2);
+    const debtTotal = pending.reduce((a, r) => a + r.debt, 0n);
+    // Timestamp from the CHAIN, not the local clock — the local clock is not what
+    // the ages in this file are measured against.
+    const iso = new Date(Number(now) * 1000).toISOString();
+    fs.appendFileSync(out, [
+      iso, block, parkedTotal, halt.length, selfFunded.length, evictFloor.length,
+      evictOther.length, rescue.length, n(sfBal), stabFloor === null ? "" : n(stabFloor),
+      n(needTotal), n(bufferPart), n(needNoBuffer), n(debtTotal), bufferBps, floorBps,
+    ].join(",") + "\n");
+    const rows = fs.readFileSync(out, "utf8").trim().split("\n").length - 1;
+    console.log(`\nbaseline row appended -> logs/parked_baseline.csv  (${rows} row${rows === 1 ? "" : "s"} so far)`);
+    if (rows >= 2) {
+      const lines = fs.readFileSync(out, "utf8").trim().split("\n").slice(1);
+      const first = lines[0].split(","), last = lines[lines.length - 1].split(",");
+      const hrs = (Date.parse(last[0]) - Date.parse(first[0])) / 3_600_000;
+      if (hrs > 0.25) {
+        const dParked = Number(last[2]) - Number(first[2]);
+        console.log(`    over ${hrs.toFixed(1)}h: parked ${first[2]} -> ${last[2]} ` +
+                    `(${dParked >= 0 ? "+" : ""}${dParked}, ${(dParked / hrs * 24).toFixed(1)}/day)` +
+                    `   SF $${first[8]} -> $${last[8]}`);
+        console.log(`    (old V8.47 chain, for comparison: +125 parked/day, queue never drained)`);
+      } else {
+        console.log(`    (need a few hours between runs before a rate means anything)`);
+      }
+    }
+  } catch (e) {
+    // Logging must never break the diagnostic.
+    console.log(`\nbaseline log SKIPPED (${e.message})`);
+  }
+
   if (unreadable.length) {
     console.log(`\nUNREADABLE (${unreadable.length}) — counted nowhere above, never assumed to be zero:`);
     unreadable.slice(0, 30).forEach(s => console.log("    " + s));
