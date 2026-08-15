@@ -88,6 +88,112 @@ which disables case 4 only (cases 2 and 3 remain, and are pre-V8.48 behaviour).
 
 ---
 
+---
+
+## ITEM 1b — THE INSOLVENCY FLOOR DOES NOT CAP DEBT (owner found it 2026-08-15)
+
+**Owner's observation:** "saw a loan size of $5.40 which would be outside the loan
+parameters — if the member is unable to cover the loan they should not be given the
+loan." Then, when the numbers did not add up: *"explain how a member with one loan can
+owe $5.40 when they have a $5.00 reserve. Something is missing in those numbers."*
+
+**Both instincts were right. There are TWO separate defects here.**
+
+### Defect 1 — the floor is tested BEFORE the loan and never includes it
+
+`StabilityFund.sol:799` —
+```solidity
+function loanEligible(address member, uint8 tierIdx) public view returns (bool) {
+    ...
+    return memberDebt[member] < fee * insolvencyFloorBps / 10_000;   // T1: $10 x 34% = $3.40
+}
+```
+Enforced at `payCoRescue` (line 649) and `payForceCross` (line 679) — both as a bare
+`require(loanEligible(...))` with the **new loan amount never added**. So the floor caps
+the debt you may *start* a loan from, not the debt you end with. Every borrower finishes
+above the floor by up to a full advance. The contract's own doc comment claims it
+"refuses a new loan when memberDebt >= fee x this / 10000" — an intent the code does not
+implement.
+
+### Defect 2 — THE DEBT IS BIGGER THAN THE SHORTFALL (this is what broke the arithmetic)
+
+`MatrixLogicLib.sol:1379`, in `forceCrossKeeper`:
+```solidity
+uint256 totalLoan = sfContribution + crossingBuffer;
+IStabilityFund(self.stabilityFund).increaseMemberDebt(member, cfg.tierIndex, totalLoan);
+```
+The booked debt is the entry-fee shortfall **plus a crossing buffer** — extra USDC seeded
+into the member's `withdrawable` so they will have accumulated the re-entry fee by the
+time they reach MatA root. **`crossingBuffer` is a PARAMETER supplied by the keeper**
+(`FigureEightMatrixV8.sol:561`), not derived on chain.
+
+That resolves the owner's arithmetic exactly: a member with a $5.00 crossing reserve and
+nothing withdrawable has a maximum shortfall of $5.00 against the $10.00 T1 fee — so a
+$5.20 loan is impossible from the shortfall alone. $5.00 shortfall + ~$0.20 buffer =
+**$5.20**, which is precisely the observed cluster (the worst five debts are all exactly
+$5.20). `coPayRescue` (line 1423) books `shortfall` only, so the oversized loans are the
+**forceCrossKeeper** path.
+
+**OPEN QUESTION FOR THE NEXT SESSION — do not guess this, read it:** where does the
+keeper compute `crossingBuffer`, and what bounds it? It flows from MatrixKeeper /
+MatrixKeeperLib discovery into `forceCrossKeeper(member, sfContribution, crossingBuffer)`.
+Any fix to the floor MUST include the buffer, or it will under-count the advance a second
+time and the same class of breach reappears.
+
+### MEASURED, 2026-08-15 (`scripts/model_insolvency_floor.js`, all values read from chain)
+
+| measurement | value |
+|---|---|
+| floor threshold, T1 | **$3.40** (fee $10.00 x 3400 bps) |
+| loan events / unique borrowers | **55 / 55 — every borrower has exactly ONE loan.** Not accumulation. |
+| loan size, T1 | min $0.33 · **median $4.25** · max **$5.20** · mean $3.80 |
+| borrowers still owing | 37 of 55, **$139.62** outstanding |
+| **over their own tier floor** | **29 of 37 = 78.4%**, worst $5.20 = **1.53x the floor** |
+| currently parked (T1 MatB) | 49, shortfall min $0.22 · median $0.83 · max $1.72 · **0 self-funded** |
+| lifetime lent / repaid | $208.81 / $69.19 = **33.1% recovery** |
+
+**A single loan of median size already breaches the floor.** The owner's "$5.00 reserve +
+$3.40 earned = $1.60 shortfall, so two loans then refused" model describes a MATURE
+member; the measured borrowers were thin and early, and the crossing buffer pushed each
+one over in one step.
+
+### THE POLICY CHOICE — modelled against the live population
+
+| policy | granted | refused | SF out | max debt after |
+|---|---|---|---|---|
+| A CURRENT (pre-loan check) | 49 | 0 | $41.72 | $1.72 |
+| B STRICT (post-loan check) | 49 | 0 | $41.72 | $1.72 |
+| C PARTIAL (clamp to floor) | 49 | 0 | $41.72 | $1.72 |
+
+**All three are IDENTICAL on today's queue** — current shortfalls (max $1.72) sit far
+below the $3.40 floor, so nothing is refused either way. There is no emergency and no
+forced decision this week. The divergence is historical: median past loan $4.25 > $3.40,
+so **more than half of every rescue that has ever happened would have been refused under
+B**.
+
+**C (partial) should probably be DROPPED as unimplementable.** If the SF funds $3.40 of a
+$5.20 need, the entry fee is not covered, the member is not seated, and the keeper cannot
+complete the rescue. C degrades into "self-rescue with a subsidy", which requires the
+member to act anyway.
+
+### RECOMMENDATION — ship B TOGETHER WITH item 1's eviction clock, never alone
+
+`memberDebt[member] + totalAdvance <= fee * insolvencyFloorBps / 10_000`, where
+`totalAdvance` includes the crossing buffer (defect 2), applied at both `payCoRescue` and
+`payForceCross`.
+
+**The two halves are one change.** B alone refuses a thin member's loan and the current
+24h eviction clock removes them the next day — worse for that member than today's
+behaviour. Item 1's 3-5 day window alone leaves the floor unenforced. Together they are
+the owner's stated policy: do not lend what one cycle cannot repay, and give the member
+days, not hours, to self-rescue first.
+
+**Interim lever needing no deploy:** PARAM 59 sets `insolvencyFloorBps`. Raising it does
+NOT fix the structural gap (the check still excludes the new loan) but does move where
+the overshoot lands. 0 disables the floor entirely.
+
+---
+
 ## ITEM 2 — THE WALLET RPC (carried from the V8.48 handoff, likely the biggest member win)
 
 `index.html:2834` and `:2903` call `wallet_addEthereumChain` with
