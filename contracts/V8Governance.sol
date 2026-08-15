@@ -131,6 +131,8 @@ interface IGovernanceTarget {
     function setInsolvencyFloorBps(uint256 v) external;
     // ── V8.48: SF surplus-to-community dial (item 26's setter, param 60) ─────
     function setCommunityOverflowBps(uint256 v) external;
+    // ── V8.49: MatrixKeeper crossing buffer, default 0 (param 61) ────────────
+    function setCrossingBufferBps(uint256 v) external;
     // ── V8.20: second wave -- CNOVABuybackReserve ────────────────────────────
     function setTriggerThreshold(uint256 v) external;
     function setMaxSlippageBps(uint256 v) external;
@@ -286,8 +288,19 @@ contract V8Governance is Ownable {
     ///         L1 inflow to the CommunityWallet; the DAO can dial it down.
     uint8 public constant PARAM_SF_COMMUNITY_OVERFLOW      = 60;
 
+    /// @notice V8.49 (owner decision 2026-08-15): the MatrixKeeper CROSSING BUFFER.
+    ///         Was a hardcoded 3_600 bps advanced on top of every keeper rescue and
+    ///         booked as member debt. Measured on the live V8.48 chain it accounted for
+    ///         80% of everything the Stability Fund was asked for, and being LARGER than
+    ///         insolvencyFloorBps (3_400) it made that floor impossible to enforce —
+    ///         every advance cleared it on the way past. DEFAULT 0 = buffer off.
+    ///         Kept DAO-tunable rather than deleted so it can be restored without a
+    ///         redeploy if rescued members start re-parking too fast (the accepted risk
+    ///         of 0). Full reasoning and numbers in V8_49_SCOPE.md item 1b.
+    uint8 public constant PARAM_MK_CROSSING_BUFFER         = 61;
+
     /// @dev Highest assigned param id -- update whenever a new param is added.
-    uint8 public constant PARAM_MAX_ID                     = PARAM_SF_COMMUNITY_OVERFLOW;
+    uint8 public constant PARAM_MAX_ID                     = PARAM_MK_CROSSING_BUFFER;
 
     // ── Governance config (self-governable) ───────────────────────────────────
     uint256 public votingPeriod   = 72 hours;
@@ -469,6 +482,10 @@ contract V8Governance is Ownable {
         // V8.48: surplus-to-community dial — MUST mirror StabilityFund's setter
         // enumeration exactly; default 10000 and 0 both on the menu.
         _allowedValues[PARAM_SF_COMMUNITY_OVERFLOW] = [0, 100, 250, 500, 1000, 2500, 5000, 7500, 10000];
+        // V8.49: crossing buffer — 0 (the new default, buffer OFF) through 3600 (the
+        // retired V8.31 value). Both endpoints on the menu so either can be voted back;
+        // must mirror MatrixKeeper.setCrossingBufferBps's require exactly.
+        _allowedValues[PARAM_MK_CROSSING_BUFFER] = [0, 900, 1800, 2700, 3600];
         // V8.33: extended idle timeout -- 0.5d/1d/2d/3d/4d/5d/6d/7d/14d
         _allowedValues[PARAM_EXTENDED_IDLE_TIMEOUT] = [43200, 86400, 172800, 259200, 345600, 432000, 518400, 604800, 1209600];
         // V8.35: per-tier whale gate thresholds (1–50 pioneers)
@@ -824,6 +841,9 @@ contract V8Governance is Ownable {
         // ── V8.48: StabilityFund surplus-to-community dial ────────────────────
         } else if (paramId == PARAM_SF_COMMUNITY_OVERFLOW) {
             t.setCommunityOverflowBps(value);
+        // ── V8.49: MatrixKeeper crossing buffer (default 0 — buffer off) ──────
+        } else if (paramId == PARAM_MK_CROSSING_BUFFER) {
+            t.setCrossingBufferBps(value);
         // ── V8.33: MatrixKeeper extended idle timeout ──────────────────────────
         } else if (paramId == PARAM_EXTENDED_IDLE_TIMEOUT) {
             t.setExtendedIdleTimeout(value);

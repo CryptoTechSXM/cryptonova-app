@@ -60,11 +60,22 @@ contract MatrixKeeper is Ownable {
     uint8 public constant STATE_SLOW     = 1;
     uint8 public constant STATE_RECOVERY = 2;
 
-    /// @notice Fraction of each pool distribution share redirected to SF for gradual debt repayment.
-    ///         Must match MatrixLogicLib.RESCUE_REPAY_BPS.
-    ///         V8.31: raised from 15% (1500) → 50% (5000).
-    ///         Clears rescue debt ~3× faster (6 cycles vs 18 at T1) while member still earns CNOVA.
-    ///         Passive members earn CNOVA mining rewards; USDC is the active-recruiter bonus.
+    /// @notice ⚠️ HISTORICAL ONLY — DO NOT REASON FROM THIS VALUE. V8.49 (2026-08-15).
+    ///         This said "must match MatrixLogicLib.RESCUE_REPAY_BPS" for three versions
+    ///         after that constant stopped existing: V8.32 removed it (see the note at
+    ///         MatrixLogicLib.sol:200) in favour of StabilityFund.rescueRepayBps (DAO
+    ///         param #50), and V8.47 replaced THAT for the live redirect with the BANDED
+    ///         clawback — StabilityFund.clawbackBpsFor(member), keyed to the issuing tier
+    ///         (clawbackBpsByBand default [9000, 8000, 7000, 6000]; T1–T3 = 60%, not 50%).
+    ///
+    ///         Nothing reads this constant any more. It is kept, deprecated, only because
+    ///         it was the input to the retired CROSSING_BUFFER_BPS derivation below, and
+    ///         a future reader needs to know the derivation rested on a stale number:
+    ///         redone at the live 60% band, the old formula yields 37.8%, not 36%.
+    ///
+    ///         THE LESSON, which outlives this constant: a mirrored constant with a
+    ///         "must match X" comment silently becomes a lie the moment X moves. Read the
+    ///         live value from the owning contract instead of mirroring it.
     uint256 public constant RESCUE_REPAY_BPS = 5_000;
 
     /// @notice V8.31: 50/5/45 model constants (must mirror MatrixLogicLib).
@@ -80,21 +91,41 @@ contract MatrixKeeper is Ownable {
     ///                               = entryFee × 1800 / 10_000
     uint256 public constant POOL_BPS = 1_800;
 
-    /// @notice Pre-computed BPS fraction of the entry fee to advance as a crossing buffer.
-    ///         After a keeper rescue, the member enters a new matrix and receives:
-    ///           crossingReserve = entryFee × 50%    (pre-funded by new matrix entry)
-    ///           direct earn     = entryFee × 5%     (instant withdrawable)
-    ///           crossingBuffer  = advanced by SF     (so member can cross after ~1 pool cycle)
+    /// @notice BPS of the entry fee advanced as a CROSSING BUFFER on top of the entry-fee
+    ///         shortfall, seeded into the rescued member's withdrawable so they can cross
+    ///         again sooner. **DEFAULT 0 SINCE V8.49 — the buffer is OFF.**
     ///
-    ///         For the NEXT crossing, member needs entryFee − crossingReserve from withdrawable:
-    ///           need = entryFee × (1 − CROSSING_RESERVE_BPS/10_000)
-    ///                = entryFee × 5000/10_000  = 50%
-    ///         Member already has directEarn + one pool cycle after RESCUE_REPAY_BPS deduction:
-    ///           directEarn         = entryFee × 500/10_000  = 5%
-    ///           poolCycle (net)    = entryFee × POOL_BPS/10_000 × (1 − RESCUE_REPAY_BPS/10_000)
-    ///                             = entryFee × 1800/10_000 × 5000/10_000 = 9%
-    ///         Buffer needed = 50% − 5% − 9% = 36% = 3_600 bps
-    uint256 public constant CROSSING_BUFFER_BPS = 3_600;
+    ///         V8.31 set this to a hardcoded 3_600 (36%) on this derivation: the next
+    ///         crossing needs 50% of the fee from withdrawable, the member already has 5%
+    ///         direct earn plus a 9% net pool cycle, so 50 − 5 − 9 = 36. That derivation
+    ///         used RESCUE_REPAY_BPS = 5_000, which was already stale (see above).
+    ///
+    ///         WHY IT IS OFF (owner decision 2026-08-15, measured on the live V8.48 chain
+    ///         with scripts/diag_floor_halt.js — full numbers in V8_49_SCOPE.md item 1b):
+    ///
+    ///         1. IT DWARFED THE THING IT SUPPLEMENTED. Real entry-fee shortfalls on the
+    ///            live queue ran $0.41–$1.72 at a $10 T1 fee. The flat buffer added $3.60
+    ///            to every one — **80% of everything the Stability Fund was asked for**
+    ///            ($187.20 of $232.29 across 52 parked members).
+    ///         2. IT MADE THE INSOLVENCY FLOOR UNENFORCEABLE. At 3_600 the buffer alone
+    ///            exceeded insolvencyFloorBps (3_400), so EVERY advance cleared the floor
+    ///            on its way past — including for a member with zero debt and zero
+    ///            shortfall. The floor could not refuse anyone. At 0 it refuses on roughly
+    ///            the third loan, which is the policy it was written for.
+    ///         3. IT FED THE DEBT SPIRAL IT WAS MEANT TO PREVENT. The buffer is booked as
+    ///            debt, and the banded clawback then takes 60% of the member's pool income
+    ///            to repay it — consuming the very earnings they need to fund the next
+    ///            crossing. Bigger advance → heavier clawback → larger next shortfall.
+    ///            That is the loop diag_parked_growth.js measured on 2026-08-13.
+    ///
+    ///         KEPT AS A GOVERNED PARAM RATHER THAN DELETED so it is reversible without a
+    ///         redeploy. The accepted risk of 0 is that rescued members re-park sooner
+    ///         (they are re-seated with $0 withdrawable and must earn the full 50% again).
+    ///         **If the parked queue stops draining, this is the knob** — dial it up and
+    ///         the old behaviour returns at 3_600.
+    ///
+    ///         DAO param 61. Menu 0 / 900 / 1800 / 2700 / 3600 (0% / 9% / 18% / 27% / 36%).
+    uint256 public crossingBufferBps = 0;
 
     uint8 public constant WORK_VELOCITY      = 0;
     uint8 public constant WORK_GHOST         = 1;
@@ -331,6 +362,21 @@ contract MatrixKeeper is Ownable {
         rescueRatioBps = v;
         emit ConfigUpdated("rescueRatioBps", v);
     }
+
+    /// @notice V8.49: the crossing buffer, now a dial instead of a hardcoded 36%.
+    ///         DEFAULT 0 — see the crossingBufferBps declaration for why, and for what
+    ///         to watch before turning it back up. Enumerated like every other keeper
+    ///         setter (house convention: menus, not free ranges), with BOTH the current
+    ///         default (0) and the retired V8.31 value (3_600) on the menu — the item-42
+    ///         lesson: a default that is not on its own menu cannot be voted back.
+    function setCrossingBufferBps(uint256 v) external onlyOwnerOrGovernance {
+        require(
+            v == 0 || v == 900 || v == 1_800 || v == 2_700 || v == 3_600,
+            "MK: invalid crossing buffer (0/900/1800/2700/3600)"
+        );
+        crossingBufferBps = v;
+        emit ConfigUpdated("crossingBufferBps", v);
+    }
     function setCommunityWallet(address _cw) external onlyOwner {
         communityWallet = _cw;
         emit ConfigUpdated("communityWallet", uint256(uint160(_cw)));
@@ -562,10 +608,20 @@ contract MatrixKeeper is Ownable {
             if (sfShare > maxShortfall) sfShare = maxShortfall;
 
             // -- Crossing buffer --------------------------------------------------
-            // V8.31: buffer formula derivation in CROSSING_BUFFER_BPS constant above.
-            // Advances enough for member to cross after ~1 pool cycle at the new matrix,
-            // even with 50% RESCUE_REPAY_BPS deductions from pool income.
-            crossingBuffer = fee * CROSSING_BUFFER_BPS / 10_000;
+            // V8.49: crossingBufferBps is 0 by DEFAULT, so this is normally 0 and the
+            // member is advanced their entry-fee shortfall and nothing more. Rationale
+            // and the reversal knob are on the crossingBufferBps declaration above.
+            //
+            // NOTE THE CONSEQUENCE AT 0, because it is load-bearing: a SELF-FUNDED member
+            // has sfShare == 0, so totalSfNeeded is 0, so the payForceCross call below is
+            // skipped entirely by its own `> 0` guard. That is what makes item 12's
+            // "this rescue costs the fund nothing" true — it was NOT true while the
+            // buffer was unconditional, and the resulting call reached the SF's
+            // insolvency floor, whose revert is not on performUpkeep's swallow-list and
+            // would have reverted the WHOLE batch. See V8_49_SCOPE.md item 1b finding (ii).
+            // Any future change that makes this non-zero for a self-funded member
+            // re-arms that batch-halt path.
+            crossingBuffer = fee * crossingBufferBps / 10_000;
         }   // fee, withdrawable, reserve, effectiveContrib, sfBps, maxShortfall freed here
 
         uint256 totalSfNeeded = sfShare + crossingBuffer;

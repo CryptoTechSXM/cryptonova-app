@@ -391,6 +391,46 @@ if (mkText) {
   } else {
     fail("_doVelocityGate() NOT found in MatrixKeeper.sol");
   }
+
+  // ── V8.49 item 1b: the crossing buffer must ship OFF ──────────────────────
+  // deploy_v8.js does NOT set crossingBufferBps (verified 2026-08-15), so the
+  // DECLARED DEFAULT is what ships — exactly the item-42 situation. If a future
+  // change restores a non-zero default, the insolvency floor silently becomes
+  // unenforceable again (buffer 3600 > floor 3400) and the self-funded
+  // batch-halt path re-arms. Gate it here so that cannot happen quietly.
+  if (mkText.includes("uint256 public constant CROSSING_BUFFER_BPS")) {
+    fail("CROSSING_BUFFER_BPS is still a hardcoded constant — V8.49 replaces it with the governed crossingBufferBps (default 0)");
+  } else if (/uint256\s+public\s+crossingBufferBps\s*=\s*0\s*;/.test(mkText)) {
+    ok("crossingBufferBps declared default is 0 (V8.49: crossing buffer OFF)");
+  } else if (mkText.includes("crossingBufferBps")) {
+    fail("crossingBufferBps found but its declared default is NOT 0 — deploy_v8.js never sets it, so a non-zero default SHIPS (V8_49_SCOPE.md item 1b)");
+  } else {
+    fail("crossingBufferBps NOT found in MatrixKeeper.sol — V8.49 item 1b not applied");
+  }
+
+  if (mkText.includes("function setCrossingBufferBps")) {
+    ok("setCrossingBufferBps() setter present (DAO param 61)");
+  } else {
+    fail("setCrossingBufferBps() NOT found — the buffer must stay reversible without a redeploy");
+  }
+
+  // The keeper's require and the governance menu must enumerate the SAME set, or
+  // a passed proposal reverts at execution — the item-26 "DAO tunable was fiction"
+  // class. Mechanical string check, deliberately literal.
+  const mkBufMenu  = /v == 0 \|\| v == 900 \|\| v == 1_800 \|\| v == 2_700 \|\| v == 3_600/.test(mkText);
+  const govBufText = read("contracts/V8Governance.sol");
+  const govBufMenu = !!govBufText && govBufText.includes("_allowedValues[PARAM_MK_CROSSING_BUFFER] = [0, 900, 1800, 2700, 3600]");
+  const govBufWire = !!govBufText && govBufText.includes("t.setCrossingBufferBps(value)");
+  const govBufId   = !!govBufText && /PARAM_MAX_ID\s+=\s+PARAM_MK_CROSSING_BUFFER/.test(govBufText);
+  if (mkBufMenu && govBufMenu) {
+    ok("crossing-buffer menus match: MatrixKeeper require == V8Governance allowedValues [0,900,1800,2700,3600]");
+  } else {
+    fail(`crossing-buffer menu MISMATCH — keeper require ${mkBufMenu ? "ok" : "MISSING"}, governance allowedValues ${govBufMenu ? "ok" : "MISSING"}`);
+  }
+  if (govBufWire) ok("PARAM_MK_CROSSING_BUFFER routed to setCrossingBufferBps() in _applyParam");
+  else fail("PARAM_MK_CROSSING_BUFFER has no _applyParam branch — the param id would be unreachable");
+  if (govBufId) ok("PARAM_MAX_ID advanced to PARAM_MK_CROSSING_BUFFER (61)");
+  else fail("PARAM_MAX_ID NOT advanced to 61 — propose() would reject the new param");
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

@@ -52,6 +52,10 @@ not intend.**
 3. `sfBps == type(uint256).max` — off the bottom of the rescue ladder, too thin.
 4. **Item 46 insolvency floor** — `!loanEligible(member, tier)`, i.e. debt already
    >= 34% of the tier fee. Self-funded members (`sfShare == 0`) are never floored.
+   ⚠️ **CORRECTED 2026-08-15 (item 1b, finding (i)): "never floored" is true at
+   DISCOVERY only. A self-funded member is still advanced the flat 36% crossing buffer
+   and still has it booked as debt, and the SF-side floor check DOES see them — which
+   is finding (ii)'s keeper-halt path. Read item 1b before relying on this line.**
 
 Cases 2–4 evict a REAL member. None of them can trigger on a chain that is hours old —
 debt and withdrawal history take days to accumulate — which is why this is a V8.49
@@ -127,18 +131,236 @@ into the member's `withdrawable` so they will have accumulated the re-entry fee 
 time they reach MatA root. **`crossingBuffer` is a PARAMETER supplied by the keeper**
 (`FigureEightMatrixV8.sol:561`), not derived on chain.
 
-That resolves the owner's arithmetic exactly: a member with a $5.00 crossing reserve and
-nothing withdrawable has a maximum shortfall of $5.00 against the $10.00 T1 fee — so a
-$5.20 loan is impossible from the shortfall alone. $5.00 shortfall + ~$0.20 buffer =
-**$5.20**, which is precisely the observed cluster (the worst five debts are all exactly
-$5.20). `coPayRescue` (line 1423) books `shortfall` only, so the oversized loans are the
-**forceCrossKeeper** path.
+That resolves the owner's arithmetic — the shortfall alone cannot produce a $5.20 loan.
+`coPayRescue` (line 1423) books `shortfall` only, so the oversized loans are the
+**forceCrossKeeper** path. **The exact decomposition is below; an earlier draft of this
+item guessed "$5.00 shortfall + ~$0.20 buffer" and that guess was wrong in both terms.**
 
-**OPEN QUESTION FOR THE NEXT SESSION — do not guess this, read it:** where does the
-keeper compute `crossingBuffer`, and what bounds it? It flows from MatrixKeeper /
-MatrixKeeperLib discovery into `forceCrossKeeper(member, sfContribution, crossingBuffer)`.
-Any fix to the floor MUST include the buffer, or it will under-count the advance a second
-time and the same class of breach reappears.
+---
+
+### ✅ THE OPEN QUESTION IS ANSWERED (read 2026-08-15, in the contracts, not inferred)
+
+> *Where does the keeper compute `crossingBuffer`, and what bounds it?*
+
+**Computed at `MatrixKeeper.sol:568`, inside `_doParkedRescue`:**
+```solidity
+crossingBuffer = fee * CROSSING_BUFFER_BPS / 10_000;   // MatrixKeeper.sol:568
+uint256 public constant CROSSING_BUFFER_BPS = 3_600;   // MatrixKeeper.sol:97
+```
+
+**It is a FLAT 36% OF THE TIER ENTRY FEE. Nothing about the member enters it** — not
+their debt, not their earnings, not their shortfall, not their tier history. Every
+`forceCrossKeeper` rescue at T1 advances **exactly $3.60**, and books it as debt.
+
+The derivation is in the comment block at `MatrixKeeper.sol:83-97`: after a rescue the
+member needs 50% of the fee from `withdrawable` to cross again, already has 5% direct
+earn plus a net 9% pool cycle, so 50 − 5 − 9 = **36%**.
+
+**What bounds it — one thing only, and it is not a policy bound:**
+
+| candidate bound | reality |
+|---|---|
+| a cap relative to the member's debt or the floor | **none anywhere** |
+| a `require` on the matrix side | **none.** `MatrixLogicLib.forceCrossKeeper` (line 1345) requires only `sfContribution <= cfg.entryFee`. `crossingBuffer` has **no require at all** — the matrix accepts whatever it is handed |
+| a governance param | **no.** `CROSSING_BUFFER_BPS` is `public constant` — changing it needs a **redeploy**, not a DAO vote |
+| SF liquidity | **yes, the only one.** `MatrixKeeper.sol:578-581` trims the buffer to whatever is left after `sfShare`, down to 0, when the fund cannot cover both |
+
+So the buffer is deterministic keeper-contract arithmetic, not keeper-operator input —
+but it is a hardcoded constant that **no live lever can move**.
+
+**The exact decomposition of the observed $5.20** (T1 fee $10.00):
+`sfShare $1.60 + buffer $3.60 = $5.20`. The buffer is the DOMINANT term, not a rounding
+tail. It also explains the rest of the measured spread: median $4.25 = $0.65 + $3.60
+(shortfall in the measured range, median $0.83); min $0.33 is below the buffer alone, so
+those are either `coPayRescue` (no buffer) or early loans issued while the young SF could
+not fund the buffer and line 579 trimmed it.
+
+**The real ceiling is not $5.20.** Under the live default ladder (preset 1, bottom rung
+4_000 → 6_000 bps) the largest T1 shortfall the fund will cover is $6.00, so a single
+T1 rescue can book **$9.60 = 2.8× the $3.40 floor**. $5.20 is the worst case seen in
+two days, not the worst case available.
+
+### ⛔ THREE THINGS THE READ TURNED UP THAT ARE WORSE THAN THE ORIGINAL DEFECT
+
+**(i) THE BUFFER IS ADVANCED TO SELF-FUNDED MEMBERS TOO — item 12's "costs the fund
+nothing" is not true.** `_triageParked` (MatrixKeeperLib.sol:400) skips the floor check
+when `sfShare == 0`, and this scope's item 1 repeats that as "self-funded members are
+never floored". But `_doParkedRescue` computes the buffer **unconditionally** — it is
+outside every branch on `sfShare`. A member whose own reserve + withdrawable covers the
+whole fee still receives $3.60 of SF money and still has $3.60 booked against them
+(`totalLoan = sfContribution + crossingBuffer`, MatrixLogicLib.sol:1379). They are not
+floored because they borrow nothing — except they do borrow, $3.60 of it. **This is a
+debt-loop driver in its own right and belongs in the parked-loop reasoning.**
+
+**(ii) A LIVE KEEPER-HALT RISK IN V8.48, ON CHAIN RIGHT NOW.** Combine (i) with the
+revert allowlist at `MatrixKeeper.sol:469-478`: `"SF: insolvency floor"` is **not** on
+the swallow list, so it hits `revert(reason)` and **the entire `performUpkeep` batch
+reverts** — velocity, chain-links, evictions, CW epoch, everything. Reachable today: a
+member who already owes ≥ $3.40 and has since earned enough to be self-funded passes
+discovery (no floor check, `sfShare == 0`), then `payForceCross` is still called because
+`totalSfNeeded = 0 + $3.60 > 0`, and the SF refuses. Discovery and the SF disagree
+exactly as the comment at `MatrixKeeper.sol:584-587` warns, and the designed response to
+that disagreement is to stop the keeper. **Measured cover: 29 of 37 borrowers are already
+over the floor; 0 of the 49 currently parked are self-funded, which is why it has not
+fired yet.** Watch for a keeper that goes quiet, not just for eviction events.
+
+**(iii) THE BUFFER FORMULA IS DERIVED FROM A CONSTANT THAT NO LONGER EXISTS.**
+`MatrixKeeper.sol:64-68` declares `RESCUE_REPAY_BPS = 5_000` and says it "must match
+MatrixLogicLib.RESCUE_REPAY_BPS" — but `MatrixLogicLib.sol:200` records that constant was
+**removed in V8.32**, and V8.47 replaced it again with the **banded clawback**
+(`StabilityFund.clawbackBpsByBand = [9000, 8000, 7000, 6000]`, T1–T3 → **60%**, DAO-
+tunable). Redo the 36% derivation at the live 60% rate: net pool cycle is 18% × 40% =
+7.2%, so the buffer *should* be 50 − 5 − 7.2 = **37.8%**. The constant is stale by 180
+bps, and any future clawback vote silently invalidates it again with no way to correct
+it short of a redeploy. **Whatever V8.49 does with the floor, `CROSSING_BUFFER_BPS`
+should stop being a constant and start being derived from `clawbackBpsFor` — or at
+minimum become a governed param with the derivation documented at the setter.**
+
+### ✅ BUILT 2026-08-15 — 575 PASSING (was 565), 0 FAILING, COMPILE CLEAN
+
+**The contract half of item 1b is DONE.** Not yet committed/pushed at the time of
+writing — contracts repo branch is **`v8.1`** (the admin→preview→main ladder is the
+FRONTEND repo only).
+
+| file | change |
+|---|---|
+| `contracts/MatrixKeeper.sol` | `CROSSING_BUFFER_BPS` constant **removed**; `crossingBufferBps` state var **default 0**; `setCrossingBufferBps` enumerated 0/900/1800/2700/3600 + `ConfigUpdated`; call site (was :568) reads the param; the stale `RESCUE_REPAY_BPS` block marked historical with the V8.32/V8.47 trail |
+| `contracts/V8Governance.sol` | `PARAM_MK_CROSSING_BUFFER = 61` + interface entry + `_allowedValues` + `_applyParam` branch + `PARAM_MAX_ID` advanced — **all five**, because item 26 shipped three of them and "DAO tunable" was fiction until it was caught |
+| `scripts/predeploy_check.js` | fails if the constant returns, if the declared default is not 0, if the setter is missing, or if the keeper `require` and the governance menu disagree |
+| `test/V8_49_CrossingBuffer.test.js` | **NEW, 10 tests** (CB-1 … CB-10) |
+
+**Two judgement calls, recorded so they are not re-litigated blind:**
+
+1. **The `crossingBuffer` ARGUMENT STAYS in `forceCrossKeeper`'s signature.** Cutting it
+   would ripple through `FigureEightMatrixV8`, `MatrixLogicLib`, the keeper interface,
+   the mocks and **`MatrixKeeperPrev.sol`** — the frozen pre-refactor copy that
+   `V8_48_KeeperScan` compares against for byte-identical `performData`. Keeping the
+   plumbing made this a one-line arithmetic change and left that equivalence harness
+   valid. The buffer is dead AT THE SOURCE (bps 0), not at the boundary. **The boundary
+   is still unbounded** — `MatrixLogicLib:1345` requires nothing of `crossingBuffer` —
+   which is acceptable only because the sole caller is the keeper contract computing
+   from an enumerated param. If that ever stops being true, add the require.
+2. **CB-10 asserts `buffer < floor`, NOT `buffer == 0`.** That is the invariant that
+   actually has to hold. A test pinned to zero would pass while someone dials the buffer
+   to 3_600 and silently re-arms the original defect. At the current floor (3_400),
+   2_700 is safe and 3_600 is not — and CB-10 is what says so.
+
+**STILL OPEN — the honest gap, also written into the test file's header:** there is NO
+end-to-end assertion that a real keeper rescue books `shortfall` and nothing more. That
+needs a live-matrix parked fixture (V8Elevator scale). **The arithmetic change itself
+rests on the live measurement above, not on a test.** Closing it: extend
+`V8_48_GhostFloor.test.js`'s mock harness to run `_doParkedRescue`, not just discovery.
+
+**Two test-authoring facts worth not rediscovering:**
+- **`MatrixKeeper` is a LINKED contract since V8.48 item 12a.** `getContractFactory`
+  needs `{ libraries: { MatrixKeeperLib } }` or it throws "missing links" before any
+  test body runs. `V8_48_KeeperScan` and `V8_48_GhostFloor` show the pattern;
+  `V8Governance` and `StabilityFund` are NOT linked, which is what misled the first draft.
+- **ethers v6 `Interface.getFunction()` RETURNS NULL for an unknown name** — it does not
+  throw (verified against ethers 6.17). A `try/catch` around it never fires. The first
+  CB-2 assumed a throw and reported the removed constant as still present. Same family
+  as this project's fabricated-fallback bugs: a null read as a value.
+
+### ✅ OWNER DECISION 2026-08-15 — REMOVE THE CROSSING BUFFER
+
+> *"I think we should remove the buffer as it does not match our model."*
+
+**Agreed, and the live measurement is a stronger argument than the reasoning was.**
+Build as **`crossingBufferBps`, a governed param, DEFAULT 0** — behaviourally identical
+to deleting it, but reversible without a redeploy if the parked queue balloons (the one
+real counter-risk, below). Enumerated menu like every other DAO param
+(0 / 900 / 1800 / 2700 / 3600), new PARAM id, `predeploy_check.js` assertion that the
+declared default is 0.
+
+**MEASURED ON THE LIVE QUEUE (`scripts/diag_floor_halt.js`, 2026-08-15, 52 parked,
+all with $0.00 debt — this is a two-day-old chain and nobody has borrowed yet):**
+
+| | with buffer | with `crossingBufferBps = 0` |
+|---|---|---|
+| advance per rescue | $4.01 – $5.32 | **$0.41 – $1.72** (the real shortfall) |
+| queue of 52 costs | **$232.29** | **$45.09** |
+| of that, buffer | **$187.20 = 80% of the ask** | $0 |
+| SF `totalBalance` $100.84 covers | **21 of 52**, then graceful skip | **all 52, $55.75 left over** |
+| loans before policy B refuses | **0** (first advance already over the $3.40 floor) | **3** (avg shortfall $0.87) |
+
+**Read the last row honestly: 3, not the 2 in the owner's worked example.** The example
+assumed a $1.60 shortfall; the live queue averages **$0.87**, because members are
+reaching the crossing better funded than the example supposed. Three loans total $2.61
+and the fourth is refused — still inside the floor's own stated intent ("expected
+per-cycle earnings", ≈ $1.80/journey of pool at T1), so the mechanism behaves as
+designed. The model is confirmed directionally; the count is queue-dependent and will
+move. **Do not hard-code "two loans" anywhere — it is an emergent number, not a rule.**
+
+**Three consequences, in order of importance:**
+
+1. **The floor becomes the rule it was designed to be.** The owner's model — "$5.00
+   reserve + earnings ⇒ ~$1.60 shortfall, two loans then refused" — is exactly what the
+   live shortfalls show ($0.41–$1.72, centred on $1.60). Policy B then reads
+   $1.60 → $3.20 → refused on the third. **Policy B is unshippable WITH the buffer and
+   correct WITHOUT it.** The two changes are one change.
+2. **Finding (ii)'s keeper-halt path stops existing.** For a self-funded member
+   `sfShare == 0`, so with no buffer `totalSfNeeded == 0`, the
+   `if (totalSfNeeded > 0)` guard at MatrixKeeper.sol:588 is false, `payForceCross` is
+   never called, and there is no floor check to revert on. No swallow-list entry needed
+   for `"SF: insolvency floor"` on this path. **(Add it anyway as belt-and-braces —
+   `payCoRescue` can still raise it.)**
+3. **The Stability Fund is not actually short — the buffer is what makes it short.**
+   $187 of the $232 pending ask is buffer. The fund looked insolvent against its own
+   queue because of a mechanism that exists to prevent re-parking.
+
+**THE COUNTER-ARGUMENT, ON THE RECORD (this is what to watch after the change).** The
+buffer's purpose is real: it seeds enough `withdrawable` that a rescued member can cross
+again after ~1 journey instead of parking immediately. Removed, a rescued member is
+re-seated with $0 withdrawable and must earn the full 50% from scratch, so **parks will
+become MORE FREQUENT**. Worked through at T1 (pool ≈ $1.80/journey, 60% T1–T3 clawback):
+with buffer they cross in ~2 journeys carrying ~$3.04 of residual debt; without, ~4
+journeys carrying $0. The trade is accepted because each park then costs the fund ~$1.60
+instead of ~$5.00, and **the clawback on the inflated debt was itself consuming the
+earnings the member needed to avoid the next park** — which is precisely the spiral
+`diag_parked_growth.js` measured on 2026-08-13. **Watch the parked count and the park
+RATE after the change; the owner's standing product view is that the queue must visibly
+drain, not just churn.** If it balloons, dial `crossingBufferBps` up — that is what the
+param is for.
+
+**Ripple when building:** `MatrixKeeper` (the constant → param + setter + menu),
+`MatrixKeeperLib` interface, `MatrixLogicLib.forceCrossKeeper` (the arg stays; it is
+still the SF's pre-transfer), `FigureEightMatrixV8:561`, the mocks, and the V8.48
+tests that pin buffer arithmetic. **Also fix `MatrixKeeper.sol:64-68` in the same
+commit** — `RESCUE_REPAY_BPS = 5_000` there claims to mirror a MatrixLogicLib constant
+deleted in V8.32, and it is the input to the 36% derivation being retired.
+
+### WHAT THIS MEANS FOR THE FIX — POLICY B AS WRITTEN BELOW DOES NOT WORK
+### (superseded in practice by the buffer removal above — kept because it is WHY)
+
+The buffer (**3_600 bps**) is LARGER than the insolvency floor (**3_400 bps**). So
+`memberDebt + totalAdvance <= fee * insolvencyFloorBps / 10_000` fails for a member with
+**zero debt and zero shortfall**: 0 + $3.60 > $3.40. **Policy B applied at
+`payForceCross` with the buffer included refuses 100% of forceCross rescues at T1, and
+routes every one of them to eviction.** That is not a tuning accident — the two
+mechanisms contradict each other by construction: the floor says "never owe more than
+34% of a tier fee", the rescue path advances 36% of the tier fee to everyone it touches
+before any shortfall is added.
+
+Three ways out, to decide when building (all need the ladder + buffer numbers above):
+- **raise the floor above the buffer** — `insolvencyFloorBps` must exceed 3_600 plus
+  headroom for the shortfall; PARAM 59 already reaches it with no deploy, but it weakens
+  the floor everywhere else;
+- **shrink or condition the buffer** — e.g. skip it entirely when `sfShare == 0` (fixes
+  (i) and (ii) as a side effect), or scale it by remaining debt capacity;
+- **floor the SHORTFALL, cap the BUFFER separately** — two rules for two different
+  advances, which is what they actually are.
+
+**Whichever is chosen, `_triageParked` must change in the SAME commit as
+`payCoRescue`/`payForceCross`,** and the `sfShare == 0` guard at MatrixKeeperLib.sol:400
+must go, or every disagreement between discovery and the SF halts the whole keeper batch
+per (ii). Adding `"SF: insolvency floor"` to the allowlist at MatrixKeeper.sol:471-473 is
+the cheap belt-and-braces and should ship regardless.
+
+**One correction to Defect 2's own wording, now that the source is read:** the buffer is
+NOT "a PARAMETER supplied by the keeper" in the sense of operator input — it is computed
+by the MatrixKeeper CONTRACT from a constant. It is unbounded at the matrix boundary
+(any value would be accepted), but in practice only the keeper contract can pass it,
+because `forceCrossKeeper` is gated on `msg.sender == _state.matrixKeeper`.
 
 ### MEASURED, 2026-08-15 (`scripts/model_insolvency_floor.js`, all values read from chain)
 
@@ -178,9 +400,23 @@ member to act anyway.
 
 ### RECOMMENDATION — ship B TOGETHER WITH item 1's eviction clock, never alone
 
+⚠️ **AMENDED 2026-08-15 after the crossingBuffer read — see "WHAT THIS MEANS FOR THE FIX"
+above. B in the form written here is NOT shippable as-is: the buffer (36% of fee) exceeds
+the floor (34% of fee), so including it in `totalAdvance` refuses every forceCross rescue
+at T1, including for members with zero debt. B needs a buffer decision made with it.**
+
 `memberDebt[member] + totalAdvance <= fee * insolvencyFloorBps / 10_000`, where
 `totalAdvance` includes the crossing buffer (defect 2), applied at both `payCoRescue` and
-`payForceCross`.
+`payForceCross` — **and with `_triageParked` changed in the same commit** so discovery and
+the lender cannot disagree and halt the keeper.
+
+**Good news for the implementation:** both SF entry points already RECEIVE the full
+advance. `payForceCross(member, tierIdx, sourceMatrix, fee)` is called with
+`fee = totalSfNeeded = sfShare + crossingBuffer` (MatrixKeeper.sol:571, 588), and
+`payCoRescue`'s `sfShare` is the whole shortfall. So the amount the check needs is
+already in scope at both `require(loanEligible(...))` sites — StabilityFund.sol:649 and
+:679. No new plumbing, no signature change. The blocker is the policy contradiction
+above, not the code shape.
 
 **The two halves are one change.** B alone refuses a thin member's loan and the current
 24h eviction clock removes them the next day — worse for that member than today's
