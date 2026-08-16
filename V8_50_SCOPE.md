@@ -162,7 +162,7 @@ must be calibrated against POST-item-A asks (~$3.20, then ~$6.40), not today's $
 - **`parkedGracePeriod` was set to 300s** on the test chain to compress a 24h wait.
   Accumulation-phase numbers were taken at the real 86400; only the rescue phase ran
   compressed.
-- **T5 (seating depth) has a tool now — `scripts/diag_seating_depth.js` — but was NOT RUN.**
+- **T5 (seating depth): tool exists (`scripts/diag_seating_depth.js`) and WAS RUN — no answer.**
   Item D is still undecided. Note the test plan's original spec for it was wrong: it named
   `SlotReclaimed`, which the keeper no longer emits (it calls `softParkIdle` → `SlotParkedIdle`).
 
