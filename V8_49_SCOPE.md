@@ -698,6 +698,107 @@ days, not hours, to self-rescue first.
 NOT fix the structural gap (the check still excludes the new loan) but does move where
 the overshoot lands. 0 disables the floor entirely.
 
+### ✅ BUILT 2026-08-16 — POLICY B SHIPPED. 594 PASSING, 0 FAILING, PREDEPLOY 142/142
+
+Commit `40d7843` on `v8.1`. **Owner decision: STRICT B — one rule, first loan or not.**
+
+| file | change |
+|---|---|
+| `contracts/StabilityFund.sol` | `loanHeadroom(member, tier)` is the ONLY copy of the arithmetic; `loanEligibleFor(member, tier, advance)` (policy B) and `loanEligible(member, tier)` both derive from it. Both require sites pass the amount they are about to lend |
+| `contracts/MatrixKeeperLib.sol` | `_triageParked` asks `loanEligibleFor` with `sfShare + fee * cfg.crossingBufferBps / 10_000`; guard moved from `sfShare > 0` to `advance > 0`; ratio maths block-scoped for stack room; `ScanCfg.crossingBufferBps` added |
+| `contracts/MatrixKeeper.sol` | populates `crossingBufferBps` in the snapshot; `performUpkeep` swallow-list gains `"SF: insolvency floor"` AND `"SF: below floor"` |
+| `contracts/MatrixV8Interfaces.sol` | `loanEligibleFor` + `loanHeadroom` declared for the matrix/frontend side |
+| `contracts/test/MockKeeperScan.sol` | `MockStabilityFundK` gained a REAL floor (bps/fee/debt) — a boolean mock answers identically for a $0.01 loan and a $6.00 one, which is the very thing B fixes. Defaults inert (bps 0), so every existing fixture is unchanged. `payForceCross` now actually refuses |
+| `test/V8_49_InsolvencyFloor.test.js` | **NEW, 10 tests** (IF-1 … IF-10) |
+| `scripts/predeploy_check.js` | **15 new gates** — every regex verified to resolve against the real sources before shipping (a gate that cannot find its target reports nothing, not a failure) |
+| `scripts/diag_loan_history.js` | **NEW** — answers "first loan or rescued before?" from the event log |
+
+**THREE DECISIONS RECORDED SO THEY ARE NOT RE-LITIGATED BLIND:**
+
+1. **Discovery asks about the UNTRIMMED advance** (`sfShare + buffer`). `_doParkedRescue`
+   trims the buffer when the fund is short (:727-730), and a trim only ever makes the ask
+   SMALLER — so discovery is never LOOSER than the lender, which is the safe direction.
+   Asking about `sfShare` alone would let a vote on param 61 silently re-arm the
+   batch-halt. **IF-8 is the test that fails if anyone ever simplifies it back.**
+2. **The guard is on the ADVANCE, not on `sfShare`.** This structurally removes findings
+   (i) and (ii) instead of relying on `crossingBufferBps` staying 0.
+3. **`loanEligible` keeps its old semantics exactly** (`headroom > 0` is algebraically
+   `memberDebt < ceiling`), so the frontend and diagnostics do not break — but it is
+   documented as NO LONGER the enforcement rule. It says "not at the ceiling yet"; it
+   does not promise the next loan lands.
+
+### ⛔ THE 2026-08-15 POLICY TABLE ABOVE IS FALSIFIED — B IS NOT INERT
+
+The "**All three are IDENTICAL on today's queue**" row was true when written and is
+**wrong now**. Re-measured 2026-08-16 (101 parked, then 104):
+
+| | value |
+|---|---|
+| refused by B at `crossingBufferBps = 0` | **15 of 104** |
+| of those, repeat borrowers | **15** |
+| of those, refused on a FIRST loan | **0** |
+| parked carrying outstanding debt | 11 |
+| **parked who borrowed and REPAID IN FULL** | **9 — invisible to `memberDebt`** |
+| parked growth rate (first real V8.48 figure) | **+212/day** (88 → 101 in 1.5h) |
+| SF `totalBalance` / `stabilityFloor` | $294.12 / $0.00 |
+| queue cost at buffer 0 vs with buffer | $202.09 vs $716.89 (buffer = 71% of the ask) |
+
+**WHY THE EARLIER READING WAS WRONG, AND IT IS THE LESSON OF THE DAY:** an intermediate
+count said "4 of the refused have never borrowed". **`memberDebt` is CURRENT
+OUTSTANDING** — `applyRepayment` decrements it (:854) — so a member who borrowed $4.00
+and repaid it reads **$0.00**, identical in every getter to one who never borrowed. Nine
+of the parked queue are exactly that. **The owner rejected the claim on instinct**
+("explain how a member can come to the point of crossing without getting at least
+$3.40") and the event log settled it. `diag_loan_history.js` exists because of that
+question, and it self-tests its scan against `totalRescueLoaned()` before printing any
+verdict — 62 events, $228.72, matched to the cent.
+
+**WHAT THE 15 ACTUALLY LOOK LIKE — one uniform profile, and it is the spiral:** reserve
+$5.00, lifetime withdrawn **$0.00** (not one of them has ever taken money out),
+`cyclesCompleted` 1, lifetime EARNED $2.32-$3.82, borrowed ONCE ($3.63-$4.94),
+repaid $3.40-$4.04 — the clawback took essentially everything they earned — and they
+are back at the crossing needing $3.77-$5.00. **They earn less per cycle than they need
+per cycle.** That is verbatim the condition the floor was written to stop.
+
+**AND THE MITIGATING FACT, which is why this shipped without softening:** $3.60 of each
+of those first loans was the CROSSING BUFFER. Their real first shortfall was cents to
+~$1.34. At `crossingBufferBps = 0` every one of them sails through loan one, and their
+second ask is smaller too because the clawback takes ~$0.94 instead of ~$4.54.
+**Today's 15 refusals were manufactured by the buffer this same release removes.**
+
+### ⚠️ NEW, UNRESOLVED — THE LADDER AND THE FLOOR NOW DISAGREE ABOUT WHO IS FUNDABLE
+
+**This is the same shape as buffer-vs-floor, one layer down, and the scope never caught
+it:** it checked the BUFFER against the floor and stopped there. The SF RESCUE LADDER
+also lends past the ceiling.
+
+Derived from preset 1 (the live default) and confirmed against the measured population.
+With `debt == 0`, B refuses whenever `sfShare > $3.40`, and
+`sfShare = min(coverage x fee, fee - effective)`. So:
+
+> **A member whose effective contribution (crossing reserve + withdrawable) is below
+> 66% of the entry fee is refused, ZERO DEBT OR NOT.**
+
+The boundary is exact: `wBps = 6600` gives `sfShare = $3.40` and passes; `6500` gives
+$3.50 and is refused. Every one of the measured 15 sits at 50-62% — consistent.
+
+**Consequence: the bottom rungs of preset 1 (thresholds 6500 / 6000 / 5000 / 4000, whose
+coverage values are 4000 / 4500 / 5000 / 6000 bps) are DEAD under the shipping
+defaults.** The ladder advertises coverage the floor forbids, and `EVICT_LADDER` and
+`EVICT_FLOOR` now overlap for reasons nobody chose. Three ways out, none taken yet:
+
+- **accept it** — those members are precisely the eviction population the owner
+  described, and the rungs are simply vestigial. Cheapest, but leaves a lookup table in
+  the contract that can never fire;
+- **trim the ladder** so its bottom rung stops where the floor bites, making the two
+  mechanisms state one policy instead of two;
+- **raise `insolvencyFloorBps`** (PARAM 59, menu `0/1700/2500/3400/5000/6800/10000`) —
+  6800 would make the whole ladder reachable again, at the cost of the floor no longer
+  meaning "one cycle's expected earnings", which is the measurement it was derived from.
+
+**Do not resolve this by reading. Re-run `diag_floor_halt.js` first** — the refusal count
+moved 13 → 15 in the forty minutes between two runs today.
+
 ---
 
 ## ITEM 2 — THE WALLET RPC (carried from the V8.48 handoff, likely the biggest member win)

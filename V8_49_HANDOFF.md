@@ -1,4 +1,4 @@
-# V8.49 HANDOFF — written 2026-08-15, updated 2026-08-16 (read this FIRST, then `V8_49_SCOPE.md`)
+# V8.49 HANDOFF — written 2026-08-15, updated 2026-08-16 twice (read this FIRST, then `V8_49_SCOPE.md`)
 
 Audience: a future session of Claude, plus the owner. Nobody else touches this code.
 
@@ -12,13 +12,15 @@ working on now", it is this file then `V8_49_SCOPE.md`.
 ## WHERE THINGS STAND IN ONE PARAGRAPH
 
 V8.48 is **live on Base Sepolia** and healthy. V8.49 is **in progress on branch `v8.1`**
-of the contracts repo (`admin → preview → main` is the FRONTEND repo only). Item 1b —
-the crossing buffer — and item 1 — the eviction clock — are both **built and tested**:
-`584 passing, 0 failing` (was 575, was 565), predeploy `131/131`. **Nothing of V8.49 is
-deployed**: the chain is still running V8.48. Nothing is half-refactored.
+of the contracts repo (`admin → preview → main` is the FRONTEND repo only). **Item 1b is
+now COMPLETE — both halves.** The crossing buffer (2026-08-15), the eviction clock
+(item 1, 2026-08-16 morning) and **policy B (2026-08-16, commit `40d7843`)** are all
+built, tested and pushed: `594 passing, 0 failing` (was 584, 575, 565), predeploy
+`142/142` (was 131). **Nothing of V8.49 is deployed**: the chain is still running V8.48.
+Nothing is half-refactored, nothing is uncommitted.
 
-**Next up is item 1b's POLICY-B HALF** — see "NEXT" below. It was blocked on item 1 and
-is not blocked any more.
+**Next up: the `selfFundedGracePeriod` deploy gap** (small, and it is a hard MAINNET=1
+predeploy failure), then **item 2, the wallet RPC**. See "NEXT" below.
 
 ---
 
@@ -80,7 +82,26 @@ queue does not drain — the owner's standing product concern.
 
 **`stabilityFloor` is $0.00**, which is why SF exhaustion degrades gracefully instead of
 reverting the batch. **Any non-zero floor turns exhaustion into a whole-batch revert**
-(the trim lands exactly on `totalBalance >= fee + stabilityFloor`). Worth a guard.
+(the trim lands exactly on `totalBalance >= fee + stabilityFloor`). ~~Worth a guard.~~
+**GUARDED 2026-08-16** — `"SF: below floor"` is on `performUpkeep`'s swallow-list now, so
+exhaustion skips a member (with `WorkItemFailed`) instead of stopping the queue.
+
+### THIRD READING, 2026-08-16 — the two columns above are SUPERSEDED, keep them only as the trend
+
+| | 1st (08-15) | +4.6h | **2026-08-16** |
+|---|---|---|---|
+| parked | 52 | 88 | **101, then 104** |
+| SF totalBalance | $100.84 | $230.08 | **$294.12** |
+| pending ask, with buffer | $232.29 | $566.43 | **$716.89** |
+| buffer's share | 80% | 74% | **71%** |
+| rescues the fund completes | 21 of 52 | 48 of 88 | **62 of 101** |
+| …at `crossingBufferBps = 0` | all 52 | all 88 | **all 101, $92.03 left** |
+| halt risk / ghosts | 0 / 0 | 0 / 0 | **0 / 0** |
+| **parked growth rate** | — | (burst, not a rate) | **+212/day** |
+
+**The fund is growing and the queue is growing faster.** SF nearly tripled while the
+queue doubled; the buffer still eats 71% of every ask. Nothing here changes the buffer
+decision — it strengthens it.
 
 ---
 
@@ -140,51 +161,108 @@ real window from 7. `extendedIdleTimeout` goes back to meaning only idle-slot re
 
 ---
 
-## NEXT — ITEM 1b's POLICY-B HALF. IT IS NO LONGER BLOCKED.
+## ✅ SHIPPED 2026-08-16 (afternoon) — ITEM 1b's POLICY-B HALF, commit `40d7843`
 
-The scope has always said B and the eviction clock ship together, because **B alone
-refuses a thin member's loan and the 24h clock evicts them the next day — worse for that
-member than doing nothing.** **That objection was never true**, because the 24h clock was
-discovery-only and real eviction was always 7 days (see the correction above). It is now
-true in the other direction too: eviction is ONE governed clock at 7 days, so a refused
-member has a week to self-rescue.
+Full record in `V8_49_SCOPE.md` item 1b under "✅ BUILT 2026-08-16". The short version:
 
-Both preconditions B needed are now met — the crossing buffer is 0 (so the floor is
-enforceable at all; at 3_600 it exceeded the 3_400 floor and refused *everyone*), and the
-eviction clock is one governed knob at 7 days (so a refused member has a week to
-self-rescue, not hours).
+**The floor now tests `memberDebt + advance <= fee * insolvencyFloorBps / 10_000`** at
+both SF entry points, and **`_triageParked` asks the same question about the same number**
+in the same commit. `loanHeadroom` is the single primitive; `loanEligibleFor` and
+`loanEligible` derive from it. `performUpkeep` swallows both `"SF: insolvency floor"` and
+`"SF: below floor"` as belt-and-braces (both still emit `WorkItemFailed`).
 
-The design is written in `V8_49_SCOPE.md` item 1b under "RECOMMENDATION — ship B TOGETHER
-WITH item 1's eviction clock". The shape, from that section:
-`memberDebt[member] + totalAdvance <= fee * insolvencyFloorBps / 10_000` at **both**
-`payCoRescue` (StabilityFund.sol:649) and `payForceCross` (:679) — **and `_triageParked`
-changed in the SAME commit**, or discovery and the lender disagree and the whole
-`performUpkeep` batch reverts (finding (ii)). Both entry points already receive the full
-advance, so there is no new plumbing and no signature change.
+**Owner decision: STRICT B — one rule, first loan or not.**
 
-**Re-read the live numbers before building it** — the "3 loans then refused" figure moved
-to 2 within four hours of being measured. It is emergent, not a rule. Do not hard-code it.
+### THE FIVE THINGS WORTH CARRYING FORWARD
+
+1. **`memberDebt` IS CURRENT OUTSTANDING, NOT LIFETIME.** `applyRepayment` decrements it,
+   so a member who borrowed and repaid reads `$0.00` — indistinguishable, in every
+   getter, from one who never borrowed. An intermediate finding this session claimed "4
+   of the refused have never borrowed"; **the owner refused to accept it and was right.**
+   The event log said 0 of 15. **Before describing anyone's history from a mapping, ask
+   whether that mapping is a BALANCE or a LEDGER.**
+2. **A DETECTOR'S OWN TOTAL MUST BE RECONCILED AGAINST A COUNTER THE CONTRACT KEEPS.**
+   `diag_loan_history.js` checks Σ`MemberDebtIncreased.amount` against
+   `totalRescueLoaned()` — written by the same function — and refuses to be believed if
+   they differ. It matched (62 events, $228.72). Without that, a capped scan gives a
+   clean, plausible, wrong "never borrowed".
+3. **I MADE THE CAPPED-SCAN MISTAKE MYSELF, IN A SHELL PIPE.** I predicted which fixtures
+   would break by grepping for `setTierFee` and piping through `head -30`.
+   `stress_test_full.js` sorts after the `V8_*` files, fell off the end, and I read the
+   absence as evidence. It broke. **Do not truncate a search you intend to draw a
+   negative conclusion from.**
+4. **THREE OF THE FOUR BROKEN FIXTURES WERE ONE SHAPE:** a premise of "the SF covers 100%
+   of the entry fee", which is 294% of a 34% ceiling. Under V8.48 zero debt was a free
+   pass regardless of loan SIZE, so none of them ever had to state that assumption. All
+   three now assert the refusal first, then raise the floor to 10_000 bps to say the
+   premise out loud. **When a rule gains a dimension, every fixture that was silent about
+   that dimension is a candidate.**
+5. **A BOOLEAN MOCK CANNOT TEST AN AMOUNT.** `MockStabilityFundK.loanEligible` was a
+   per-member flag, which answers identically for a $0.01 loan and a $6.00 one — exactly
+   the bug policy B fixes. It now carries the real floor arithmetic, defaults inert.
+
+---
+
+## NEXT — TWO ITEMS, IN THIS ORDER
+
+### 1. `selfFundedGracePeriod` is never set by `deploy_v8.js` (small, but a mainnet blocker)
+
+It ships at the contract default of **5 minutes**. Its own declaration says the mainnet
+default is **6h**, and `predeploy_check.js` already fails hard on it when `MAINNET=1` —
+today it prints as an `ℹ`, which is the honest state for testnet and the wrong state for
+launch. Fix is either a setter call in the deploy or a documented post-deploy tx. **Decide
+which and write it down either way** — the "a live setter call is not a code change" rule.
+
+### 2. Item 2 — the wallet RPC (likely the biggest member-facing win in the scope)
+
+`index.html:2834` and `:2903` hand members the PUBLIC `sepolia.base.org` endpoint while
+the site's own reads go elsewhere. Carried from the V8.48 handoff, untouched today.
+
+**Also open, and now RESOLVABLE:** the ladder-vs-floor contradiction — see the new
+"⚠️ NEW, UNRESOLVED" section in `V8_49_SCOPE.md` item 1b. The SF rescue ladder lends up to
+60% of the entry fee against a 34% ceiling, so **preset 1's bottom rungs can never fire**
+and a member below 66% effective contribution is refused with zero debt. Three options are
+written up. **Re-run `diag_floor_halt.js` before deciding** — the refusal count moved
+13 → 15 inside forty minutes today.
 
 ---
 
 ## OPEN, HONESTLY STATED
 
-- **No end-to-end test that a real rescue books `shortfall` and nothing more.** The
-  arithmetic change rests on the live measurement, not on a test. Closing it means
-  extending `V8_48_GhostFloor.test.js`'s mock harness to run `_doParkedRescue`, not just
-  discovery. Written into the test file's own header too.
-- **The parked GROWTH RATE on V8.48 is still not established.** `logs/parked_baseline.csv`
-  has **one row**. Two runs several hours apart make `diag_floor_halt.js` print the rate.
-  The 2026-08-13 investigation's "+125/day, 99.8% repeat share" is **old-chain (V8.47)**
-  and is not comparable — that investigation's fixes shipped in V8.48 and were never
-  re-measured. **That is the unfinished half of the parked investigation.**
-- **Ghosts measured 0 of 88** — first real evidence item 45 works, with the caveat that
-  this chain is days old and has had little time to accumulate them.
+- **No end-to-end test that a real rescue books `shortfall` and nothing more.** Still
+  open, but **narrower than it was**: `V8_49_InsolvencyFloor.test.js` IF-10 now drives
+  `performUpkeep` into `_doParkedRescue` for real, so the execution path is no longer
+  untested — what is missing is an assertion on the `increaseMemberDebt` AMOUNT, which
+  the mock matrix stubs out. Closing it means a `forceCrossKeeper` mock that records its
+  `(sfContribution, crossingBuffer)` arguments. Cheap now that the harness reaches it.
+- ~~**The parked GROWTH RATE on V8.48 is still not established.**~~ **MEASURED
+  2026-08-16: +212/day** (88 → 101 parked in 1.5h, `logs/parked_baseline.csv` row 2).
+  That is the first real V8.48 figure and it is **worse than the old V8.47 chain's
+  +125/day**, which the 2026-08-13 investigation treated as the problem case. Two rows is
+  still a slope through two points with a registration burst in it — keep appending, and
+  do not quote it as settled. **The queue is not draining, and that is the owner's
+  standing product concern; `crossingBufferBps = 0` is expected to help (the same $294 SF
+  covers all 104 instead of 62) but is NOT DEPLOYED yet.**
+- **Ghosts measured 0 of 88, then 0 of 101** — accumulating evidence item 45 works, with
+  the caveat that this chain is days old.
+- **`getParkedMember(65)` reverted `ARRAY_RANGE_ERROR` mid-scan on T1 MatB** (2026-08-16).
+  Benign: `getParkedCount` read high and the keeper drained the queue underneath the
+  loop. Counted nowhere, listed under UNREADABLE. Worth one look if it ever recurs on a
+  QUIET chain, where that explanation would not hold.
 - **`scripts/diag_floor_halt.js` mirrors `_triageParked` line for line** (its own header
   says so) and was NOT updated for the reason codes. It models the FLOOR, not the clock,
   so its output is still correct — but it now reports "would be evicted" without saying
-  *when*. Worth a column — and note it models DISCOVERY only, which is the exact half-view
-  that produced this item's false premise. If it is extended, extend it to both gates.
+  *when*. Worth a column — and it models DISCOVERY only, which is the exact half-view
+  that produced item 1's false premise. **It now says so in its own output**, and its
+  buffer read survives the V8.49 deploy (tries `crossingBufferBps()`, falls back to the
+  V8.48 constant, prints which one it read — never a literal). If it is extended, extend
+  it to both gates.
+- **`diag_floor_halt.js` was NOT updated for policy B's discovery change.** Its
+  `_triageParked` mirror still gates the floor on `sfShare > 0`, and it still calls the
+  2-arg `loanEligible`. Its POLICY B PREVIEW block computes B correctly and separately, so
+  today's numbers are sound — but once V8.49 DEPLOYS, the mirror and the chain will
+  disagree about self-funded members whenever the buffer is non-zero. **Fix it in the same
+  session as the V8.49 deploy, or delete the mirror and read the chain.**
 - The V8.48 handoff's own open list (wallet RPC `sepolia.base.org`, raw RPC error in
   `alert()`, `uBal` fabrication, epoch panel) is **untouched today** and still open —
   it is items 2–4 of `V8_49_SCOPE.md`.
