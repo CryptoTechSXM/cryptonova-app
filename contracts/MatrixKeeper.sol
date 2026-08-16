@@ -167,6 +167,45 @@ contract MatrixKeeper is Ownable {
     ///         a policy window: it stops a rescue being queued in the same minute a
     ///         member is mid-registration or mid-upgrade.
     uint256 public selfFundedGracePeriod = 5 minutes;  // V8.25: mainnet default 6h; testnet owner can set as low as 5 min
+
+    /// @notice V8.49 item 1 — how long a parked member who is heading for EVICTION
+    ///         (not rescue) is left alone first. **4 days.**
+    ///
+    ///         Owner policy, stated on V8.48 deploy day: "the SF always grows
+    ///         organically, eviction should not happen for 3 to 5 days… 24hrs of
+    ///         registrations before automated rescue kicks in on testnet and 48hrs on
+    ///         mainnet — that is by design, to have members rescue themselves before SF
+    ///         takes over." Two halves of that were built. This one was not: the evict
+    ///         branch gated on parkedGracePeriod, the SAME 24h clock as rescue.
+    ///
+    ///         IT HAD NEVER BEEN VISIBLE BECAUSE EVICTIONS HAD NEVER FIRED. The VPS
+    ///         evict_parked.js cron guard (pgrep -f evict_loop.sh) always matched its
+    ///         own parent shell, so the script never ran once in the protocol's history.
+    ///         V8.48 moved eviction on chain (item 47's two-branch valve) and authorized
+    ///         the keeper EOA — so V8.48 is the first version that CAN evict a real
+    ///         member, and it would have done so a day after they parked.
+    ///
+    ///         WHY A SECOND PARAM RATHER THAN A BIGGER parkedGracePeriod: one knob drove
+    ///         both clocks. Raising it to 3-5 days would have pushed SF rescue out with
+    ///         it and broken the 24h design the owner described as deliberate.
+    ///
+    ///         WHO WAITS THE 4 DAYS: the three eviction cases that remove a REAL member —
+    ///         withdrawRatio past rescueRatioBps, off the bottom of the SF rescue ladder,
+    ///         and the item 46 insolvency floor. GHOSTS DO NOT: a parked record whose
+    ///         holder is already seated is dequeued on the old parkedGracePeriod, because
+    ///         that costs its holder nothing and there is no one to protect. See
+    ///         MatrixKeeperLib._checkParked.
+    ///
+    ///         DAO param 62. Menu 0 / 1d / 2d / 3d / 4d / 5d / 7d. Setting it EQUAL to
+    ///         parkedGracePeriod reproduces pre-V8.49 behaviour exactly — that collapse
+    ///         property is what keeps V8_48_KeeperScan's frozen-keeper equivalence
+    ///         harness meaningful, and it is asserted in V8_49_EvictionClock.test.js.
+    ///         0 means evict as soon as triage says so, with NO wait: it is the same
+    ///         admin/testing override parkedGracePeriod's 0 is, not an "off" switch.
+    ///
+    ///         MAINNET: parkedGracePeriod 48h and this at 3-5 days must both be set AT
+    ///         DEPLOY. predeploy_check.js asserts it; testnet defaults must not ship.
+    uint256 public evictionGracePeriod = 4 days;   // 345_600
     uint256 public rescueRatioBps      = 7_000;
     /// @notice V8.44 (item E) / V8.48 item 24 (owner decision 2026-08-13): how long
     ///         a FULL MatB may sit without rotating before on-chain automation
@@ -353,6 +392,35 @@ contract MatrixKeeper is Ownable {
         emit ConfigUpdated("selfFundedGracePeriod", v);
     }
 
+    /// @notice V8.49 item 1: the EVICTION clock. Enumerated like every other keeper
+    ///         setter (house convention: menus, not free ranges).
+    /// @dev    BOTH ends of the menu are load-bearing and neither is decoration:
+    ///
+    ///         86400 (24h) is the PRE-V8.49 value. A default that is not on its own
+    ///         menu cannot be voted back (the item-42 lesson), and here the value to be
+    ///         able to return to is not just the default — it is the OLD BEHAVIOUR.
+    ///         Set this equal to parkedGracePeriod and V8.49's clock split collapses
+    ///         to nothing, which is the property the frozen-keeper equivalence harness
+    ///         in V8_48_KeeperScan.test.js depends on.
+    ///
+    ///         0 is the admin/testing override, exactly as it is for
+    ///         setParkedGracePeriod — evict the instant triage says so. It is NOT an
+    ///         "eviction off" switch; it is the opposite, and it is on the menu because
+    ///         that same equivalence harness pins BOTH clocks to 0.
+    ///
+    ///         Capped at 7 days: beyond that a parked seat is held indefinitely by a
+    ///         member the triage has already judged unrescuable, which is the queue
+    ///         congestion the eviction valve exists to relieve.
+    function setEvictionGracePeriod(uint256 v) external onlyOwnerOrGovernance {
+        require(
+            v == 0 || v == 86_400 || v == 172_800 || v == 259_200 ||
+            v == 345_600 || v == 432_000 || v == 604_800,
+            "MK: invalid eviction grace (0/1d/2d/3d/4d/5d/7d)"
+        );
+        evictionGracePeriod = v;
+        emit ConfigUpdated("evictionGracePeriod", v);
+    }
+
     function setRescueRatioBps(uint256 v) external onlyOwnerOrGovernance {
         require(
             v == 5_000 || v == 6_000 || v == 7_000 ||
@@ -462,6 +530,7 @@ contract MatrixKeeper is Ownable {
             extendedIdleTimeout: extendedIdleTimeout,
             parkedGracePeriod:   parkedGracePeriod,
             selfFundedGracePeriod: selfFundedGracePeriod,
+            evictionGracePeriod: evictionGracePeriod,
             rescueRatioBps:      rescueRatioBps,
             configuredTierCount: configuredTierCount,
             tierRouter:          tierRouter,

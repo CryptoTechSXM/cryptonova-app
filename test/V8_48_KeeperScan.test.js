@@ -62,6 +62,17 @@
  *   proves what it was written to prove — that item 12a's extraction was behaviour-
  *   preserving — while V8_48_SplitGrace.test.js covers the new branch separately.
  *
+ *   V8.49 item 1 is the SECOND item to do this — the eviction clock, likewise collapsing
+ *   when evictionGracePeriod == parkedGracePeriod, likewise pinned in setup(), likewise
+ *   covered separately (V8_49_EvictionClock.test.js, which asserts the collapse property
+ *   itself so this file's pin cannot quietly stop meaning anything).
+ *
+ *   READ THE PINS AS A LIST OF DELIBERATE BEHAVIOUR CHANGES. Each one is an item that
+ *   changed the scan on purpose; the harness holds them at their old values so it can
+ *   still answer the one question it was built for. If a third pin appears, that is
+ *   normal. If a pin is ever added to make a FAILURE go away rather than to hold a known
+ *   deliberate change, this file has stopped being evidence of anything.
+ *
  *   Retire this file (and MatrixKeeperPrev.sol) when the 12a refactor is old enough that
  *   a frozen pre-refactor keeper is no longer worth compiling, NOT on item 12's account.
  */
@@ -180,6 +191,14 @@ describe("V8.48 item 12a — MatrixKeeperLib extraction is behaviour-preserving"
     // exactly the blind spot that made the first version of this file worthless, and it
     // should not be load-bearing a second time.)
     for (const k of [keeperNew]) await k.setSelfFundedGracePeriod(0);
+    // V8.49 item 1 does the same thing again with the EVICTION clock: the frozen keeper
+    // gates eviction on parkedGracePeriod, the refactored one on its own 4-day window.
+    // Equivalence holds only where the two are equal, so pin them — 0 is on the setter's
+    // menu for exactly this reason. Same caveat as above and it is worth repeating: this
+    // harness proves item 12a's EXTRACTION was behaviour-preserving. It does not, and
+    // cannot, prove that no later item changed behaviour deliberately. Every pin here is
+    // an item that DID.
+    for (const k of [keeperNew]) await k.setEvictionGracePeriod(0);
     for (const k of [keeperNew, keeperOld]) await k.setParkedGracePeriod(0);
 
     return {

@@ -421,7 +421,21 @@ if (mkText) {
   const govBufText = read("contracts/V8Governance.sol");
   const govBufMenu = !!govBufText && govBufText.includes("_allowedValues[PARAM_MK_CROSSING_BUFFER] = [0, 900, 1800, 2700, 3600]");
   const govBufWire = !!govBufText && govBufText.includes("t.setCrossingBufferBps(value)");
-  const govBufId   = !!govBufText && /PARAM_MAX_ID\s+=\s+PARAM_MK_CROSSING_BUFFER/.test(govBufText);
+
+  // PARAM_MAX_ID is checked by VALUE, not by which constant it happens to name.
+  // The first version of this line was `PARAM_MAX_ID = PARAM_MK_CROSSING_BUFFER` and it
+  // broke the day param 62 arrived — a change detector that fails on correct work and
+  // explains nothing (the item-42 anti-pattern; V8_48_GhostFloor.test.js learned the
+  // same lesson at GF-G1 when param 60 landed). What has to hold is that propose()
+  // ACCEPTS the id, i.e. MAX_ID covers it.
+  const govParamIds = {};
+  for (const m of (govBufText || "").matchAll(/uint8\s+public\s+constant\s+(PARAM_[A-Z0-9_]+)\s*=\s*(\d+)\s*;/g)) {
+    govParamIds[m[1]] = Number(m[2]);
+  }
+  const maxIdRef = ((govBufText || "").match(/PARAM_MAX_ID\s*=\s*(PARAM_[A-Z0-9_]+|\d+)\s*;/) || [, null])[1];
+  const maxIdVal = maxIdRef == null ? -1
+    : (/^\d+$/.test(maxIdRef) ? Number(maxIdRef) : (govParamIds[maxIdRef] ?? -1));
+  const govBufId   = maxIdVal >= (govParamIds.PARAM_MK_CROSSING_BUFFER ?? 61);
   if (mkBufMenu && govBufMenu) {
     ok("crossing-buffer menus match: MatrixKeeper require == V8Governance allowedValues [0,900,1800,2700,3600]");
   } else {
@@ -429,8 +443,44 @@ if (mkText) {
   }
   if (govBufWire) ok("PARAM_MK_CROSSING_BUFFER routed to setCrossingBufferBps() in _applyParam");
   else fail("PARAM_MK_CROSSING_BUFFER has no _applyParam branch — the param id would be unreachable");
-  if (govBufId) ok("PARAM_MAX_ID advanced to PARAM_MK_CROSSING_BUFFER (61)");
-  else fail("PARAM_MAX_ID NOT advanced to 61 — propose() would reject the new param");
+  if (govBufId) ok(`PARAM_MAX_ID = ${maxIdRef} (${maxIdVal}) covers PARAM_MK_CROSSING_BUFFER (61)`);
+  else fail(`PARAM_MAX_ID resolves to ${maxIdVal} — below 61, so propose() would reject the crossing-buffer param`);
+
+  // ── V8.49 item 1: the EVICTION CLOCK, param 62 ────────────────────────────
+  // Same five-site discipline as param 61. Item 26 shipped three of the five and
+  // "DAO tunable" was fiction until somebody checked; this is that check.
+  if (/uint256\s+public\s+evictionGracePeriod\s*=\s*4\s+days\s*;/.test(mkText) ||
+      /uint256\s+public\s+evictionGracePeriod\s*=\s*345_?600\s*;/.test(mkText)) {
+    ok("evictionGracePeriod declared default is 4 days (V8.49 item 1: eviction clock separated from rescue)");
+  } else if (mkText.includes("evictionGracePeriod")) {
+    fail("evictionGracePeriod found but its declared default is not 4 days — owner policy is 3-5 days and deploy_v8.js is what must set anything else");
+  } else {
+    fail("evictionGracePeriod NOT found in MatrixKeeper.sol — V8.49 item 1 not applied; eviction still runs on the 24h rescue clock");
+  }
+
+  if (mkText.includes("function setEvictionGracePeriod")) {
+    ok("setEvictionGracePeriod() setter present (DAO param 62)");
+  } else {
+    fail("setEvictionGracePeriod() NOT found — the eviction clock must be tunable without a redeploy");
+  }
+
+  // 86400 on the menu is not decoration: it is how the DAO reverses V8.49 item 1
+  // (evictionGracePeriod == parkedGracePeriod collapses the split), and it is the
+  // value V8_48_KeeperScan's frozen-keeper harness pins to. 0 likewise — that harness
+  // pins BOTH clocks to 0. A menu without them makes the change irreversible by vote.
+  const mkEvMenu  = /v == 0 \|\| v == 86_400 \|\| v == 172_800 \|\| v == 259_200 \|\|\s*v == 345_600 \|\| v == 432_000 \|\| v == 604_800/.test(mkText);
+  const govEvMenu = !!govBufText && govBufText.includes("_allowedValues[PARAM_MK_EVICTION_GRACE] = [0, 86400, 172800, 259200, 345600, 432000, 604800]");
+  const govEvWire = !!govBufText && govBufText.includes("t.setEvictionGracePeriod(value)");
+  const govEvId   = maxIdVal >= (govParamIds.PARAM_MK_EVICTION_GRACE ?? 62);
+  if (mkEvMenu && govEvMenu) {
+    ok("eviction-clock menus match: MatrixKeeper require == V8Governance allowedValues [0,1d,2d,3d,4d,5d,7d]");
+  } else {
+    fail(`eviction-clock menu MISMATCH — keeper require ${mkEvMenu ? "ok" : "MISSING"}, governance allowedValues ${govEvMenu ? "ok" : "MISSING"}. A passed proposal would revert at execution.`);
+  }
+  if (govEvWire) ok("PARAM_MK_EVICTION_GRACE routed to setEvictionGracePeriod() in _applyParam");
+  else fail("PARAM_MK_EVICTION_GRACE has no _applyParam branch — the param id would be unreachable");
+  if (govEvId) ok(`PARAM_MAX_ID (${maxIdVal}) covers PARAM_MK_EVICTION_GRACE (62)`);
+  else fail(`PARAM_MAX_ID resolves to ${maxIdVal} — below 62, so propose() would reject the eviction-clock param`);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1186,6 +1236,7 @@ sep("V8.48 item 12a — MatrixKeeperLib");
   // error, but a field assigned to the WRONG source compiles fine — that is what
   // V8_48_KeeperScan.test.js's mutation probe is for. Here we only check it is built.
   const missing = ["idleSlotTimeout:", "extendedIdleTimeout:", "parkedGracePeriod:",
+                   "selfFundedGracePeriod:", "evictionGracePeriod:",
                    "rescueRatioBps:", "frozenMatBTimeout:", "sfThresholds:", "sfLadder:",
                    "pairManagers:", "links:"]
     .filter((f) => !(mkTxt12a && mkTxt12a.includes(f)));
@@ -1250,11 +1301,19 @@ sep("V8.48 item 12 — split grace (self-funded vs loan)");
   } else {
     fail("MatrixKeeperLib.sol: the sfShare-based grace choice is GONE — one window governs both again, which is the defect item 12 fixed");
   }
-  // Eviction must NOT get the short window.
-  if (libTxt12 && /if \(evict\) \{[\s\S]{0,200}?age < cfg\.parkedGracePeriod/.test(libTxt12)) {
-    ok("MatrixKeeperLib.sol: eviction still waits the FULL parkedGracePeriod");
+  // Eviction must NOT get item 12's SHORT self-funded window. That is all this ever
+  // asserted, and it was written as "gates on parkedGracePeriod" because in V8.48 those
+  // were the same thing. V8.49 item 1 separated them, so the assertion is restated as
+  // what it actually means: the eviction branch must not read selfFundedGracePeriod.
+  // The eviction clock itself is checked in the grace-timings section at the bottom.
+  if (libTxt12 && /if \(evictReason != EVICT_NONE\) \{[\s\S]{0,400}?selfFundedGracePeriod/.test(libTxt12)) {
+    fail("MatrixKeeperLib.sol: the evict branch reads selfFundedGracePeriod — evicting a member is never a zero-cost action and must not use the race-guard window");
+  } else if (libTxt12 && /if \(evictReason != EVICT_NONE\)/.test(libTxt12)) {
+    ok("MatrixKeeperLib.sol: eviction does not use the short self-funded window (V8.49 reason-code branch)");
+  } else if (libTxt12 && /if \(evict\) \{[\s\S]{0,200}?age < cfg\.parkedGracePeriod/.test(libTxt12)) {
+    ok("MatrixKeeperLib.sol: eviction still waits the FULL parkedGracePeriod (pre-V8.49 shape)");
   } else {
-    fail("MatrixKeeperLib.sol: eviction is not gated on parkedGracePeriod — evicting a member early is not a zero-cost action");
+    fail("MatrixKeeperLib.sol: eviction branch shape not recognised — re-read _checkParked before trusting this check");
   }
   if (mkTxt12 && mkTxt12.includes("v == 0 || v == 60 || v == 300 || v == 900 || v == 1800 || v == 3600")) {
     ok("MatrixKeeper.sol: selfFundedGracePeriod is enumerated and capped at 1h");
@@ -1423,8 +1482,12 @@ if (!htmlTxt) {
 //                          The declaration itself says "mainnet default 6h; testnet
 //                          owner can set as low as 5 min" — so a mainnet deploy ships
 //                          5 minutes unless someone remembers a post-deploy tx.
-//   evictionGracePeriod    DOES NOT EXIST YET (V8.49 item 1). Until it does, eviction
-//                          runs on parkedGracePeriod — 24h, NOT the 3-5 days intended.
+//   evictionGracePeriod    contract default 4 DAYS (V8.49 item 1) -> deploy_v8.js
+//                          NEVER SETS IT, so the declared default is what ships. That
+//                          is inside the owner's 3-5 day policy on both networks, so
+//                          it is correct by default rather than by remembering — but
+//                          the default is now load-bearing, which is why it is asserted
+//                          above as well as here.
 //
 // Set MAINNET=1 to turn the advisory lines into hard failures.
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1464,10 +1527,44 @@ if (!htmlTxt) {
   const hasEvictGrace = /evictionGracePeriod/.test(mkG) && /evictionGracePeriod/.test(libG);
   if (hasEvictGrace) {
     ok("evictionGracePeriod exists in MatrixKeeper + MatrixKeeperLib (V8.49 item 1 shipped)");
-    if (!/if\s*\(age\s*<\s*cfg\.evictionGracePeriod\)/.test(libG)) {
-      fail("evictionGracePeriod is declared but the EVICT BRANCH still gates on parkedGracePeriod — the clocks are not actually separated");
+
+    // The whole item is this line. Without it the field exists, reaches the library, and
+    // does nothing — the same silent shape item 12's ternary check guards against.
+    if (!/gate\s*=\s*evictReason == EVICT_GHOST[\s\S]{0,120}?cfg\.evictionGracePeriod/.test(libG) &&
+        !/if\s*\(age\s*<\s*cfg\.evictionGracePeriod\)/.test(libG)) {
+      fail("evictionGracePeriod is declared but the EVICT BRANCH never reads it — the clocks are not actually separated");
     } else {
       ok("MatrixKeeperLib: the evict branch gates on evictionGracePeriod, not parkedGracePeriod");
+    }
+
+    // The reason code is what makes the ghost carve-out possible at all. A bool here
+    // means ghosts and insolvent members share whichever clock is chosen, and the
+    // failure is invisible: a ghost sitting on a 4-day clock looks like a quiet queue.
+    if (/uint8\s+internal\s+constant\s+EVICT_GHOST/.test(libG) &&
+        /returns\s*\(uint256 sfShare, uint8 evictReason\)/.test(libG)) {
+      ok("MatrixKeeperLib: _triageParked returns a reason code, so ghosts can keep the short clock");
+    } else {
+      fail("MatrixKeeperLib: _triageParked does not return an eviction REASON — a bool cannot distinguish a harmless ghost dequeue from evicting a real member, so both get one clock");
+    }
+    if (/evictReason == EVICT_GHOST[\s\S]{0,80}cfg\.parkedGracePeriod/.test(libG)) {
+      ok("MatrixKeeperLib: GHOST dequeues stay on parkedGracePeriod (decided 2026-08-15 — costs the holder nothing)");
+    } else {
+      fail("MatrixKeeperLib: the ghost carve-out is gone — a stale record whose holder is already seated would linger for the full eviction window for nobody's benefit");
+    }
+
+    // Both networks: the DECLARED DEFAULT is what ships, because nothing in the deploy
+    // path sets it. 4 days sits inside the owner's 3-5 day policy, so this passes by
+    // construction — but say so out loud, because "correct by default" is exactly the
+    // condition that stops being true silently (selfFundedGracePeriod, two lines up).
+    const evDefault = (mkG.match(/uint256\s+public\s+evictionGracePeriod\s*=\s*([^;]+);/) || [, "?"])[1].trim();
+    const evSecs = /4\s+days/.test(evDefault) ? 345600 : Number(String(evDefault).replace(/_/g, "")) || 0;
+    if (/setEvictionGracePeriod\(/.test(dep)) {
+      ok("deploy_v8.js sets evictionGracePeriod explicitly");
+    } else if (evSecs >= 259200 && evSecs <= 432000) {
+      ok(`evictionGracePeriod is never set by deploy_v8.js, but its default (${evDefault} = ${evSecs}s) is inside the 3-5 day policy on every network`);
+    } else {
+      gate(`evictionGracePeriod is NEVER set by deploy_v8.js and its default (${evDefault}) is OUTSIDE the owner's 3-5 day policy. ` +
+           `Add the setter call to the deploy or change the declared default — a post-deploy tx is what was forgotten last time.`);
     }
   } else if (/if\s*\(age\s*<\s*cfg\.parkedGracePeriod\)\s*return[^\n]*\n\s*return\s*\(parkedMember,\s*WORK_EVICT_PARKED\)/.test(libG.replace(/\r/g, ""))) {
     gate("KNOWN GAP (V8.49 item 1): eviction gates on parkedGracePeriod — the SAME clock as rescue. " +

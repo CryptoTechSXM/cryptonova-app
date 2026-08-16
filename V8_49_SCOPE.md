@@ -5,7 +5,7 @@ Read `V8_48_HANDOFF.md` first for the V8.48 deployed state; this file is what co
 
 ---
 
-## ITEM 1 — SEPARATE THE EVICTION CLOCK FROM THE RESCUE CLOCK ⛔ TOP PRIORITY
+## ITEM 1 — SEPARATE THE EVICTION CLOCK FROM THE RESCUE CLOCK ✅ BUILT 2026-08-16
 
 **Owner policy, stated 2026-08-13 (deploy day), verbatim in substance:**
 > "The SF always grows organically, eviction should not happen for 3 to 5 days.
@@ -83,7 +83,99 @@ Points to settle when building it:
   drives both clocks, so it would push SF rescue out to 3–5 days and break the 24h
   design. That is exactly why a second param is needed.
 
-### 🔧 BUILD PLAN — written 2026-08-15, NOT YET BUILT (item 1b's contract half is done)
+### ✅ BUILT 2026-08-16 — 582 PASSING (was 575), 0 FAILING, predeploy 130/130
+
+**Item 1 is DONE.** The build plan below was followed as written and did not need
+redesigning — recorded here first, then the plan is kept underneath as the record of
+what was decided and why.
+
+| file | change |
+|---|---|
+| `contracts/MatrixKeeperLib.sol` | `_triageParked` returns `uint8 evictReason` instead of `bool evict`, with `EVICT_NONE/GHOST/RATIO/LADDER/FLOOR`; `ScanCfg` gains `evictionGracePeriod`; the evict branch picks `parkedGracePeriod` for ghosts and `evictionGracePeriod` for the three real cases |
+| `contracts/MatrixKeeper.sol` | `evictionGracePeriod = 4 days`; enumerated `setEvictionGracePeriod`; field wired into the `ScanCfg` literal |
+| `contracts/V8Governance.sol` | `PARAM_MK_EVICTION_GRACE = 62` at **all five** sites |
+| `scripts/predeploy_check.js` | five regions — see "the two extra breakages" below |
+| `test/V8_49_EvictionClock.test.js` | **NEW, 7 tests** (EC-1 … EC-7) |
+| `test/V8_48_GhostFloor.test.js` | `setEvictionGracePeriod(PARKED_GRACE)` in the discovery `setup()` |
+| `test/V8_48_KeeperScan.test.js` | `setEvictionGracePeriod(0)` pin + header |
+| `test/V8_48_SplitGrace.test.js` | one test extended — the breakage nobody predicted |
+
+**THE STACK HELD.** `_checkParked` compiled first try. `bool` → `uint8` really is the
+same one slot, and the gate is computed in a ternary inside the branch rather than as a
+new local — worth keeping that shape if this function is ever touched again.
+
+**ONE DEVIATION FROM THE PLAN, AND IT IS LOAD-BEARING: `0` IS ON THE SETTER MENU.**
+The plan suggested `86400 / 172800 / 259200 / 345600 / 432000 / 604800`. But
+`V8_48_KeeperScan.test.js` pins `setParkedGracePeriod(0)` on BOTH keepers, so without 0
+the two clocks cannot be made equal there and the frozen-keeper equivalence harness
+cannot be repaired at all. Shipped menu: **`0 / 1d / 2d / 3d / 4d / 5d / 7d`**. Note what
+0 means — evict the instant triage says so, the same admin/testing override
+`parkedGracePeriod`'s 0 is. It is **not** an "eviction off" switch; it is the opposite.
+
+### ⚠️ THE PLAN NAMED TWO BREAKING FIXTURES. THERE WERE FOUR.
+
+The two it named (`V8_48_GhostFloor`, `V8_48_KeeperScan`) broke exactly as described. Two
+more did not appear until they were run:
+
+**3. `scripts/predeploy_check.js:1254`** asserted the evict branch gates on
+`cfg.parkedGracePeriod` — the very thing item 1 changes. Restated as what it always
+*meant*: the evict branch must not read `selfFundedGracePeriod`. Found by reading, before
+running anything.
+
+**4. `scripts/predeploy_check.js:424`** asserted `PARAM_MAX_ID = PARAM_MK_CROSSING_BUFFER`
+as a literal string, so param 62 failed it. **Third time this exact anti-pattern has been
+hit** (`V8_48_GhostFloor`'s GF-G1 hit it when param 60 landed and its comment says so).
+Replaced with a value comparison that parses the param constants and asserts
+`MAX_ID >= 61` — param 63 will not break it. **If a fourth site pins MAX_ID literally,
+fix it the same way rather than bumping it.**
+
+**5. `test/V8_48_SplitGrace.test.js` — the one worth remembering.** Its test
+*"EVICTION keeps the full window even when the member is self-funded"* went red. Nothing
+about it was wrong: it was written when eviction and rescue shared one clock, so "the
+full window" meant 24h — but its actual subject was item 12's *short* window. **It had
+encoded a coincidence as an intention, and nobody chose to do that.** Repaired by
+EXTENDING it, not by pinning a clock: it now walks all three windows in order — nothing
+at 5 minutes (item 12, unchanged), nothing at 24 hours (V8.49's addition), EVICT at 4
+days — and asserts the shipping default rather than setting its own. Stronger than
+before. **The lesson generalises: only running everything finds this class, because the
+fixture reads correct in isolation.**
+
+### WHAT THE NEW TESTS PIN, AND WHICH ONE MATTERS MOST
+
+EC-1 the three real cases wait 4 days AND produce **no work at all** in between (asserted
+as an empty list, not as "not EVICT" — they must not be quietly rescued either; those
+days are the member's, to self-rescue) · EC-2 a ghost is still dequeued at 24h **while a
+real eviction in the same batch waits** · EC-3 ordinary rescue untouched · **EC-4 the
+COLLAPSE PROPERTY** · EC-5 keeper require ↔ DAO menu, both directions · EC-6 the default
+and 86400 and 0 are all on the menu · EC-7 setter gated.
+
+**EC-4 is the one to protect.** `V8_48_KeeperScan` pins `evictionGracePeriod ==
+parkedGracePeriod` in `setup()` so its byte-identical comparison against the frozen
+pre-refactor keeper still holds. That pin is only honest if the collapse is real. Without
+EC-4 the pin could go on masking a genuine divergence and the harness would stay green.
+**Read that file's pins as a list of deliberate behaviour changes — item 12's split
+grace, now item 1's eviction clock. A pin added to make a failure go away rather than to
+hold a known deliberate change is the point at which that file stops being evidence.**
+
+### STILL OPEN AFTER ITEM 1
+
+- **Item 1b's policy-B half has NOT shipped.** The scope says the two halves ship
+  together and the reason still holds — B alone refuses a thin member's loan while the
+  24h clock evicts them the next day. **Item 1 has now removed that objection**: the
+  eviction clock is 4 days, so B can be built without it being worse for that member than
+  today. **B is the next thing.** See "RECOMMENDATION — ship B TOGETHER WITH item 1's
+  eviction clock" below; with the buffer at 0 and the clock at 4 days, both preconditions
+  it names are now met.
+- **`scripts/diag_floor_halt.js` mirrors `_triageParked` line for line** (its own header
+  says so) and has NOT been updated for the reason codes. It models the FLOOR, not the
+  clock, so its output is still correct — but it now reports "would be evicted" without
+  saying *when*, and on a 4-day clock that distinction is the whole point. Worth a column.
+- **`deploy_v8.js` never sets `evictionGracePeriod`.** Correct by accident of the default
+  being 4 days, which is inside policy on both networks. `predeploy_check.js` now says so
+  out loud rather than leaving it silent — the `selfFundedGracePeriod` situation two lines
+  above it in that file is what happens when nobody does.
+
+### 🔧 BUILD PLAN — written 2026-08-15, BUILT 2026-08-16 (kept as the record of what was decided and why)
 
 **Read this before touching `MatrixKeeperLib`. The obvious implementation breaks two
 existing test fixtures in ways that look like the change is wrong.**
@@ -157,12 +249,17 @@ evicted at the parked clock; the governance menu matches the setter both directi
 setting `evictionGracePeriod == parkedGracePeriod` reproduces pre-V8.49 behaviour
 exactly (the collapse property — it is what keeps the KeeperScan harness meaningful).
 
-### Until V8.49 ships — the interim position (owner chose: fix properly, watch daily)
+### Until V8.49 DEPLOYS — the interim position (owner chose: fix properly, watch daily)
 
-Watch for the first eviction ever recorded: `MemberEvicted` / `GhostDequeued` events,
-`diag_ghost_parked.js`, and the keeper log. If evictions start hitting real members
-before V8.49 is ready, the emergency lever is **PARAM 59 → `insolvencyFloorBps = 0`**,
-which disables case 4 only (cases 2 and 3 remain, and are pre-V8.48 behaviour).
+**Still live, because the fix is built but NOT DEPLOYED.** V8.48 is what is on chain and
+it evicts real members on the 24h clock. Watch for the first eviction ever recorded:
+`MemberEvicted` / `GhostDequeued` events, `diag_ghost_parked.js`, and the keeper log. If
+evictions start hitting real members before V8.49 deploys, the emergency lever is
+**PARAM 59 → `insolvencyFloorBps = 0`**, which disables case 4 only (cases 2 and 3
+remain, and are pre-V8.48 behaviour).
+
+**No eviction had been observed as of the last check (0 of 88 parked).** That is the
+whole reason there was time to build this properly instead of hotfixing it.
 
 ---
 

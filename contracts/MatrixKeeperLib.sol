@@ -127,6 +127,23 @@ library MatrixKeeperLib {
     uint8 internal constant WORK_FORCE_ROTATE  = 8;
     uint8 internal constant WORK_ADVANCE_EPOCH = 9;
 
+    // ── Eviction REASON codes ─────────────────────────────────────────────────
+    // V8.49 item 1. _triageParked used to answer "evict?" with a bool, which made a
+    // harmless GHOST and a genuinely insolvent member indistinguishable by the time
+    // _checkParked applied a clock — and clocking them differently is the entire
+    // point of the change. A uint8 is the SAME single stack slot a bool occupied, so
+    // this costs nothing where it matters: see the note above the _triageParked call
+    // site about that frame already having blown the stack once.
+    //
+    // These are internal to discovery. They never reach performData, so the WorkItem
+    // wire format is untouched and an upkeep in flight across the upgrade still
+    // decodes — the same property item 12a's extraction preserved.
+    uint8 internal constant EVICT_NONE   = 0;  // not an eviction — rescue this member
+    uint8 internal constant EVICT_GHOST  = 1;  // seated in either half; the valve DEQUEUES ONLY
+    uint8 internal constant EVICT_RATIO  = 2;  // withdrawRatio > rescueRatioBps
+    uint8 internal constant EVICT_LADDER = 3;  // off the bottom of the SF rescue ladder
+    uint8 internal constant EVICT_FLOOR  = 4;  // V8.48 item 46 insolvency floor
+
     /// @dev Field order is load-bearing: performData is abi.encode(WorkItem[]) and
     ///      performUpkeep decodes it with this exact shape. Reordering these silently
     ///      reroutes work items to the wrong handler.
@@ -155,6 +172,9 @@ library MatrixKeeperLib {
         uint256 extendedIdleTimeout;
         uint256 parkedGracePeriod;
         uint256 selfFundedGracePeriod;
+        /// @dev V8.49 item 1: the EVICTION clock, separate from the rescue clock.
+        ///      Ghosts deliberately keep parkedGracePeriod — see _checkParked.
+        uint256 evictionGracePeriod;
         uint256 rescueRatioBps;
         uint8   configuredTierCount;
         address tierRouter;
@@ -352,11 +372,18 @@ library MatrixKeeperLib {
     /**
      * @dev What should happen to this parked member, ignoring how long they have waited?
      *      Returns the Stability Fund's share of the re-entry (ZERO when the member funds
-     *      it themselves) and whether they should be evicted instead of rescued.
-     *      Its own frame purely for stack room — see the note at the call site.
+     *      it themselves) and WHY they should be evicted, if they should — EVICT_NONE
+     *      meaning "rescue them". Its own frame purely for stack room — see the note at
+     *      the call site.
+     *
+     *      V8.49 item 1: the second return was a bool. It is a uint8 now because the
+     *      four eviction cases are not alike: a GHOST is stale bookkeeping and dequeuing
+     *      it costs its holder nothing, while cases 2-4 remove a real member from a real
+     *      seat. The caller cannot give them different clocks if it cannot tell them
+     *      apart. Same one stack slot; no extra return value, deliberately.
      */
     function _triageParked(IFigureEightKeeper mat, address member, uint8 tierIdx, ScanCfg memory cfg)
-        internal view returns (uint256 sfShare, bool evict)
+        internal view returns (uint256 sfShare, uint8 evictReason)
     {
         // V8.48 item 45: GHOST — a parked record whose holder is actually SEATED in
         // either half of the pair (measured 2026-08-13: 41 live, 39 of them parked
@@ -364,10 +391,10 @@ library MatrixKeeperLib {
         // "already in matrix" forever; route to the valve, which DEQUEUES ONLY.
         // Scoped so `partner` does not raise this frame's peak stack depth.
         {
-            if (mat.isInMatrix(member)) return (0, true);
+            if (mat.isInMatrix(member)) return (0, EVICT_GHOST);
             address partner = mat.partner();
             if (partner != address(0) && IFigureEightKeeper(partner).isActiveInMatrix(member)) {
-                return (0, true);
+                return (0, EVICT_GHOST);
             }
         }
 
@@ -379,12 +406,12 @@ library MatrixKeeperLib {
         uint256 totalEarned  = withdrawn + withdrawable;
         uint256 withdrawRatio = totalEarned > 0 ? withdrawn * 10_000 / totalEarned : 0;
         // Has taken out most of what they earned — evict rather than lend them more.
-        if (withdrawRatio > cfg.rescueRatioBps) return (0, true);
+        if (withdrawRatio > cfg.rescueRatioBps) return (0, EVICT_RATIO);
 
         uint256 effectiveContrib = reserve + withdrawable;
         uint256 sfBps = _rescueBpsFor(cfg.sfThresholds, cfg.sfLadder, effectiveContrib, fee);
         // Off the bottom of the ladder — the fund will not cover someone this thin.
-        if (sfBps == type(uint256).max) return (0, true);
+        if (sfBps == type(uint256).max) return (0, EVICT_LADDER);
 
         // THE LINE ITEM 12 TURNS ON. maxShortfall is 0 exactly when the member's own
         // withdrawable + crossing reserve already covers the fee, so sfShare is 0 and the
@@ -399,8 +426,9 @@ library MatrixKeeperLib {
         // Self-funded members (sfShare == 0) borrow nothing and are never floored.
         if (sfShare > 0
             && !IStabilityFundKeeper(cfg.stabilityFund).loanEligible(member, tierIdx)) {
-            return (0, true);
+            return (0, EVICT_FLOOR);
         }
+        // Falling through leaves evictReason at its default 0 == EVICT_NONE: rescue.
     }
 
     function _checkParked(address matAddr, uint8 tierIdx, uint256 idx, ScanCfg memory cfg)
@@ -448,15 +476,37 @@ library MatrixKeeperLib {
         // not, and it blew the stack. Extracted to its own frame rather than enabling
         // viaIR — same call as CommunityWallet._gateAndExpiry, and for the same reason:
         // viaIR compiles today and leaves the function one local from the same failure.
-        (uint256 sfShare, bool evict) = _triageParked(mat, parkedMember, tierIdx, cfg);
+        (uint256 sfShare, uint8 evictReason) = _triageParked(mat, parkedMember, tierIdx, cfg);
 
         uint256 age = block.timestamp - ts;
 
-        // EVICTION KEEPS THE FULL GRACE PERIOD. Eviction removes a member who has already
-        // taken out most of what they earned; there is no "costs the fund nothing"
-        // version of it, and nothing about it is urgent.
-        if (evict) {
-            if (age < cfg.parkedGracePeriod) return (address(0), type(uint8).max);
+        // EVICTION GETS ITS OWN, LONGER CLOCK — V8.49 item 1.
+        //
+        // It used to gate on cfg.parkedGracePeriod, the SAME 24h window that decides
+        // when the Stability Fund steps in. The comment here said eviction "keeps the
+        // FULL grace period", which was about not giving it item 12's SHORTENED
+        // self-funded path — it was never the 3-5 days the owner's policy states.
+        // Nobody noticed because evictions had never fired in any version: the VPS
+        // evict_parked.js cron guard always matched its own parent shell. V8.48 moved
+        // eviction on chain (item 47's valve) and authorized the keeper EOA, so V8.48
+        // is the first version that can evict a real member at all — on a clock that
+        // was never intended. Hence a SECOND parameter: raising parkedGracePeriod
+        // instead would push SF rescue out to days and break the 24h design, because
+        // one knob was driving both clocks.
+        //
+        // GHOSTS DELIBERATELY KEEP THE OLD CLOCK (decided 2026-08-15). A ghost is a
+        // parked record whose holder is already seated in either half of the pair;
+        // the valve DEQUEUES it and nobody loses a seat, funds or position. Giving it
+        // the long clock would make a stale row linger for days for no one's benefit,
+        // and giving it a SHORTER-than-today clock is a separate improvement. Keeping
+        // it exactly as-is means this parameter introduces exactly ONE behavioural
+        // change to reason about — real evictions get slower — instead of two.
+        // One line to reverse if that judgement turns out wrong.
+        if (evictReason != EVICT_NONE) {
+            uint256 gate = evictReason == EVICT_GHOST
+                ? cfg.parkedGracePeriod
+                : cfg.evictionGracePeriod;
+            if (age < gate) return (address(0), type(uint8).max);
             return (parkedMember, WORK_EVICT_PARKED);
         }
 

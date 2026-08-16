@@ -1,4 +1,4 @@
-# V8.49 HANDOFF — written 2026-08-15 (read this FIRST, then `V8_49_SCOPE.md`)
+# V8.49 HANDOFF — written 2026-08-15, updated 2026-08-16 (read this FIRST, then `V8_49_SCOPE.md`)
 
 Audience: a future session of Claude, plus the owner. Nobody else touches this code.
 
@@ -13,13 +13,13 @@ working on now", it is this file then `V8_49_SCOPE.md`.
 
 V8.48 is **live on Base Sepolia** and healthy. V8.49 is **in progress on branch `v8.1`**
 of the contracts repo (`admin → preview → main` is the FRONTEND repo only). Item 1b —
-the crossing buffer — is **built, tested and pushed**: `575 passing, 0 failing` (was
-565). Item 1 — the eviction clock — is **fully specified and deliberately NOT started**;
-its build plan is in `V8_49_SCOPE.md` under "🔧 BUILD PLAN". Nothing is uncommitted,
-nothing is half-refactored, nothing is deployed that should not be.
+the crossing buffer — and item 1 — the eviction clock — are both **built and tested**:
+`582 passing, 0 failing` (was 575, was 565), predeploy `130/130`. **Nothing of V8.49 is
+deployed**: the chain is still running V8.48, which evicts real members on the 24h clock,
+so the interim watch in the scope is still live. Nothing is half-refactored.
 
-**Two commits today:** `7d41fcc` (item 1b) and `6151590` (baseline logging + item 1
-plan). Both pushed to `origin/v8.1`.
+**Next up is item 1b's POLICY-B HALF** — see "NEXT" below. It was blocked on item 1 and
+is not blocked any more.
 
 ---
 
@@ -85,25 +85,50 @@ reverting the batch. **Any non-zero floor turns exhaustion into a whole-batch re
 
 ---
 
-## NEXT — ITEM 1, THE EVICTION CLOCK. DO NOT REDESIGN IT.
+## WHAT SHIPPED 2026-08-16 — ITEM 1, THE EVICTION CLOCK
 
-`V8_49_SCOPE.md` → item 1 → "🔧 BUILD PLAN" has the whole design. The short version of
-why it is not a one-liner, and the parts that will bite:
+Built to the plan; the plan did not need redesigning. Full record in `V8_49_SCOPE.md`
+item 1 under "✅ BUILT 2026-08-16". The three things worth carrying forward:
 
-1. `_triageParked` returns a **bool**, so a harmless GHOST and an insolvent member are
-   indistinguishable when the clock is applied. Use a **`uint8` reason code** — NOT an
-   extra return value: that function's own comments record the evict branch already
-   blowing the EVM stack once.
-2. **Ghosts keep today's `parkedGracePeriod`** (decided 2026-08-15) so the new param
-   introduces exactly one behavioural change, not two. One line to reverse.
-3. **Two existing fixtures WILL break, with misleading failures:**
-   `V8_48_GhostFloor.test.js` (asserts `WORK_EVICT_PARKED` after 24h for ratio/ladder/
-   floor cases) and `V8_48_KeeperScan.test.js` (byte-identical `performData` against the
-   frozen pre-refactor keeper — pin `evictionGracePeriod == parkedGracePeriod` in its
-   `setup()`, the same remedy that file already uses for item 12's split grace).
-4. Item 1 and item 1b's policy-B half **ship together** — the scope says so and the
-   reason still holds: B alone refuses a thin member and the 24h clock evicts them the
-   next day, which is worse for that member than today.
+1. **`0` had to go on the setter menu**, which the plan did not call for. Without it
+   `V8_48_KeeperScan.test.js` — which pins `setParkedGracePeriod(0)` on both keepers —
+   cannot make the two clocks equal, and the frozen-keeper equivalence harness cannot be
+   repaired. Shipped menu `0 / 1d / 2d / 3d / 4d / 5d / 7d`. **0 means evict immediately,
+   not "eviction off"** — same shape as `parkedGracePeriod`'s 0.
+2. **The plan named two breaking fixtures. There were four.** The two extras were both in
+   `predeploy_check.js` (one asserting the old evict branch; one pinning `PARAM_MAX_ID`
+   to a literal constant name — the **third** time that anti-pattern has been hit, now
+   fixed by value comparison so param 63 will not break it) plus
+   **`V8_48_SplitGrace.test.js`**, which nothing predicted: its eviction test said "keeps
+   the FULL window", written when eviction and rescue shared a clock, so it had encoded a
+   coincidence as an intention. Extended, not pinned — it now walks all three windows.
+   **Only running the whole suite finds that class.**
+3. **The stack held.** `_checkParked` compiled first try; `bool` → `uint8` really is one
+   slot, with the gate as a ternary inside the branch rather than a new local. Keep that
+   shape if the function is touched again.
+
+---
+
+## NEXT — ITEM 1b's POLICY-B HALF. IT IS NO LONGER BLOCKED.
+
+The scope has always said B and the eviction clock ship together, because **B alone
+refuses a thin member's loan and the 24h clock evicts them the next day — worse for that
+member than doing nothing.** That objection is gone: the clock is 4 days.
+
+Both preconditions B needed are now met — the crossing buffer is 0 (so the floor is
+enforceable at all; at 3_600 it exceeded the 3_400 floor and refused *everyone*), and the
+eviction clock is 4 days (so a refused member has days to self-rescue, not hours).
+
+The design is written in `V8_49_SCOPE.md` item 1b under "RECOMMENDATION — ship B TOGETHER
+WITH item 1's eviction clock". The shape, from that section:
+`memberDebt[member] + totalAdvance <= fee * insolvencyFloorBps / 10_000` at **both**
+`payCoRescue` (StabilityFund.sol:649) and `payForceCross` (:679) — **and `_triageParked`
+changed in the SAME commit**, or discovery and the lender disagree and the whole
+`performUpkeep` batch reverts (finding (ii)). Both entry points already receive the full
+advance, so there is no new plumbing and no signature change.
+
+**Re-read the live numbers before building it** — the "3 loans then refused" figure moved
+to 2 within four hours of being measured. It is emergent, not a rule. Do not hard-code it.
 
 ---
 
@@ -120,6 +145,11 @@ why it is not a one-liner, and the parts that will bite:
   re-measured. **That is the unfinished half of the parked investigation.**
 - **Ghosts measured 0 of 88** — first real evidence item 45 works, with the caveat that
   this chain is days old and has had little time to accumulate them.
+- **`scripts/diag_floor_halt.js` mirrors `_triageParked` line for line** (its own header
+  says so) and was NOT updated for the reason codes. It models the FLOOR, not the clock,
+  so its output is still correct — but it now reports "would be evicted" without saying
+  *when*, and against a 4-day clock that distinction is the entire item. Worth a column
+  the next time it is run.
 - The V8.48 handoff's own open list (wallet RPC `sepolia.base.org`, raw RPC error in
   `alert()`, `uBal` fabrication, epoch panel) is **untouched today** and still open —
   it is items 2–4 of `V8_49_SCOPE.md`.
@@ -135,6 +165,14 @@ why it is not a one-liner, and the parts that will bite:
 - **ethers v6 `Interface.getFunction()` returns `null`** for an unknown name; it does not
   throw (verified against ethers 6.17). A `try/catch` around it never fires. Same family
   as this project's fabricated-fallback bugs: a null read as a value.
+- **A fixture can encode a coincidence as an intention, and nothing local reveals it**
+  (2026-08-16). `V8_48_SplitGrace.test.js` asserted eviction "keeps the FULL window" —
+  true and meaningful when eviction and rescue shared one clock, and silently a statement
+  about the wrong clock once they did not. It reads correct in isolation, passes in
+  isolation, and only the full suite exposed it. **Corollary: when a change splits one
+  value into two, grep the suite for assertions about the OLD value before running —
+  three of the four breakages this session were exactly that, and only one had been
+  predicted.**
 - **`checkUpkeep` returning `upkeepNeeded: false` proves nothing about a latent path** —
   it reports only what is DUE at that block, and a parked member inside grace produces no
   work item. Ask the question directly instead; that is what `diag_floor_halt.js` is for.

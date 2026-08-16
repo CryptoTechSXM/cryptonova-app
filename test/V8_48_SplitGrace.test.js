@@ -28,6 +28,14 @@
  *   The census was not wrong, it was CENSORED: fastlane clears these members within ten
  *   minutes, so a snapshot samples the residue. A rare state is not an absent one, and
  *   a point-in-time count cannot tell the difference. That is what these tests pin.
+ *
+ * TOUCHED BY V8.49 ITEM 1 (the eviction clock) — one test, EXTENDED not weakened.
+ *   This file was not on the list of fixtures item 1 expected to break; the full suite
+ *   found it. Its eviction test asserted "waits the FULL window", written when eviction
+ *   and rescue shared parkedGracePeriod, so it read the 24h clock as the answer rather
+ *   than as one of two. It now walks all three windows in order. Worth noting for the
+ *   next session: a fixture can encode a coincidence as an intention without anyone
+ *   choosing to, and the only thing that finds it is running everything.
  */
 const { ethers } = require("hardhat");
 const { expect } = require("chai");
@@ -41,6 +49,9 @@ const FEE = M6(10);
 const RESERVE = M6(5);          // CROSSING_RESERVE_BPS = 5000, a flat 50% of the fee
 const SELF_GRACE = 300;         // 5 min
 const PARKED_GRACE = 24 * 3600; // 24h, the live setting
+// V8.49 item 1: the EVICTION clock, split out of parkedGracePeriod. Declared default,
+// asserted below rather than assumed — this file must exercise what ships.
+const EVICT_GRACE = 4 * 24 * 3600;
 
 function decode(performData) {
   if (!performData || performData === "0x") return [];
@@ -139,16 +150,36 @@ describe("V8.48 item 12 — grace protects against LOANS, not against your own m
   });
 
   // ── eviction is not a rescue ──────────────────────────────────────────────
-  it("EVICTION keeps the full window even when the member is self-funded", async function () {
+  //
+  // V8.49 item 1 EXTENDED this test; it did not change what it asserts. Item 12's claim
+  // — a member who can pay for themselves does not make EVICTION cheap, so the 5-minute
+  // race guard never applies to it — is untouched and is still the first assertion below.
+  // What V8.49 added is the second one: the 24-hour RESCUE clock does not evict anyone
+  // either. Eviction used to fire at exactly that moment, because the evict branch gated
+  // on parkedGracePeriod. Owner policy has always been 3-5 days; it had simply never been
+  // built, and it had never been noticed because evictions could not fire AT ALL until
+  // V8.48 put the valve on chain and authorized the keeper.
+  it("EVICTION gets neither short window — not the self-funded race guard, not the rescue clock", async function () {
     await setup();
-    // withdrawn/totalEarned above rescueRatioBps (7000) => evict, not rescue.
+    expect(await keeper.evictionGracePeriod(),
+      "this test must exercise the SHIPPING default, not a value it set for itself").to.equal(BigInt(EVICT_GRACE));
+
+    // withdrawn/totalEarned above rescueRatioBps (7000) => evict, not rescue. They are
+    // ALSO self-funded ($6 withdrawable + $5 reserve against a $10 fee) — that pairing
+    // is the whole fixture: being able to fund your own re-entry is what would have
+    // qualified you for the short window, if eviction were a rescue. It is not.
     await matA.addParked(alice.address, await now(), M6(6), RESERVE, M6(94));
 
     await time.increase(SELF_GRACE + 5);
     expect((await items()).length,
-      "eviction has no zero-cost version and nothing about it is urgent").to.equal(0);
+      "item 12: eviction has no zero-cost version, so the self-funded race guard never applies").to.equal(0);
 
     await time.increase(PARKED_GRACE);
+    expect((await items()).length,
+      "V8.49 item 1: the rescue clock does not evict either — these days belong to the " +
+      "member, to self-rescue before the valve takes their seat").to.equal(0);
+
+    await time.increase(EVICT_GRACE - PARKED_GRACE);
     const found = await items();
     expect(found.length).to.equal(1);
     expect(found[0].workType, "and then it is an EVICT, not a rescue").to.equal(WORK_EVICT_PARKED);

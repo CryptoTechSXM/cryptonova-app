@@ -405,6 +405,14 @@ describe("V8.48 items 45+46+47 — ghosts, the insolvency floor, and the evictio
       await pm.addPair(await matA.getAddress(), await matB.getAddress());
       await keeper.setPairManager(0, await pm.getAddress());
       await keeper.setParkedGracePeriod(PARKED_GRACE);
+      // V8.49 item 1 split the EVICTION clock out of the rescue clock (default 4 days).
+      // These GF-D* tests are about ROUTING — which valve a member is sent to — not
+      // about timing, and they assert at PARKED_GRACE + 5. Pin the two clocks together
+      // so the routing assertions keep meaning what they were written to mean; the
+      // clock itself is covered by V8_49_EvictionClock.test.js. Setting it rather than
+      // weakening the assertions is deliberate: at the 4-day default GF-D1 would go
+      // green on an EMPTY work list, which reads exactly like a passing routing test.
+      await keeper.setEvictionGracePeriod(PARKED_GRACE);
       await time.increase(10);
     }
     const now = async () => (await ethers.provider.getBlock("latest")).timestamp;

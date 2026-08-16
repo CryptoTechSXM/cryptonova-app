@@ -133,6 +133,8 @@ interface IGovernanceTarget {
     function setCommunityOverflowBps(uint256 v) external;
     // ── V8.49: MatrixKeeper crossing buffer, default 0 (param 61) ────────────
     function setCrossingBufferBps(uint256 v) external;
+    // ── V8.49 item 1: MatrixKeeper eviction clock, default 4 days (param 62) ─
+    function setEvictionGracePeriod(uint256 v) external;
     // ── V8.20: second wave -- CNOVABuybackReserve ────────────────────────────
     function setTriggerThreshold(uint256 v) external;
     function setMaxSlippageBps(uint256 v) external;
@@ -299,8 +301,19 @@ contract V8Governance is Ownable {
     ///         of 0). Full reasoning and numbers in V8_49_SCOPE.md item 1b.
     uint8 public constant PARAM_MK_CROSSING_BUFFER         = 61;
 
+    /// @notice V8.49 item 1: the MatrixKeeper EVICTION CLOCK, split out from the rescue
+    ///         clock. Owner policy has always been "eviction should not happen for 3 to
+    ///         5 days", but the evict branch gated on parkedGracePeriod — the same 24h
+    ///         window that governs SF rescue — so the policy was never built. It went
+    ///         unnoticed because evictions had literally never fired: the VPS cron guard
+    ///         matched its own parent shell. V8.48 put eviction on chain and authorized
+    ///         the keeper, making it live for the first time. Default 4 days (345_600).
+    ///         Ghost dequeues deliberately stay on parkedGracePeriod — they cost their
+    ///         holder nothing. Full reasoning in V8_49_SCOPE.md item 1.
+    uint8 public constant PARAM_MK_EVICTION_GRACE          = 62;
+
     /// @dev Highest assigned param id -- update whenever a new param is added.
-    uint8 public constant PARAM_MAX_ID                     = PARAM_MK_CROSSING_BUFFER;
+    uint8 public constant PARAM_MAX_ID                     = PARAM_MK_EVICTION_GRACE;
 
     // ── Governance config (self-governable) ───────────────────────────────────
     uint256 public votingPeriod   = 72 hours;
@@ -486,6 +499,12 @@ contract V8Governance is Ownable {
         // retired V8.31 value). Both endpoints on the menu so either can be voted back;
         // must mirror MatrixKeeper.setCrossingBufferBps's require exactly.
         _allowedValues[PARAM_MK_CROSSING_BUFFER] = [0, 900, 1800, 2700, 3600];
+        // V8.49 item 1: eviction clock — 0 (admin/testing override, evict immediately)
+        // and 86400 (the PRE-V8.49 24h behaviour) are both on the menu on purpose: the
+        // second is how the DAO reverses this change without a redeploy, and it is the
+        // value the frozen-keeper equivalence harness pins to. Default 345600 = 4 days.
+        // Must mirror MatrixKeeper.setEvictionGracePeriod's require exactly.
+        _allowedValues[PARAM_MK_EVICTION_GRACE] = [0, 86400, 172800, 259200, 345600, 432000, 604800];
         // V8.33: extended idle timeout -- 0.5d/1d/2d/3d/4d/5d/6d/7d/14d
         _allowedValues[PARAM_EXTENDED_IDLE_TIMEOUT] = [43200, 86400, 172800, 259200, 345600, 432000, 518400, 604800, 1209600];
         // V8.35: per-tier whale gate thresholds (1–50 pioneers)
@@ -844,6 +863,9 @@ contract V8Governance is Ownable {
         // ── V8.49: MatrixKeeper crossing buffer (default 0 — buffer off) ──────
         } else if (paramId == PARAM_MK_CROSSING_BUFFER) {
             t.setCrossingBufferBps(value);
+        // ── V8.49 item 1: MatrixKeeper eviction clock (default 4 days) ────────
+        } else if (paramId == PARAM_MK_EVICTION_GRACE) {
+            t.setEvictionGracePeriod(value);
         // ── V8.33: MatrixKeeper extended idle timeout ──────────────────────────
         } else if (paramId == PARAM_EXTENDED_IDLE_TIMEOUT) {
             t.setExtendedIdleTimeout(value);
