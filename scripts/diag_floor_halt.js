@@ -68,7 +68,13 @@ const MK_ABI = [
   "function sfRescueThresholds(uint256) view returns (uint256)",
   "function sfRescueBpsLadder(uint256) view returns (uint256)",
   "function sfRescueLadderPreset() view returns (uint8)",
+  // V8.48 (live) exposes the retired CONSTANT; V8.49 replaces it with the governed
+  // param of the same meaning. BOTH are declared so this script keeps working across
+  // the deploy — readBufferBps() below tries the param first and reports which one it
+  // read. It never falls back to a literal: a fabricated 3600 here would silently
+  // mis-state every advance in the report.
   "function CROSSING_BUFFER_BPS() view returns (uint256)",
+  "function crossingBufferBps() view returns (uint256)",
 ];
 const SF_ABI = [
   "function memberDebt(address) view returns (uint256)",
@@ -96,6 +102,15 @@ function rescueBpsFor(thresholds, ladder, effectiveContrib, entryFee) {
 // Read a dynamic public array by probing indices until the getter reverts.
 // Deliberately NOT reconstructed from the preset table in the source — this
 // reads live chain state, so a hand-set ladder cannot silently mislead us.
+// The crossing buffer is a CONSTANT on the live V8.48 keeper and a governed PARAM
+// on V8.49. Read whichever this chain actually has, and say which. Returns
+// { bps, source } or throws — there is no default, deliberately.
+async function readBufferBps(mk) {
+  try   { return { bps: await mk.crossingBufferBps(),   source: "crossingBufferBps() [V8.49 param]" }; }
+  catch { /* not deployed yet — fall through to the V8.48 constant */ }
+  return { bps: await mk.CROSSING_BUFFER_BPS(), source: "CROSSING_BUFFER_BPS() [V8.48 constant]" };
+}
+
 async function readArray(c, fn) {
   const out = [];
   for (let i = 0; i < 64; i++) {
@@ -116,7 +131,8 @@ async function readArray(c, fn) {
   const rescueRatioBps  = await mk.rescueRatioBps();
   const grace           = await mk.parkedGracePeriod();
   const selfGrace       = await mk.selfFundedGracePeriod();
-  const bufferBps       = await mk.CROSSING_BUFFER_BPS();
+  const bufferRead      = await readBufferBps(mk);
+  const bufferBps       = bufferRead.bps;
   const preset          = await mk.sfRescueLadderPreset();
   const thresholds      = await readArray(mk, "sfRescueThresholds");
   const ladder          = await readArray(mk, "sfRescueBpsLadder");
@@ -136,7 +152,7 @@ async function readArray(c, fn) {
 
   console.log(`block ${block}   keeper ${A.matrixKeeper}`);
   console.log(`SF ${A.stabilityFund}   totalBalance ${usd(sfBal)}   stabilityFloor ${stabFloor === null ? "?" : usd(stabFloor)}`);
-  console.log(`insolvencyFloorBps ${floorBps}   CROSSING_BUFFER_BPS ${bufferBps}   rescueRatioBps ${rescueRatioBps}`);
+  console.log(`insolvencyFloorBps ${floorBps}   crossing buffer ${bufferBps} bps  <- read from ${bufferRead.source}   rescueRatioBps ${rescueRatioBps}`);
   console.log(`parkedGracePeriod ${grace}s   selfFundedGracePeriod ${selfGrace}s   ladder preset ${preset} (${thresholds.length} rungs)`);
   if (bufferBps > floorBps) {
     console.log(`\n*** BUFFER (${bufferBps} bps) EXCEEDS FLOOR (${floorBps} bps) — every forceCross advance`);
@@ -255,13 +271,68 @@ async function readArray(c, fn) {
   console.log(`\nWould be RESCUED with an SF loan: ${rescue.length}`);
   rescue.slice(0, 20).forEach(r => console.log(line(r)));
 
-  // What policy B (floor tested AFTER the advance, buffer included) would do.
-  const wouldRefuse = [...rescue, ...selfFunded].filter(r => r.debt + r.advance > (r.fee * floorBps) / 10_000n);
-  console.log(`\nPOLICY B PREVIEW — memberDebt + advance > floor, so refused if B shipped today: ` +
-              `${wouldRefuse.length} of ${rescue.length + selfFunded.length}`);
+  // ── POLICY B PREVIEW ───────────────────────────────────────────────────────
+  // B = the insolvency floor tested AFTER the advance:
+  //     memberDebt + totalAdvance <= fee * insolvencyFloorBps / 10_000
+  //
+  // ⚠ THIS MODELS DISCOVERY ONLY. It mirrors _triageParked, not
+  // MatrixKeeper._doParkedRescue and not StabilityFund.payForceCross. A clock or a
+  // gate in this system is TWO gates and this script can only see one of them —
+  // exactly the half-view that produced item 1's false premise. Treat every number
+  // below as "what discovery would decide", never as "what happens".
+  const pendingB = [...rescue, ...selfFunded];
+  const floorOf  = r => (r.fee * floorBps) / 10_000n;
+
+  const refusedLive = pendingB.filter(r => r.debt + r.advance > floorOf(r));
+  console.log(`\nPOLICY B PREVIEW (discovery only) — refused if B shipped AT THE LIVE BUFFER (${bufferBps} bps): ` +
+              `${refusedLive.length} of ${pendingB.length}`);
   if (floorBps > 0n && bufferBps > floorBps) {
     console.log(`    (expected to be ALL of them while the buffer exceeds the floor — that is item 1b's blocker,`);
     console.log(`     not a property of this population.)`);
+  }
+
+  // THE NUMBER V8.49 ACTUALLY SHIPS AGAINST. crossingBufferBps defaults to 0, so the
+  // advance is the real entry-fee shortfall and nothing else. Everything below is the
+  // configuration being built, not the one on chain today.
+  const refusedAt0 = pendingB.filter(r => r.debt + r.sfShare > floorOf(r));
+  console.log(`\n    AT crossingBufferBps = 0 (the V8.49 default, advance == real shortfall):`);
+  console.log(`      refused now      : ${refusedAt0.length} of ${pendingB.length}`);
+  refusedAt0.slice(0, 10).forEach(r => console.log(line(r)));
+
+  // How much room each member has LEFT before B bites, and how many further loans of
+  // their own current size that room holds. Emergent and queue-dependent — the "3 loans"
+  // figure moved to 2 within 4.6h on 2026-08-15. Reported as a spread, never as a rule.
+  const withDebt  = pendingB.filter(r => r.debt > 0n);
+  const debtTotalB = pendingB.reduce((a, r) => a + r.debt, 0n);
+  console.log(`      carrying debt    : ${withDebt.length} of ${pendingB.length}, total ${usd(debtTotalB)}` +
+              (withDebt.length ? `, max ${usd(withDebt.reduce((a, r) => r.debt > a ? r.debt : a, 0n))}` : ""));
+  if (debtTotalB === 0n) {
+    console.log(`      => B REFUSES NOBODY TODAY. It is a guard that arms as debt accumulates,`);
+    console.log(`         not a change anyone on this queue would feel. Say so in the handoff.`);
+  }
+
+  const loansLeft = pendingB
+    .filter(r => r.sfShare > 0n)
+    .map(r => {
+      const room = floorOf(r) > r.debt ? floorOf(r) - r.debt : 0n;
+      return Number(room / r.sfShare);          // whole further loans at TODAY's shortfall
+    })
+    .sort((a, b) => a - b);
+  if (loansLeft.length) {
+    const med = loansLeft[Math.floor(loansLeft.length / 2)];
+    console.log(`      loans until B refuses, at each member's CURRENT shortfall: ` +
+                `min ${loansLeft[0]} · median ${med} · max ${loansLeft[loansLeft.length - 1]}`);
+    console.log(`      (emergent, not a rule — it moved 3 -> 2 in 4.6h on 2026-08-15. Do not hard-code it.)`);
+  }
+
+  // The AMOUNT question, stated as a number. Discovery must ask the floor about the
+  // SAME advance the lender will be asked for, or the two disagree and "SF: insolvency
+  // floor" reverts the whole performUpkeep batch. This line shows what a future vote to
+  // raise the buffer would do to that agreement if discovery only asked about sfShare.
+  for (const bps of [0n, 900n, 1800n, 2700n, 3600n]) {
+    const n = pendingB.filter(r => r.debt + r.sfShare + (r.fee * bps) / 10_000n > floorOf(r)).length;
+    console.log(`      if crossingBufferBps were ${String(bps).padStart(4)}: B refuses ${n} of ${pendingB.length}` +
+                (bps === 0n ? "   <- shipping default" : ""));
   }
 
   // ── SF EXHAUSTION PROJECTION ───────────────────────────────────────────────

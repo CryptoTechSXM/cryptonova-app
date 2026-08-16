@@ -191,6 +191,22 @@ describe("CycleOutDebug", function () {
     //   2. matA.forceCrossKeeper(member)                 — matA uses those funds to cross
     // Here we call both steps directly with owner acting as keeper.
     // V8.48 item 46: the member travels with the funding call (insolvency floor).
+    //
+    // ⚠ V8.49 item 1b (policy B): the floor now includes the advance, and this fixture
+    // deliberately models "the SF covers 100% of the fee" — an advance of the WHOLE
+    // $10 entry fee against a ceiling that defaults to 34% of it. So the default floor
+    // refuses this rescue, correctly. That refusal is asserted first, because it is the
+    // new behaviour and a fixture that merely sidestepped it would hide the change:
+    expect(await sf.loanEligibleFor(W1.address, 0, FEE),
+      "policy B: a full-fee advance is 294% of the default $3.40 ceiling").to.equal(false);
+    await expect(sf.connect(owner).payForceCross(W1.address, 0, matAAddr, FEE))
+      .to.be.revertedWith("SF: insolvency floor");
+
+    // ...then the floor is raised to 100% (10_000 bps is on the DAO menu, PARAM 59) so
+    // this scenario's own premise — SF covers the entire fee — is representable. This is
+    // the fixture declaring its assumption out loud rather than inheriting a default that
+    // happens to permit it.
+    await sf.connect(owner).setInsolvencyFloorBps(10_000);
     await sf.connect(owner).payForceCross(W1.address, 0, matAAddr, FEE);
     // V8.11: sfContribution=FEE (SF covers 100% in this test scenario)
     await matA.connect(owner).forceCrossKeeper(W1.address, FEE, 0n);

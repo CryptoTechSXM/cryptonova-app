@@ -56,6 +56,12 @@ interface IStabilityFundKeeper {
     function payForceCross(address member, uint8 tierIdx, address sourceMatrix, uint256 fee) external;
     /// @dev V8.48 item 46: discovery routes floor-tripped members to eviction.
     function loanEligible(address member, uint8 tierIdx) external view returns (bool);
+    /// @dev V8.49 item 1b policy B: the AMOUNT-aware floor, and the only one discovery
+    ///      may use. loanEligible() answers "has this member any room left?", which is
+    ///      NOT the question payForceCross asks ("room for THIS advance?"). Asking the
+    ///      easier question here is how discovery and the lender come to disagree — and
+    ///      a disagreement reverts the whole performUpkeep batch, not just one item.
+    function loanEligibleFor(address member, uint8 tierIdx, uint256 advance) external view returns (bool);
 }
 
 interface IFigureEightKeeper {
@@ -175,6 +181,12 @@ library MatrixKeeperLib {
         /// @dev V8.49 item 1: the EVICTION clock, separate from the rescue clock.
         ///      Ghosts deliberately keep parkedGracePeriod — see _checkParked.
         uint256 evictionGracePeriod;
+        /// @dev V8.49 item 1b: carried ONLY so discovery can ask the insolvency floor
+        ///      about the same advance the lender will be asked for. Discovery does not
+        ///      otherwise care about the buffer. It is 0 by default, so this is normally
+        ///      a no-op — but a future DAO vote on param 61 must not be able to make
+        ///      discovery and the SF disagree, and reading sfShare alone would.
+        uint256 crossingBufferBps;
         uint256 rescueRatioBps;
         uint8   configuredTierCount;
         address tierRouter;
@@ -398,15 +410,24 @@ library MatrixKeeperLib {
             }
         }
 
-        uint256 withdrawn    = mat.getMemberTotalWithdrawn(member);
         uint256 withdrawable = mat.withdrawableOf(member);
         // V8.31: crossing reserve reduces SF shortfall — include it in effective contribution.
         uint256 reserve      = mat.crossingReserveOf(member);
         uint256 fee          = mat.ENTRY_FEE();
-        uint256 totalEarned  = withdrawn + withdrawable;
-        uint256 withdrawRatio = totalEarned > 0 ? withdrawn * 10_000 / totalEarned : 0;
-        // Has taken out most of what they earned — evict rather than lend them more.
-        if (withdrawRatio > cfg.rescueRatioBps) return (0, EVICT_RATIO);
+
+        // V8.49 item 1b: BLOCK-SCOPED, and not for tidiness. This frame blew the stack
+        // once already when the evict branch was added (hence _triageParked exists at
+        // all), and policy B needs one more local further down. `withdrawn`,
+        // `totalEarned` and `withdrawRatio` are dead the moment this test is answered,
+        // so scoping them returns three slots instead of borrowing a fourth. Arithmetic
+        // is byte-for-byte the old expression, ternary included.
+        {
+            uint256 withdrawn     = mat.getMemberTotalWithdrawn(member);
+            uint256 totalEarned   = withdrawn + withdrawable;
+            uint256 withdrawRatio = totalEarned > 0 ? withdrawn * 10_000 / totalEarned : 0;
+            // Has taken out most of what they earned — evict rather than lend them more.
+            if (withdrawRatio > cfg.rescueRatioBps) return (0, EVICT_RATIO);
+        }
 
         uint256 effectiveContrib = reserve + withdrawable;
         uint256 sfBps = _rescueBpsFor(cfg.sfThresholds, cfg.sfLadder, effectiveContrib, fee);
@@ -420,13 +441,36 @@ library MatrixKeeperLib {
         sfShare = fee * sfBps / 10_000;
         if (sfShare > maxShortfall) sfShare = maxShortfall;
 
-        // V8.48 item 46: the INSOLVENCY FLOOR. A member who would need SF money but
-        // whose outstanding debt already guarantees the next shortfall gets no more
-        // loans (owner policy 2026-08-13) — route to the eviction valve instead.
-        // Self-funded members (sfShare == 0) borrow nothing and are never floored.
-        if (sfShare > 0
-            && !IStabilityFundKeeper(cfg.stabilityFund).loanEligible(member, tierIdx)) {
-            return (0, EVICT_FLOOR);
+        // V8.48 item 46 / V8.49 item 1b: the INSOLVENCY FLOOR, asked the way the LENDER
+        // will ask it.
+        //
+        // TWO THINGS CHANGED HERE AND BOTH ARE LOAD-BEARING.
+        //
+        // 1. THE AMOUNT. V8.48 called loanEligible(member, tier) — "has this member any
+        //    room left?" — while payForceCross would go on to demand room for a specific
+        //    advance. Two different questions about one decision. Now both sides call
+        //    loanEligibleFor with the SAME number, so they cannot answer differently.
+        //    The advance is the UNTRIMMED total: MatrixKeeper._doParkedRescue may trim
+        //    the buffer when the fund is short (:727-730), and a trim only ever makes
+        //    the ask SMALLER — so discovery is never looser than the lender, which is
+        //    the safe direction. The reverse would queue a rescue the SF refuses, and
+        //    "SF: insolvency floor" reverting inside performUpkeep takes the WHOLE
+        //    batch: velocity, chain-links, evictions, the CW epoch, all of it.
+        //
+        // 2. THE GUARD IS ON THE ADVANCE, NOT ON sfShare. V8.48 skipped the floor
+        //    whenever sfShare == 0, reasoning that a self-funded member borrows nothing.
+        //    That was false while the buffer was unconditional: _doParkedRescue computed
+        //    it outside every branch on sfShare, so a self-funded member was still
+        //    advanced 36% of the fee and could still be refused by the SF — the exact
+        //    batch-halt in V8_49_SCOPE.md finding (ii). With crossingBufferBps at 0 the
+        //    advance really is 0 for those members and this skips as before; if it is
+        //    ever voted back up, the check follows the money instead of re-arming.
+        {
+            uint256 advance = sfShare + fee * cfg.crossingBufferBps / 10_000;
+            if (advance > 0
+                && !IStabilityFundKeeper(cfg.stabilityFund).loanEligibleFor(member, tierIdx, advance)) {
+                return (0, EVICT_FLOOR);
+            }
         }
         // Falling through leaves evictReason at its default 0 == EVICT_NONE: rescue.
     }

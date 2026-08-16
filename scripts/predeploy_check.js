@@ -498,6 +498,99 @@ if (mkText) {
   else fail("PARAM_MK_EVICTION_GRACE has no _applyParam branch — the param id would be unreachable");
   if (govEvId) ok(`PARAM_MAX_ID (${maxIdVal}) covers PARAM_MK_EVICTION_GRACE (62)`);
   else fail(`PARAM_MAX_ID resolves to ${maxIdVal} — below 62, so propose() would reject the eviction-clock param`);
+
+  // ── V8.49 item 1b, POLICY B: the floor must include the loan being asked for ─
+  //
+  // No new governance param here (the floor is PARAM 59, shipped in V8.48). What has
+  // to hold is that the LENDER and DISCOVERY ask the same question about the same
+  // amount. They did not in V8.48 — discovery asked "any room left?", the lender asked
+  // "room for THIS advance?" — and the punishment for disagreeing is not a skipped
+  // member: "SF: insolvency floor" inside performUpkeep reverts the WHOLE batch.
+  const sfB  = read("contracts/StabilityFund.sol");
+  const libB = read("contracts/MatrixKeeperLib.sol");
+
+  if (/function\s+loanEligibleFor\s*\(\s*address\s+member,\s*uint8\s+tierIdx,\s*uint256\s+advance\s*\)/.test(sfB)) {
+    ok("StabilityFund.loanEligibleFor(member, tier, advance) present — policy B's enforcement rule");
+  } else {
+    fail("StabilityFund.loanEligibleFor NOT found — V8.49 item 1b policy B not applied; the floor still caps the debt a loan STARTS from, not the debt it ends at");
+  }
+  if (/function\s+loanHeadroom\s*\(/.test(sfB)) {
+    ok("StabilityFund.loanHeadroom() present — the figure the dashboard shows instead of a bare yes/no");
+  } else {
+    fail("StabilityFund.loanHeadroom NOT found — a member told only 'no loan' cannot act on it (parity rule)");
+  }
+
+  // ONE PRIMITIVE, THREE VIEWS. If loanEligible ever re-inlines the arithmetic there
+  // are two models of one rule again — the exact shape that produced a dashboard
+  // itemising $7,500 against a chain holding $10,000.
+  const leBody = (sfB.match(/function\s+loanEligible\s*\(address\s+member,\s*uint8\s+tierIdx\)[\s\S]*?\n    \}/) || [""])[0];
+  if (/return\s+loanHeadroom\(member,\s*tierIdx\)\s*>\s*0;/.test(leBody)) {
+    ok("loanEligible derives from loanHeadroom — the floor arithmetic lives in exactly one place");
+  } else {
+    fail("loanEligible has its own copy of the floor arithmetic — two models of one rule WILL drift (see the $7,500-vs-$10,000 reserve breakdown)");
+  }
+
+  // BOTH lending entry points, checked in their own function bodies rather than by a
+  // whole-file grep: a file-wide match would pass while one of the two still used the
+  // old rule, and the V8.48 defect was present at BOTH sites.
+  for (const [fn, amountArg] of [["payForceCross", "fee"], ["payCoRescue", "sfShare"]]) {
+    const body = (sfB.match(new RegExp(`function\\s+${fn}\\s*\\([\\s\\S]*?\\n    \\}`)) || [""])[0];
+    if (!body) {
+      fail(`could not locate ${fn} in StabilityFund.sol — re-read before trusting this section`);
+    } else if (new RegExp(`require\\(loanEligibleFor\\(member,\\s*tierIdx,\\s*${amountArg}\\)`).test(body)) {
+      ok(`${fn} enforces the floor WITH the advance included (loanEligibleFor(member, tier, ${amountArg}))`);
+    } else if (/require\(loanEligible\(/.test(body)) {
+      fail(`${fn} still calls the amount-less loanEligible() — every borrower finishes above the ceiling by up to a full advance (V8_49_SCOPE.md item 1b defect 1)`);
+    } else {
+      fail(`${fn} has no recognised insolvency-floor require — read it before deploying`);
+    }
+  }
+
+  // DISCOVERY MUST ASK THE SAME QUESTION, ABOUT THE SAME NUMBER, IN THE SAME COMMIT.
+  const triage = (libB.match(/function\s+_triageParked\([\s\S]*?\n    \}/) || [""])[0];
+  if (!triage) {
+    fail("could not locate _triageParked in MatrixKeeperLib.sol — re-read before trusting this section");
+  } else {
+    if (/loanEligibleFor\(member,\s*tierIdx,\s*advance\)/.test(triage)) {
+      ok("_triageParked asks the floor about the ADVANCE, matching what payForceCross will be asked for");
+    } else if (/loanEligible\(member,\s*tierIdx\)/.test(triage)) {
+      fail("_triageParked still calls the amount-less loanEligible() — discovery and the SF ask different questions, and a disagreement reverts the ENTIRE performUpkeep batch (scope finding (ii))");
+    } else {
+      fail("_triageParked has no recognised floor check — the eviction valve may be unreachable");
+    }
+    // The amount must include the buffer. crossingBufferBps is DAO param 61, so a vote
+    // can change the advance without anyone touching this code; if discovery reads only
+    // sfShare, that vote silently re-arms the batch-halt.
+    if (/sfShare\s*\+\s*fee\s*\*\s*cfg\.crossingBufferBps\s*\/\s*10_000/.test(triage)) {
+      ok("_triageParked's advance = sfShare + crossing buffer — a vote on param 61 cannot desynchronise discovery from the lender");
+    } else {
+      fail("_triageParked does not add the crossing buffer to the advance it asks about — raising crossingBufferBps by vote would then queue rescues the SF refuses, halting the batch");
+    }
+    // The guard follows the money, not sfShare. V8.48 skipped the floor whenever
+    // sfShare == 0 while the buffer was still advanced to those members — finding (i).
+    if (/sfShare\s*>\s*0\s*[\r\n\s]*&&\s*!IStabilityFundKeeper/.test(triage)) {
+      fail("_triageParked still gates the floor on sfShare > 0 — a self-funded member advanced a non-zero buffer is unfloored at discovery and refused at the lender (scope finding (i)/(ii))");
+    } else {
+      ok("_triageParked gates the floor on the ADVANCE, not on sfShare — self-funded members are checked iff they actually borrow");
+    }
+  }
+
+  if (/crossingBufferBps;/.test(libB) && /crossingBufferBps:\s*crossingBufferBps,/.test(mkText)) {
+    ok("ScanCfg carries crossingBufferBps and checkUpkeep populates it from storage");
+  } else {
+    fail("ScanCfg.crossingBufferBps missing or not populated in checkUpkeep — discovery would compute the advance from a zero it was never told");
+  }
+
+  // The swallow-list. Belt and braces for a disagreement the checks above are meant to
+  // make impossible — because the cost of being wrong is the whole queue, not one member.
+  const puBody = (mkText.match(/function performUpkeep\([\s\S]*?\n    \}/) || [""])[0];
+  for (const s of ["SF: insolvency floor", "SF: below floor"]) {
+    if (puBody.includes(`keccak256("${s}")`)) {
+      ok(`performUpkeep swallows "${s}" — one member is skipped (WorkItemFailed) instead of the batch reverting`);
+    } else {
+      fail(`performUpkeep does NOT swallow "${s}" — a single refusal would revert velocity, chain-links, evictions and the CW epoch along with it`);
+    }
+  }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

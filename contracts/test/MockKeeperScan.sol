@@ -117,15 +117,56 @@ contract MockStabilityFundK {
     // V8.48 item 46: per-member floor flag. Default ELIGIBLE (floor inert) so the
     // equivalence suite's default world is unchanged; a test arms it per member.
     mapping(address => bool) public floored;
+
+    // ── V8.49 item 1b: a REAL floor, not just a flag ──────────────────────────
+    // Policy B is about an AMOUNT, so a boolean mock cannot test it: it answers the
+    // same way for a $0.01 loan and a $6.00 one, which is precisely the bug policy B
+    // fixes. This mirrors StabilityFund.loanHeadroom/loanEligibleFor arithmetic.
+    //
+    // DEFAULTS ARE INERT ON PURPOSE. insolvencyFloorBps starts at 0, which the real SF
+    // treats as "floor disabled", so every existing fixture (V8_48_KeeperScan's
+    // equivalence world, V8_48_GhostFloor, V8_49_EvictionClock) behaves exactly as it
+    // did and `floored` keeps working as the blunt per-member override it always was.
+    uint256 public insolvencyFloorBps;              // 0 = disabled, like the real SF
+    mapping(uint8 => uint256) public tierEntryFees;
+    mapping(address => uint256) public memberDebt;
+
     constructor(uint256 bal) { totalBalance = bal; }
     function setTier(uint8 t, uint256 v) external { balanceByTier[t] = v; }
     function setTotal(uint256 v) external { totalBalance = v; }
     function setFloored(address m, bool f) external { floored[m] = f; }
-    function loanEligible(address m, uint8) external view returns (bool) { return !floored[m]; }
+    function setInsolvencyFloorBps(uint256 v) external { insolvencyFloorBps = v; }
+    function setTierFee(uint8 t, uint256 v) external { tierEntryFees[t] = v; }
+    function setMemberDebt(address m, uint256 v) external { memberDebt[m] = v; }
+
+    function loanHeadroom(address m, uint8 t) public view returns (uint256) {
+        if (insolvencyFloorBps == 0) return type(uint256).max;
+        uint256 fee = tierEntryFees[t];
+        if (fee == 0) return type(uint256).max;
+        uint256 ceiling = fee * insolvencyFloorBps / 10_000;
+        return ceiling > memberDebt[m] ? ceiling - memberDebt[m] : 0;
+    }
+    function loanEligible(address m, uint8 t) external view returns (bool) {
+        return !floored[m] && loanHeadroom(m, t) > 0;
+    }
+    /// @dev V8.49 policy B. `floored` stays as an unconditional override so the older
+    ///      fixtures that arm it keep meaning what they meant.
+    function loanEligibleFor(address m, uint8 t, uint256 advance) public view returns (bool) {
+        if (floored[m]) return false;
+        return advance <= loanHeadroom(m, t);
+    }
+
     function payGhostEntry(uint8, address) external {}
     function activateLayer(uint8, bool) external {}
     // Both signatures: the PREV (pre-12a) keeper calls the 3-arg form, the V8.48
     // keeper calls the member-aware 4-arg form. One mock serves both worlds.
     function payForceCross(uint8, address, uint256) external {}
-    function payForceCross(address, uint8, address, uint256) external {}
+    /// @dev V8.49 item 1b: the LENDER now actually refuses, with the real revert string.
+    ///      Without this the mock would accept a loan discovery had already routed to
+    ///      eviction, and the discovery/lender agreement test could not fail — which is
+    ///      the only failure mode that matters here (a disagreement reverts the whole
+    ///      performUpkeep batch, not one item).
+    function payForceCross(address member, uint8 tierIdx, address, uint256 fee) external view {
+        require(loanEligibleFor(member, tierIdx, fee), "SF: insolvency floor");
+    }
 }

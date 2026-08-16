@@ -296,7 +296,7 @@ describe("S2: Parked wallet rescue", function () {
     // For W1 who naturally crossed: passes MatA guards, then _enterMatrix(MatB) reverts
     // "already in matrix" because W1 is already occupying a seat in MatB.
     // This test also exercises the SF.payForceCross interface end-to-end.
-    const { matA, matB, tr, fund, w1, members, pm1Addr, keeper, sf } =
+    const { matA, matB, tr, fund, w1, members, pm1Addr, keeper, sf, admin } =
       await loadFixture(deployFixture);
 
     // Trigger W1 cycle-out (W1 crosses naturally — earns ~$37 vs $10 cross fee)
@@ -320,9 +320,28 @@ describe("S2: Parked wallet rescue", function () {
     expect(await matA.getParkedCount()).to.equal(0n);
 
     // SF.payForceCross interface check: succeeds (keeper role, SF has $1000 seeded)
-    // V8.48 item 46: member-aware signature — w1 has no debt, so the floor passes.
+    // V8.48 item 46: member-aware signature — the member travels with the funding call.
     const sfBal = await sf.totalBalance();
     expect(sfBal).to.be.gte(T1_FEE);
+
+    // ⚠ V8.49 item 1b (policy B). This line used to read "w1 has no debt, so the floor
+    // passes" — true under V8.48, where the floor tested only the debt a loan STARTED
+    // from. It now tests debt + advance, and the advance here is the WHOLE $10 entry fee
+    // against a ceiling that defaults to 34% of it. Zero debt is no longer a free pass:
+    // one loan of this size is, by itself, three times what one cycle can repay.
+    //
+    // Asserted rather than sidestepped, because it is the new behaviour and this test's
+    // stated job is to exercise the payForceCross interface "live".
+    expect(await sf.loanEligibleFor(w1.address, 0, T1_FEE),
+      "policy B: a full-fee advance is 294% of the $3.40 default ceiling, debt or no debt"
+    ).to.equal(false);
+    await expect(sf.connect(keeper).payForceCross(w1.address, 0, await matA.getAddress(), T1_FEE))
+      .to.be.revertedWith("SF: insolvency floor");
+
+    // Then state this fixture's own premise out loud — "the SF covers 100% of the fee" —
+    // by raising the floor to 100% (10_000 bps is on the DAO menu, PARAM 59), and run the
+    // interface check the test was actually written to perform.
+    await sf.connect(admin).setInsolvencyFloorBps(10_000);
     await sf.connect(keeper).payForceCross(w1.address, 0, await matA.getAddress(), T1_FEE);
   });
 

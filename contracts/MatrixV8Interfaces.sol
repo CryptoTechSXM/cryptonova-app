@@ -35,6 +35,15 @@ interface IStabilityFund {
     ///         false = their outstanding debt already guarantees the next shortfall,
     ///         no new loan will be issued, and the eviction valve (item 47) applies.
     function loanEligible(address member, uint8 tierIdx) external view returns (bool);
+    /// @notice V8.49 item 1b (policy B): may this member take an advance of exactly
+    ///         `advance`? THIS is what payCoRescue/payForceCross enforce — loanEligible
+    ///         above only says whether ANY room is left, which is a weaker statement
+    ///         and must never be used to predict whether a specific loan will be granted.
+    function loanEligibleFor(address member, uint8 tierIdx, uint256 advance) external view returns (bool);
+    /// @notice V8.49 item 1b: how much more this member may borrow at this tier before
+    ///         the floor refuses. 0 = refused now; type(uint256).max = no ceiling applies.
+    ///         The dashboard should show this figure rather than a bare yes/no.
+    function loanHeadroom(address member, uint8 tierIdx) external view returns (uint256);
     /// @notice Legacy per-matrix repayment. Called by an authorized matrix after
     ///         approving `amount` USDC. SF pulls the USDC and increments totalBalance.
     function receiveDebtRepayment(uint256 amount) external;

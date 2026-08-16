@@ -314,10 +314,25 @@ describe("V8.48 items 45+46+47 — ghosts, the insolvency floor, and the evictio
       const { member, sf, mock } = await sfFixture();
       expect(await sf.insolvencyFloorBps(), "declared default").to.equal(3400n);
 
-      // One unit under the ceiling: still eligible, loan flows.
+      // One unit under the ceiling: still eligible in the V8.48 sense.
       await mock.bookLoan(member.address, 0, M6(3.4) - 1n);
       expect(await sf.loanEligible(member.address, 0)).to.equal(true);
-      await mock.pullCoRescue(member.address, 0, M6(1));
+
+      // ⚠ EXTENDED FOR V8.49 item 1b (policy B), not re-pinned to make red go green.
+      // This line used to lend $1.00 here and pass, which is the entire defect in one
+      // statement: the member was "eligible" because their EXISTING debt was under the
+      // ceiling, and the loan they then took carried them straight past it. V8.49 tests
+      // debt + advance, so the only loan that fits is the 1 wei of room they have.
+      //
+      // loanEligible() still returns TRUE here and that is CORRECT — it answers "any
+      // room left?", which is a weaker question than "room for THIS loan?". The gap
+      // between those two statements IS item 1b, so both are asserted rather than one
+      // being quietly adjusted to agree with the other.
+      expect(await sf.loanHeadroom(member.address, 0), "room left is exactly 1 wei").to.equal(1n);
+      await expect(mock.pullCoRescue(member.address, 0, M6(1)),
+        "$1.00 no longer fits under the ceiling — V8.48 allowed exactly this"
+      ).to.be.revertedWith("SF: insolvency floor");
+      await mock.pullCoRescue(member.address, 0, 1n);   // the loan that does fit
 
       // Cross the line: lending stops, with a reason a keeper log can grep.
       await mock.bookLoan(member.address, 0, 1n);

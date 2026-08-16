@@ -555,6 +555,13 @@ contract MatrixKeeper is Ownable {
             parkedGracePeriod:   parkedGracePeriod,
             selfFundedGracePeriod: selfFundedGracePeriod,
             evictionGracePeriod: evictionGracePeriod,
+            // V8.49 item 1b: carried ONLY so discovery can ask the insolvency floor about
+            // the same advance _doParkedRescue will ask the SF for. Leaving it out would
+            // let a future vote on param 61 silently re-arm the batch-halt path, because
+            // discovery would be asking about sfShare while the lender was asked for
+            // sfShare + buffer. The ScanCfg field order is not load-bearing (named
+            // initialiser), but a MISSING field is a compile error — deliberately.
+            crossingBufferBps:   crossingBufferBps,
             rescueRatioBps:      rescueRatioBps,
             configuredTierCount: configuredTierCount,
             tierRouter:          tierRouter,
@@ -604,11 +611,30 @@ contract MatrixKeeper is Ownable {
                 // V8.24: added "insufficient withdrawable for rescue" -- member cannot cover their
                 //        share under the SF rescue ladder; skip them so the rest of the batch runs.
                 //        This is what makes the ladder self-sustaining without SF top-ups.
+                // V8.49 item 1b: added "SF: insolvency floor" and "SF: below floor".
+                //
+                // BELT AND BRACES, AND SAY WHY. Discovery now asks the floor about the
+                // exact advance the SF will be asked for (MatrixKeeperLib._triageParked),
+                // so a floor refusal here should be unreachable. "Should be" is the whole
+                // reason it is on the list: the alternative to swallowing it is reverting
+                // the ENTIRE batch — velocity, chain-links, evictions, the CW epoch — on
+                // one member's arithmetic. A skipped member is recoverable next tick; a
+                // halted keeper is the outage this project spent 2026-07-30 recovering
+                // from. "SF: below floor" is the same shape: the fund running out of
+                // money must skip a member, never stop the queue (measured 2026-08-16:
+                // stabilityFloor is $0.00 today, so exhaustion degrades gracefully — any
+                // non-zero floor voted in turns it into a batch revert without this).
+                //
+                // NEITHER IS SILENT. Both emit WorkItemFailed, so a keeper that starts
+                // refusing loans shows up in the logs as failed items rather than as an
+                // absence. If WORK_PARKED_RESCUE failures climb, read the floor first.
                 try this._doParkedRescueExternal(item.addr1, item.addr2, item.tierIndex) {}
                 catch Error(string memory reason) {
                     bytes32 h = keccak256(bytes(reason));
                     if (h == keccak256("F8V8: already in matrix") || h == keccak256("F8V8: not parked") ||
                         h == keccak256("F8V8: still in matrix") ||
+                        h == keccak256("SF: insolvency floor") ||
+                        h == keccak256("SF: below floor") ||
                         h == keccak256("F8V8: insufficient withdrawable for rescue")) {
                         emit WorkItemFailed(WORK_PARKED_RESCUE, item.tierIndex, item.addr1, item.addr2);
                     } else {

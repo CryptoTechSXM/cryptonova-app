@@ -646,7 +646,11 @@ contract StabilityFund is Ownable2Step {
         require(tierIdx < MAX_TIERS,         "SF: invalid tier");
         require(sourceMatrix != address(0),  "SF: zero matrix");
         require(fee > 0,                     "SF: zero fee");
-        require(loanEligible(member, tierIdx), "SF: insolvency floor");
+        // V8.49 item 1b policy B: the floor is tested WITH the advance included. `fee`
+        // here is the keeper's totalSfNeeded (sfShare + crossingBuffer, MatrixKeeper.sol
+        // :720/:737) — the whole amount about to leave the fund, which is exactly what
+        // MatrixKeeperLib._triageParked asks about. Same question, same number, both sides.
+        require(loanEligibleFor(member, tierIdx, fee), "SF: insolvency floor");
         require(totalBalance >= fee + stabilityFloor, "SF: below floor");
 
         if (balanceByTier[tierIdx] >= fee) {
@@ -676,7 +680,10 @@ contract StabilityFund is Ownable2Step {
         require(sfShare > 0,                    "SF: zero share");
         // V8.48 item 46: the insolvency floor. The old member-less signature could
         // not refuse anyone — a lender must know who it is lending to.
-        require(loanEligible(member, tierIdx),  "SF: insolvency floor");
+        // V8.49 item 1b policy B: ...and how much it is lending. sfShare IS the whole
+        // advance on this path (coPayRescue books shortfall only, no crossing buffer —
+        // MatrixLogicLib.sol:1423), so the amount needs no assembling here.
+        require(loanEligibleFor(member, tierIdx, sfShare),  "SF: insolvency floor");
         require(totalBalance >= sfShare + stabilityFloor, "SF: below floor");
 
         if (balanceByTier[tierIdx] >= sfShare) {
@@ -790,18 +797,71 @@ contract StabilityFund is Ownable2Step {
         emit InsolvencyFloorBpsSet(bps);
     }
 
-    /// @notice V8.48 item 46: may this member take a new SF rescue loan at this tier?
-    ///         false = insolvency floor tripped. Read by the rescue paths (hard
-    ///         enforcement in payCoRescue/payForceCross), by keeper discovery
-    ///         (routes floored members to the eviction valve), and by the frontend
-    ///         (the dashboard must SAY why no loan came — parity rule).
-    ///         A tier with no registered fee cannot form an estimate — eligible.
-    function loanEligible(address member, uint8 tierIdx) public view returns (bool) {
+    // ── V8.49 item 1b, POLICY B: THE FLOOR INCLUDES THE LOAN BEING ASKED FOR ──
+    //
+    // V8.48 tested `memberDebt < ceiling` BEFORE the advance and never added the
+    // advance itself, so the floor capped the debt a member could START a loan from,
+    // not the debt they ended with. Every borrower finished above the ceiling by up to
+    // a full advance. The doc comment on insolvencyFloorBps claimed the intent; the
+    // code did not implement it.
+    //
+    // V8.49 tests `memberDebt + advance <= ceiling`. This is STRICTLY TIGHTER than the
+    // old rule at every point — if the new test passes then `memberDebt < ceiling` also
+    // held, because every advance is > 0 (both call sites require it). So this can
+    // never lend where V8.48 refused. That property is pinned by a test, because it is
+    // the whole safety argument for shipping it.
+    //
+    // ⚠ THE THREE VIEWS BELOW SHARE ONE PRIMITIVE ON PURPOSE. loanHeadroom is the only
+    // place the arithmetic lives; loanEligible and loanEligibleFor both derive from it.
+    // Three copies of one formula is how this codebase produced a dashboard that
+    // itemised $7,500 while the chain held $10,000 — two models of one rule, drifting.
+    //
+    // MEASURED BEFORE SHIPPING (2026-08-16, diag_loan_history.js against 104 parked):
+    // 15 members are refused by this rule, and ALL 15 are repeat borrowers — 0 are
+    // refused on a first loan. Each had borrowed once, repaid $3.40-$4.04 of it, and
+    // came back needing MORE than they earn per cycle ($2.32-$3.82 earned against a
+    // $3.77-$5.00 ask), which is verbatim the condition this floor exists to stop.
+    // Note their first loans looked oversized only because $3.60 of each was the
+    // crossing buffer — with crossingBufferBps at 0 they would all have passed loan one.
+
+    /// @notice How much MORE this member may borrow at this tier before the insolvency
+    ///         floor refuses them. 0 = refused now. type(uint256).max = no ceiling
+    ///         applies (floor disabled, or the tier has no registered fee).
+    ///         THE FRONTEND SHOULD SHOW THIS, not just a yes/no — a member told only
+    ///         "no loan" cannot act on it, and the parity rule says the dashboard must
+    ///         say WHY no loan came.
+    function loanHeadroom(address member, uint8 tierIdx) public view returns (uint256) {
+        if (insolvencyFloorBps == 0) return type(uint256).max;   // floor disabled — the escape hatch
+        if (tierIdx >= MAX_TIERS) return 0;
+        uint256 fee = tierEntryFees[tierIdx];
+        if (fee == 0) return type(uint256).max;                  // no fee registered — no estimate to form
+        uint256 ceiling = fee * insolvencyFloorBps / 10_000;
+        uint256 owed    = memberDebt[member];
+        return ceiling > owed ? ceiling - owed : 0;
+    }
+
+    /// @notice V8.49: may this member take an advance of exactly `advance` at this tier?
+    ///         THIS IS THE ENFORCEMENT RULE — payCoRescue and payForceCross both call it
+    ///         with the amount they are about to lend, and keeper discovery
+    ///         (MatrixKeeperLib._triageParked) calls it with the SAME amount so the two
+    ///         cannot disagree. A disagreement is not a cosmetic bug: "SF: insolvency
+    ///         floor" reverting inside performUpkeep would take the whole batch with it.
+    function loanEligibleFor(address member, uint8 tierIdx, uint256 advance) public view returns (bool) {
         if (insolvencyFloorBps == 0) return true;
         if (tierIdx >= MAX_TIERS) return false;
-        uint256 fee = tierEntryFees[tierIdx];
-        if (fee == 0) return true;
-        return memberDebt[member] < fee * insolvencyFloorBps / 10_000;
+        if (tierEntryFees[tierIdx] == 0) return true;
+        return advance <= loanHeadroom(member, tierIdx);
+    }
+
+    /// @notice V8.48 item 46: does this member have ANY room left under the floor?
+    ///         Equivalent to loanHeadroom(...) > 0, and kept because the frontend and
+    ///         the diagnostics read it. NOTE: this is NOT the rule the lender enforces
+    ///         any more — see loanEligibleFor. A true here means "not yet at the
+    ///         ceiling"; it does NOT promise the next loan will be granted, because
+    ///         that depends on the loan's SIZE.
+    ///         A tier with no registered fee cannot form an estimate — eligible.
+    function loanEligible(address member, uint8 tierIdx) public view returns (bool) {
+        return loanHeadroom(member, tierIdx) > 0;
     }
 
     /// @notice Total outstanding rescue debt for a member (explicit accessor used by
