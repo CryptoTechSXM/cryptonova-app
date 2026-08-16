@@ -621,6 +621,33 @@ async function main() {
   await (await keeper.setParkedGracePeriod(GRACE_PERIOD_SECS)).wait();
   console.log(`  ↳  MatrixKeeper.setParkedGracePeriod → ${GRACE_PERIOD_SECS}s (${GRACE_PERIOD_SECS/3600}h)`);
 
+  // V8.49: set selfFundedGracePeriod EXPLICITLY, so it ships by decision rather than by
+  // whatever the declaration happens to say.
+  //
+  // ⚠ READ BEFORE CHANGING THIS NUMBER. The old note here — and in predeploy_check.js,
+  // and in the contract's own declaration — said "mainnet default 6h". THAT WAS NEVER
+  // REACHABLE: setSelfFundedGracePeriod's menu is 0/60/300/900/1800/3600, capped at ONE
+  // HOUR, and the cap is deliberate. V8.48 item 12 redefined this value as a RACE GUARD
+  // (it stops a rescue being queued in the same minute a member is mid-registration or
+  // mid-upgrade, matching fastlane_rescue.js's MIN_AGE=300), NOT as a protection window.
+  // The protection window is parkedGracePeriod, which is where a long value belongs.
+  // "6h" was a stale V8.25 statement that item 12 superseded and nobody deleted, so the
+  // deploy was being told to set a value no setter would have accepted.
+  //
+  // 300s is therefore correct on MAINNET as well as testnet: the race it guards is the
+  // same on both networks, and it costs a self-funded member five minutes' wait for money
+  // that is already theirs. Override with SELF_GRACE_SECS, but only with a MENU value.
+  const SELF_GRACE_SECS = process.env.SELF_GRACE_SECS
+    ? Number(process.env.SELF_GRACE_SECS)
+    : 300; // 5 min — the race guard, both networks
+  if (![0, 60, 300, 900, 1800, 3600].includes(SELF_GRACE_SECS)) {
+    throw new Error(
+      `SELF_GRACE_SECS=${SELF_GRACE_SECS} is not on setSelfFundedGracePeriod's menu ` +
+      `(0/60/300/900/1800/3600). Failing here rather than mid-deploy.`);
+  }
+  await (await keeper.setSelfFundedGracePeriod(SELF_GRACE_SECS)).wait();
+  console.log(`  ↳  MatrixKeeper.setSelfFundedGracePeriod → ${SELF_GRACE_SECS}s (race guard, V8.48 item 12)`);
+
   // ── 10a. Save addresses BEFORE W1 seed ────────────────────────────────────
   {
     sep("Save Addresses");

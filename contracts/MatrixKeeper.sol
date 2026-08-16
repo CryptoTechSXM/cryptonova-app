@@ -166,7 +166,16 @@ contract MatrixKeeper is Ownable {
     ///         5 minutes, matching fastlane_rescue.js's MIN_AGE. It is a race guard, not
     ///         a policy window: it stops a rescue being queued in the same minute a
     ///         member is mid-registration or mid-upgrade.
-    uint256 public selfFundedGracePeriod = 5 minutes;  // V8.25: mainnet default 6h; testnet owner can set as low as 5 min
+    ///         V8.49 CORRECTION: this line used to end "V8.25: mainnet default 6h;
+    ///         testnet owner can set as low as 5 min". **6h was never reachable** —
+    ///         setSelfFundedGracePeriod's menu stops at 3600 (1 hour) and that cap is
+    ///         deliberate, because item 12 (above) redefined this from a protection
+    ///         window into a RACE GUARD. The old text was a stale V8.25 statement that
+    ///         item 12 superseded, and both deploy_v8.js and predeploy_check.js were
+    ///         repeating it — predeploy would have HARD-FAILED a mainnet deploy demanding
+    ///         a value no setter would accept. 5 minutes is correct on both networks; the
+    ///         long window belongs to parkedGracePeriod, which is what it is for.
+    uint256 public selfFundedGracePeriod = 5 minutes;
 
     /// @notice V8.49 item 1 — THE eviction clock. How long a parked member heading for
     ///         eviction (not rescue) is left alone first. **7 days.** ONE knob, read by

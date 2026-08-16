@@ -1588,16 +1588,26 @@ if (!htmlTxt) {
 //
 //   parkedGracePeriod      contract default 6h  -> deploy_v8.js SETS it (86400 = 24h,
 //                          override with PARKED_GRACE_SECS). Mainnet needs 172800.
-//   selfFundedGracePeriod  contract default 5 MINUTES -> deploy_v8.js NEVER SETS IT.
-//                          The declaration itself says "mainnet default 6h; testnet
-//                          owner can set as low as 5 min" — so a mainnet deploy ships
-//                          5 minutes unless someone remembers a post-deploy tx.
-//   evictionGracePeriod    contract default 4 DAYS (V8.49 item 1) -> deploy_v8.js
-//                          NEVER SETS IT, so the declared default is what ships. That
-//                          is inside the owner's 3-5 day policy on both networks, so
-//                          it is correct by default rather than by remembering — but
-//                          the default is now load-bearing, which is why it is asserted
-//                          above as well as here.
+//   selfFundedGracePeriod  contract default 5 MINUTES -> deploy_v8.js NOW SETS IT
+//                          (V8.49, SELF_GRACE_SECS, default 300).
+//                          ⚠ CORRECTED 2026-08-16. This block used to say "the
+//                          declaration says mainnet default 6h", and the gate below
+//                          would have HARD-FAILED a mainnet deploy on that basis. 6h was
+//                          NEVER SETTABLE: setSelfFundedGracePeriod's menu is
+//                          0/60/300/900/1800/3600, capped at ONE HOUR, deliberately —
+//                          V8.48 item 12 redefined the value as a RACE GUARD, not a
+//                          protection window. The "6h" line was a stale V8.25 statement
+//                          repeated in three places (contract declaration, deploy script,
+//                          here) and superseded in none of them. A gate that demands an
+//                          unreachable value is the item-26 class in reverse.
+//   evictionGracePeriod    contract default 7 DAYS (V8.49 item 1; the plan said 4 and
+//                          the owner chose 7, because 4 would have SHORTENED members'
+//                          real window from the 7 that extendedIdleTimeout was already
+//                          enforcing) -> deploy_v8.js NEVER SETS IT, so the declared
+//                          default is what ships. That is inside the owner's 3-5 day
+//                          policy on both networks, so it is correct by default rather
+//                          than by remembering — but the default is now load-bearing,
+//                          which is why it is asserted above as well as here.
 //
 // Set MAINNET=1 to turn the advisory lines into hard failures.
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1623,14 +1633,31 @@ if (!htmlTxt) {
     ok(`MAINNET: parkedGracePeriod ${parkedSecs}s meets the 48h policy`);
   }
 
-  // 2. selfFundedGracePeriod — the silent one. Nothing in the deploy path touches it.
+  // 2. selfFundedGracePeriod — was the silent one until V8.49.
   const sfgDefault = (mkG.match(/uint256\s+public\s+selfFundedGracePeriod\s*=\s*([^;]+);/) || [,"?"])[1].trim();
   if (/setSelfFundedGracePeriod\(/.test(dep)) {
-    ok("deploy_v8.js sets selfFundedGracePeriod explicitly");
+    ok(`deploy_v8.js sets selfFundedGracePeriod explicitly (declared default ${sfgDefault}; SELF_GRACE_SECS overrides)`);
   } else {
     gate(`selfFundedGracePeriod is NEVER set by deploy_v8.js — it ships at the contract default (${sfgDefault}). ` +
-         `Fine on testnet, WRONG on mainnet (the declaration says mainnet default 6h). ` +
-         `Either add the setter call to the deploy or run it as a post-deploy tx.`);
+         `It should be set by DECISION, not inherited. Note the value must come from the ` +
+         `setter's menu (0/60/300/900/1800/3600) — this line used to say "mainnet needs 6h", ` +
+         `which no setter would have accepted.`);
+  }
+
+  // ...and whatever the deploy sets, it must be ON THE MENU. A deploy that reverts on its
+  // own config line is a bad afternoon; catching it here costs nothing. The literal is
+  // read out of MatrixKeeper's require rather than restated, so the two cannot drift.
+  {
+    const menuSrc = (mkG.match(/function setSelfFundedGracePeriod[\s\S]{0,300}?require\(([\s\S]*?)\);/) || [,""])[1];
+    const menu = [...menuSrc.matchAll(/v == (\d[\d_]*)/g)].map(m => Number(m[1].replace(/_/g, "")));
+    const want = Number(process.env.SELF_GRACE_SECS || 300);
+    if (!menu.length) {
+      fail("could not read setSelfFundedGracePeriod's menu out of MatrixKeeper.sol — read it before deploying");
+    } else if (menu.includes(want)) {
+      ok(`selfFundedGracePeriod ${want}s is on the setter's own menu [${menu.join("/")}]`);
+    } else {
+      fail(`SELF_GRACE_SECS=${want} is NOT on setSelfFundedGracePeriod's menu [${menu.join("/")}] — the deploy would revert on its own config line`);
+    }
   }
 
   // 3. evictionGracePeriod — V8.49 item 1. Assert the day it lands so it cannot regress.

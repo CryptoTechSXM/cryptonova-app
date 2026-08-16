@@ -203,20 +203,48 @@ in the same commit. `loanHeadroom` is the single primitive; `loanEligibleFor` an
 
 ---
 
-## NEXT — TWO ITEMS, IN THIS ORDER
+## ✅ ALSO SHIPPED 2026-08-16 — `selfFundedGracePeriod`, AND THE REQUIREMENT WAS FICTION
 
-### 1. `selfFundedGracePeriod` is never set by `deploy_v8.js` (small, but a mainnet blocker)
+Opened as "deploy never sets it, so mainnet ships 5 min instead of the declared 6h".
+**The 6h was never reachable.** `setSelfFundedGracePeriod`'s menu is
+`0/60/300/900/1800/3600` — **capped at ONE HOUR, deliberately**, because V8.48 item 12
+redefined this value from a protection window into a **race guard** (matching
+`fastlane_rescue.js`'s `MIN_AGE=300`) and said so at the setter. The "mainnet default 6h"
+line was a stale **V8.25** statement that item 12 superseded and nobody deleted — and it
+had been copied into **three places**: the contract declaration, `deploy_v8.js`'s comment,
+and `predeploy_check.js`, which **would have hard-failed a `MAINNET=1` deploy demanding a
+value no setter would accept.**
 
-It ships at the contract default of **5 minutes**. Its own declaration says the mainnet
-default is **6h**, and `predeploy_check.js` already fails hard on it when `MAINNET=1` —
-today it prints as an `ℹ`, which is the honest state for testnet and the wrong state for
-launch. Fix is either a setter call in the deploy or a documented post-deploy tx. **Decide
-which and write it down either way** — the "a live setter call is not a code change" rule.
+**THIS IS THE ITEM-26 CLASS IN REVERSE.** Item 26 shipped a param that claimed to be DAO
+tunable and was not. This was a GATE that claimed a value was required and it was
+unsettable. **When a check and a setter disagree, read the setter — it is the one the
+chain enforces.**
 
-### 2. Item 2 — the wallet RPC (likely the biggest member-facing win in the scope)
+Shipped: `deploy_v8.js` sets it **explicitly to 300** (env `SELF_GRACE_SECS`, and it
+**throws before the deploy starts** on an off-menu value); the stale claim deleted and
+explained in all three places; a new predeploy gate that **reads the menu out of
+MatrixKeeper's own `require`** rather than restating it, so the two cannot drift.
+**300s is correct on mainnet too** — the race it guards is identical on both networks.
+Also corrected in the same block: it claimed `evictionGracePeriod` defaults to 4 days.
+It is **7**.
+
+`144/144` predeploy (was 142).
+
+---
+
+## NEXT
+
+### Item 2 — the wallet RPC (likely the biggest member-facing win in the scope)
 
 `index.html:2834` and `:2903` hand members the PUBLIC `sepolia.base.org` endpoint while
 the site's own reads go elsewhere. Carried from the V8.48 handoff, untouched today.
+
+**A NOTE ON THE THREE-COPIES PATTERN, because it has now cost two items in two days.**
+`crossingBufferBps` was a constant whose derivation cited a constant deleted in V8.32.
+`selfFundedGracePeriod` carried a mainnet target its own setter forbade. Both are the same
+shape: **a value's MEANING written down beside it, and the meaning changing while the
+prose did not.** When you change what a value is FOR — not just what it is — grep the repo
+for the old justification, not only for the identifier.
 
 **Also open, and now RESOLVABLE:** the ladder-vs-floor contradiction — see the new
 "⚠️ NEW, UNRESOLVED" section in `V8_49_SCOPE.md` item 1b. The SF rescue ladder lends up to
