@@ -51,7 +51,7 @@ const SELF_GRACE = 300;         // 5 min
 const PARKED_GRACE = 24 * 3600; // 24h, the live setting
 // V8.49 item 1: the EVICTION clock, split out of parkedGracePeriod. Declared default,
 // asserted below rather than assumed — this file must exercise what ships.
-const EVICT_GRACE = 4 * 24 * 3600;
+const EVICT_GRACE = 7 * 24 * 3600;
 
 function decode(performData) {
   if (!performData || performData === "0x") return [];

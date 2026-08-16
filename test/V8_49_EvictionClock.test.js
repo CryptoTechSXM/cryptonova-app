@@ -8,19 +8,40 @@
  *    kicks in on testnet and 48hrs on mainnet — that is by design, to have members
  *    rescue themselves before SF takes over."
  *
- *   Three clauses. Two were built. The third was not: MatrixKeeperLib's evict branch
- *   gated on cfg.parkedGracePeriod — the SAME 24h window that decides when the Stability
- *   Fund steps in. One knob drove both clocks, so the 3-5 days could not be configured
- *   in either: raising parkedGracePeriod to reach it would have pushed SF rescue out with
- *   it and broken the 24h design.
+ * WHAT WAS ACTUALLY WRONG — AND WHAT WAS NOT. READ THIS BEFORE THE SCOPE.
+ *   The scope opened item 1 on the claim that "V8.48 will evict real members 24 hours
+ *   after they park". THAT CLAIM WAS FALSE, and finding out why is most of what this
+ *   file is for.
  *
- * WHY NOBODY EVER NOTICED
- *   Evictions had never fired, in any version. evict_parked.js's cron guard
+ *   It came from reading MatrixKeeperLib's evict branch, which gates DISCOVERY on
+ *   parkedGracePeriod (24h). But EXECUTION had its own, independent gate:
+ *   MatrixKeeper._doEvictParked refused every non-ghost eviction until
+ *   `extendedIdleTimeout` — 7 days, never set at deploy, so 7 days is what has always
+ *   shipped. A member could be QUEUED from 24h and simply never evicted: the work item
+ *   was consumed and _doEvictParked returned silently. **No member was ever exposed to a
+ *   24-hour eviction, in any version.** The owner's 3-5 day policy was already satisfied.
+ *
+ *   THE REAL DEFECT WAS TWO UNRELATED KNOBS GOVERNING ONE BEHAVIOUR. Neither
+ *   parkedGracePeriod (the SF rescue clock) nor extendedIdleTimeout (the idle-slot
+ *   RECLAIM clock, borrowed by V8.46 "mirroring _doReclaimSlot") means "eviction". So
+ *   eviction timing could not be read off any single value, could not be voted on, and
+ *   would move if either unrelated knob moved. And for six of the seven days, discovery
+ *   emitted EVICT work items that execution refused — burning slots out of
+ *   maxItemsPerUpkeep (15) against a queue of 88 parked members.
+ *
+ *   V8.49 makes evictionGracePeriod the ONLY eviction clock, read by both sides, and
+ *   defaults it to 7 days — exactly what extendedIdleTimeout was already enforcing. So
+ *   this change moves nobody's eviction. The policy became REACHABLE (a DAO vote to
+ *   3/4/5 days), not enacted. That was the owner's call, 2026-08-16.
+ *
+ * WHY NOBODY EVER NOTICED, INCLUDING THE SESSION THAT WROTE THE FIRST VERSION OF THIS
+ *   Evictions had never fired at all, in any version: evict_parked.js's cron guard
  *   (pgrep -f evict_loop.sh) always matched its own parent shell, so the script never ran
- *   once. V8.48 moved eviction on chain (item 47's two-branch valve) AND authorized the
- *   keeper EOA. V8.48 is therefore the first version in the protocol's history that can
- *   evict a real member — and it would have done so a day after they parked. The bug was
- *   old; the exposure is new. That is what makes this item 1 and not a backlog entry.
+ *   once. V8.48 moved eviction on chain (item 47's valve) AND authorized the keeper EOA,
+ *   so V8.48 is the first version that can evict anyone — which is what made this
+ *   urgent. But the deeper reason is in this file's own subject: **every test that
+ *   existed drove checkUpkeep only.** Discovery was covered and execution was not, so a
+ *   disagreement between them could not fail anything. EC-8 is that missing test.
  *
  * WHAT IS ASSERTED, AND WHY EACH ONE IS HERE
  *   EC-1  the three REAL eviction cases (ratio / ladder / floor) wait the new clock,
@@ -40,6 +61,10 @@
  *         reverts at execution — the item-26 "DAO tunable was fiction" class.
  *   EC-6  the declared default is on its own menu (item-42 lesson) and so is 86400,
  *         which is how this change is reversed by vote rather than by redeploy.
+ *   EC-8  **DISCOVERY AND EXECUTION AGREE AT EVERY INSTANT.** The one that would have
+ *         caught the original defect. Drives performUpkeep, not just checkUpkeep.
+ *   EC-9  a ghost still bypasses the execution gate entirely — including the rotation
+ *         check, which a non-ghost could not survive.
  *
  * FIXTURE NOTE — why mocks. The four eviction reasons need a parked member with specific
  * withdrawn/withdrawable/reserve ratios and a specific SF verdict. A real pair produces
@@ -62,7 +87,7 @@ const WORK_PARKED_RESCUE = 4;
 const WORK_EVICT_PARKED  = 6;
 
 const PARKED_GRACE = 24 * 3600;           // the live testnet rescue clock
-const EVICT_GRACE  = 4 * 24 * 3600;       // 345_600 — the declared default
+const EVICT_GRACE  = 7 * 24 * 3600;       // 604_800 — the declared default
 
 describe("V8.49 item 1 — the eviction clock is separate from the rescue clock", function () {
   this.timeout(600_000);
@@ -87,7 +112,7 @@ describe("V8.49 item 1 — the eviction clock is separate from the rescue clock"
    * The numbers are chosen against the LIVE default ladder (preset 1: bottom rung
    * 4000 bps) and the live rescueRatioBps (7000) — not against round numbers.
    */
-  async function setup({ evictGrace = null } = {}) {
+  async function setup({ evictGrace = null, rotation = 0 } = {}) {
     const sigs = await ethers.getSigners();
     [ghost, ratio, ladder, floored, rescued] = sigs.slice(1, 6).map((s) => s.address);
 
@@ -131,11 +156,27 @@ describe("V8.49 item 1 — the eviction clock is separate from the rescue clock"
     // RESCUE  — the control. Identical to FLOOR, minus the floor.
     await matA.addParked(rescued, t, M6(2), M6(5), 0);
 
+    // rotationCount stays 0 by default so _scanMatrix returns on its first line and the
+    // only work items are parked ones. EC-8 opts in, because _doEvictParked gates on it.
+    if (rotation > 0) await matA.setRotationCount(rotation);
+
     await time.increase(10);
   }
 
+  /// Drive the EXECUTION side directly: hand performUpkeep one EVICT work item.
+  /// Returns the ParkedMemberEvicted events it emitted (none = the gate refused).
+  async function evictViaKeeper(who) {
+    const pd = ethers.AbiCoder.defaultAbiCoder().encode(
+      ["tuple(uint8 workType, uint8 tierIndex, address addr1, address addr2)[]"],
+      [[[WORK_EVICT_PARKED, 0, await matA.getAddress(), who]]]);
+    const rc = await (await keeper.performUpkeep(pd)).wait();
+    return rc.logs
+      .map((l) => { try { return keeper.interface.parseLog(l); } catch { return null; } })
+      .filter(Boolean).filter((e) => e.name === "ParkedMemberEvicted");
+  }
+
   // ── EC-1 ───────────────────────────────────────────────────────────────────
-  it("EC-1: ratio / ladder / floor members are NOT evicted at 24h, are at 4 days, and produce no work in between", async function () {
+  it("EC-1: ratio / ladder / floor members are NOT evicted at 24h, are at 7 days, and produce no work in between", async function () {
     await setup();
     expect(await keeper.evictionGracePeriod(),
       "the fixture must be exercising the declared default, not a value it set itself").to.equal(BigInt(EVICT_GRACE));
@@ -155,7 +196,7 @@ describe("V8.49 item 1 — the eviction clock is separate from the rescue clock"
 
     for (const [name, who] of [["ratio", ratio], ["ladder", ladder], ["floor", floored]]) {
       expect(await workFor(who),
-        `${name}: at 4 days the eviction clock has run and the valve takes them`).to.deep.equal([WORK_EVICT_PARKED]);
+        `${name}: at 7 days the eviction clock has run and the valve takes them`).to.deep.equal([WORK_EVICT_PARKED]);
     }
   });
 
@@ -201,6 +242,46 @@ describe("V8.49 item 1 — the eviction clock is separate from the rescue clock"
         `${name}: with the clocks equal, every eviction case fires at the old moment`).to.deep.equal([WORK_EVICT_PARKED]);
     }
     expect(await workFor(rescued)).to.deep.equal([WORK_PARKED_RESCUE]);
+  });
+
+  // ── EC-8 ───────────────────────────────────────────────────────────────────
+  it("EC-8: EXECUTION uses the same clock as discovery — no work item is ever queued that _doEvictParked refuses", async function () {
+    // THIS IS THE TEST THAT WOULD HAVE CAUGHT THE ORIGINAL DEFECT, and its absence is
+    // why the defect survived to be found by reading rather than by running.
+    //
+    // Discovery and execution were on DIFFERENT knobs: _checkParked gated on
+    // parkedGracePeriod (24h) while _doEvictParked gated on extendedIdleTimeout (7 days,
+    // the idle-slot RECLAIM timeout, borrowed). Nothing failed — the work item was
+    // queued, consumed, and silently dropped, six days running, burning slots out of
+    // maxItemsPerUpkeep against an 88-member queue. Every existing test drove
+    // checkUpkeep only, so every existing test was green.
+    //
+    // The invariant, stated once so it cannot drift again: AT EVERY INSTANT, discovery
+    // queueing an eviction and execution accepting it are the SAME answer.
+    await setup({ rotation: 1 });
+
+    await time.increase(PARKED_GRACE + 5);
+    expect(await workFor(ratio), "discovery: not yet").to.deep.equal([]);
+    expect((await evictViaKeeper(ratio)).length,
+      "execution: not yet either — the two must refuse together").to.equal(0);
+
+    await time.increase(EVICT_GRACE - PARKED_GRACE + 10);
+    expect(await workFor(ratio), "discovery: now").to.deep.equal([WORK_EVICT_PARKED]);
+    const evicted = await evictViaKeeper(ratio);
+    expect(evicted.length, "execution: now — and they must accept together").to.equal(1);
+    expect(evicted[0].args.member).to.equal(ratio);
+  });
+
+  it("EC-9: a GHOST bypasses the execution gate entirely, as it always has", async function () {
+    // _doEvictParked's ghost branch skips both the rotation check and the clock. That is
+    // load-bearing and predates V8.49: a stale record whose holder is seated can be
+    // dequeued at any age because it costs them nothing. Pinned here so the reconciliation
+    // above cannot quietly swallow it — note rotation stays 0, which a non-ghost could
+    // not survive.
+    await setup();
+    await matA.setSeated(ghost, true);
+    const evicted = await evictViaKeeper(ghost);
+    expect(evicted.length, "a ghost is dequeued immediately, no clock, no rotation").to.equal(1);
   });
 
   // ── EC-5 ───────────────────────────────────────────────────────────────────
@@ -253,7 +334,7 @@ describe("V8.49 item 1 — the eviction clock is separate from the rescue clock"
       const { k, g } = await govFixture();
       const menu = (await g.getAllowedValues(await g.PARAM_MK_EVICTION_GRACE())).map((v) => Number(v));
 
-      expect(await k.evictionGracePeriod(), "declared default = 4 days").to.equal(BigInt(EVICT_GRACE));
+      expect(await k.evictionGracePeriod(), "declared default = 7 days").to.equal(BigInt(EVICT_GRACE));
       expect(menu,
         "a default absent from its own menu can never be voted back (item-42)").to.include(EVICT_GRACE);
       expect(menu,

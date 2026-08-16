@@ -168,44 +168,64 @@ contract MatrixKeeper is Ownable {
     ///         member is mid-registration or mid-upgrade.
     uint256 public selfFundedGracePeriod = 5 minutes;  // V8.25: mainnet default 6h; testnet owner can set as low as 5 min
 
-    /// @notice V8.49 item 1 — how long a parked member who is heading for EVICTION
-    ///         (not rescue) is left alone first. **4 days.**
+    /// @notice V8.49 item 1 — THE eviction clock. How long a parked member heading for
+    ///         eviction (not rescue) is left alone first. **7 days.** ONE knob, read by
+    ///         BOTH discovery and execution.
     ///
     ///         Owner policy, stated on V8.48 deploy day: "the SF always grows
     ///         organically, eviction should not happen for 3 to 5 days… 24hrs of
     ///         registrations before automated rescue kicks in on testnet and 48hrs on
     ///         mainnet — that is by design, to have members rescue themselves before SF
-    ///         takes over." Two halves of that were built. This one was not: the evict
-    ///         branch gated on parkedGracePeriod, the SAME 24h clock as rescue.
+    ///         takes over."
     ///
-    ///         IT HAD NEVER BEEN VISIBLE BECAUSE EVICTIONS HAD NEVER FIRED. The VPS
-    ///         evict_parked.js cron guard (pgrep -f evict_loop.sh) always matched its
-    ///         own parent shell, so the script never ran once in the protocol's history.
-    ///         V8.48 moved eviction on chain (item 47's two-branch valve) and authorized
-    ///         the keeper EOA — so V8.48 is the first version that CAN evict a real
-    ///         member, and it would have done so a day after they parked.
+    ///         ⚠️ READ THIS BEFORE BELIEVING THE SCOPE'S ORIGINAL FRAMING OF ITEM 1.
+    ///         That framing — "V8.48 will evict real members 24 hours after they park" —
+    ///         WAS WRONG, and this comment is the correction. It was written from
+    ///         MatrixKeeperLib's evict branch alone, which gates DISCOVERY. Execution has
+    ///         always had its own, independent gate: _doEvictParked refused any non-ghost
+    ///         eviction until `extendedIdleTimeout` had passed — 7 days, never set at
+    ///         deploy, so 7 days is what has always shipped. A member could be QUEUED for
+    ///         eviction from 24h and simply never evicted; the work item was consumed and
+    ///         _doEvictParked returned silently. **No member was ever exposed to a 24-hour
+    ///         eviction.** The owner's 3-5 day policy was already met, at 7 days.
     ///
-    ///         WHY A SECOND PARAM RATHER THAN A BIGGER parkedGracePeriod: one knob drove
-    ///         both clocks. Raising it to 3-5 days would have pushed SF rescue out with
-    ///         it and broken the 24h design the owner described as deliberate.
+    ///         WHAT WAS ACTUALLY BROKEN, AND STILL IS WORTH FIXING: two unrelated knobs
+    ///         governed one behaviour. Discovery used parkedGracePeriod (the SF rescue
+    ///         clock); execution used extendedIdleTimeout (the IDLE-SLOT RECLAIM clock,
+    ///         borrowed by V8.46 "mirroring _doReclaimSlot"). Neither means "eviction",
+    ///         so eviction timing could not be read off any one value, could not be voted
+    ///         on, and moved if either unrelated knob moved. And for six of those seven
+    ///         days discovery emitted EVICT work items that execution refused — burning
+    ///         slots out of maxItemsPerUpkeep (15) against a queue of 88 parked members.
     ///
-    ///         WHO WAITS THE 4 DAYS: the three eviction cases that remove a REAL member —
-    ///         withdrawRatio past rescueRatioBps, off the bottom of the SF rescue ladder,
-    ///         and the item 46 insolvency floor. GHOSTS DO NOT: a parked record whose
-    ///         holder is already seated is dequeued on the old parkedGracePeriod, because
-    ///         that costs its holder nothing and there is no one to protect. See
-    ///         MatrixKeeperLib._checkParked.
+    ///         SO THIS PARAM IS NOW THE ONLY EVICTION CLOCK. _checkParked gates discovery
+    ///         on it and _doEvictParked gates execution on it. They agree by construction
+    ///         and no futile work item is ever queued. extendedIdleTimeout goes back to
+    ///         meaning only what its name says: idle-slot reclaim.
+    ///
+    ///         DEFAULT 7 DAYS = TODAY'S REAL BEHAVIOUR, deliberately (owner decision
+    ///         2026-08-16). This change is therefore member-neutral: nobody's eviction
+    ///         timing moves. Dialling it to 3/4/5 days is now a DAO vote instead of a
+    ///         redeploy, which is the point — the policy became reachable, not enacted.
+    ///
+    ///         WHO WAITS: the three cases that remove a REAL member — withdrawRatio past
+    ///         rescueRatioBps, off the bottom of the SF rescue ladder, and the item 46
+    ///         insolvency floor. GHOSTS DO NOT, on either side: a parked record whose
+    ///         holder is already seated is dequeued on parkedGracePeriod in discovery and
+    ///         bypasses the gate entirely in _doEvictParked. It costs its holder nothing
+    ///         and there is no one to protect.
     ///
     ///         DAO param 62. Menu 0 / 1d / 2d / 3d / 4d / 5d / 7d. Setting it EQUAL to
-    ///         parkedGracePeriod reproduces pre-V8.49 behaviour exactly — that collapse
+    ///         parkedGracePeriod reproduces pre-V8.49 DISCOVERY exactly — that collapse
     ///         property is what keeps V8_48_KeeperScan's frozen-keeper equivalence
     ///         harness meaningful, and it is asserted in V8_49_EvictionClock.test.js.
     ///         0 means evict as soon as triage says so, with NO wait: it is the same
     ///         admin/testing override parkedGracePeriod's 0 is, not an "off" switch.
     ///
-    ///         MAINNET: parkedGracePeriod 48h and this at 3-5 days must both be set AT
-    ///         DEPLOY. predeploy_check.js asserts it; testnet defaults must not ship.
-    uint256 public evictionGracePeriod = 4 days;   // 345_600
+    ///         MAINNET: parkedGracePeriod 48h must be set AT DEPLOY. This one ships at
+    ///         its declared default; predeploy_check.js asserts the default is inside
+    ///         policy so that cannot change silently.
+    uint256 public evictionGracePeriod = 7 days;   // 604_800 — today's real behaviour
     uint256 public rescueRatioBps      = 7_000;
     /// @notice V8.44 (item E) / V8.48 item 24 (owner decision 2026-08-13): how long
     ///         a FULL MatB may sit without rotating before on-chain automation
@@ -410,7 +430,11 @@ contract MatrixKeeper is Ownable {
     ///
     ///         Capped at 7 days: beyond that a parked seat is held indefinitely by a
     ///         member the triage has already judged unrescuable, which is the queue
-    ///         congestion the eviction valve exists to relieve.
+    ///         congestion the eviction valve exists to relieve. 7 days is also the
+    ///         DEFAULT — it is what extendedIdleTimeout was already enforcing on the
+    ///         execution side before V8.49 made this the single clock, so the cap and
+    ///         the default coincide by design, not by accident. Voting the policy's
+    ///         3-5 days means voting DOWN from here.
     function setEvictionGracePeriod(uint256 v) external onlyOwnerOrGovernance {
         require(
             v == 0 || v == 86_400 || v == 172_800 || v == 259_200 ||
@@ -731,9 +755,27 @@ contract MatrixKeeper is Ownable {
         if (!ghost) {
             // V8.46 item 1: eviction had NO time gate — anyone could evict a freshly-parked
             // member and lock them out of rescue re-entry (selfRescue/coPayRescue need parkedAt>0).
-            // Require a completed rotation and a full idle window first, mirroring _doReclaimSlot.
+            // Require a completed rotation and a full window first, mirroring _doReclaimSlot.
+            //
+            // V8.49 item 1: THE WINDOW IS evictionGracePeriod NOW, was extendedIdleTimeout.
+            // That was the idle-slot RECLAIM timeout, borrowed here because at the time it
+            // was the nearest thing to an eviction delay — and it is what made eviction's
+            // real clock 7 days while discovery ran on parkedGracePeriod's 24h. Two knobs,
+            // neither named for this behaviour, governing it between them: discovery
+            // queued EVICT items for six days that this line silently refused, consuming
+            // slots out of maxItemsPerUpkeep against an 88-member parked queue.
+            //
+            // Both sides read the same value now, so they agree by construction and no
+            // futile item is ever queued. THE DEFAULT IS 7 DAYS ON PURPOSE — identical to
+            // what extendedIdleTimeout was already enforcing, so this reconciliation moves
+            // nobody's eviction. The clock became votable; it did not become shorter.
+            //
+            // Do NOT re-point this at extendedIdleTimeout to "keep them in step". They are
+            // different policies that happened to share a number: reclaiming an idle SEAT
+            // is not evicting a PARKED member, and a DAO vote on one must not move the
+            // other. That coupling is the entire defect this item exists to remove.
             if (mat.rotationCount() == 0) return;
-            if (block.timestamp - mat.parkedAt(member) < extendedIdleTimeout) return;
+            if (block.timestamp - mat.parkedAt(member) < evictionGracePeriod) return;
         }
         uint256 withdrawn = mat.getMemberTotalWithdrawn(member);
         mat.evictParked(member);

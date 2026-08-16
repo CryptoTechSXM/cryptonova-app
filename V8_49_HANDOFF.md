@@ -14,9 +14,8 @@ working on now", it is this file then `V8_49_SCOPE.md`.
 V8.48 is **live on Base Sepolia** and healthy. V8.49 is **in progress on branch `v8.1`**
 of the contracts repo (`admin → preview → main` is the FRONTEND repo only). Item 1b —
 the crossing buffer — and item 1 — the eviction clock — are both **built and tested**:
-`582 passing, 0 failing` (was 575, was 565), predeploy `130/130`. **Nothing of V8.49 is
-deployed**: the chain is still running V8.48, which evicts real members on the 24h clock,
-so the interim watch in the scope is still live. Nothing is half-refactored.
+`584 passing, 0 failing` (was 575, was 565), predeploy `131/131`. **Nothing of V8.49 is
+deployed**: the chain is still running V8.48. Nothing is half-refactored.
 
 **Next up is item 1b's POLICY-B HALF** — see "NEXT" below. It was blocked on item 1 and
 is not blocked any more.
@@ -85,25 +84,57 @@ reverting the batch. **Any non-zero floor turns exhaustion into a whole-batch re
 
 ---
 
-## WHAT SHIPPED 2026-08-16 — ITEM 1, THE EVICTION CLOCK
+## WHAT SHIPPED 2026-08-16 — ITEM 1, AND THE FALSE PREMISE IT WAS OPENED ON
 
-Built to the plan; the plan did not need redesigning. Full record in `V8_49_SCOPE.md`
-item 1 under "✅ BUILT 2026-08-16". The three things worth carrying forward:
+### ⚠️ READ THIS FIRST — the scope's original framing of item 1 was WRONG
 
-1. **`0` had to go on the setter menu**, which the plan did not call for. Without it
+**V8.48 never evicted anyone 24 hours after they parked.** That claim came from reading
+`MatrixKeeperLib`'s evict branch, which gates **discovery**. `MatrixKeeper._doEvictParked`
+has always had its own independent gate — `extendedIdleTimeout`, **7 days**, never set at
+deploy. A member could be QUEUED from 24h and never evicted: the item was consumed and the
+function returned silently. **The owner's "not before 3-5 days" policy was already met.**
+
+What was genuinely broken: **two unrelated knobs governed one behaviour.** Neither
+`parkedGracePeriod` (SF rescue) nor `extendedIdleTimeout` (idle-*slot reclaim*) means
+"eviction", so the timing could not be read off any value, could not be voted on, and
+moved if either unrelated knob moved — and discovery burned `maxItemsPerUpkeep` slots for
+six days on items execution refused.
+
+**Found by reading `_doEvictParked` while starting policy B** — the "verify the premise"
+rule, one item too late. It could NOT have been found by running: **every test drove
+`checkUpkeep` only.** Full correction in `V8_49_SCOPE.md` item 1's top box.
+
+### What shipped
+
+**`evictionGracePeriod` is the ONLY eviction clock now**, read by discovery AND execution,
+**default 7 days** — exactly what `extendedIdleTimeout` already enforced, so **nobody's
+eviction timing moved**. The policy became reachable by DAO vote, not enacted. Owner chose
+that over the plan's 4-day default precisely because 4 days would have SHORTENED members'
+real window from 7. `extendedIdleTimeout` goes back to meaning only idle-slot reclaim —
+**do not re-couple them.**
+
+### Five things worth carrying forward
+
+1. **A clock in this system is TWO gates.** Discovery decides what is queued; execution
+   decides what happens. **Before believing any "X happens after N", find both gates.**
+2. **`0` had to go on the setter menu**, which the plan did not call for. Without it
    `V8_48_KeeperScan.test.js` — which pins `setParkedGracePeriod(0)` on both keepers —
    cannot make the two clocks equal, and the frozen-keeper equivalence harness cannot be
    repaired. Shipped menu `0 / 1d / 2d / 3d / 4d / 5d / 7d`. **0 means evict immediately,
    not "eviction off"** — same shape as `parkedGracePeriod`'s 0.
-2. **The plan named two breaking fixtures. There were four.** The two extras were both in
-   `predeploy_check.js` (one asserting the old evict branch; one pinning `PARAM_MAX_ID`
-   to a literal constant name — the **third** time that anti-pattern has been hit, now
-   fixed by value comparison so param 63 will not break it) plus
-   **`V8_48_SplitGrace.test.js`**, which nothing predicted: its eviction test said "keeps
-   the FULL window", written when eviction and rescue shared a clock, so it had encoded a
-   coincidence as an intention. Extended, not pinned — it now walks all three windows.
-   **Only running the whole suite finds that class.**
-3. **The stack held.** `_checkParked` compiled first try; `bool` → `uint8` really is one
+3. **The plan named two breaking fixtures. There were four.** Both extras were in
+   `predeploy_check.js` (one asserting the old evict branch; one pinning `PARAM_MAX_ID` to
+   a literal constant name — the **third** time that anti-pattern has been hit, now fixed
+   by value comparison so param 63 will not break it) plus **`V8_48_SplitGrace.test.js`**,
+   which nothing predicted: its eviction test said "keeps the FULL window", written when
+   eviction and rescue shared a clock, so it had encoded a coincidence as an intention.
+   Extended, not pinned — it now walks all three windows.
+4. **An untestable path is where this class of bug lives.** `_doEvictParked` returns early
+   when `rotationCount == 0` and `MockMatrixK` had no setter for it, so the execution path
+   was literally unreachable from any mock test. `setRotationCount` was added and EC-8/EC-9
+   are the first tests in this repo to drive `performUpkeep` rather than `checkUpkeep`.
+   **When a test cannot reach a path, that is a finding, not an inconvenience.**
+5. **The stack held.** `_checkParked` compiled first try; `bool` → `uint8` really is one
    slot, with the gate as a ternary inside the branch rather than a new local. Keep that
    shape if the function is touched again.
 
@@ -113,11 +144,15 @@ item 1 under "✅ BUILT 2026-08-16". The three things worth carrying forward:
 
 The scope has always said B and the eviction clock ship together, because **B alone
 refuses a thin member's loan and the 24h clock evicts them the next day — worse for that
-member than doing nothing.** That objection is gone: the clock is 4 days.
+member than doing nothing.** **That objection was never true**, because the 24h clock was
+discovery-only and real eviction was always 7 days (see the correction above). It is now
+true in the other direction too: eviction is ONE governed clock at 7 days, so a refused
+member has a week to self-rescue.
 
 Both preconditions B needed are now met — the crossing buffer is 0 (so the floor is
 enforceable at all; at 3_600 it exceeded the 3_400 floor and refused *everyone*), and the
-eviction clock is 4 days (so a refused member has days to self-rescue, not hours).
+eviction clock is one governed knob at 7 days (so a refused member has a week to
+self-rescue, not hours).
 
 The design is written in `V8_49_SCOPE.md` item 1b under "RECOMMENDATION — ship B TOGETHER
 WITH item 1's eviction clock". The shape, from that section:
@@ -148,8 +183,8 @@ to 2 within four hours of being measured. It is emergent, not a rule. Do not har
 - **`scripts/diag_floor_halt.js` mirrors `_triageParked` line for line** (its own header
   says so) and was NOT updated for the reason codes. It models the FLOOR, not the clock,
   so its output is still correct — but it now reports "would be evicted" without saying
-  *when*, and against a 4-day clock that distinction is the entire item. Worth a column
-  the next time it is run.
+  *when*. Worth a column — and note it models DISCOVERY only, which is the exact half-view
+  that produced this item's false premise. If it is extended, extend it to both gates.
 - The V8.48 handoff's own open list (wallet RPC `sepolia.base.org`, raw RPC error in
   `alert()`, `uBal` fabrication, epoch panel) is **untouched today** and still open —
   it is items 2–4 of `V8_49_SCOPE.md`.

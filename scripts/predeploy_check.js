@@ -449,13 +449,30 @@ if (mkText) {
   // ── V8.49 item 1: the EVICTION CLOCK, param 62 ────────────────────────────
   // Same five-site discipline as param 61. Item 26 shipped three of the five and
   // "DAO tunable" was fiction until somebody checked; this is that check.
-  if (/uint256\s+public\s+evictionGracePeriod\s*=\s*4\s+days\s*;/.test(mkText) ||
-      /uint256\s+public\s+evictionGracePeriod\s*=\s*345_?600\s*;/.test(mkText)) {
-    ok("evictionGracePeriod declared default is 4 days (V8.49 item 1: eviction clock separated from rescue)");
+  if (/uint256\s+public\s+evictionGracePeriod\s*=\s*7\s+days\s*;/.test(mkText) ||
+      /uint256\s+public\s+evictionGracePeriod\s*=\s*604_?800\s*;/.test(mkText)) {
+    ok("evictionGracePeriod declared default is 7 days (V8.49 item 1: matches what extendedIdleTimeout already enforced — member-neutral)");
   } else if (mkText.includes("evictionGracePeriod")) {
-    fail("evictionGracePeriod found but its declared default is not 4 days — owner policy is 3-5 days and deploy_v8.js is what must set anything else");
+    fail("evictionGracePeriod found but its declared default is not 7 days. 7d is what execution ALREADY enforced via extendedIdleTimeout, so it is the member-neutral value; anything shorter is a real change to when members are evicted and must be an owner decision, not a default nobody noticed.");
   } else {
-    fail("evictionGracePeriod NOT found in MatrixKeeper.sol — V8.49 item 1 not applied; eviction still runs on the 24h rescue clock");
+    fail("evictionGracePeriod NOT found in MatrixKeeper.sol — V8.49 item 1 not applied; eviction timing is still split across parkedGracePeriod and extendedIdleTimeout");
+  }
+
+  // ── THE RECONCILIATION, and the check that matters most in this block ─────
+  // Before V8.49 discovery gated on parkedGracePeriod (24h) and execution gated on
+  // extendedIdleTimeout (7d). Nothing failed: work items were queued and silently
+  // dropped for six days, burning maxItemsPerUpkeep slots. If _doEvictParked ever goes
+  // back to extendedIdleTimeout, that returns — and returns SILENTLY, which is why it
+  // is asserted mechanically here rather than left to review.
+  const evExecBlock = (mkText.match(/function _doEvictParked\([\s\S]*?\n    \}/) || [""])[0];
+  if (!evExecBlock) {
+    fail("could not locate _doEvictParked in MatrixKeeper.sol — re-read before trusting this section");
+  } else if (/block\.timestamp - mat\.parkedAt\(member\) < evictionGracePeriod/.test(evExecBlock)) {
+    ok("_doEvictParked gates EXECUTION on evictionGracePeriod — discovery and execution read the same knob");
+  } else if (/extendedIdleTimeout/.test(evExecBlock)) {
+    fail("_doEvictParked still gates on extendedIdleTimeout — that is the IDLE-SLOT RECLAIM clock. Eviction timing would again be governed by two unrelated knobs, and discovery would queue EVICT items that execution silently drops.");
+  } else {
+    fail("_doEvictParked has no recognised time gate — eviction may be ungated (the V8.46 hole) or gated on something new; read it before deploying");
   }
 
   if (mkText.includes("function setEvictionGracePeriod")) {
@@ -1557,14 +1574,21 @@ if (!htmlTxt) {
     // construction — but say so out loud, because "correct by default" is exactly the
     // condition that stops being true silently (selfFundedGracePeriod, two lines up).
     const evDefault = (mkG.match(/uint256\s+public\s+evictionGracePeriod\s*=\s*([^;]+);/) || [, "?"])[1].trim();
-    const evSecs = /4\s+days/.test(evDefault) ? 345600 : Number(String(evDefault).replace(/_/g, "")) || 0;
+    const evDays = (evDefault.match(/^(\d+)\s+days$/) || [])[1];
+    const evSecs = evDays ? Number(evDays) * 86400 : Number(String(evDefault).replace(/_/g, "")) || 0;
+    // The policy is a FLOOR — "eviction should not happen for 3 to 5 days" — so anything
+    // at or above 3 days satisfies it and 7 days (the shipping default, and what
+    // extendedIdleTimeout already enforced) satisfies it comfortably. The upper bound is
+    // the setter's own cap, not a policy line.
     if (/setEvictionGracePeriod\(/.test(dep)) {
       ok("deploy_v8.js sets evictionGracePeriod explicitly");
-    } else if (evSecs >= 259200 && evSecs <= 432000) {
-      ok(`evictionGracePeriod is never set by deploy_v8.js, but its default (${evDefault} = ${evSecs}s) is inside the 3-5 day policy on every network`);
+    } else if (evSecs >= 259200 && evSecs <= 604800) {
+      ok(`evictionGracePeriod is never set by deploy_v8.js, but its default (${evDefault} = ${evSecs}s) satisfies the "not before 3-5 days" policy on every network`);
+    } else if (evSecs > 604800) {
+      fail(`evictionGracePeriod default (${evDefault}) exceeds the setter's own 7-day cap — the declared default is not even settable, so it could never be voted back`);
     } else {
-      gate(`evictionGracePeriod is NEVER set by deploy_v8.js and its default (${evDefault}) is OUTSIDE the owner's 3-5 day policy. ` +
-           `Add the setter call to the deploy or change the declared default — a post-deploy tx is what was forgotten last time.`);
+      gate(`evictionGracePeriod is NEVER set by deploy_v8.js and its default (${evDefault} = ${evSecs}s) is BELOW the owner's "not before 3-5 days" floor. ` +
+           `Add the setter call to the deploy or raise the declared default — a post-deploy tx is what was forgotten last time.`);
     }
   } else if (/if\s*\(age\s*<\s*cfg\.parkedGracePeriod\)\s*return[^\n]*\n\s*return\s*\(parkedMember,\s*WORK_EVICT_PARKED\)/.test(libG.replace(/\r/g, ""))) {
     gate("KNOWN GAP (V8.49 item 1): eviction gates on parkedGracePeriod — the SAME clock as rescue. " +

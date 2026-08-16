@@ -405,7 +405,7 @@ describe("V8.48 items 45+46+47 — ghosts, the insolvency floor, and the evictio
       await pm.addPair(await matA.getAddress(), await matB.getAddress());
       await keeper.setPairManager(0, await pm.getAddress());
       await keeper.setParkedGracePeriod(PARKED_GRACE);
-      // V8.49 item 1 split the EVICTION clock out of the rescue clock (default 4 days).
+      // V8.49 item 1 split the EVICTION clock out of the rescue clock (default 7 days).
       // These GF-D* tests are about ROUTING — which valve a member is sent to — not
       // about timing, and they assert at PARKED_GRACE + 5. Pin the two clocks together
       // so the routing assertions keep meaning what they were written to mean; the

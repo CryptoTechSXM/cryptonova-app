@@ -52,6 +52,15 @@ contract MockMatrixK {
     }
     function clearParked() external { delete _parked; }
 
+    /// @dev V8.49 item 1: rotationCount defaults to 0, which makes _scanMatrix return on
+    ///      its first line — that is what keeps every fixture in this harness to
+    ///      parked-queue work items only, and it must stay the default. But
+    ///      _doEvictParked ALSO gates on rotationCount, so the EXECUTION side of the
+    ///      eviction valve was unreachable from any mock test: the discovery clock could
+    ///      be tested and the execution clock could not. That asymmetry is exactly how
+    ///      the two ended up on different knobs unnoticed. Opt in per test.
+    function setRotationCount(uint256 v) external { rotationCount = v; }
+
     function getParkedCount() external view returns (uint256) { return _parked.length; }
     function getParkedMember(uint256 i) external view returns (address) { return _parked[i]; }
 
