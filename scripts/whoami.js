@@ -9,11 +9,32 @@
  * MockUSDC; 7702-delegated to MetaMask stateless delegator — accepted risk).
  * MAINNET: fresh, never-delegated deployer required.
  */
-const { ethers } = require("hardhat");
+const hre = require("hardhat");
+const { ethers } = hre;
+
+// 2026-08-16: the same trap that made check_nonce.js report Hardhat account #0
+// as "the deployer" three times immediately before a live deploy. Without
+// --network, hardhat uses its in-memory chain and getSigners() returns the
+// built-in test accounts. This file is PARTLY protected by EXPECTED_DEPLOYER —
+// but only when that var is set; unset, it would print a fake signer and then
+// "✅ Signer matches expectation — safe to proceed."
+// A pre-deploy identity check must never be able to bless the wrong chain.
+if (hre.network.name === "hardhat" || hre.network.name === "localhost") {
+  console.error("");
+  console.error("  REFUSING TO ANSWER.");
+  console.error(`  Network is '${hre.network.name}' — hardhat's in-memory chain.`);
+  console.error("  getSigners() returns built-in test accounts here, so the signer");
+  console.error("  reported would not be the one that signs your deploy.");
+  console.error("");
+  console.error("    npx hardhat run scripts/whoami.js --network baseSepolia");
+  console.error("");
+  process.exit(1);
+}
 
 async function main() {
   const [signer] = await ethers.getSigners();
   const addr = signer.address;
+  console.log("Network:", hre.network.name);
   const [bal, code] = await Promise.all([
     ethers.provider.getBalance(addr),
     ethers.provider.getCode(addr),
