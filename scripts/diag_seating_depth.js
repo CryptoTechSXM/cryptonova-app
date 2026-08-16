@@ -72,6 +72,7 @@ const MAT_ABI = [
   "function rotationCount() view returns (uint256)",
   "function matrixSize() view returns (uint256)",
 ];
+const MK_ABI = ["function extendedIdleTimeout() view returns (uint256)"];
 
 // Chunked scan. NEVER a single unbounded getLogs: this project has twice produced
 // a clean, plausible, wrong answer from a capped scan. The range actually covered
@@ -206,6 +207,44 @@ async function scan(p, iface, address, fromBlock, toBlock) {
 
   console.log("=".repeat(76));
   console.log(`TOTAL entries ${grandEntries}   TOTAL backfills ${grandBackfills}`);
+
+  // ── COULD THE MECHANISM HAVE FIRED AT ALL? ───────────────────────────────
+  // FIRST RUN OF THIS SCRIPT (2026-08-16) RETURNED ZERO BACKFILLS AND ZERO
+  // SEAT-FREEING EVENTS OF ANY KIND, ON A CHAIN SIX HOURS OLD. The conclusion
+  // block below would have read as "T5 PASS — item D is theoretical". It was
+  // nothing of the sort: idle reclaim requires extendedIdleTimeout (7 days by
+  // default), so on a six-hour-old chain it CANNOT fire, and MemberExitedSeat
+  // needs a voluntary early exit that bigfill never performs. Zero was
+  // guaranteed before the test started.
+  //
+  // A result that could not have come out any other way is not a measurement.
+  // So: check whether the chain has even existed long enough, and refuse to
+  // offer a verdict when the mechanism was unreachable.
+  let idleTimeout = null;
+  try { idleTimeout = await new ethers.Contract(A.matrixKeeper, MK_ABI, p).extendedIdleTimeout(); } catch {}
+  const deployedAt = A.deployedAt ? Date.parse(A.deployedAt) : null;
+  const ageSecs = deployedAt ? Math.floor((Date.now() - deployedAt) / 1000) : null;
+
+  const noFreeings = grandBackfills === 0;
+  if (noFreeings && idleTimeout !== null && ageSecs !== null && ageSecs < Number(idleTimeout)) {
+    console.log("");
+    console.log("⛔ T5 IS UNANSWERED BY THIS RUN — THE MECHANISM COULD NOT HAVE FIRED.");
+    console.log(`   chain age ${(ageSecs / 3600).toFixed(1)}h   extendedIdleTimeout ` +
+                `${(Number(idleTimeout) / 3600).toFixed(1)}h`);
+    console.log(`   Idle reclaim cannot occur until a member has been idle for the timeout, and`);
+    console.log(`   this chain is younger than that. MemberExitedSeat needs a voluntary early`);
+    console.log(`   exit, which bigfill never performs. Zero backfills was guaranteed before the`);
+    console.log(`   first block — it is not evidence that shallow seating is rare.`);
+    console.log("");
+    console.log("   To answer T5, one of these must be true:");
+    console.log(`     - the chain runs longer than extendedIdleTimeout (${(Number(idleTimeout) / 86400).toFixed(1)} days), or`);
+    console.log(`     - extendedIdleTimeout is lowered on the TEST chain (setter menu applies), or`);
+    console.log(`     - early exits are driven deliberately so MemberExitedSeat fires.`);
+    console.log("");
+    console.log("   Do NOT record item D as theoretical on the strength of this output.");
+    return;
+  }
+
   console.log(`\nWhat a shallow seat costs, over a FULL ride from that seat (T1, $10 fee):`);
   for (const [seat, earn] of EARN_AT) console.log(`  seat ${String(seat).padStart(3)} -> ${earn}`);
   console.log(`\nA member seated at 2 pays $10 and collects $0.25. No funds leak — the slices`);
