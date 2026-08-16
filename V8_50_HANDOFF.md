@@ -165,8 +165,10 @@ No chain was touched. **No transaction sent, nothing deployed, no parameter set,
 keeper untouched, live V8.48 exactly as it was.** `.env` line 69 is still
 `deployed_addresses_v8_48.json`. Every command run was a read, a local build, or a test.
 
-Files changed by session 3, all uncommitted at time of writing: `contracts/MatrixKeeperLib.sol`,
-`contracts/MatrixKeeper.sol`, `contracts/TierRouter.sol` (comments only), this file. New
+Session 3's work is COMMITTED AND PUSHED to `v8.1` as **`24c193c`** (4 files, +500/-68):
+`contracts/MatrixKeeperLib.sol`, `contracts/MatrixKeeper.sol`, `contracts/TierRouter.sol`
+(comments only), and this file — this line was corrected in a follow-up commit, so the
+handoff itself is one commit later than the code. New
 scratch captures in the repo root: `test_v850_task1.txt` (ladder-credit run, superseded) and
 `test_v850_task1b.txt` (current). Both redundant once the numbers above are read; session 2's
 `after.txt`/`before.txt` are still the baseline and should be kept until the re-fixture lands.
