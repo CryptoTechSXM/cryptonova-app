@@ -1234,11 +1234,29 @@ contract TierRouter is Ownable2Step {
         //   double reentry ON → ADDITIONALLY take a 2nd seat in this tier.
         // V8.44: funds arrive as TWO buckets — escrow (the member's crossing
         // reserve, passed by MatrixLogicLib._cycleOutRoot) and withdrawable.
-        // Each seat draws escrow first, then earnings (mirror of
-        // _crossToPartner's 50/50 crossing logic). If re-entry is ON but
+        // Each seat draws escrow first, then earnings. If re-entry is ON but
         // underfunded, the member is PARKED in matrixB (rescue machinery
         // applies) instead of silently exiting; on a clean graduation any
         // un-consumed reserve is released to withdrawable — never stranded.
+        //
+        // V8.50 ITEM A — ESCROW ARRIVES HERE AS ZERO NOW, AND NOTHING BREAKS.
+        //
+        // A MatB seat is reached by a crossing; item A pays that crossing out of the
+        // reserve and skips the destination's reserve carve, so a member cycling out
+        // of a MatB holds none. This paragraph used to end "(mirror of
+        // _crossToPartner's 50/50 crossing logic)" — that mirror is GONE. The crossing
+        // is 100%-from-reserve now and the two-bucket split at cycle-out is 0/100.
+        //
+        // THE MEMBER IS NOT WORSE OFF, and the conservation is exact rather than
+        // approximate. At a T1 MatB cycle-out with no referrals:
+        //   V8.48  reserve $5.00 + earnings $3.40 - $1.60 crossing debt = $6.80
+        //   V8.50  reserve $0.00 + earnings $3.40 (journey A, KEPT) + $3.40 = $6.80
+        // The same $6.80 against the same $10 re-entry, so every funding gate below
+        // decides identically. What changed is how they got here: the V8.48 member
+        // borrowed twice and parked mid-cycle on the way, the V8.50 member borrows
+        // once, at this point. That is item A's entire purpose, and it is why item A
+        // needed NO code change in this contract.
+        //
         // -- 3. V8.46-B CASCADE DEPTH CAP -------------------------------------
         //
         // THE PROBLEM, measured on production 2026-07-28: a self-rescue by a
@@ -1260,6 +1278,19 @@ contract TierRouter is Ownable2Step {
         // rest. Fresh fixtures stop at two tiers; production reaches six because
         // members accrue. A bound that depends on how rich the chain happens to
         // be is not a bound. This makes it explicit and constant.
+        //
+        // V8.50 ITEM A MOVED THAT WEALTH BOUND — TIGHTER, NOT LOOSER, AND THE
+        // COUNTER IS WHY IT DOES NOT MATTER. The sentence above rests on "the
+        // crossing reserve is exactly 50% of the fee", which is no longer true of a
+        // member cycling out of a MatB: escrow reaches this function as 0, so each
+        // link now demands 100% of nextFee from EARNINGS where V8.48 demanded 50%.
+        // Cascades therefore get SHALLOWER under item A, never deeper.
+        //
+        // Left as the whole reason the counter exists: this is the second time the
+        // wealth bound has moved under us, and an implicit bound that keeps moving is
+        // exactly what maxCascadeDepth replaced. Do NOT relax the cap on the strength
+        // of item A making cascades cheaper — the same argument was true in V8.46 and
+        // production still reached six links.
         //
         // TRANSIENT storage (EIP-1153, evmVersion cancun): ~100 gas per access
         // and it CLEARS AT END OF TRANSACTION, so a revert mid-cascade cannot
@@ -1428,6 +1459,38 @@ contract TierRouter is Ownable2Step {
         } else if (!reenteredThisTier && escrow > 0) {
             // Clean graduation from this tier (re-entry OFF, or upgrade-only
             // exit) with un-consumed reserve → release it to withdrawable.
+            //
+            // V8.50 ITEM A — THIS BRANCH IS NOW DORMANT ON THE NORMAL PATH, AND THAT
+            // IS CORRECT. LEAVE IT.
+            //
+            // Item A means a member who reached this MatB by crossing holds escrow 0,
+            // so the test fails and control falls through to the `!anySeat` branch
+            // below. The V8_50_HANDOFF read that as a defect — "the escrow > 0
+            // graduation branch becomes unreachable, dropping members into a park
+            // labelled autoReentry disabled, a misleading reason for a healthy member".
+            // Checked against this code 2026-08-16: IT IS NOT A DEFECT, on both counts.
+            //
+            //   1. Nothing is lost. This branch's only real work is releasing an
+            //      UN-CONSUMED reserve. With escrow == 0 there is nothing to release,
+            //      and releaseReserve() would be a no-op anyway (MatrixLogicLib:1896
+            //      guards on `r > 0`). A member who DID enter this MatB at full fee —
+            //      registerForMatB, or a legacy pre-item-A position — still holds a
+            //      real reserve, still trips `escrow > 0`, and is still released here.
+            //      That is why the test stays instead of being deleted.
+            //
+            //   2. No healthy member is mislabelled. The underfunded member is caught
+            //      by the FIRST branch, `!anySeat && reentryOn`, which is evaluated
+            //      before escrow is looked at at all and emits "insufficient funds".
+            //      "autoReentry disabled" is only reachable when reentryOn is false —
+            //      i.e. when auto re-entry genuinely is disabled — and both this branch
+            //      and the one below emit exactly the same string in that case.
+            //
+            // WHERE THE MISREADING PROBABLY CAME FROM, since it is worth closing:
+            // neither of the two graduation branches calls parkCycledOut. They emit
+            // MemberParked and do not park anybody — the member has GRADUATED. The
+            // event name is a V8.44 legacy and reads like an eviction in the logs.
+            // Renaming it is a frontend-and-tooling change, so it is recorded here as
+            // a known naming defect rather than fixed inside the item A diff.
             try IFigureEightMatrixV8(matrixB).releaseReserve(member) {} catch {}
             if (!anySeat) {
                 emit MemberParked(member, tierIndex + 1, "autoReentry disabled");
@@ -1698,13 +1761,13 @@ contract TierRouter is Ownable2Step {
     }
 
 
-    /// @notice V8.19: Returns the USDC amount a member must keep as protocol reserve.
-    ///         Matrix withdraw() functions call this to prevent members from accidentally
-    ///         draining the funds needed for their own automation (reentry / upgrade).
-    /// @dev    Reserve is computed from the member's current options + tier fees.
-    ///         Double-entry stacks: one slot upgrades + one slot re-enters.
-    ///         Only the active highest-tier matrix enforces this (checked in the matrix).
     // ── V8.32 admin helpers ───────────────────────────────────────────────────
+    //
+    // V8.50: an ORPHANED DOCSTRING was removed from directly above this header. It
+    // described reservedFor() ("V8.19: Returns the USDC amount a member must keep as
+    // protocol reserve...") and had drifted away from that function, ending up
+    // attached to setGlobalJoined() below — the same drift found the same day on
+    // MatrixKeeper.pendingChainLinkCount(). It is restored on reservedFor() itself.
 
     /// @notice V8.32: Retroactively set globalJoined for pre-V8.31 coupon members
     ///         who bypassed registerWithCoupon() and therefore never got the flag set.
@@ -1719,6 +1782,20 @@ contract TierRouter is Ownable2Step {
         freeReentryAllowed[member] = true;
     }
 
+    /// @notice V8.19: Returns the USDC amount a member must keep as protocol reserve.
+    ///         Matrix withdraw() functions call this to prevent members from accidentally
+    ///         draining the funds needed for their own automation (reentry / upgrade).
+    /// @dev    Reserve is computed from the member's current options + tier fees.
+    ///         Double-entry stacks: one slot upgrades + one slot re-enters.
+    ///         Only the active highest-tier matrix enforces this (checked in the matrix).
+    ///
+    ///         V8.50 ITEM A — UNCHANGED, AND CHECKED RATHER THAN ASSUMED. Every leg
+    ///         totalled below (re-entry, upgrade, double) buys a seat in a MatA at FULL
+    ///         fee, so none of them is a crossing and none is repriced by item A. The
+    ///         one number item A halves — the A->B hop — is never reserved for here,
+    ///         because the reserve already pre-funds it. Withdrawal's own crossing lock
+    ///         (MatrixLogicLib.withdrawCore) is likewise deliberately left at the full
+    ///         fee; see the note there before touching either.
     function reservedFor(address member) external view returns (uint256) {
         uint8 highest = memberHighestTier[member];
         if (highest == 0) return 0;

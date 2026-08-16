@@ -5,10 +5,179 @@ Audience: a future session of Claude, plus the owner. Nobody else touches this c
 
 ---
 
-# ⬛ SESSION 2 STATE — 2026-08-16, LATER THE SAME DAY. READ THIS BEFORE SECTION 1.
+# ⬛ SESSION 3 STATE — 2026-08-16, EVENING. READ THIS FIRST, BEFORE SESSION 2.
 
-Everything below section 1 is still the plan and still correct. This section says what
+Session 2's plan is still the plan. This section says what happened building step 1 of it,
+**corrects two things session 2 got wrong**, and names the one decision that is the owner's.
+
+## THE HEADLINE NUMBERS — MEASURED, NOT ESTIMATED
+
+| | passing | failing |
+|---|---|---|
+| baseline, item A stashed (session 2) | 593 | 1 |
+| item A only (session 2, `after.txt`) | **543** | **51** |
+| + session 3 keeper fix (`test_v850_task1b.txt`) | **534** | **60** |
+
+**9 new failures, 0 fixed, every one attributed below.** The diff was taken mechanically
+against `after.txt`, not by eye — decode, slice from the `N failing` line, compare failure
+titles as sets. Do that again rather than reading 60 stack traces.
+
+⚠️ **`after.txt` AND EVERY `Tee-Object` CAPTURE IS UTF-16.** `grep` finds nothing in them and
+exits 0, which reads exactly like "no failures". Decode before believing any search of these
+files. Windows PowerShell 5.1's `Tee-Object` has **no `-Encoding` parameter** (that is
+PowerShell 7+), so this cannot be fixed at the capture site — fix it at the read site.
+
+## WHAT SHIPPED (branch `v8.1`, compiles, sizes checked)
+
+**`MatrixKeeperLib.sol` + `MatrixKeeper.sol` — the keeper now prices a rescue at what the
+crossing COSTS, not at the entry fee.** New `_crossingCost(mat, fee)` mirrors
+`MatrixLogicLib._crossingPrice` and the `cfg.isMatrixA ? … : …` line that appears in six
+places there. It feeds three things in BOTH discovery (`_triageParked`) and execution
+(`_doParkedRescue`): the ladder's denominator, `maxShortfall`, and `sfShare`.
+
+**This half is load-bearing, not polish.** `forceCrossKeeper` REQUIRES
+`sfContribution <= crossingCost`; a keeper still computing against the full fee hands it up
+to 2x that and reverts its own rescue. `stress_test_full.js` proves it — two tests there fail
+with `'F8V8: sfContribution exceeds fee'`, and they failed that way in session 2's run too,
+before any keeper change. That was the bug sitting in plain sight in the 51.
+
+**`MatrixKeeper.sol:722` zero-balance trap is now gated on `isMatrixA()`.** `reserve == 0`
+was evidence of destitution only while every seated member was guaranteed to hold one. Under
+item A it is the normal healthy state for every MatB member. In a MatA the old evidence still
+holds, and those members keep V8.48 behaviour exactly.
+
+**`TierRouter.sol` — COMMENTS ONLY, no executable change. See correction 1.**
+
+**Sizes (`node scripts\sizes.js`): MatrixKeeper 21,282 (3,294 spare) · TierRouter 23,910
+(666) · MatrixLogicLib 24,013 (563) · MatrixPairFactory 24,228 (348).** All fit.
+
+## ⛔ CORRECTION 1 — SESSION 2'S TASK 2 WAS A FALSE ALARM. NO CODE CHANGE WAS NEEDED.
+
+Session 2 wrote: *"`TierRouter` escrow-zero … makes the `escrow > 0` graduation branch at
+`TierRouter.sol:1428` unreachable and dropping members into a park labelled 'autoReentry
+disabled' — a misleading reason for a healthy member."* Checked against the source:
+
+1. **Nothing is lost.** That branch's only work is releasing an UN-CONSUMED reserve. At
+   escrow 0 there is nothing to release, and `releaseReserve()` guards on `r > 0` anyway. A
+   member who entered a MatB at full fee still trips `escrow > 0` and is still released — so
+   the test stays rather than being deleted.
+2. **No healthy member is mislabelled.** The underfunded member is caught by the FIRST
+   branch, `!anySeat && reentryOn`, evaluated BEFORE escrow is read, emitting "insufficient
+   funds". "autoReentry disabled" is only reachable when re-entry genuinely is disabled.
+
+**And every funding gate decides identically, because the conservation is exact.** At a T1
+MatB cycle-out with no referrals: V8.48 = $5.00 reserve + $3.40 earnings − $1.60 crossing
+debt = **$6.80**; V8.50 = $0.00 + $3.40 (journey A, KEPT) + $3.40 = **$6.80**. Same money,
+same $10 re-entry. The V8.48 member just borrowed twice and parked mid-cycle to get there.
+
+**WHERE THE MISREADING CAME FROM, closed rather than left open:** neither graduation branch
+calls `parkCycledOut`. They emit `MemberParked` and park nobody — the member GRADUATED. The
+event name is V8.44 legacy and reads like an eviction in the logs. **That is a real naming
+defect**, frontend-and-tooling scope, deliberately not dragged into the item A diff.
+
+## ⛔ CORRECTION 2 — SESSION 2'S ATTRIBUTION WAS WRONG, AND SO WAS ITS PRESCRIPTION
+
+Session 2 said *"`V8_48_KeeperScan.test.js` (~44)"* of the 51. **That suite has 13 tests and
+9 of them fail.** The other ~42 were never attributed. Do not trust "each is attributed" —
+the run itself is the list.
+
+More importantly, session 2's prescription — *"the ladder must stop reading a spent reserve
+as poverty"* — was **built, tested, and reverted the same hour.** The full write-up sits at
+the top of `MatrixKeeperLib._triageParked` so the next session does not rebuild it:
+
+- The credit was `withdrawable + max(reserve, carve)`. For a MatA member the DENOMINATOR is
+  the carve, so `wBps >= 10_000` always: **it made `EVICT_LADDER` unreachable for everyone,
+  in every matrix.** A member holding nothing read as a top-rung self-funder, the keeper
+  queued a rescue `forceCrossKeeper` refuses, swallowed as `WorkItemFailed`, retried every
+  tick. **An eviction traded for an infinite loop.**
+- The premise double-counted borrowed money. The only position where V8.48 reads higher is
+  mid-journey in a MatB ($6.70 vs $5.10), and that gap **is** the $1.60 SF loan that funded
+  the old full-fee crossing and got carved into a reserve. V8.48's number was inflated by
+  debt; "restoring" it restores an artefact of the double-lending item A exists to remove.
+
+**PROOF THE BACK-OUT DID WHAT IT CLAIMS**, because "it feels right" is not evidence: `EC-1`
+and `EC-4` name their failing leg. With the credit in they failed on **`ladder:`**; with it
+out they fail on **`floor:`**. The ladder behaviour is restored; what remains is a different
+cause.
+
+## THE 9 NEW FAILURES — TWO EFFECTS, BOTH INTENDED, NEITHER A BUG
+
+**(a) ADVANCES GOT SMALLER, so the insolvency floor stops refusing — 6 of 9.**
+`GF-D1`, `IF-7`, `IF-10`, the floor legs of `EC-1`/`EC-2`/`EC-4`, and the three
+`V8_48_SplitGrace` fixtures ("ONE UNIT SHORT is a loan", "the 84% member … is unaffected",
+"a LOAN rescue does NOT fire when the fund cannot cover it"). **The 84% member is exactly who
+item A is for** — they need $5, hold $5, borrow nothing. These encode the pre-item-A
+economics and must be RE-FIXTURED, not fixed.
+
+**(b) THE LADDER CLIFF IS REAL AND IS NOW REPRODUCED — the owner's decision.**
+Inside the already-failing `KeeperScan` diffs, this code now **evicts** in slots where the
+frozen V8.48 copy rescued. Honest arithmetic: an early-MatB member reads ~**3,400 bps**
+against preset 1's bottom rung of **4,000** and falls off it — debt-free, where V8.48 kept
+them on it owing $1.60. **This was analysis in session 3 and is now a fixture result.**
+Deliberately NOT fixed in code: the lever is `sfRescueThresholds`, a governed preset (presets
+2 and 3 reach 3,000 and 1,000). It is an economic trade-off, not an arithmetic one.
+
+## ⛔ TWO OWNER DECISIONS, TAKEN TOGETHER, BEFORE THE RE-FIXTURE IS FINISHED
+
+1. **PARAM 59 `insolvencyFloorBps` 3400 -> 5000** — decided in session 2, still not applied
+   (a deploy-time setting, not code).
+2. **The SF rescue ladder's bottom rung.** Keep preset 1 (bottom 4,000) and accept that
+   early-MatB members fall off it, or move to preset 2 (3,000) / preset 3 (1,000). Framing:
+   under item A these members carry NO debt where V8.48 gave them one, so falling off the
+   ladder is not the same event it was.
+
+**Do not settle 2 from the fixtures alone** — run `scripts/model_item_a.js` against the live
+population the way session 2 did, so the answer is measured on real members.
+
+## NEXT, IN ORDER
+
+1. **Re-fixture the 6 old-economics tests** (`SplitGrace` ×3, `GF-D1`, `IF-7`, `IF-10`) at a
+   MatB re-entry, where a full fee is still charged, instead of a MatA crossing.
+2. **`V8_48_RescueSurplus.test.js` (3)** — still "fixture produced no parked member", still
+   item A working, same re-fixture. Unchanged since session 2.
+3. **Decide the `KeeperScan` premise.** It pins the keeper byte-identical to a frozen
+   `MatrixKeeperPrev`; item A changes the WORLD, so the premise is structurally incompatible.
+   Session 2's advice stands: decide deliberately, record which and why.
+4. **Then** the two owner decisions, then defects 2 and 4 from the scope.
+
+## METHOD NOTES FROM THIS SESSION
+
+- **A prediction at the wrong granularity is not a wrong diagnosis.** I predicted 60 -> 57
+  and got 60. The diagnosis was right — `EC-1`/`EC-4`'s ladder leg DID recover — but these
+  are MULTI-ASSERTION tests and fixing one leg does not turn a test green. Predict the
+  assertion, not the test.
+- **`npx hardhat compile` printed "Nothing to compile" for a file that HAD changed.** The
+  cache's `contentHash` matched the on-disk md5, so Hardhat had seen it — but stale-artifact
+  risk under a 594-test run is not worth reasoning about. `npx hardhat compile --force`
+  settles it in 90 seconds. Do that before any run whose numbers you intend to trust.
+- **Verify a write landed via `device_bash`, not the upload cache** — `wc -c` plus a `grep`
+  for a string you just wrote. The cache served a stale file earlier in this project and cost
+  an hour.
+- **Two orphaned docstrings found and closed**, both the same shape: a comment left behind
+  when its function moved, silently re-attaching to the next function.
+  `MatrixKeeper.pendingChainLinkCount()` carried the SF-ladder docstring (stranded by V8.48
+  item 12a); `TierRouter` had `reservedFor`'s sitting above `setGlobalJoined`. Worth a sweep —
+  this repo has moved a lot of code between files.
+
+## STATE OF THE TREE
+
+No chain was touched. **No transaction sent, nothing deployed, no parameter set, the VPS
+keeper untouched, live V8.48 exactly as it was.** `.env` line 69 is still
+`deployed_addresses_v8_48.json`. Every command run was a read, a local build, or a test.
+
+Files changed by session 3, all uncommitted at time of writing: `contracts/MatrixKeeperLib.sol`,
+`contracts/MatrixKeeper.sol`, `contracts/TierRouter.sol` (comments only), this file. New
+scratch captures in the repo root: `test_v850_task1.txt` (ladder-credit run, superseded) and
+`test_v850_task1b.txt` (current). Both redundant once the numbers above are read; session 2's
+`after.txt`/`before.txt` are still the baseline and should be kept until the re-fixture lands.
+
+---
+
+# ⬛ SESSION 2 STATE — 2026-08-16, LATER THE SAME DAY.
+
+Everything below section 1 is still the plan. This section says what
 happened when we started building it, and **it contains one finding that reorders the work.**
+**Read session 3 above first — it corrects this section's task 2 and its failure attribution.**
 
 Read `V8_50_SCOPE.md`'s "⬛ MEASURED ON THE LIVE V8.48 COMMUNITY CHAIN" section next — it
 carries the numbers, the five source defects, and the two wrong turns the new instrument

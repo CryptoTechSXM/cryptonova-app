@@ -266,7 +266,14 @@ contract MatrixKeeper is Ownable {
     mapping(address => bool) public upkeepCaller;
 
     /// @notice V8.20/V8.21: SF parked-rescue coverage ladder, governable.
-    ///         thresholds[i] = withdrawable/entryFee bps breakpoint (descending).
+    ///         thresholds[i] = bps breakpoint on what the member holds versus what the
+    ///                         crossing costs (descending). V8.50 item A: BOTH sides of
+    ///                         that ratio changed and neither is "withdrawable/entryFee"
+    ///                         any more — the numerator credits the crossing reserve
+    ///                         carve and the denominator is the crossing price, which is
+    ///                         half a fee on an A->B hop. See
+    ///                         MatrixKeeperLib._triageParked for why, and do not
+    ///                         re-derive these presets from the old description.
     ///         bpsLadder[i]  = SF coverage bps at that breakpoint (ascending).
     ///         Below the lowest threshold => ineligible for rescue (evict instead).
     ///         V8.21: free-form custom arrays were removed -- the DAO now picks
@@ -703,36 +710,88 @@ contract MatrixKeeper is Ownable {
         if (!mat.isParked(member)) return;
 
         // Declare outputs before the scoped block so they survive into the SF-call section.
-        // The block frees fee/withdrawable/reserve/effectiveContrib/sfBps/maxShortfall from
-        // the EVM stack before the payForceCross call, keeping peak depth ≤ 9 (limit = 16).
+        // The block frees fee/crossingCost/effectiveContrib/sfBps/maxShortfall from the EVM
+        // stack before the payForceCross call, keeping peak depth ≤ 9 (limit = 16).
+        //
+        // V8.50 item A added three locals to this frame (carve, crossingCost and the
+        // ladder contribution). The reads are NESTED one scope deeper rather than added
+        // alongside the others, so withdrawable/reserve/carve die before maxShortfall is
+        // born: peak inside is 7 where V8.49's was 6. MatrixKeeperLib._triageParked has
+        // the same shape for the same reason — that frame has already blown the stack once.
         uint256 sfShare;
         uint256 crossingBuffer;
 
         {   // ---- amount-computation block ----------------------------------------
-            uint256 fee          = mat.ENTRY_FEE();
-            uint256 withdrawable = mat.withdrawableOf(member);
-            // V8.31: crossing reserve reduces SF shortfall — read it alongside withdrawable.
-            uint256 reserve      = mat.crossingReserveOf(member);
+            uint256 fee = mat.ENTRY_FEE();
 
-            // -- Zero-balance eviction guard -----------------------------------------
-            // If this member has $0 in both withdrawable AND crossingReserve, AND already
-            // carries rescue debt from a prior rescue, they've proven they cannot repay
-            // (likely a testnet zero-income wallet or mainnet member who never referred anyone).
-            // Evict instead of piling on more unpayable debt that drains the SF indefinitely.
-            if (withdrawable == 0 && reserve == 0 && mat.rescueDebtOf(member) > 0) {
-                _doEvictParked(matrix, member);
-                return;
-            }
+            // V8.50 ITEM A: the price of THIS crossing, not the entry fee. Mirrors
+            // MatrixKeeperLib._crossingCost exactly — the full reasoning lives on
+            // _triageParked there and this block must not be read without it. A MatA
+            // member is crossing into the pair's MatB, which their reserve pre-funded; a
+            // MatB member is starting a NEW cycle at full fee. MatrixLogicLib's
+            // forceCrossKeeper prices itself the same way and REQUIRES
+            // sfContribution <= crossingCost, so a keeper still computing against the
+            // full fee here would revert its own rescue on an A->B hop.
+            uint256 crossingCost = mat.isMatrixA() ? fee * CROSSING_RESERVE_BPS / 10_000 : fee;
 
-            // V8.31: effective contribution = crossingReserve + withdrawable.
-            uint256 effectiveContrib = reserve + withdrawable;
-            uint256 sfBps = MatrixKeeperLib.rescueBpsFor(
-                sfRescueThresholds, sfRescueBpsLadder, effectiveContrib, fee);
+            uint256 effectiveContrib;
+            uint256 sfBps;
+            {
+                uint256 withdrawable = mat.withdrawableOf(member);
+                // V8.31: crossing reserve reduces SF shortfall — read it alongside withdrawable.
+                uint256 reserve      = mat.crossingReserveOf(member);
+
+                // -- Zero-balance eviction guard -----------------------------------------
+                // If this member has $0 in both withdrawable AND crossingReserve, AND already
+                // carries rescue debt from a prior rescue, they've proven they cannot repay
+                // (likely a testnet zero-income wallet or mainnet member who never referred anyone).
+                // Evict instead of piling on more unpayable debt that drains the SF indefinitely.
+                //
+                // V8.50 ITEM A — NOW GATED ON isMatrixA(), AND THAT GATE IS THE POINT.
+                //
+                // This is the SECOND DOOR to an eviction item A would otherwise open (the first
+                // is the ladder, in MatrixKeeperLib._triageParked). "reserve == 0" was evidence
+                // of destitution only while every seated member was guaranteed to hold one.
+                // Item A makes a zero reserve the NORMAL, HEALTHY state for every member in a
+                // MatB, because it was spent getting them there. A member who borrowed at
+                // re-entry, was seated in a fresh MatA, crossed free into MatB and had their
+                // MatA earnings taken by the clawback reads $0 / $0 / debt > 0 and is perfectly
+                // mid-cycle. Under V8.48 they held a $5 carve and this line could not fire on
+                // them at all.
+                //
+                // In a MatA the old evidence still holds — a MatA member is SUPPOSED to hold a
+                // reserve, so zero means it was released (softParkIdle) and then spent — and
+                // those members keep exactly the V8.48 behaviour.
+                //
+                // MatB members are not waved through. They fall to the ladder, the shortfall
+                // and the insolvency floor below, which is the single governed arbiter of how
+                // large an advance the fund will absorb. What they no longer meet is a
+                // heuristic item A silently invalidated.
+                if (mat.isMatrixA() && withdrawable == 0 && reserve == 0 && mat.rescueDebtOf(member) > 0) {
+                    _doEvictParked(matrix, member);
+                    return;
+                }
+
+                // V8.31: effective contribution = crossingReserve + withdrawable.
+                // V8.50 item A: the NUMERATOR is untouched — only the price basis moved.
+                // A "notional carve" credit was tried here and reverted the same hour; the
+                // full reasoning is on MatrixKeeperLib._triageParked and must be read before
+                // anyone adds one back. Whatever this expression is, it has to MATCH
+                // discovery's exactly, or discovery queues a rescue this function refuses —
+                // and that disagreement is the batch-halt shape V8.49 item 1b closed.
+                effectiveContrib = reserve + withdrawable;
+                sfBps = MatrixKeeperLib.rescueBpsFor(
+                    sfRescueThresholds,
+                    sfRescueBpsLadder,
+                    effectiveContrib,
+                    crossingCost
+                );
+            }   // withdrawable and reserve freed here
             if (sfBps == type(uint256).max) return;
 
             // Cap sfShare at the actual shortfall (don't advance more than needed).
-            uint256 maxShortfall = fee > effectiveContrib ? fee - effectiveContrib : 0;
-            sfShare = fee * sfBps / 10_000;
+            uint256 maxShortfall = crossingCost > effectiveContrib ? crossingCost - effectiveContrib : 0;
+            sfShare = crossingCost * sfBps / 10_000;
             if (sfShare > maxShortfall) sfShare = maxShortfall;
 
             // -- Crossing buffer --------------------------------------------------
@@ -749,8 +808,16 @@ contract MatrixKeeper is Ownable {
             // would have reverted the WHOLE batch. See V8_49_SCOPE.md item 1b finding (ii).
             // Any future change that makes this non-zero for a self-funded member
             // re-arms that batch-halt path.
+            //
+            // V8.50 ITEM A: STILL THE FULL FEE, ON PURPOSE, while everything above it was
+            // repriced to the crossing cost. The buffer is not a share of THIS crossing —
+            // it is seed money for the member's NEXT one, and after an A->B hop that is a
+            // full-fee MatA re-entry. Halving it would under-seed exactly the members item
+            // A exists to carry through a whole cycle. MatrixKeeperLib._triageParked
+            // computes the same term the same way when it asks the insolvency floor about
+            // the advance; those two expressions must never drift apart.
             crossingBuffer = fee * crossingBufferBps / 10_000;
-        }   // fee, withdrawable, reserve, effectiveContrib, sfBps, maxShortfall freed here
+        }   // fee, crossingCost, effectiveContrib, sfBps, maxShortfall freed here
 
         uint256 totalSfNeeded = sfShare + crossingBuffer;
         uint256 sfBal         = IStabilityFundKeeper(stabilityFund).balanceByTier(tierIdx);
@@ -931,11 +998,20 @@ contract MatrixKeeper is Ownable {
         }
     }
 
-    /// @notice V8.20: ladder is now governable storage (see sfRescueThresholds/sfRescueBpsLadder)
-    ///         instead of hardcoded breakpoints. Behavior is identical to V8.18 by default.
-    /// @notice V8.31: parameter renamed to effectiveContrib (= crossingReserve + withdrawable).
-    ///         The ladder ratio is now (crossingReserve + withdrawable) / entryFee, so a member
-    ///         with a full crossing reserve but zero earnings correctly shows 50% contribution.
+    /// @notice V8.50 — THIS DOCSTRING WAS ORPHANED, AND IT IS DELETED RATHER THAN MOVED.
+    ///
+    ///         It described the SF rescue ladder ("V8.20: ladder is now governable
+    ///         storage… V8.31: the ladder ratio is now (crossingReserve + withdrawable) /
+    ///         entryFee") and was sitting on pendingChainLinkCount(), which counts pending
+    ///         chain links. V8.48 item 12a moved _rescueBpsFor out to MatrixKeeperLib and
+    ///         the comment did not travel with it — it stayed behind and attached itself
+    ///         to whatever function came next.
+    ///
+    ///         Not moved, because by V8.50 it was also WRONG: item A made both sides of
+    ///         that ratio something else. The live description lives on
+    ///         MatrixKeeperLib._rescueBpsFor and _triageParked, which is the only place it
+    ///         can be kept honest. Recorded here rather than deleted silently so a future
+    ///         session does not go looking for a comment it half-remembers.
     function pendingChainLinkCount() external view returns (uint256) {
         return pendingChainLinks.length;
     }
