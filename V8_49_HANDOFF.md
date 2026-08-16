@@ -19,8 +19,12 @@ built, tested and pushed: `594 passing, 0 failing` (was 584, 575, 565), predeplo
 `142/142` (was 131). **Nothing of V8.49 is deployed**: the chain is still running V8.48.
 Nothing is half-refactored, nothing is uncommitted.
 
-**Next up: the `selfFundedGracePeriod` deploy gap** (small, and it is a hard MAINNET=1
-predeploy failure), then **item 2, the wallet RPC**. See "NEXT" below.
+**Next up: the LADDER-VS-FLOOR decision, then the V8.49 DEPLOY.** See "NEXT" below.
+
+**NOTHING IS UNCOMMITTED IN EITHER REPO.** Contracts pushed through `492d6d5` on `v8.1`;
+the frontend's item-2 refactor is pushed as `f4afff5` on `admin` (not yet promoted to
+`preview`/`main` — it is comment-and-refactor only, member behaviour unchanged, so it can
+ride along with the next real frontend change).
 
 ---
 
@@ -88,20 +92,41 @@ exhaustion skips a member (with `WorkItemFailed`) instead of stopping the queue.
 
 ### THIRD READING, 2026-08-16 — the two columns above are SUPERSEDED, keep them only as the trend
 
-| | 1st (08-15) | +4.6h | **2026-08-16** |
-|---|---|---|---|
-| parked | 52 | 88 | **101, then 104** |
-| SF totalBalance | $100.84 | $230.08 | **$294.12** |
-| pending ask, with buffer | $232.29 | $566.43 | **$716.89** |
-| buffer's share | 80% | 74% | **71%** |
-| rescues the fund completes | 21 of 52 | 48 of 88 | **62 of 101** |
-| …at `crossingBufferBps = 0` | all 52 | all 88 | **all 101, $92.03 left** |
-| halt risk / ghosts | 0 / 0 | 0 / 0 | **0 / 0** |
-| **parked growth rate** | — | (burst, not a rate) | **+212/day** |
+| | 1st (08-15) | +4.6h | 08-16 a | **08-16 b (latest)** |
+|---|---|---|---|---|
+| parked | 52 | 88 | 101 / 104 | **121** |
+| SF totalBalance | $100.84 | $230.08 | $294.12 | **$383.02** |
+| pending ask, with buffer | $232.29 | $566.43 | $716.89 | **$918.95** |
+| buffer's share | 80% | 74% | 71% | **69%** |
+| rescues the fund completes | 21 of 52 | 48 of 88 | 62 of 101 | **69 of 121** |
+| …at `crossingBufferBps = 0` | all 52 | all 88 | all 101 | **all 121, $99.47 left** |
+| halt risk / ghosts | 0 / 0 | 0 / 0 | 0 / 0 | **0 / 0** |
+| **parked growth rate** | — | (burst) | +212/day | **+201/day over 3.9h** |
+| **avg real shortfall** | $0.87 | $1.61 | $2.00 | **$2.34** |
+| **refused by policy B at buffer 0** | — | — | 15 of 104 (14%) | **29 of 121 (24%)** |
 
-**The fund is growing and the queue is growing faster.** SF nearly tripled while the
-queue doubled; the buffer still eats 71% of every ask. Nothing here changes the buffer
-decision — it strengthens it.
+**The fund is growing and the queue is growing faster.** SF nearly quadrupled while the
+queue more than doubled; the buffer still eats 69% of every ask. Nothing here changes the
+buffer decision — it strengthens it. **+201/day over 3.9h is now a RATE, not a burst** —
+three baseline rows, steady.
+
+### ⛔ THE TREND THAT MATTERS MOST — AND IT IS NOT IN ANY SINGLE READING
+
+**Average real shortfall is climbing monotonically: $0.87 → $1.61 → $2.00 → $2.34.**
+Members are arriving at the crossing progressively THINNER. Because policy B refuses when
+`debt + shortfall > $3.40`, that trend drives the refusal rate directly:
+**14% → 24% of the queue in a few hours.**
+
+**Read that as a trajectory, not a level.** If the shortfall keeps climbing toward the
+$3.40 ceiling, B stops being a guard on the tail and becomes the main path — it would
+evict a growing majority rather than a struggling minority. **Nobody has decided that,
+and nobody should discover it after deploy.** This is the single strongest argument for
+settling the ladder-vs-floor question BEFORE V8.49 goes out, and for putting a watch on
+this number after it does. `logs/parked_baseline.csv` has the series.
+
+**Also new: 23 of 121 now carry debt (was 9), total $28.20 — and a cluster of them sit at
+EXACTLY $1.80** with $0.00 withdrawable. $1.80 is 18% of the T1 fee. Not investigated.
+Worth one look, because an exact repeated figure is usually a mechanism, not a coincidence.
 
 ---
 
@@ -232,12 +257,73 @@ It is **7**.
 
 ---
 
-## NEXT
+## NEXT — IN THIS ORDER, AND THE ORDER IS THE POINT
 
-### Item 2 — the wallet RPC (likely the biggest member-facing win in the scope)
+### 1. THE LADDER-VS-FLOOR DECISION — the last real choice in V8.49
 
-`index.html:2834` and `:2903` hand members the PUBLIC `sepolia.base.org` endpoint while
-the site's own reads go elsewhere. Carried from the V8.48 handoff, untouched today.
+Written up in full in `V8_49_SCOPE.md` item 1b, "⚠️ NEW, UNRESOLVED". In one line: **the
+SF rescue ladder will lend up to 60% of the entry fee while the insolvency floor caps
+debt at 34%**, so with policy B shipped, a member whose crossing reserve + withdrawable is
+**below 66% of the fee is refused with ZERO debt**, and the bottom rungs of the live
+ladder preset can never fire. Three options are written up (accept / trim the ladder /
+raise `insolvencyFloorBps` via PARAM 59).
+
+**WHY IT IS BEFORE THE DEPLOY AND NOT AFTER:** if the answer is "trim the ladder" or
+"move the floor", that is a code or config change and it should ship IN V8.49, not as a
+second deploy days later.
+
+**RE-MEASURE FIRST — `node scripts\diag_floor_halt.js`.** Three readings on 2026-08-16
+gave **13 → 15 → 29** refused. It is not a stable number and the direction is UP (see the
+shortfall trend above). Do not decide who gets evicted off a stale reading. This is an
+OWNER decision — an economic trade-off, not a code fact — so put the fresh numbers in
+front of him with the three options and a recommendation.
+
+**The latest reading changes the weight of the options.** At 14% of the queue this looked
+like a guard on the tail; at 24% and climbing it does not. Consider seriously that the
+answer may be **raise `insolvencyFloorBps`** (PARAM 59 — no redeploy, menu
+`0/1700/2500/3400/5000/6800/10000`) rather than accept, because 5000 or 6800 tracks where
+members actually are while leaving the mechanism intact. Against that: 3400 was MEASURED
+as the ~34% median per-cycle earnings, so raising it means the floor stops meaning what it
+was derived from. **That tension is the decision. Do not resolve it by reading.**
+
+### 2. THEN DEPLOY V8.49 — and the queue is the argument for urgency
+
+Parked is growing at **+212/day** and nothing of V8.49 is on chain. At the live buffer the
+Stability Fund completes **62 of 101** rescues; at `crossingBufferBps = 0` the same $294
+clears **all 101 with $92 left**. **Every day this is not deployed, the queue compounds
+against a fix that is already built and tested.** Runbooks: `DEPLOY_V8_48_CARD.md`,
+`GO_LIVE_RUNBOOK.md`.
+
+### 3. CHEAP AND WORTH DOING WHILE WAITING — close the last measurement-only claim
+
+There is still no assertion that a real rescue books **`shortfall` and nothing more**.
+IF-10 now drives `performUpkeep` into `_doParkedRescue` for real, so the path is reached;
+what is missing is a `forceCrossKeeper` mock that RECORDS its
+`(sfContribution, crossingBuffer)` arguments so the amount can be asserted. `MockMatrixK`
+stubs it today. **This is the only part of item 1b still resting on a live measurement
+rather than on a test.**
+
+### ITEM 2 (the wallet RPC) — OPEN, AND DEFERRED TO MAINNET BY OWNER DECISION
+
+`sepolia.base.org` is still what goes into a new member's wallet, and still the prime
+suspect for the "Transaction failed on-chain — hard-refresh" report class (the most
+common in `BUGS.md`). **SUSPECT, NEVER MEASURED.**
+
+**DO NOT PROPOSE FREE PUBLIC ENDPOINTS.** This session did exactly that
+(`base-sepolia-rpc.publicnode.com` as primary) and **the owner overruled it from
+operational history: public RPCs were tried in this site's own read pool, were buggy, and
+were all removed.** That is direct experience of those endpoints on this site and it beats
+any reliability claim from documentation. Recorded as OWNER-OBSERVED — an attempt to find
+the written record in `BUGS.md` and the git history timed out, so do not assume a
+write-up exists behind it. The options still live: a **dedicated QuickNode endpoint kept
+OUT of the read pool**, or leave it to mainnet. Revisit at mainnet, not before.
+
+**Context worth carrying:** all five QuickNode URLs, keys included, are already in
+plaintext in `index.html`, which Vercel serves publicly. Anyone can scrape them today. So
+"putting an endpoint in a member's wallet exposes it" is not the real trade-off — the
+exposure already exists; what changes is the VOLUME of ordinary member traffic. If that
+ever matters enough to fix, the repo already has an `api/` directory and `vercel.json`,
+so a serverless RPC proxy is feasible. Not scoped, not started.
 
 **A NOTE ON THE THREE-COPIES PATTERN, because it has now cost two items in two days.**
 `crossingBufferBps` was a constant whose derivation cited a constant deleted in V8.32.
@@ -273,10 +359,17 @@ written up. **Re-run `diag_floor_halt.js` before deciding** — the refusal coun
   covers all 104 instead of 62) but is NOT DEPLOYED yet.**
 - **Ghosts measured 0 of 88, then 0 of 101** — accumulating evidence item 45 works, with
   the caveat that this chain is days old.
-- **`getParkedMember(65)` reverted `ARRAY_RANGE_ERROR` mid-scan on T1 MatB** (2026-08-16).
-  Benign: `getParkedCount` read high and the keeper drained the queue underneath the
-  loop. Counted nowhere, listed under UNREADABLE. Worth one look if it ever recurs on a
-  QUIET chain, where that explanation would not hold.
+- **`getParkedMember()` reverting `ARRAY_RANGE_ERROR` on T1 MatB — IT HAS NOW HAPPENED
+  TWICE, AND IT IS ALWAYS THE LAST INDEX.** Index 65 on one run, 66 on the next, same
+  matrix `0xB83e7F9f`, both times the final index of the loop. The easy explanation is a
+  race (`getParkedCount` reads high, the keeper drains the queue during the ~1-minute
+  scan). **That still fits — but "always the last index, every time" also fits
+  `getParkedCount()` returning one MORE than the array actually holds**, which would be a
+  real off-by-one and would mean the keeper's own loops read a phantom slot too. Two
+  observations is not a diagnosis. **Settle it by reading `getParkedCount` against the
+  array length directly, on a quiet moment, rather than by assuming the benign branch** —
+  assuming the benign branch on one observation is how item 1 got opened on a false
+  premise. Counted nowhere in the diagnostic; listed under UNREADABLE.
 - **`scripts/diag_floor_halt.js` mirrors `_triageParked` line for line** (its own header
   says so) and was NOT updated for the reason codes. It models the FLOOR, not the clock,
   so its output is still correct — but it now reports "would be evicted" without saying
@@ -298,6 +391,23 @@ written up. **Re-run `diag_floor_halt.js` before deciding** — the refusal coun
 ---
 
 ## TRAPS LEARNED TODAY (cost two failed test runs; do not repay them)
+
+- **CLAUDE'S DEVICE-BRIDGE GIT IS NOT TRUSTWORTHY IN THESE MOUNTED FOLDERS** (found
+  2026-08-16). `git status` through the bridge fails with `unable to unlink
+  '.git/index.lock': Operation not permitted` — the device VM cannot delete files, so git
+  cannot refresh its index, and it then reports a working tree that is not the real one
+  (a bridge read claimed 1,162 modified files in the frontend repo and omitted the one
+  file that had actually just been edited). **The owner's PowerShell git is unaffected.**
+  Rule: Claude may READ files through the bridge, but every git verdict comes from the
+  owner running the command. This also means `git add -A` in that repo would be
+  catastrophic on a scale nobody has measured — the existing never-use-`-A` rule is doing
+  more work than it was written for.
+- **A SEARCH YOU TRUNCATE CANNOT SUPPORT A NEGATIVE.** Predicting which fixtures policy B
+  would break, Claude grepped for `setTierFee` and piped it through `head -30`.
+  `stress_test_full.js` sorts after the `V8_*` files, fell off the end, and its absence
+  was read as evidence it had no tier fee registered. It did, at line 144. It broke.
+  Same family as the capped-`getLogs` bugs this project has hit twice — **a capped scan
+  produces a clean, plausible, wrong answer.**
 
 - **`MatrixKeeper` is a LINKED contract** since V8.48 item 12a. `getContractFactory`
   needs `{ libraries: { MatrixKeeperLib: <addr> } }` or it throws "missing links" before
