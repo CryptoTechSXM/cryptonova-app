@@ -1,6 +1,144 @@
 # V8.49 PRIVATE TEST PLAN — owner + bigfill only, no community
 
 Written 2026-08-16. Audience: a future session of Claude, plus the owner.
+**Updated 2026-08-16 (deploy session) — read the CORRECTIONS section first; several
+instructions below it are superseded.**
+
+---
+
+# ⛔ CORRECTIONS FROM THE DEPLOY SESSION (2026-08-16)
+
+The plan below was written before the deploy. Running it surfaced things it could not
+have known. **Where this section and the original text disagree, this section wins.**
+
+## THE DEPLOY THAT HAPPENED
+
+- **V8.49 deployed to Base Sepolia 2026-08-16T07:07:33Z**, addresses in
+  `scripts/deployed_addresses_v8_49.json` (committed, `de27329`).
+  MatrixKeeper `0x03Ff2184Afa458eE743c123bdb93D7804953F49D`,
+  StabilityFund `0x9b3EbdE821DE116cF338021D0Ab46590ed066CF8`.
+- **`.env` line 69 was NOT changed** and must not be. It still names
+  `deployed_addresses_v8_48.json`. The deploy card's step 0.5 says to bump it; that is
+  correct for a community deploy and WRONG here — bumping it repoints every live
+  diagnostic at the test chain while members are still on V8.48. The private deploy is
+  reached by shell override only.
+- **The VPS keeper was NOT disabled and NOT repointed.** Deploy card 0.2 disables all
+  keepers; that exists for nonce safety, and here it would have stalled live rescues for
+  members for no reason. Verified instead (badly — see below) and left running.
+- **`set_upkeep_caller.js` was NOT run on this deployment, deliberately.** The test keeper
+  signs as the deployer, which `performUpkeep` accepts as `owner()` unconditionally. So
+  the VPS keeper EOA has NO authority on the test chain and cannot drive it even if
+  misconfigured.
+- **`probe_v849_getters.js` (new) confirms V8.49 bytecode is what is on chain**:
+  `crossingBufferBps = 0`, `evictionGracePeriod = 604800`, `extendedIdleTimeout = 604800`
+  (decoupled), `insolvencyFloorBps = 3400`, `loanHeadroom/loanEligibleFor/loanEligible`
+  all answering, and the retired V8.48 constant `CROSSING_BUFFER_BPS()` **absent from the
+  runtime bytecode, with a positive control proving the scan works**. Re-run it after any
+  redeploy. SF at t0 was **$0.30** (W1's own registration).
+
+## ⚠️ `-Offset` DOES NOT ISOLATE A COHORT — THIS WOULD HAVE RUINED THE SPLIT
+
+`bigfill_v8.js:1261-1269` builds its rescue/upgrade population as
+`historicalCount = max(0, HDR_OFFSET - SCAN_FROM)` with **`SCAN_FROM` defaulting to 0**.
+So a run at `-Offset 127` also sweeps wallets `0..126` and applies **its own
+`SELF_RESCUE_RATE`** to them.
+
+**Cohort B at rate 0 would have reached into cohort A and stopped it self-rescuing.** The
+control would have been driven by the subject. `-Offset` separates who gets REGISTERED,
+not who gets SWEPT — and the plan's "non-overlapping `-Offset` ranges" does not prevent
+it. The bleed is one-directional (A at offset 0 has `historicalCount = 0`), which is
+worse than symmetric: it yields a plausible confusing result rather than an obvious break.
+
+**Fixed in `run_bigfill_rr.ps1`**: a new `-ScanFrom`, auto-pinned to `-Offset` whenever
+`-SelfRescueRate` is not 1.0, and the banner now prints the SWEEP range as well as the
+registration range. **Check the sweep line on every cohort launch.**
+
+## THE COHORT RANGES CHANGED
+
+The suggested `A = 0-126, B = 127-253` is unusable. **A private deploy is a private
+DEPLOYMENT, not a private network** — V8.49 and live V8.48 share Base Sepolia, so a
+wallet index is the same address, nonce and ETH balance on both. `bigfill_v8.js:44-49`
+records earlier runs at `HDR_OFFSET=0..3249`, and the live run stopped 2026-08-16
+03:30:44 -04:00 was working a 127-wallet range above that (its exact offset was **not
+recorded** — do not assume).
+
+| cohort | offset | count | `-SelfRescueRate` | `-ScanFrom` |
+|---|---|---|---|---|
+| **A — control** | 6000 | 127 | 1.0 | **6000** |
+| **B — subject** | 6200 | 127 | 0 | **6200** |
+
+The gap between 6126 and 6200 is deliberate: an off-by-one lands on an unused index
+instead of the other cohort.
+
+**`-ScanFrom` is required on BOTH, for different reasons.** On B it stops the bleed. On A
+— where the auto-pin does NOT fire, because A runs at 1.0 — leaving the default would make
+bigfill derive and scan 6,126 non-existent historical wallets before registering anything.
+
+**AND: the interlock does not protect cohort A.** `run_bigfill_rr.ps1` refuses a run below
+rate 1.0 that has not named its chain, but cohort A runs AT 1.0 and so is indistinguishable
+from the ordinary live traffic-driver invocation, which must keep working. **For cohort A
+the only protection is reading the banner.** Confirm `ADDRESSES FILE` and its `source`
+line before letting it register anything.
+
+## RUN THEM SEQUENTIALLY, B FIRST — AND NOT ONLY FOR NONCE REASONS
+
+`FILL_FUNDER_KEY` is **not set** in `.env`, so bigfill falls back to the deployer for every
+ETH send and USDC top-up (`bigfill_v8.js:961`), and the test keeper also signs as deployer.
+Two bigfills plus a keeper on one nonce is a bad footing for a 20-hour run.
+
+**The stronger reason is scientific.** Cohort A's registrations pay 3% of every entry into
+the Stability Fund. Run concurrently, **A subsidises B's rescues**, and the fund-versus-
+shortfall ratio — the exact quantity T1 measures — becomes an artifact of the A:B size
+ratio somebody picked. Run B alone and its parked population, SF income and refusal rate
+are all attributable to B. T6 only asks whether the control behaves normally on V8.49; it
+does not need to be contemporaneous to answer that.
+
+**Start the keeper AFTER B's funding phase completes.** `parkedGracePeriod` is 86400, so
+nothing is eligible for SF rescue for 24h and the keeper is not needed early; bigfill's
+heaviest deployer usage is its opening funding phase.
+
+## ⚠️ T1 AS WRITTEN CLAIMS MORE THAN THE BUFFER CAN DELIVER
+
+T1's pass condition — *"the SF covers ALL pending advances"* — is **not a property of
+`crossingBufferBps`**. It is a property of SF balance versus total shortfall. On live it
+held because the fund happened to sit at roughly **1.35x** the total ask. On a fresh chain
+whose population is deliberately half non-self-funding, that ratio will be far worse for
+reasons having nothing to do with the buffer, and **T1 would fail for the wrong reason.**
+
+**The claim item 1b actually needs to survive, and which IS directly checkable:**
+> **the buffer contributes $0 to every ask.** Every pending advance equals its member's
+> shortfall exactly, with no 36%-of-fee component.
+
+Measure that first. Then, separately, report `SF balance ÷ total pending shortfall` as a
+ratio — it is the number that decides how much fund the system needs, and it is worth
+knowing on its own rather than hidden inside a pass/fail.
+
+## STILL OPEN AT THE TIME OF WRITING
+
+- **The Stability Fund is not yet seeded.** It starts at $0.30 and fills only from 3% of
+  entries. 24h of `parkedGracePeriod` buys time to decide the number — set it from the
+  OBSERVED shortfall distribution, not an estimate, and **write the figure down here**,
+  because "covers all pending" is meaningless without it. Use `topup_sf.js` /
+  `receiveLayer(tier, amount, 5)`; `totalBalance` is the number that governs, not
+  `balanceOf`.
+- **T5 still has no tool.** Unchanged from the original plan below.
+- **`diag_floor_halt.js` is still not updated for policy B** — its `_triageParked` mirror
+  gates the floor on `sfShare > 0` and calls the 2-arg `loanEligible`. V8.49 is now
+  DEPLOYED, so the mirror and the chain can disagree. T1 and T2 both read from this tool.
+- **Sponsor concentration differs from live.** Only W1 is registered as a sponsor on this
+  deployment, so all 127 cohort-B members take W1 as referrer, where live spreads across
+  41 leaders. Member-side economics are identical (they receive L1 from nobody, which is
+  the no-referral profile), but do not compare refusal rates across the two chains without
+  accounting for it.
+- **The deployer nonce was never actually verified quiet before the deploy.**
+  `check_nonce.js` was run as `node scripts\check_nonce.js` with no `--network`, so hardhat
+  used its in-memory chain and reported Hardhat account #0's nonce three times. Both it and
+  `whoami.js` now refuse on the in-memory chain. The deploy completed with no nonce error,
+  so the question is moot for this deploy — but it was not answered.
+- **`whoami.js`'s header comment is stale**: it says the testnet deployer is 7702-delegated
+  to the MetaMask stateless delegator. It now reports `clean EOA (no delegation)`.
+
+---
 
 ## WHY THIS EXISTS, IN THE OWNER'S WORDS
 

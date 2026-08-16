@@ -80,6 +80,9 @@ const SF_ABI = [
   "function memberDebt(address) view returns (uint256)",
   "function insolvencyFloorBps() view returns (uint256)",
   "function loanEligible(address,uint8) view returns (bool)",
+  // V8.49 policy B. Absent on V8.48 — detection at startup decides which is used.
+  "function loanEligibleFor(address,uint8,uint256) view returns (bool)",
+  "function loanHeadroom(address,uint8) view returns (uint256)",
   "function totalBalance() view returns (uint256)",
   "function stabilityFloor() view returns (uint256)",
   "function balanceByTier(uint8) view returns (uint256)",
@@ -111,6 +114,30 @@ async function readBufferBps(mk) {
   return { bps: await mk.CROSSING_BUFFER_BPS(), source: "CROSSING_BUFFER_BPS() [V8.48 constant]" };
 }
 
+// Which insolvency policy does THIS chain implement? Same shape as readBufferBps:
+// ask the chain, never assume, and report which answer was used.
+//
+// Probed with a zero-address / zero-advance call purely for existence. A chain
+// with policy B answers; V8.48 has no such selector and reverts with empty data.
+// An UNEXPECTED error is fatal rather than defaulted: silently modelling policy A
+// against a policy-B chain is exactly the disagreement this detection exists to
+// stop, and it would produce clean, plausible, wrong numbers.
+async function detectPolicyB(sf) {
+  try {
+    await sf.loanEligibleFor(ethers.ZeroAddress, 0, 0);
+    return true;
+  } catch (e) {
+    const msg = (e.shortMessage || e.message || "").toLowerCase();
+    const missing = msg.includes("missing revert data") || msg.includes("could not decode")
+                 || (e.code === "CALL_EXCEPTION" && !e.reason) || e.code === "BAD_DATA";
+    if (missing) return false;
+    throw new Error(
+      `Cannot tell which insolvency policy this chain implements: ${e.shortMessage || e.message}\n` +
+      `  Refusing to guess. A wrong guess here mis-classifies exactly the members this tool is for.`
+    );
+  }
+}
+
 async function readArray(c, fn) {
   const out = [];
   for (let i = 0; i < 64; i++) {
@@ -138,6 +165,7 @@ async function readArray(c, fn) {
   const ladder          = await readArray(mk, "sfRescueBpsLadder");
   const floorBps        = await sf.insolvencyFloorBps();
   const sfBal           = await sf.totalBalance();
+  const POLICY_B        = await detectPolicyB(sf);
 
   // stabilityFloor decides whether SF EXHAUSTION is graceful or fatal.
   // MatrixKeeper._doParkedRescue trims the buffer so totalSfNeeded == sfAvail
@@ -153,6 +181,15 @@ async function readArray(c, fn) {
   console.log(`block ${block}   keeper ${A.matrixKeeper}`);
   console.log(`SF ${A.stabilityFund}   totalBalance ${usd(sfBal)}   stabilityFloor ${stabFloor === null ? "?" : usd(stabFloor)}`);
   console.log(`insolvencyFloorBps ${floorBps}   crossing buffer ${bufferBps} bps  <- read from ${bufferRead.source}   rescueRatioBps ${rescueRatioBps}`);
+  console.log(`INSOLVENCY POLICY MODELLED: ${POLICY_B
+    ? "B  — floor tested on the ADVANCE via loanEligibleFor(m,tier,advance), applied to EVERY parked member [V8.49]"
+    : "A  — floor skipped when sfShare == 0, else 2-arg loanEligible(m,tier) [V8.48]"}`);
+  if (POLICY_B && bufferBps === 0n) {
+    console.log(`Buffer is 0, so totalSfNeeded == 0 for a self-funded member and payForceCross is`);
+    console.log(`never called for them — the V8.48 batch-halt path is DELETED, not merely unarmed.`);
+    console.log(`("SF: insolvency floor" and "SF: below floor" are also on performUpkeep's`);
+    console.log(` swallow-list as of V8.49, so a refusal skips one member, not the batch.)`);
+  }
   console.log(`parkedGracePeriod ${grace}s   selfFundedGracePeriod ${selfGrace}s   ladder preset ${preset} (${thresholds.length} rungs)`);
   if (bufferBps > floorBps) {
     console.log(`\n*** BUFFER (${bufferBps} bps) EXCEEDS FLOOR (${floorBps} bps) — every forceCross advance`);
@@ -192,7 +229,7 @@ async function readArray(c, fn) {
           try { m = await mat.getParkedMember(i); } catch (e) { unreadable.push(`${addr}[${i}] getParkedMember ? ${e.shortMessage || e.message}`); continue; }
           if (!m || m === ethers.ZeroAddress) continue;
 
-          let ts, seatedHere, seatedPartner, withdrawn, withdrawable, reserve, debt, eligible;
+          let ts, seatedHere, seatedPartner, withdrawn, withdrawable, reserve, debt;
           try {
             ts            = await mat.parkedAt(m);
             if (ts === 0n) continue;
@@ -204,7 +241,9 @@ async function readArray(c, fn) {
             withdrawable  = await mat.withdrawableOf(m);
             reserve       = await mat.crossingReserveOf(m);
             debt          = await sf.memberDebt(m);
-            eligible      = await sf.loanEligible(m, tierIdx);
+            // Eligibility is NOT read here any more. Under policy B the question
+            // depends on the ADVANCE, which is not known until the ladder has run
+            // below. Reading it here is what forced the 2-arg form. See POLICY.
           } catch (e) {
             unreadable.push(`${tierName} ${addr} ${m} ? ${e.shortMessage || e.message}`);
             continue;
@@ -212,7 +251,7 @@ async function readArray(c, fn) {
           parkedTotal++;
 
           const age  = BigInt(now) - ts;
-          const row  = { tierName, tierIdx, addr, m, age, fee, reserve, withdrawable, debt, eligible };
+          const row  = { tierName, tierIdx, addr, m, age, fee, reserve, withdrawable, debt };
 
           // ---- _triageParked, in order -------------------------------------
           if (seatedHere || seatedPartner) { evictOther.push({ ...row, why: "GHOST (seated in the pair)" }); continue; }
@@ -229,9 +268,43 @@ async function readArray(c, fn) {
           let sfShare = (fee * sfBps) / 10_000n;
           if (sfShare > maxShortfall) sfShare = maxShortfall;
 
-          const buffer  = (fee * bufferBps) / 10_000n;   // MatrixKeeper.sol:568 — UNCONDITIONAL
+          const buffer  = (fee * bufferBps) / 10_000n;
           const advance = sfShare + buffer;
           row.sfShare = sfShare; row.buffer = buffer; row.advance = advance;
+
+          // ---- THE FLOOR TEST — WHICH POLICY IS ON THIS CHAIN? ---------------
+          // V8.48 (policy A): discovery skips the floor entirely when sfShare == 0
+          //   ("self-funded, costs the fund nothing") and otherwise asks the 2-arg
+          //   loanEligible(member, tier) — which is loanHeadroom > 0, i.e. "can
+          //   they borrow ANYTHING". It answers identically for a $0.01 advance and
+          //   a $6.00 one.
+          // V8.49 (policy B): the floor is tested against the ADVANCE, at both SF
+          //   entry points AND in _triageParked, via
+          //   loanEligibleFor(member, tier, advance).
+          //
+          // This mirror asked the V8.48 question unconditionally. Once V8.49 was
+          // deployed that made it disagree with the chain about exactly the members
+          // the test is about. Detected at startup, never assumed, and the policy
+          // actually modelled is printed in the header.
+          let eligible;
+          try {
+            eligible = POLICY_B
+              ? await sf.loanEligibleFor(m, tierIdx, advance)
+              : await sf.loanEligible(m, tierIdx);
+          } catch (e) {
+            unreadable.push(`${tierName} ${addr} ${m} eligibility ? ${e.shortMessage || e.message}`);
+            continue;
+          }
+          row.eligible = eligible;
+
+          if (POLICY_B) {
+            // One rule, first loan or not, self-funded or not. sfShare == 0 no
+            // longer buys a pass — that coupling was policy A's.
+            if (!eligible) { evictFloor.push({ ...row, why: "floored at discovery (policy B, on the advance) -> eviction valve" }); continue; }
+            if (sfShare === 0n) { selfFunded.push(row); continue; }
+            rescue.push(row);
+            continue;
+          }
 
           if (sfShare > 0n && !eligible) { evictFloor.push({ ...row, why: "floored at discovery -> eviction valve" }); continue; }
 
@@ -282,6 +355,40 @@ async function readArray(c, fn) {
   // below as "what discovery would decide", never as "what happens".
   const pendingB = [...rescue, ...selfFunded];
   const floorOf  = r => (r.fee * floorBps) / 10_000n;
+
+  // ── WHEN POLICY B IS ALREADY ON CHAIN, THIS STOPS BEING A PREVIEW ─────────
+  // It becomes a RECONCILIATION, which is more useful: the arithmetic below
+  // (debt + advance > fee * floorBps / 10_000) is this script's MODEL of the
+  // rule; loanEligibleFor() is the CHAIN'S implementation of it. Run both over
+  // the same members and they must agree. Two independent instruments, the way
+  // the VPS threshold work checked entry counts against rotation counts.
+  //
+  // A disagreement is a finding, not a rounding difference: it means the mirror
+  // and the contract have drifted, and every number this script prints about the
+  // floor is then suspect. It is reported loudly and NOT reconciled silently.
+  if (POLICY_B) {
+    const all = [...rescue, ...selfFunded, ...evictFloor];
+    const mismatch = all.filter(r => {
+      const modelRefuses = (r.debt + r.advance) > floorOf(r);
+      const chainRefuses = r.eligible === false;
+      return modelRefuses !== chainRefuses;
+    });
+    console.log(`\nMIRROR RECONCILIATION (policy B is LIVE on this chain)`);
+    console.log(`  members checked            : ${all.length}`);
+    console.log(`  chain refused (loanEligibleFor==false) : ${all.filter(r => r.eligible === false).length}`);
+    console.log(`  model refused (debt+advance > floor)   : ${all.filter(r => (r.debt + r.advance) > floorOf(r)).length}`);
+    if (mismatch.length === 0) {
+      console.log(`  ✓ model and chain AGREE on all ${all.length}`);
+    } else {
+      console.log(`  *** ${mismatch.length} DISAGREEMENT(S) — the mirror has drifted from the contract.`);
+      console.log(`  *** Every floor number in this report is suspect until this is explained.`);
+      mismatch.slice(0, 10).forEach(r => console.log(
+        `      ${r.tierName} ${r.m}  debt ${usd(r.debt)} + advance ${usd(r.advance)} vs floor ${usd(floorOf(r))}` +
+        `  chain says eligible=${r.eligible}`));
+    }
+    console.log(`\n(The block below is retained for the V8.48 comparison only — on this chain the`);
+    console.log(` real refusal count is the "Routed to EVICTION by the insolvency floor" figure above.)`);
+  }
 
   const refusedLive = pendingB.filter(r => r.debt + r.advance > floorOf(r));
   console.log(`\nPOLICY B PREVIEW (discovery only) — refused if B shipped AT THE LIVE BUFFER (${bufferBps} bps): ` +
@@ -397,12 +504,33 @@ async function readArray(c, fn) {
   // appends one row here, so the growth RATE becomes measurable, and so there
   // is a genuine before/after when V8.49 lands the buffer removal.
   // Append-only, never rewritten. Safe to run as often as you like.
+  //
+  // ⛔ THE SERIES WAS CHAIN-BLIND, AND IT PRODUCED A FICTION (found 2026-08-16).
+  // The first V8.49 private-deploy run appended row 4 to a file whose rows 1-3 were
+  // from the LIVE V8.48 chain, then differenced last-vs-first ACROSS DEPLOYMENTS and
+  // printed:
+  //     "over 11.5h: parked 88 -> 13 (-75, -156.2/day)"
+  // V8.49 did not drain 156 members a day. Those are two different chains. The row's
+  // DATA was correct; what was wrong was that nothing recorded WHICH deployment it
+  // described, so the trend arithmetic silently spanned both.
+  //
+  // Fixed by recording the MatrixKeeper ADDRESS — the deployment's ground truth, not
+  // the addresses-file name, which is an operator-chosen label that can be pointed
+  // anywhere. Trends are computed only across rows from the SAME keeper. Rows written
+  // before this column existed are excluded from the arithmetic and COUNTED OUT LOUD,
+  // rather than assumed to belong to whichever chain is being read today.
+  //
+  // Deliberately still append-only. The historical rows are real measurements and are
+  // not rewritten; they are simply no longer differenced against a chain they never
+  // described.
   try {
     const fs   = require("fs");
-    const out  = path.join(__dirname, "..", "logs", "parked_baseline.csv");
+    const out  = process.env.BASELINE_FILE
+      ? path.join(__dirname, "..", "logs", process.env.BASELINE_FILE)
+      : path.join(__dirname, "..", "logs", "parked_baseline.csv");
     const head = "iso,block,parked,halt_risk,self_funded,evict_floor,evict_other," +
                  "rescue,sf_balance_usd,stability_floor_usd,advance_total_usd," +
-                 "buffer_total_usd,shortfall_total_usd,debt_total_usd,buffer_bps,floor_bps\n";
+                 "buffer_total_usd,shortfall_total_usd,debt_total_usd,buffer_bps,floor_bps,keeper\n";
     if (!fs.existsSync(path.dirname(out))) fs.mkdirSync(path.dirname(out), { recursive: true });
     if (!fs.existsSync(out)) fs.writeFileSync(out, head);
     const n = v => (Number(v) / 1e6).toFixed(2);
@@ -410,26 +538,43 @@ async function readArray(c, fn) {
     // Timestamp from the CHAIN, not the local clock — the local clock is not what
     // the ages in this file are measured against.
     const iso = new Date(Number(now) * 1000).toISOString();
+    const thisKeeper = String(A.matrixKeeper).toLowerCase();
     fs.appendFileSync(out, [
       iso, block, parkedTotal, halt.length, selfFunded.length, evictFloor.length,
       evictOther.length, rescue.length, n(sfBal), stabFloor === null ? "" : n(stabFloor),
       n(needTotal), n(bufferPart), n(needNoBuffer), n(debtTotal), bufferBps, floorBps,
+      thisKeeper,
     ].join(",") + "\n");
-    const rows = fs.readFileSync(out, "utf8").trim().split("\n").length - 1;
-    console.log(`\nbaseline row appended -> logs/parked_baseline.csv  (${rows} row${rows === 1 ? "" : "s"} so far)`);
-    if (rows >= 2) {
-      const lines = fs.readFileSync(out, "utf8").trim().split("\n").slice(1);
-      const first = lines[0].split(","), last = lines[lines.length - 1].split(",");
+
+    const raw       = fs.readFileSync(out, "utf8").trim().split("\n");
+    const headerCol = raw[0].split(",");
+    const kIdx      = headerCol.indexOf("keeper");
+    const body      = raw.slice(1).map(l => l.split(","));
+    console.log(`\nbaseline row appended -> logs/${path.basename(out)}  (${body.length} row${body.length === 1 ? "" : "s"} total)`);
+
+    const mine     = kIdx >= 0 ? body.filter(c => (c[kIdx] || "").toLowerCase() === thisKeeper) : [];
+    const unlabelled = kIdx >= 0 ? body.filter(c => !c[kIdx]).length : body.length;
+
+    if (unlabelled > 0) {
+      console.log(`    ${unlabelled} row(s) predate deployment labelling and are EXCLUDED from the trend.`);
+      console.log(`    They are real measurements, but nothing records which chain they describe,`);
+      console.log(`    and at least one of them is from a different deployment than this one.`);
+    }
+    console.log(`    ${mine.length} row(s) belong to THIS deployment (keeper ${thisKeeper.slice(0, 10)}…)`);
+
+    if (mine.length >= 2) {
+      const first = mine[0], last = mine[mine.length - 1];
       const hrs = (Date.parse(last[0]) - Date.parse(first[0])) / 3_600_000;
       if (hrs > 0.25) {
         const dParked = Number(last[2]) - Number(first[2]);
-        console.log(`    over ${hrs.toFixed(1)}h: parked ${first[2]} -> ${last[2]} ` +
+        console.log(`    over ${hrs.toFixed(1)}h on this chain: parked ${first[2]} -> ${last[2]} ` +
                     `(${dParked >= 0 ? "+" : ""}${dParked}, ${(dParked / hrs * 24).toFixed(1)}/day)` +
                     `   SF $${first[8]} -> $${last[8]}`);
-        console.log(`    (old V8.47 chain, for comparison: +125 parked/day, queue never drained)`);
       } else {
-        console.log(`    (need a few hours between runs before a rate means anything)`);
+        console.log(`    (need a few hours between runs on THIS chain before a rate means anything)`);
       }
+    } else {
+      console.log(`    (no trend yet — a rate needs at least two rows from the same deployment)`);
     }
   } catch (e) {
     // Logging must never break the diagnostic.
