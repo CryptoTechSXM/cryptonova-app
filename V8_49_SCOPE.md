@@ -357,7 +357,39 @@ all with $0.00 debt — this is a two-day-old chain and nobody has borrowed yet)
 | SF `totalBalance` $100.84 covers | **21 of 52**, then graceful skip | **all 52, $55.75 left over** |
 | loans before policy B refuses | **0** (first advance already over the $3.40 floor) | **3** (avg shortfall $0.87) |
 
-**Read the last row honestly: 3, not the 2 in the owner's worked example.** The example
+**RE-MEASURED ~4.6h LATER THE SAME DAY (block 45526605 → 45534929) — and it found a
+THIRD argument neither the reasoning nor the first measurement had:**
+
+| | 1st read | +4.6h | note |
+|---|---|---|---|
+| parked | 52 | **88** | +69% in under five hours; a visible registration burst (11 at age ~0.0h) is part of it |
+| SF totalBalance | $100.84 | $230.08 | organic growth is healthy — the fund is NOT the problem |
+| pending ask (with buffer) | $232.29 | $566.43 | |
+| buffer share of the ask | 80% | 74% | |
+| **rescues the fund can complete** | **21 of 52** | **48 of 88** | |
+| **…with `crossingBufferBps = 0`** | **all 52** | **all 88, $88.45 left** | |
+| avg real shortfall | $0.87 | $1.61 | |
+| loans before policy B refuses | 3 | 2 | |
+
+**⛔ THE BUFFER IS A THROUGHPUT LIMIT, NOT JUST A DEBT INFLATOR.** The keeper trims the
+buffer as the fund drains (MatrixKeeper.sol:578-581) and then skips the rest gracefully
+— so the SF spends its capacity on BUFFERS for the first 48 members instead of on
+RESCUES for all 88. **Forty parked members wait who would not have to.** At bps 0 the
+same dollars clear the entire queue with a third left over. This speaks directly to the
+owner's standing product view that the queue must visibly DRAIN rather than churn: part
+of why it does not drain is that every rescue costs ~3× what it needs to.
+
+**And the "3 loans" caveat proved itself within four hours** — the average shortfall
+moved $0.87 → $1.61 and the count moved 3 → 2. It is queue-dependent, exactly as
+written. Do not hard-code it.
+
+**Baseline logging now live** (`logs/parked_baseline.csv`, one row per
+`diag_floor_halt.js` run, appended). One row as of 2026-08-15. **The growth RATE is
+still not established** — 4.6h with a registration burst in it is not a rate, and the
+old chain's "+125/day" is not comparable. Two runs several hours apart will print it.
+
+**Read the last row of the table above honestly: 3, not the 2 in the owner's worked
+example (at the FIRST reading; it was 2 by the second).** The example
 assumed a $1.60 shortfall; the live queue averages **$0.87**, because members are
 reaching the crossing better funded than the example supposed. Three loans total $2.61
 and the fourth is refused — still inside the floor's own stated intent ("expected
