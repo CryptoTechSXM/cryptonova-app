@@ -6,6 +6,166 @@ Read `V8_49_HANDOFF.md` first, then `V8_49_TEST_PLAN.md` (V8.49 is a PRIVATE mea
 deploy — owner + bigfill only). **V8.50 is the release members re-register into**, so it
 carries the economics changes, not V8.49.
 
+**UPDATED 2026-08-16 — the V8.49 private test RAN. Read the MEASURED section below before
+item A. Several assumptions here are now facts, one is now wrong, and the mechanism behind
+item C is not what this document says it is.**
+
+---
+
+# ⬛ MEASURED ON THE V8.49 PRIVATE CHAIN, 2026-08-16
+
+Deployment `0x03Ff2184…F49D`. Cohort B (127 wallets, offset 6200, `-SelfRescueRate 0`),
+cohort A (127, offset 6000, rate 1.0), traffic (offset 6327, rate 1.0). Every figure came
+from the owner running a script — neither sandbox can reach Base Sepolia.
+
+## 1. THE 84% MEMBER IS REAL, AND EXACT
+
+Thirteen members simultaneously read, to the cent:
+
+```
+reserve $5.00   withdrawable $3.40   effective $8.40   shortfall $1.60
+```
+
+That is item A's own table (`reserve $5 + $5 from earnings → short $1.60 → PARK`) and the
+`250 + 1800 + 1350 = 3400 bps` breakdown, observed. **It only appears once members complete
+FULL journeys** — earlier parkers had partial pool weight and scattered shortfalls of
+$0.02–$2.12. The clean number is the steady state, not the transient.
+
+## 2. THE CROSSING BUFFER WAS THE CONSTRAINT — CONFIRMED FROM A COLD START
+
+At `crossingBufferBps = 0` the buffer is **0% of every ask**, and the fund **cleared the
+entire queue**: 43 parked → 0, via 81 rescues. V8.48 live at buffer 3600 completed 69 of 121.
+
+The sensitivity table reproduced the live contradiction on a chain sharing no history:
+
+| buffer bps | policy B refuses |
+|---|---|
+| 0 | 0 of 38 |
+| 1800 | 23 of 38 |
+| **3600 (V8.48)** | **38 of 38** |
+
+Matching the live 52-of-52 and then 88-of-88. **Item 1b's central claim is settled.**
+
+## 3. ⛔ ITEM C'S MECHANISM IS NOT DEBT ACCUMULATION — THE CLAWBACK REPAYS EVERY LOAN
+
+This changes item C, and it is the opposite of what the ladder-vs-floor write-up assumes.
+
+**14 members were refused by the floor. Every one had `memberDebt = $0.00`.** The event log
+(150 loans / $195.78 and 65 repayments / $47.95, both matching the contract's own counters)
+shows each **borrowed exactly once and was repaid IN FULL by the clawback**, in two tranches
+at a single block:
+
+```
+outstanding debt $0.00  -> RESCUED BEFORE x1  (lifetime borrowed $2.12, repaid $2.12)
+repayments : $0.71@blk45558974  $1.41@blk45558974
+```
+
+**`0 of 14 were refused on a first loan.`** 34 of 42 parked members had borrowed invisibly
+to `memberDebt`.
+
+So policy B does **not** "arm as debt accumulates". Debt never accumulates — the clawback
+clears it from the next journey's earnings. **B refuses on the size of a SINGLE advance**:
+
+> loan 1 (~$1.4–2.1) granted → clawback takes the MatB earnings that would repay it →
+> member reaches crossing 2 with those earnings gone → asks **$3.43–4.06** →
+> **exceeds the $3.40 floor** → refused.
+
+**The clawback is what makes the second loan too big.** The owner's two-loan model is
+confirmed: one granted, the second refused.
+
+## 4. T3'S 66% BOUNDARY IS EXACT
+
+| effective | % of fee | advance | verdict |
+|---|---|---|---|
+| $6.61 | **66.1%** | $3.39 | rescued |
+| $6.57 | **65.7%** | $3.43 | **refused** |
+| $5.94 | 59.4% | $4.06 | **refused** |
+
+$6.60 effective produces exactly a $3.40 advance. Never observed before. `diag_floor_halt`'s
+arithmetic mirror agreed with the chain's `loanEligibleFor` on **all 33 members, including
+all 14 refusals**.
+
+## 5. THE FUND IS A FLOW, NOT A STOCK — SEEDING IT IS THE WRONG LEVER
+
+$56.55 → $6.37 in ~6 minutes of rescues, then back to $21.37 in ~14 minutes of
+registrations. Solvency is entry-rate versus rescue-rate; a starting balance only buys
+time. **Do not scope "seed the Stability Fund" as a fix.**
+
+## 6. ⚠️ GAS PER RESCUE ROSE 4x AS JOURNEYS COMPLETED — A LATENT BATCH FAILURE
+
+600k/item (15-item batches) → **2.6M/item** once members were settling full journeys.
+At that rate a full `maxItemsPerUpkeep = 15` batch projects to **~39M gas against a ~17.8M
+practical tx ceiling** (`KEEPER_VPS_CONFIG.md`).
+
+**A batch that fails for GAS is indistinguishable, in the results, from a floor failure.**
+Consider `maxItemsPerUpkeep` 5 or 10 for V8.50; keep the per-item warning in
+`testchain_keeper.js`.
+
+## 7. ⛔ THE RUN HAD NO VALID CONTROL — T6 IS UNANSWERED
+
+| cohort | rate | loans | borrowed | repaid |
+|---|---|---|---|---|
+| A ("control") | **1.0** | **58** | $92.80 | $0.00 |
+| B (subject) | 0 | 98 | $112.58 | $52.20 |
+| traffic | 1.0 | 0 | — | — |
+
+**Self-rescue only happens WHILE that cohort's bigfill process is alive.** Cohort A's exited
+after registration; its members parked hours later with nobody topping them up and were
+rescued by the fund instead. A ran at rate 1.0 and behaved as a second subject.
+
+Traffic's zero is **not** the control signal — traffic registered last and its members likely
+never reached a crossing. The 87 → 58 → 0 gradient tracks **cohort age**, not self-rescue rate.
+
+**Design fix for run 2:** keep the control's bigfill running for the whole measurement, and
+confirm its members have actually reached crossings before reading its loan count.
+
+## 8. THE SELF-RESCUE CAVEAT ON EVERYTHING ABOVE (owner's point, and it is right)
+
+`SELF_RESCUE_RATE = 0` is a **pathological extreme, not a population.** A real member facing
+eviction can top up and pay the $3.43 themselves. The cohort exists to make the floor
+observable — with everyone self-rescuing it never fires — but "14 evicted" is not a forecast
+for real members.
+
+**Self-rescue does not remove the structural gap; it moves who absorbs it.** Item A's
+~32%-of-a-fee-per-cycle becomes a **recurring out-of-pocket cost — about $3.20 per full cycle
+at T1, indefinitely, for a member with no referrals** — instead of an eviction. **That is the
+number V8.50 should be judged on, and the honest one for member comms.**
+
+## 9. ITEM A, WORKED THROUGH WITH THESE NUMBERS
+
+Under item A the reserve pays the A→B crossing, so there is **no first loan, therefore no
+clawback**, and the member reaches re-entry holding the full $6.80 — asking **$3.20, under
+the $3.40 ceiling**. Today's second ask is $3.43–4.06 and is refused.
+
+One cycle further: that $3.20 loan is itself clawed back, and the member reaches the NEXT
+re-entry holding ~$3.60 against $10 — asking **~$6.40, far above the floor**. So **item A
+roughly doubles member lifetime (a full cycle instead of half) and does not fix solvency** —
+what this document already says, now with numbers. It also supports the owner's point that
+doubling completed rotations means more pool and chain earnings, and more CNOVA minted, for
+the fully passive member.
+
+**This is Claude's arithmetic, not a measurement.** Run `scripts/model_insolvency_floor.js`
+against this population before building, as "⚠️ THE MARGIN IS THIN" requires. **And item C
+must be calibrated against POST-item-A asks (~$3.20, then ~$6.40), not today's $3.43–4.06.**
+
+## 10. SMALLER THINGS WORTH CARRYING
+
+- **`ARRAY_RANGE_ERROR` recurred as FIVE CONSECUTIVE TAIL indices (8–12)** during active
+  keeper rescues — not "always the last index" as recorded twice before. A five-slot shrink
+  mid-scan fits the RACE explanation and does **not** fit a `getParkedCount` off-by-one,
+  which would misreport by exactly one every time.
+- **Park rate 84%** — MatA rotations 51 = 43 parked + 8 crossed. Only the earliest roots,
+  carrying the most pool weight, fund their own crossing.
+- **A second T1 pair was deployed mid-run by the factory.** Any tool reading fixed MatA/MatB
+  addresses from the deploy file (including `v849_watch.html`) under-reports once that
+  happens. `diag_floor_halt.js` iterates pairs and stays authoritative.
+- **`parkedGracePeriod` was set to 300s** on the test chain to compress a 24h wait.
+  Accumulation-phase numbers were taken at the real 86400; only the rescue phase ran
+  compressed.
+- **T5 (seating depth) has a tool now — `scripts/diag_seating_depth.js` — but was NOT RUN.**
+  Item D is still undecided. Note the test plan's original spec for it was wrong: it named
+  `SlotReclaimed`, which the keeper no longer emits (it calls `softParkIdle` → `SlotParkedIdle`).
+
 ---
 
 ## ITEM A — THE CROSSING SHOULD BE PAID BY THE RESERVE (owner's idea, 2026-08-16)
