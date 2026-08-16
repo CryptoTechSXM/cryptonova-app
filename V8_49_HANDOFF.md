@@ -2,6 +2,70 @@
 
 Audience: a future session of Claude, plus the owner. Nobody else touches this code.
 
+---
+
+# 🔴 STOP — THIS FILE IS PARTLY SUPERSEDED. V8.49 IS DEPLOYED AND THE TEST HAS RUN.
+
+**2026-08-16, later the same day.** Everything below describing V8.49 as built-but-not-
+deployed, and the whole "NEXT" section, is now HISTORY. What actually happened:
+
+- **V8.49 was deployed privately** to Base Sepolia at `2026-08-16T07:07:33Z`.
+  Addresses in `scripts/deployed_addresses_v8_49.json` (committed).
+  MatrixKeeper `0x03Ff2184…F49D` · StabilityFund `0x9b3EbdE8…6CF8`.
+- **`.env` line 69 still names `deployed_addresses_v8_48.json` and MUST STAY THAT WAY.**
+  The private deploy is reached by a SHELL OVERRIDE only. Changing `.env` would repoint
+  every live V8.48 diagnostic at the test chain while members are still on V8.48.
+- **The VPS keeper was never touched.** It still drives live V8.48. The test chain is
+  driven by `scripts/testchain_keeper.js` run from the Windows box, signing as the
+  deployer (which `performUpkeep` accepts as `owner()`), so the VPS keeper EOA has NO
+  authority on the test deployment and cannot drive it even if misconfigured.
+- **The live bigfill was STOPPED at 2026-08-16 03:30:44 -04:00** so the two chains could
+  not collide on wallet nonces (same network, same addresses). It has not been restarted.
+  **The live V8.48 chain is therefore running PURELY ORGANIC** — a growth measurement this
+  project has never had. A `diag_floor_halt.js` run against `deployed_addresses_v8_48.json`
+  is worth taking.
+
+**WHERE THE RESULTS LIVE:** `V8_50_SCOPE.md`, section **"⬛ MEASURED ON THE V8.49 PRIVATE
+CHAIN"**. Read that before anything in this file's NEXT section.
+
+**THE HEADLINES, so nobody re-derives them:**
+
+1. **T1 PASS.** At `crossingBufferBps = 0` the buffer is 0% of every ask and the fund
+   cleared the entire queue (43 parked → 0, 81 rescues). At 3600 it refuses everyone —
+   the live 52-of-52 / 88-of-88 result, reproduced from a cold start.
+2. **T3 PASS, boundary exact at 66%.** $6.61 effective asks $3.39 and is rescued; $6.57
+   asks $3.43 and is refused. Never observed before.
+3. **T4 PASS.** 81+ rescues, batches of 15, zero reverts, graceful skip on exhaustion.
+4. **⛔ T2 WAS THE WRONG QUESTION.** There is no accumulating refusal rate. **The clawback
+   repays every loan in full**, so `memberDebt` returns to $0.00 between loans and policy B
+   refuses on the size of a SINGLE advance. All 14 refused members had borrowed exactly
+   once and repaid exactly; **0 were refused on a first loan**. The clawback takes the
+   earnings that would have funded the second crossing, which is what makes the second ask
+   ($3.43–4.06) exceed the $3.40 floor. **Item C's stated mechanism is wrong.**
+5. **⛔ T6 UNANSWERED — the run had NO VALID CONTROL.** Self-rescue only happens WHILE that
+   cohort's bigfill process is alive. Cohort A's exited after registration, so A took 58
+   loans at `-SelfRescueRate 1.0` and behaved as a second subject.
+6. **T5 NOT RUN.** `scripts/diag_seating_depth.js` exists now; item D is still undecided.
+
+**THE CAVEAT ON ALL OF IT (owner's, and it is right):** `SELF_RESCUE_RATE = 0` is a
+pathological extreme, not a population. Real members can top up and pay. Self-rescue does
+not remove the ~32%-of-a-fee-per-cycle structural gap — **it moves who absorbs it, into a
+recurring ~$3.20-per-cycle out-of-pocket cost at T1.** That is the number V8.50 should be
+judged on.
+
+**NEW TOOLS FROM THE RUN** (all committed, all self-testing):
+`probe_v849_getters.js` (proves V8.49 bytecode is on chain, bytecode scan + positive
+control) · `testchain_keeper.js` (drives the test chain, counts reverts, gas-ceiling
+warning) · `diag_cohort_split.js` (attributes loans by BIP-44 range) ·
+`diag_seating_depth.js` (T5) · `v849_watch.html` (local read-only watch page — **under-
+reports once the factory deploys a second pair; `diag_floor_halt.js` stays authoritative**).
+
+**ONE OPEN ITEM MOVED:** `ARRAY_RANGE_ERROR` recurred as **five consecutive TAIL indices**
+during active rescues, not "always the last index". That fits the RACE explanation and does
+not fit a `getParkedCount` off-by-one, which would misreport by exactly one every time.
+
+---
+
 **This replaces `V8_48_HANDOFF.md` as the entry point.** That file is still the record
 of the V8.48 DEPLOY (what went live 2026-08-13, the deploy-day traps, the member issues
 open at that moment) — keep reading it for deployed-state questions.
