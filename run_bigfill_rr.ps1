@@ -9,6 +9,7 @@
 # Usage:
 #   powershell -ExecutionPolicy Bypass -File C:\CryptoNite-Smart-Contracts\CryptoNova\run_bigfill_rr.ps1 -Count 127 -Offset 0
 #   Burst mode (old behavior): add -BatchSize 5 -BatchDelay 8
+#   Against a TEST deployment: add -AddressesFile deployed_addresses_v8_49.json
 
 param(
     [int]$Count  = 127,
@@ -16,8 +17,56 @@ param(
     [double]$SelfRescueRate = 1.0,   # 1.0 = every parked wallet self-rescues
     [double]$UpgradeRate    = 1.0,   # 1.0 = upgrade whenever eligible
     [int]$BatchSize  = 1,            # wallets per batch
-    [int]$BatchDelay = 300           # seconds between batches (300 = 5 min drip)
+    [int]$BatchDelay = 300,          # seconds between batches (300 = 5 min drip)
+    [string]$AddressesFile = ""      # "" = inherit .env; see the block below
 )
+
+# ---------------------------------------------------------------------------
+# WHICH DEPLOYMENT DOES THIS RUN DRIVE?  (added 2026-08-16)
+#
+# This wrapper used to set no ADDRESSES_FILE at all, so every run silently
+# inherited .env's value -- which is the LIVE community deployment. Harmless
+# for the default (-SelfRescueRate 1.0) run; NOT harmless for a split-cohort
+# test. A cohort at -SelfRescueRate 0 registers wallets that CANNOT self-fund,
+# so they park, accrue debt and get evicted. Pointed at the live chain that is
+# not a wasted test -- it is damage to the chain members are registered on.
+#
+# hardhat.config.js:2 calls dotenv.config() with NO override, so a shell
+# variable set here WINS over .env. Read out of the loader, not assumed.
+#
+# The interlock is deliberately written WITHOUT naming a version. "A cohort
+# that cannot self-fund must name its chain out loud" stays true after V8.49,
+# V8.50 and every deploy after; a hardcoded "is it v8_48" check would go stale
+# on the next deploy -- the three-copies pattern that has already cost this
+# project two items.
+# ---------------------------------------------------------------------------
+if ($SelfRescueRate -ne 1.0 -and $AddressesFile -eq "") {
+    Write-Host ""
+    Write-Host "REFUSING TO RUN." -ForegroundColor Red
+    Write-Host ("  -SelfRescueRate {0} means this cohort CANNOT self-fund." -f $SelfRescueRate) -ForegroundColor Red
+    Write-Host "  Those wallets park, accrue debt and get evicted -- that belongs on a" -ForegroundColor Red
+    Write-Host "  TEST deployment only, never on the chain members are registered on." -ForegroundColor Red
+    Write-Host "  Name the chain explicitly, e.g.:" -ForegroundColor Red
+    Write-Host "    -AddressesFile deployed_addresses_v8_49.json" -ForegroundColor Red
+    Write-Host ""
+    exit 1
+}
+
+if ($AddressesFile -ne "") {
+    $env:ADDRESSES_FILE = $AddressesFile
+    $effectiveAddrs = $AddressesFile
+    $addrsSource    = "-AddressesFile (chosen for this run)"
+} else {
+    $dotenvPath = Join-Path $PSScriptRoot ".env"
+    $dotenvLine = Select-String -Path $dotenvPath -Pattern '^\s*ADDRESSES_FILE\s*=' -ErrorAction SilentlyContinue | Select-Object -First 1
+    if ($dotenvLine) {
+        $effectiveAddrs = ($dotenvLine.Line -split '=', 2)[1].Trim()
+        $addrsSource    = ".env  <-- INHERITED, not chosen for this run"
+    } else {
+        $effectiveAddrs = "<built-in default inside bigfill_v8.js>"
+        $addrsSource    = "script default (no ADDRESSES_FILE in .env)"
+    }
+}
 
 # ---------------------------------------------------------------------------
 # OWNER RULE (2026-07-25): bigfill does FOUR things and nothing else --
@@ -87,9 +136,12 @@ $env:HDR_OFFSET  = "$Offset"
 
 Write-Host ""
 Write-Host "BIGFILL - register / self-rescue / manual-upgrade ONLY"
+Write-Host ("  ADDRESSES FILE   : {0}" -f $effectiveAddrs)
+Write-Host ("    source         : {0}" -f $addrsSource)
 Write-Host ("  leaders supplied : {0}" -f $leaders.Count)
 Write-Host ("  COUNT            : {0}" -f $Count)
 Write-Host ("  HDR_OFFSET       : {0}" -f $Offset)
+Write-Host ("  wallet range     : HDR {0} .. {1}" -f $Offset, ($Offset + $Count - 1))
 Write-Host ("  batch size/delay : {0} wallet(s) every {1}s" -f $BatchSize, $BatchDelay)
 Write-Host ("  self-rescue rate : {0}" -f $SelfRescueRate)
 Write-Host ("  upgrade rate     : {0}" -f $UpgradeRate)

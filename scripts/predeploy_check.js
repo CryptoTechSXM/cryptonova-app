@@ -286,8 +286,34 @@ if (deployText) {
   }
 
   // Check deploy_v8.js writes to the CONFIGURED ADDRESSES_FILE (was a stale v8_43 hardcode).
+  //
+  // 2026-08-16 — THIS GATE FORBADE THE PRIVATE DEPLOY IT WAS NEVER MEANT TO BLOCK.
+  // The original test was `deployText.includes(ADDR_FILE)`: the SOURCE of
+  // deploy_v8.js had to literally contain the runtime addresses filename. That
+  // is right when the runtime value comes from .env and wrong the moment it
+  // comes from a shell override — which is exactly how V8.49 is deployed
+  // privately (V8_49_TEST_PLAN.md: "use ADDRESSES_FILE as an ENV OVERRIDE rather
+  // than editing the committed defaults", because editing the committed default
+  // repoints every LIVE diagnostic at the test chain).
+  //
+  // The guard's real intent is in its own comment above: catch a STALE HARDCODE.
+  // That intent is satisfied by deploy_v8.js resolving its output through
+  // process.env.ADDRESSES_FILE, which it does at :72. So: an override is
+  // accepted, and only accepted when the env path demonstrably exists.
+  //
+  // Same family as selfFundedGracePeriod (V8_49_HANDOFF) — a CHECK asserting
+  // something the code never promised. When a check and the code disagree, the
+  // code is what the chain runs.
+  const deployHonoursEnv = /process\.env\.ADDRESSES_FILE/.test(deployText);
   if (deployText.includes(ADDR_FILE)) {
     ok(`deploy_v8.js output file: ${ADDR_FILE}`);
+  } else if (process.env.ADDRESSES_FILE && deployHonoursEnv) {
+    ok(`deploy_v8.js output file: ${ADDR_FILE} (ENV OVERRIDE — committed default left alone)`);
+    console.log(`      ⚠  This deploy writes ${ADDR_FILE}, NOT the committed default.`);
+    console.log(`         Intended for a PRIVATE deploy. If you expected the committed`);
+    console.log(`         default, unset ADDRESSES_FILE in this shell and re-run.`);
+  } else if (!deployHonoursEnv) {
+    fail(`deploy_v8.js does not read process.env.ADDRESSES_FILE — output filename is hardcoded`);
   } else {
     fail(`deploy_v8.js does not output to ${ADDR_FILE} (set ADDRESSES_FILE in .env, align deploy_v8.js default)`);
   }
