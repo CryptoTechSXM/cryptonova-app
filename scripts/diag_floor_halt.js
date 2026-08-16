@@ -413,9 +413,36 @@ async function readArray(c, fn) {
   const debtTotalB = pendingB.reduce((a, r) => a + r.debt, 0n);
   console.log(`      carrying debt    : ${withDebt.length} of ${pendingB.length}, total ${usd(debtTotalB)}` +
               (withDebt.length ? `, max ${usd(withDebt.reduce((a, r) => r.debt > a ? r.debt : a, 0n))}` : ""));
-  if (debtTotalB === 0n) {
-    console.log(`      => B REFUSES NOBODY TODAY. It is a guard that arms as debt accumulates,`);
-    console.log(`         not a change anyone on this queue would feel. Say so in the handoff.`);
+  // ── THIS CONCLUSION WAS WRONG TWICE OVER, AND IT PRINTED CONFIDENTLY ──────
+  // It used to say, whenever debtTotalB was 0:
+  //   "B REFUSES NOBODY TODAY. It is a guard that arms as debt accumulates."
+  // Both halves failed on 2026-08-16:
+  //
+  // 1. IT PRINTED DIRECTLY BELOW 14 ACTUAL REFUSALS. pendingB is rescue +
+  //    selfFunded — it EXCLUDES evictFloor, the members already refused. So it
+  //    was reporting "nobody among the not-refused is refused", which is
+  //    trivially true and reads as "nobody is refused".
+  //
+  // 2. "ARMS AS DEBT ACCUMULATES" IS THE WRONG MECHANISM. debtTotalB is 0
+  //    because the CLAWBACK REPAYS EACH LOAN IN FULL from the next journey's
+  //    earnings — measured: 14 of 14 refused members read memberDebt $0.00 while
+  //    diag_loan_history shows each borrowed once and repaid exactly.
+  //    Debt never accumulates. B refuses on the SIZE OF A SINGLE ADVANCE, and
+  //    the advance grows because the clawback took the earnings that would have
+  //    funded it. memberDebt is a BALANCE, not a LEDGER — this line was reading
+  //    it as a ledger, which is the trap CLAUDE.md names explicitly.
+  if (evictFloor.length > 0) {
+    console.log(`      => ${evictFloor.length} MEMBER(S) ARE BEING REFUSED RIGHT NOW (listed above under`);
+    console.log(`         "Routed to EVICTION by the insolvency floor"). The 0 on the line above`);
+    console.log(`         counts only members NOT already refused — it is not a verdict on B.`);
+    console.log(`      => outstanding debt of $0.00 does NOT mean "never borrowed". The clawback`);
+    console.log(`         repays each loan in full, so memberDebt returns to zero between loans.`);
+    console.log(`         Run diag_loan_history.js for the event-sourced answer.`);
+  } else if (debtTotalB === 0n) {
+    console.log(`      => nobody on this queue is refused at the moment. Note this is a statement`);
+    console.log(`         about the CURRENT queue, not about policy B: refusal depends on the size`);
+    console.log(`         of a single advance, not on accumulated debt (the clawback clears debt`);
+    console.log(`         between loans). Do not restate this as "B never refuses anyone".`);
   }
 
   const loansLeft = pendingB
@@ -533,6 +560,26 @@ async function readArray(c, fn) {
                  "buffer_total_usd,shortfall_total_usd,debt_total_usd,buffer_bps,floor_bps,keeper\n";
     if (!fs.existsSync(path.dirname(out))) fs.mkdirSync(path.dirname(out), { recursive: true });
     if (!fs.existsSync(out)) fs.writeFileSync(out, head);
+
+    // HEADER MIGRATION (2026-08-16, second attempt at this fix).
+    // The first version only wrote the new header when CREATING the file. On an
+    // existing file the header stayed 16 columns, so indexOf("keeper") was -1 and
+    // EVERY row — including the one just written WITH a keeper — was classified
+    // "unlabelled". The run reported "0 rows belong to THIS deployment" while
+    // holding the label in its hand.
+    //
+    // Rewriting the HEADER LINE is a schema migration, not a data rewrite: no
+    // measurement is altered, and old 16-field rows simply have no value in the
+    // new column, which is exactly what "unlabelled" should mean.
+    {
+      const cur = fs.readFileSync(out, "utf8");
+      const firstNL = cur.indexOf("\n");
+      const curHead = firstNL >= 0 ? cur.slice(0, firstNL + 1) : "";
+      if (curHead !== head && !curHead.includes("keeper")) {
+        fs.writeFileSync(out, head + cur.slice(firstNL + 1));
+        console.log(`\n(baseline header migrated: added the 'keeper' column — data untouched)`);
+      }
+    }
     const n = v => (Number(v) / 1e6).toFixed(2);
     const debtTotal = pending.reduce((a, r) => a + r.debt, 0n);
     // Timestamp from the CHAIN, not the local clock — the local clock is not what

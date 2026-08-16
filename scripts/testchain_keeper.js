@@ -114,9 +114,26 @@ const CSV_PATH       = path.join(__dirname, "..", "logs", "testchain_keeper.csv"
 const sleep = s => new Promise(r => setTimeout(r, s * 1000));
 const stamp = () => new Date().toISOString().replace("T", " ").slice(0, 19);
 
+// Read out of MatrixKeeper.sol:130-147. DO NOT edit this map from memory.
+//
+// The first version of this map was copied from run_keeper.js, which listed only
+// 0-5 and had `3: "?"`. Claude filled that gap by GUESSING "FORCE_ROTATE".
+// Type 3 is WORK_CHAIN_LINK; FORCE_ROTATE is 8. So chain-link work would have been
+// mislabelled in the console AND in the CSV, and types 6-9 printed as bare numbers
+// — including WORK_EVICT_PARKED (6), which is the event this whole test is
+// watching for. A guessed label is worse than a missing one: a number invites a
+// lookup, a wrong word does not.
 const WORK_NAMES = {
-  0: "VELOCITY", 1: "GHOST", 2: "RECLAIM",
-  3: "FORCE_ROTATE", 4: "PARKED_RESCUE", 5: "VEL_GATE",
+  0: "VELOCITY",       // WORK_VELOCITY
+  1: "GHOST",          // WORK_GHOST
+  2: "RECLAIM",        // WORK_RECLAIM
+  3: "CHAIN_LINK",     // WORK_CHAIN_LINK
+  4: "PARKED_RESCUE",  // WORK_PARKED_RESCUE
+  5: "VELOCITY_GATE",  // WORK_VELOCITY_GATE
+  6: "EVICT_PARKED",   // WORK_EVICT_PARKED   <- T2/T3 watch for this one
+  7: "DISTRIBUTE_CW",  // WORK_DISTRIBUTE_CW
+  8: "FORCE_ROTATE",   // WORK_FORCE_ROTATE
+  9: "ADVANCE_EPOCH",  // WORK_ADVANCE_EPOCH
 };
 
 function csvAppend(row) {
@@ -265,8 +282,25 @@ async function main() {
     }
     totRescued += rescued; totReclaimed += reclaimed; totFailed += failed;
 
+    // ── GAS PER ITEM, AND THE CEILING IT IS WALKING TOWARD ───────────────
+    // Observed 2026-08-16: cost per rescue rose from ~600k (15 items, 9.0M) to
+    // ~2.6M (5 items, 12.9M) as members began completing FULL journeys — pool
+    // settlement, five levels of chain pay and a full destination distribution
+    // instead of a partial one. At 2.6M/item a full maxItemsPerUpkeep=15 batch
+    // projects to ~39M, and KEEPER_VPS_CONFIG puts the practical tx ceiling near
+    // 17.8M. That is a batch failure with a GAS cause that would look exactly
+    // like a floor failure in the results. Warn before it happens.
+    const perItem = items.length ? Number(receipt.gasUsed) / items.length : 0;
+    const projected = perItem * 15;   // a full maxItemsPerUpkeep batch
     console.log(`            gas ${receipt.gasUsed}  rescued ${rescued}  reclaimed ${reclaimed}  skipped ${failed}` +
-                (failedDetail.length ? `  [${failedDetail.join(" ")}]` : ""));
+                (failedDetail.length ? `  [${failedDetail.join(" ")}]` : "") +
+                (perItem ? `  (${Math.round(perItem / 1000)}k/item)` : ""));
+    if (projected > 17_800_000) {
+      console.log(`            *** GAS WARNING: ${Math.round(perItem / 1000)}k/item projects to ` +
+                  `${(projected / 1e6).toFixed(1)}M for a full 15-item batch, above the ~17.8M`);
+      console.log(`            practical tx ceiling. If a batch that size comes due it may fail for a`);
+      console.log(`            GAS reason and look like a floor failure. Consider maxItemsPerUpkeep 5 or 10.`);
+    }
     console.log(`            running: rescued ${totRescued}  reclaimed ${totReclaimed}  skipped ${totFailed}  REVERTS ${totReverts}`);
     csvAppend(`${stamp()},${tick},${items.length},${rescued},${reclaimed},${failed},${receipt.gasUsed},0,"${failedDetail.join(" ")}"`);
 

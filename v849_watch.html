@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>V8.49 private test chain — watch</title>
+<style>
+  :root {
+    --bg:#0f1115; --panel:#171a21; --line:#252a34; --txt:#e6e9ef; --dim:#8b93a3;
+    --ok:#4ea77a; --warn:#c9a227; --bad:#c0524a; --accent:#5b8dd6;
+  }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--txt);
+         font:14px/1.5 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; padding:20px; }
+  h1 { font-size:16px; margin:0 0 4px; font-weight:600; }
+  .sub { color:var(--dim); font-size:12px; margin-bottom:16px; }
+  .bar { display:flex; gap:8px; margin-bottom:16px; flex-wrap:wrap; align-items:center; }
+  input { background:var(--panel); border:1px solid var(--line); color:var(--txt);
+          padding:7px 9px; border-radius:6px; font:inherit; min-width:380px; }
+  button { background:var(--accent); border:0; color:#fff; padding:7px 14px;
+           border-radius:6px; font:inherit; cursor:pointer; }
+  button:disabled { opacity:.5; cursor:default; }
+  .tiles { display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr));
+           gap:10px; margin-bottom:16px; }
+  .tile { background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:12px 14px; }
+  .tile .k { color:var(--dim); font-size:11px; text-transform:uppercase; letter-spacing:.04em; }
+  .tile .v { font-size:22px; margin-top:4px; }
+  .tile .n { color:var(--dim); font-size:11px; margin-top:2px; }
+  .ok{color:var(--ok)} .warn{color:var(--warn)} .bad{color:var(--bad)}
+  table { width:100%; border-collapse:collapse; background:var(--panel);
+          border:1px solid var(--line); border-radius:8px; overflow:hidden; }
+  th,td { padding:6px 10px; text-align:right; border-bottom:1px solid var(--line); }
+  th:first-child,td:first-child { text-align:left; }
+  th { color:var(--dim); font-weight:500; font-size:11px; text-transform:uppercase; }
+  tr:last-child td { border-bottom:0; }
+  .note { color:var(--dim); font-size:12px; margin:10px 0; }
+  .err { color:var(--bad); }
+</style>
+</head>
+<body>
+<h1>V8.49 private test chain</h1>
+<div class="sub">
+  MatrixKeeper 0x03Ff2184…F49D &nbsp;·&nbsp; StabilityFund 0x9b3EbdE8…6CF8 &nbsp;·&nbsp;
+  read-only, polls every 30s. Not the chain members are on.
+</div>
+
+<div class="bar">
+  <input id="rpc" placeholder="RPC URL (paste your Base Sepolia endpoint)" value="https://sepolia.base.org">
+  <button id="go">Start</button>
+  <span id="status" class="note"></span>
+</div>
+
+<div class="tiles" id="tiles"></div>
+<div class="note" id="cover"></div>
+<table id="tbl"><thead><tr>
+  <th>parked member</th><th>reserve</th><th>withdrawable</th><th>effective</th><th>shortfall</th>
+</tr></thead><tbody id="rows"><tr><td colspan="5" class="note">not started</td></tr></tbody></table>
+<div class="note" id="unread"></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/6.13.4/ethers.umd.min.js"></script>
+<script>
+const A = {
+  keeper: "0x03Ff2184Afa458eE743c123bdb93D7804953F49D",
+  sf:     "0x9b3EbdE821DE116cF338021D0Ab46590ed066CF8",
+  t1a:    "0xD430eD1175C98c1A86EEAf5E39fa94Be25dA70F4",
+  t1b:    "0x52D59908A8a628830dAfcdD19E61A02fd937FFF0",
+};
+const MAT_ABI = [
+  "function occupancy() view returns (uint256)",
+  "function rotationCount() view returns (uint256)",
+  "function getParkedCount() view returns (uint256)",
+  "function getParkedMember(uint256) view returns (address)",
+  "function crossingReserveOf(address) view returns (uint256)",
+  "function withdrawableOf(address) view returns (uint256)",
+  "function ENTRY_FEE() view returns (uint256)",
+];
+const SF_ABI  = ["function totalBalance() view returns (uint256)"];
+const MK_ABI  = ["function crossingBufferBps() view returns (uint256)"];
+
+const usd = v => "$" + (Number(v) / 1e6).toFixed(2);
+const $   = id => document.getElementById(id);
+let timer = null;
+
+async function readMatrix(p, addr) {
+  const c = new ethers.Contract(addr, MAT_ABI, p);
+  const [occ, rot, pc, fee] = await Promise.all([
+    c.occupancy(), c.rotationCount(), c.getParkedCount(), c.ENTRY_FEE(),
+  ]);
+  const members = [];
+  let unreadable = 0;
+  for (let i = 0n; i < pc; i++) {
+    // getParkedCount can read high while the keeper drains the queue, so the last
+    // index sometimes reverts. Skip and COUNT it — never let a failed read look
+    // like an empty queue.
+    try {
+      const m = await c.getParkedMember(i);
+      if (!m || m === ethers.ZeroAddress) continue;
+      const [res, wd] = await Promise.all([c.crossingReserveOf(m), c.withdrawableOf(m)]);
+      const eff = res + wd;
+      members.push({ m, res, wd, eff, short: fee > eff ? fee - eff : 0n });
+    } catch { unreadable++; }
+  }
+  return { occ, rot, pc, fee, members, unreadable };
+}
+
+async function tick() {
+  const url = $("rpc").value.trim();
+  if (!url) return;
+  try {
+    const p = new ethers.JsonRpcProvider(url, 84532, { staticNetwork: true });
+    const block = await p.getBlockNumber();
+    const [sfBal, bufBps, a, b] = await Promise.all([
+      new ethers.Contract(A.sf, SF_ABI, p).totalBalance(),
+      new ethers.Contract(A.keeper, MK_ABI, p).crossingBufferBps(),
+      readMatrix(p, A.t1a),
+      readMatrix(p, A.t1b),
+    ]);
+
+    const all = [...a.members, ...b.members].sort((x, y) => (x.short > y.short ? -1 : 1));
+    const need = all.reduce((s, r) => s + r.short, 0n);
+    const covered = need <= sfBal;
+    const headroom = covered ? sfBal - need : need - sfBal;
+
+    $("tiles").innerHTML = [
+      ["block", block, ""],
+      ["T1 MatA", `${a.occ}/127`, `rotations ${a.rot}`],
+      ["T1 MatB", `${b.occ}/127`, `rotations ${b.rot}`],
+      ["parked", all.length, `MatA ${a.members.length} · MatB ${b.members.length}`],
+      ["stability fund", usd(sfBal), "totalBalance"],
+      ["queue needs", usd(need), "sum of shortfalls"],
+      ["crossing buffer", `${bufBps} bps`, bufBps === 0n ? "V8.49 default" : "NOT the default"],
+    ].map(([k, v, n]) =>
+      `<div class="tile"><div class="k">${k}</div><div class="v">${v}</div><div class="n">${n}</div></div>`
+    ).join("");
+
+    $("cover").innerHTML = all.length === 0
+      ? `<span class="note">no parked members yet</span>`
+      : covered
+        ? `<span class="ok">FUND COVERS THE QUEUE</span> — ${usd(sfBal)} against ${usd(need)}, ${usd(headroom)} spare.`
+        : `<span class="bad">FUND SHORT BY ${usd(headroom)}</span> — ${usd(sfBal)} against ${usd(need)}.`;
+
+    $("rows").innerHTML = all.length === 0
+      ? `<tr><td colspan="5" class="note">none</td></tr>`
+      : all.slice(0, 40).map(r =>
+          `<tr><td>${r.m.slice(0, 10)}…${r.m.slice(-4)}</td><td>${usd(r.res)}</td>` +
+          `<td>${usd(r.wd)}</td><td>${usd(r.eff)}</td><td>${usd(r.short)}</td></tr>`
+        ).join("") + (all.length > 40
+          ? `<tr><td colspan="5" class="note">…and ${all.length - 40} more</td></tr>` : "");
+
+    const un = a.unreadable + b.unreadable;
+    $("unread").innerHTML = un
+      ? `<span class="warn">${un} parked slot(s) unreadable this pass</span> — counted, not hidden. Usually the queue draining mid-scan.`
+      : "";
+    $("status").textContent = "updated " + new Date().toLocaleTimeString();
+  } catch (e) {
+    $("status").innerHTML = `<span class="err">${(e.shortMessage || e.message || e).toString().slice(0, 90)}</span>`;
+  }
+}
+
+$("go").onclick = () => {
+  if (timer) { clearInterval(timer); timer = null; $("go").textContent = "Start"; return; }
+  $("go").textContent = "Stop";
+  tick();
+  timer = setInterval(tick, 30000);
+};
+</script>
+</body>
+</html>

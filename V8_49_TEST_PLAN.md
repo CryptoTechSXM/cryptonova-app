@@ -140,6 +140,102 @@ knowing on its own rather than hidden inside a pass/fail.
 
 ---
 
+# RESULTS — RUN 1, 2026-08-16 (phases 1 and 2 complete)
+
+Deployment `0x03Ff2184…F49D`. All numbers from the owner running scripts; neither
+sandbox can reach Base Sepolia.
+
+## ✅ T1 — PASS, IN ITS ORIGINAL STRONG FORM
+
+**The buffer contributes $0 to every ask**, measured not derived: every advance
+printed `(sf $X.XX + buffer $0.00)`, and the aggregate read
+`BUFFER $0.00 and real shortfall $54.34 (buffer is 0% of the ask)`.
+
+**And the fund cleared the whole queue.** 43 parked → **0**, with 81 rescues.
+For comparison, V8.48 live at buffer 3600 completed **69 of 121**.
+
+**The V8.48 contradiction reproduced from a cold start.** The sensitivity table
+at 38 parked:
+
+| buffer bps | policy B refuses |
+|---|---|
+| 0 (shipping) | 0 of 38 |
+| 900 | 0 of 38 |
+| 1800 | 23 of 38 |
+| 2700 | 31 of 38 |
+| **3600 (V8.48)** | **38 of 38** |
+
+At V8.48's buffer, policy B refuses EVERYONE — matching the live measurement of
+52 of 52 and then 88 of 88. Two independent chains, same result. That is item 1b's
+central claim confirmed on a chain that shares no history with the one it was
+derived from.
+
+## ✅ T4 — PASS SO FAR
+
+81 rescues across 7 ticks, batches of 15, ~9.0-9.5M gas per batch.
+**0 skipped · 0 REVERTS.** Not yet stressed by fund exhaustion mid-batch — the
+fund never actually ran dry, so the graceful-degradation path is still unproven.
+
+## ⏳ T2, T3 — NOT YET ANSWERABLE, AND THE REASON MATTERS
+
+`carrying debt: 0 of 0`. **That is "the queue is empty", NOT "nobody owes
+anything."** `diag_floor_halt.js` reads PARKED members only; the 81 debtors are
+seated in MatB. Reading that line as "no debt exists" would be exactly the kind of
+clean, plausible, wrong conclusion this project keeps hitting.
+
+`diag_loan_history.js` sees them: **81 events, $91.28, MATCHING
+`totalRescueLoaned`** — the scan self-test passed, so the figures are sound.
+81 distinct borrowers, **$0.00 repaid, zero repeat borrowers — every loan is a
+first loan.** Average debt **$1.13 against a $3.40 floor ≈ 3 loans each** before
+policy B bites.
+
+**Phase 3 is where T2/T3 open**: MatB fills, cycles, and those 81 return to MatA
+for a SECOND crossing already carrying debt. Nobody has ever observed that
+population.
+
+## MEASUREMENTS WORTH KEEPING
+
+- **Park rate 84%** — MatA rotations 51 = 43 parked + 8 crossed. Only the earliest
+  roots, carrying the most pool weight, fund their own crossing. (The two counters
+  reconciling exactly is itself the check.)
+- **Average shortfall $0.87 at first read** — identical to the live chain's first
+  reading. The shortfall climb is a property of the mechanism, not of one chain's
+  history.
+- **The SF is a FLOW, not a stock.** It fell $56.55 → $6.37 in ~6 minutes of
+  rescues, then recovered to $21.37 in ~14 minutes of registrations. Solvency is
+  entry-rate versus rescue-rate; **the starting balance only sets how long it
+  lasts.** This is why seeding the fund is the wrong lever — and why the seeding
+  question in the corrections above should be answered "don't", pending phase 3.
+- **~$1.19 lost per parked member** during accumulation (spare went +$36.21 →
+  +$0.71 → −$5.24 across 13 → 38 → 43 parked), against $1.13 predicted from
+  3%-in / $1.43-out. A quantitative prediction that held.
+
+## CORRECTIONS TO CLAUDE'S OWN REASONING DURING THE RUN
+
+- **The "treadmill" hypothesis was WRONG.** Claude reasoned that a rescued member
+  re-enters MatA, displacing someone, so the queue would regenerate as fast as it
+  cleared. It does not. A parked member is stuck at the **A→B crossing**, so the
+  rescue COMPLETES that crossing and they land in MatB — MatB went 8 → 98. Nothing
+  is displaced and the queue drains. The chain corrected the model.
+- **"Parking starts after MatB fills" was WRONG**, corrected by the owner mid-run.
+  `V8_50_SCOPE.md` item A states it directly: the A→B crossing charges the full fee,
+  reserve covers $5, earnings give $3.40, short $1.60 → PARK. Parking begins on the
+  FIRST crossing. That is also why MatB stays near-empty on the live chain while the
+  queue runs to 121 — most members never reach MatB at all.
+
+## DEVIATIONS FROM THE PLAN, DELIBERATE
+
+- **`parkedGracePeriod` set 86400 → 300s** at ~12:12 UTC, on the test chain only.
+  `MatrixKeeper.sol:232` names `0` an "admin/testing override" and the setter doc
+  says "Testnet: 0 or 5-10 minutes". Phases 1 and 2's accumulation numbers were
+  taken at the real 86400; only the rescue phase ran compressed.
+- **Cohorts run SEQUENTIALLY, B first**, then A, then traffic at 6327 — see the
+  corrections section for why.
+- **Traffic at rate 1.0** so it self-funds and the parked queue stays attributable
+  to cohort B.
+
+---
+
 ## WHY THIS EXISTS, IN THE OWNER'S WORDS
 
 > *"we do 8.49 but only me, you and bigfill to do the measurements. once we are satisfied
