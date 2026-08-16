@@ -4,8 +4,15 @@ Audience: a future session of Claude, plus the owner. Nobody else touches this c
 
 **This replaces `V8_48_HANDOFF.md` as the entry point.** That file is still the record
 of the V8.48 DEPLOY (what went live 2026-08-13, the deploy-day traps, the member issues
-open at that moment) — keep reading it for deployed-state questions. For "what am I
-working on now", it is this file then `V8_49_SCOPE.md`.
+open at that moment) — keep reading it for deployed-state questions.
+
+**READING ORDER for "what am I working on now":**
+1. this file
+2. **`V8_49_TEST_PLAN.md`** — the private V8.49 measurement deploy, and the split cohort
+   without which it measures nothing
+3. **`V8_50_SCOPE.md`** — the crossing redesign; the version members actually join
+4. `V8_49_SCOPE.md` — the detail behind what V8.49 built (items 1, 1b) and the
+   ladder-vs-floor write-up that V8.50 item C decides
 
 ---
 
@@ -19,7 +26,17 @@ built, tested and pushed: `594 passing, 0 failing` (was 584, 575, 565), predeplo
 `142/142` (was 131). **Nothing of V8.49 is deployed**: the chain is still running V8.48.
 Nothing is half-refactored, nothing is uncommitted.
 
-**Next up: the LADDER-VS-FLOOR decision, then the V8.49 DEPLOY.** See "NEXT" below.
+**THE PLAN CHANGED LATE ON 2026-08-16 — READ THIS BEFORE THE "NEXT" SECTION.**
+V8.49 is no longer a release. It is a **PRIVATE MEASUREMENT DEPLOY** — owner + bigfill
+only, community untouched — and **V8.50 is the version members re-register into**. Owner's
+reasoning: every version is a fresh deployment members must re-join, and v8.47 → v8.48 →
+v8.49 → v8.50 in four days spends all their trust. Claude had recommended deploy-and-
+measure as cheap engineering hygiene; that priced deploys wrongly, and the owner's plan is
+the one being followed. Two new documents:
+**`V8_49_TEST_PLAN.md`** (how to run the private test so it can actually fail) and
+**`V8_50_SCOPE.md`** (the crossing redesign — the real economic fix).
+**The ladder-vs-floor decision moved INTO V8.50** on purpose: the crossing redesign moves
+the whole shortfall distribution, so deciding it now means deciding it twice.
 
 **NOTHING IS UNCOMMITTED IN EITHER REPO.** Contracts pushed through `492d6d5` on `v8.1`;
 the frontend's item-2 refactor is pushed as `f4afff5` on `admin` (not yet promoted to
@@ -257,9 +274,30 @@ It is **7**.
 
 ---
 
-## NEXT — IN THIS ORDER, AND THE ORDER IS THE POINT
+## NEXT — SUPERSEDED BY THE PRIVATE-TEST PLAN. READ THIS FIRST.
 
-### 1. THE LADDER-VS-FLOOR DECISION — the last real choice in V8.49
+**The current order is:**
+
+1. **Deploy V8.49 to a PRIVATE chain** — owner + bigfill only. Follow
+   **`V8_49_TEST_PLAN.md`** exactly, in particular the **SPLIT COHORT**: bigfill's
+   wrapper runs `SELF_RESCUE_RATE = 1.0`, and if every wallet self-rescues then nobody
+   parks, nobody accrues debt, the floor never fires and **the test passes while measuring
+   nothing.** One cohort at `1.0` (control), one at `0` (the subject).
+   Do **NOT** repoint the frontend at the V8.49 addresses — that is what keeps it private.
+2. **Read T1–T6** from the test plan. They have pass/fail conditions, not vibes.
+3. **Build V8.50** — `V8_50_SCOPE.md`: the crossing redesign (item A) + no mid-cycle
+   eviction (item B, not separable from A), ladder-vs-floor calibrated from the
+   measurements (item C), seating fixed only if T5 says it is real (item D).
+4. **V8.50 is the deploy the community re-registers into.** One member-facing deploy.
+
+The sections below are kept because their content is still true — the ladder-vs-floor
+analysis, the deploy urgency argument, the test gap — but **their SEQUENCING is
+superseded** by the four steps above. Two corrections to what they say:
+**(a)** the "+201/day, every day costs 200 more parked members" urgency was overstated —
+that is bigfill's registration rate, a dial the owner controls, not organic growth;
+**(b)** ladder-vs-floor is now decided in V8.50, not before the V8.49 deploy.
+
+### 1. THE LADDER-VS-FLOOR ANALYSIS — now decided in V8.50 (kept for its content)
 
 Written up in full in `V8_49_SCOPE.md` item 1b, "⚠️ NEW, UNRESOLVED". In one line: **the
 SF rescue ladder will lend up to 60% of the entry fee while the insolvency floor caps
