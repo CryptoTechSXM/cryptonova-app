@@ -18,8 +18,42 @@ param(
     [double]$UpgradeRate    = 1.0,   # 1.0 = upgrade whenever eligible
     [int]$BatchSize  = 1,            # wallets per batch
     [int]$BatchDelay = 300,          # seconds between batches (300 = 5 min drip)
-    [string]$AddressesFile = ""      # "" = inherit .env; see the block below
+    [string]$AddressesFile = "",     # "" = inherit .env; see the block below
+    [int]$ScanFrom = -1              # -1 = leave bigfill's default; see COHORT BLEED below
 )
+
+# ---------------------------------------------------------------------------
+# COHORT BLEED — -Offset DOES NOT ISOLATE A COHORT  (found 2026-08-16)
+#
+# bigfill_v8.js:1261-1269 builds the rescue/upgrade population as
+#     historicalCount = max(0, HDR_OFFSET - SCAN_FROM)
+#     allWallets      = makeWallets(historicalCount, SCAN_FROM) + newWallets
+# and SCAN_FROM DEFAULTS TO 0. So a run at -Offset 127 also sweeps wallets
+# 0..126 for rescue and upgrade, and applies ITS OWN SELF_RESCUE_RATE to them.
+#
+# For the V8.49 split cohort that is fatal: cohort B (-SelfRescueRate 0) would
+# reach into cohort A's wallets and stop them self-rescuing, so the control
+# would be driven by the subject. -Offset separates who gets REGISTERED, not
+# who gets SWEPT. The bleed is one-directional (cohort A at offset 0 has
+# historicalCount 0 and never reaches B), which is worse, not better: it
+# produces a plausible confusing result instead of an obvious failure.
+#
+# Default stays bigfill's own (0) so ordinary runs keep sweeping everything,
+# which is how the system is normally kept moving. But a run with a non-default
+# self-rescue rate is a COHORT, and a cohort must not touch wallets outside its
+# own range — so we pin SCAN_FROM to its offset and say so loudly.
+# ---------------------------------------------------------------------------
+if ($SelfRescueRate -ne 1.0 -and $ScanFrom -lt 0) {
+    $ScanFrom = $Offset
+    Write-Host ""
+    Write-Host "  NOTE: -ScanFrom pinned to $Offset automatically." -ForegroundColor Yellow
+    Write-Host "  -SelfRescueRate $SelfRescueRate makes this a COHORT run. Left at bigfill's" -ForegroundColor Yellow
+    Write-Host "  default of 0 it would also sweep wallets 0..$($Offset - 1) for rescue and" -ForegroundColor Yellow
+    Write-Host "  upgrade, applying this cohort's self-rescue rate to another cohort's" -ForegroundColor Yellow
+    Write-Host "  wallets. Pass -ScanFrom explicitly to override." -ForegroundColor Yellow
+    Write-Host ""
+}
+if ($ScanFrom -ge 0) { $env:SCAN_FROM = "$ScanFrom" }
 
 # ---------------------------------------------------------------------------
 # WHICH DEPLOYMENT DOES THIS RUN DRIVE?  (added 2026-08-16)
@@ -142,6 +176,11 @@ Write-Host ("  leaders supplied : {0}" -f $leaders.Count)
 Write-Host ("  COUNT            : {0}" -f $Count)
 Write-Host ("  HDR_OFFSET       : {0}" -f $Offset)
 Write-Host ("  wallet range     : HDR {0} .. {1}" -f $Offset, ($Offset + $Count - 1))
+if ($ScanFrom -ge 0) {
+    Write-Host ("  sweeps (rescue)  : HDR {0} .. {1}" -f $ScanFrom, ($Offset + $Count - 1))
+} else {
+    Write-Host ("  sweeps (rescue)  : HDR 0 .. {0}   <-- bigfill default, ALL earlier wallets" -f ($Offset + $Count - 1))
+}
 Write-Host ("  batch size/delay : {0} wallet(s) every {1}s" -f $BatchSize, $BatchDelay)
 Write-Host ("  self-rescue rate : {0}" -f $SelfRescueRate)
 Write-Host ("  upgrade rate     : {0}" -f $UpgradeRate)
