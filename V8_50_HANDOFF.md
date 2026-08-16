@@ -173,11 +173,63 @@ was.** Every command run was a read or a local build/test.
 4. The `KeeperScan` premise decision.
 5. Defects 2 and 4 from the scope's list.
 6. PARAM 59 -> 5000 at deploy (decided by the owner, not yet applied).
-7. **TIME-SENSITIVE: the second organic reading.** `logs/parked_baseline.csv` holds one
-   row for this deployment and a growth RATE needs two. Live V8.48 has run without bigfill
-   since 2026-08-16 03:30:44 -04:00 — the first purely organic window this project has
-   ever had. **Restarting bigfill closes it permanently.** One `diag_floor_halt.js` run
-   against the v8_48 addresses is all it takes.
+7. **The second organic reading is DONE — and it raised a question. See below.**
+
+## ⛔ THE ORGANIC READING: 41 MEMBERS LEFT THE QUEUE AND THE FUND DID NOT MOVE
+
+Two `diag_floor_halt.js` readings on live V8.48, 2.0 hours apart, both fully organic
+(no bigfill since 03:30:44 -04:00):
+
+```
+parked          139 -> 98     (-41)
+SF totalBalance $458.35 -> $458.35   (UNCHANGED, to the cent)
+debtors         29 -> 23      debt total $32.74 -> $28.20
+```
+
+`logs/parked_baseline.csv` now has 2 rows for this deployment and the script printed a
+trend: **"-496.1/day"**.
+
+**DO NOT QUOTE THAT NUMBER AS THE QUEUE DRAINING.** It is the first organic trend this
+project has ever had and it is almost certainly not what it looks like:
+
+- **A rescue costs the Stability Fund money. The fund did not move by one cent.** So
+  whatever removed 41 members, it was not the rescue path.
+- **Debt-carrying members left too** (29 -> 23, $32.74 -> $28.20) **and the fund did not
+  RISE either** — so their debt was not repaid on the way out.
+- The remaining top-20 are the same addresses with the same balances, 2.0h older. The 41
+  came from elsewhere in the queue.
+
+Three candidate mechanisms, none confirmed, and they mean completely different things:
+
+1. **Eviction.** `evictParked` releases the reserve to withdrawable, removes the member,
+   leaves the debt on the SF ledger, and costs the fund nothing. If this is it, **41
+   community members were evicted in two hours** — which is precisely what item B exists
+   to prevent, and it makes V8.50 more urgent, not less.
+2. **Ghost / residue dequeue.** The V8.48 item 45 `clearParkRecord` and item 47 valve
+   remove queue entries for members who are actually seated. `diag_ghost_parked.js`
+   measured **41 ghosts** on 2026-08-13 — the same number, which is either a strong hint
+   or a coincidence worth ruling out. If this is it, no member was harmed and the queue
+   never really held 139.
+3. **Self-rescue** from members' own wallets — costs the fund nothing, but bigfill is
+   stopped and these are bigfill wallets, so this is the weakest of the three.
+
+**Do not reason further about this — measure it.** `scripts/diag_parked_growth.js` exists
+and answers exactly this question: parks vs rescues vs **evictions** per day, the
+repeat-park loop signature, and the SF debt financing. It is read-only:
+
+```powershell
+cd C:\CryptoNite-Smart-Contracts\CryptoNova
+Remove-Item Env:ADDRESSES_FILE -ErrorAction SilentlyContinue
+node scripts\diag_parked_growth.js
+```
+
+Until that runs, treat "-496.1/day" as **an unexplained observation, not a trend**, and do
+not let it into member comms or into any V8.50 justification.
+
+One more thing the pair of readings says on its own: **the fund being unchanged to the
+cent over two hours means there were essentially no new entries either** (the SF takes a
+split of every entry fee). "Purely organic" may be measuring a very quiet chain. That is
+worth knowing before anyone extrapolates a growth rate from it in either direction.
 
 **Nothing else from session 2 is in flight.** No half-finished edit, no script waiting on
 an answer, no chain state expecting a follow-up.
