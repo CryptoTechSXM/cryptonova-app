@@ -3,6 +3,195 @@
 Written 2026-08-16 at the end of the V8.49 private measurement run.
 Audience: a future session of Claude, plus the owner. Nobody else touches this code.
 
+---
+
+# ⬛ SESSION 2 STATE — 2026-08-16, LATER THE SAME DAY. READ THIS BEFORE SECTION 1.
+
+Everything below section 1 is still the plan and still correct. This section says what
+happened when we started building it, and **it contains one finding that reorders the work.**
+
+Read `V8_50_SCOPE.md`'s "⬛ MEASURED ON THE LIVE V8.48 COMMUNITY CHAIN" section next — it
+carries the numbers, the five source defects, and the two wrong turns the new instrument
+took before it was right.
+
+## WHAT IS DONE
+
+- **Item A modelled against the real population.** New tool `scripts/model_item_a.js`.
+  Note the handoff's own pointer was wrong: `model_insolvency_floor.js` does NOT model
+  item A, it models the three floor POLICIES. Item A is confirmed and sized — frees
+  **76 of 139** parked members outright, premise holds **100%** on chain, removes
+  **63.7%** of all funding parks. Re-entry ask afterwards: median **$2.71**, better than
+  the $3.20 the plan predicted.
+- **ITEM C IS DECIDED BY THE OWNER: `insolvencyFloorBps` 3400 -> 5000.** Measured, not
+  asserted: the rule *"never lend more than one full journey's earnings"* was calibrated
+  on the STRUCTURAL no-referral minimum, but one completed journey actually earns
+  **min $3.40 / median $4.83 / max $6.34**. At 5000 the maximum measured ask ($4.28)
+  clears, so **all 63 members at re-entry are rescued** and item B's promise holds.
+  NOT YET APPLIED — it is a PARAM 59 setting, not a code change.
+- **Item A's contract core is written and COMPILES** — `contracts/MatrixLogicLib.sol` on
+  branch `v8.1`, one file. See "WHAT THE CODE DOES NOW". It is NOT deployed anywhere and
+  **must not be** until step 1 below is done — see the finding immediately after this list.
+
+## ⛔ THE FINDING THAT REORDERS THE WORK
+
+**Item A creates a member state that has never existed before: a live mid-cycle member
+holding a ZERO crossing reserve.** Every MatB member is now in that state, because their
+reserve was spent getting them there and no new one is carved.
+
+The keeper is not ready for it, and the failure is not benign:
+
+```
+MatrixKeeperLib._triageParked:432   effectiveContrib = reserve + withdrawable
+MatrixKeeperLib._rescueBpsFor:359   wBps = effectiveContrib * 10_000 / entryFee
+```
+
+With `reserve == 0` a MatB member's `effectiveContrib` roughly HALVES, `wBps` drops, and
+they fall off the bottom of the SF rescue ladder — which routes to **EVICT_LADDER**.
+`MatrixKeeper.sol:722`'s `withdrawable == 0 && reserve == 0 && debt > 0` trap is a second
+door to the same place.
+
+**So item A shipped WITHOUT the keeper change does not merely fail to help members at
+re-entry — it evicts members the old code would have rescued. That is the exact opposite
+of item B.**
+
+**THE KEEPER CHANGE IS LOAD-BEARING FOR ITEM A'S SAFETY, NOT POLISH. THEY SHIP TOGETHER
+OR NOT AT ALL.** The ladder must stop reading a spent reserve as poverty: what matters is
+what the member needs NEXT (a full fee at re-entry) against what they hold, not a reserve
+that item A deliberately consumed.
+
+## TEST STATE — MEASURED BOTH WAYS. DO NOT GUESS AT THIS.
+
+| | passing | failing |
+|---|---|---|
+| baseline (item A stashed) | **593** | **1** |
+| with item A | **543** | **51** |
+
+**All 50 new failures are ours.** A confident prediction in this session that
+`V8_48_KeeperScan.test.js` used mock matrices was WRONG — it deploys real
+`FigureEightMatrixV8` with the real `MatrixLogicLib` at test:152-157. Caught only because
+the baseline was actually run instead of reasoned about.
+
+- **The 1 pre-existing failure is inherited debt and is a TEST bug, not a contract bug:**
+  `V8.46-B — cascade gas versus ladder depth`, `TypeError: Cannot read properties of
+  undefined (reading 'worst')`. Log it; do not let it confuse a future run.
+- `V8_48_RescueSurplus.test.js` (3) fails with *"fixture produced no parked member"* —
+  **that is item A working.** The fixture parks someone at a crossing they cannot afford;
+  under item A their reserve covers it and they cross. Re-fixture at a MatB re-entry,
+  where a full fee is still charged.
+- `V8_48_KeeperScan.test.js` (~44) asserts the refactored keeper is byte-identical to the
+  frozen `MatrixKeeperPrev` (a V8.48 artifact). **The file states its own doctrine at
+  test:190-199: every later item that deliberately changes behaviour gets PINNED, and
+  "every pin here is an item that DID."** Item A cannot be pinned that way — it changes
+  the WORLD, not a keeper parameter, and `MatrixKeeperPrev` will never know about item A.
+  **This suite's premise is structurally incompatible with V8.50.** Do NOT delete it
+  reflexively; decide deliberately (retire with a note / re-baseline the frozen copy /
+  scope it to untouched behaviours) and record which and why.
+
+## WHAT THE CODE DOES NOW — `contracts/MatrixLogicLib.sol`
+
+The discriminator is **`cfg.isMatrixA`, the matrix's own immutable flag**. Crossing out of
+a MatA means crossing into a MatB, which is the hop the reserve pre-funded. Everything
+else enters a MatA and begins a new cycle at full fee. No interface change, and no
+cross-contract read added to the money path.
+
+**This decides the tier-upgrade question the scope told us to decide deliberately:**
+upgrades arrive via the PairManager, never as the partner, so they take the full-fee
+branch automatically and fund their own reserve. It cannot fall out of the diff wrongly.
+
+- `_crossingPrice(entryFee)` — new helper, `entryFee * CROSSING_RESERVE_BPS / BPS_DENOM`
+- `_crossToPartner` — charges `crossingCost`; `CrossingFunded` now reports the real total
+- `enterMatrix` — pulls the crossing price on a crossing. `isCrossingEntry` is the
+  destination-side twin of the source's price decision and **the two must agree or the
+  transferFrom reverts on allowance.**
+- `_distributePayments(..., bool skipReserveCarve)` — **the other half of item A. THE
+  CARVE AND THE PRICE MUST MOVE TOGETHER:** carve on + full fee in = 10_000; carve off +
+  50% in = 5_000. Either alone breaks the contract's cash balance.
+- `_finalizeCrossing` — same price rule, and **now emits `CrossingFunded` (defect 5)** so
+  rescued crossings stop being invisible to event tooling
+- `forceCross` — **BUG FIXED:** pulled a full fee for an A->B hop, stranding 50% in the
+  matrix as unattributed surplus
+- `forceCrossKeeper` — **BUG FIXED:** unconditionally zeroed the reserve, erasing anything
+  above the crossing price. Harmless while reserve == fee; not any more.
+- `coPayRescue` / `_selfRescue` — priced at `crossingCost`, so an A->B hop needs no loan
+  and no out-of-pocket payment at all
+- **DELIBERATE NON-CHANGE:** the withdraw lock (`crossNeeded`, at :686 and :1345) stays at
+  the FULL fee. A MatA member no longer needs it for the hop but WILL need it for the
+  re-entry, and this lock is what accumulates it. Measured: **0 of 63** members at
+  re-entry had withdrawn to wallet — the lock is doing all of that work. Repricing it
+  would send members into MatB with nothing. The code says so; do not "simplify" it.
+
+## NEXT, IN ORDER
+
+1. **`MatrixKeeperLib` + `MatrixKeeper` for the zero-reserve state.** Load-bearing, see
+   above. The keeper interface already has `isMatrixA()` (`MatrixKeeperLib.sol:89`, used
+   at `:342`), so it can discriminate without new plumbing.
+2. **`TierRouter` escrow-zero.** `MatrixLogicLib:775` passes the reserve as `escrow` to
+   `handleCycleOut`; at MatB cycle-out that is now always 0, making the `escrow > 0`
+   graduation branch at `TierRouter.sol:1428` unreachable and dropping members into a park
+   labelled "autoReentry disabled" — a misleading reason for a healthy member.
+3. **Re-fixture the tests**, and decide the `KeeperScan` question above.
+4. **Scope defects 2 and 4** — `MatrixKeeper.DIRECT_EARN_BPS = 500` (dead but public, and
+   wrong) and `totalEarnedOf` (the true earnings field has no getter, and the keeper's
+   withdraw-ratio eviction test runs on a reconstruction that includes buffer money).
+   Defect 1, the stale split comments, is DONE.
+5. **Set PARAM 59 to 5000** at deploy, per the owner's decision.
+6. **Second organic reading** — `logs/parked_baseline.csv` has one row for this
+   deployment; a growth RATE needs two, and bigfill restarting ends the window forever.
+
+## STATE OF THE WORKING TREE AND EVERY LOOSE END
+
+Nothing in this session touched a chain. **No transaction was sent, nothing was deployed,
+no parameter was set, the VPS keeper was never touched, and live V8.48 is exactly as it
+was.** Every command run was a read or a local build/test.
+
+**Files changed or added by session 2** (all on branch `v8.1`, contracts push to `v8.1`):
+
+| file | what |
+|---|---|
+| `contracts/MatrixLogicLib.sol` | item A core. Compiles. Not deployed. |
+| `V8_50_HANDOFF.md` | this file |
+| `V8_50_SCOPE.md` | the measured findings section |
+| `scripts/model_item_a.js` | new read-only instrument |
+
+**Scratch files left in the repo root, safe to delete, deliberately NOT deleted here:**
+
+- `after.txt` / `before.txt` — the two test runs behind the 593/1 vs 543/51 table above.
+  Both counts are recorded in this document, so the files are redundant once read.
+- `predeploy_A.txt`, `predeploy_B.txt` (2026-08-16 early), `predeploy_out.txt`
+  (2026-08-13) — **these predate session 2 and are NOT ours.** They are predeploy_check
+  output from the V8.49 and V8.48 deploy days. Left alone deliberately: an unexplained
+  file is an incomplete handoff from an earlier session, and deleting one to tidy up
+  destroys the record rather than closing the loop. Someone should confirm what they were
+  for and then either log or remove them.
+
+**Open, and each one is written up above rather than left implicit:**
+
+1. The keeper's zero-reserve handling — **blocking, and the reason item A must not ship
+   alone.**
+2. `TierRouter` escrow-zero at MatB cycle-out.
+3. 50 failing tests, all attributable, none mysterious.
+4. The `KeeperScan` premise decision.
+5. Defects 2 and 4 from the scope's list.
+6. PARAM 59 -> 5000 at deploy (decided by the owner, not yet applied).
+7. **TIME-SENSITIVE: the second organic reading.** `logs/parked_baseline.csv` holds one
+   row for this deployment and a growth RATE needs two. Live V8.48 has run without bigfill
+   since 2026-08-16 03:30:44 -04:00 — the first purely organic window this project has
+   ever had. **Restarting bigfill closes it permanently.** One `diag_floor_halt.js` run
+   against the v8_48 addresses is all it takes.
+
+**Nothing else from session 2 is in flight.** No half-finished edit, no script waiting on
+an answer, no chain state expecting a follow-up.
+
+## STANDING LESSON FROM THIS SESSION
+
+Three confident, plausible claims turned out wrong, and all three were caught the same
+way — by rerunning or reading the source instead of reasoning from a convenient proxy.
+A median ask 7x better than predicted (buffer money counted as member earnings). A control
+that refused a verdict for an "impossible" condition that was actually normal. A
+prediction that a test suite used mocks when it deploys the real library. **The pattern is
+always substituting an easy observable for the question actually being asked, and the fix
+is always the same: go and look.**
+
 **This replaces `V8_49_HANDOFF.md` as the entry point.** That file is still the record of
 V8.49 — what it built, what the private test measured, and the traps from deploy day.
 Read it for "why is V8.49 like this"; read THIS for "what am I building now".

@@ -175,18 +175,50 @@ library MatrixLogicLib {
 
     uint256 internal constant BPS_DENOM = 10_000;
 
-    /// @notice V8.31: 50/5/45 fee split constants.
+    /// @notice V8.32 fee split constants — 50 / 2.5 / 47.5 of the ENTRY FEE.
     ///         Every entry fee is divided into three buckets BEFORE the BPS array runs:
-    ///           50% -> crossingReserve  (pre-funds first crossing; held in member struct)
-    ///            5% -> direct earnings  (immediately withdrawable by the new member)
-    ///           45% -> payout base      (BPS array applied to this portion ONLY)
-    ///         Crossing cost = full entryFee, funded from crossingReserve first then withdrawable.
-    ///         Member only needs to accumulate entryFee x 50% = $5 in withdrawable per crossing
-    ///         (the other 50% is always pre-funded by the reserve deposited at entry time),
-    ///         reducing cycles to cross from ~6 to ~3 at every tier.
+    ///           50%   -> crossingReserve  (pre-funds the crossing; held in member struct)
+    ///            2.5% -> direct earnings  (immediately withdrawable by the new member)
+    ///           47.5% -> the BPS splits   (expressed as BPS-of-entryFee, summing to 4_750)
+    ///
+    ///         V8.50: this docstring previously described the V8.31 50/5/45 model and the
+    ///         line below it computed a 4_500 payout base. BOTH WERE STALE — V8.32 halved
+    ///         DIRECT_EARN_BPS to 250 and made payBase the full entryFee. The correct sum
+    ///         has always been enforced in _distributePayments; only the comments lied.
+    ///         They are corrected here because item A's entire case rests on this sum:
+    ///           5_000 + 250 + 4_750 = 10_000, exactly.
     uint256 internal constant CROSSING_RESERVE_BPS = 5_000;   // 50% pre-funded for crossing
     uint256 internal constant DIRECT_EARN_BPS      =   250;   // 2.5% instant earnings on entry (V8.32: halved from 5%)
-    // payout base = BPS_DENOM - CROSSING_RESERVE_BPS - DIRECT_EARN_BPS = 4_500 (45%)
+
+    /// @notice V8.50 ITEM A — WHAT IT COSTS TO CROSS INTO A PAIR'S MatB.
+    ///
+    ///   Owner, 2026-08-16: "the crossing fee should be used for the crossing, so no
+    ///   reserve fee is required at crossing... entering A costs 100%, 50% reserve;
+    ///   entering B costs 50% only, that was reserved at A."
+    ///
+    /// The member pre-funded exactly CROSSING_RESERVE_BPS of the fee when they entered
+    /// MatA. Charging the FULL fee again at the crossing forced every member without
+    /// referral income to find another 50% from earnings, against the ~34% a no-referral
+    /// journey pays — a permanent 16% gap that WAS the parked queue.
+    ///
+    /// MEASURED on live V8.48, 2026-08-16 (scripts/model_item_a.js): 76 of 139 parked
+    /// members were stuck at exactly this crossing, and ALL 76 held a reserve covering
+    /// this price in full — 100%, no exceptions. 63.7% of every funding park ever
+    /// recorded happened here, worth $401.30 of lending at T1 alone.
+    ///
+    /// The destination is made whole because it skips its own reserve carve:
+    ///   direct 250 + splits 4_750 = 5_000 = exactly this price. The same dollars reach
+    ///   L1, chain pay, pool, treasury, SF, dev, ops, community, buyback and liquidity
+    ///   as before. NOT ONE SPLIT BPS CHANGES. See skipReserveCarve in
+    ///   _distributePayments, which is the other half of this change and must never be
+    ///   separated from it: charging half without skipping the carve would underfund
+    ///   every destination by 50%.
+    ///
+    /// ENTERING A MatA IS NEVER THIS PRICE. A fresh entry, an end-of-cycle re-entry and
+    /// a tier upgrade all begin a NEW cycle and must fund their own reserve at full fee.
+    function _crossingPrice(uint256 entryFee) internal pure returns (uint256) {
+        return entryFee * CROSSING_RESERVE_BPS / BPS_DENOM;
+    }
 
     /// @notice Fraction of each pool distribution share that is redirected to the SF
     ///         as gradual rescue-debt repayment.  5000 = 50%.
@@ -317,8 +349,31 @@ library MatrixLogicLib {
             "F8V8: already in matrix"
         );
 
+        // V8.50 ITEM A — A CROSSING INTO A MatB PULLS THE CROSSING PRICE, NOT THE FEE.
+        //
+        // `isCrossingEntry` is the destination-side twin of the price decision in
+        // _crossToPartner, and the two MUST agree or the transferFrom reverts on
+        // allowance. They agree structurally: a MatA's partner is always a MatB, so
+        // "this matrix is a MatB AND the caller is the partner or a chain matrix" is
+        // true exactly when the source computed the crossing price.
+        //
+        // Everything else stays at full fee, which is the whole tier-upgrade answer the
+        // scope asked us to decide deliberately: upgrades arrive via the PairManager
+        // (enterFor / registerFor), never as the partner, so they take the false branch
+        // and fund their own reserve. Letting an upgrade take the crossing price would
+        // sell a higher tier at half price.
+        //
+        // PairManagerV8.registerForMatB is also full-fee by this rule — it is a direct
+        // paid entry into a MatB, not a crossing, and it must carve a reserve.
+        bool isCrossingEntry = !cfg.isMatrixA
+            && (msg.sender == self.partner || self.chainAuthorized[msg.sender]);
+
         if (msg.sender == self.partner || self.chainAuthorized[msg.sender]) {
-            cfg.usdc.safeTransferFrom(msg.sender, address(this), cfg.entryFee);
+            cfg.usdc.safeTransferFrom(
+                msg.sender,
+                address(this),
+                isCrossingEntry ? _crossingPrice(cfg.entryFee) : cfg.entryFee
+            );
         }
 
         // V8.46: TAKING A SEAT CLEARS ANY PARK RECORD FOR THIS MATRIX.
@@ -473,7 +528,11 @@ library MatrixLogicLib {
 
         // V8.48 item 4: the reserve deposit this seat just made prices its own
         // mint cap — pass the EXACT amount deposited, never a reconstruction.
-        uint256 _reserveDeposit = _distributePayments(self, cfg, member);
+        // V8.50 item A: skipReserveCarve rides along. Note this does NOT change the
+        // mint cap — _distributePayments returns the TREASURY deposit, which is a split
+        // of payBase and is untouched by item A. Verified rather than assumed, because
+        // "reserve" appears in both names and they are not the same money.
+        uint256 _reserveDeposit = _distributePayments(self, cfg, member, isCrossingEntry);
 
         try cfg.cnova.mintReward(member, cfg.tierIndex, _reserveDeposit) {} catch {}
 
@@ -624,6 +683,18 @@ library MatrixLogicLib {
         }
 
         if (self.members[member].isInMatrix && automationReserve > 0) {
+            // V8.50 item A — DELIBERATELY LEFT AT THE FULL FEE. This is the savings
+            // lock, not the crossing price, and the two stopped being the same number.
+            // A MatA member now crosses on their reserve alone, so strictly they need
+            // nothing more for the HOP — but they will need the full fee for the
+            // re-entry that follows, and this lock is what accumulates it. Repricing it
+            // to the crossing price would unlock ~50% of a fee for withdrawal mid-cycle
+            // and send members into MatB with nothing to re-enter on. Measured
+            // 2026-08-16: 0 of 63 members at re-entry had withdrawn to wallet, i.e.
+            // this lock is currently doing all of that work.
+            // For a MatB member the reserve is 0 under item A, so this evaluates to the
+            // full fee, which is exactly what their re-entry costs. Correct by accident
+            // there, correct by intent here — either way, do not "simplify" it.
             uint256 crossNeeded = cfg.entryFee > self.members[member].crossingReserve
                 ? cfg.entryFee - self.members[member].crossingReserve
                 : 0;
@@ -847,15 +918,29 @@ library MatrixLogicLib {
 
         uint256 reentryFee = IFigureEightMatrixV8Cross(destination).ENTRY_FEE();
 
-        // V8.31: 50/5/45 crossing logic.
+        // V8.50 ITEM A — THE PRICE DEPENDS ON WHICH HALF WE ARE ENTERING.
+        //
+        // From MatA the destination is always this pair's MatB (set above), and that is
+        // a CROSSING: the member already pre-funded it, so it costs _crossingPrice.
+        // From MatB the destination is a MatA (chainNext, or the partner on a legacy
+        // deployment) and that is a NEW CYCLE: full fee, and MatA will carve a fresh
+        // reserve out of it.
+        //
+        // The discriminator is this matrix's OWN immutable isMatrixA — deliberately not
+        // a call to the destination. A cross-contract read here would add a failure mode
+        // to the money path for a fact we already hold locally and cannot be wrong about.
+        uint256 crossingCost = cfg.isMatrixA ? _crossingPrice(reentryFee) : reentryFee;
+
         // Draw from crossingReserve first; any remaining shortfall comes from withdrawable.
-        // Member only needs to accumulate 50% of the fee in withdrawable (the other 50%
-        // is always pre-funded by the reserve deposited at entry time).
+        // Under item A a MatA member's reserve covers crossingCost outright, so
+        // fromWithdrawable is 0 and the park branch below is unreachable for them —
+        // which is the entire point of the change, and item B ("no member evicted
+        // mid-cycle") is what it buys.
         Member storage memberData = self.members[member];
-        uint256 fromReserve = memberData.crossingReserve >= reentryFee
-            ? reentryFee
+        uint256 fromReserve = memberData.crossingReserve >= crossingCost
+            ? crossingCost
             : memberData.crossingReserve;
-        uint256 fromWithdrawable = reentryFee - fromReserve;
+        uint256 fromWithdrawable = crossingCost - fromReserve;
 
         if (memberData.withdrawable < fromWithdrawable) {
             uint256 shortfall = fromWithdrawable - memberData.withdrawable;
@@ -868,9 +953,12 @@ library MatrixLogicLib {
         memberData.crossingReserve -= fromReserve;
         memberData.withdrawable    -= fromWithdrawable;
 
-        emit CrossingFunded(member, fromReserve, fromWithdrawable, reentryFee);
+        // `total` is what actually moved, not the destination's ENTRY_FEE. Anything
+        // reconciling this event against a fee will now see the crossing price on an
+        // A->B hop; that is the truth, and the identity escrow + earnings == total holds.
+        emit CrossingFunded(member, fromReserve, fromWithdrawable, crossingCost);
 
-        SafeERC20.forceApprove(cfg.usdc, destination, reentryFee);
+        SafeERC20.forceApprove(cfg.usdc, destination, crossingCost);
 
         self.crossingInProgress = true;
         emit MemberCrossedToPartner(member, address(this), destination);
@@ -928,9 +1016,29 @@ library MatrixLogicLib {
         }
         address destination = (!cfg.isMatrixA && self.chainNext != address(0))
             ? self.chainNext : self.partner;
-        SafeERC20.forceApprove(cfg.usdc, destination, cfg.entryFee);
+
+        // V8.50 ITEM A. Same rule as _crossToPartner, and it has to be here too: every
+        // rescue path (forceCross, forceCrossKeeper, coPayRescue, selfRescue) ends in
+        // this function, so a rescued crossing must cost the same as a self-funded one.
+        // From MatA -> the partner MatB: crossing price. From MatB -> a MatA: full fee.
+        // The MatB/PairManager branch above returns before reaching here and is
+        // deliberately left at full fee, because rescueReentry always lands in a MatA.
+        uint256 crossingCost = cfg.isMatrixA ? _crossingPrice(cfg.entryFee) : cfg.entryFee;
+        SafeERC20.forceApprove(cfg.usdc, destination, crossingCost);
 
         emit MemberCrossedToPartner(member, address(this), destination);
+
+        // V8.50 (defect 5, found 2026-08-16): this path emitted NO CrossingFunded, so
+        // every RESCUED crossing was invisible to event-sourced tooling while
+        // self-funded ones were fully visible. model_item_a.js v1 drew a confident,
+        // wrong conclusion from exactly that gap within an hour of being written, and
+        // "no MatB crossing has ever succeeded" could be neither confirmed nor denied.
+        // Emitted with fromEarnings 0: by this point the member's own funds were already
+        // consumed by the caller (forceCrossKeeper zeroes the reserve and takes its
+        // member share; coPayRescue and selfRescue do the same), so what moves HERE is
+        // the assembled fee. The escrow + earnings == total identity still holds.
+        emit CrossingFunded(member, crossingCost, 0, crossingCost);
+
         IFigureEightMatrixV8Cross(destination)._enterMatrix(member, self.members[member].referrer);
     }
 
@@ -938,13 +1046,29 @@ library MatrixLogicLib {
     // Payment distribution
     // ===========================================================================
 
+    /// @dev V8.50: the external wrapper has no caller in this repo, but it is part of
+    ///      the deployed library's ABI. It keeps the FULL-FEE behaviour (carve on), which
+    ///      is the only correct default for a paid entry — a crossing never reaches here.
     function distributePayments(MatrixState storage self, ImmutableConfig memory cfg, address newMember) external {
-        _distributePayments(self, cfg, newMember);
+        _distributePayments(self, cfg, newMember, false);
     }
 
     /// @dev V8.48 item 4: returns the treasury-reserve deposit this entry made, so
     ///      the caller can pass it to mintReward as the mint's backing value.
-    function _distributePayments(MatrixState storage self, ImmutableConfig memory cfg, address newMember) internal returns (uint256) {
+    /// @param skipReserveCarve V8.50 ITEM A. True only for a crossing into a MatB, where
+    ///        the member paid _crossingPrice (50%) instead of the full fee because their
+    ///        reserve funded it. THE CARVE AND THE PRICE MUST MOVE TOGETHER:
+    ///          * carve on, full fee in   -> 5_000 held + 250 + 4_750 out = 10_000  (MatA)
+    ///          * carve off, 50% in       ->             250 + 4_750 out =  5_000   (MatB)
+    ///        Either one alone breaks the contract's cash balance. Skipping the carve on
+    ///        a full-fee entry would pay out 50% more than came in; charging half WITH
+    ///        the carve would underfund every recipient by half.
+    function _distributePayments(
+        MatrixState storage self,
+        ImmutableConfig memory cfg,
+        address newMember,
+        bool skipReserveCarve
+    ) internal returns (uint256) {
         Member storage m = self.members[newMember];
 
         // V8.32: 50/2.5/47.5 pre-split.  Before the BPS array runs, carve the entry fee into:
@@ -955,7 +1079,14 @@ library MatrixLogicLib {
         // V8.32 change: payBase is now the full entryFee; all SplitConfig BPS values
         // are expressed as fractions of entryFee (not of the 45% sub-pool).
         // Sum check: 5000 (cross) + 250 (instant) + 4750 (splits) = 10000
-        m.crossingReserve += cfg.entryFee * CROSSING_RESERVE_BPS / BPS_DENOM;
+        //
+        // V8.50 item A: on a crossing the 5000 bucket was already carved at MatA entry
+        // and has just been spent paying for THIS seat, so it is not carved again. The
+        // 250 + 4750 below are untouched and still absolute BPS of the full entryFee —
+        // which is exactly why nothing downstream needs re-tuning.
+        if (!skipReserveCarve) {
+            m.crossingReserve += cfg.entryFee * CROSSING_RESERVE_BPS / BPS_DENOM;
+        }
         _credit(self, newMember, cfg.entryFee * DIRECT_EARN_BPS / BPS_DENOM, SRC_DIRECT_ENTRY, newMember);
         uint256 payBase = cfg.entryFee;
 
@@ -1223,6 +1354,18 @@ library MatrixLogicLib {
             // V8.32: only enforce crossing reserve when automation is active.
             // If all automation is disabled (automationReserve == 0), member may
             // withdraw freely -- they have explicitly opted out of auto-reentry.
+            // V8.50 item A — DELIBERATELY LEFT AT THE FULL FEE. This is the savings
+            // lock, not the crossing price, and the two stopped being the same number.
+            // A MatA member now crosses on their reserve alone, so strictly they need
+            // nothing more for the HOP — but they will need the full fee for the
+            // re-entry that follows, and this lock is what accumulates it. Repricing it
+            // to the crossing price would unlock ~50% of a fee for withdrawal mid-cycle
+            // and send members into MatB with nothing to re-enter on. Measured
+            // 2026-08-16: 0 of 63 members at re-entry had withdrawn to wallet, i.e.
+            // this lock is currently doing all of that work.
+            // For a MatB member the reserve is 0 under item A, so this evaluates to the
+            // full fee, which is exactly what their re-entry costs. Correct by accident
+            // there, correct by intent here — either way, do not "simplify" it.
             uint256 crossNeeded = cfg.entryFee > self.members[member].crossingReserve
                 ? cfg.entryFee - self.members[member].crossingReserve
                 : 0;
@@ -1325,7 +1468,15 @@ library MatrixLogicLib {
         require(!self.members[member].isInMatrix,    "F8V8: still in matrix");
         require(self.partner != address(0),           "F8V8: no partner");
 
-        cfg.usdc.safeTransferFrom(msg.sender, address(this), cfg.entryFee);
+        // V8.50 item A: charge the owner what the crossing actually costs. Pulling a
+        // full fee for an A->B hop would leave 50% of it stranded in this matrix as
+        // unattributed surplus with no claim against it — the same shape as the V8.46
+        // incident at :420.
+        cfg.usdc.safeTransferFrom(
+            msg.sender,
+            address(this),
+            cfg.isMatrixA ? _crossingPrice(cfg.entryFee) : cfg.entryFee
+        );
 
         if (self.parkedAt[member] > 0) _removeFromParkedQueue(self, member);
 
@@ -1342,12 +1493,24 @@ library MatrixLogicLib {
         require(self.members[member].hasEverJoined,  "F8V8: not a member");
         require(!self.members[member].isInMatrix,    "F8V8: still in matrix");
         require(self.partner != address(0),           "F8V8: no partner");
-        require(sfContribution <= cfg.entryFee,       "F8V8: sfContribution exceeds fee");
+        // V8.50 item A: every amount in this function is measured against what the
+        // crossing COSTS, not against the entry fee. On an A->B hop those differ by 2x.
+        // Read once into a local so the require, the member share and the "contract now
+        // holds the full price" invariant below can never drift apart.
+        uint256 crossingCost = cfg.isMatrixA ? _crossingPrice(cfg.entryFee) : cfg.entryFee;
+
+        require(sfContribution <= crossingCost,       "F8V8: sfContribution exceeds fee");
 
         // V8.31: crossing is funded from crossingReserve first, then withdrawable, then SF.
+        // V8.50: for a MatA member the reserve alone now covers crossingCost, so
+        // memberShare is 0 and the keeper should be sending sfContribution 0 as well —
+        // no loan, no clawback, no park. If a non-zero sfContribution still arrives here
+        // for such a member the maths below simply does not need it and the surplus
+        // would strand, which is why MatrixKeeper's triage must be updated in lockstep.
         uint256 reserveContrib = self.members[member].crossingReserve;
-        uint256 memberShare = cfg.entryFee > (sfContribution + reserveContrib)
-            ? cfg.entryFee - sfContribution - reserveContrib
+        if (reserveContrib > crossingCost) reserveContrib = crossingCost;
+        uint256 memberShare = crossingCost > (sfContribution + reserveContrib)
+            ? crossingCost - sfContribution - reserveContrib
             : 0;
         if (memberShare > 0) {
             require(
@@ -1355,6 +1518,18 @@ library MatrixLogicLib {
                 "F8V8: insufficient withdrawable for rescue"
             );
             self.members[member].withdrawable -= memberShare;
+        }
+        // V8.50 item A: return any reserve BEYOND the crossing price instead of erasing
+        // it. Before item A the reserve and the fee were equal by construction so this
+        // was always a no-op; now that a crossing can cost half the fee, a member whose
+        // reserve exceeds the price (a preserved reserve across re-registration, or a
+        // future carve change) would have had the difference silently destroyed by the
+        // unconditional zeroing below. Same defect shape as the V8.46 struct-overwrite.
+        {
+            uint256 heldReserve = self.members[member].crossingReserve;
+            if (heldReserve > reserveContrib) {
+                self.members[member].withdrawable += heldReserve - reserveContrib;
+            }
         }
         self.members[member].crossingReserve = 0;  // consume reserve toward crossing
 
@@ -1400,13 +1575,19 @@ library MatrixLogicLib {
         uint256 reserve = self.members[member].crossingReserve;
         uint256 effectiveContrib = reserve + withdrawable;
 
+        // V8.50 item A: price the rescue at what the crossing costs, not at the fee.
+        // For a MatA member the reserve alone now meets crossingCost, so shortfall is 0,
+        // the SF is never called, no debt is booked — and the surplus line below returns
+        // their earnings intact instead of spending them on the hop.
+        uint256 crossingCost = cfg.isMatrixA ? _crossingPrice(cfg.entryFee) : cfg.entryFee;
+
         // Pure SF loan: SF covers the full shortfall. No deployer USDC required.
-        uint256 shortfall = cfg.entryFee > effectiveContrib ? cfg.entryFee - effectiveContrib : 0;
+        uint256 shortfall = crossingCost > effectiveContrib ? crossingCost - effectiveContrib : 0;
 
         // V8.48 item 11 — same erasure as selfRescue, same fix. A member rescued by the
         // co-pay keeper whose own balances already covered the fee borrows NOTHING
         // (shortfall == 0) and previously lost the excess anyway.
-        uint256 surplus = effectiveContrib > cfg.entryFee ? effectiveContrib - cfg.entryFee : 0;
+        uint256 surplus = effectiveContrib > crossingCost ? effectiveContrib - crossingCost : 0;
 
         self.members[member].crossingReserve = 0;
         self.members[member].withdrawable = surplus;
@@ -1480,7 +1661,12 @@ library MatrixLogicLib {
         // V8.31: crossing reserve is consumed first -- reduces what member must pay.
         uint256 reserve = self.members[member].crossingReserve;
         uint256 effectiveContrib = reserve + withdrawable;
-        uint256 shortfall = cfg.entryFee > effectiveContrib ? cfg.entryFee - effectiveContrib : 0;
+
+        // V8.50 item A: the member is asked for the crossing PRICE, not the entry fee.
+        // On an A->B hop their reserve already covers it, so shortfall is 0 and
+        // selfRescue costs them nothing out of pocket — they simply cross.
+        uint256 crossingCost = cfg.isMatrixA ? _crossingPrice(cfg.entryFee) : cfg.entryFee;
+        uint256 shortfall = crossingCost > effectiveContrib ? crossingCost - effectiveContrib : 0;
 
         // V8.48 item 11 — THE SURPLUS BELONGS TO THE MEMBER.
         //
@@ -1495,8 +1681,12 @@ library MatrixLogicLib {
         // against $25.00 ($2.26 erased). Roughly one an hour on the live chain.
         //
         // Return the excess to withdrawable. The USDC backing it never left this
-        // contract — only entryFee is forwarded — so the credit is fully backed.
-        uint256 surplus = effectiveContrib > cfg.entryFee ? effectiveContrib - cfg.entryFee : 0;
+        // contract — only the crossing cost is forwarded — so the credit is fully backed.
+        // V8.50: measured against crossingCost for the same reason as the shortfall.
+        // On an A->B hop this now returns the member's ENTIRE withdrawable, because the
+        // reserve alone met the price. That is item A working: earnings survive the
+        // crossing instead of funding it.
+        uint256 surplus = effectiveContrib > crossingCost ? effectiveContrib - crossingCost : 0;
 
         self.members[member].crossingReserve = 0;
         self.members[member].withdrawable = surplus;

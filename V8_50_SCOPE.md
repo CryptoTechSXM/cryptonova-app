@@ -345,3 +345,145 @@ floor, which would only be punishing members for where the system sat them.
    says it is real.
 4. **V8.50 is the deploy the community re-registers into.** One member-facing deploy, not
    four.
+
+---
+
+# ⬛ MEASURED ON THE LIVE V8.48 COMMUNITY CHAIN, 2026-08-16 (later the same day)
+
+Taken during the ORGANIC window — bigfill stopped 03:30:44 -04:00 and never restarted, so
+this is the first time this project has measured itself without bigfill driving it.
+
+Instrument: `scripts/model_item_a.js` (new, this session). Read-only. Every figure is a
+chain read or a source-tagged credit event. **Its own control validates it:** entry-fee
+volume derived independently from the 250bps source-1 tag gives $8,540, against which
+chain pay lands at **97.3%** of its 1350bps weight. Pool undershoots at 77.7% because it
+settles per rotation and part is still in the accumulator — expected, not a fault.
+
+**Scan coverage is provably complete**, and the data proves it rather than the clock: the
+minimum completed-journey earning is **exactly $3.40**, the structural no-referral figure
+(250 direct + 1800 pool + 1350 chain). A truncated history would read BELOW the structural
+minimum. None does.
+
+## 1. ITEM A IS CONFIRMED AND SIZED — SHIP IT
+
+| | measured |
+|---|---|
+| parked members freed outright by item A | **76 of 139** (54.7% of the live queue; 35 of 98 within T1) |
+| MatA parkers whose reserve covers the crossing price | **35 of 35 — 100%, no exceptions** |
+| their current shortfall against the fund | **$37.89 -> $0.00** (T1); $132.16 -> $0.00 all tiers |
+| share of ALL funding parks ever, removed | **63.7%** (281 MatA vs 160 MatB), worth **$401.30** of lending |
+| self-funded crossings, split reserve/earnings | 100 crossings, **$500.00 / $500.00 — exactly 50/50** |
+
+The 50/50 split is structural, not coincidence: the reserve is carved at 50% on entry and
+the destination charges the same fee. **Item A's premise is visible in the raw data.**
+
+Verified in source, not assumed: `_distributePayments` carves
+`reserve 5000 + direct 250 + splits 4750 = 10000` exactly. Paying a crossing from the $5
+reserve and skipping the destination's reserve carve delivers **identical dollars to every
+recipient**. Not one split BPS changes.
+
+## 2. ⛔ ITEM C NOW HAS A MEASURED ANSWER, AND 3400 IS THE WRONG NUMBER
+
+The floor's defensible framing — *"never lend more than one full journey's earnings"* —
+was calibrated at **3400bps from the STRUCTURAL NO-REFERRAL MINIMUM**. Live data says that
+minimum is the floor of the distribution, not its centre:
+
+```
+WHAT ONE COMPLETED JOURNEY ACTUALLY EARNS  (n=63, members who finished one)
+  min $3.40      median $4.83      max $6.34
+```
+
+**$3.40 is the poorest journey on the chain, not the typical one.** Referral income lands
+in MatA (that is where referrals enter), so journey A out-earns journey B and the median
+member clears 4830bps, not 3400.
+
+Post-item-A re-entry ask, measured against that population:
+
+| | value |
+|---|---|
+| ask under item A | min **$0.00**, median **$2.71**, max **$4.28** |
+| clears the $3.40 floor | **48 of 63 — 76.2%** |
+| refused by the $3.40 floor | **15 of 63 — 23.8%** |
+
+**The handoff predicted $3.20. The measured median is $2.71 — better than predicted**,
+because journeys earn more than the structural minimum. So the asks do NOT cluster above
+the floor, and **item A does not require item C to move with it.**
+
+But at the next rung up PARAM 59's menu (`5000`), the **maximum** ask of $4.28 clears, so
+**every one of the 63 is rescued**. Same rule, honestly recalibrated on measured earnings
+instead of the worst case. Affordability is not the constraint: 63 asks at a $2.71 median
+is ~$170 against a $458.35 fund, and item A drops the MatA parkers to $0.
+
+**OWNER DECISION REQUIRED — this is an economic trade-off, not a code question.**
+
+## 3. THE LIVE FUND'S PROBLEM IS THE BUFFER, NOT THE FLOOR
+
+`diag_floor_halt.js`, same window: the queue asks **$1,019.18** against **$458.35** held —
+short **$560.83**. Of that ask, **$721.80 is the crossing buffer** and only **$297.38** is
+real shortfall. **At buffer 0 the fund clears all 139 with $160.97 left over.**
+
+V8.48 hardcodes the buffer as a constant, so it cannot be turned off without a redeploy.
+**V8.49 already made it a governed param defaulting to 0.** V8.50 therefore fixes the live
+fund's insolvency simply by carrying a change that is already built and already measured.
+That is a larger and far more certain win than item A, and no earlier draft framed it so.
+
+Also: only **82 of 139** rescues fund before exhaustion, then it degrades gracefully —
+**but only because `stabilityFloor` is $0.00.** Any non-zero value turns that into a batch
+revert. **Add this to the V8.50 predeploy checks.**
+
+## 4. FIVE DEFECTS FOUND IN SOURCE — ALL FIXABLE IN V8.50
+
+1. **`MatrixLogicLib.sol:189`** — comment says payout base is `4_500 (45%)` and the
+   docstring above says 5% direct earn. Both pre-V8.32. The correct 50/2.5/47.5 is at
+   `:949`. **Anyone computing item A from line 189 gets it wrong.**
+2. **`MatrixKeeper.sol:86`** — `DIRECT_EARN_BPS = 500`. Real value is 250. Dead code
+   (never referenced), but **public**, so any script reading it off the keeper is wrong
+   with no error. Delete it, and `CROSSING_RESERVE_BPS` with it if unused.
+3. **The clawback works AGAINST item A for indebted members.** `_crossToPartner:882-897`
+   sweeps ALL remaining withdrawable to repay SF debt right after the crossing. Under
+   item A the member arrives holding MORE, so an indebted member is clawed **harder**.
+   *"No first loan, therefore no clawback"* holds only for members who never borrowed.
+   **23 of 63 MatB parkers currently carry debt.**
+4. **Two conflicting definitions of `totalEarned`.** The member struct has a true
+   accumulator written only by `_credit()` (`MatrixLogicLib:1146`). `MatrixKeeperLib:426`
+   *reconstructs* it as `withdrawn + withdrawable`, which silently includes crossing-buffer
+   money — and the keeper's withdraw-ratio EVICTION test runs on the contaminated one.
+   **No getter exposes the true field.** V8.50: add `totalEarnedOf(address)` (one line, the
+   field exists) and point the keeper at it.
+5. **`_finalizeCrossing` (`:907-934`) emits no `CrossingFunded`.** Every RESCUED crossing
+   is invisible to event-sourced tooling; only `_crossToPartner:871` emits. This made
+   `model_item_a.js` v1 wrong within an hour of being written. **Emit it from both paths.**
+
+## 5. THE INSTRUMENT WAS WRONG TWICE BEFORE IT WAS RIGHT — BOTH LESSONS
+
+Recorded because both are the trap-list pattern, and both produced clean plausible numbers.
+
+**v1 said the re-entry ask was a median $0.48 and 100% cleared the floor** — 7x better
+than the handoff, in the direction that flatters the plan. Wrong for two independent
+reasons that pushed the same way: (a) `crossingBuffer` enters `withdrawable` at
+`MatrixLogicLib:1368` WITHOUT going through `_credit()`, so at 3600bps it was counting
+$3.60 of borrowed SF money per rescue as member earnings; (b) `CrossingFunded` fires only
+on the self-funded path, so the sample was 24 of 63 members self-selected for health.
+
+**v2's positive control then refused a verdict for a reason that does not exist.** It
+asserted `credited == withdrawable + withdrawn` for a never-rescued member and called the
+converse "impossible". It is normal: withdrawable also drains via the crossing payment
+(`:868`), the debt clawback (`:882-897`) and a rescued crossing's member share (`:1357`).
+87 of 98 members showed it. **A control must encode an invariant that is actually
+invariant** — v3 uses BPS cross-reconciliation between independent source tags instead.
+
+**The standing rule this reinforces:** a result that flatters the plan gets read against
+the source before it gets believed. Both errors here were caught that way, not by testing.
+
+## 6. STILL OPEN AFTER THIS RUN
+
+- **"No MatB crossing has ever succeeded" is NOT established.** 0 self-funded MatB
+  crossings were seen, but defect 5 means rescued crossings emit nothing. It is a blind
+  spot, not a finding. Fixing defect 5 settles it — and it is worth settling, because if
+  true it is the strongest single piece of evidence for the whole V8.50 thesis.
+- **No organic growth RATE yet.** `logs/parked_baseline.csv` holds one row for this
+  deployment; a rate needs two. Take a second `diag_floor_halt.js` reading before bigfill
+  restarts.
+- **Journey B under-earns journey A** (median ask implies ~$2.46 vs $4.83). The likely
+  cause is that referral income is credited in MatA, where referrals enter. Unconfirmed,
+  and it matters for tier-upgrade economics.
