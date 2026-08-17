@@ -111,6 +111,21 @@ describe("V8.49 item 1 — the eviction clock is separate from the rescue clock"
    * Five parked members, one per triage outcome, all parked at the same instant.
    * The numbers are chosen against the LIVE default ladder (preset 1: bottom rung
    * 4000 bps) and the live rescueRatioBps (7000) — not against round numbers.
+   *
+   * ⛔ V8.50 ITEM A MOVED THIS WORLD INTO THE PAIR'S MatB, AND EVERY BPS BELOW IS
+   * UNCHANGED. Item A pays an A->B crossing out of the member's own crossing reserve,
+   * so crossing out of a MatA costs 50% of the fee, which a MatA parker's flat 50%
+   * reserve covers outright — sfShare goes to 0 and FLOOR and LADDER stop being
+   * reachable there at all. Four of these five outcomes only exist where a crossing
+   * still costs a full fee, and that is the MatB cycle-out re-entering a MatA.
+   *
+   * Each member kept its effective contribution: withdrawable is the old
+   * (withdrawable + reserve), reserve is 0, because item A leaves a MatB member holding
+   * none — it was spent getting them there. RATIO is the one exception and it is not an
+   * exception to the rule, it is the rule: rescueRatioBps is withdrawn/(withdrawn +
+   * withdrawable) and never looked at the reserve, so folding it in would have moved
+   * that member from 8000 bps to 5333 and quietly retired the case. Its withdrawable
+   * stays $2.00.
    */
   async function setup({ evictGrace = null, rotation = 0 } = {}) {
     const sigs = await ethers.getSigners();
@@ -128,37 +143,54 @@ describe("V8.49 item 1 — the eviction clock is separate from the rescue clock"
       libraries: { MatrixKeeperLib: await lib.getAddress() },
     })).deploy(await tr.getAddress(), await sfMock.getAddress());
 
-    // Both mocks report isMatrixA — keeps the frozen-MatB scan out of the batch, so
-    // every work item in performData is a parked-queue decision.
+    // V8.50 item A: matB is flagged as one, because a full-fee crossing is what the
+    // ladder and the floor need in order to be reachable at all. This does NOT let the
+    // frozen-MatB scan into the batch — _isFrozenMatB returns on
+    // `occupancy() < MATRIX_SIZE()`, and this mock's occupancy is always 0 — so every
+    // work item in performData is still a parked-queue decision.
     matA = await (await ethers.getContractFactory("MockMatrixK")).deploy(FEE, true);
-    matB = await (await ethers.getContractFactory("MockMatrixK")).deploy(FEE, true);
+    matB = await (await ethers.getContractFactory("MockMatrixK")).deploy(FEE, false);
     const pm = await (await ethers.getContractFactory("MockPairManagerK")).deploy();
     await pm.addPair(await matA.getAddress(), await matB.getAddress());
     await keeper.setPairManager(0, await pm.getAddress());
     await keeper.setParkedGracePeriod(PARKED_GRACE);
+    // This fixture parks FIVE members, one per triage outcome, and reads all five out
+    // of a single checkUpkeep — so it is only meaningful while the discovery batch is
+    // big enough to hold them. Set explicitly rather than inherited: V8.50 defect 5 is
+    // an open proposal to lower the live default of maxItemsPerUpkeep to 5 on gas
+    // grounds, and at 5 the last member added (RESCUED) drops out of performData and
+    // EC-3 and EC-4 fail for a reason that has nothing to do with either clock.
+    //
+    // Not a pin in the V8_48_KeeperScan sense — it holds no deliberate behaviour change,
+    // it just stops a batch-sizing knob from deciding a triage question. Batch sizing
+    // has its own coverage in KeeperScan, which sets the same knob for the opposite
+    // reason (byte-identical comparison against the frozen pre-refactor keeper).
+    await keeper.setMaxItemsPerUpkeep(15);
     if (evictGrace !== null) await keeper.setEvictionGracePeriod(evictGrace);
 
     const t = await now();
     // addParked(member, parkedAt, withdrawable, crossingReserve, lifetimeWithdrawn)
     //
     // GHOST   — seated in this very matrix; triage returns before reading any numbers.
-    await matA.addParked(ghost, t, M6(2), M6(5), 0);
-    await matA.setSeated(ghost, true);
+    await matB.addParked(ghost, t, M6(7), 0, 0);
+    await matB.setSeated(ghost, true);
     // RATIO   — withdrawn $8 of $10 earned = 8000 bps, past rescueRatioBps (7000).
-    await matA.addParked(ratio, t, M6(2), M6(5), M6(8));
+    //           Withdrawable stays $2.00: see the note above. The reserve was never in
+    //           this ratio, so item A did not move this member's verdict at all.
+    await matB.addParked(ratio, t, M6(2), 0, M6(8));
     // LADDER  — contribution $0.30 against a $10 fee = 300 bps, below the ladder's
     //           bottom rung (4000). The fund will not cover someone this thin.
-    await matA.addParked(ladder, t, M6(0.1), M6(0.2), 0);
+    await matB.addParked(ladder, t, M6(0.3), 0, 0);
     // FLOOR   — a live rescue candidate ($7 of $10 covered, $3 shortfall) whom the SF
     //           refuses on item 46's insolvency floor.
-    await matA.addParked(floored, t, M6(2), M6(5), 0);
+    await matB.addParked(floored, t, M6(7), 0, 0);
     await sfMock.setFloored(floored, true);
     // RESCUE  — the control. Identical to FLOOR, minus the floor.
-    await matA.addParked(rescued, t, M6(2), M6(5), 0);
+    await matB.addParked(rescued, t, M6(7), 0, 0);
 
     // rotationCount stays 0 by default so _scanMatrix returns on its first line and the
     // only work items are parked ones. EC-8 opts in, because _doEvictParked gates on it.
-    if (rotation > 0) await matA.setRotationCount(rotation);
+    if (rotation > 0) await matB.setRotationCount(rotation);
 
     await time.increase(10);
   }
@@ -168,7 +200,7 @@ describe("V8.49 item 1 — the eviction clock is separate from the rescue clock"
   async function evictViaKeeper(who) {
     const pd = ethers.AbiCoder.defaultAbiCoder().encode(
       ["tuple(uint8 workType, uint8 tierIndex, address addr1, address addr2)[]"],
-      [[[WORK_EVICT_PARKED, 0, await matA.getAddress(), who]]]);
+      [[[WORK_EVICT_PARKED, 0, await matB.getAddress(), who]]]);
     const rc = await (await keeper.performUpkeep(pd)).wait();
     return rc.logs
       .map((l) => { try { return keeper.interface.parseLog(l); } catch { return null; } })
@@ -279,7 +311,7 @@ describe("V8.49 item 1 — the eviction clock is separate from the rescue clock"
     // above cannot quietly swallow it — note rotation stays 0, which a non-ghost could
     // not survive.
     await setup();
-    await matA.setSeated(ghost, true);
+    await matB.setSeated(ghost, true);
     const evicted = await evictViaKeeper(ghost);
     expect(evicted.length, "a ghost is dequeued immediately, no clock, no rotation").to.equal(1);
   });

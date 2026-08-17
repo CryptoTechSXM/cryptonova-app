@@ -36,6 +36,27 @@
  *   than as one of two. It now walks all three windows in order. Worth noting for the
  *   next session: a fixture can encode a coincidence as an intention without anyone
  *   choosing to, and the only thing that finds it is running everything.
+ *
+ * RE-FIXTURED BY V8.50 ITEM A — AND THE ARITHMETIC IS UNCHANGED BY THE MOVE.
+ *   Item A pays an A->B crossing out of the member's own crossing reserve, so crossing
+ *   OUT of a MatA now costs 50% of the fee and a MatA parker holding the flat 50%
+ *   reserve covers it outright. The loan path did not get rarer in a MatA — it stopped
+ *   existing there (measured: 35 of 35 live MatA parkers self-fund). So the three tests
+ *   that need a LOAN moved to the pair's MatB, where a cycle-out re-enters a MatA at the
+ *   FULL fee and a member can still be short. The self-funded tests stay in the MatA:
+ *   that case did not move, it got commoner.
+ *
+ *   Each moved member keeps its exact effective contribution — withdrawable becomes the
+ *   old (withdrawable + reserve) and the reserve becomes 0, because item A leaves a MatB
+ *   member holding NO reserve; it was spent getting them there. So every wBps, every
+ *   shortfall and every sfShare below is the same number it was before item A. Only the
+ *   matrix and the pocket changed. That is deliberate: these tests pin item 12's rule
+ *   (grace protects against loans), not item A's economics.
+ *
+ *   THE POPULATION, MEASURED — live V8.48, 2026-08-16, scripts/model_item_a.js, n=63
+ *   members who completed a journey. Post-item-A the re-entry ask runs min $0.00 /
+ *   median $2.71 / max $4.28, so a member arrives at a $10 re-entry holding between
+ *   $5.72 and $10.00. Every fixture below sits inside that band.
  */
 const { ethers } = require("hardhat");
 const { expect } = require("chai");
@@ -63,7 +84,7 @@ function decode(performData) {
 describe("V8.48 item 12 — grace protects against LOANS, not against your own money", function () {
   this.timeout(300_000);
 
-  let keeper, matA, sf, owner, alice;
+  let keeper, matA, matB, sf, owner, alice;
 
   // One tier, one pair, MatA only. rotationCount stays 0 so the idle sweep returns on
   // its first line and tierVelocityGreen is true so the gate scan skips — the only work
@@ -80,7 +101,11 @@ describe("V8.48 item 12 — grace protects against LOANS, not against your own m
     })).deploy(await tr.getAddress(), await sf.getAddress());
 
     matA = await (await ethers.getContractFactory("MockMatrixK")).deploy(FEE, true);
-    const matB = await (await ethers.getContractFactory("MockMatrixK")).deploy(FEE, true);
+    // V8.50 item A: the pair's MatB is now flagged as one, because the tests below need
+    // a crossing that still costs a FULL fee — the MatB cycle-out that re-enters a MatA.
+    // Flipping it does NOT let the frozen-MatB scan into the batch: _isFrozenMatB returns
+    // on `occupancy() < MATRIX_SIZE()` and this mock's occupancy is always 0.
+    matB = await (await ethers.getContractFactory("MockMatrixK")).deploy(FEE, false);
     const pm = await (await ethers.getContractFactory("MockPairManagerK")).deploy();
     await pm.addPair(await matA.getAddress(), await matB.getAddress());
     await keeper.setPairManager(0, await pm.getAddress());
@@ -126,7 +151,10 @@ describe("V8.48 item 12 — grace protects against LOANS, not against your own m
 
   it("ONE UNIT SHORT is a loan and waits the full 24 hours", async function () {
     await setup();
-    await matA.addParked(alice.address, await now(), FEE - RESERVE - 1n, RESERVE, 0);
+    // V8.50 item A: at a MatB re-entry the member holds no reserve and the crossing is
+    // the full fee, so "one unit short" is withdrawable alone. Effective FEE - 1 against
+    // a FEE crossing is the same 9,999 bps this asserted before item A moved the money.
+    await matB.addParked(alice.address, await now(), FEE - 1n, 0, 0);
 
     await time.increase(SELF_GRACE + 5);
     expect(await rescuedMe(alice.address),
@@ -137,14 +165,19 @@ describe("V8.48 item 12 — grace protects against LOANS, not against your own m
   });
 
   // ── the population the live chain is actually made of ─────────────────────
-  it("the 84% member — the live median — is unaffected", async function () {
+  it("the MEDIAN re-entry member — the live population — is unaffected", async function () {
     await setup();
-    // Measured 2026-08-11: median parked member sits at 84.2% of the fee,
-    // reserve 50% + ~34% earnings. They need a loan and must keep the full window.
-    await matA.addParked(alice.address, await now(), M6(3.42), RESERVE, 0);
+    // WAS "the 84% member": reserve 50% + ~34% earnings = 84.2% of the fee, measured
+    // 2026-08-11 at an A->B crossing. Item A retired that member — in a MatA the reserve
+    // now pays the crossing outright. The population this test exists to represent moved
+    // to the MatB re-entry, and it was re-measured there: model_item_a.js on live V8.48,
+    // 2026-08-16, n=63, median ask $2.71 — so the median member arrives holding $7.29 of
+    // a $10 re-entry, 72.9%. Still a loan, so still the full window. The number changed
+    // because the world did; the rule under test did not.
+    await matB.addParked(alice.address, await now(), M6(7.29), 0, 0);
 
     await time.increase(SELF_GRACE + 5);
-    expect(await rescuedMe(alice.address), "84% of the fee still needs SF money").to.equal(false);
+    expect(await rescuedMe(alice.address), "a $2.71 ask is SF money, not their own").to.equal(false);
     await time.increase(PARKED_GRACE);
     expect(await rescuedMe(alice.address)).to.equal(true);
   });
@@ -210,7 +243,9 @@ describe("V8.48 item 12 — grace protects against LOANS, not against your own m
 
   it("a LOAN rescue does NOT fire when the fund cannot cover it", async function () {
     await setup({ sfBalance: 0n });
-    await matA.addParked(alice.address, await now(), M6(1), RESERVE, 0); // 60% of fee
+    // 60% of a full-fee MatB re-entry, near the poor end of the measured post-item-A
+    // band ($5.72 is the largest measured ask's member). They need $4.00; there is $0.00.
+    await matB.addParked(alice.address, await now(), M6(6), 0, 0);
     await time.increase(PARKED_GRACE + 10);
     expect(await rescuedMe(alice.address), "no money, no loan").to.equal(false);
   });

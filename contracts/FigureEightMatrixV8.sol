@@ -619,6 +619,25 @@ contract FigureEightMatrixV8 is Ownable2Step {
         return MatrixLogicLib.pendingPoolOf(_state, _cfg(), member);
     }
     function crossingReserveOf(address member) external view returns (uint256) { return _state.members[member].crossingReserve; }  // V8.31
+
+    /// @notice V8.50 DEFECT 4: the member's TRUE lifetime earnings — the accumulator
+    ///         written only by MatrixLogicLib._credit (:1315), and until now the only
+    ///         field in the struct with no getter.
+    ///
+    ///         MatrixKeeperLib reconstructed it as `withdrawn + withdrawable` because it
+    ///         had no choice, and that reconstruction is CONTAMINATED: withdrawable also
+    ///         receives the crossing buffer (MatrixLogicLib:1368) and, since V8.50 item
+    ///         E1, a carried balance from the partner half. Neither is an earning. The
+    ///         keeper's withdraw-ratio EVICTION test runs on that figure, so a member who
+    ///         was rescued, or who simply crossed carrying their own money, looks like
+    ///         they earned more than they did and their ratio reads LOW — the eviction
+    ///         under-fires, in the member's favour but not by design.
+    ///
+    ///         E1 made this worse, which is why it is fixed in the same release rather
+    ///         than left on the defect list.
+    function totalEarnedOf(address member) external view returns (uint256) {
+        return _state.members[member].totalEarned;
+    }
     function rescueDebtOf(address member) external view returns (uint256) { return _state.rescueDebt[member]; }
 
     /// @notice Called by the partner MatA during forceCrossKeeper to record the
@@ -628,6 +647,33 @@ contract FigureEightMatrixV8 is Ownable2Step {
     function addRescueDebt(address member, uint256 amount) external {
         require(msg.sender == _state.partner, "F8V8: only partner");
         _state.rescueDebt[member] += amount;
+    }
+
+    /// @notice V8.50 ITEM E1 — A MEMBER'S MONEY FOLLOWS THE MEMBER.
+    ///
+    ///         Called by the partner MatA at the end of a crossing to hand over this
+    ///         member's remaining withdrawable. Item A stopped charging the crossing to
+    ///         earnings, which was the point — but it left those earnings sitting in the
+    ///         MatA ledger, and TierRouter.handleCycleOut is passed only the CYCLING
+    ///         matrix's buckets. Measured on live V8.48 (model_item_a.js phase 6,
+    ///         2026-08-17, n=70): the re-entry ask read $1.90 across both halves and
+    ///         $6.60 on the ledger the gate actually sees, every member identical.
+    ///         Without this, item A makes the re-entry HARDER than V8.48, not easier.
+    ///
+    ///         Only the A->B direction needs this. A member cycling out of MatB leaves
+    ///         their remainder in MatB, re-enters their OWN pair, and returns to this
+    ///         same contract — so it waits for them and the next gate already reads it.
+    ///
+    ///         NOT routed through _credit(): this is a TRANSFER, not an earning.
+    ///         Crediting it would inflate the member struct's totalEarned — the field
+    ///         defect 4 exists to clean up — and double-count in any tool summing
+    ///         EarningsCredited. The source matrix emits BalanceCarried instead, so the
+    ///         movement is visible without pretending to be income.
+    function creditCarriedBalance(address member, uint256 amount) external {
+        require(msg.sender == _state.partner, "F8V8: only partner");
+        if (amount == 0) return;
+        usdc.safeTransferFrom(msg.sender, address(this), amount);
+        _state.members[member].withdrawable += amount;
     }
 
     /// @notice V8.47 migration: owner sweeps a stranded pre-V8.47 per-matrix rescue

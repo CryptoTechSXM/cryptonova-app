@@ -50,7 +50,13 @@ const { time } = require("@nomicfoundation/hardhat-toolbox/network-helpers");
 
 const M6  = (n) => ethers.parseUnits(n.toString(), 6);
 const FEE = M6(10);                       // T1
-const CEIL = M6(3.4);                     // FEE x 3400bps — the declared default floor
+// FEE x insolvencyFloorBps. DERIVED, not pinned: V8.50 moved the declared default from
+// 3400 to 5000 and a hard-coded $3.40 here silently turned three boundary tests into
+// change detectors that explain nothing — the item-42 anti-pattern this suite names
+// elsewhere. The invariant is "the ceiling is the fee times the declared default", so
+// state that and let the number follow. sfFixture() asserts the default separately.
+const FLOOR_BPS_DEFAULT = 3400n;          // StabilityFund.sol declared default, asserted below
+const CEIL = FEE * FLOOR_BPS_DEFAULT / 10_000n;
 
 const WORK_PARKED_RESCUE = 4;
 const WORK_EVICT_PARKED  = 6;
@@ -84,7 +90,7 @@ describe("V8.49 item 1b — policy B: the insolvency floor includes the loan bei
 
     it("IF-1: the boundary is debt + advance <= ceiling — exactly at it passes, one wei over is refused", async function () {
       const { member, sf, mock } = await sfFixture();
-      expect(await sf.insolvencyFloorBps(), "declared default").to.equal(3400n);
+      expect(await sf.insolvencyFloorBps(), "declared default").to.equal(3400n);   // V8.50: proposed 5000, reverted — see StabilityFund.sol
 
       // Zero debt, and an advance that lands EXACTLY on the ceiling. Under V8.48 this
       // was never the question — any advance was allowed as long as prior debt was
@@ -135,7 +141,9 @@ describe("V8.49 item 1b — policy B: the insolvency floor includes the loan bei
 
       await mock.bookLoan(member.address, 0, M6(1));
       const room = await sf.loanHeadroom(member.address, 0);
-      expect(room, "$3.40 ceiling less $1.00 owed").to.equal(M6(2.4));
+      // DERIVED from CEIL, not the old literal $2.40: the ceiling moved to $5.00 in
+      // V8.50 and the RULE being pinned is "headroom == ceiling - debt", not a number.
+      expect(room, "the ceiling less $1.00 owed").to.equal(CEIL - M6(1));
 
       // The headroom IS the boundary — not an approximation of it. The dashboard shows
       // this figure, so if it were off by anything the member would be told a number
@@ -172,7 +180,9 @@ describe("V8.49 item 1b — policy B: the insolvency floor includes the loan bei
       // both. payForceCross is the keeper path (the one that carries the buffer);
       // payCoRescue is the member-driven path.
       const { owner, member, sf, mock } = await sfFixture();
-      await mock.bookLoan(member.address, 0, M6(3));       // $0.40 of room left
+      // Book the member up to $0.40 short of the ceiling, DERIVED — the old literal $3
+      // assumed a $3.40 ceiling and silently left $2.00 of room once V8.50 moved it.
+      await mock.bookLoan(member.address, 0, CEIL - M6(0.4));   // $0.40 of room left
 
       await expect(mock.pullCoRescue(member.address, 0, M6(0.5)))
         .to.be.revertedWith("SF: insolvency floor");
@@ -208,7 +218,7 @@ describe("V8.49 item 1b — policy B: the insolvency floor includes the loan bei
 
   // ══ PART 2 — discovery and the lender, on the keeper harness ════════════════
   describe("discovery agrees with the lender", function () {
-    let keeper, matA, sfMock, thin, fat, ghost;
+    let keeper, matA, matB, sfMock, thin, fat, ghost;
 
     function decode(pd) {
       if (!pd || pd === "0x") return [];
@@ -223,12 +233,27 @@ describe("V8.49 item 1b — policy B: the insolvency floor includes the loan bei
     const now = async () => (await ethers.provider.getBlock("latest")).timestamp;
 
     /**
-     * THIN — reserve $5.00 + withdrawable $3.40 = $8.40 effective = 8400 bps, which
-     *        lands on preset 1's 8000 rung (2500 bps). sfShare = min($2.50, shortfall
-     *        $1.60) = $1.60. Comfortably inside the $3.40 ceiling on its own — which is
-     *        exactly what makes it the right member for IF-8.
-     * FAT  — reserve $5.00 + withdrawable $5.00 = the whole fee. maxShortfall 0, so
-     *        sfShare is 0: the SELF-FUNDED case item 12 turns on.
+     * ⛔ V8.50 ITEM A MOVED THIS WHOLE WORLD INTO THE PAIR'S MatB, AND THE NUMBERS DID
+     * NOT CHANGE. Item A pays an A->B crossing out of the member's own reserve, so a
+     * crossing out of a MatA costs 50% of the fee and every MatA parker — who holds a
+     * flat 50% reserve — covers it outright (35 of 35 measured live). sfShare is then 0
+     * for all three members here and this file's entire subject, the insolvency floor on
+     * a LOAN, has nothing left to grip. The loan did not become rare in a MatA; it left.
+     *
+     * Where it still lives is the MatB cycle-out, which re-enters a MatA at the FULL fee.
+     * So each member moved there with its effective contribution intact: withdrawable is
+     * the old (withdrawable + reserve) and the reserve is 0, because item A leaves a MatB
+     * member holding none — it was spent getting them there. Same bps, same shortfall,
+     * same sfShare, same ceiling arithmetic below.
+     *
+     * THIN — withdrawable $8.40, no reserve = 8400 bps of a $10.00 re-entry, which lands
+     *        on preset 1's 8000 rung (2500 bps). sfShare = min($2.50, shortfall $1.60)
+     *        = $1.60. Comfortably inside the $3.40 ceiling on its own — which is exactly
+     *        what makes it the right member for IF-8.
+     * FAT  — withdrawable $10.00 = the whole fee. maxShortfall 0, so sfShare is 0: the
+     *        SELF-FUNDED case item 12 turns on. Measured live post-item-A, the smallest
+     *        re-entry ask is $0.00 — this member is the real bottom of that distribution,
+     *        not a contrivance.
      */
     async function setup() {
       const sigs = await ethers.getSigners();
@@ -249,17 +274,20 @@ describe("V8.49 item 1b — policy B: the insolvency floor includes the loan bei
       })).deploy(await tr.getAddress(), await sfMock.getAddress());
 
       matA = await (await ethers.getContractFactory("MockMatrixK")).deploy(FEE, true);
-      const matB = await (await ethers.getContractFactory("MockMatrixK")).deploy(FEE, true);
+      // Flagged as a real MatB — that flag is what makes the crossing cost a full fee.
+      // It does not admit the frozen-MatB scan: _isFrozenMatB returns on
+      // `occupancy() < MATRIX_SIZE()` and this mock's occupancy is always 0.
+      matB = await (await ethers.getContractFactory("MockMatrixK")).deploy(FEE, false);
       const pm = await (await ethers.getContractFactory("MockPairManagerK")).deploy();
       await pm.addPair(await matA.getAddress(), await matB.getAddress());
       await keeper.setPairManager(0, await pm.getAddress());
       await keeper.setParkedGracePeriod(PARKED_GRACE);
 
       const t = await now();
-      await matA.addParked(thin, t, M6(3.4), M6(5), 0);
-      await matA.addParked(fat,  t, M6(5),   M6(5), 0);
-      await matA.addParked(ghost, t, M6(2),  M6(5), 0);
-      await matA.setSeated(ghost, true);
+      await matB.addParked(thin,  t, M6(8.4), 0, 0);
+      await matB.addParked(fat,   t, M6(10),  0, 0);
+      await matB.addParked(ghost, t, M6(7),   0, 0);
+      await matB.setSeated(ghost, true);
       await time.increase(10);
     }
 
@@ -344,13 +372,13 @@ describe("V8.49 item 1b — policy B: the insolvency floor includes the loan bei
       // member, it is velocity, chain-links, evictions and the CW epoch all reverting.
       await setup();
       await sfMock.setMemberDebt(thin, M6(3.4));   // ceiling full: the lender will refuse
-      await matA.setRotationCount(1);              // _doEvictParked needs a rotation
+      await matB.setRotationCount(1);              // _doEvictParked needs a rotation
 
       const pd = ethers.AbiCoder.defaultAbiCoder().encode(
         ["tuple(uint8 workType, uint8 tierIndex, address addr1, address addr2)[]"],
         [[
-          [WORK_PARKED_RESCUE, 0, await matA.getAddress(), thin],   // the SF will refuse this
-          [WORK_EVICT_PARKED,  0, await matA.getAddress(), ghost],  // ...this must still run
+          [WORK_PARKED_RESCUE, 0, await matB.getAddress(), thin],   // the SF will refuse this
+          [WORK_EVICT_PARKED,  0, await matB.getAddress(), ghost],  // ...this must still run
         ]]);
 
       const rc = await (await keeper.performUpkeep(pd)).wait();

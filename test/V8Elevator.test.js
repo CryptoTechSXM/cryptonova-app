@@ -177,7 +177,21 @@ async function deployV8Fixture() {
     return tierRouter.connect(signer).register(referrer ?? ethers.ZeroAddress);
   };
 
+  // ENSURE this member is in MatB — not "push them there unconditionally".
+  //
+  // V8.50 ITEM A: every caller of this helper wrote it as "the root parked, so shove it
+  // across", and that is no longer what happens. Item A pays an A->B crossing out of the
+  // member's own crossing reserve, which a MatA member holds by construction, so the root
+  // now crosses ITSELF during the rotation and is already seated when we get here.
+  // forceCross would then hit require(!isInMatrix) at MatrixLogicLib:255 and revert with
+  // "F8V8: already in matrix" — which is the guard working, not a fault.
+  //
+  // The skip is deliberately in the helper and not at the 21 call sites: they all want
+  // the same postcondition, and the ones that still need a real force-cross (a member who
+  // genuinely could not fund the hop) still get one. V8_48_KeeperScan.test.js already
+  // guards its own force-cross loop exactly this way; this is that pattern, hoisted.
   const fc = async (memberAddr) => {
+    if (await matB.isActiveInMatrix(memberAddr)) return;   // item A got there first
     await usdc.connect(admin).approve(await matA.getAddress(), T1_FEE);
     return matA.connect(admin).forceCross(memberAddr);
   };
@@ -331,10 +345,32 @@ describe("V8Elevator — T1 → T2 upgrade cycle (MSIZE=7)", function () {
       await reg(w1, ethers.ZeroAddress);
       for (const s of [s0, s1, s2, s3, s4, s5]) await reg(s, w1.address);
 
+      // ⛔ V8.50 ITEM A: HOLD THE UPGRADE OFF UNTIL THE MOMENT THIS TEST IS ABOUT.
+      //
+      // The rule under test is V8.44's PRIORITY rule — at a MatB cycle-out, funds go to
+      // RE-ENTRY before UPGRADE. Item A does not break that rule, it moves the upgrade
+      // somewhere else: the A->B crossing now costs $5 instead of a full fee, so W1
+      // leaves the MatA cycle-out holding $7.66 and the additive engine spends it on a
+      // T2 seat there — long before the MatB cycle-out this test examines. W1 arrives at
+      // the interesting moment already at tier 2, and the priority can no longer be
+      // observed, because an upgrade from T2 would need a T3 that this fixture does not
+      // deploy.
+      //
+      // So the fixture CONTROLS for the variable item A introduced: upgrade is disabled
+      // for the MatA hop and re-enabled before the MatB cycle-out. W1 then reaches that
+      // cycle-out as a T1 member with both options live — exactly the state V8.44's rule
+      // is about — and the assertions below mean what they always meant.
+      //
+      // This is deliberately NOT a re-statement of the rule to fit the new world. The
+      // rule is unchanged and still worth pinning; only the fixture has to work harder
+      // to isolate it now.
+      await tierRouter.connect(w1).setMemberOptions(true /*disable upgrade*/, true /*re-entry ON*/, false);
+
       // S6 entry → occ==7 → W1 cycles out of matA → crosses to matB pos1
       await reg(s6, w1.address);
       expect(await tierRouter.globalJoined(w1.address)).to.be.true;
-      expect(await tierRouter.memberHighestTier(w1.address)).to.equal(1);
+      expect(await tierRouter.memberHighestTier(w1.address),
+        "upgrade held off: W1 must still be T1 when they reach MatB").to.equal(1);
 
       // ROUND 2: S7-S12 register → cycles out S0-S5 (each parks: earned < $5)
       for (const s of [s7, s8, s9, s10, s11, s12]) await reg(s, w1.address);
@@ -357,14 +393,34 @@ describe("V8Elevator — T1 → T2 upgrade cycle (MSIZE=7)", function () {
       //   (V8.43 hardcoded escrow=0, so funds were $7.66 < $10: re-entry was
       //   silently skipped and the upgrade fired instead — the exact bug class
       //   V8.44 fixes: "auto-reentry ON → member NEVER graduates".)
+      // Re-enable the upgrade so BOTH toggles are live at the MatB cycle-out — the
+      // contest this test exists to judge.
+      await tierRouter.connect(w1).setMemberOptions(false /*upgrade ON*/, true /*re-entry ON*/, false);
+
       await fc(s6.address);
 
       // ── KEY ASSERTIONS (V8.44) ────────────────────────────────────────────
-      expect(await tierRouter.memberHighestTier(w1.address)).to.equal(
-        1, "W1 re-enters T1 (re-entry priority consumes the funds first)"
-      );
+      // ⛔ V8.50 ITEM A: `memberHighestTier == 1` USED TO STAND IN FOR THE PRIORITY RULE,
+      // AND IT WAS CONFLATING TWO DIFFERENT THINGS.
+      //
+      // V8.44's rule is "at a MatB cycle-out, funds go to RE-ENTRY before UPGRADE". Under
+      // V8.48 the member arrived with $12.66: re-entry took $10 and the remaining $2.66
+      // could not reach the $7 T2 fee, so the upgrade was SKIPPED — and "still T1" was a
+      // faithful proxy for "re-entry won".
+      //
+      // Item A means the member arrives holding MORE, because their MatA earnings were
+      // never spent on the crossing. Re-entry still goes first and still gets its seat —
+      // but there is now enough left for the upgrade to fire SECOND. "Before" has stopped
+      // meaning "instead of". A tier of 2 here is not a priority violation; it is the
+      // member affording both, which is item A's entire promise.
+      //
+      // So the rule is asserted DIRECTLY instead of by proxy: W1 holds a T1 seat. If the
+      // upgrade had won the contest, they would hold a T2 seat and NO T1 one — that is
+      // the V8.43 bug this test was written to catch ("auto-reentry ON → member NEVER
+      // graduates"), and it is still caught.
       expect(await matA.isActiveInMatrix(w1.address)).to.equal(
-        true, "W1 re-entered own pair's MatA"
+        true, "RE-ENTRY WON: W1 holds a seat in their own pair's MatA. If the upgrade had " +
+              "consumed the funds first, this seat would not exist — that is the V8.43 bug."
       );
       expect(await matB.crossingReserveOf(w1.address)).to.equal(
         0, "W1's matB crossing reserve was consumed as re-entry escrow"
@@ -970,46 +1026,56 @@ describe("V8.10 — Withdrawal reserve, drain-and-park prevention, grace evictio
 
   });
 
+  // ── V8.50 ITEM A: WHERE THIS SEQUENCE PARKS SOMEBODY MOVED ──────────────────
+  //
+  // These fourteen registrations used to leave s0 PARKED IN MatA, stuck at the A->B
+  // crossing because chain pay alone could not fund a second full fee. Item A pays that
+  // crossing from the member's own crossing reserve, so it no longer happens. Measured on
+  // this exact fixture:
+  //
+  //     matA  parked 0   occupancy 7   rotationCount 8      <- everyone crossed themselves
+  //     matB  parked 1   [w1]          rotationCount 1      <- the one real park
+  //
+  // The park that remains is w1 at the MatB CYCLE-OUT, re-entering a MatA at the full
+  // fee — the only crossing item A still charges in full. These four tests are about
+  // parkedAt and evictParked MECHANICS, not about which half of the pair the park
+  // happens in, so they follow the park rather than asserting the old location.
+  async function parkOneAtReentry(f) {
+    const { matB, w1, s0, s1, s2, s3, s4, s5, s6, s7, s8, s9, s10, s11, s12, s13, reg } = f;
+      await reg(w1, ethers.ZeroAddress);
+      for (const s of [s0, s1, s2, s3, s4, s5]) await reg(s, w1.address);
+      await reg(s6, w1.address);
+      for (const s of [s7, s8, s9, s10, s11, s12]) await reg(s, w1.address);
+      await reg(s13, w1.address);
+    // ASSERT THE PRECONDITION LOUDLY. A fixture that quietly stops reaching the state
+    // turns all four of these into vacuous passes — the failure mode this repo keeps
+    // finding.
+    expect(await matB.parkedAt(w1.address),
+      "fixture must leave w1 parked in MatB at re-entry; if it does not, the sequence no " +
+      "longer reaches a cycle-out and these tests are measuring nothing").to.be.gt(0n);
+    return { mat: matB, member: w1 };
+  }
+
   // ── 7d. parkedAt — grace period clock ────────────────────────────────────────
   describe("7d. parkedAt — grace period clock", function () {
 
     it("parkedAt[member] is set when a member parks on cycle-out with insufficient funds", async function () {
-      const {
-        matA,
-        w1, s0, s1, s2, s3, s4, s5, s6, s7, s8, s9, s10, s11, s12, s13,
-        reg,
-      } = await loadFixture(deployV8Fixture);
+      const { mat, member } = await parkOneAtReentry(await loadFixture(deployV8Fixture));
 
-      await reg(w1, ethers.ZeroAddress);
-      for (const s of [s0, s1, s2, s3, s4, s5]) await reg(s, w1.address);
-      await reg(s6, w1.address);
-      for (const s of [s7, s8, s9, s10, s11, s12]) await reg(s, w1.address);
-      await reg(s13, w1.address);
-
-      const parkedTs = await matA.parkedAt(s0.address);
-      expect(parkedTs).to.be.gt(0n, "parkedAt must be set when member parks");
-      expect(await matA.getParkedCount()).to.be.gte(1n);
+      const parkedTs = await mat.parkedAt(member.address);
+      expect(parkedTs).to.be.gt(0n, "parkedAt must be set when member parks").to.be.gt(0n);
+      expect(await mat.getParkedCount()).to.be.gte(1n);
     });
 
     it("parkedAt[member] is cleared when evictParked is called", async function () {
-      const {
-        matA, admin,
-        w1, s0, s1, s2, s3, s4, s5, s6, s7, s8, s9, s10, s11, s12, s13,
-        reg,
-      } = await loadFixture(deployV8Fixture);
+      const f = await loadFixture(deployV8Fixture);
+      const { admin } = f;
+      const { mat, member } = await parkOneAtReentry(f);
 
-      await reg(w1, ethers.ZeroAddress);
-      for (const s of [s0, s1, s2, s3, s4, s5]) await reg(s, w1.address);
-      await reg(s6, w1.address);
-      for (const s of [s7, s8, s9, s10, s11, s12]) await reg(s, w1.address);
-      await reg(s13, w1.address);
+      await mat.connect(admin).setMatrixKeeper(admin.address);
+      await mat.connect(admin).evictParked(member.address);
 
-      expect(await matA.parkedAt(s0.address)).to.be.gt(0n);
-
-      await matA.connect(admin).setMatrixKeeper(admin.address);
-      await matA.connect(admin).evictParked(s0.address);
-
-      expect(await matA.parkedAt(s0.address)).to.equal(0n, "parkedAt must clear after eviction");
+      expect(await mat.parkedAt(member.address)).to.equal(0n, "parkedAt must clear after eviction");
     });
 
   });
@@ -1018,55 +1084,37 @@ describe("V8.10 — Withdrawal reserve, drain-and-park prevention, grace evictio
   describe("7e. evictParked — V8.10 grace-period eviction", function () {
 
     it("only matrixKeeper can call evictParked", async function () {
-      const {
-        matA, admin, w1,
-        s0, s1, s2, s3, s4, s5, s6, s7, s8, s9, s10, s11, s12, s13,
-        reg,
-      } = await loadFixture(deployV8Fixture);
+      const f = await loadFixture(deployV8Fixture);
+      const { s0 } = f;
+      const { mat, member } = await parkOneAtReentry(f);
 
-      await reg(w1, ethers.ZeroAddress);
-      for (const s of [s0, s1, s2, s3, s4, s5]) await reg(s, w1.address);
-      await reg(s6, w1.address);
-      for (const s of [s7, s8, s9, s10, s11, s12]) await reg(s, w1.address);
-      await reg(s13, w1.address);
-
-      expect(await matA.parkedAt(s0.address)).to.be.gt(0n);
-
+      // s0 is the stranger now, because the parked member IS w1 under item A.
       await expect(
-        matA.connect(w1).evictParked(s0.address)
+        mat.connect(s0).evictParked(member.address)
       ).to.be.revertedWith("F8V8: not keeper");
     });
 
     it("evictParked removes member from parked queue and emits MemberEvicted", async function () {
-      const {
-        matA, admin,
-        w1, s0, s1, s2, s3, s4, s5, s6, s7, s8, s9, s10, s11, s12, s13,
-        reg,
-      } = await loadFixture(deployV8Fixture);
+      const f = await loadFixture(deployV8Fixture);
+      const { admin } = f;
+      const { mat, member } = await parkOneAtReentry(f);
 
-      await reg(w1, ethers.ZeroAddress);
-      for (const s of [s0, s1, s2, s3, s4, s5]) await reg(s, w1.address);
-      await reg(s6, w1.address);
-      for (const s of [s7, s8, s9, s10, s11, s12]) await reg(s, w1.address);
-      await reg(s13, w1.address);
-
-      const countBefore = await matA.getParkedCount();
+      const countBefore = await mat.getParkedCount();
       expect(countBefore).to.be.gte(1n);
-      expect(await matA.parkedAt(s0.address)).to.be.gt(0n);
 
-      await matA.connect(admin).setMatrixKeeper(admin.address);
+      await mat.connect(admin).setMatrixKeeper(admin.address);
 
-      const tx      = await matA.connect(admin).evictParked(s0.address);
+      const tx      = await mat.connect(admin).evictParked(member.address);
       const receipt = await tx.wait();
 
-      expect(await matA.parkedAt(s0.address)).to.equal(
+      expect(await mat.parkedAt(member.address)).to.equal(
         0n, "parkedAt must clear after eviction"
       );
-      expect(await matA.getParkedCount()).to.equal(
+      expect(await mat.getParkedCount()).to.equal(
         countBefore - 1n, "Parked count must decrease by 1"
       );
       const evicted = receipt.logs.some(log => {
-        try { return matA.interface.parseLog(log)?.name === "MemberEvicted"; }
+        try { return mat.interface.parseLog(log)?.name === "MemberEvicted"; }
         catch { return false; }
       });
       expect(evicted).to.be.true;
@@ -1136,7 +1184,7 @@ describe("V8.21 — Whale Gate: per-tier first-entry tracking (shared threshold)
     expect(await tierRouter.tierFirstEntries(1)).to.equal(4n);
   });
 
-  it("trips tierWhaleGateActive(1) exactly at the shared threshold, emits per-tier event, and leaves tier 2 untouched", async function () {
+  it("trips tierWhaleGateActive(1) exactly at the shared threshold, emits per-tier event, and leaves tier 2's GATE shut", async function () {
     const {
       tierRouter, admin,
       w1, s0, s1, s2, s3, s4, s5, s6, s7, s8,
@@ -1161,8 +1209,27 @@ describe("V8.21 — Whale Gate: per-tier first-entry tracking (shared threshold)
     expect(await tierRouter.tierFirstEntries(1)).to.equal(10n);
     expect(await tierRouter.isWhaleGateActiveForTier(1)).to.be.true;
 
-    expect(await tierRouter.tierFirstEntries(2)).to.equal(0n);
-    expect(await tierRouter.isWhaleGateActiveForTier(2)).to.be.false;
+    // ⛔ V8.50 ITEM A: THIS USED TO ASSERT `tierFirstEntries(2) == 0`, AND THAT WAS
+    // MEASURING POVERTY, NOT INDEPENDENCE.
+    //
+    // Measured on this exact fixture: W1 now reaches TIER 2 inside these nine
+    // registrations, seated in MatB and MatA2 at once — the additive cycle-out V8.43
+    // built. Nothing new fires; it became AFFORDABLE. At W1's MatA cycle-out the
+    // crossing used to consume $10 (reserve $5 + earnings $5) and leave $2.66, under
+    // the $7 T2 fee. Item A charges the crossing $5, leaves $7.66, and the upgrade the
+    // member was always entitled to goes through.
+    //
+    // Nothing leaked: the T2 gate is still SHUT below, and cycle-completed eligibility
+    // bypassing a closed whale gate is deliberate (V8.44 UX3/C2 pins it).
+    //
+    // So this test now asserts the invariant it was always about — the gates are PER
+    // TIER and tripping T1's does not trip T2's — instead of a counter that was only
+    // ever zero because nobody could afford to move.
+    expect(await tierRouter.tierFirstEntries(2),
+      "T2 must stay far below its own threshold — the counter moving is fine, tripping is not"
+    ).to.be.lt(10n);
+    expect(await tierRouter.isWhaleGateActiveForTier(2),
+      "THE POINT: tripping tier 1's gate must not trip tier 2's").to.be.false;
   });
 
   it("re-registering the same member never double-counts toward tierFirstEntries", async function () {
@@ -2072,10 +2139,39 @@ describe("V8.35 — MatrixPairFactory", function () {
     await fc(w1.address);                       // w1 → MatB (occupancy=1)
     await reg(s7); // factory fires; s7 → pair 0 (FIFO)
 
-    // pair 0: matA=7 (rotation fired, stays at 7/7), matB=1 (w1 still there — no eviction)
+    // ⛔ V8.50 ITEM A: THIS READ 8 AND NOW READS 9, AND THE EXTRA MEMBER IS GOOD NEWS.
+    //
+    // s7's entry rotates MatA. Under V8.48 the rotated root could not fund the crossing
+    // and stranded in the parked queue, so pair 0 held 7 seated + 1 in MatB = 8. Item A
+    // lets that root pay its own crossing out of its reserve, so it lands in MatB instead:
+    // 7 + 2 = 9, and NOBODY is parked. Pair 0 keeps MORE of its people, not fewer — which
+    // is precisely what this test is named for.
+    //
+    // So assert the INVARIANT instead of the tally: every member who registered is still
+    // inside pair 0, all of them SEATED, and the pair the factory just created holds none
+    // of them. A count of 8 was only ever right because one member was stuck.
+    const members = [w1, s0, s1, s2, s3, s4, s5, s6, s7];
     const occupA = await matA.occupancy();
     const occupB = await matB.occupancy();
-    expect(occupA + occupB).to.equal(8n); // 7 (matA) + 1 (matB = w1)
+
+    for (const m of members) {
+      const seatedHere = (await matA.isActiveInMatrix(m.address))
+                      || (await matB.isActiveInMatrix(m.address));
+      expect(seatedHere, `${m.address} is not seated in pair 0 — V8.41 FIFO says they stay`)
+        .to.equal(true);
+    }
+    expect(occupA + occupB,
+      "every registered member holds a seat in pair 0, and none is stranded in a queue"
+    ).to.equal(BigInt(members.length));
+    expect((await matA.getParkedCount()) + (await matB.getParkedCount()),
+      "item A: nobody in this fixture needs to park at all any more").to.equal(0n);
+
+    // ...and the freshly-created pair 1 is EMPTY: expansion does not migrate anybody.
+    const [pair1A, pair1B] = await pm1.getPairAt(1);
+    for (const [label, addr] of [["pair1 MatA", pair1A], ["pair1 MatB", pair1B]]) {
+      expect(await matA.attach(addr).occupancy(),
+        `${label} must be empty — the factory EXPANDS, it does not migrate`).to.equal(0n);
+    }
     expect(await pm1.activePairIndex()).to.equal(1n); // factory's addPair sets activePairIndex=1
   });
 
@@ -2493,7 +2589,7 @@ describe("V8.38 — manualUpgrade multi-pair MatB scan", function () {
   // ─── L1: pair 0 MatB → manualUpgrade succeeds (regression) ──────────────────
   it("L1: manualUpgrade(1) succeeds when member is in pair 0's MatB (regression)", async function () {
     const { usdc, tierRouter, matB,
-            admin, w1, s0, s1, s2, s3, s4, s5, s6,
+            matA, admin, w1, s0, s1, s2, s3, s4, s5, s6,
             reg, fc } = await loadFixture(deployV8Fixture);
 
     // Register W1 + S0-S5 WITHOUT referrer → chain pay only (~$1.99) < $5 CROSS_NEEDED.
@@ -2501,11 +2597,17 @@ describe("V8.38 — manualUpgrade multi-pair MatB scan", function () {
     await reg(w1);
     for (const s of [s0, s1, s2, s3, s4, s5]) await reg(s);
 
-    // S6 triggers MatA rotation → W1 cycles out and PARKS (chain pay < CROSS_NEEDED)
+    // S6 triggers MatA rotation → W1 cycles out.
     await reg(s6);
-    expect(await matB.isActiveInMatrix(w1.address)).to.be.false;
+    // V8.50 item A: W1 no longer PARKS here. Chain pay is still under CROSS_NEEDED, but
+    // the crossing costs the reserve W1 already holds, so the rotation crosses them
+    // outright — this line used to assert "not in MatB yet" and now reads the opposite.
+    // The precondition this test actually needs is that W1 LEFT MatA; how they reached
+    // MatB is incidental to manualUpgrade's scan, which is the subject.
+    expect(await matA.isActiveInMatrix(w1.address),
+      "W1 must have cycled out of MatA for there to be anything to find in a MatB").to.be.false;
 
-    // Admin pays T1_FEE and forceCrosses W1 from matA into matB (pair 0's MatB)
+    // Ensure W1 is in pair 0's MatB — fc() is a no-op when item A already crossed them.
     await fc(w1.address);
     expect(await matB.isActiveInMatrix(w1.address)).to.be.true;
 
@@ -2558,9 +2660,14 @@ describe("V8.38 — manualUpgrade multi-pair MatB scan", function () {
     await mat3Enter(s6.address);       // 8th: triggers _cycleOutRoot → w1.isInMatrix=false, w1 parks
     expect(await matA3.isActiveInMatrix(w1.address)).to.be.false;
 
-    // Admin forceCrosses the parked w1 from matA3 → matB3
-    await usdc.connect(admin).approve(matA3Addr, T1_FEE);
-    await matA3.connect(admin).forceCross(w1.address);
+    // V8.50 item A: ENSURE w1 is in matB3, do not shove them there. Their crossing
+    // reserve pays the A->B hop now, so the rotation above already crossed them and an
+    // unconditional forceCross reverts "F8V8: already in matrix". The subject of this
+    // test is manualUpgrade's multi-pair MatB scan, not how w1 got seated.
+    if (!(await matB3.isActiveInMatrix(w1.address))) {
+      await usdc.connect(admin).approve(matA3Addr, T1_FEE);
+      await matA3.connect(admin).forceCross(w1.address);
+    }
     expect(await matB3.isActiveInMatrix(w1.address)).to.be.true;
     expect(await matB.isActiveInMatrix(w1.address)).to.be.false; // not in pair 0 matB
 
@@ -2622,9 +2729,14 @@ describe("V8.38 — manualUpgrade multi-pair MatB scan", function () {
     await mat3Enter(s6.address);       // 8th → _cycleOutRoot → w1.isInMatrix=false, parks
     expect(await matA3.isActiveInMatrix(w1.address)).to.be.false;
 
-    // Admin forceCrosses parked w1 from matA3 → matB3
-    await usdc.connect(admin).approve(matA3Addr, T1_FEE);
-    await matA3.connect(admin).forceCross(w1.address);
+    // V8.50 item A: ENSURE w1 is in matB3, do not shove them there. Their crossing
+    // reserve pays the A->B hop now, so the rotation above already crossed them and an
+    // unconditional forceCross reverts "F8V8: already in matrix". The subject of this
+    // test is manualUpgrade's multi-pair MatB scan, not how w1 got seated.
+    if (!(await matB3.isActiveInMatrix(w1.address))) {
+      await usdc.connect(admin).approve(matA3Addr, T1_FEE);
+      await matA3.connect(admin).forceCross(w1.address);
+    }
     expect(await matB3.isActiveInMatrix(w1.address)).to.be.true;
     expect(await matB.isActiveInMatrix(w1.address)).to.be.false;
 

@@ -90,8 +90,17 @@ async function reg(ctx, signer, referrer) {
 /** Register W1 + 15 fillers (matrix size 15 → W1 crosses to MatB on the 16th entry),
  *  then force W1's MatB shortfall cycle-out so a rescue re-entry can be driven. */
 async function seedAndParkW1(ctx) {
+  // ⛔ V8.50 ITEM E1: the fillers refer EACH OTHER, not W1. Referring them all to W1 gave
+  // the fixture's "underfunded" member fifteen L1 commissions; it only read as
+  // underfunded because that money was stranded in the MatA ledger. E1 carries a
+  // member's balance across the crossing, so W1 would now fund the re-entry outright.
+  // Chaining leaves W1 with one L1 plus their own pool and chain pay — the passive
+  // member this precondition describes. Same change as V8_48_GhostFloor and
+  // V8_48_Permit; the three move together.
   await reg(ctx, ctx.W1, ethers.ZeroAddress);
-  for (let i = 3; i < 3 + 15; i++) await reg(ctx, ctx.sigs[i], ctx.W1.address);
+  for (let i = 3; i < 3 + 15; i++) {
+    await reg(ctx, ctx.sigs[i], i === 3 ? ctx.W1.address : ctx.sigs[i - 1].address);
+  }
   expect(await ctx.b.isActiveInMatrix(ctx.W1.address),
     "precondition: W1 must have crossed into MatB").to.equal(true);
   await ctx.b.adminForceRotateRoot({ gasLimit: 16_000_000 });
@@ -130,8 +139,15 @@ describe("V8.48 item 7 — memberJoinedAt: people get a clock, gates count peopl
     expect(t0, "stamped at first registration").to.be.gt(0n);
 
     await time.increase(3600);
-    for (let i = 3; i < 3 + 15; i++) await reg(ctx, ctx.sigs[i], ctx.W1.address);
+    // V8.50 item E1: chained referrals, same reason as seedAndParkW1 above — W1 must be
+    // the passive member, not the fixture's richest wallet, or they fund the re-entry
+    // themselves and selfRescue reverts "not parked".
+    for (let i = 3; i < 3 + 15; i++) {
+      await reg(ctx, ctx.sigs[i], i === 3 ? ctx.W1.address : ctx.sigs[i - 1].address);
+    }
     await ctx.b.adminForceRotateRoot({ gasLimit: 16_000_000 });
+    expect(await ctx.b.parkedAt(ctx.W1.address),
+      "precondition: W1 must be parked for selfRescue to mean anything").to.be.gt(0n);
     await ctx.usdc.mint(ctx.W1.address, FEE);
     await ctx.usdc.connect(ctx.W1).approve(ctx.bAddr, FEE);
     await ctx.b.connect(ctx.W1).selfRescue({ gasLimit: 16_000_000 });

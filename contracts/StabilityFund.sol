@@ -787,6 +787,31 @@ contract StabilityFund is Ownable2Step {
     /// @notice Expected per-cycle earnings as BPS of the loan tier's entry fee.
     ///         The floor refuses a new loan when memberDebt >= fee x this / 10000.
     ///         0 = floor disabled (every member stays loan-eligible).
+    /// V8.50: STAYS AT 3_400 — AND THE ROUND TRIP IS RECORDED BECAUSE IT WAS INSTRUCTIVE.
+    ///
+    /// This was changed to 5_000 on 2026-08-17 and changed back the same day. The 5_000
+    /// case was measured, not guessed: scripts/model_item_a.js showed the post-item-A
+    /// re-entry ask at a median $1.90 / max $4.28, and 5_000 cleared every member where
+    /// 3_400 refused 15 of 72. The reasoning was sound. **The BASIS was wrong.**
+    ///
+    /// Phase 6 of that script, added afterwards, computes the same ask on the ledger the
+    /// contract actually reads. TierRouter.handleCycleOut is passed only the CYCLING
+    /// matrix's buckets, and MatrixKeeperLib._triageParked reads only the PARKED matrix.
+    /// Item A left the member's journey-A earnings in the MatA ledger, so the gate saw
+    /// roughly half of what the model was summing:
+    ///
+    ///     ask, AGGREGATE (both halves)   median $1.90   -> 3_400 clears 69 of 69
+    ///     ask, MatB LEDGER (the gate)    median $6.60   -> 3_400 clears  0 of 69
+    ///
+    /// On that basis 5_000 rescued ZERO members. The fix was not a bigger ceiling, it was
+    /// item E1 — MatrixLogicLib._crossToPartner now carries the member's remaining
+    /// withdrawable across the crossing, so the MatB ledger holds journey A + journey B
+    /// and the gate sees the whole sum. With E1 in, the two bases coincide and the
+    /// declared default clears the population with room.
+    ///
+    /// THE LESSON, worth more than the number: a floor calibrated against a total the
+    /// enforcing code cannot see is not calibrated at all. Any future change to this
+    /// value must state WHICH BALANCE it was measured against.
     uint256 public insolvencyFloorBps = 3_400;
 
     event InsolvencyFloorBpsSet(uint256 bps);

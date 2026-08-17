@@ -4,8 +4,17 @@
  *
  * WHAT THIS PROVES
  *   The refactored MatrixKeeper and the frozen pre-refactor copy
- *   (contracts/test/MatrixKeeperPrev.sol, commit 7eaf3d6) return BYTE-IDENTICAL
- *   performData from checkUpkeep, across every state this fixture can reach.
+ *   (contracts/test/MatrixKeeperPrev.sol, commit 7eaf3d6) discover the SAME SET of work
+ *   from checkUpkeep, across every state this fixture can reach.
+ *
+ *   ⛔ IT SAID "BYTE-IDENTICAL performData" UNTIL V8.50 DEFECT 6, AND THAT IS NOW FALSE
+ *      BY DESIGN. Defect 6 reordered MatrixKeeperLib.discover so bounded work drains
+ *      first and the unbounded scans then run by deadline — parked (eviction clock)
+ *      ahead of ghost/reclaim (no deadline). Prev is frozen at the old order, so the two
+ *      emit the same work in a different SEQUENCE. The comparison moved to multiset
+ *      equality plus an exact count check; see the canon() note below for why that costs
+ *      the harness none of its four measured mutation kills, and read the re-premised
+ *      truncation case for the one place it genuinely could not be preserved.
  *
  * WHY EQUIVALENCE AND NOT SCENARIOS
  *   Item 12a is a pure move: the scan reads eighteen keeper variables, and they now
@@ -67,6 +76,13 @@
  *   covered separately (V8_49_EvictionClock.test.js, which asserts the collapse property
  *   itself so this file's pin cannot quietly stop meaning anything).
  *
+ *   V8.50 IS THE THIRD, AND IT IS THE FIRST THAT COULD NOT BE PINNED. defect 5 lowers
+ *   maxItemsPerUpkeep and IS pinnable (setup() holds it at 15, the frozen keeper's
+ *   value, and the collapse is exact). Defect 6's reorder is not: an order has no value
+ *   to set it back to. That is why this file's comparison changed shape instead of
+ *   growing a fourth pin — and it is the honest signal that the 12a harness has started
+ *   to age, exactly as the retirement note below anticipated.
+ *
  *   READ THE PINS AS A LIST OF DELIBERATE BEHAVIOUR CHANGES. Each one is an item that
  *   changed the scan on purpose; the harness holds them at their old values so it can
  *   still answer the one question it was built for. If a third pin appears, that is
@@ -109,6 +125,44 @@ function decodeItems(performData) {
 }
 const describeItems = (items) =>
   items.length === 0 ? "(none)" : items.map((i) => `${NAME[i.workType]}@t${i.tierIndex}`).join(", ");
+
+/**
+ * ⛔ V8.50 DEFECT 6 CHANGED WHAT "IDENTICAL" MEANS HERE. READ THIS BEFORE TIGHTENING IT
+ *    BACK TO A BYTE COMPARE.
+ *
+ * This file used to compare raw performData BYTES. It cannot any more: defect 6
+ * reordered MatrixKeeperLib.discover so that bounded work drains first and the two
+ * UNBOUNDED scans then run in order of what expires — parked (eviction clock) ahead of
+ * ghost/reclaim (no deadline). MatrixKeeperPrev is frozen at the old order by
+ * definition, so the two keepers now emit the same work in a different SEQUENCE.
+ *
+ * Unlike the split grace and the eviction clock, this one CANNOT be pinned back to its
+ * old behaviour, because an order is not a parameter. So the comparison moves from
+ * sequence-identity to SET-identity, and the harness loses nothing measurable: all four
+ * mutation kills recorded in the header change WHICH items appear, never merely their
+ * order —
+ *     idleSlotTimeout <-> extendedIdleTimeout   reclassifies GHOST vs RECLAIM
+ *     pendingChainLinks emptied                 removes CHAIN_LINK items
+ *     maxItems hardcoded                        changes the item COUNT
+ *     communityWallet mispointed                changes the CW items
+ * Every one of those is still caught by a multiset comparison, and the count check
+ * below keeps the maxItems kill exact.
+ *
+ * The ONE place set-identity is genuinely weaker is a truncated batch, where the two
+ * orders legitimately keep different work. That case is no longer compared against Prev
+ * at all — it asserts the NEW priority deliberately. See "the batch truncates" below.
+ */
+const canon = (i) => `${i.workType}|${i.tierIndex}|${i.addr1.toLowerCase()}|${i.addr2.toLowerCase()}`;
+const asMultiset = (items) => items.map(canon).sort();
+
+function expectSameSet(itemsNew, itemsOld, label) {
+  expect(itemsNew.length, `${label}: item COUNT differs\n` +
+    `      new: ${describeItems(itemsNew)}\n` +
+    `      old: ${describeItems(itemsOld)}`).to.equal(itemsOld.length);
+  expect(asMultiset(itemsNew), `${label}: same count, DIFFERENT WORK\n` +
+    `      new: ${describeItems(itemsNew)}\n` +
+    `      old: ${describeItems(itemsOld)}`).to.deep.equal(asMultiset(itemsOld));
+}
 
 describe("V8.48 item 12a — MatrixKeeperLib extraction is behaviour-preserving", function () {
   this.timeout(600_000);
@@ -190,16 +244,95 @@ describe("V8.48 item 12a — MatrixKeeperLib extraction is behaviour-preserving"
     // roughly 80% of the fee. But "the test passes because the state is unreachable" is
     // exactly the blind spot that made the first version of this file worthless, and it
     // should not be load-bearing a second time.)
-    for (const k of [keeperNew]) await k.setSelfFundedGracePeriod(0);
-    // V8.49 item 1 does the same thing again with the EVICTION clock: the frozen keeper
-    // gates eviction on parkedGracePeriod, the refactored one on its own 4-day window.
-    // Equivalence holds only where the two are equal, so pin them — 0 is on the setter's
-    // menu for exactly this reason. Same caveat as above and it is worth repeating: this
-    // harness proves item 12a's EXTRACTION was behaviour-preserving. It does not, and
-    // cannot, prove that no later item changed behaviour deliberately. Every pin here is
-    // an item that DID.
-    for (const k of [keeperNew]) await k.setEvictionGracePeriod(0);
+    //
+    // ⛔ THE COLLAPSE IS AT ZERO, AND THE SETTERS LEAVE NO OTHER CHOICE. Read them before
+    //    touching these three lines:
+    //        setSelfFundedGracePeriod  0 / 60 / 300 / 900 / 1800 / 3600
+    //        setEvictionGracePeriod    0 / 1d / 2d / 3d / 4d / 5d / 7d
+    //    Their menus intersect at 0 and nowhere else, so "set each equal to
+    //    parkedGracePeriod" — the collapse the header describes and EC-4 asserts — is
+    //    only REACHABLE when parkedGracePeriod is itself 0. Anything else is unsettable.
+    //
+    //    THAT THIRD LINE WAS MISSING AND IT IS THE WHOLE BUG. MatrixKeeperLib._checkParked
+    //    gates on
+    //        age < (sfShare == 0 ? selfFundedGracePeriod : parkedGracePeriod)
+    //        age < (isGhost      ? parkedGracePeriod     : evictionGracePeriod)
+    //    while MatrixKeeperPrev has neither branch and gates BOTH on parkedGracePeriod.
+    //    Pinning the new keeper's two windows to 0 while leaving parkedGracePeriod at its
+    //    6h default does not collapse the split — it OPENS it as far as it goes: the
+    //    refactored keeper discovers a self-funded rescue and fires an eviction
+    //    IMMEDIATELY, where the frozen one waits the full six hours.
+    //
+    //    It survived only while this fixture happened to produce no self-funded and no
+    //    evictable parker inside that window — the exact "passes because the state is
+    //    unreachable" blind spot the note below warns about, reintroduced by the pins
+    //    written to prevent it. V8.50 made the state reachable: the run showed keeperNew
+    //    queueing one PARKED_RESCUE and four EVICT_PARKED that Prev did not queue at all,
+    //    in a batch nowhere near its cap. Six of the eight failures were this one line,
+    //    the rest of them downstream of it.
     for (const k of [keeperNew, keeperOld]) await k.setParkedGracePeriod(0);
+    for (const k of [keeperNew]) await k.setSelfFundedGracePeriod(0);
+    for (const k of [keeperNew]) await k.setEvictionGracePeriod(0);
+
+    // ⛔ THE FOURTH PIN, AND IT IS THE ONE THAT MAKES ALL THE OTHERS MEAN ANYTHING:
+    //    THE BATCH MUST NOT TRUNCATE. Raised from the 15 default to the enumerated
+    //    ceiling of 40.
+    //
+    //    V8.50 defect 6 reordered discovery so parked work is taken before ghost/reclaim.
+    //    Once the cap BITES, the two keepers are supposed to keep DIFFERENT work — that
+    //    is the entire fix — so no content comparison against a frozen keeper that
+    //    orders them the other way can be meaningful. Measured on this world at the 15
+    //    default: new = 12x PARKED_RESCUE + 1x RECLAIM, old = 13x RECLAIM, both exactly
+    //    15, in SIX separate cases. Neither keeper was wrong. The comparison was.
+    //
+    //    With no truncation both emit the SAME SET in a different sequence, which is
+    //    exactly what expectSameSet is for, and this file goes back to answering the one
+    //    question it was built for: did the 12a extraction preserve WHICH members get
+    //    WHICH verdict. Batch sizing is not that question and has its own two cases
+    //    below, which set the cap deliberately and restore it to 40 rather than 15.
+    //
+    //    ⚠ If a future fixture grows past 40 discoverable items this pin silently stops
+    //    holding and the same six failures return wearing a different hat. The guard is
+    //    the count assertion in expectSameSet plus "the batch actually contains work" at
+    //    the end of this file; if both keepers ever report exactly 40, suspect this line
+    //    first.
+    for (const k of [keeperNew, keeperOld]) await k.setMaxItemsPerUpkeep(40);
+
+    // ⛔ V8.50 ITEM A — THE THIRD PIN, AND THE DECISION BEHIND IT IS WRITTEN OUT IN FULL
+    // BECAUSE THE OBVIOUS READING OF THIS FILE IS THAT ITEM A RETIRES IT.
+    //
+    // THE PREMISE LOOKED STRUCTURALLY DEAD. The two pins above equalise a PARAMETER each.
+    // Item A is not a parameter: it changes what a crossing COSTS, and MatrixKeeperPrev
+    // will never know about it. So the first reading was that this suite cannot be
+    // rescued the way items 12 and 1 were, and should be retired or re-baselined.
+    //
+    // THAT READING WAS WRONG, AND THE RUN SAYS SO. Item A reprices a crossing OUT OF A
+    // MatA. Out of a MatB it changes nothing — MatrixKeeperLib._crossingCost returns the
+    // full entry fee, the same number the frozen keeper uses — and under item A a MatA
+    // parker's reserve covers their crossing outright, so MatA parks nobody for funding
+    // and the entire parked queue this fixture builds lives in the MatB. The two keepers
+    // therefore ask the same question about the same members. Measured on this world:
+    // at insolvencyFloorBps 0 they queue the SAME SET of work, in every scenario in this
+    // file. (It read BYTE-IDENTICAL when measured; V8.50 defect 6 then reordered
+    // discovery, so the sequence differs and the set does not. The claim above is
+    // unaffected — it was always about WHICH members get WHICH verdict.)
+    //
+    // WHAT DOES DIVERGE IS ONE THING, AND IT IS NOT THE EXTRACTION. Item A stops carving
+    // a reserve for a MatB entrant, so a MatB parker's effective contribution is their
+    // earnings alone — measured here, $4.12 and $4.88 of a $10.00 fee where V8.48 read
+    // $9.12 and $9.88. Same ladder, same rung arithmetic; what moves is the SHORTFALL,
+    // from ~$0.88 to ~$5.13. That ask then clears or fails the INSOLVENCY FLOOR, and the
+    // floor is a governed amount. So the divergence is real, intended, and lives entirely
+    // in one parameter — which is exactly the shape the two pins above already handle.
+    //
+    // Pinning it to 0 does NOT hide a keeper difference: both keepers call the same
+    // loanEligibleFor, and this suite was green at the shipping 3400 before item A. It
+    // neutralises the one INPUT item A moved. The divergence itself is not swept away —
+    // it is asserted, at the shipping value, by "V8.50 item A: the two keepers diverge
+    // ONLY at the insolvency floor" at the bottom of this file. Between them the file
+    // now covers more than it did: the extraction is still pinned byte-for-byte, and the
+    // economic change has a test that fails if it ever stops happening.
+    await sf.setInsolvencyFloorBps(0);
 
     return {
       usdc, tr, pm, sf, matA, matB, keeperNew, keeperOld, owner, W1, devOps, sigs,
@@ -223,9 +356,7 @@ describe("V8.48 item 12a — MatrixKeeperLib extraction is behaviour-preserving"
     const itemsNew = decodeItems(dataNew);
     const itemsOld = decodeItems(dataOld);
 
-    expect(dataNew, `${label}: performData BYTES differ\n` +
-      `      new: ${describeItems(itemsNew)}\n` +
-      `      old: ${describeItems(itemsOld)}`).to.equal(dataOld);
+    expectSameSet(itemsNew, itemsOld, label);
     expect(neededNew, `${label}: upkeepNeeded differs`).to.equal(neededOld);
     return itemsNew;
   }
@@ -328,10 +459,20 @@ describe("V8.48 item 12a — MatrixKeeperLib extraction is behaviour-preserving"
     const same = async (label) => {
       const [, dn] = await c.keeperNew.checkUpkeep("0x");
       const [, do_] = await c.keeperOld.checkUpkeep("0x");
-      expect(dn, `${label}: performData BYTES differ`).to.equal(do_);
+      expectSameSet(decodeItems(dn), decodeItems(do_), label);
       return decodeItems(dn);
     };
 
+    // ⛔ THE CAP MUST NOT BITE IN THIS WORLD. V8.50 defect 6 put parked work ahead of
+    // ghost/reclaim, and this fixture parks a dozen members — at the default cap of 15
+    // the parked queue fills the batch and the idle sweep is squeezed out entirely.
+    // Measured before this line existed: new = 12x PARKED_RESCUE + 1x GHOST, old = 13x
+    // GHOST, both exactly 15. Nothing was WRONG there — that IS the reorder working, and
+    // both keepers were still capped identically — but it makes the GHOST/RECLAIM
+    // classification this test exists to check unobservable, and a comparison against a
+    // frozen keeper that orders the two scans differently is meaningless once the cap
+    // bites. Truncation priority is covered on its own, deliberately, further down.
+    await pair((k) => k.setMaxItemsPerUpkeep(40));
     await pair((k) => k.setIdleSlotTimeout(21_600));       // 6h  — GHOST threshold
     await pair((k) => k.setExtendedIdleTimeout(604_800));  // 7d  — RECLAIM threshold
 
@@ -363,6 +504,11 @@ describe("V8.48 item 12a — MatrixKeeperLib extraction is behaviour-preserving"
     // and the mutant survived it.
     const c = await freshPopulated();
     for (const k of [c.keeperNew, c.keeperOld]) {
+      // Cap raised for the same reason as the idle sweep above: since V8.50 defect 6 put
+      // parked work ahead of ghost/reclaim, a default-15 batch in this fixture is filled
+      // by the parked queue and the GHOST this probe looks for never appears — which
+      // would turn a MUTATION PROBE into a test that passes because it sees nothing.
+      await k.setMaxItemsPerUpkeep(40);
       await k.setIdleSlotTimeout(21_600);        // 6h
       await k.setExtendedIdleTimeout(604_800);   // 7d
     }
@@ -378,29 +524,182 @@ describe("V8.48 item 12a — MatrixKeeperLib extraction is behaviour-preserving"
       "expected GHOST at 7h idle with thresholds 6h/7d — a swapped ScanCfg produces RECLAIM here").to.equal(true);
     expect(items.some((i) => i.workType === WORK.RECLAIM),
       "RECLAIM at 7h idle means idleSlotTimeout and extendedIdleTimeout are crossed in ScanCfg").to.equal(false);
-    expect(dn, "the two implementations disagree at the threshold boundary").to.equal(do_);
+    expectSameSet(decodeItems(dn), decodeItems(do_),
+      "the two implementations disagree at the threshold boundary");
   });
 
-  it("agree as maxItemsPerUpkeep truncates the batch", async function () {
+  it("truncate the batch to the SAME SIZE — and V8.50 keeps the deadline work, not the housekeeping", async function () {
+    // ⛔ THE ONE TEST DEFECT 6 GENUINELY RE-PREMISED. It used to call assertIdentical at
+    // each cap, which was a fair question while both keepers filled the batch in the
+    // same order. It is not fair any more and, worse, it would be MISLEADING: when the
+    // cap bites, the two keepers legitimately keep DIFFERENT work, because choosing what
+    // survives truncation is the entire point of the reorder. A test demanding they
+    // agree there would be demanding the fix not work.
+    //
+    // So this splits into the two questions that are still answerable:
+    //   1. the CAP itself is still read from storage and still bites identically —
+    //      this is what killed the "maxItems hardcoded" mutation, and it survives;
+    //   2. when it bites, V8.50 keeps the work that EXPIRES and sheds the work that
+    //      does not. Asserted directly, against the new priority, not against Prev.
     for (const n of [5, 10, 15, 20, 30, 40]) {   // the enumerated menu
       await both((k) => k.setMaxItemsPerUpkeep(n));
-      const items = await assertIdentical(`maxItems=${n}`);
-      expect(items.length, `maxItems=${n} must cap the batch`).to.be.lte(n);
+      const [, dN] = await ctx.keeperNew.checkUpkeep("0x");
+      const [, dO] = await ctx.keeperOld.checkUpkeep("0x");
+      const iN = decodeItems(dN), iO = decodeItems(dO);
+
+      expect(iN.length, `maxItems=${n} must cap the batch`).to.be.lte(n);
+      expect(iN.length, `maxItems=${n}: the two keepers must truncate to the same SIZE — ` +
+        `a difference here means the cap is no longer read from storage, which is the ` +
+        `mutation this case was written to kill`).to.equal(iO.length);
+
+      // 2. Deadline work first. GHOST/RECLAIM carry no deadline and are the only items
+      //    the reorder demotes, so a batch that is FULL must not be spending a slot on
+      //    them while a parked decision went unqueued. Stated as an implication rather
+      //    than a flat "no housekeeping": when nothing is parked, housekeeping is
+      //    exactly what SHOULD fill the batch.
+      const full = iN.length === n;
+      const housekeeping = iN.filter((i) => i.workType === WORK.GHOST || i.workType === WORK.RECLAIM).length;
+      const parkedWork  = iN.filter((i) => i.workType === WORK.PARKED_RESCUE || i.workType === WORK.EVICT_PARKED).length;
+      if (full && housekeeping > 0) {
+        // Everything parked that was discoverable made it in, or the reorder is not
+        // doing its job. Re-read at a cap large enough not to bite, and compare.
+        await both((k) => k.setMaxItemsPerUpkeep(40));
+        const [, dWide] = await ctx.keeperNew.checkUpkeep("0x");
+        const wideParked = decodeItems(dWide)
+          .filter((i) => i.workType === WORK.PARKED_RESCUE || i.workType === WORK.EVICT_PARKED).length;
+        await both((k) => k.setMaxItemsPerUpkeep(n));
+        expect(parkedWork, `maxItems=${n}: the batch is FULL and still spending ${housekeeping} ` +
+          `slot(s) on GHOST/RECLAIM while only ${parkedWork} of ${wideParked} parked ` +
+          `decisions made it in. Housekeeping has no deadline; a parked member is on the ` +
+          `eviction clock. This is exactly the starvation defect 6 removed.`).to.equal(wideParked);
+      }
     }
-    await both((k) => k.setMaxItemsPerUpkeep(15));
+    await both((k) => k.setMaxItemsPerUpkeep(40));   // restore the no-truncation pin
   });
 
-  it("agree across the parked grace period — the other uncovered path", async function () {
-    // _checkParked. Whether or not this fixture manages to park anyone, moving the
-    // grace period must move BOTH keepers the same way.
+  it("DEFECT 6: parked work outranks ghost/reclaim when the batch cannot hold both", async function () {
+    // The property stated on its own, so it cannot quietly stop being tested if the
+    // truncation case above is ever rewritten.
+    //
+    // ⛔ THE CAP CANNOT BE SQUEEZED TO 1. setMaxItemsPerUpkeep is enumerated —
+    //    5 / 10 / 15 / 20 / 30 / 40 — and the first draft of this test asked for 1 and
+    //    reverted with "MK: invalid max items". FIVE is the floor, and five slots are
+    //    not necessarily all contested: velocity, chain links, the CW block, force-rotate
+    //    and the velocity gate are BOUNDED sources that legitimately drain ahead of both
+    //    scans (see the ordering note in MatrixKeeperLib.discover), so some of the five
+    //    are spoken for before either scan runs.
+    //
+    //    So the property is stated as an IMPLICATION rather than "the winning slot is
+    //    parked": if ANY housekeeping item made it into a capped batch, then EVERY parked
+    //    decision must have made it in first. That is precisely what starvation violates,
+    //    it does not care how many bounded items came first, and it stays true whatever
+    //    the enumerated floor becomes.
+    await both((k) => k.setMaxItemsPerUpkeep(40));
+    const [, dWide] = await ctx.keeperNew.checkUpkeep("0x");
+    const wide = decodeItems(dWide);
+    const isParked = (i) => i.workType === WORK.PARKED_RESCUE || i.workType === WORK.EVICT_PARKED;
+    const isHouse  = (i) => i.workType === WORK.GHOST || i.workType === WORK.RECLAIM;
+    const wideParked = wide.filter(isParked);
+    const wideHouse  = wide.filter(isHouse);
+
+    if (wideParked.length === 0 || wideHouse.length === 0) {
+      // Nothing to arbitrate — say so out loud rather than passing silently on a fixture
+      // that never built the contention this test exists to check.
+      console.log(`      (no contention in this fixture: parked=${wideParked.length} housekeeping=${wideHouse.length})`);
+      await both((k) => k.setMaxItemsPerUpkeep(40));   // restore the no-truncation pin
+      this.skip();
+      return;
+    }
+
+    for (const cap of [5, 10]) {
+      await both((k) => k.setMaxItemsPerUpkeep(cap));
+      const [, dCap] = await ctx.keeperNew.checkUpkeep("0x");
+      const got = decodeItems(dCap);
+      const gotParked = got.filter(isParked).length;
+      const gotHouse  = got.filter(isHouse).length;
+
+      expect(got.length, `maxItems=${cap} must cap the batch`).to.be.lte(cap);
+      if (gotHouse > 0) {
+        expect(gotParked, `maxItems=${cap}: the batch kept ${gotHouse} GHOST/RECLAIM item(s) ` +
+          `while only ${gotParked} of ${wideParked.length} parked decisions made it in — ` +
+          `${describeItems(got)}. Housekeeping has no deadline; a parked member is on the ` +
+          `eviction clock, and a rescue that waits long enough becomes an eviction. This ` +
+          `is the starvation defect 6 removed.`).to.equal(wideParked.length);
+      }
+    }
+    await both((k) => k.setMaxItemsPerUpkeep(40));   // restore the no-truncation pin
+  });
+
+  it("the parked grace period moves both keepers, and the split windows only ever make V8.50 act SOONER", async function () {
+    // _checkParked, the other path item 12a moved. Two claims, and the second one is
+    // deliberately weaker than "identical" — because identical is UNREACHABLE here and
+    // pretending otherwise is what broke this test.
+    //
+    // ⛔ WHY IT CANNOT BE AN EQUALITY AT EVERY g. The refactored keeper gates on
+    //        age < (sfShare == 0 ? selfFundedGracePeriod : parkedGracePeriod)
+    //        age < (isGhost      ? parkedGracePeriod     : evictionGracePeriod)
+    //    and MatrixKeeperPrev gates both on parkedGracePeriod alone. Collapsing that
+    //    needs selfFundedGracePeriod == evictionGracePeriod == parkedGracePeriod, and the
+    //    SETTERS DO NOT ALLOW IT: the self-funded menu tops out at 3600 while the
+    //    eviction menu starts at 86400. They intersect at 0 and nowhere else. At g=300,
+    //    g=6h or g=30d there is no legal pair of values that reproduces Prev.
+    //
+    //    The previous version of this test papered over that with
+    //        setSelfFundedGracePeriod(g === 0 ? 0 : (g >= 3600 ? 3600 : 300))
+    //    under a comment claiming it "pinned" the windows together. A one-hour
+    //    self-funded window against a thirty-day loan window is not a pin, it is the
+    //    split opened as wide as the setters go. It read green only while no self-funded
+    //    parker was older than an hour — and it never restored the value, so every later
+    //    test in this shared world inherited the un-collapsed split. That single
+    //    expression accounted for six of the eight failures in the V8.50 run; the
+    //    rescue-ratio, ladder-preset, frozen-MatB, chain-link and velocity-window cases
+    //    were downstream of it, not faults of their own.
+    //
+    // So: equality where it is reachable, and the real safety property everywhere else.
     for (const g of [0, 300, 6 * 3600, 30 * 86400]) {   // 0 or 5min..30d
       await both((k) => k.setParkedGracePeriod(g));
-      // keep the self-funded window pinned to the loan window so the two keepers stay
-      // comparable; the split itself is covered by V8_48_SplitGrace.test.js
-      await ctx.keeperNew.setSelfFundedGracePeriod(g === 0 ? 0 : (g >= 3600 ? 3600 : 300));
-      await assertIdentical(`parkedGracePeriod=${g}`);
+
+      const [, dN] = await ctx.keeperNew.checkUpkeep("0x");
+      const [, dO] = await ctx.keeperOld.checkUpkeep("0x");
+      const iN = decodeItems(dN), iO = decodeItems(dO);
+
+      if (g === 0) {
+        // The one value where all three windows CAN be equal — and setup() has already
+        // put the two split windows there. Full equivalence must hold.
+        expectSameSet(iN, iO, `parkedGracePeriod=${g}`);
+        continue;
+      }
+
+      // ── THE SAFETY PROPERTY, and it is the same shape as IF-2 ──────────────────
+      // Both split windows are 0, i.e. as permissive as they go. Every member Prev
+      // queues, V8.50 must queue too, with the SAME verdict: a shorter window can only
+      // ever bring work FORWARD, never withhold it and never change what the work is.
+      // A member appearing only in the OLD list would mean V8.50 is sitting on a
+      // decision the frozen keeper already made — the one direction that is not a
+      // trade-off anyone chose.
+      const newSet = new Set(asMultiset(iN));
+      const missing = asMultiset(iO).filter((x) => !newSet.has(x));
+      expect(missing, `parkedGracePeriod=${g}: V8.50 DROPPED work the frozen keeper queued\n` +
+        `      new: ${describeItems(iN)}\n` +
+        `      old: ${describeItems(iO)}`).to.deep.equal([]);
+
+      // And the extra items, if any, must be exactly the parked decisions the shorter
+      // windows unlocked — never a ghost, a reclaim, a chain link or anything structural.
+      const oldSet = new Set(asMultiset(iO));
+      const extra = iN.filter((i) => !oldSet.has(canon(i)));
+      for (const e of extra) {
+        expect([WORK.PARKED_RESCUE, WORK.EVICT_PARKED],
+          `parkedGracePeriod=${g}: V8.50 queued a ${NAME[e.workType]} the frozen keeper ` +
+          `did not, and only the two PARKED verdicts can legitimately differ here — ` +
+          `everything else means the extraction diverged`).to.include(e.workType);
+      }
     }
-    await both((k) => k.setParkedGracePeriod(6 * 3600));
+    // Restore the world exactly as setup() built it. The old version restored
+    // parkedGracePeriod to 6h — which setup() never set — and left the split windows
+    // behind entirely.
+    await both((k) => k.setParkedGracePeriod(0));
+    await ctx.keeperNew.setSelfFundedGracePeriod(0);
+    await ctx.keeperNew.setEvictionGracePeriod(0);
   });
 
   it("agree across the rescue-ratio eviction boundary", async function () {
@@ -428,7 +727,7 @@ describe("V8.48 item 12a — MatrixKeeperLib extraction is behaviour-preserving"
     const same = async (label) => {
       const [, dn] = await c.keeperNew.checkUpkeep("0x");
       const [, do_] = await c.keeperOld.checkUpkeep("0x");
-      expect(dn, `${label}: performData BYTES differ`).to.equal(do_);
+      expectSameSet(decodeItems(dn), decodeItems(do_), label);
       return decodeItems(dn);
     };
     // Distinct values on purpose: when this test was written BOTH fields defaulted to
@@ -474,7 +773,7 @@ describe("V8.48 item 12a — MatrixKeeperLib extraction is behaviour-preserving"
     const same = async (label) => {
       const [, dn] = await c.keeperNew.checkUpkeep("0x");
       const [, do_] = await c.keeperOld.checkUpkeep("0x");
-      expect(dn, `${label}: performData BYTES differ`).to.equal(do_);
+      expectSameSet(decodeItems(dn), decodeItems(do_), label);
       return decodeItems(dn);
     };
 
@@ -537,6 +836,94 @@ describe("V8.48 item 12a — MatrixKeeperLib extraction is behaviour-preserving"
       await time.increase(w + 10);
       await assertIdentical(`velocityWindow=${w}, window elapsed`);
     }
+  });
+
+  // ── V8.50 item A: the divergence, pinned rather than swept away ────────────────
+  it("V8.50 item A: the two keepers diverge ONLY at the insolvency floor, and only for MatB parkers", async function () {
+    // THE COMPANION TO THE THIRD PIN IN setup(). That pin is only honest if the thing it
+    // neutralises is exactly this and nothing else, and this is the test that says so.
+    //
+    // It is also a live instrument for the owner's PARAM 59 decision: the sweep below
+    // prints, for every value on the DAO menu, how many members the refactored keeper
+    // evicts that V8.48 would have rescued. ⚠ READ THE SIZE BEFORE QUOTING IT: this world
+    // is MATRIX_SIZE 7, where one journey earns $2.44 (24%) against the structural $3.40
+    // (34%) at 127. These members are POORER than any real member and their ask is
+    // correspondingly larger. This measures the SHAPE of the cliff, not its live depth —
+    // scripts/model_item_a.js on the live population is the number that decides PARAM 59.
+    //
+    // OWN WORLD, the same idiom the idle sweep uses: the shared ctx has had its batch
+    // size, ratio, ladder preset and velocity window moved by the tests above, and the
+    // cliff is only legible against the SHIPPING config. Measured on the shared world
+    // this sweep reads 0 flips at every value — which looks like good news and is
+    // actually the fixture no longer containing the members.
+    const c = await freshPopulated();
+    expect(Number(await c.matB.getParkedCount()),
+      "no MatB parked queue — this test is measuring nothing").to.be.gt(0);
+
+    const sweep = [];
+    for (const bps of [0, 1_700, 2_500, 3_400, 5_000, 6_800, 10_000]) {
+      await c.sf.setInsolvencyFloorBps(bps);
+      const [, dN] = await c.keeperNew.checkUpkeep("0x");
+      const [, dO] = await c.keeperOld.checkUpkeep("0x");
+      const iN = decodeItems(dN), iO = decodeItems(dO);
+      // ⛔ MATCHED BY MEMBER, NOT BY SLOT. This used to walk both arrays by index and
+      // call iN[k] vs iO[k] a flip. V8.50 defect 6 reordered discovery, so slot k in one
+      // keeper and slot k in the other are no longer the same member — index matching
+      // would report every item as flipped and the assertions below would start
+      // "passing" on noise. The question was always per-MEMBER anyway: for this parker,
+      // did the verdict change?
+      const key = (i) => `${i.addr1.toLowerCase()}|${i.addr2.toLowerCase()}`;
+      const oldBy = new Map(iO.map((i) => [key(i), i]));
+      const flips = [];
+      for (const n of iN) {
+        const o = oldBy.get(key(n));
+        if (o && o.workType !== n.workType) flips.push({ who: n.addr2, o, n });
+      }
+      // Set-identity, not byte-identity — see the canon() note at the top of the file.
+      const sameSet = JSON.stringify(asMultiset(iN)) === JSON.stringify(asMultiset(iO));
+      sweep.push({ bps, identical: sameSet, flips });
+    }
+    await c.sf.setInsolvencyFloorBps(0);   // leave the world as the pin found it
+
+    console.log("      PARAM 59 sweep — members the refactored keeper evicts that V8.48 rescued:");
+    for (const r of sweep) console.log(`        insolvencyFloorBps ${String(r.bps).padStart(5)} -> ${r.flips.length} flipped${r.identical ? "  (same work, both keepers)" : ""}`);
+
+    // 1. AT FLOOR 0 THE EXTRACTION STILL HOLDS BYTE-FOR-BYTE, under item A. This is the
+    //    claim the whole file exists to make, and item A did not take it away.
+    expect(sweep[0].identical,
+      "at insolvencyFloorBps 0 the refactored keeper must still queue the SAME SET of work " +
+      "as the frozen V8.48 copy — if this fails, item A broke the EXTRACTION and not just " +
+      "the economics, and the third pin in setup() is no longer honest. (Set, not bytes: " +
+      "V8.50 defect 6 reordered discovery and Prev is frozen at the old order.)").to.equal(true);
+
+    // 2. THE DIVERGENCE IS ONE-DIRECTIONAL AND ONE-SHAPED. Every flip is a member V8.48
+    //    would have lent to and item A's keeper evicts — never the reverse. A flip the
+    //    other way would mean item A is lending to somebody V8.48 refused, which is not
+    //    a trade-off anyone chose.
+    const shipping = sweep.find((r) => r.bps === 3_400);
+    expect(shipping.flips.length,
+      "the shipping floor must actually produce the cliff — a zero here means this test " +
+      "has stopped measuring anything").to.be.gt(0);
+    for (const f of shipping.flips) {
+      expect(f.o.workType, `${f.who}: V8.48 side must be a RESCUE`).to.equal(WORK.PARKED_RESCUE);
+      expect(f.n.workType, `${f.who}: V8.50 side must be an EVICT`).to.equal(WORK.EVICT_PARKED);
+      expect(f.n.addr1,
+        "every flip must be a MatB parker. A MatA flip would mean item A repriced a " +
+        "crossing the reserve was supposed to cover, which is the opposite of the item"
+      ).to.equal(c.matBAddr);
+      expect(await c.matB.crossingReserveOf(f.n.addr2),
+        "and the reason is that item A no longer carves this member a reserve — if it is " +
+        "non-zero, the cliff has some other cause and this explanation is wrong"
+      ).to.equal(0n);
+    }
+
+    // 3. THE CLIFF IS THE FLOOR, NOT THE LADDER — so it is bought back with PARAM 59 and
+    //    nothing else. Raising the ceiling far enough must restore parity exactly.
+    const top = sweep[sweep.length - 1];
+    expect(top.identical,
+      "at insolvencyFloorBps 10000 the ceiling is a full fee and no advance can exceed " +
+      "it, so the two keepers must agree again. If they do not, something OTHER than the " +
+      "floor is diverging and the analysis above is incomplete.").to.equal(true);
   });
 
   it("the batch actually contains work — this whole file is vacuous otherwise", async function () {

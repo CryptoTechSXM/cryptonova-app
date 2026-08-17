@@ -93,6 +93,11 @@ interface IFigureEightMatrixV8Cross {
     /// @notice Called by the partner MatA immediately after forceCrossKeeper
     ///         to record the rescue loan on MatB, where the 15% repayment fires.
     function addRescueDebt(address member, uint256 amount) external;
+    /// @notice V8.50 item E1: the partner MatA hands this member's remaining
+    ///         withdrawable across at the crossing, so it lands in the ledger the
+    ///         re-entry gate actually reads. Pulls `amount` from the caller, who must
+    ///         have approved it. Partner-only, same door as addRescueDebt.
+    function creditCarriedBalance(address member, uint256 amount) external;
     /// @notice V8.40: used by selfRescue() to fail early if destination is full.
     function isFull() external view returns (bool);
     /// @notice V8.46: is this member seated here? Needed so a matrix can ask its

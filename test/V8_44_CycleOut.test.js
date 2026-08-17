@@ -19,6 +19,33 @@
  * (MatrixLogicLib._cycleOutRoot escrow pass-through, deductForUpgrade reserve
  * accounting, TierRouter._takeSeat split funding, park-not-exit, reserve
  * release on opted-out exit).
+ *
+ * ⛔ RE-FIXTURED BY V8.50 ITEM A — THIS FILE'S SUBJECT IS THE THING ITEM A CHANGED.
+ *
+ *   A MatB MEMBER NOW HOLDS NO CROSSING RESERVE AT ALL. Item A pays the A->B crossing
+ *   out of the reserve the member already carved on entry, and the destination carves
+ *   no new one. Measured on this fixture: a member seated in MatB reads
+ *   `crossingReserveOf == $0.00`, not $5.00. So "fund from reserve" and "reserve
+ *   preserved" describe a bucket that is empty by design, and every HALF assertion
+ *   below that read the MatB reserve is now 0.
+ *
+ *   WHAT SURVIVES IS THE PART THAT MATTERED. The V8.43 defect was a SILENT EXIT — a
+ *   member who cycled out of MatB underfunded vanished, seat gone, money stranded. That
+ *   is still the thing under test and it still passes: they PARK. What changed is only
+ *   which pocket the money was in when they got there, and under item A there is one
+ *   pocket instead of two.
+ *
+ *   T2 NEEDED A BIGGER MATRIX, and the reason is worth recording. It asserts auto
+ *   re-entry FIRING, which needs the member to cover a full fee. Under V8.48 that was
+ *   $5 reserve + $5 earnings; under item A it is earnings alone. At MATRIX_SIZE 7 a
+ *   fully-referred W1 reaches only $7.852 and PARKS — correctly. At size 11 they reach
+ *   $12.128 and re-enter. The two-bucket case T2 was written for is not merely rare
+ *   now, it is UNREACHABLE: the reserve exactly equals the crossing price, so a MatA
+ *   crossing never touches withdrawable and a MatB member has no reserve to split with.
+ *
+ *   AND ITEM A'S OTHER HALF IS NOW ASSERTED HERE, which it was not before: a member
+ *   re-entering a MatA pays the FULL fee and a FRESH $5.00 reserve is carved for them
+ *   (`matA.crossingReserveOf == HALF` in T2 and T3). Entry carves, crossing spends.
  */
 const { ethers } = require("hardhat");
 const { expect } = require("chai");
@@ -172,18 +199,21 @@ async function rotateMatBOnce(ctx, externalsUsed, nextExternalIdx) {
 describe("V8.44 — MatB cycle-out: fund from reserve, park-not-exit", function () {
   this.timeout(600_000);
 
-  it("T1: passive underfunded member with re-entry ON parks (never silently exits), reserve preserved", async function () {
+  it("T1: passive underfunded member with re-entry ON parks (never silently exits)", async function () {
     const ctx = await deploySystem(4);
     const { matB, W1 } = ctx;
     await fillMatB(ctx, 4, false);
 
-    // Drain W1's MatB withdrawable so re-entry is genuinely underfunded:
-    // reserve $5 + withdrawable $0 < $10 fee.
+    // Drain W1's MatB withdrawable so re-entry is genuinely underfunded.
+    // V8.50 item A: there is no second bucket to drain — a MatB member's reserve is
+    // already $0.00 because it paid their A->B crossing. Underfunded now means
+    // withdrawable $0 against a $10 fee, full stop.
     if ((await matB.withdrawableOf(W1.address)) > 0n) {
       await matB.connect(W1).withdraw();
     }
     expect(await matB.withdrawableOf(W1.address)).to.equal(0n);
-    expect(await matB.crossingReserveOf(W1.address)).to.equal(HALF);
+    expect(await matB.crossingReserveOf(W1.address),
+      "item A: a MatB member holds NO reserve — it was spent getting them here").to.equal(0n);
 
     const rotBefore = await matB.rotationCount();
     await rotateMatBOnce(ctx, null, 17);
@@ -195,32 +225,41 @@ describe("V8.44 — MatB cycle-out: fund from reserve, park-not-exit", function 
     expect(await matB.isActiveInMatrix(W1.address)).to.equal(false);
     expect(await ctx.matA.isActiveInMatrix(W1.address)).to.equal(false);
     expect(await matB.parkedAt(W1.address), "member must PARK, not silently exit").to.be.gt(0n);
-    expect(await matB.crossingReserveOf(W1.address), "reserve must be preserved while parked").to.equal(HALF);
+    // V8.43's other symptom was a STRANDED $5 reserve. Item A removes that failure mode
+    // by construction rather than by fixing it: there is no reserve here to strand.
+    expect(await matB.crossingReserveOf(W1.address),
+      "nothing to strand — item A spent this member's reserve at the A->B crossing").to.equal(0n);
   });
 
-  it("T2: reserve + withdrawable >= fee → auto re-entry fires funded by both buckets", async function () {
-    const ctx = await deploySystem(7);
+  it("T2: withdrawable >= fee → auto re-entry fires, funded from EARNINGS ALONE", async function () {
+    // SIZE 11, not 7 — see the header. Under item A the member funds re-entry from
+    // withdrawable alone, and a fully-referred W1 only reaches $7.852 at size 7, which
+    // correctly PARKS. Size 11 takes them to $12.128 and the re-entry fires.
+    const ctx = await deploySystem(11);
     const { matA, matB, W1 } = ctx;
-    await fillMatB(ctx, 7, true);   // all fillers referred by W1 → W1 earns L1 in MatB
+    await fillMatB(ctx, 11, true);  // all fillers referred by W1 → W1 earns L1 in MatB
 
     const wBefore = await matB.withdrawableOf(W1.address);
-    const rBefore = await matB.crossingReserveOf(W1.address);
-    expect(rBefore).to.equal(HALF);
-    // W1 must have >= $5 withdrawable (6 × $0.95 L1 + chain pay + direct earn)
-    expect(wBefore, "test setup: W1 needs >= $5 MatB earnings").to.be.gte(HALF);
-    expect(wBefore, "test setup: W1 must NOT self-fund the full fee from earnings alone").to.be.lt(FEE);
+    expect(await matB.crossingReserveOf(W1.address),
+      "item A: no reserve in MatB — the re-entry is funded by ONE bucket now").to.equal(0n);
+    expect(wBefore, "test setup: W1 must cover the whole fee from earnings alone").to.be.gte(FEE);
 
-    await rotateMatBOnce(ctx, null, 25);
+    await rotateMatBOnce(ctx, null, 34);
 
     // V8.43 BUG: escrow hardcoded to 0 → funds = withdrawable only (< fee) → silent exit.
-    // V8.44: funds = reserve + withdrawable >= fee → re-entry seat taken.
+    // V8.50: funds = withdrawable alone, and it is >= fee, so the re-entry seat is taken.
     expect(await matA.isActiveInMatrix(W1.address), "auto re-entry must re-seat the member").to.equal(true);
-    expect(await matB.crossingReserveOf(W1.address), "escrow bucket must fund the re-entry").to.equal(0n);
-    // fee = 5 escrow + 5 withdrawable → remaining earnings stay withdrawable,
-    // plus the $0.95 L1 credited AFTER the cycle-out by the triggering member's
-    // own MatB entry (they were referred by W1; distribution runs post-rotation).
-    expect(await matB.withdrawableOf(W1.address)).to.equal(wBefore - (FEE - HALF) + 950_000n);
+    expect(await matB.crossingReserveOf(W1.address), "still nothing in the MatB reserve").to.equal(0n);
+    // The WHOLE fee comes out of withdrawable now (it was fee - HALF under V8.48), plus
+    // the $0.95 L1 credited AFTER the cycle-out by the triggering member's own MatB
+    // entry — they were referred by W1 and distribution runs post-rotation. Measured:
+    // $12.128 - $10.00 + $0.95 = $3.078.
+    expect(await matB.withdrawableOf(W1.address)).to.equal(wBefore - FEE + 950_000n);
     expect(await matB.parkedAt(W1.address)).to.equal(0n);
+    // ⬇ ITEM A'S OTHER HALF, asserted here for the first time: entering a MatA costs the
+    // full fee AND carves a fresh reserve. Entry carves; crossing spends.
+    expect(await matA.crossingReserveOf(W1.address),
+      "a full-fee MatA entry must carve the member a new crossing reserve").to.equal(HALF);
   });
 
   it("T3: parked-at-MatB member selfRescue pays shortfall → re-enters own pair, no debt", async function () {
@@ -233,10 +272,17 @@ describe("V8.44 — MatB cycle-out: fund from reserve, park-not-exit", function 
     await rotateMatBOnce(ctx, null, 17);
     expect(await matB.parkedAt(W1.address), "precondition: T1 parking behavior").to.be.gt(0n);
 
-    // shortfall = fee − (reserve + withdrawable) = $10 − $5 = $5
-    await usdc.mint(W1.address, HALF);
-    await usdc.connect(W1).approve(matBAddr, HALF);
+    // shortfall = fee − (reserve + withdrawable). DERIVED, not the old literal $5:
+    // under item A the reserve is 0, so the member covers almost the whole fee from
+    // their wallet. Measured here: $0.95 held, $9.05 paid.
+    const held = (await matB.withdrawableOf(W1.address)) + (await matB.crossingReserveOf(W1.address));
+    const shortfall = FEE - held;
+    await usdc.mint(W1.address, shortfall);
+    await usdc.connect(W1).approve(matBAddr, shortfall);
+    const walletBefore = await usdc.balanceOf(W1.address);
     await matB.connect(W1).selfRescue({ gasLimit: 16_000_000 });
+    expect(walletBefore - (await usdc.balanceOf(W1.address)),
+      "member pays exactly the shortfall, not a penny more").to.equal(shortfall);
 
     expect(await matB.parkedAt(W1.address)).to.equal(0n);
     expect(await matB.crossingReserveOf(W1.address)).to.equal(0n);
@@ -244,9 +290,11 @@ describe("V8.44 — MatB cycle-out: fund from reserve, park-not-exit", function 
     expect(await matA.isActiveInMatrix(W1.address)).to.equal(true);
     expect(await matA.rescueDebtOf(W1.address)).to.equal(0n);
     expect(await matB.rescueDebtOf(W1.address)).to.equal(0n);
+    // ...and the full-fee MatA entry carved them a fresh reserve for the NEXT crossing.
+    expect(await matA.crossingReserveOf(W1.address)).to.equal(HALF);
   });
 
-  it("T4: re-entry OFF (explicit opt-out) → clean exit WITH reserve released to withdrawable", async function () {
+  it("T4: re-entry OFF (explicit opt-out) → clean exit, and nothing is stranded", async function () {
     const ctx = await deploySystem(4);
     const { tr, matA, matB, W1, owner } = ctx;
     await fillMatB(ctx, 4, false);
@@ -258,7 +306,8 @@ describe("V8.44 — MatB cycle-out: fund from reserve, park-not-exit", function 
     if ((await matB.withdrawableOf(W1.address)) > 0n) {
       await matB.connect(W1).withdraw();
     }
-    expect(await matB.crossingReserveOf(W1.address)).to.equal(HALF);
+    // V8.50 item A: nothing here to release — the reserve paid the A->B crossing.
+    expect(await matB.crossingReserveOf(W1.address)).to.equal(0n);
 
     await rotateMatBOnce(ctx, null, 17);
 
@@ -267,9 +316,16 @@ describe("V8.44 — MatB cycle-out: fund from reserve, park-not-exit", function 
     expect(await matB.isActiveInMatrix(W1.address)).to.equal(false);
     expect(await matA.isActiveInMatrix(W1.address)).to.equal(false);
     expect(await matB.parkedAt(W1.address)).to.equal(0n);
-    expect(await matB.crossingReserveOf(W1.address), "reserve must not strand on opt-out exit").to.equal(0n);
-    // released $5 reserve + the $0.95 L1 credited after the cycle-out by the
-    // triggering member's own MatB entry (referred by W1).
-    expect(await matB.withdrawableOf(W1.address), "reserve must be released to withdrawable").to.equal(HALF + 950_000n);
+    expect(await matB.crossingReserveOf(W1.address),
+      "nothing may strand on an opt-out exit — and under item A there is nothing to " +
+      "strand, because the reserve was spent at the A->B crossing").to.equal(0n);
+    // V8.48 read HALF + $0.95 here: a released $5 reserve plus the $0.95 L1 credited
+    // after the cycle-out by the triggering member's own MatB entry (referred by W1).
+    // V8.50 item A: the $5 is gone from this sum because it was never carved — the L1
+    // credit is all that lands. The member is not a cent worse off; that $5 bought them
+    // the MatB seat they just completed, instead of sitting idle and being handed back.
+    expect(await matB.withdrawableOf(W1.address),
+      "the post-exit credit must still arrive; only the released reserve is absent"
+    ).to.equal(950_000n);
   });
 });

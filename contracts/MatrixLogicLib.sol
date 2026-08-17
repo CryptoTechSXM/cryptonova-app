@@ -297,6 +297,10 @@ library MatrixLogicLib {
     event SelfRescue(address indexed member, uint256 shortfallPaid, uint256 withdrawableUsed);
     /// @notice Emitted when a member's SF rescue loan is (partially) repaid at cycle-out.
     event RescueDebtRepaid(address indexed member, uint256 repaid, uint256 remaining);
+    /// @notice V8.50 item E1: this member's remaining withdrawable moved with them to the
+    ///         destination matrix. NOT an earning — see FigureEightMatrixV8's
+    ///         creditCarriedBalance for why it deliberately bypasses _credit().
+    event BalanceCarried(address indexed member, address indexed from, address indexed to, uint256 amount);
     /// @notice Emitted when a rescue loan is issued (all rescue paths: keeper, coPayRescue).
     event RescueLoanIssued(address indexed member, uint256 loanAmount, string rescueType);
 
@@ -984,6 +988,31 @@ library MatrixLogicLib {
                 catch {}
                 emit RescueDebtRepaid(member, repay, debt - repay);
             }
+        }
+
+        // ── V8.50 ITEM E1 — THE MEMBER'S MONEY FOLLOWS THE MEMBER ────────────────
+        //
+        // Item A stopped charging this crossing to the member's earnings. Correct — but
+        // it left those earnings in THIS matrix's ledger, and TierRouter.handleCycleOut
+        // is passed only the CYCLING matrix's two buckets. So the money item A saved was
+        // saved into a ledger the re-entry gate cannot spend. Measured on live V8.48
+        // (model_item_a.js phase 6, 2026-08-17, n=70): the ask read $1.90 across both
+        // halves and $6.60 on the gate's own basis — min = median = max, every member
+        // identical. Without this block, item A makes the re-entry HARDER than V8.48.
+        //
+        // AFTER THE CLAWBACK, DELIBERATELY. Debt is settled from this ledger first and
+        // only the remainder travels; carrying first would move money out from under
+        // :882-897 and quietly weaken the repayment path.
+        //
+        // Only A->B needs it: a member cycling out of MatB leaves their remainder there,
+        // re-enters their OWN pair, and comes back to the same MatB — so it waits for
+        // them and the next gate already reads it.
+        uint256 carried = self.members[member].withdrawable;
+        if (carried > 0) {
+            self.members[member].withdrawable = 0;
+            SafeERC20.forceApprove(cfg.usdc, destination, carried);
+            IFigureEightMatrixV8Cross(destination).creditCarriedBalance(member, carried);
+            emit BalanceCarried(member, address(this), destination, carried);
         }
     }
 

@@ -1,7 +1,1010 @@
 # V8.50 HANDOFF — the crossing redesign. READ THIS FIRST.
 
 Written 2026-08-16 at the end of the V8.49 private measurement run.
+Sessions 2, 3 and 4 have appended to it since; read the NEWEST section first — each one
+corrects the ones below it, and says so explicitly where it does.
 Audience: a future session of Claude, plus the owner. Nobody else touches this code.
+
+---
+
+# ⬛ SESSION 4 STATE — 2026-08-16, LATE. READ THIS FIRST, BEFORE SESSION 3.
+
+Session 3's "NEXT, IN ORDER" list is DONE, items 1–3. Nothing below this section is
+contradicted; two things are **extended** and one **sharpened**, each marked.
+
+## WHAT SHIPPED — SIX TEST FILES RE-FIXTURED, NO CONTRACT CHANGED
+
+**Not one line of `contracts/` was touched this session.** Every change is in `test/`.
+That is the headline: the 9 new failures session 3 attributed to item A were all
+fixtures encoding pre-item-A economics, exactly as it said, and none of them was a
+defect in the item A code.
+
+| file | was | now |
+|---|---|---|
+| `V8_48_SplitGrace.test.js` | 3 failing | 0 |
+| `V8_48_GhostFloor.test.js` (GF-D1) | 1 of its 3 | 0 of that 1 |
+| `V8_49_InsolvencyFloor.test.js` (IF-7, IF-10) | 2 failing | 0 |
+| `V8_49_EvictionClock.test.js` (EC-1/2/4) | 3 failing | 0 |
+| `V8_48_RescueSurplus.test.js` | 3 failing | 0 |
+| `V8_48_KeeperScan.test.js` | 9 failing | 0, **plus one new test** |
+
+## ⛔ EXTENSION 1 — STEP 1 WAS SIX TESTS. IT IS NINE, AND THEY ARE ONE BUG.
+
+Session 3's step 1 named `SplitGrace ×3, GF-D1, IF-7, IF-10`. Its own effect-(a)
+paragraph also lists **the floor legs of EC-1/EC-2/EC-4**, and the run confirms those
+three fail for the identical reason and are fixed by the identical edit. The "6 of 9" in
+that paragraph is a slip: the list under it has nine entries and all nine are effect (a).
+
+**All nine have ONE root cause and ONE fix.** Every one of them builds its parked member
+on the `MockKeeperScan` harness with `MockMatrixK(FEE, true)` — a **MatA**. Under item A
+a MatA crossing costs the reserve carve, and every one of those fixtures gives the member
+a $5.00 reserve, so all nine members became SELF-FUNDED, `sfShare` went to 0, and the
+ladder, the floor and the loan-grace window all stopped being reachable. The failures say
+so literally: `expected [ 4 ] to deeply equal [ 6 ]` — RESCUE where the test wanted EVICT.
+
+**THE FIX, AND WHY IT PRESERVES EVERY NUMBER.** Each member moved to the pair's MatB —
+`MockMatrixK(FEE, false)` — where a cycle-out re-enters a MatA at the FULL fee and the
+loan path still exists. Their money moved with them: **withdrawable becomes the old
+(withdrawable + reserve), reserve becomes 0**, because item A leaves a MatB member holding
+no reserve; it was spent getting them there.
+
+That substitution is exact. `effectiveContrib` is unchanged, the price basis is back to
+the full fee, so **every wBps, every shortfall and every sfShare in all nine tests is the
+same number it was before item A**. Not one assertion's expected value was edited. The
+fixtures changed matrix and pocket; the rules under test did not move.
+
+- ONE EXCEPTION, and it is the rule not an exception to it: EvictionClock's **RATIO**
+  member keeps `withdrawable $2.00`. `rescueRatioBps` is `withdrawn/(withdrawn +
+  withdrawable)` and never looked at the reserve — folding it in would have moved that
+  member from 8000 bps to 5333 and quietly retired the case. Noted in the file.
+- Flipping the B-half's flag does NOT admit the frozen-MatB scan into these batches:
+  `_isFrozenMatB` returns on `occupancy() < MATRIX_SIZE()` and `MockMatrixK.occupancy` is
+  always 0 (there is no setter). Checked in source before relying on it.
+
+## ⛔ SHARPENING — THE POPULATION NUMBER IN SplitGrace WAS PRE-ITEM-A AND IS NOW RE-MEASURED
+
+`"the 84% member — the live median"` was 50% reserve + ~34% earnings at an A->B crossing,
+measured 2026-08-11. **Item A retired that member.** The population it represents moved to
+the MatB re-entry, so the test was re-pointed at where that population now lives and
+renamed **"the MEDIAN re-entry member"**: `$7.29` of a `$10.00` re-entry, from
+`model_item_a.js` on live V8.48 (n=63, median ask **$2.71**). Every other fixture amount
+in these files was checked against that same measured band — a member arrives at a $10
+re-entry holding **$5.72 to $10.00** — and all of them sit inside it.
+
+## ⛔ CORRECTION TO SESSION 3'S CHARACTERISATION OF THE CLIFF — IT IS THE FLOOR, NOT THE LADDER
+
+Session 3: *"an early-MatB member reads ~3,400 bps against preset 1's bottom rung of 4,000
+and falls off it."* **Reproduced, and it is one rung further along than that.** The two
+members that actually diverge in `KeeperScan` read **4,120 and 4,875 bps** — both ABOVE
+the 4,000 rung. They get a ladder rung; what kills them is what the rung then asks for.
+
+Losing the carve does not change the ladder arithmetic, it changes the **shortfall**:
+`$0.88 -> $5.13` for those two. That ask is then refused by the **insolvency floor**.
+Same family, same cause, but the lever is PARAM 59 and not `sfRescueThresholds` — which
+matters, because the two are different owner decisions and session 3 pointed at the
+second one. The ladder can still bite a poorer member; it is not what bit here.
+
+## THE KeeperScan DECISION — SCOPED, NOT RETIRED, AND THE DIVERGENCE IS NOW PINNED
+
+Session 2 and 3 both said the byte-identical premise is *structurally* incompatible with
+item A, because item A is not a parameter and `MatrixKeeperPrev` will never know about it.
+**That reading was wrong, and the run says so.**
+
+Item A reprices a crossing out of a **MatA**. Out of a MatB, `_crossingCost` returns the
+full entry fee — the same number the frozen keeper uses. And under item A a MatA parker's
+reserve covers their crossing outright, so **MatA parks nobody for funding and the whole
+parked queue this fixture builds lives in the MatB.** Both keepers ask the same question
+about the same members. Measured across every scenario in the file:
+
+```
+insolvencyFloorBps      0 -> 0 slots differ   (BYTE-IDENTICAL)
+insolvencyFloorBps   1700 -> 2 slots differ
+insolvencyFloorBps   2500 -> 2
+insolvencyFloorBps   3400 -> 2      <- the shipping value
+insolvencyFloorBps   5000 -> 2
+insolvencyFloorBps   6800 -> 0      (BYTE-IDENTICAL)
+insolvencyFloorBps  10000 -> 0      (BYTE-IDENTICAL)
+```
+
+**The divergence is one-shaped and lives in one governed parameter.** Every differing slot
+is OLD=`PARKED_RESCUE`, NEW=`EVICT_PARKED`, a MatB member, reserve 0 — never the reverse.
+
+So the decision, recorded with its reason as session 2 asked:
+
+1. **`insolvencyFloorBps` is pinned to 0 in `deployBoth()`**, a THIRD pin alongside item
+   12's `selfFundedGracePeriod` and item 1's `evictionGracePeriod`. It is the same move
+   for the same reason and it obeys the file's own doctrine — *"every pin here is an item
+   that DID [change behaviour]."* It hides no keeper difference: both keepers call the
+   same `loanEligibleFor`, and this suite was green at the shipping 3400 before item A.
+   It neutralises the one INPUT item A moved.
+2. **The divergence is asserted, not swept away**, by a new test at the bottom of the
+   file: at floor 0 byte-identical; at the shipping floor every flip is RESCUE->EVICT, in
+   the MatB, on a member holding no reserve; at floor 10000 identical again — which is
+   what proves the cause is the floor and not the ladder.
+
+Net: the file covers MORE than it did. The extraction is still pinned byte-for-byte, and
+the economic change now has a test that fails if it ever stops happening.
+
+## RescueSurplus — THE QUEUE MOVED, AND THAT IS ITEM A'S THESIS REPRODUCED LOCALLY
+
+*"Fixture produced no parked member"* was the right failure to see. Measured on this
+fixture's own world (`world(7)`, 41 registrations), stepping the count as it grows:
+
+```
+regs=10   matA.parked 0   matB.parked 0
+regs=20   matA.parked 0   matB.parked 7
+regs=40   matA.parked 0   matB.parked 27     every one at wd $2.436 / rs $0.00
+regs=70   matA.parked 0   matB.parked 57
+```
+
+**MatA parks NOBODY. Not one, at any population size.** The entire queue is the MatB
+cycle-out. That is the whole V8.50 argument, reproduced in a local fixture in seven
+seconds, and it is worth more than the three tests it was found while fixing.
+
+The file now builds its member in MatB, and asserts MatA's emptiness explicitly rather
+than ignoring it — if a funding park ever appears in a MatA again, item A has regressed
+and that is the cheapest line in the suite to find it on.
+
+**ONE NEW FIXTURE STEP, AND IT IS NOT A FUDGE.** A journey earns at most ~34% of a fee, so
+the only way past 100% is referral income — the member must be a referrer, and their
+downline keeps crossing into MatB paying them `l1Bps` each time. Left alone, the RESCUE
+TRANSACTION ITSELF pays them another $0.95 mid-flight and the post-rescue balance reads
+`surplus + $0.95`. The fixture now drains that first: register outside their downline
+until their withdrawable stops moving, measured, not counted. Then the surplus assertion
+is exact — **verified delta $0.000000**. The comment says in the file: do not replace this
+with a tolerance; the drain is what keeps the assertion sharp.
+
+**MUTATION-CHECKED.** `_selfRescue`'s `withdrawable = surplus` was flipped back to
+`withdrawable = 0` — the original V8.48 defect — recompiled, and the REGRESSION test
+fails. The re-fixtured test still catches the bug it was written for.
+
+## TEST STATE — AND HOW IT WAS MEASURED, WHICH YOU NEED TO KNOW BEFORE TRUSTING IT
+
+⚠️ **THESE NUMBERS COME FROM A SANDBOX REPRODUCTION OF THE REPO, NOT FROM THE OWNER'S
+MACHINE.** Contracts + tests were copied into a clean Linux container with a fresh
+`npm install` and solc 0.8.26 from npm. It is a faithful reproduction — it reproduced
+every one of the 12 target failures with byte-identical assertion messages before the fix
+— but it is NOT the owner's environment and it **drifts by about two tests**: it shows 7
+`KeeperScan` failures where the owner's `test_v850_task1b.txt` recorded 9, and it does not
+show `V8.46-B cascade gas` (the known inherited `TypeError`). **The owner's run is the
+authoritative one. Treat the prediction below as a prediction.**
+
+| | passing | failing |
+|---|---|---|
+| session 3, owner's machine (`test_v850_task1b.txt`) | 534 | 60 |
+| session 4, sandbox, six files re-fixtured | **555** | **40** |
+| session 4, sandbox, + the `V8Elevator` fc() guard | **567** | **28** |
+| **OWNER'S MACHINE, MEASURED** (`test_v850_task2.txt`) | **574** | **21** |
+
+**60 -> 21. Thirty-nine tests went green.** The prediction was ~568/~27 and was BEATEN, not
+missed — the sandbox over-predicted the remainder by 6 because several `V8.35` factory
+tests and `V8.46-B cascade gas` fail there and pass on the owner's machine. **Read that as
+the sandbox being pessimistic, not as a surprise: every one of the 24 re-fixtured tests and
+every test the `fc()` guard was meant to reach went green exactly as predicted.** The
+KeeperScan PARAM 59 sweep printed identically on both machines, to the row.
+
+Predicting the ASSERTION and not the test, per session 3's own method note: **33 failing
+tests should go green and 1 new test should appear**, and no test that was passing should
+start failing. If the owner's run lands anywhere else, the diff — not the total — is the
+thing to read.
+
+**THE 40 THAT REMAIN ARE NOT OURS TO FIX THIS SESSION.** Every one was already in session
+2's 51: real-pair fixtures that encode a full-fee A->B crossing (`V8.35` factory ×10,
+`V8.39` ×5, `V8.38` ×3, `V8.44` ×5, `V8Elevator` ×4, `V8.10` ×4, and so on), plus
+`GhostFloor`'s GF-V1 and GF-V3. They are the same class of work as this session's, at
+larger scale.
+
+**GF-V3 is worth naming because it is the cleanest statement of the remaining work:**
+`precondition: cycle-out park must keep the crossing reserve: expected 0 to equal 5000000`.
+Its precondition is now false BY DESIGN. Item A is the reason, and the fixture is right to
+say so loudly rather than adapting quietly.
+
+# ✅ ITEM E1 IS BUILT — AND THE SUITE IS GREEN FOR THE FIRST TIME THIS RELEASE
+
+**595 passing / 7 pending / 0 failing.** Session 4 opened at 60 failing.
+
+## WHAT E1 IS
+
+`MatrixLogicLib._crossToPartner`, at the very end and **after** the SF debt clawback: the
+member's remaining withdrawable moves with them. `forceApprove` to the destination, then a
+partner-only `creditCarriedBalance(member, amount)` on the far side — the same door
+`addRescueDebt` has used since V8.28 (`FigureEightMatrixV8:629`), not a new one.
+
+- **NOT routed through `_credit()`.** A transfer is not an earning. Crediting it would
+  inflate the member struct's `totalEarned` — the field defect 4 exists to clean up — and
+  double-count in anything summing `EarningsCredited`, `model_item_a.js` included.
+- **Emits `BalanceCarried(member, from, to, amount)`** so the movement is visible. The
+  crossing buffer's sin at `:1368` is moving money into `withdrawable` invisibly; this must
+  not repeat it.
+- **AFTER the clawback, deliberately.** Debt settles from this ledger first and only the
+  remainder travels. Carrying first would move money out from under `:882-897`.
+- **ONE DIRECTION ONLY.** My own design note said it had to be symmetric. Wrong: a member
+  cycling out of MatB leaves their remainder in MatB, re-enters their OWN pair, and returns
+  to that same contract — so it waits for them and the next gate already reads it.
+
+**Measured effect:** MatB ledger at the gate $7.66 -> **$8.32**, gate-basis ask
+$2.34 -> **$1.68**.
+
+## THE VALIDATION THAT MATTERS
+
+**E1 fixed all three remaining walk-through items with no fixture change at all** —
+the 15-registration re-entry-priority test, `V8_44_Overflow` O1+O2, and `V8.35` G4. Those
+were the three I could not resolve and had planned to re-state. **They were failing because
+of the defect.** Fixing the root cause turned them green untouched. Nothing else in this
+session came close to that as evidence.
+
+## THE FIXTURES E1 THEN BROKE, AND WHAT THEY TAUGHT
+
+E1 took the suite 3 -> 8 failing, every one the same shape: *"precondition: shortfall
+cycle-out must PARK the root in MatB"*. The fixtures could no longer make a poor member.
+
+**The cause was the same in three files, and it was a fixture lie of long standing.**
+`driveW1IntoMatB`, `parkW1InMatB` and `seedAndParkW1` all referred **fifteen fillers to
+W1**, handing the fixture's "underfunded" member $14.25 of L1 and making them the richest
+wallet in the pair. It only ever read as underfunded because that money sat in the MatA
+ledger where the gate could not see it. **The fixtures were relying on the defect.** They
+now chain the referrals, so W1 is the passive no-referral member the precondition always
+described.
+
+**Two more corrections came out of `V8_48_RescueSurplus`, both mine:**
+
+1. **"MatA must park nobody" was too strong.** E1 changes cascade timing, so the mid-cascade
+   DEFERRAL park (`:906`) now fires — measured: 2 MatA parkers, both holding a reserve of
+   exactly $5.00, the full crossing price. They are not stuck; a deferral park hands them to
+   the standard machinery for a later transaction and bounds recursion depth. Item A's claim
+   is about FUNDING, so the test now asserts funding: **no MatA parker may hold less than
+   the crossing price.** Stronger than a count, and it survives future cascade changes.
+2. **The settle loop was replaced by accounting.** A rescue re-seats the member, which
+   cascades, which can pay them L1 in the SAME transaction. The old fix quiesced their
+   downline first; E1 changed the timing and a credit slipped back in. It now SUMS
+   `EarningsCredited` from the receipt — with two traps recorded in the file, because both
+   produced confident wrong answers: the event must be parsed from an EXPLICIT interface
+   (solc does not copy a library's events into the using contract's ABI, and parsing
+   through `matB.interface` silently returned zero), and it must be FILTERED BY EMITTER
+   (credits are per-ledger — a rescue pays $0.95 L1 on the matrix being left and $0.25
+   direct-earn on the one being entered; counting both over-states by exactly the
+   direct-earn, the same error as summing both halves in phase 5).
+
+## ⚠️ CONTRACT SIZE IS NOW A LIVE CONSTRAINT ON THE REST OF V8.50
+
+```
+  MatrixPairFactory   24,444   headroom   132     <- embeds the matrix init code
+  MatrixLogicLib      24,274   headroom   302
+  TierRouter          23,910   headroom   666
+```
+
+E1 cost MatrixPairFactory 216 bytes and MatrixLogicLib 261. **Defect 4 wants to ADD a
+getter to the matrix, which grows the factory again.** With everything landing in V8.50 and
+nothing deferring, size has to be managed deliberately from here — budget it before writing,
+and `node scripts\sizes.js` after every contract change, not just at the end.
+
+## NEXT
+
+1. **Re-run `scripts/model_item_a.js` phase 6.** It now measures a fixed system. PARAM 59
+   should finally be chosen against a basis that is true — the expectation is that the ask
+   returns toward the scope's ~$3.20 and 3400 clears the population, but that is a
+   prediction and the script is the answer.
+2. Defects 2 and 4, within the size budget above.
+3. `maxItemsPerUpkeep` 15 -> 5 or 10.
+4. Items D, the organic growth reading, and the tier-gate recalibration.
+
+# ⛔⛔ OWNER DIRECTIVE, 2026-08-17: NOTHING DEPLOYS, NOTHING DEFERS
+
+> *"we fix everything, deploy nothing until we have a solid ground to stand on. also would
+> like everything we find to be in v8.50, nothing deferred to 8.51"*
+
+**This supersedes every "ship it / defer it" recommendation elsewhere in this document,
+including my own from earlier today.** V8.50 is now a FIX-EVERYTHING release. No partial
+deploy, no interim PARAM value chosen to unblock a deploy that is no longer happening.
+
+**Practical consequence: PARAM 59 does not need an interim answer.** The 6800 recommendation
+existed only to unblock a deploy. With the deploy held, the right sequence is: fix the
+ledger split FIRST, then re-measure, then choose the floor against the fixed system. A
+floor chosen against the broken basis would be a number nobody could defend later.
+
+## THE REAL V8.50 SCOPE, AS IT NOW STANDS
+
+**Contract work — money path**
+- **E1. CARRY THE MEMBER'S BALANCE WHEN THEY CHANGE MATRIX.** The headline fix. See the
+  design fork below. Everything else on this list is small by comparison.
+- **E2.** Correct the conservation comment in `TierRouter.handleCycleOut` — it currently
+  asserts an equality that does not hold at that gate and is the most authoritative-looking
+  place anyone will read.
+- **E3.** `_executeAdditive`'s re-entry/upgrade fall-through: independent `if`s, not
+  `else`. Unreachable on the real ascending ladder ($10 -> $25 -> $50), so the CODE is
+  safe; the doc comment claiming "re-enter or PARK" is not. Comment fix at minimum.
+- **E4.** Revisit the MatA withdraw lock. Session 2 kept it at the FULL fee on the
+  reasoning that "a MatA member WILL need it for the re-entry, and this lock is what
+  accumulates it". **The lock accumulates money in MatA and the re-entry gate reads MatB.**
+  The lock and the gate are on different ledgers — the same defect from another angle. If
+  E1 lands, the lock's premise becomes true for the first time.
+- **Defect 2.** `MatrixKeeper.DIRECT_EARN_BPS = 500` — dead, public, and wrong (real value
+  250). Delete it.
+- **Defect 4.** No getter exposes the true `totalEarned`; `MatrixKeeperLib:426`
+  reconstructs it as `withdrawn + withdrawable`, which includes crossing-buffer money, and
+  the keeper's withdraw-ratio EVICTION test runs on the contaminated figure.
+
+**Parameters — all decided AFTER E1, not before**
+- PARAM 59 `insolvencyFloorBps`. With E1 the ask returns to ~$3.20 and 3400 clears
+  everyone; without it, 6800 is the floor. **Do not fix this number until E1 is settled.**
+- `crossingBufferBps` -> 0. Already governed in V8.49; confirm in predeploy.
+- `maxItemsPerUpkeep` 15 -> 5 or 10 (scope §6: gas per rescue rose 600k -> 2.6M; a full
+  15-item batch projects ~39M against a ~17.8M ceiling).
+
+**Tests — 3 red, and 2 of them wait on decisions**
+- 15-registration re-entry priority (waits on E3)
+- `V8_44_Overflow` O1+O2 (needs a rule re-stated, not a fixture moved)
+- `V8.35` G4 — FIXED in the sandbox, not yet committed
+- New coverage for E1 will be needed and does not exist yet.
+
+**Still unmeasured, and now in scope because nothing defers**
+- **Item D, shallow seating.** T5 has never been able to fire. A member seated at seat 2
+  pays a full fee and collects $0.25. If E1 lands, that member's balance travels — which
+  changes item D's severity but not its existence.
+- **The organic growth rate.** `logs/parked_baseline.csv` and `diag_parked_growth.js` —
+  parks vs rescues vs EVICTIONS per day, still never run.
+- **Tier-gate recalibration** after the acceleration finding.
+
+## 🚨🚨 MEASURED ON CHAIN 2026-08-17: PARAM 59 = 5000 RESCUES **ZERO** MEMBERS
+
+**THIS REVERSES THE OWNER DECISION TAKEN EARLIER TODAY. DO NOT DEPLOY 5000.**
+
+`scripts/model_item_a.js` phase 6 (added for this question) computes the re-entry ask two
+ways: the AGGREGATE across both halves — phase 5's basis, and what the 5000 decision was
+made on — and the **MatB LEDGER alone**, which is the basis `handleCycleOut` and
+`_triageParked` actually use. Live V8.48, block 45588411, n=70:
+
+```
+  ask, AGGREGATE (both halves)      min $1.23   median $1.90   max $2.58
+  ask, MatB LEDGER (the real gate)  min $6.60   median $6.60   max $6.60
+  MEDIAN UNDERSTATEMENT             $4.70
+
+  PARAM 59 sweep on the LEDGER basis — rescued of 70:
+     3400 bps  ceiling $3.40    aggregate 70    LEDGER   0
+     5000 bps  ceiling $5.00    aggregate 70    LEDGER   0     <- THE DECISION WE TOOK
+     6800 bps  ceiling $6.80    aggregate 70    LEDGER  70     <- first value that works
+    10000 bps  ceiling $10.00   aggregate 70    LEDGER  70
+```
+
+**$6.60 for every single member, min = median = max.** That uniformity is itself the
+proof: journey B earns the structural $3.40, a re-entry costs $10.00, the ask is $6.60,
+and every one of these 70 is a no-referral member. It matches the hand-derivation exactly.
+
+### WHAT THIS ACTUALLY MEANS — AND IT IS NOT "ITEM A IS BROKEN"
+
+Item A's headline win is untouched and confirmed again this run: **40 of 40 MatA parkers
+freed, 100%**, $48.93 of live shortfall to zero, 64.0% of all funding parks removed. Nobody
+is evicted mid-cycle. **That is item B delivered and it does not depend on any of this.**
+
+What is broken is the SECOND half of the story — the claim that the member arrives at
+re-entry holding $6.80 and asks $3.20. They DO hold $6.80. It sits in two ledgers, $3.40
+each, and the re-entry gate can only spend the MatB one.
+
+**So at that gate item A makes the ask WORSE than V8.48, not better:**
+
+```
+  V8.48  MatB reserve $5.00 + earnings $1.80 (post-clawback) = $6.80  ->  ask $3.20
+  V8.50  MatB reserve $0.00 + journey-B earnings     $3.40  = $3.40  ->  ask $6.60
+```
+
+The member is not poorer — their journey-A $3.40 is real, withdrawable, and usable for a
+MANUAL `selfRescue` (which pulls a shortfall from the WALLET). **Item A moved money from
+the automatic path to the manual path.** For a passive member, who is exactly who item A
+exists for, the automatic path is the only one they use.
+
+### THE THREE WAYS OUT
+
+1. **PARAM 59 = 6800 and ship.** Clears all 70. Defensible framing, and better than the one
+   it replaces: 3400 was "never lend more than one JOURNEY's earnings"; 6800 is "never lend
+   more than one full A+B CYCLE's earnings" — which is exactly what a member at re-entry
+   has completed. No code change. But it doubles the fund's per-rescue exposure against a
+   balance that fell $451.66 -> $329.29 in one day.
+2. **CARRY THE BALANCE ACROSS THE CROSSING.** At the A->B hop, move the member's remaining
+   MatA withdrawable into their MatB ledger. They then reach the gate holding $6.80 and ask
+   $3.20 — the scope's model, restored — and 3400 would clear everyone with room.
+   **NOT A ONE-LINER:** withdrawable is backed by USDC held in the MatA contract, so the
+   claim and the tokens must move together, across contracts, in the money path. Needs its
+   own scope item and its own tests.
+3. **BOTH** — do 2, keep the floor low, and treat 6800 as the interim while 2 is built.
+
+**RECOMMENDATION: 1 now, 2 scoped for V8.51.** 6800 is honest, on the DAO menu, reversible
+by vote, and unblocks the deploy. Option 2 is the real fix and should not be rushed into a
+release whose test suite is still being re-fixtured.
+
+### SECONDARY OBSERVATIONS FROM THE SAME RUN
+
+- **The population has fully turned over to organic no-referral members.** One completed
+  journey now earns min $3.40 / median $3.40 / **max $3.40** — the whole distribution has
+  collapsed onto the structural minimum (it was min $3.40 / median $4.83 / max $6.34 on
+  2026-08-16). The bigfill-era members with referral income have cycled out.
+- **MatB parkers carrying debt: 0 of 70**, down from 23 of 72 yesterday. The clawback
+  concern (scope defect 3) has no live population right now.
+- **The Stability Fund fell $451.66 -> $329.29 in a day** while the queue drained 133 -> 110.
+  Worth watching before committing to a higher lending ceiling.
+
+## 🚨 THE CONSERVATION ARGUMENT HAS A HOLE — MEASURED 2026-08-17, READ BEFORE DEPLOY
+
+**This contradicts a conclusion session 3 committed to source, and it bears on PARAM 59.**
+
+### WHAT SESSION 3 WROTE, IN THE HANDOFF AND IN `TierRouter.handleCycleOut`
+
+> V8.48  reserve $5.00 + earnings $3.40 - $1.60 crossing debt = **$6.80**
+> V8.50  reserve $0.00 + earnings $3.40 (journey A, **KEPT**) + $3.40 = **$6.80**
+> "The same $6.80 against the same $10 re-entry, so every funding gate below decides
+> identically... that is why item A needed NO code change in this contract."
+
+### WHY IT IS WRONG
+
+Journey A's earnings are kept — **in the MatA ledger.** `handleCycleOut(member, tierIndex,
+escrow, withdrawable)` receives ONLY the cycling matrix's two buckets, passed by
+`MatrixLogicLib._cycleOutRoot` from **MatB**. There is no cross-matrix lookup. So the
+"+$3.40 (journey A, KEPT)" term is real money that this gate never sees.
+
+**MEASURED on `deployV8Fixture`, W1 at the MatB cycle-out:**
+
+```
+  MatA ledger  $7.31   <- STRANDED from this decision
+  MatB ledger  $7.66   <- ALL that handleCycleOut receives
+  aggregate   $14.97   <- what scripts/model_item_a.js sums
+  T1 re-entry needs $10.00
+```
+
+The member holds $14.97 and the contract sees $7.66. Under V8.48 the same member reached
+this gate with **$12.66**, because the $5 arrived as a carved MatB reserve. **Item A leaves
+that money behind in MatA.** The member is not poorer overall — they are poorer AT THIS
+GATE, which is the only place it matters for an automatic re-entry.
+
+### THREE CONSEQUENCES, IN ORDER OF IMPORTANCE
+
+1. **`model_item_a.js` IS OPTIMISTIC FOR THE POST-ITEM-A POPULATION.** Phase 5 computes
+   holdings as *"credits across BOTH halves"*. That is CORRECT for the members it measured
+   — today's V8.48 parkers, whose MatA money was already spent on their full-fee crossing,
+   so aggregate ≈ MatB ledger. It is **wrong as a projection**, because under item A the
+   money splits across two ledgers and only one funds the re-entry. **The measured median
+   ask of $1.90 and "15 of 72 refused at 3400" are both understatements.** PARAM 59 at 5000
+   still looks like the right call — the direction does not change — but the headroom it
+   buys is smaller than the sweep suggested.
+
+2. **A MEMBER CAN NOW UPGRADE INSTEAD OF RE-ENTERING, AND THE CODE PERMITS IT.**
+   `_executeAdditive` (`:1351`, `:1362`) tries re-entry first, gated on
+   `escrow + withdrawable >= curFee`, then tries the upgrade in an INDEPENDENT `if` —
+   not an `else`. The doc comment says *"auto-reentry ON → member NEVER graduates:
+   re-enter or PARK"*, and the code does not enforce the "or PARK". Under V8.48 the
+   divergence was invisible: a member who could afford a $7 upgrade had almost always
+   cleared the $10 re-entry first, because the $5 reserve got them there. **Item A opens a
+   band — funds between the next-tier fee and the current-tier fee — where the member
+   leaves T1 rather than completing another cycle.** Observed: W1 at $7.66 skipped a $10
+   re-entry and took a $7 T2 upgrade.
+
+3. **IT INTERACTS WITH ITEM B.** "No member evicted mid-cycle" is satisfied by item A at
+   the A->B crossing. This is a different thing: a member who does not re-enter has not
+   been evicted, but they have not continued either.
+
+### WHAT IS *NOT* WRONG — CHECKED, SO NOBODY RE-OPENS IT
+
+- **`disableUpgrade` is NOT being ignored.** `_executeAdditive:1336-1341` applies a
+  member's options only once `cycles >= reentryMinCycles` / `autoUpgradeCycleThreshold`;
+  below that the system default governs. That is V8.44 design (`V8_44_CycleOut` sets
+  `setReentryMinCycles(1)` explicitly for exactly this reason). A first cycle-out ignoring
+  the member's own toggle is intended, not a defect.
+- **The member does not LOSE the MatA money.** It is withdrawable, and `selfRescue` pulls
+  a shortfall from the WALLET, so a member can move it manually. **Item A moves money from
+  the automatic path to the manual path** — that is the honest one-line summary.
+
+### WHAT TO DO NEXT — NOT YET DONE
+
+1. **Add a phase to `scripts/model_item_a.js` that splits holdings BY LEDGER** and reports
+   the re-entry ask on the MatB balance alone. That is the basis the contract uses. Re-run
+   PARAM 59's sweep on it. **Until then, treat the $1.90 median and the 5000-clears-all-72
+   result as an upper bound on how good things are.**
+2. **Decide whether the `_executeAdditive` fall-through is wanted.** Options: leave it (a
+   member progressing a tier is not a bad outcome), or make the upgrade an `else` so
+   "re-enter or PARK" means what it says. **This is an owner decision and a contract
+   change, so it does not belong in a test fix.**
+3. **Correct the comment in `TierRouter.handleCycleOut`** — it currently asserts a
+   conservation that does not hold at that gate, and it is the most authoritative-looking
+   place anyone will read.
+
+**The 15-registration test stays RED until 2 is decided.** It was left failing on purpose
+rather than being written around behaviour that is not yet understood.
+
+## ⛔ THE 40 WERE TRIAGED, AND HALF OF THE BIGGEST CLUSTER WAS ONE LINE
+
+Grouping the remaining failures by revert signature rather than by file: **20 of them —
+by far the largest cluster — fail on `F8V8: already in matrix`**, which is the
+duplicate-seat guard at `MatrixLogicLib:255` and has a history in this repo as a real
+pair-wide DoS. That warranted looking at before any more re-fixturing.
+
+**It is not a regression. It is item A succeeding where a fixture expected it to fail.**
+The trace runs `test helper -> matA.forceCross -> _finalizeCrossing -> seat in MatB ->
+require(!isInMatrix)`. `V8Elevator.test.js` has ONE shared `fc()` helper used at 21 call
+sites, and the helper's own comment states the dead assumption outright:
+
+```
+// 7 registrations each trigger a MatA rotation; fc() pushes each parked root to MatB
+```
+
+Under item A **the root does not park** — its reserve pays the crossing, so it crosses
+itself during the rotation and is already seated by the time `fc()` runs. The helper's
+real contract was always "ensure this member is in MatB"; only the world made the two
+readings identical. **One guard in the helper, and that file went from 22 failing to 10:**
+
+```js
+if (await matB.isActiveInMatrix(memberAddr)) return;   // item A got there first
+```
+
+The pattern was not invented here — `V8_48_KeeperScan.test.js` already guards its own
+force-cross loop exactly this way, and so does `V8_47_UpgradeGate.test.js` at its call
+site. This is that pattern hoisted into the helper.
+
+**THREE MORE FILES CARRY THE SAME `ownerForceCross` IDIOM** (`V8_44_CycleOut`,
+`V8_47_UpgradeGate`, `V8_44_Overflow`) **and the same guard was applied to them, measured,
+and REVERTED: it fixed nothing.** Their 6 failures are the other family — a fixture that
+needs a parked member item A no longer produces — and V8_47's call site was already
+guarded. The guard would have been correct-by-design and dead in the diff, so it went
+back out. Recorded because "it looked like the same bug and was not" is worth one line to
+the next session.
+
+**Where the remaining work stands after that:** sandbox **28 failing**, predicted **~27**
+on the owner's machine. Two shapes, and neither is mysterious:
+
+1. **The parked-member family** — `V8.10` ×4, `V8.44` ×5, `V8.47` G3, `V8.35` G4,
+   `V8.38` L1/L2/L4, `GhostFloor` GF-V1/GF-V3, `CycleOutDebug`, whale gate. Each needs
+   what `RescueSurplus` needed: build the member at the MatB cycle-out instead of the MatA
+   crossing. **`RescueSurplus` and `GF-V3` are the two worked examples; the rest is that
+   job repeated.**
+2. **`stress_test_full.js` ×2** — `Expected 'F8V8: already in matrix' but got
+   'F8V8: sfContribution exceeds fee'`. Session 3 already named these two as the bug that
+   was sitting in plain sight in the 51, and they are now asserting the OLD revert string
+   against a keeper that prices correctly. Fixture, one line each.
+
+## ✅ BOTH OWNER DECISIONS ARE SETTLED — 2026-08-17, MEASURED THEN DECIDED
+
+**Superseding the "STILL OPEN" section below, which is kept for its reasoning.**
+
+### ⚠️ DECISION 1 — PARAM 59 3400 -> 5000 — **SUPERSEDED, SEE THE PHASE 6 SECTION ABOVE.**
+### (original reasoning kept below; it was correct on the basis it had)
+
+The owner's instinct was **4000**. A sweep added to `scripts/model_item_a.js` measured what
+each ceiling actually buys, against the live population (n=72, block 45578581):
+
+```
+    0 bps  ceiling  $0.00   rescued   6/72   refused 66
+ 1700 bps  ceiling  $1.70   rescued  12/72   refused 60
+ 2500 bps  ceiling  $2.50   rescued  44/72   refused 28
+ 3400 bps  ceiling  $3.40   rescued  57/72   refused 15     <- today
+ 4000 bps  ceiling  $4.00   rescued  60/72   refused 12     <- OFF the DAO menu
+ 5000 bps  ceiling  $5.00   rescued  72/72   refused  0     <- DECIDED
+ 6800 bps  ceiling  $6.80   rescued  72/72   refused  0
+10000 bps  ceiling $10.00   rescued  72/72   refused  0
+```
+
+**4000 was rejected on the data, not on taste. It buys THREE members** (57 -> 60) and still
+refuses 12, because **12 of the 15 refused sit in a $0.28 band between $4.00 and $4.28** —
+a $4.00 ceiling lands just underneath the cluster it was meant to catch. The tail is a
+cliff, not a slope, and the sweep is the only thing that could have shown that; min/median/
+max cannot answer "how many clear at X" for an X between them.
+
+**AND 4000 IS SETTABLE BUT NOT VOTABLE.** `StabilityFund.setInsolvencyFloorBps` accepts any
+bps <= 10_000 (a free range, not an enum), so it CAN be deployed — but `V8Governance.sol:496`
+enumerates `[0, 1700, 2500, 3400, 5000, 6800, 10000]` and 4000 is not on it. Set it and the
+DAO could never vote back to it. That is CLAUDE.md's `375/400` trap in a new costume:
+on-chain state drifting from the source default with nothing keeping them equal. Deploying
+4000 honestly would mean moving the source default, the DAO menu and the `GF-G1`
+menu-discipline test together — three files, to buy three members.
+
+**THE JUSTIFICATION IS NOT THE MEDIAN ANY MORE, AND THAT MATTERS.** Session 2 argued from
+*"one completed journey earns min $3.40 / median $4.83 / max $6.34"*. The 2026-08-17 run
+reads **min $3.40 / median $3.40 / max $5.93** — the median IS the structural no-referral
+minimum now.
+
+⛔ **I FIRST CALLED THIS "ONE OF THE TWO RUNS IS WRONG". THAT WAS WRONG, AND THE TELL WAS
+IN THE NUMBERS I ALREADY HAD.** The MAXIMUM fell, $6.34 -> $5.93. A completed journey's
+earnings cannot decrease for a member who stays, and adding members cannot lower a maximum.
+**So the population TURNED OVER between the two readings — it did not merely grow.** The
+$6.34 member left the MatB queue (rescued or evicted) and new ones arrived. Both runs are
+correct; they measure different populations nine hours apart. The degraded reconciliations
+(chain pay 97.3% -> 92.6%, pool 77.7% -> 50.2%) are separately explained: pool settles per
+ROTATION and the chain has been organic and quiet since bigfill stopped, so more of it sits
+unsettled in the accumulator. Neither needed to be a fault.
+
+**AND THE TURNOVER SAYS SOMETHING WORTH KEEPING.** The queue is churning, and the member who
+left was the RICHEST one — which is what you would expect, because the richest ask the least
+and are the ones the fund can afford. **A queue that keeps losing its wealthiest members
+gets poorer, and its median ask rises over time.** That is one observation, not a trend, and
+it must not be quoted as one until a third reading exists. But it points the same way the
+decision went.
+
+**THE STANDING LESSON, because I nearly filed a false alarm as a finding:** two runs
+disagreeing is not evidence that an instrument is broken. Check first whether they measured
+the same thing. And it is the reason PARAM 59 is anchored to `CROSSING_RESERVE_BPS` and not
+to a median — **a median over a churning queue is a snapshot, not a property of the system.**
+
+The decision does not rest on it. **The operative number is the max ask, $4.28 — measured
+twice, on two population sizes, identical to the cent.** And the defensible anchor is
+structural rather than statistical:
+
+> **5000 bps IS `CROSSING_RESERVE_BPS`. The fund lends at most what the system itself
+> reserves for a crossing.**
+
+That does not drift between runs, it is already on the DAO menu, and it reads honestly in
+member comms — better than either "a median" or "one full journey's earnings", which was
+the 3400 framing and is now contradicted by its own data.
+
+**COST, BOUNDED:** the 15 extra members each ask between $3.40 and $4.28, so the entire
+marginal exposure of 3400 -> 5000 is **$51.00 to $64.20**, against a fund holding $451.66
+which item A simultaneously relieves of $96.70. Absolute worst case across all 72 is $308
+if every member asked the maximum; none do, the median ask is $1.90.
+
+**⛔ AND THE CORRECTION THAT SHOULD HAVE COME FIRST: PARAM 59 IS NOT REQUIRED BY ITEM B.**
+Session 2 wrote that 5000 is needed *"so all 63 members at re-entry are rescued and item B's
+promise holds."* **That is wrong.** Item B is about members evicted **MID-CYCLE**, and every
+one of those is a MatA parker — all 61 of whom item A frees outright, 100%, measured twice.
+The members the floor refuses are MatB parkers **at re-entry, having COMPLETED a full
+cycle**. Evicting them does not violate item B. **Item A alone satisfies item B.** PARAM 59
+is a purely economic generosity choice and was decided as one. Anyone re-opening it should
+argue it on cost and member lifetime, never on item B.
+
+**SECOND-ORDER EFFECT, ACCEPTED WITH EYES OPEN:** 23 of 72 re-entry members carry SF debt,
+and `_crossToPartner` sweeps all remaining withdrawable to repay it (`:882-897`). Under item
+A they arrive holding MORE, so an indebted member is clawed back HARDER, not spared. Raising
+the ceiling means more members borrow, so that group grows next cycle. This is scope defect
+3 and it is not fixed by this decision.
+
+### DECISION 2 — THE SF RESCUE LADDER: **KEEP PRESET 1. NOTHING MOVES.**
+
+Measured, and it closes the question session 3 opened: **the poorest live member at re-entry
+holds $5.72 — 5,720 bps against preset 1's 4,000 bottom rung.** Not one member of the live
+population falls off the ladder. Derived from the sweep: the largest ask is $4.28, so the
+smallest holding is $10.00 - $4.28.
+
+The ~3,400 bps case session 3 worried about belongs to a member **mid-journey-B**, and under
+item A those never park — there is nothing to pay until cycle-out — so **they never meet the
+ladder at all.** The cliff that showed up in `V8_48_KeeperScan.test.js` was the FLOOR, not
+the ladder (see the correction above), and it is bought back by decision 1.
+
+**Revisit only if item D (shallow seating) turns out to be real**: a member seated at seat 2
+collects $0.25 of a journey and could arrive at re-entry far below anything on chain today.
+That frequency is still unmeasured — it is test T5, and `scripts/diag_seating_depth.js`
+exists but has never been able to fire.
+
+### ✅ FINALISED IN SOURCE — NOT LEFT AS A DEPLOY STEP
+
+- **`StabilityFund.sol` `insolvencyFloorBps` default is now `5_000`.** Done in source, not
+  deferred to a setter call, and that choice is the point: **V8.50 is a fresh deployment, so
+  the source value IS the live value from block one.** Leaving `3_400` would have needed a
+  runbook step that can be forgotten, with the community's fund silently on the old ceiling
+  until someone ran it — which is `375/400` in CLAUDE.md, exactly. 5_000 is already on the
+  governance menu (`V8Governance.sol:496`), so the DAO retains full control.
+- **The change cost six test edits and every one of them made the suite better.** Two
+  "declared default" pins moved 3400n -> 5000n deliberately (they exist to catch accidental
+  drift; this drift was chosen). Four boundary tests — `GF-F1`, `IF-1`, `IF-3`, `IF-5` — had
+  the $3.40 ceiling HARD-CODED and silently became change detectors the moment the default
+  moved. They now DERIVE the ceiling from `insolvencyFloorBps`, so the rule under test is
+  "headroom == ceiling - debt" rather than a number. That is this suite's own item-42
+  lesson, applied to itself.
+- **VERIFIED, NOT ASSUMED: the change has ZERO net effect on the suite.** Full run before
+  and after, same sandbox: **574 passing / 21 failing, and the failing SET is identical
+  member-for-member.** Nothing else in the codebase keyed off 3400. (The same sandbox now
+  matches the owner's machine exactly, 574/21 — the earlier "drifts by two tests" note was
+  an artefact of running `KeeperScan` ALONE rather than in suite order. Worth knowing before
+  trusting a single-file run again.)
+- ⚠️ `contracts/StabilityFund.sol` is the FIRST contract file touched since `24c193c`. One
+  constant plus comments, so bytecode is unmoved. **Sizes run, all watched contracts fit:**
+
+```
+  TierRouter        23,910  (666 spare)      MatrixLogicLib   24,013  (563)
+  MatrixPairFactory 24,228  (348)            MatrixKeeper     21,229  (3,347)
+  StabilityFund     15,063  (9,513)
+```
+
+  **THE BUILD REPRODUCES ACROSS TWO MACHINES BYTE-FOR-BYTE** — the sandbox container and the
+  owner's Windows box produce identical deployed sizes on all five. That is a stronger
+  statement than "it fits" and it retires the earlier worry about sandbox drift entirely.
+
+- 🔎 **ONE UNEXPLAINED NUMBER, LOGGED RATHER THAN IGNORED: `MatrixKeeper` reads 21,229 here
+  and session 3 recorded 21,282 — 53 bytes SMALLER now.** Nothing in this session touched
+  `MatrixKeeper.sol` (mtime unchanged since session 3), and TierRouter, MatrixLogicLib and
+  MatrixPairFactory all match session 3's figures EXACTLY, which rules out a toolchain or
+  optimiser difference. The likely cause is mundane: session 3 ran `sizes.js` before its
+  final edit to that file and recorded the earlier figure. **Direction is benign — headroom
+  went UP, 3,294 -> 3,347 — so nothing is at risk.** Recorded because an unexplained number
+  is an incomplete handoff, and 21,229 is now the figure to check future runs against.
+- `sfRescueLadderPreset` stays **1**. No action.
+- **The crossing buffer is the third lever and it is already decided by V8.49:** live V8.48
+  hardcodes `CROSSING_BUFFER_BPS = 3600` and the model's Phase 1 warns about it every run —
+  every rescue seeds 36% of the fee into withdrawable as SF money without passing through
+  `_credit()`. V8.49 made it a governed param defaulting to **0**, and V8.50 carries that.
+  Confirm it ships at 0 in the predeploy checks; it is worth more to the live fund's
+  solvency than either decision above.
+
+## ~~THE TWO OWNER DECISIONS — STILL OPEN~~ — SUPERSEDED BY THE SECTION ABOVE, KEPT FOR ITS REASONING
+
+**1. PARAM 59 `insolvencyFloorBps` 3400 -> 5000.** Decided in session 2, still not applied.
+**A new measurement complicates it and must be read before it is applied.** In the
+`KeeperScan` world, 5000 does NOT close the cliff — those two members ask **$5.13** against
+a $5.00 ceiling and are still evicted. Parity only returns at **6800**.
+
+⚠️ **DO NOT CARRY THAT NUMBER TO THE LIVE CHAIN.** That world is `MATRIX_SIZE 7`, where one
+journey earns **$2.44 (24%)** against the structural **$3.40 (34%)** at 127. Those members
+are POORER than any real member and their ask is correspondingly larger. Live, `n=63`, the
+maximum ask is **$4.28** — which 5000 clears with room, which is exactly why session 2
+chose it. **The fixture measures the SHAPE of the cliff, not its live depth.** What it
+does add, honestly: 5000 is not a large margin, the live max is 86% of the way to that
+ceiling, and if journeys ever earn less than they do today the ceiling bites first.
+
+**2. The SF rescue ladder's bottom rung.** Session 3 framed this as the lever. **The
+reproduction says the floor is what bit, not the ladder** (see the correction above), so
+the honest form of decision 2 is now: *is there a population that falls off the 4,000 rung
+at all?* In the fixture, no — the poorest divergent member read 4,120. `model_item_a.js`
+against the live population is what answers it.
+
+**NEITHER IS SETTLED HERE, AND NEITHER SHOULD BE SETTLED FROM THE FIXTURES.** The command
+is still the one session 3 gave, and it needs the owner because neither sandbox can reach
+Base Sepolia:
+
+```powershell
+cd C:\CryptoNite-Smart-Contracts\CryptoNova
+Remove-Item Env:ADDRESSES_FILE -ErrorAction SilentlyContinue
+node scripts\model_item_a.js
+```
+
+## PROGRESS ON THE 21 — DOWN TO 3
+
+Nine more closed after the owner's `test_v850_task2.txt` run. Every one was a fixture; no
+contract logic changed (the only contract edit this session is the PARAM 59 default).
+
+| what | tests | the fix |
+|---|---|---|
+| `V8.10` parkedAt / evictParked | 4 | new `parkOneAtReentry()` helper — follow the park to MatB |
+| `V8.38` L1 / L2 / L4 | 3 | ensure-not-shove on `forceCross`; L1's precondition re-stated |
+| `stress_test_full` S2 x2 | 2 | `sfContribution` = CROSSING_PRICE, not the full fee |
+
+**`V8.10` x4 is the one worth reading**, because it is the template for most of what is
+left. The fourteen-registration sequence used to leave `s0` parked in MatA. Measured now on
+that exact fixture:
+
+```
+  matA  parked 0   occupancy 7   rotationCount 8     <- everyone crossed themselves
+  matB  parked 1   [w1]          rotationCount 1     <- the one real park
+```
+
+So the tests follow the park to MatB via a shared helper that ASSERTS the precondition
+loudly. They were never about which half the park happened in — they are about `parkedAt`
+and `evictParked` mechanics — and saying so in the helper is most of the work.
+
+**`stress_test_full` x2 is session 3's "bug sitting in plain sight", closed.** They passed
+`sfContribution = T1_FEE` to `forceCrossKeeper` to make `memberShare` 0 and isolate the
+seat guard. Under item A the whole crossing IS half a fee, so the full fee trips
+`sfContribution <= crossingCost` FIRST and the seat guard was never reached. Now
+`CROSSING_PRICE`, mirrored from `MatrixLogicLib`'s `internal` constant with its source
+named — the same way `V8_48_SplitGrace.test.js` mirrors it.
+
+### ⛔ SCOPE ITEM, OWNER-ACCEPTED 2026-08-17: ITEM A ACCELERATES TIER PROGRESSION
+
+**Two failing tests turned out to be one finding, and it is not a test problem.**
+
+At a MatA cycle-out under V8.48 the crossing consumed a full fee — $5 reserve + $5
+earnings — leaving a T1 member $2.66 against the $7 T2 fee, so the additive cycle-out's
+UPGRADE leg could not fire. Item A charges that crossing $5 and leaves **$7.66**. Measured
+on `V8Elevator`'s own fixture: W1 now reaches **tier 2 inside nine registrations**, seated
+in MatB and MatA2 at once.
+
+**Nothing new fires and nothing leaked.** The additive cycle-out is V8.43 behaviour that
+merely became AFFORDABLE; the T2 whale gate stays shut; and cycle-completed eligibility
+bypassing a closed gate is deliberate and pinned by V8.44 UX3/C2. The member did not skip
+MatB — they hold both seats.
+
+**THE CONSEQUENCE IS ECONOMIC AND IT IS LIVE.** `tierGateThreshold` and
+`whaleGateThreshold` were calibrated in a world where members could not afford to upgrade
+at their first cycle-out. **T2's whale gate will now trip sooner than V8.48 modelled**,
+because members reach the tier one cycle earlier. Owner decision 2026-08-17: **ACCEPT it —
+this is the "more completed rotations, more tiers, more CNOVA" benefit the scope promised,
+arriving faster than predicted — and log the threshold recalibration as an OPEN SCOPE
+ITEM.** No contract change; nothing blocks the deploy.
+
+**The two tests were asserting POVERTY, not the rule they were named for.**
+`tierFirstEntries(2) == 0` was only ever true because nobody could afford to move. The
+whale-gate test now asserts what it was always about — the gates are per-tier, and
+tripping T1's does not trip T2's. **DONE.** The 15-registration test is NOT done and is a
+walk-through item below, because its assertion pins a different rule.
+
+**STILL OPEN, for whoever picks this up:** re-measure when T2's gate trips under item A
+against the live population before the thresholds are trusted. `scripts/model_item_a.js`
+does not model tier progression today; it would need a new phase.
+
+### ⛔ NEW SCOPE FINDING: `EvictionReserveReleased` IS NOW ALL BUT UNREACHABLE
+
+Found while walking GF-V3, and it is worth more than the test fix it came from.
+
+Releasing a crossing reserve on eviction needs a member who is **(a) parked, (b) holding a
+reserve, and (c) NOT seated in the partner half** — because a holder seated in the partner
+is a GHOST, and the valve dequeues those without touching a balance. Every park site in
+`MatrixLogicLib` was walked against that three-part test:
+
+| park site | holds a reserve? | a ghost? | reachable under item A |
+|---|---|---|---|
+| `:947` funding shortfall | yes | no | **NO — item A deleted this park** |
+| `:876` duplicate seat | yes | **YES, by construction** | dequeue-only, releases nothing |
+| `:1461` `softParkIdle` | no — releases it itself at `:1447-1450` | no | n/a |
+| MatB, any cause | no — item A spent it | no | n/a |
+| `:906` mid-cascade deferral | yes | no | yes |
+| `:523` cascade-refill on entry | yes | no | yes |
+
+**Only the last two survive, and no test in this suite constructs either deliberately.**
+Measured, not reasoned: a duplicate holder parked in MatA was built and evicted — the
+contract emitted `GhostDequeued`, not `MemberEvicted`, and released nothing. Correct
+behaviour, and it closes off the one path that looked promising.
+
+**So on the live chain, eviction will essentially never release a reserve under item A:
+the members who still hold one when they park are ghosts, and ghosts are dequeued.** That
+is not a bug — it is item A removing the poverty park, which was the only common way to be
+parked while still holding a carve.
+
+**WHAT NEEDS DECIDING (not urgent, not deploy-blocking):** whether the release path is
+still worth carrying. It is live code with a live event and near-zero reachability. GF-V3
+now pins the behaviour that actually ships — a MatB eviction releasing nothing — and
+asserts `EvictionReserveReleased` count is **0**, which will fail loudly if anything ever
+starts carving a MatB reserve again. That makes it a regression guard for item A rather
+than coverage of the release.
+
+### ⛔ WALK-THROUGH ITEMS — 3 LEFT OF 6
+
+**DONE:** GF-V1 and GF-V3 (below), on the owner's go-ahead 2026-08-17.
+
+**GF-V1 — SOLVED BY MOVING TO A CONSTRUCTION THAT STILL WORKS.** It swung *MatA's* partner
+to the decoy and seated through `_enterMatrix` into a FULL MatA, which under item A
+cascades a real cycle-out into an unwired decoy. `V8_46_PairGuard` G2's construction was
+adopted instead — swing *MatB's* partner, seat both halves through the PairManager BEFORE
+anything is full, restore — so nothing cascades and the decoy never has to accept a
+crossing. Hoisted into shared `forceSeat()` / `seatBothHalves()` helpers in that file.
+
+**GF-V3 — RESOLVED AS A FINDING, see above.**
+
+**`CycleOutDebug` — REBUILT, NOT RETIRED, AND THE FIRST CALL ON IT WAS WRONG.** It was
+triaged as "retire it, the behaviour is covered by `V8_44_CycleOut` and
+`V8_48_RescueSurplus`". **That was judged from the filename and the error message, not
+from reading the file, and it was wrong.** Those two cover `selfRescue` and `coPayRescue`
+— the member paying for THEMSELVES. Checked properly: only two files call both
+`payForceCross` and `forceCrossKeeper`, this one and `stress_test_full`, and
+`stress_test_full` only exercises the REVERT paths. `V8_44_Keeper` covers force-rotation
+and epochs, not member rescues.
+
+**So this is the ONLY test in the suite where the Stability Fund successfully rescues
+anybody** — and this handoff's own open-items list already says *"no end-to-end test that
+a real rescue books shortfall and nothing more"*. Deleting it in the same release that
+REPRICES rescues would have thinned a known-thin area at exactly the wrong moment.
+
+It moved instead: members now park at the MatB cycle-out, where re-entry costs a full fee,
+and that is where the live keeper will find them. The rebuilt flow asserts MatA parks
+NOBODY, the member holds no reserve, the floor refuses a full-fee advance at the NEW $5.00
+ceiling (PARAM 59 = 5000), the floor is raised, SF funds, `forceCrossKeeper` completes it,
+and the member re-enters MatA **with a fresh $5.00 reserve carved**.
+
+Two assertions were tried and abandoned on the way, both recorded in the file: "the queue
+is empty" and "the count dropped by one". Both are wrong for the same reason — the rescue
+re-seats the member, which cascades, which cycles ANOTHER member into their own re-entry
+park. One out, one in, net zero. **That churn is item A's thesis showing up as a side
+effect, not a fault.** The test scans for the rescued member's ABSENCE instead, which says
+what the rescue promised and nothing about the fixture's shape.
+
+**STATUS: 592 passing / 7 pending / 3 failing** (was 60 failing at the start of session 4).
+Remaining: the 15-registration re-entry-priority test, `V8.35` G4, and `V8_44_Overflow`
+O1+O2 — items 1, 6 and 4 of the walk-through list.
+
+### ⛔ THE ORIGINAL SIX, FOR REFERENCE
+
+**Owner instruction 2026-08-17: walk through each before changing anything.** They were
+triaged as "the same fixture shape" and they are NOT. Every one asks what the test should
+now MEAN, and each answer is a small policy decision. **The mechanical tail is finished;
+this is the judgement tail.**
+
+1. **`V8Elevator` — 15-registration re-entry priority** (`expected 2 to equal 1`).
+   Pins the V8.44 rule *re-entry has priority over upgrade at a MatB cycle-out*. Item A
+   moves the upgrade EARLIER — to the MatA cycle-out — so W1 is already T2 before the
+   moment this test examines. The rule is still real; the fixture no longer isolates it.
+   Complication: proving "funds went to re-entry, not upgrade" needs a tier ABOVE the
+   member's current one to be available, and T3 is not deployed in this fixture.
+
+2. **`GF-V1` — the ghost can no longer be constructed.** It swings MatA's partner to a
+   decoy, seats W1 through the decoy, restores the pair. Under item A that entry cascades
+   a REAL cycle-out; the root can now afford to cross; it crosses into the unwired decoy
+   and dies on `F8V8: not authorized`. Under V8.48 the root was underfunded and simply
+   parked, so the cascade never reached the partner. **Recommendation: build the ghost at
+   a moment the matrix cannot cascade — do NOT wire the decoy, because a decoy that
+   accepts crossings has stopped being a decoy.**
+
+3. **`GF-V3` — eviction's reserve release may now be DEAD CODE, and that is the real
+   question.** It asserts a cycle-out park keeps its $5 reserve, then that `evictParked`
+   emits `EvictionReserveReleased` and folds it into withdrawable. Under item A a MatB
+   parker holds $0.00, so nothing is released and the event does not fire
+   (`releaseReserve` guards `r > 0`). **And a MatA parker — the only member who still
+   holds a reserve — no longer exists: MatA parks nobody.** So before re-fixturing, answer
+   the real question: **is `EvictionReserveReleased` reachable at all under item A?** If
+   not, that is a scope finding, not a test edit.
+
+4. **`V8_44_Overflow` O1+O2 — needs a member who no longer exists.** Requires a parked
+   MatA member to `selfRescue` into a full MatB. The invariant it protects (own members
+   return to their OWN pair, never a later one) is worth keeping, but re-pointing it at a
+   MatB parker breaks one assertion outright: *"own MatB must rotate from the rescue
+   entry"* stops being true, because a MatB parker re-enters MatA and does not rotate
+   MatB. Something must be re-stated, not re-pointed.
+
+5. **`CycleOutDebug` — its entire premise is what item A deletes.** The test is *"W1 parks
+   on cycle-out (insufficient funds), keeper rescues to MatB"*. Item A means W1 crosses
+   itself; there is no park and no rescue. **Recommendation: this one is a genuine
+   RETIRE-or-repoint decision, and retiring it is defensible** — it is a diagnostic
+   harness, its behaviour is covered by `V8_44_CycleOut` and `V8_48_RescueSurplus`, and
+   keeping it means inventing a scenario item A worked to prevent.
+
+6. **`V8.35` G4 — a member count moved** (`expected 9 to equal 8`). FIFO placement after a
+   factory expansion. Item A changed who is seated where at the moment the factory fires,
+   so the count shifted. **Needs reading before touching: this is the only one of the six
+   where the FACTORY, not the parked queue, may be what moved.**
+
+### THE 6 THAT REMAIN
+
+- **9 of one shape — a fixture that needs a parked member item A no longer produces:**
+  `V8_44_CycleOut` T1-T4, `V8_44_Overflow` O1+O2, `V8_47_UpgradeGate` G3, `CycleOutDebug`,
+  `GhostFloor` GF-V3, `V8.35` G4. Four of them announce it outright with
+  `expected 0 to equal 5000000` — a fixture asking for a $5 reserve item A no longer
+  carves. `V8_48_RescueSurplus.test.js` and the `V8.10` helper are the two worked examples.
+- **3 odd ones, each needing to be READ rather than pattern-matched:** `V8Elevator`'s
+  15-registration re-entry count (`expected 2 to equal 1`), the `V8.21` whale gate
+  (`expected 1 to equal 0` — a first-entry counter, possibly a genuine behaviour question
+  rather than a fixture), and `GhostFloor` GF-V1 (`F8V8: not authorized` inside `seatVia`,
+  a different failure entirely). **Do not assume these are the same job as the nine.**
+
+
+## STATE OF THE TREE
+
+**No chain was touched. No transaction sent, nothing deployed, no parameter set, the VPS
+keeper untouched, live V8.48 exactly as it was.** `.env` line 69 is still
+`deployed_addresses_v8_48.json`. Every command run was a read, a local build, or a test —
+and every test ran in a sandbox container, never against a chain.
+
+**`contracts/` is UNCHANGED from `24c193c`.** Seven files in `test/` are modified, plus `scripts/model_item_a.js` (the PARAM 59 sweep), and
+nothing is staged. Git is the owner's to run:
+
+```powershell
+cd C:\CryptoNite-Smart-Contracts\CryptoNova
+git status
+git add test/V8_48_SplitGrace.test.js test/V8_48_GhostFloor.test.js test/V8_49_InsolvencyFloor.test.js test/V8_49_EvictionClock.test.js test/V8_48_RescueSurplus.test.js test/V8_48_KeeperScan.test.js test/V8Elevator.test.js scripts/model_item_a.js V8_50_HANDOFF.md
+git commit -m "V8.50: re-fixture the 24 tests that encoded pre-item-A economics; scope the KeeperScan equivalence premise and pin its one divergence"
+git push origin v8.1
+```
+
+**Before the run whose numbers you intend to trust** — session 3's rule, unchanged:
+
+```powershell
+cd C:\CryptoNite-Smart-Contracts\CryptoNova
+npx hardhat compile --force
+npx hardhat test 2>&1 | Tee-Object -FilePath test_v850_task2.txt
+```
+
+…and remember that capture will be **UTF-16**. Decode before searching it.
+
+## NEXT, IN ORDER
+
+1. **The owner runs the suite** and the diff is taken mechanically against
+   `test_v850_task1b.txt` — failure titles as sets, both files decoded first. The
+   prediction above is 21 green and 1 new.
+2. ~~`model_item_a.js`, then the two decisions~~ — **DONE, both settled above.**
+3. **The remaining 12**, listed above. Nine are one shape with two worked examples; three
+   need reading rather than pattern-matching.
+4. **Defects 2 and 4** from the scope (`DIRECT_EARN_BPS = 500`, `totalEarnedOf`).
+
+## METHOD NOTE FROM THIS SESSION
+
+**A sandbox reproduction of the repo paid for itself many times over, and its limits are
+the first thing to state about it.** Building the project in a clean container turned a
+four-minute owner round-trip into a seven-second loop, and three of this session's results
+could not have been reached without iteration: the RescueSurplus queue measurement, the
+$0.95 commission that was silently corrupting an exact assertion, and the PARAM 59 sweep
+that overturned session 3's reading of the cliff. It also **drifts from the owner's
+machine by two tests**, which is exactly why every number above says where it came from.
+The repo's own standing rule applied to itself: give every instrument something to check
+itself against, and say which instrument produced which number.
 
 ---
 
@@ -752,6 +1755,293 @@ Use `diag_loan_history.js` (event-sourced, self-testing) for any claim about his
 - **A write that reads back wrong is usually a STALE READ.** `KEEPER_VPS_CONFIG.md`
   recorded this for `set_entry_thresholds.js`; it recurred on `set_parked_grace.js` this
   run. **Re-read after ~20s. NEVER re-run a state-changing command on that warning alone.**
+
+---
+
+# 6c. DEFECT 6 — PARKED WORK IS STARVED IN DISCOVERY (found session 5, OPEN)
+
+**`MatrixKeeperLib.discover` fills the batch in a fixed order and `_scanParked` runs
+FIFTH**, after:
+
+1. `WORK_VELOCITY` (at most 1)
+2. `WORK_CHAIN_LINK` (one per pending link)
+3. the frozen-MatB sweep -> `WORK_FORCE_ROTATE`
+4. `_scanMatrix` -> `WORK_GHOST` / `WORK_RECLAIM`, **walked over every position of every
+   matrix of every pair of every tier**
+5. `_scanParked` -> `WORK_PARKED_RESCUE` / `WORK_EVICT_PARKED`   <- here
+
+So **parked work is only reached when the WHOLE SYSTEM has fewer than
+`maxItemsPerUpkeep` ghost/reclaim items pending.** `WORK_RECLAIM` has no rate limit;
+`WORK_GHOST` at least has `lastGhostTime[matrix]`.
+
+**This was observed live and then worked around, not diagnosed.** `scripts/set_max_items.js`
+exists for exactly this: *"Currently: 14 Reclaim + 1 Velocity = 15, filling the cap and
+leaving zero slots for WORK_PARKED_RESCUE (type 4)."* The operator's fix was to **raise**
+the cap. `contracts/test/MatrixKeeperPrev.sol` orders it the same way, so this predates
+the V8.48 item-12a extraction — it is not something V8.50 introduced.
+
+**Why this is worse than it looks.** Starving reclaim leaves a dead seat sitting; nothing
+expires. Starving a parked member runs their **eviction clock** — at `evictionGracePeriod`
+(7 days) a member the fund would have RESCUED is EVICTED instead. Delay does not defer
+that work, it **changes the answer**. Two other queues share the problem in milder form:
+`WORK_ADVANCE_EPOCH` is dead last and has a **calendar** deadline (the 25th), and
+`WORK_DISTRIBUTE_CW` sits beside it.
+
+**It blocks defect 5.** Lowering `maxItemsPerUpkeep` 15 -> 5 on gas grounds tightens the
+starvation condition from "fewer than 15 pending" to "fewer than 5 pending". **The cap and
+the order land together or neither lands.** The cap is therefore HELD AT 15 with the full
+gas case recorded in place at `MatrixKeeper.sol:maxItemsPerUpkeep`.
+
+## The fix, and the one thing it costs
+
+Reorder discovery by **deadline**, not by history:
+
+    velocity -> chain links -> PARKED -> CW distribute/epoch -> force-rotate
+             -> velocity gate -> ghost/reclaim
+
+Ghost and reclaim go LAST because they are the only work in the system with no deadline
+attached. Nothing is dropped; the tail of a full batch is deferred to the next upkeep,
+which for housekeeping is free.
+
+**The cost is `V8_48_KeeperScan.test.js`.** It proves the refactored keeper and the frozen
+`MatrixKeeperPrev` return **byte-identical** `performData`, and a reorder makes that false
+by construction. Its own header anticipates pins for deliberate behaviour changes — but a
+reorder cannot be pinned back to the old value, because the order is not a parameter.
+
+**It does not have to be retired.** When the batch is NOT truncated both keepers emit the
+same SET of work items, only in a different order, so the harness survives as
+**set-identity** with no loss: all four of its recorded mutation kills (`idleSlotTimeout`
+<-> `extendedIdleTimeout`, emptied chain links, hardcoded `maxItems`, wrong community
+wallet) change WHICH items appear, never merely their order. Only the one truncation test
+genuinely diverges, and that test should be re-premised to assert the NEW priority
+deliberately.
+
+**Sizes are not a constraint here** (`MatrixKeeper` 3,347 headroom, `MatrixKeeperLib`
+15,436, `V8Governance` 11,828). The tight contracts — `MatrixPairFactory` 132 and
+`MatrixLogicLib` 302 — are not touched by this.
+
+## MEASURED 2026-08-17 — AND IT IS NOT FIRING TODAY
+
+`diag_keeper_discovery.js` against live V8.48, block time 13:49:18Z:
+
+    maxItemsPerUpkeep 15   pendingChainLinks 0   configuredTierCount 10
+    T1: pairs=2 parked=105 pastGrace=0
+         p0A occ=127/127 rot=460 parked=36
+         p0B occ=127/127 rot=300 parked=69
+    T2..T10: parked=0
+    checkUpkeep -> upkeepNeeded true, items 1 / 15:  VELOCITY x1
+
+**Correct the record: ZERO reclaim items exist right now.** The batch is 1 of 15. The
+"14 Reclaim + 1 Velocity" signature quoted from `set_max_items.js` is V8.30-era history,
+not the state of this chain — an earlier draft of this section leaned on it as if it were
+current, and it is not. Defect 6 is a **latent ordering hazard**, not an active outage.
+That lowers its urgency and it does NOT lower its correctness: `WORK_RECLAIM` is unbounded
+and scanned ahead of parked work, so the hazard is one idle cohort away at any time, and
+lowering the cap to 5 brings that cohort five times closer.
+
+## THE THING THAT DOES NOT ADD UP: 105 parked, pastGrace 0
+
+`parkedGracePeriod` is 24h. Every one of 105 parked members would have to have parked
+within the last day. Possible on a T1 pair at rot=460/300 — but **it is also exactly what
+a swallowed read prints**. `diag_keeper_discovery.js` wraps both per-member reads:
+
+    const mem = await mx.getParkedMember(q).catch(() => ethers.ZeroAddress);
+    const ts  = Number(await mx.parkedAt(mem).catch(() => 0n));
+
+A member whose read reverts is still counted by `getParkedCount` and contributes 0 to the
+age census. **This deployment is already on record returning `ARRAY_RANGE_ERROR` from
+`getParkedMember` during active rescues** (section 8). So `parked=105 / pastGrace=0` has
+two readings and the output cannot tell them apart — the same trap as the UTF-16
+`Tee-Object` captures.
+
+`scripts/diag_parked_ages.js` (new, read-only) settles it: it catches nothing silently,
+names every failed read, prints the age histogram and the ten oldest with the numbers that
+decide their verdict, and its closing verdict refuses to call the queue healthy unless
+`aged == getParkedCount`. It also flags `parkedAt == 0 while queued` separately, which is
+a state defect rather than a read failure — `_checkParked` reads that same slot, so the
+keeper could not age such a member either.
+
+### IT RAN — 2026-08-17 14:39Z, AND THE QUEUE IS CLEAN
+
+    T1 p0A  queued=37  aged=37  readFailed=0  parkedAtZero=0  median 0.30d  oldest 0.85d
+    T1 p0B  queued=69  aged=69  readFailed=0  parkedAtZero=0  median 0.60d  oldest 0.87d
+    <1h 4   1-6h 14   6-24h 88   1-3d 0   3-7d 0   7-14d 0   14-30d 0   >30d 0
+    getParkedCount 106 | aged 106 | read failures 0 | parkedAt==0 queued 0
+    0 of 106 past the 24h grace.
+
+**`pastGrace=0` was REAL.** All 106 aged with zero swallowed reads, so the earlier figure
+was the queue being young, not the census failing. **Defect 6 is confirmed LATENT** — a
+hazard, not an outage — and the reorder is cheap insurance rather than a fire drill.
+
+Two things worth keeping from the reading:
+
+- **The population is homogeneous, and it is a bigfill artefact, not an organic one.**
+  Every one of the ten oldest holds exactly `$8.40` against a `$10.00` fee
+  (`w=$3.40 res=$5.00`), `withdrawnRatio=0`. 88 of 106 sit in the 6-24h bucket, i.e. they
+  parked before the chain went organic. Do not quote "35% of the parked queue" as an
+  organic statistic.
+- **`selfFundedGracePeriod` is 0.1h (6 min) live, `parkedGracePeriod` 24h.** These members
+  hold $8.40 against a $10.00 crossing, so they are $1.60 short and wait the full 24h.
+  Under item A a MatA parker's price is $5.00, their $8.40 covers it, `sfShare` is 0 and
+  they take the **6-minute** window instead — 37 of these 106 (the p0A queue), which is
+  the same effect `_triageParked` already records as "35 of 35 on the live chain, 76 of
+  139 parked members across all tiers". Item A does nothing for the 69 MatB parkers; a
+  MatB re-entry is still a full fee.
+- **The whole 6-24h bucket crosses the grace within hours of each other.** 88 members
+  become discoverable at nearly the same instant, against `maxItemsPerUpkeep` 15. That is
+  the contention defect 6 is about, arriving on a timer.
+
+### DONE — the reorder shipped
+
+`MatrixKeeperLib.discover` now drains **bounded** sources first (velocity, chain links,
+CW distribute+epoch, force-rotate, velocity gate), then runs the two **unbounded** scans
+by deadline: **parked, then ghost/reclaim**. The rule is stated in full at the top of the
+reordered block. No new storage, no new parameter, no bytes — the same code in a
+different order.
+
+`V8_48_KeeperScan.test.js` moved from byte-identity to **set-identity** (`canon` /
+`expectSameSet`), its PARAM-59 sweep now matches flips **by member instead of by slot**
+(index matching would have reported every item as flipped and started passing on noise),
+and its truncation case was re-premised: the two keepers must still truncate to the same
+SIZE, but which work survives is asserted against the NEW priority, not against Prev. A
+new case, `DEFECT 6: parked work outranks ghost/reclaim`, squeezes the cap to 1 and
+states the property on its own so it cannot quietly stop being tested.
+
+**Still open — defect 5 (the cap).** Held at 15. The 2.6M-gas-per-rescued-item figure it
+rests on predates items A and E1, and the reading above says item A turns a third of this
+queue into `sfShare == 0` rescues with no SF round trip at all. **Measure post-item-A
+rescue gas in a fixture before setting the cap** — that is a local test, no chain needed,
+and it replaces a pessimistic estimate with a real number.
+
+## DEFECT 7 — THE KeeperScan PINS NEVER COLLAPSED ANYTHING (found session 5, FIXED)
+
+Surfaced by the V8.50 run, but it has been wrong since V8.48. `deployBoth()` pinned the
+refactored keeper's `selfFundedGracePeriod` and `evictionGracePeriod` to **0** so the
+frozen `MatrixKeeperPrev` — which has neither concept — stayed comparable. But
+`_checkParked` gates on
+
+    age < (sfShare == 0 ? selfFundedGracePeriod : parkedGracePeriod)
+    age < (isGhost      ? parkedGracePeriod     : evictionGracePeriod)
+
+and Prev gates BOTH on `parkedGracePeriod`, **which the pins left at its 6h default.**
+Setting the new keeper's two windows to 0 does not collapse the split — it opens it as
+wide as it goes: V8.50 discovers a self-funded rescue and fires an eviction IMMEDIATELY
+where Prev waits six hours. The missing line was `setParkedGracePeriod(0)` on BOTH keepers.
+
+**Why the setters force zero.** `setSelfFundedGracePeriod` enumerates 0/60/300/900/1800/
+3600; `setEvictionGracePeriod` enumerates 0/1d/2d/3d/4d/5d/7d. **They intersect at 0 and
+nowhere else.** "Set each equal to `parkedGracePeriod`" — the collapse the file header
+describes and `EC-4` asserts — is only REACHABLE with all three at zero. Any other value
+is unsettable, so any test that claims to pin them at a nonzero window is not pinning
+anything.
+
+**The grace-period walk was doing exactly that.** It set
+`setSelfFundedGracePeriod(g === 0 ? 0 : (g >= 3600 ? 3600 : 300))` under a comment
+claiming the windows were "pinned together" — a one-hour self-funded window against a
+thirty-day loan window — and never restored the value, so every later test in the shared
+world inherited an un-collapsed split. Real, and worth fixing on its own.
+
+**⚠ CORRECTION, AND IT MATTERS MORE THAN THE FINDING.** The first write-up of this section
+blamed that expression for six of the eight failures. **That attribution was wrong.** The
+next run — with the pins corrected — failed six times again, and the output made the real
+cause unmissable: **both keepers were returning exactly 15 items, the cap**, one filled
+with `PARKED_RESCUE` and the other with `RECLAIM`.
+
+    new: VELOCITY, FORCE_ROTATE, PARKED_RESCUE x12, RECLAIM      (15 = cap)
+    old: VELOCITY, FORCE_ROTATE, RECLAIM x13                     (15 = cap)
+
+**The batch was TRUNCATING in the shared world, and neither keeper was wrong.** Defect 6
+reordered discovery precisely so that a full batch keeps parked work and sheds
+housekeeping; Prev is frozen doing the opposite. Once the cap bites, no content comparison
+against Prev can mean anything — the difference IS the fix.
+
+Twice in a row a mechanism was reasoned out and asserted before it was measured, and both
+times the measurement said something else. The lesson is the one this project already
+knows: an explanation that fits the numbers is not the same as the explanation, and
+"3 items vs 2, batch not full" should have prompted a check of what the cap actually was
+rather than a theory about grace windows.
+
+### The fix: a FOURTH pin — the batch must not truncate
+
+`deployBoth()` now raises `maxItemsPerUpkeep` from the 15 default to the enumerated
+ceiling of **40**, so the shared world discovers everything and the two keepers emit the
+same SET in a different sequence — which is what `expectSameSet` is for. This file asks
+one question, "did the 12a extraction preserve which member gets which verdict", and batch
+sizing was never that question. The two sizing cases set the cap deliberately and restore
+it to 40 rather than 15.
+
+⚠ The pin holds only while the fixture stays under 40 discoverable items. Measured union
+today is roughly 30 (2 bounded + ~14 parked + ~14 reclaim, `MATRIX_SIZE` 7 across two
+matrices). **If both keepers ever report exactly 40, suspect this pin before anything
+else.**
+
+Rewritten honestly: full equivalence at `g == 0` where it is reachable, and elsewhere the
+real safety property — every item Prev queues, V8.50 must queue with the SAME verdict (a
+shorter window can only bring work forward, never withhold it), and any extra item must be
+one of the two PARKED verdicts, never a ghost, reclaim or chain link.
+
+**It passed for two versions because the fixture never reached the state.** That is the
+blind spot the comment directly above those pins warns about, reintroduced by the pins
+written to prevent it. Worth stating plainly: the harness was green on luck, not on proof.
+
+### The other two failures were the reorder, working
+
+The idle sweep and the mutation probe park a dozen members against a cap of 15. With
+parked work now ahead of ghost/reclaim it fills the batch and squeezes the sweep out —
+measured new = 12x `PARKED_RESCUE` + 1x `GHOST`, old = 13x `GHOST`, both exactly 15. Both
+keepers still truncate identically; what breaks is that the GHOST/RECLAIM classification
+those tests exist to check becomes unobservable, which would have turned a MUTATION PROBE
+into a test passing because it sees nothing. Both now raise the cap to 40. Truncation
+priority is covered separately and deliberately.
+
+### Still unexplained, and recorded rather than guessed
+
+Why defect 7 surfaced on THIS run and not on the earlier three-file run. The reorder does
+not change what is discovered in an untruncated batch, so the working assumption is that
+the shared fixture's parked population differs between running KeeperScan alone and
+running the full suite. **Not proven.** The fix stands on its own merits either way.
+
+### `setMaxItemsPerUpkeep` is enumerated — 5/10/15/20/30/40
+
+There is no cap of 1. The first draft of the new `DEFECT 6` test asked for one and
+reverted with `MK: invalid max items`. Five is the floor, and five slots are not all
+contested (velocity, chain links, CW, force-rotate and the velocity gate drain first), so
+the property is stated as an implication instead: **if any housekeeping item is in a
+capped batch, every parked decision must already be in it.** That is what starvation
+violates, and it survives the enumeration changing.
+
+---
+
+## SUITE GREEN — 596 passing / 7 pending / 0 failing (2026-08-17)
+
+After `npx hardhat compile --force`. That is the first CONFIRMED green run of V8.50; the
+earlier "595/0" in this document was a projection that was never executed, and it should
+not have been written as a result.
+
+The road there, because the failures were more instructive than the pass:
+
+| run | failing | cause |
+|---|---|---|
+| 1 | 8 | 6 x un-collapsed split grace (defect 7) + 2 x idle-sweep truncation |
+| 2 | 1 | the new DEFECT 6 test asked for `maxItemsPerUpkeep(1)`; the setter enumerates 5/10/15/20/30/40 |
+| 3 | 6 | **the real cause** — the shared batch truncating at 15, misattributed in run 1 |
+| 4 | 0 | fourth pin: `maxItemsPerUpkeep` 40 in `deployBoth()`, no truncation |
+
+**Five tracked files are CRLF-only churn and must stay OUT of any commit** — verified with
+`git diff --ignore-all-space --ignore-blank-lines`, which comes back empty for each:
+`scripts/deployed_addresses_v8_30/31/40.json`, `contracts/test/CryptoNovaCommunityWallet.sol`,
+`archive/windows_keeper/corescue.bat`. The address files matter especially: a 148-line
+diff on a `deployed_addresses_*.json` looks exactly like a repoint, and here it is nothing
+at all. Check them the same way before every commit rather than trusting the line count.
+
+---
+
+**Owner decision, still open:** whether parked work may take the WHOLE batch when the
+queue is long, or whether housekeeping keeps a reserved slot or two. **The reorder as
+shipped lets parked take the whole batch** — defensible because parked work drains (a
+rescue or an eviction removes the item) while housekeeping has no deadline to miss, but
+it is a policy choice and it is reversible with a reserved-slots param if the owner wants
+one.
 
 ---
 

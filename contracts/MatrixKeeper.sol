@@ -78,16 +78,33 @@ contract MatrixKeeper is Ownable {
     ///         live value from the owning contract instead of mirroring it.
     uint256 public constant RESCUE_REPAY_BPS = 5_000;
 
-    /// @notice V8.31: 50/5/45 model constants (must mirror MatrixLogicLib).
-    ///         50% of each entry fee is pre-funded as a crossing reserve in the member struct.
-    ///          5% is credited as instant direct earnings.
-    ///         45% (= payBase) is distributed via the BPS array.
+    /// @notice The crossing reserve carved on entry — mirrors MatrixLogicLib's
+    ///         CROSSING_RESERVE_BPS (:190) and, since V8.50 item A, prices the crossing
+    ///         itself in _doParkedRescue. It is LOAD-BEARING here, not decorative.
+    ///
+    ///         ⛔ V8.50 DEFECT 2: `DIRECT_EARN_BPS = 500` USED TO SIT ON THIS LINE AND IT
+    ///         WAS WRONG. V8.32 halved the real value to 250 (MatrixLogicLib:191) and
+    ///         made payBase the full entry fee; the 50/5/45 split this docstring
+    ///         described has not existed since. Nothing in the contract referenced it, so
+    ///         it never broke a test — but it was PUBLIC, so any script reading it off
+    ///         the keeper got 5% instead of 2.5% with no error to notice.
+    ///
+    ///         Deleted rather than corrected. This is the RESCUE_REPAY_BPS lesson
+    ///         directly above, applied a second time: a mirrored constant with a
+    ///         "must match X" comment becomes a lie the moment X moves. The three
+    ///         scripts that mention direct earn (model_item_a, model_reserve_bps,
+    ///         predeploy_check) all carry their own 250 with a source citation, and
+    ///         model_item_a says outright that it does NOT read this one. They were
+    ///         already routing around it.
     uint256 public constant CROSSING_RESERVE_BPS = 5_000;  // 50%
-    uint256 public constant DIRECT_EARN_BPS      =   500;  // 5%
 
     /// @notice Effective pool income as a BPS fraction of the full entry fee.
-    ///         pool income per entry = payBase × splitPoolBps / 10_000
-    ///                               = (entryFee × 4500/10_000) × (4000/10_000)
+    ///         V8.50 defect 2, same sweep: the derivation here was written against the
+    ///         retired 4500 payBase. Since V8.32 payBase IS the entry fee and the pool
+    ///         takes splitPoolBps of it directly — 1800bps, which is what the constant
+    ///         has always said. The VALUE was right; only the arithmetic explaining it
+    ///         was stale, which is the more dangerous shape of wrong.
+    ///         pool income per entry = entryFee × splitPoolBps / 10_000
     ///                               = entryFee × 1800 / 10_000
     uint256 public constant POOL_BPS = 1_800;
 
@@ -152,6 +169,48 @@ contract MatrixKeeper is Ownable {
     uint256 public recoveryThreshold   = 3;
     uint256 public idleSlotTimeout     = 259_200;   // V8.33: 3 days (was 43200 = 12h)
     uint256 public extendedIdleTimeout = 604_800;   // V8.33: 7 days (was 86400 = 24h)
+    /// @notice V8.50 defect 5 — HELD AT 15. The lowering to 5 is written, measured and
+    ///         justified, but it MUST NOT SHIP ALONE. It is half of a pair; the other
+    ///         half is defect 6 (parked-work starvation, MatrixKeeperLib.discover).
+    ///
+    ///         THE GAS CASE FOR LOWERING IT. The V8.49 private chain measured ~2.6M gas
+    ///         for a RESCUED parked item (~600k before the rescue path grew the SF round
+    ///         trip and the cross-matrix settle). Against a ~17.8M practical
+    ///         performUpkeep ceiling:
+    ///             15 items -> ~39M  REVERTS
+    ///             10 items -> ~26M  REVERTS
+    ///              5 items -> ~13M  fits, with room
+    ///         The 2.6M predates items A and E1 and is pessimistic — item A pays an A->B
+    ///         crossing out of the member's own reserve and never reaches the SF — but
+    ///         the two failure modes are not symmetric. A truncated batch defers its tail
+    ///         to the next upkeep and is invisible in the results; an out-of-gas batch
+    ///         reverts WHOLE and looks, in the results, exactly like a floor refusal or
+    ///         an empty queue. One costs a block of latency, the other costs the
+    ///         diagnosis. That argues for 5.
+    ///
+    ///         WHY IT IS HELD ANYWAY. discover() fills the batch in a fixed order and
+    ///         _scanParked runs FIFTH — after velocity, chain links, the frozen-MatB
+    ///         sweep, and _scanMatrix's ghost/reclaim walk over every position of every
+    ///         matrix in every tier. So parked work is only ever reached when the WHOLE
+    ///         SYSTEM has fewer than maxItemsPerUpkeep ghost/reclaim items pending.
+    ///         RECLAIM has no rate limit (GHOST at least has lastGhostTime).
+    ///
+    ///         This is not theoretical and it is not new — scripts/set_max_items.js
+    ///         exists because it was observed live: "14 Reclaim + 1 Velocity = 15,
+    ///         filling the cap and leaving zero slots for WORK_PARKED_RESCUE". The
+    ///         operator's workaround was to RAISE the cap, which is the exact opposite
+    ///         of what the gas ceiling now permits. MatrixKeeperPrev orders it the same
+    ///         way, so the behaviour predates the 12a extraction.
+    ///
+    ///         Starving parked work is worse than starving reclaim, and not by a little.
+    ///         A starved reclaim leaves a dead seat sitting; nothing expires. A starved
+    ///         parked member is on the eviction clock — evictionGracePeriod converts a
+    ///         RESCUE into an EVICTION at 7 days. Delay there does not defer the work,
+    ///         it changes the answer.
+    ///
+    ///         Lowering the cap to 5 without reordering discovery would tighten that
+    ///         from "fewer than 15 pending" to "fewer than 5 pending". Cap and order
+    ///         land together or neither lands. DAO param 60; menu 5 / 10 / 15 / 20.
     uint256 public maxItemsPerUpkeep   = 15;
     uint256 public parkedGracePeriod   = 6 hours;
 

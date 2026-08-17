@@ -1,13 +1,34 @@
 "use strict";
 /**
  * CycleOutDebug.test.js
- * MATRIX_SIZE=4 local test: seed W1 at pos-1, fill to 4, trigger cycle-out on member #5.
+ * MATRIX_SIZE=4 local test of the FULL PRODUCTION KEEPER RESCUE, end to end:
+ * a member parks underfunded, the Stability Fund refuses on the insolvency floor,
+ * the floor is raised, SF funds the crossing and forceCrossKeeper completes it.
  *
- * With MSIZE=4 and V8.7 BPS, W1 earns ~$4.10 from L1+chain pay on 3 fillers — not enough
- * to self-fund the $10 crossing fee. W1 gets parked. The keeper+SF rescue path is then
- * exercised: SF funds the cross, matA.forceCrossKeeper() completes the crossing.
+ * ⛔ REBUILT FOR V8.50 ITEM A — AND KEPT RATHER THAN RETIRED, DELIBERATELY.
  *
- * This tests the full production parked-wallet rescue flow.
+ *   THE OLD PREMISE IS GONE. This used to park W1 at the MatA->MatB crossing: W1 earned
+ *   ~$2.53 against a $5 crossing need and could not fund it. Item A pays that crossing
+ *   from the member's own $5 reserve, so it ALWAYS succeeds now and W1 never parks there.
+ *   Measured on this fixture: MatA parks nobody.
+ *
+ *   RETIRING THIS FILE WAS CONSIDERED AND REJECTED, and the reason is worth writing down
+ *   because the name invites it. Despite "Debug", this is the ONLY test in the suite that
+ *   walks a SUCCESSFUL Stability-Fund rescue end to end. Only two files call both
+ *   payForceCross and forceCrossKeeper — this one and stress_test_full — and
+ *   stress_test_full only exercises the REVERT paths (wrong caller, already-in-MatB, debt
+ *   guards). V8_44_Keeper covers force-rotation and epochs, not member rescues.
+ *   V8_44_CycleOut and V8_48_RescueSurplus cover selfRescue and coPayRescue — the member
+ *   paying for THEMSELVES. Nothing else proves the fund can rescue anybody.
+ *
+ *   V8_50_HANDOFF.md's own open-items list already says "no end-to-end test that a real
+ *   rescue books shortfall and nothing more". Deleting this in the same release that
+ *   REPRICES rescues would have thinned a known-thin area at exactly the wrong moment.
+ *
+ *   SO IT MOVED INSTEAD OF DYING. The keeper rescue did not disappear under item A, it
+ *   relocated: members now park at the MatB CYCLE-OUT, where re-entry costs a full fee,
+ *   and that is where the live keeper will find them. The flow below is the one that
+ *   ships.
  */
 const { ethers } = require("hardhat");
 const { expect } = require("chai");
@@ -82,6 +103,8 @@ async function deploy(size = 4) {
 
   // Set owner as matrixKeeper on matA AND sf (allows keeper rescue calls in tests)
   await matA.setMatrixKeeper(owner.address);
+  // V8.50 item A: the rescue happens on the MatB side now, so MatB needs the keeper too.
+  await matB.setMatrixKeeper(owner.address);
   await sf.setMatrixKeeper(owner.address);
 
   // PairManager: add pair + set tierRouter
@@ -112,112 +135,113 @@ async function deploy(size = 4) {
 }
 
 describe("CycleOutDebug", function () {
-  this.timeout(120_000);
+  this.timeout(300_000);
 
-  it("fills MatA (size=4): W1 parks on cycle-out (insufficient funds), keeper rescues to MatB", async function () {
+  it("MatB cycle-out: W1 parks underfunded, the floor refuses, the keeper+SF rescue completes it", async function () {
     const { usdc, treasury, sf, matA, matB, tr, pm, owner, W1, sigs } = await deploy(4);
     const pmAddr   = await pm.getAddress();
     const matAAddr = await matA.getAddress();
     const matBAddr = await matB.getAddress();
 
-    // Confirm treasury auth
     expect(await treasury.authorizedCallers(matAAddr), "MatA not authed in treasury").to.be.true;
     expect(await treasury.authorizedCallers(matBAddr), "MatB not authed in treasury").to.be.true;
-    console.log("  treasury auth: OK");
 
-    // Register W1 at position 1
-    await usdc.mint(W1.address, FEE);
-    await usdc.connect(W1).approve(pmAddr, FEE);
-    await tr.connect(W1).register(ethers.ZeroAddress, { gasLimit: 3_000_000 });
+    const reg = async (signer, referrer) => {
+      await usdc.mint(signer.address, FEE);
+      await usdc.connect(signer).approve(pmAddr, FEE);
+      return tr.connect(signer).register(referrer, { gasLimit: 16_000_000 });
+    };
+
+    // ── Phase 1: W1 into MatA, then let item A carry them across ──────────────
+    await reg(W1, ethers.ZeroAddress);
     expect(await matA.matrixPos(W1.address)).to.equal(1n);
     console.log("  W1 at position 1: OK");
 
-    // Fill remaining 3 seats
-    const fillers = sigs.slice(10, 13);
-    for (let i = 0; i < fillers.length; i++) {
-      const w   = fillers[i];
-      const ref = i === 0 ? W1.address : fillers[i-1].address;
-      await usdc.mint(w.address, FEE);
-      await usdc.connect(w).approve(pmAddr, FEE);
-      await tr.connect(w).register(ref, { gasLimit: 3_000_000 });
-    }
-    expect(await matA.occupancy()).to.equal(4n);
-    console.log("  MatA full (4/4): OK");
-
-    // Trigger cycle-out: 5th member registration
-    const cycler = sigs[13];
-    await usdc.mint(cycler.address, FEE);
-    await usdc.connect(cycler).approve(pmAddr, FEE);
-
-    try {
-      const tx   = await tr.connect(cycler).register(fillers[2].address, { gasLimit: 3_000_000 });
-      const rcpt = await tx.wait();
-      console.log("  Cycle-out TX: OK  gasUsed=" + rcpt.gasUsed.toString());
-    } catch (err) {
-      console.log("  Cycle-out FAILED:", err.reason || err.message.slice(0, 200));
-      try {
-        await ethers.provider.call({
-          from: cycler.address,
-          to:   await tr.getAddress(),
-          data: tr.interface.encodeFunctionData("register", [fillers[2].address]),
-        });
-      } catch (ce) {
-        console.log("  eth_call reason:", ce.reason ?? "(null)");
-        if (ce.data && ce.data.startsWith("0x4e487b71")) {
-          const code = BigInt("0x" + ce.data.slice(10));
-          const msgs = {1n:"assert",17n:"overflow/underflow",18n:"div-by-zero",49n:"pop empty array",65n:"alloc too large"};
-          console.log("  PANIC:", msgs[code] ?? "code=" + code.toString());
-        }
-      }
-      throw err;
+    // Drive registrations until W1 has cycled out of MatB and PARKED there. Item A
+    // crosses them into MatB for free on the way; the park happens one cycle later, at
+    // the re-entry that still costs a full fee. Bounded and asserted rather than counted,
+    // because the exact number of entries depends on cascade shape.
+    let parked = false;
+    for (let i = 0; i < 24 && !parked; i++) {
+      await reg(sigs[10 + i], W1.address);
+      parked = (await matB.parkedAt(W1.address)) > 0n;
     }
 
-    // ── Phase 2: Verify parked state ─────────────────────────────────────────
-    // V8.32 (scaled BPS, MSIZE=4): W1 earns ~$2.53 total
-    //   direct_earn=$0.25, L1-from-filler0=$0.95, chain (lvl1×2 + lvl2×2) = $1.14.
-    // cross_needed = $5 (50% crossingReserve model). $2.53 < $5 → W1 parks.
-    const w1Parked  = await matA.isParked(W1.address);
-    const w1InBpre  = await matB.getMember(W1.address);
-    const w1Earn    = await matA.withdrawableOf(W1.address);
-    console.log("  W1 parked in matA:          " + w1Parked + " (expect true)");
-    console.log("  W1 in matB before rescue:   " + w1InBpre.hasEverJoined + " (expect false)");
-    console.log("  W1 withdrawable (earnings): $" + (Number(w1Earn) / 1e6).toFixed(6));
-    expect(w1Parked,               "W1 should be parked (earnings < cross fee)").to.be.true;
-    expect(w1InBpre.hasEverJoined, "W1 should not be in matB before rescue").to.be.false;
+    // ── Phase 2: the parked state, asserted loudly ────────────────────────────
+    console.log("  MatA parked count: " + (await matA.getParkedCount()).toString() + " (expect 0 — item A)");
+    expect(await matA.getParkedCount(),
+      "V8.50 item A: a MatA parker's reserve covers their crossing, so MatA must park " +
+      "nobody. A non-zero count here means item A regressed.").to.equal(0n);
 
-    // ── Phase 3: Keeper rescue ────────────────────────────────────────────────
-    // Production flow: MatrixKeeper.performUpkeep() calls _doParkedRescue() which does:
-    //   1. sf.payForceCross(member, tierIdx, sourceMatrix, fee)  — SF sends ENTRY_FEE to matA
-    //   2. matA.forceCrossKeeper(member)                 — matA uses those funds to cross
-    // Here we call both steps directly with owner acting as keeper.
-    // V8.48 item 46: the member travels with the funding call (insolvency floor).
+    expect(await matB.parkedAt(W1.address),
+      "fixture must reach a MatB cycle-out park — if it does not, this test proves nothing"
+    ).to.be.gt(0n);
+    expect(await matB.isActiveInMatrix(W1.address)).to.equal(false);
+    expect(await matA.isActiveInMatrix(W1.address),
+      "not a ghost — nobody is holding a seat for them").to.equal(false);
+
+    const w1Wd = await matB.withdrawableOf(W1.address);
+    const w1Rs = await matB.crossingReserveOf(W1.address);
+    console.log("  W1 parked in matB:          true");
+    console.log("  W1 withdrawable (earnings): $" + (Number(w1Wd) / 1e6).toFixed(6));
+    console.log("  W1 crossing reserve:        $" + (Number(w1Rs) / 1e6).toFixed(6) + " (expect $0 — item A spent it)");
+    expect(w1Rs, "item A: a MatB member holds no reserve").to.equal(0n);
+    expect(w1Wd, "the re-entry must be genuinely underfunded, or the rescue is a no-op").to.be.lt(FEE);
+
+    // ── Phase 3: the insolvency floor refuses first ───────────────────────────
+    // Production flow: MatrixKeeper.performUpkeep() → _doParkedRescue():
+    //   1. sf.payForceCross(member, tierIdx, sourceMatrix, fee) — SF sends funds to the matrix
+    //   2. matrix.forceCrossKeeper(member, sfContribution, buffer) — the matrix crosses them
+    // Here both steps are driven directly, with owner acting as keeper.
     //
-    // ⚠ V8.49 item 1b (policy B): the floor now includes the advance, and this fixture
-    // deliberately models "the SF covers 100% of the fee" — an advance of the WHOLE
-    // $10 entry fee against a ceiling that defaults to 34% of it. So the default floor
-    // refuses this rescue, correctly. That refusal is asserted first, because it is the
-    // new behaviour and a fixture that merely sidestepped it would hide the change:
+    // This fixture models "the SF covers 100% of the fee" — an advance of the WHOLE $10
+    // against the declared 3400bps ceiling ($3.40). So the default floor refuses,
+    // correctly, and that refusal is asserted FIRST because a fixture that merely
+    // sidestepped it would hide the rule.
+    //
+    // The ceiling is read from the SF rather than written here on purpose: PARAM 59 went
+    // 3400 -> 5000 -> 3400 inside one day in V8.50 (the 5000 case was measured against a
+    // balance the enforcing code cannot see — see StabilityFund.sol). A hard-coded
+    // number here would have survived that round trip while quietly meaning something
+    // else.
+    const floorBps = await sf.insolvencyFloorBps();
+    console.log("  insolvencyFloorBps: " + floorBps.toString() + " → ceiling $" +
+                (Number(FEE * floorBps / 10_000n) / 1e6).toFixed(2) + " vs a $10.00 advance");
     expect(await sf.loanEligibleFor(W1.address, 0, FEE),
-      "policy B: a full-fee advance is 294% of the default $3.40 ceiling").to.equal(false);
-    await expect(sf.connect(owner).payForceCross(W1.address, 0, matAAddr, FEE))
+      "policy B: a full-fee advance is far above the declared ceiling, whatever it is set to").to.equal(false);
+    await expect(sf.connect(owner).payForceCross(W1.address, 0, matBAddr, FEE))
       .to.be.revertedWith("SF: insolvency floor");
 
-    // ...then the floor is raised to 100% (10_000 bps is on the DAO menu, PARAM 59) so
-    // this scenario's own premise — SF covers the entire fee — is representable. This is
-    // the fixture declaring its assumption out loud rather than inheriting a default that
-    // happens to permit it.
+    // ── Phase 4: raise the ceiling, then rescue for real ──────────────────────
+    // 10_000 bps is on the DAO menu (PARAM 59) — the fixture declaring its own
+    // assumption out loud rather than inheriting a default that happens to permit it.
     await sf.connect(owner).setInsolvencyFloorBps(10_000);
-    await sf.connect(owner).payForceCross(W1.address, 0, matAAddr, FEE);
-    // V8.11: sfContribution=FEE (SF covers 100% in this test scenario)
-    await matA.connect(owner).forceCrossKeeper(W1.address, FEE, 0n);
+    await sf.connect(owner).payForceCross(W1.address, 0, matBAddr, FEE);
+    // sfContribution = FEE: the SF covers 100%. forceCrossKeeper requires
+    // sfContribution <= crossingCost, and a MatB crossing costs the FULL fee under item A
+    // — which is exactly why the rescue path still exists here and not in MatA.
+    await matB.connect(owner).forceCrossKeeper(W1.address, FEE, 0n);
 
-    const w1InB  = await matB.getMember(W1.address);
-    const w1PosB = await matB.matrixPos(W1.address);
-    console.log("  W1 in MatB after rescue: hasEverJoined=" + w1InB.hasEverJoined + " pos=" + w1PosB.toString());
-    expect(w1InB.hasEverJoined, "W1 should be in matB after keeper rescue").to.be.true;
-    expect(w1InB.isInMatrix,    "W1 should be active in matB").to.be.true;
-    expect(w1PosB,              "W1 should be at pos 1 in matB").to.equal(1n);
-    expect(await matA.getParkedCount(), "parked queue should be empty after rescue").to.equal(0n);
-    console.log("  SUCCESS: W1 rescued by keeper and crossed to MatB at position 1");
+    // ── Phase 5: the member is back in play ───────────────────────────────────
+    expect(await matB.parkedAt(W1.address), "parked queue entry must clear").to.equal(0n);
+    // NOT "the queue is empty", and not "the count dropped by one" either — both were
+    // tried and both are wrong. The rescue seats W1 back in MatA, which cascades, which
+    // cycles ANOTHER member out of MatB into their own re-entry park: one out, one in,
+    // net zero. That churn is item A's thesis showing up as a side effect, not a fault.
+    // Scan for W1's ABSENCE instead — it says exactly what the rescue promised and
+    // nothing about the fixture's shape.
+    const queued = [];
+    for (let q = 0; q < Number(await matB.getParkedCount()); q++) {
+      queued.push((await matB.getParkedMember(q)).toLowerCase());
+    }
+    expect(queued, "the rescued member must be OFF the parked queue").to.not.include(W1.address.toLowerCase());
+    expect(await matA.isActiveInMatrix(W1.address),
+      "a MatB cycle-out re-enters a MatA — that is the crossing the fund just paid for"
+    ).to.equal(true);
+    // ...and the full-fee entry carved them a fresh reserve for the NEXT crossing.
+    expect(await matA.crossingReserveOf(W1.address),
+      "entry carves, crossing spends — the rescued member is funded for their next hop"
+    ).to.equal(FEE / 2n);
+    console.log("  SUCCESS: W1 rescued by keeper+SF and re-entered MatA with a fresh reserve");
   });
 });

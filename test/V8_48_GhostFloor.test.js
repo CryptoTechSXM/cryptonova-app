@@ -121,6 +121,39 @@ async function impersonate(addr) {
   return ethers.getSigner(addr);
 }
 
+/** ⛔ V8.50 ITEM A — THE CONSTRUCTION BELOW REPLACES `seatVia` FOR GF-V1 AND GF-V3.
+ *
+ *  `seatVia` swings MatA's partner to the decoy and seats through `_enterMatrix`. Under
+ *  item A that entry lands in a FULL MatA, cascades a real cycle-out, and the root — who
+ *  can now afford the $5 crossing where it used to cost a full fee — tries to cross into
+ *  the unwired decoy and dies on "F8V8: not authorized". Wiring the decoy was rejected:
+ *  a decoy that accepts crossings has stopped being a decoy.
+ *
+ *  This is `V8_46_PairGuard` G2's construction instead, which still works because it
+ *  seats BEFORE anything is full, so nothing cascades: swing MATB's partner to the decoy
+ *  (so MatB's guard looks the wrong way), seat the member into both halves through the
+ *  PairManager, restore the pair. That is the exact shape the 67 live duplicate
+ *  formations left behind, so it is not a contrivance either.
+ */
+async function forceSeat(ctx, matrix, member, referrer) {
+  await ctx.usdc.mint(ctx.owner.address, FEE);
+  await ctx.usdc.connect(ctx.owner).transfer(await matrix.getAddress(), FEE);
+  const pmSigner = await impersonate(ctx.pmAddr);
+  const tx = await matrix.connect(pmSigner).enterFor(member, referrer, { gasLimit: 16_000_000 });
+  await ethers.provider.send("hardhat_stopImpersonatingAccount", [ctx.pmAddr]);
+  return tx;
+}
+
+/** Seat `member` in BOTH halves of the pair — the pre-fix duplicate state. */
+async function seatBothHalves(ctx, member) {
+  await ctx.b.setPartner(ctx.decoyAddr);
+  await forceSeat(ctx, ctx.a, member, ctx.W1.address);
+  await forceSeat(ctx, ctx.b, member, ctx.W1.address);
+  await ctx.b.setPartner(ctx.aAddr);
+  expect(await ctx.a.isActiveInMatrix(member), "duplicate setup failed: not seated in A").to.equal(true);
+  expect(await ctx.b.isActiveInMatrix(member), "duplicate setup failed: not seated in B").to.equal(true);
+}
+
 /** Seat `member` into `dest` the way a cross-matrix flow does: impersonate the
  *  matrix `viaAddr` (which must be dest's current partner), fund the fee, call
  *  _enterMatrix. Returns the receipt. */
@@ -137,8 +170,21 @@ async function seatVia(ctx, dest, viaAddr, member) {
 /** Drive W1 into MatB: W1 registers, 15 fillers fill MatA (size 15), the 16th entry
  *  rotates the root and W1 crosses to MatB. Asserted, not assumed (item-11 lesson). */
 async function driveW1IntoMatB(ctx) {
+  // ⛔ V8.50 ITEM E1: THE FILLERS REFER EACH OTHER, NOT W1.
+  //
+  // They used to ALL name W1, which handed W1 fifteen L1 commissions ($14.25) and made
+  // the fixture's "underfunded" member the richest wallet in the pair. That never showed
+  // because the money sat in the MatA ledger and the MatB re-entry gate could not see it.
+  // E1 carries a member's balance across the crossing — correctly — so W1 now arrives in
+  // MatB able to fund a $10 re-entry outright and the shortfall park stops happening.
+  //
+  // Referring them in a chain leaves W1 with ONE L1 plus their own pool and chain pay:
+  // the passive, no-referral member item A exists for, and the member every "shortfall
+  // cycle-out" precondition below was always describing.
   await reg(ctx, ctx.W1, ethers.ZeroAddress);
-  for (let i = 3; i < 3 + 15; i++) await reg(ctx, ctx.sigs[i], ctx.W1.address);
+  for (let i = 3; i < 3 + 15; i++) {
+    await reg(ctx, ctx.sigs[i], i === 3 ? ctx.W1.address : ctx.sigs[i - 1].address);
+  }
   expect(await ctx.b.isActiveInMatrix(ctx.W1.address),
     "fixture precondition: W1 must have crossed into MatB").to.equal(true);
   expect(await ctx.a.isActiveInMatrix(ctx.W1.address),
@@ -205,36 +251,35 @@ describe("V8.48 items 45+46+47 — ghosts, the insolvency floor, and the evictio
   describe("item 47 — evictParked: ghost = dequeue-only, parked = evict with reserve released", function () {
     it("GF-V1: a GHOST is dequeued ONLY — seat intact, balances untouched, GhostDequeued not MemberEvicted", async function () {
       const ctx = await deployPair(15);
-      await driveW1IntoMatB(ctx);
-      await ctx.b.softParkIdle(ctx.W1.address);
+      const victim = ctx.sigs[40].address;
 
       // Construct the ghost by BYPASSING prevention (no supported path can create
-      // one now): swing MatA's partner to a DECOY for the seat — the V8.46 G2
-      // trick — so MatA's partner-clear misses MatB, then restore the pair.
-      await ctx.a.setPartner(ctx.decoyAddr);
-      await seatVia(ctx, ctx.a, ctx.decoyAddr, ctx.W1.address);
-      await ctx.a.setPartner(ctx.bAddr);
+      // one now). V8.50 item A: this used to drive W1 into MatB and then seat them
+      // back into a FULL MatA, which now cascades — see the note on seatBothHalves.
+      // Seat into both halves while nothing is full, THEN park the MatB side.
+      await seatBothHalves(ctx, victim);
+      await ctx.b.softParkIdle(victim);
 
       // Ghost precondition, asserted loudly: parked in B AND seated in A.
-      expect(await ctx.b.parkedAt(ctx.W1.address), "ghost setup failed: not parked in B").to.be.gt(0n);
-      expect(await ctx.a.isActiveInMatrix(ctx.W1.address), "ghost setup failed: not seated in A").to.equal(true);
+      expect(await ctx.b.parkedAt(victim), "ghost setup failed: not parked in B").to.be.gt(0n);
+      expect(await ctx.a.isActiveInMatrix(victim), "ghost setup failed: not seated in A").to.equal(true);
 
-      const wdBefore = await ctx.b.withdrawableOf(ctx.W1.address);
-      const rsBefore = await ctx.b.crossingReserveOf(ctx.W1.address);
-      const posBefore = await ctx.a.matrixPos(ctx.W1.address);
+      const wdBefore = await ctx.b.withdrawableOf(victim);
+      const rsBefore = await ctx.b.crossingReserveOf(victim);
+      const posBefore = await ctx.a.matrixPos(victim);
 
-      const rc = await (await ctx.b.evictParked(ctx.W1.address)).wait();
+      const rc = await (await ctx.b.evictParked(victim)).wait();
 
-      expect(await ctx.b.parkedAt(ctx.W1.address)).to.equal(0n);
+      expect(await ctx.b.parkedAt(victim)).to.equal(0n);
       expect(await ctx.b.getParkedCount()).to.equal(0n);
       expect(libEvents(rc, ctx.b.interface, "GhostDequeued").length).to.equal(1);
       expect(libEvents(rc, ctx.b.interface, "MemberEvicted").length,
         "a ghost must NOT be reported as evicted").to.equal(0);
       // Funds and seat untouched — they are a live, earning member.
-      expect(await ctx.b.withdrawableOf(ctx.W1.address)).to.equal(wdBefore);
-      expect(await ctx.b.crossingReserveOf(ctx.W1.address)).to.equal(rsBefore);
-      expect(await ctx.a.matrixPos(ctx.W1.address)).to.equal(posBefore);
-      expect(await ctx.a.isActiveInMatrix(ctx.W1.address)).to.equal(true);
+      expect(await ctx.b.withdrawableOf(victim)).to.equal(wdBefore);
+      expect(await ctx.b.crossingReserveOf(victim)).to.equal(rsBefore);
+      expect(await ctx.a.matrixPos(victim)).to.equal(posBefore);
+      expect(await ctx.a.isActiveInMatrix(victim)).to.equal(true);
     });
 
     it("GF-V2: the valve stays keeper-gated and idempotent — no new door was opened", async function () {
@@ -254,39 +299,61 @@ describe("V8.48 items 45+46+47 — ghosts, the insolvency floor, and the evictio
         .to.be.revertedWith("F8V8: member not parked");
     });
 
-    it("GF-V3: a cycle-out-parked member is EVICTED — dequeued, reserve RELEASED to withdrawable", async function () {
-      // The reserve-bearing parked state is the LIVE dominant one (members park at
-      // ~84% of fee = 50% reserve INTACT + ~34% earnings). softParkIdle cannot
-      // produce it — it releases the reserve at park time by design — so drive the
-      // REAL path, which is also the live one: a MatB root whose re-entry cannot
-      // be funded parks IN MatB with their reserve intact. (adminForceRotateRoot
-      // is a MatB-only tool — the first version of this test aimed it at MatA and
-      // the contract said so: "F8V8: only callable on MatB".)
+    it("GF-V3: a cycle-out-parked member is EVICTED — and under item A there is no reserve to release", async function () {
+      // ⛔ V8.50 ITEM A HAS ALL BUT RETIRED EvictionReserveReleased, AND THAT IS THE
+      // FINDING THIS TEST NOW CARRIES.
+      //
+      // Releasing a reserve on eviction needs a member who is (a) parked, (b) holding a
+      // reserve, and (c) NOT seated in the partner half — because a holder seated in the
+      // partner is a GHOST, and the valve dequeues those without touching anything.
+      // Every park site in MatrixLogicLib was walked against that test:
+      //
+      //   :947  funding shortfall     holds a reserve, NOT a ghost  <- ITEM A DELETED IT
+      //   :876  duplicate seat        holds a reserve, but IS A GHOST by construction
+      //                               (measured: evictParked emits GhostDequeued, not
+      //                               MemberEvicted, and releases nothing)
+      //   :1461 softParkIdle          releases the reserve itself at :1447-1450
+      //   MatB, any cause             nothing to hold — item A spent it
+      //   :906  mid-cascade deferral  holds a reserve, not a ghost  <- still reachable
+      //   :523  cascade-refill entry  holds a reserve, not a ghost  <- still reachable
+      //
+      // Only the last two survive, and no test in this suite constructs either
+      // deliberately. So on the live chain the release is now essentially unreachable:
+      // the members who still hold a reserve when they park are ghosts, and ghosts are
+      // dequeued. THAT IS A SCOPE FINDING, NOT A TEST BUG — see V8_50_HANDOFF.md. This
+      // test pins the behaviour that actually ships; the release path needs a decision
+      // about whether it is still worth carrying.
       const ctx = await deployPair(15);
       await driveW1IntoMatB(ctx);
-      // W1 in MatB: fresh $5 reserve from the crossing entry, earnings ~pennies —
-      // the $10 re-entry MUST fall short. Force the cycle-out.
+      // W1 in MatB: item A left them NO reserve, so the $10 re-entry falls short on
+      // earnings alone. Force the cycle-out.
       await ctx.b.adminForceRotateRoot({ gasLimit: 16_000_000 });
 
-      // Preconditions asserted loudly (item-11 lesson): parked, unseated, reserve intact.
+      // Preconditions asserted loudly (item-11 lesson).
       expect(await ctx.b.parkedAt(ctx.W1.address),
         "precondition: shortfall cycle-out must PARK the root in MatB").to.be.gt(0n);
       expect(await ctx.b.isActiveInMatrix(ctx.W1.address)).to.equal(false);
-      const rs = await ctx.b.crossingReserveOf(ctx.W1.address);
-      expect(rs, "precondition: cycle-out park must keep the crossing reserve").to.equal(RESERVE);
+      expect(await ctx.a.isActiveInMatrix(ctx.W1.address),
+        "precondition: NOT a ghost — nobody is holding a seat for them").to.equal(false);
+      expect(await ctx.b.crossingReserveOf(ctx.W1.address),
+        "item A: a MatB member holds no reserve; it paid their A->B crossing").to.equal(0n);
       const wd = await ctx.b.withdrawableOf(ctx.W1.address);
 
       const rc = await (await ctx.b.evictParked(ctx.W1.address)).wait();
 
       expect(await ctx.b.parkedAt(ctx.W1.address)).to.equal(0n);
-      expect(libEvents(rc, ctx.b.interface, "MemberEvicted").length).to.equal(1);
-      const rel = libEvents(rc, ctx.b.interface, "EvictionReserveReleased");
-      expect(rel.length).to.equal(1);
-      expect(rel[0].args.amount).to.equal(rs);
-      // The owner's rule, in balances: they keep every cent that was theirs —
-      // reserve folded into withdrawable — and the POSITION is what they lose.
+      expect(libEvents(rc, ctx.b.interface, "MemberEvicted").length,
+        "a real eviction, not a ghost dequeue").to.equal(1);
+      expect(libEvents(rc, ctx.b.interface, "GhostDequeued").length).to.equal(0);
+      // THE CHANGE, PINNED: no reserve existed, so no release fires. If this ever goes
+      // to 1, something has started carving a reserve for MatB members again and item A
+      // has regressed.
+      expect(libEvents(rc, ctx.b.interface, "EvictionReserveReleased").length,
+        "nothing to release — item A spent this member's reserve at the crossing").to.equal(0);
+      // The owner's rule still holds in balances: they keep every cent that was theirs,
+      // and the POSITION is what they lose.
+      expect(await ctx.b.withdrawableOf(ctx.W1.address)).to.equal(wd);
       expect(await ctx.b.crossingReserveOf(ctx.W1.address)).to.equal(0n);
-      expect(await ctx.b.withdrawableOf(ctx.W1.address)).to.equal(wd + rs);
       // Re-entry from here costs the full fee: selfRescue is closed (not parked).
       await expect(ctx.b.connect(ctx.W1).selfRescue()).to.be.revertedWith("F8V8: not parked");
     });
@@ -312,10 +379,13 @@ describe("V8.48 items 45+46+47 — ghosts, the insolvency floor, and the evictio
 
     it("GF-F1: the boundary is debt >= fee x floorBps/10000, and the revert names the floor", async function () {
       const { member, sf, mock } = await sfFixture();
-      expect(await sf.insolvencyFloorBps(), "declared default").to.equal(3400n);
+      expect(await sf.insolvencyFloorBps(), "declared default").to.equal(3400n);   // V8.50: proposed 5000, reverted — see StabilityFund.sol
 
       // One unit under the ceiling: still eligible in the V8.48 sense.
-      await mock.bookLoan(member.address, 0, M6(3.4) - 1n);
+      // V8.50: DERIVED from the declared default, not the old literal $3.40 — the
+      // default moved to 5000 and a pinned number here is a change detector.
+      const CEIL = M6(10) * (await sf.insolvencyFloorBps()) / 10_000n;
+      await mock.bookLoan(member.address, 0, CEIL - 1n);
       expect(await sf.loanEligible(member.address, 0)).to.equal(true);
 
       // ⚠ EXTENDED FOR V8.49 item 1b (policy B), not re-pinned to make red go green.
@@ -415,7 +485,16 @@ describe("V8.48 items 45+46+47 — ghosts, the insolvency floor, and the evictio
         libraries: { MatrixKeeperLib: await lib.getAddress() },
       })).deploy(await tr.getAddress(), await sfMock.getAddress());
       matA = await (await ethers.getContractFactory("MockMatrixK")).deploy(M6(10), true);
-      matB = await (await ethers.getContractFactory("MockMatrixK")).deploy(M6(10), true);
+      // V8.50 item A: matB is flagged as a MatB. Crossing OUT of a MatA now costs the
+      // reserve carve (50%), which a MatA parker holds by construction — so a MatA
+      // parker can no longer need a LOAN at all, and GF-D1 has nothing to floor. The
+      // routing question it asks is still real, at the MatB cycle-out that re-enters a
+      // MatA at the full fee, so GF-D1 moved there. GF-D2 (self-funded) and GF-D3
+      // (ghost) are untouched: neither depends on the price of the crossing, and D3
+      // reads matB only as the PARTNER half, which this flag does not affect.
+      // The frozen-MatB scan still cannot enter the batch — _isFrozenMatB returns on
+      // `occupancy() < MATRIX_SIZE()` and this mock's occupancy is always 0.
+      matB = await (await ethers.getContractFactory("MockMatrixK")).deploy(M6(10), false);
       const pm = await (await ethers.getContractFactory("MockPairManagerK")).deploy();
       await pm.addPair(await matA.getAddress(), await matB.getAddress());
       await keeper.setPairManager(0, await pm.getAddress());
@@ -434,8 +513,12 @@ describe("V8.48 items 45+46+47 — ghosts, the insolvency floor, and the evictio
 
     it("GF-D1: a FLOORED member who needs a loan routes to EVICT; the same member un-floored routes to RESCUE", async function () {
       await setup();
-      // Needs a loan: $2 + $5 reserve against a $10 fee.
-      await matA.addParked(alice.address, await now(), M6(2), M6(5), 0);
+      // Needs a loan: $7.00 held against a $10.00 full-fee re-entry, $3.00 short.
+      // Identical arithmetic to the pre-item-A fixture ($2 withdrawable + $5 reserve at
+      // an A->B crossing): 7,000 bps, preset 1's 7000 rung, sfShare capped at the $3.00
+      // shortfall. Item A moved WHERE the money sits — a MatB member holds no reserve,
+      // it was spent getting them there — not how much of it there is.
+      await matB.addParked(alice.address, await now(), M6(7), 0, 0);
       await sfMock.setFloored(alice.address, true);
       await time.increase(PARKED_GRACE + 5);
       expect(await workFor(alice.address)).to.deep.equal([WORK_EVICT_PARKED]);

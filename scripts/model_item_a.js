@@ -410,6 +410,7 @@ async function readBufferBps(mk) {
     let oWd = 0n;
     try { oWd = await new ethers.Contract(other, MAT_ABI, p).getMemberTotalWithdrawn(x.m); }
     catch (e) { unreadable.push(`${x.m} partner-half withdrawn ? ${e.shortMessage || e.message}`); }
+    x.withdrawnOther = oWd;      // phase 6 needs the halves apart, not just the sum
     x.taken = x.withdrawn + oWd;
     const cr = earned.get(x.m.toLowerCase());
     if (cr === undefined) { noData++; x.trueEarned = null; continue; }
@@ -454,7 +455,104 @@ async function readBufferBps(mk) {
     console.log(`\n  The handoff predicts $3.20 against a ${usd(floorAmt)} floor. Compare the median.`);
     console.log(`  If the median sits ABOVE the floor, item C must move WITH item A and they ship together.`);
     console.log(`  This is measured, not assumed — every input is a chain read or a tagged credit.`);
+
+    // ── PARAM 59 SWEEP (added 2026-08-17, owner decision) ────────────────────
+    // min/median/max cannot answer "how many clear at X" for an X between them, and
+    // the owner's instinct (4000) sits inside the refused tail. Count it instead.
+    // 4000 is marked because it is settable by the OWNER (setInsolvencyFloorBps takes
+    // any bps <= 10000) but is NOT on the DAO menu at V8Governance.sol:496, so a value
+    // set there could never be voted back to.
+    const MENU = [0, 1700, 2500, 3400, 5000, 6800, 10000];
+    console.log(`\n  PARAM 59 SWEEP — how many of the ${asks.length} are rescued at each ceiling:`);
+    for (const bps of [...MENU, 4000].sort((a, b) => a - b)) {
+      const ceil = feeRef * BigInt(bps) / 10_000n;
+      const ok = asks.filter((a) => a <= ceil).length;
+      const onMenu = MENU.includes(bps);
+      console.log(`    ${String(bps).padStart(5)} bps  ceiling ${usd(ceil).padStart(8)}  rescued ${String(ok).padStart(3)}/${asks.length}  refused ${String(asks.length - ok).padStart(3)}${onMenu ? "" : "   <- OFF the DAO menu"}`);
+    }
   }
+  // ==========================================================================
+  console.log(`\n==============================================================================`);
+  console.log(`PHASE 6 — THE SAME ASK, ON THE BASIS THE CONTRACT ACTUALLY USES`);
+  console.log(`==============================================================================`);
+  // ⛔ WHY THIS PHASE EXISTS. Phase 5 sums a member's credits across BOTH halves. That is
+  // correct for the population it measures — today's V8.48 parkers, whose MatA balance was
+  // already spent on their full-fee crossing, so aggregate ~= MatB ledger. It is WRONG as a
+  // PROJECTION of item A, and the difference decides PARAM 59.
+  //
+  // The re-entry is funded by TierRouter.handleCycleOut(member, tierIndex, escrow,
+  // withdrawable), and MatrixLogicLib._cycleOutRoot passes those two buckets from the
+  // CYCLING MATRIX ONLY. There is no cross-matrix lookup. The keeper agrees:
+  // MatrixKeeperLib._triageParked reads crossingReserveOf + withdrawableOf on the PARKED
+  // matrix. So the gate sees one ledger, never the sum.
+  //
+  // Under item A the member KEEPS their journey-A earnings — in the MatA ledger — because
+  // the reserve alone paid the crossing. Under V8.48 that money arrived in MatB as a carved
+  // reserve and was spendable here. Item A does not take it away; it moves it somewhere the
+  // AUTOMATIC path cannot reach. (selfRescue pulls a shortfall from the WALLET, so a member
+  // can still bring it manually after a withdraw.)
+  //
+  // Measured on a local fixture 2026-08-17: MatA ledger $7.31 stranded, MatB ledger $7.66
+  // passed to the gate, $14.97 aggregate. This phase asks whether the live population says
+  // the same thing.
+  {
+    const askAgg = [], askLedger = [];
+    let noSplit = 0;
+    for (const x of inB) {
+      if (x.trueEarned === null) { noSplit++; continue; }
+      // AGGREGATE — phase 5's basis: everything they earned, minus everything withdrawn.
+      const holdAgg = x.trueEarned > x.taken ? x.trueEarned - x.taken : 0n;
+      // LEDGER — the gate's basis, projected under item A: journey-B credits only, minus
+      // what they withdrew FROM MatB. The MatB reserve is 0 under item A by construction,
+      // so the whole bucket is withdrawable.
+      const holdLed = x.earnB > x.withdrawn ? x.earnB - x.withdrawn : 0n;
+      askAgg.push(x.fee > holdAgg ? x.fee - holdAgg : 0n);
+      askLedger.push(x.fee > holdLed ? x.fee - holdLed : 0n);
+    }
+    const med = (a) => a[Math.floor(a.length / 2)];
+    if (!askLedger.length) {
+      console.log(`  no MatB parker had usable per-ledger data (${noSplit} without). NO VERDICT.`);
+    } else {
+      askAgg.sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
+      askLedger.sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
+      console.log(`  members measured  ${askLedger.length} of ${inB.length}`);
+      console.log(`  ask, AGGREGATE (phase 5, both halves)   min ${usd(askAgg[0])}  median ${usd(med(askAgg))}  max ${usd(askAgg[askAgg.length - 1])}`);
+      console.log(`  ask, MatB LEDGER (what the gate sees)   min ${usd(askLedger[0])}  median ${usd(med(askLedger))}  max ${usd(askLedger[askLedger.length - 1])}`);
+      const gap = med(askLedger) > med(askAgg) ? med(askLedger) - med(askAgg) : 0n;
+      console.log(`  MEDIAN UNDERSTATEMENT                   ${usd(gap)}   <- how much phase 5 flatters item A`);
+
+      console.log(`\n  PARAM 59 SWEEP ON THE LEDGER BASIS — rescued of ${askLedger.length}:`);
+      const MENU = [0, 1700, 2500, 3400, 5000, 6800, 10000];
+      for (const bps of MENU) {
+        const ceil = feeRef * BigInt(bps) / 10_000n;
+        const okA = askAgg.filter((a) => a <= ceil).length;
+        const okL = askLedger.filter((a) => a <= ceil).length;
+        const flag = okL === askLedger.length ? "  <- clears everyone" : "";
+        console.log(`    ${String(bps).padStart(5)} bps  ceiling ${usd(ceil).padStart(8)}   aggregate ${String(okA).padStart(3)}   LEDGER ${String(okL).padStart(3)}${flag}`);
+      }
+      console.log(`\n  ⛔ WHICH COLUMN APPLIES DEPENDS ON WHETHER ITEM E1 SHIPS — READ THIS BEFORE`);
+      console.log(`  QUOTING EITHER. This script reads the LIVE chain, which runs V8.48. It cannot`);
+      console.log(`  "see" E1; both columns are PROJECTIONS onto the same V8.48 data.`);
+      console.log(``);
+      console.log(`    LEDGER column     = item A WITHOUT E1. The crossing stops charging earnings,`);
+      console.log(`                        but those earnings stay in the MatA ledger and the`);
+      console.log(`                        re-entry gate only reads MatB. Journey B alone funds it.`);
+      console.log(`    AGGREGATE column  = item A WITH E1. _crossToPartner carries the member's`);
+      console.log(`                        remaining withdrawable across, so the MatB ledger holds`);
+      console.log(`                        journey A + journey B and the gate sees the whole sum.`);
+      console.log(``);
+      console.log(`  The two coincide BY CONSTRUCTION once E1 is in — that is what E1 does, so the`);
+      console.log(`  aggregate column is not a separate measurement, it is the post-E1 answer. Do`);
+      console.log(`  not present it as independent confirmation; it is the same arithmetic relabelled.`);
+      console.log(`  WITHOUT E1 the honest floor is 6800. WITH E1 it is 3400 and it clears everyone.`);
+      console.log(`\n  ⚠ ONE CAVEAT, STATED SO IT IS NOT MISTAKEN FOR CERTAINTY: these are V8.48`);
+      console.log(`  members. Their MatA balance was already spent on a full-fee crossing, so the`);
+      console.log(`  ledger split item A CREATES is not fully visible in them yet. The LEDGER column`);
+      console.log(`  is therefore itself an upper bound on how good things are — a post-item-A`);
+      console.log(`  member keeps MORE in MatA, so MORE is stranded from this gate, not less.`);
+    }
+  }
+
   console.log(`\n  ⚠ NOT IN THE HANDOFF: _crossToPartner sweeps ALL remaining withdrawable to repay SF`);
   console.log(`  debt right after the crossing (MatrixLogicLib:882-897). Under item A the member`);
   console.log(`  arrives there holding MORE, so an indebted member is clawed back HARDER, not spared.`);

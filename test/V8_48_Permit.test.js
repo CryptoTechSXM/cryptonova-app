@@ -92,10 +92,21 @@ async function reg(ctx, signer, referrer) {
   await ctx.tr.connect(signer).register(referrer, { gasLimit: 16_000_000 });
 }
 
-/** Park W1 in MatB with reserve intact — the real shortfall cycle-out (GF-V3's path). */
+/** Park W1 in MatB — the real shortfall cycle-out (GF-V3's path).
+ *
+ *  ⛔ V8.50 ITEM E1: THE FILLERS REFER EACH OTHER, NOT W1. They used to all name W1,
+ *  which handed W1 fifteen L1 commissions and made the fixture's "underfunded" member the
+ *  richest wallet in the pair. It only looked underfunded because that money sat in the
+ *  MatA ledger where the re-entry gate could not see it. E1 carries a member's balance
+ *  across the crossing, so W1 now funds the $10 re-entry outright and never parks.
+ *  Chaining the referrals leaves W1 with ONE L1 plus their own pool and chain pay — the
+ *  passive member this precondition was always describing. Same change as
+ *  V8_48_GhostFloor's driveW1IntoMatB; if you touch one, touch both. */
 async function parkW1InMatB(ctx) {
   await reg(ctx, ctx.W1, ethers.ZeroAddress);
-  for (let i = 3; i < 3 + 15; i++) await reg(ctx, ctx.sigs[i], ctx.W1.address);
+  for (let i = 3; i < 3 + 15; i++) {
+    await reg(ctx, ctx.sigs[i], i === 3 ? ctx.W1.address : ctx.sigs[i - 1].address);
+  }
   expect(await ctx.b.isActiveInMatrix(ctx.W1.address),
     "precondition: W1 must have crossed into MatB").to.equal(true);
   await ctx.b.adminForceRotateRoot({ gasLimit: 16_000_000 });

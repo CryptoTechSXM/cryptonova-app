@@ -26,7 +26,14 @@ const CP_BPS = [380, 238, 119, 95, 71, 47];
 const FEE1 = 10_000_000n;   // T1 $10
 const FEE2 = 7_000_000n;    // T2 $7
 const HALF1 = FEE1 / 2n;    // $5 crossing reserve at T1
-const SIZE = 7;
+// V8.50 item A: was 7. G3 guards `reserve + withdrawable >= FEE2 + debt` before it can
+// test anything, and item A removed the reserve half of that sum — a MatB member holds
+// $0.00, not $5.00. At SIZE 7 a fully-referred W1 reaches $7.852 against the $8.00 that
+// guard needs, and G3 stopped at its own precondition. SIZE 9 gives them $8.90+ from
+// earnings alone. Raising the matrix rather than lowering the debt is deliberate: the
+// $1 debt is what the test is ABOUT, and shrinking it to fit would have been the fixture
+// moving its own goalposts. G1 and G2 were re-run at 9 and are unaffected.
+const SIZE = 9;
 
 async function deployTwoTiers() {
   const sigs = await ethers.getSigners();

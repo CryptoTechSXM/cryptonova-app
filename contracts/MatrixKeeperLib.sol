@@ -269,25 +269,63 @@ library MatrixKeeperLib {
             }
         }
 
-        for (uint8 t = 0; t < cfg.configuredTierCount && count < cfg.maxItems; t++) {
-            address pm = cfg.pairManagers[t];
-            if (pm == address(0)) continue;
-            uint256 pairCount = IPairManagerKeeper(pm).activePairCount();
-            for (uint256 p = 0; p < pairCount && count < cfg.maxItems; p++) {
-                (address matA, address matB) = IPairManagerKeeper(pm).getPairAt(p);
-                count = _scanMatrix(matA, t, items, count, cfg, lastGhostTime);
-                count = _scanMatrix(matB, t, items, count, cfg, lastGhostTime);
-            }
-        }
 
-        for (uint8 t = 0; t < cfg.configuredTierCount && count < cfg.maxItems; t++) {
-            address pm = cfg.pairManagers[t];
-            if (pm == address(0)) continue;
-            uint256 pairCount = IPairManagerKeeper(pm).activePairCount();
-            for (uint256 p = 0; p < pairCount && count < cfg.maxItems; p++) {
-                (address matA, address matB) = IPairManagerKeeper(pm).getPairAt(p);
-                count = _scanParked(matA, t, items, count, cfg);
-                count = _scanParked(matB, t, items, count, cfg);
+        // ── V8.50 DEFECT 6 — DISCOVERY IS ORDERED BY DEADLINE, NOT BY HISTORY ────
+        //
+        // THE RULE, AND IT IS THE WHOLE FIX: **every BOUNDED source of work is drained
+        // first, then the two UNBOUNDED scans run in order of what expires.**
+        //
+        //   bounded    velocity (<=1), chain links (<=pending), CW distribute+epoch
+        //              (<=2), frozen-MatB force-rotate (<=pairs), velocity gate
+        //              (<=tiers, one per tier and it breaks)
+        //   unbounded  PARKED       — rescue/evict. Bounded only by the parked queue.
+        //   unbounded  GHOST/RECLAIM — one per idle seat, over every position of every
+        //                             matrix of every pair of every tier.
+        //
+        // WHAT IT USED TO BE. _scanMatrix ran FOURTH and _scanParked FIFTH, so parked
+        // work was only ever reached when the WHOLE SYSTEM held fewer than maxItems
+        // ghost/reclaim items. WORK_RECLAIM has no rate limit at all (WORK_GHOST at
+        // least has lastGhostTime). MatrixKeeperPrev orders it the same way, so this
+        // predates the V8.48 item-12a extraction — 12a moved the code, not the bug.
+        //
+        // WHY PARKED OUTRANKS RECLAIM, AND IT IS NOT A PREFERENCE. A starved reclaim
+        // leaves a dead seat sitting; nothing about it expires. A starved parked member
+        // is on the eviction clock, and at evictionGracePeriod the keeper stops offering
+        // them a RESCUE and starts issuing an EVICTION. Delay there does not defer the
+        // work — IT CHANGES THE ANSWER. Same reasoning puts the CW block above both:
+        // WORK_ADVANCE_EPOCH has a CALENDAR deadline (the 25th) and used to sit dead
+        // last, behind two unbounded scans.
+        //
+        // MEASURED BEFORE MOVING ANYTHING, live V8.48, 2026-08-17 14:39Z: 106 parked,
+        // all 106 aged with ZERO read failures, oldest 0.87d, NONE past the 24h grace,
+        // and checkUpkeep returning 1 item of 15 (VELOCITY). So the starvation was NOT
+        // firing on this chain — it is a latent hazard, and this reorder is insurance
+        // bought cheaply, not an outage being put out. Recorded that way on purpose:
+        // scripts/set_max_items.js quotes "14 Reclaim + 1 Velocity = 15, leaving zero
+        // slots for WORK_PARKED_RESCUE" and that is V8.30-era history, NOT this chain.
+        // Anyone re-reading this should not inherit a false urgency from it.
+        //
+        // NOTHING IS DROPPED BY REORDERING. The tail of a full batch is deferred to the
+        // next upkeep, which for housekeeping with no deadline is free.
+        //
+        // ⚠ THIS IS WHAT V8_48_KeeperScan.test.js's byte-identical comparison against
+        // MatrixKeeperPrev COULD NOT SURVIVE, and it cannot be pinned back the way the
+        // split grace and the eviction clock were — an ORDER is not a parameter. That
+        // file now compares the two keepers as SETS, which costs it nothing: all four of
+        // its recorded mutation kills change WHICH items appear, never merely their
+        // order. Only its truncation test genuinely diverges, and that one now asserts
+        // THIS priority on purpose.
+
+        if (cfg.communityWallet != address(0) && count < cfg.maxItems) {
+            // try/catch: whichever CW variant is wired, a missing selector must
+            // not brick the entire checkUpkeep scan.
+            try ICommunityWalletKeeper(cfg.communityWallet).distributeReady() returns (bool ready) {
+                if (ready) items[count++] = WorkItem(WORK_DISTRIBUTE_CW, 0, cfg.communityWallet, address(0));
+            } catch {}
+            if (count < cfg.maxItems) {
+                try ICommunityWalletKeeper(cfg.communityWallet).epochReady() returns (bool ready) {
+                    if (ready) items[count++] = WorkItem(WORK_ADVANCE_EPOCH, 0, cfg.communityWallet, address(0));
+                } catch {}
             }
         }
 
@@ -310,16 +348,26 @@ library MatrixKeeperLib {
             }
         }
 
-        if (cfg.communityWallet != address(0) && count < cfg.maxItems) {
-            // try/catch: whichever CW variant is wired, a missing selector must
-            // not brick the entire checkUpkeep scan.
-            try ICommunityWalletKeeper(cfg.communityWallet).distributeReady() returns (bool ready) {
-                if (ready) items[count++] = WorkItem(WORK_DISTRIBUTE_CW, 0, cfg.communityWallet, address(0));
-            } catch {}
-            if (count < cfg.maxItems) {
-                try ICommunityWalletKeeper(cfg.communityWallet).epochReady() returns (bool ready) {
-                    if (ready) items[count++] = WorkItem(WORK_ADVANCE_EPOCH, 0, cfg.communityWallet, address(0));
-                } catch {}
+        for (uint8 t = 0; t < cfg.configuredTierCount && count < cfg.maxItems; t++) {
+            address pm = cfg.pairManagers[t];
+            if (pm == address(0)) continue;
+            uint256 pairCount = IPairManagerKeeper(pm).activePairCount();
+            for (uint256 p = 0; p < pairCount && count < cfg.maxItems; p++) {
+                (address matA, address matB) = IPairManagerKeeper(pm).getPairAt(p);
+                count = _scanParked(matA, t, items, count, cfg);
+                count = _scanParked(matB, t, items, count, cfg);
+            }
+        }
+
+        // Last, and by design: the only work in the system with no deadline attached.
+        for (uint8 t = 0; t < cfg.configuredTierCount && count < cfg.maxItems; t++) {
+            address pm = cfg.pairManagers[t];
+            if (pm == address(0)) continue;
+            uint256 pairCount = IPairManagerKeeper(pm).activePairCount();
+            for (uint256 p = 0; p < pairCount && count < cfg.maxItems; p++) {
+                (address matA, address matB) = IPairManagerKeeper(pm).getPairAt(p);
+                count = _scanMatrix(matA, t, items, count, cfg, lastGhostTime);
+                count = _scanMatrix(matB, t, items, count, cfg, lastGhostTime);
             }
         }
 
@@ -505,14 +553,42 @@ library MatrixKeeperLib {
             // V8.49 item 1b: BLOCK-SCOPED, and not for tidiness. This frame blew the stack
             // once already when the evict branch was added (hence _triageParked exists at
             // all), and policy B needs one more local further down. `withdrawn`,
-            // `totalEarned` and `withdrawRatio` are dead the moment this test is answered,
+            // `claimableEver` and `withdrawRatio` are dead the moment this test is answered,
             // so scoping them returns three slots instead of borrowing a fourth. Arithmetic
             // is byte-for-byte the old expression, ternary included.
+            //
+            // ⛔ V8.50 DEFECT 4 — RESOLVED BY RENAMING, NOT BY REPOINTING. READ BEFORE
+            // "FIXING" THIS AGAIN.
+            //
+            // The scope's defect 4 reads: "MatrixKeeperLib reconstructs totalEarned as
+            // withdrawn + withdrawable, which silently includes crossing-buffer money,
+            // and the withdraw-ratio EVICTION test runs on the contaminated one. Add
+            // totalEarnedOf(address) and point the keeper at it."
+            //
+            // The getter was added (FigureEightMatrixV8.totalEarnedOf — the struct field
+            // had no accessor at all, which is a real gap for tooling). THE KEEPER WAS
+            // DELIBERATELY NOT REPOINTED, because this test does not want lifetime
+            // earnings. It asks: OF EVERYTHING THAT EVER BECAME CLAIMABLE BY THIS MEMBER
+            // IN THIS MATRIX, HOW MUCH HAVE THEY TAKEN OUT? Crossing-buffer money is
+            // claimable here. So is a balance carried in by V8.50 item E1. Neither is an
+            // "earning", and both belong in this denominator.
+            //
+            // REPOINTING WOULD BE ACTIVELY HARMFUL UNDER E1. A member who carries $3.40
+            // across the crossing holds it in the DESTINATION's withdrawable, while the
+            // destination's totalEarned — credited only by _credit — knows nothing about
+            // it. The denominator would shrink, the ratio would rise, and the valve would
+            // evict members for the crime of bringing their own money with them. E1 did
+            // not exist when defect 4 was written; the defect is older than the hazard.
+            //
+            // So the quantity was never wrong — the NAME was. `totalEarned` invited
+            // exactly the "fix" that would have broken it. It is `claimableEver` now and
+            // the arithmetic is byte-for-byte unchanged.
             {
                 uint256 withdrawn     = mat.getMemberTotalWithdrawn(member);
-                uint256 totalEarned   = withdrawn + withdrawable;
-                uint256 withdrawRatio = totalEarned > 0 ? withdrawn * 10_000 / totalEarned : 0;
-                // Has taken out most of what they earned — evict rather than lend them more.
+                uint256 claimableEver = withdrawn + withdrawable;
+                uint256 withdrawRatio = claimableEver > 0 ? withdrawn * 10_000 / claimableEver : 0;
+                // Has taken out most of what ever became theirs here — evict rather than
+                // lend them more.
                 if (withdrawRatio > cfg.rescueRatioBps) return (0, EVICT_RATIO);
             }
 

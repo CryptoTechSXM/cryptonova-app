@@ -21,6 +21,12 @@ const { loadFixture } = require("@nomicfoundation/hardhat-toolbox/network-helper
 // ─── Constants ─────────────────────────────────────────────────────────────────
 const UNIT   = 1_000_000n;
 const T1_FEE = 10n  * UNIT;   // $10
+// V8.50 item A: what an A->B crossing actually COSTS. MatrixLogicLib prices a crossing out
+// of a MatA at CROSSING_RESERVE_BPS (5_000) of the entry fee — the reserve the member
+// already pre-funded — instead of a second full fee. The constant is `internal` so it
+// cannot be read from a test; mirrored here with its source named, the same way
+// V8_48_SplitGrace.test.js mirrors it.
+const CROSSING_PRICE = T1_FEE / 2n;
 const T2_FEE = 25n  * UNIT;   // $25
 const MSIZE  = 7n;             // smallest valid full BFS tree for tests
 
@@ -312,8 +318,16 @@ describe("S2: Parked wallet rescue", function () {
 
     // forceCrossKeeper for already-crossed W1 → MatB._enterMatrix reverts "already in matrix"
     await expect(
-      // V8.11: sfContribution=T1_FEE so memberShare=0; revert comes from MatB._enterMatrix
-      matA.connect(keeper).forceCrossKeeper(w1.address, T1_FEE, 0n)
+      // V8.11: sfContribution covers the WHOLE crossing so memberShare=0 and the revert
+      // can only come from MatB._enterMatrix — that isolation is the point of the test.
+      //
+      // V8.50 item A: the whole crossing is CROSSING_PRICE now, not T1_FEE. Passing the
+      // full fee here no longer isolates anything — forceCrossKeeper requires
+      // `sfContribution <= crossingCost` and refuses FIRST with "sfContribution exceeds
+      // fee", so the seat guard below was never reached and this test was green for the
+      // wrong reason waiting to happen. Session 3 spotted this pair in the failing 51 and
+      // called it "the bug sitting in plain sight"; this is that, fixed at the fixture.
+      matA.connect(keeper).forceCrossKeeper(w1.address, CROSSING_PRICE, 0n)
     ).to.be.revertedWith("F8V8: already in matrix");
 
     // Rescue queue stays empty (W1 was never pushed to parkedMembers[])
@@ -416,8 +430,12 @@ describe("S2: Parked wallet rescue", function () {
 
     // forceCrossKeeper for W1 who is already in MatB: REVERTS — tx is fully atomic,
     // so both MatA and MatB rescueDebt remain zero (no partial writes)
+    //
+    // V8.50 item A: CROSSING_PRICE, not T1_FEE — see the note on the same call above.
+    // The full fee now trips forceCrossKeeper's own `sfContribution <= crossingCost`
+    // require and never reaches the seat guard this test is about.
     await expect(
-      matA.connect(keeper).forceCrossKeeper(w1.address, T1_FEE, 0n)
+      matA.connect(keeper).forceCrossKeeper(w1.address, CROSSING_PRICE, 0n)
     ).to.be.revertedWith("F8V8: already in matrix");
 
     // Verify: zero debt on BOTH contracts after revert
