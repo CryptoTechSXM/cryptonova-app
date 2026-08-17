@@ -169,49 +169,81 @@ contract MatrixKeeper is Ownable {
     uint256 public recoveryThreshold   = 3;
     uint256 public idleSlotTimeout     = 259_200;   // V8.33: 3 days (was 43200 = 12h)
     uint256 public extendedIdleTimeout = 604_800;   // V8.33: 7 days (was 86400 = 24h)
-    /// @notice V8.50 defect 5 — HELD AT 15. The lowering to 5 is written, measured and
-    ///         justified, but it MUST NOT SHIP ALONE. It is half of a pair; the other
-    ///         half is defect 6 (parked-work starvation, MatrixKeeperLib.discover).
+    /// @notice V8.50 defect 5 — 15 -> 20, AND IT IS NO LONGER THE GAS CONTROL.
+    ///         Read minGasPerItem below first; this constant is now a coarse upper bound
+    ///         on discovery work and calldata size, nothing more.
     ///
-    ///         THE GAS CASE FOR LOWERING IT. The V8.49 private chain measured ~2.6M gas
-    ///         for a RESCUED parked item (~600k before the rescue path grew the SF round
-    ///         trip and the cross-matrix settle). Against a ~17.8M practical
-    ///         performUpkeep ceiling:
-    ///             15 items -> ~39M  REVERTS
-    ///             10 items -> ~26M  REVERTS
-    ///              5 items -> ~13M  fits, with room
-    ///         The 2.6M predates items A and E1 and is pessimistic — item A pays an A->B
-    ///         crossing out of the member's own reserve and never reaches the SF — but
-    ///         the two failure modes are not symmetric. A truncated batch defers its tail
-    ///         to the next upkeep and is invisible in the results; an out-of-gas batch
-    ///         reverts WHOLE and looks, in the results, exactly like a floor refusal or
-    ///         an empty queue. One costs a block of latency, the other costs the
-    ///         diagnosis. That argues for 5.
+    ///         HOW IT GOT HERE, BECAUSE THE PATH MATTERS MORE THAN THE VALUE. Defect 5
+    ///         opened as "lower it to 5 on gas grounds", resting on ~2.6M per rescued
+    ///         item measured on the V8.49 private chain — a number that predated items A
+    ///         and E1 and so described a population that no longer existed. It was held
+    ///         at 15 rather than shipped, then MEASURED
+    ///         (test/V8_50_KeeperGas.test.js, on this code, MATRIX_SIZE 7):
+    ///             SF-funded rescue    1.49M median, 1.76M max
+    ///             self-funded (item A) 0.92M       -- 1.62x cheaper
+    ///             eviction             0.09M
+    ///             ghost / reclaim      0.04M
     ///
-    ///         WHY IT IS HELD ANYWAY. discover() fills the batch in a fixed order and
-    ///         _scanParked runs FIFTH — after velocity, chain links, the frozen-MatB
-    ///         sweep, and _scanMatrix's ghost/reclaim walk over every position of every
-    ///         matrix in every tier. So parked work is only ever reached when the WHOLE
-    ///         SYSTEM has fewer than maxItemsPerUpkeep ghost/reclaim items pending.
-    ///         RECLAIM has no rate limit (GHOST at least has lastGhostTime).
+    ///         A SATURATED batch — which defect 6 made ORDINARY, by taking parked work
+    ///         first — projected at 1.76M/slot against a ~17.8M ceiling: 5 fits at 49%,
+    ///         10 at 99%, 15 EXCEEDS at 148%. At the live MATRIX_SIZE 127, where the same
+    ///         item costs ~2.6M, 5 fits at 73% and 10 EXCEEDS at 146%. So the answer
+    ///         really was 5 — for a count.
     ///
-    ///         This is not theoretical and it is not new — scripts/set_max_items.js
-    ///         exists because it was observed live: "14 Reclaim + 1 Velocity = 15,
-    ///         filling the cap and leaving zero slots for WORK_PARKED_RESCUE". The
-    ///         operator's workaround was to RAISE the cap, which is the exact opposite
-    ///         of what the gas ceiling now permits. MatrixKeeperPrev orders it the same
-    ///         way, so the behaviour predates the 12a extraction.
+    ///         ⛔ BUT A COUNT IS THE WRONG UNIT, AND 5 PROVED IT. An eviction costs 1/18th
+    ///         of a rescue and a reclaim 1/44th. A count sized for the worst mix throws
+    ///         away almost all the throughput on the common one: GAS-1 measured a
+    ///         28-item batch at 4.90M, barely a quarter of the ceiling, while a cap of 5
+    ///         would have run six of those items and stopped.
     ///
-    ///         Starving parked work is worse than starving reclaim, and not by a little.
-    ///         A starved reclaim leaves a dead seat sitting; nothing expires. A starved
-    ///         parked member is on the eviction clock — evictionGracePeriod converts a
-    ///         RESCUE into an EVICTION at 7 days. Delay there does not defer the work,
-    ///         it changes the answer.
+    ///         So the safety moved to minGasPerItem, which spends the transaction until
+    ///         it genuinely cannot afford another item, and the count went UP rather than
+    ///         down. A batch of evictions now runs all 20 for ~2M; a batch of rescues
+    ///         still stops after four or five, because the floor stops it. Neither has to
+    ///         be predicted in advance.
     ///
-    ///         Lowering the cap to 5 without reordering discovery would tighten that
-    ///         from "fewer than 15 pending" to "fewer than 5 pending". Cap and order
-    ///         land together or neither lands. DAO param 60; menu 5 / 10 / 15 / 20.
-    uint256 public maxItemsPerUpkeep   = 15;
+    ///         Why 20 and not 40: discovery is a view, but performData is CALLDATA on the
+    ///         way back in, and _scanMatrix walks every position of every matrix before
+    ///         the cap binds. 20 is the largest DAO menu value that keeps both modest.
+    ///
+    ///         DAO param 60; menu 5 / 10 / 15 / 20, setter additionally accepts 30 / 40.
+    uint256 public maxItemsPerUpkeep   = 20;
+
+    /// @notice V8.50 defect 8 — THE GAS FLOOR. performUpkeep stops starting new work
+    ///         once fewer than this many gas units remain.
+    ///
+    ///         ⛔ AN OUT-OF-GAS BATCH DOES NOT REVERT. THAT IS WHY THIS EXISTS, AND THE
+    ///         DEFECT 5 COMMENT ABOVE USED TO SAY THE OPPOSITE.
+    ///
+    ///         Every work item in performUpkeep is dispatched as `try this._doXExternal()`
+    ///         — an external self-call. Under EIP-150 a sub-call receives 63/64 of the
+    ///         remaining gas, so when the batch runs dry the sub-call consumes its 63/64,
+    ///         reverts on out-of-gas, and the CATCH FIRES. The loop then continues with
+    ///         1/64 of nothing and every remaining item fails the same way.
+    ///
+    ///         So exhaustion does not announce itself as a reverted transaction. It
+    ///         announces itself as a CASCADE OF WorkItemFailed EVENTS — the same events
+    ///         a floor refusal, an SF exhaustion or an already-rescued member produce.
+    ///         The keeper looks like it ran. The queue looks like it was refused. This
+    ///         is the failure this project already spent a day misdiagnosing once, in
+    ///         exactly the shape that makes it hard to see.
+    ///
+    ///         THE FLOOR MUST EXCEED THE WORST SINGLE ITEM, or it lets the batch enter an
+    ///         item it cannot finish and buys nothing. Measured in
+    ///         test/V8_50_KeeperGas.test.js: worst item 1.76M at MATRIX_SIZE 7, and the
+    ///         V8.49 chain measured ~2.6M for the same item at the live 127. 3_500_000
+    ///         clears the live figure with ~35% margin.
+    ///
+    ///         WHY THIS AND NOT A SMALLER maxItemsPerUpkeep: an item count is the wrong
+    ///         unit. An eviction costs 0.09M and a reclaim 0.04M against a rescue's
+    ///         1.76M — a factor of 44 — so any count sized for the worst mix throws away
+    ///         nearly all the throughput on the common one. The floor spends the
+    ///         transaction until it genuinely cannot afford another item, so a batch of
+    ///         evictions runs to completion and a batch of rescues stops early, without
+    ///         either being told in advance which it is.
+    ///
+    ///         DAO param 63. Menu 2.5M / 3.5M / 5M / 7.5M.
+    uint256 public minGasPerItem = 3_500_000;
     uint256 public parkedGracePeriod   = 6 hours;
 
     /// @notice V8.48 item 12 — floor for a rescue that costs the Stability Fund NOTHING
@@ -378,6 +410,12 @@ contract MatrixKeeper is Ownable {
     event ConfigUpdated(string indexed param, uint256 value);
     event CommunityDistributed(address indexed cw);
     event WorkItemFailed(uint8 indexed workType, uint8 tierIndex, address addr1, address addr2);
+    /// @notice V8.50 defect 8: the batch stopped early because gas ran low. Emitted
+    ///         INSTEAD of the silent WorkItemFailed cascade described at minGasPerItem —
+    ///         the whole point is that exhaustion is now distinguishable from refusal in
+    ///         the logs. `processed` items ran; `total - processed` were left for the
+    ///         next upkeep, which will rediscover them.
+    event BatchGasHalted(uint256 processed, uint256 total, uint256 gasRemaining);
     event GovernanceSet(address indexed governance);
     event UpkeepCallerSet(address indexed caller, bool allowed);
     /// @dev V8.21: replaces SfRescueLadderUpdated -- presets, not free-form arrays.
@@ -462,6 +500,18 @@ contract MatrixKeeper is Ownable {
         ghostEntryEnabled = v;
         emit ConfigUpdated("ghostEntryEnabled", v ? 1 : 0);
     }
+    /// @notice V8.50 defect 8. Enumerated like every other keeper setter. The floor
+    ///         must stay ABOVE the worst single item's cost or it stops protecting
+    ///         anything — 2_500_000 is the lowest value offered and it is already close
+    ///         to the ~2.6M a live-size rescue measured, so treat it as the floor of the
+    ///         floor rather than a normal choice.
+    function setMinGasPerItem(uint256 v) external onlyOwnerOrGovernance {
+        require(v == 2_500_000 || v == 3_500_000 || v == 5_000_000 || v == 7_500_000,
+            "MK: invalid min gas (2.5M/3.5M/5M/7.5M)");
+        minGasPerItem = v;
+        emit ConfigUpdated("minGasPerItem", v);
+    }
+
     function setMaxItemsPerUpkeep(uint256 v) external onlyOwnerOrGovernance {
         // V8.31: ceiling raised to 40 to handle 10 tiers × 2 matrices at scale
         require(v == 5 || v == 10 || v == 15 || v == 20 || v == 30 || v == 40, "MK: invalid max items");
@@ -667,6 +717,19 @@ contract MatrixKeeper is Ownable {
             abi.decode(performData, (MatrixKeeperLib.WorkItem[]));
         uint256 chainLinkProcessed = 0;
         for (uint256 i = 0; i < items.length; i++) {
+            // V8.50 defect 8. Checked BEFORE dispatch, not after: the point is never to
+            // start an item the transaction cannot finish. `gasleft()` is 2 gas, so this
+            // costs nothing measurable against a batch that spends millions.
+            //
+            // Deliberately a `break` and not a `revert`. The items not reached are still
+            // in the queue and checkUpkeep rediscovers them on the next tick — the work
+            // is deferred, never dropped. Reverting would throw away the items that
+            // ALREADY SUCCEEDED in this transaction, which is the opposite of what a
+            // gas guard is for.
+            if (gasleft() < minGasPerItem) {
+                emit BatchGasHalted(i, items.length, gasleft());
+                break;
+            }
             MatrixKeeperLib.WorkItem memory item = items[i];
             if (item.workType == WORK_VELOCITY) {
                 try this._doVelocityCheckExternal() {}

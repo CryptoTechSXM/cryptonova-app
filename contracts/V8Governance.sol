@@ -135,6 +135,7 @@ interface IGovernanceTarget {
     function setCrossingBufferBps(uint256 v) external;
     // ── V8.49 item 1: MatrixKeeper eviction clock, default 7 days (param 62) ─
     function setEvictionGracePeriod(uint256 v) external;
+    function setMinGasPerItem(uint256 v) external;
     // ── V8.20: second wave -- CNOVABuybackReserve ────────────────────────────
     function setTriggerThreshold(uint256 v) external;
     function setMaxSlippageBps(uint256 v) external;
@@ -314,8 +315,20 @@ contract V8Governance is Ownable {
     ///         holder nothing. Full reasoning in V8_49_SCOPE.md item 1.
     uint8 public constant PARAM_MK_EVICTION_GRACE          = 62;
 
+    /// @notice V8.50 defect 8: the MatrixKeeper GAS FLOOR. performUpkeep stops starting
+    ///         new work once fewer than this many gas units remain.
+    ///
+    ///         Governable because it is the one keeper setting that has to track
+    ///         something OUTSIDE the contract — the gas a real rescue costs at live
+    ///         matrix size, which moves whenever the payout walk or the SF path changes.
+    ///         A floor that has drifted below the worst single item silently stops
+    ///         protecting anything, and the symptom is the WorkItemFailed cascade it
+    ///         exists to prevent. Menu 2.5M / 3.5M / 5M / 7.5M; default 3_500_000, which
+    ///         clears the ~2.6M a live-size rescue measured with roughly 35% margin.
+    uint8 public constant PARAM_MK_MIN_GAS_PER_ITEM        = 63;
+
     /// @dev Highest assigned param id -- update whenever a new param is added.
-    uint8 public constant PARAM_MAX_ID                     = PARAM_MK_EVICTION_GRACE;
+    uint8 public constant PARAM_MAX_ID                     = PARAM_MK_MIN_GAS_PER_ITEM;
 
     // ── Governance config (self-governable) ───────────────────────────────────
     uint256 public votingPeriod   = 72 hours;
@@ -507,6 +520,7 @@ contract V8Governance is Ownable {
         // value the frozen-keeper equivalence harness pins to. Default 604800 = 7 days.
         // Must mirror MatrixKeeper.setEvictionGracePeriod's require exactly.
         _allowedValues[PARAM_MK_EVICTION_GRACE] = [0, 86400, 172800, 259200, 345600, 432000, 604800];
+        _allowedValues[PARAM_MK_MIN_GAS_PER_ITEM] = [2_500_000, 3_500_000, 5_000_000, 7_500_000];
         // V8.33: extended idle timeout -- 0.5d/1d/2d/3d/4d/5d/6d/7d/14d
         _allowedValues[PARAM_EXTENDED_IDLE_TIMEOUT] = [43200, 86400, 172800, 259200, 345600, 432000, 518400, 604800, 1209600];
         // V8.35: per-tier whale gate thresholds (1–50 pioneers)
@@ -868,6 +882,9 @@ contract V8Governance is Ownable {
         // ── V8.49 item 1: MatrixKeeper eviction clock (default 7 days) ────────
         } else if (paramId == PARAM_MK_EVICTION_GRACE) {
             t.setEvictionGracePeriod(value);
+        // ── V8.50 defect 8: MatrixKeeper gas floor (default 3.5M) ─────────────
+        } else if (paramId == PARAM_MK_MIN_GAS_PER_ITEM) {
+            t.setMinGasPerItem(value);
         // ── V8.33: MatrixKeeper extended idle timeout ──────────────────────────
         } else if (paramId == PARAM_EXTENDED_IDLE_TIMEOUT) {
             t.setExtendedIdleTimeout(value);

@@ -2012,7 +2012,106 @@ violates, and it survives the enumeration changing.
 
 ---
 
-## SUITE GREEN — 596 passing / 7 pending / 0 failing (2026-08-17)
+## DEFECT 5 — CLOSED. maxItemsPerUpkeep 15 -> 5, MEASURED (2026-08-17)
+
+`test/V8_50_KeeperGas.test.js` (new) builds a real world — no mocks — and costs a whole
+`performUpkeep`, because the failure mode is a transaction running out of gas and gas is
+consumed by transactions, not by items in isolation.
+
+### Per item, MATRIX_SIZE 7
+
+| item | median | max |
+|---|---|---|
+| SF-funded rescue | 1.49M | **1.76M** |
+| self-funded rescue (item A) | 0.92M | 0.92M |
+| eviction | 0.09M | 0.10M |
+| ghost / reclaim | 0.04M | 0.04M |
+
+**An SF-funded rescue costs 1.62x a self-funded one.** That is item A's gas dividend,
+measured. An eviction is 18x cheaper than a rescue; a reclaim 44x.
+
+### ⚠ THE BATCH TABLE IS A TRAP AND IT CAUGHT ME FIRST
+
+GAS-1 costs the batch this fixture happens to produce, and it FLATTENS above cap 10 —
+4.52M, 4.67M, 4.71M, 4.90M — with every cap "fitting" the 17.8M ceiling, up to 40. The
+mix column says why: **this world only ever offers four `PARKED_RESCUE` items**, and every
+slot above that fills with `RECLAIM` at 0.04M. The first draft of the test printed
+"the largest cap under 17.80M is 40" as its conclusion. That would have been the same
+class of error the whole exercise existed to correct — quoting a number whose population
+had changed underneath it.
+
+### THE VERDICT: a SATURATED batch, which defect 6 made ordinary
+
+Discovery now takes parked work FIRST, so a deep parked queue yields a batch of rescues
+and nothing else. That is no longer the pathological composition, it is the normal one
+whenever the queue is deep — and a 25-member fixture cannot build it, so GAS-4 projects
+it from the worst rescue actually measured.
+
+    cap   projected   vs 17.8M   verdict
+      5       8.82M       49%    fits
+     10      17.64M       99%    fits, no margin whatsoever
+     15      26.47M      148%    EXCEEDS
+     20      35.29M      198%    EXCEEDS
+
+**And that is the generous end.** MATRIX_SIZE here is 7; live tiers run 127, where the
+V8.49 chain measured ~2.6M for the same item. At live size: **5 -> ~13M (73%) fits,
+10 -> ~26M (146%) EXCEEDS.** Ten survives in the small world and fails in the real one,
+which is precisely why the value is 5 and not the 10 the local table would permit.
+
+**Set to 5 — for about an hour.** Then defect 8 replaced the control entirely and the cap
+went to **20**. Both moves are correct and the sequence is the point: 5 was the right
+answer to the wrong question.
+
+### DEFECT 8 — THE GAS FLOOR (built same session, owner directive: nothing deferred)
+
+**⛔ CORRECTION FIRST, BECAUSE THE DEFECT 5 REASONING ABOVE CONTAINED A FALSE PREMISE.**
+An earlier draft of this document and of the `maxItemsPerUpkeep` docstring both said an
+out-of-gas batch "reverts WHOLE". **IT DOES NOT.**
+
+Every work item is dispatched as `try this._doXExternal()` — an external self-call. Under
+EIP-150 a sub-call receives 63/64 of the remaining gas, so when the batch runs dry the
+sub-call burns its 63/64, reverts on out-of-gas, and **the catch fires**. The loop then
+continues with 1/64 of nothing and every remaining item fails the same way.
+
+**So exhaustion presents as a CASCADE of `WorkItemFailed` events** — indistinguishable
+from a floor refusal, an SF exhaustion, or an already-rescued member. The transaction
+succeeds. The keeper looks like it ran. This is worse than a revert and it is the exact
+shape that cost a day of misdiagnosis on 2026-07-30.
+
+**The fix.** `MatrixKeeper.minGasPerItem` (default `3_500_000`, DAO param 63, menu
+2.5M / 3.5M / 5M / 7.5M) is checked with `gasleft()` **before** dispatching each item;
+below it the loop emits `BatchGasHalted(processed, total, gasRemaining)` and **breaks**.
+
+- A break, not a revert: reverting would discard the items that ALREADY SUCCEEDED in this
+  transaction, which is the opposite of what a gas guard is for. The skipped tail stays in
+  the queue and `checkUpkeep` rediscovers it next tick.
+- The floor MUST exceed the worst single item or it lets the batch enter work it cannot
+  finish and the cascade returns one item later. 3.5M clears the ~2.6M a live-size rescue
+  measured, with ~35% margin. `GAS-6` asserts this against the measured worst item AND
+  separately against the known live figure the small world cannot see.
+- Measured working: `GAS-5` hands a 20-item batch 12M against a 7.5M floor and it halts at
+  **9 of 20 with 6.46M remaining**, with the tail still discoverable afterwards.
+
+### AND THAT IS WHY THE CAP WENT UP, NOT DOWN
+
+A count is the wrong unit. An eviction costs 1/18th of a rescue, a reclaim 1/44th, so any
+count sized for the worst mix throws away nearly all the throughput on the common one —
+GAS-1 measured a 28-item batch at 4.90M, a quarter of the ceiling, where a cap of 5 would
+have run six items and stopped. With the floor doing the safety work, `maxItemsPerUpkeep`
+is **20**: a batch of evictions runs all 20 for ~2M, a batch of rescues still stops after
+four or five, and nothing has to predict in advance which it is.
+
+Not 40: `performData` is calldata on the way back in, and `_scanMatrix` walks every
+position of every matrix before the cap binds. 20 is the largest DAO menu value that keeps
+both modest.
+
+**Sizes after defect 8:** MatrixKeeper 21,590 (+381, 2,986 spare), V8Governance 12,824
+(+76, 11,752 spare). The tight pair is untouched — MatrixPairFactory 24,498 (78),
+MatrixLogicLib 24,274 (302).
+
+---
+
+## SUITE GREEN — 602 passing / 7 pending / 0 failing (2026-08-17, after defect 8)
 
 After `npx hardhat compile --force`. That is the first CONFIRMED green run of V8.50; the
 earlier "595/0" in this document was a projection that was never executed, and it should
