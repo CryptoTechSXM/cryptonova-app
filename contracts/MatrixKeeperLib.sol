@@ -49,7 +49,14 @@ interface ITierRouterKeeper {
 
 interface IStabilityFundKeeper {
     function payGhostEntry(uint8 tierIndex, address pairManager) external;
-    function activateLayer(uint8 layer, bool active) external;
+    /// ⛔ V8.50: `activateLayer(uint8,bool)` WAS DECLARED HERE AND IMPLEMENTED NOWHERE.
+    ///    StabilityFund has never had it, in any version (`git log -S` returns zero
+    ///    commits), and the fund has no fallback — so every call reverted. It broke the
+    ///    velocity check on every deployment since V8.1. Declaring a function an interface
+    ///    partner does not have is not a type error in Solidity; it compiles, and it fails
+    ///    only at the one moment the branch is reached. The declaration is removed WITH the
+    ///    caller so nothing can call it back into existence by autocomplete. Full write-up
+    ///    at the deleted `MatrixKeeper._setStabilityLayers`.
     function balanceByTier(uint8 tier) external view returns (uint256);
     function totalBalance() external view returns (uint256);
     /// @dev V8.48 item 46: member added so the SF can enforce the insolvency floor.

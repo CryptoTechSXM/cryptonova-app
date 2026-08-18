@@ -1,0 +1,85 @@
+{
+  "arm": "v850",
+  "sources": "C:\\CryptoNite-Smart-Contracts\\CryptoNova\\contracts",
+  "size": 7,
+  "calls": [
+    {
+      "call": 1,
+      "lastVelocityCheckBefore": "1787095098",
+      "result": "OK",
+      "lastVelocityCheckAfter": "1787095130",
+      "advanced": true,
+      "deflationState": "0",
+      "consecutiveRedWindows": "1",
+      "consecutiveGreenWindows": "0"
+    },
+    {
+      "call": 2,
+      "lastVelocityCheckBefore": "1787095130",
+      "result": "REVERTED",
+      "reason": "Transaction reverted: function selector was not recognized and there's no fallback function",
+      "lastVelocityCheckAfter": "1787095130",
+      "advanced": false,
+      "deflationState": "0",
+      "consecutiveRedWindows": "1",
+      "consecutiveGreenWindows": "0"
+    },
+    {
+      "call": 3,
+      "lastVelocityCheckBefore": "1787095130",
+      "result": "REVERTED",
+      "reason": "Transaction reverted: function selector was not recognized and there's no fallback function",
+      "lastVelocityCheckAfter": "1787095130",
+      "advanced": false,
+      "deflationState": "0",
+      "consecutiveRedWindows": "1",
+      "consecutiveGreenWindows": "0"
+    },
+    {
+      "call": 4,
+      "lastVelocityCheckBefore": "1787095130",
+      "result": "REVERTED",
+      "reason": "Transaction reverted: function selector was not recognized and there's no fallback function",
+      "lastVelocityCheckAfter": "1787095130",
+      "advanced": false,
+      "deflationState": "0",
+      "consecutiveRedWindows": "1",
+      "consecutiveGreenWindows": "0"
+    },
+    {
+      "call": 5,
+      "lastVelocityCheckBefore": "1787095130",
+      "result": "REVERTED",
+      "reason": "Transaction reverted: function selector was not recognized and there's no fallback function",
+      "lastVelocityCheckAfter": "1787095130",
+      "advanced": false,
+      "deflationState": "0",
+      "consecutiveRedWindows": "1",
+      "consecutiveGreenWindows": "0"
+    }
+  ],
+  "probes": {
+    "activateLayer_staticCall": "REVERTED: Transaction reverted: function selector was not recognized and there's no fallback function",
+    "activateLayer_rawSelector": "raw call REVERTED: Transaction reverted: function selector was not recognized and there's no fallback function"
+  },
+  "dials": {
+    "velocityWindow": "3600",
+    "velocityThreshold": "3",
+    "deflationThreshold": "10",
+    "recoveryThreshold": "3",
+    "lastVelocityCheck": "1787095098",
+    "deflationState": "0",
+    "consecutiveRedWindows": "0",
+    "consecutiveGreenWindows": "0",
+    "configuredTierCount": "1"
+  },
+  "verdict": {
+    "callsRun": 5,
+    "callsReverted": 4,
+    "firstRevertAtCall": 2,
+    "deflationStateEver": [
+      "0"
+    ],
+    "lastVelocityCheckFrozenAfterFirstFailure": true
+  }
+}

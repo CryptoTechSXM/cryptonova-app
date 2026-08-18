@@ -15,10 +15,18 @@ import "./MatrixKeeperLib.sol";
  *
  *         2. Deflation state machine -- tracks systemwide entry rate:
  *              NORMAL   -> entries in last window >= deflationThreshold
- *              SLOW     -> entries < deflationThreshold; activates L2 referral
- *                          carve and L4 devOps carve in StabilityFund
+ *              SLOW     -> entries < deflationThreshold for 2 consecutive windows
  *              RECOVERY -> entries recovering; transitions back to NORMAL
  *                          after recoveryThreshold consecutive green windows
+ *
+ *            V8.50: this used to read "SLOW ... activates L2 referral carve and L4
+ *            devOps carve in StabilityFund". THE FUND HAS NO LAYERS 2 OR 4 AND NEVER
+ *            HAS — it takes 1, 3 and 5 only. The call that claimed to do it reverted on
+ *            every deployment since V8.1 and took the velocity gate down with it; see
+ *            the write-up at the deleted `_setStabilityLayers`. The machine is now what
+ *            every consumer already treated it as: a REPORTED STATE with no side
+ *            effects. `deflationState` is read by no contract and by no script in any
+ *            repo. Do not re-attach behaviour to it without reading that write-up.
  *
  *         3. Ghost entries -- when a matrix slot is idle for idleSlotTimeout
  *            seconds, the keeper funds a ghost entry from StabilityFund
@@ -1107,7 +1115,10 @@ contract MatrixKeeper is Ownable {
                 if (consecutiveGreenWindows >= recoveryThreshold) {
                     deflationState = STATE_NORMAL;
                     consecutiveGreenWindows = 0;
-                    _setStabilityLayers(false);
+                    // V8.50: `_setStabilityLayers(false)` stood here. Unreachable in
+                    // practice — RECOVERY can only be entered from SLOW, and the SLOW
+                    // transition below reverted, so this line has never executed on any
+                    // deployment. Removed with its twin; write-up where the function was.
                 }
             }
         } else {
@@ -1115,7 +1126,9 @@ contract MatrixKeeper is Ownable {
             consecutiveRedWindows++;
             if (deflationState == STATE_NORMAL && consecutiveRedWindows >= 2) {
                 deflationState = STATE_SLOW;
-                _setStabilityLayers(true);
+                // V8.50: `_setStabilityLayers(true)` stood here, and it is the single line
+                // that broke every velocity check on every deployment this project has
+                // made. Write-up below, where the function used to be.
             }
         }
         if (deflationState != prev) {
@@ -1124,10 +1137,62 @@ contract MatrixKeeper is Ownable {
         }
     }
 
-    function _setStabilityLayers(bool active) internal {
-        IStabilityFundKeeper(stabilityFund).activateLayer(2, active);
-        IStabilityFundKeeper(stabilityFund).activateLayer(4, active);
-    }
+    /**
+     * ⛔ `_setStabilityLayers(bool)` WAS HERE AND WAS DELETED IN V8.50. READ THIS BEFORE
+     *    RE-ADDING ANYTHING THAT TOGGLES SF FUNDING LAYERS FROM THE VELOCITY CHECK.
+     *
+     * IT WAS:
+     *     IStabilityFundKeeper(stabilityFund).activateLayer(2, active);
+     *     IStabilityFundKeeper(stabilityFund).activateLayer(4, active);
+     *
+     * `activateLayer(uint8,bool)` WAS DECLARED IN `IStabilityFundKeeper`
+     * (MatrixKeeperLib.sol — that declaration is removed too, so nothing can call it back
+     * into existence by autocomplete) AND IMPLEMENTED NOWHERE. `git log -S activateLayer --
+     * contracts/StabilityFund.sol` returns ZERO commits — the fund has never had it, in
+     * any version, since `a06aad4 V8.1 Elevator` introduced the caller. The fund has no
+     * fallback, so both lines reverted with "function selector was not recognized".
+     * Its layer model is layers 1, 3 and 5 (`receiveLayer` requires exactly those); the
+     * layers 2 and 4 being toggled here have no meaning in it at all. This was a call into
+     * a design that V8.7 removed.
+     *
+     * WHAT IT COST, MEASURED (test_ab/diag_velocity.js, 2026-08-18, v849b AND v850,
+     * byte-identical results): call 1 OK, calls 2..5 REVERTED, `lastVelocityCheck` frozen
+     * from call 2 onward, `deflationState` never once leaving NORMAL. In the A/B replay it
+     * showed up as `WorkItemFailed` 68 times per run out of 69 keeper ticks — swallowed by
+     * the bare `catch` at the WORK_VELOCITY dispatch, which keeps no reason string.
+     *
+     * ⚠ AND THE FAILED EVENT WAS NOT THE DAMAGE. The revert discarded the WHOLE of
+     * `_doVelocityCheck`, including the per-tier `tierVelocityGreen` writes above, which
+     * run BEFORE this block. That leaves a harm band, per window:
+     *     entries >= deflationThreshold      -> green branch, no layer call, check passed
+     *     entries <  velocityThreshold       -> tier correctly red anyway
+     *     entries in between                 -> THE TIER QUALIFIED FOR A GREEN VELOCITY
+     *                                           GATE AND COULD NOT BE GIVEN ONE.
+     * `tierVelocityGreen` throttles auto-upgrades (TierRouter `_executeAdditive`) and is
+     * read by index.html, status.html, gate_status.js, rr_keeper.js and system_keeper.js.
+     * A tier stuck red through a slow patch is member-facing, and it self-healed only when
+     * traffic climbed back over `deflationThreshold`.
+     *
+     * WHY DELETED AND NOT IMPLEMENTED. `deflationState` is read by NOTHING. Across the
+     * contracts tree it is written by the state machine above, mirrored into TierRouter and
+     * emitted — no contract branches on it. Outside the contracts: zero hits for
+     * `deflationState`, `DeflationStateChanged`, `activateLayer` or `STATE_SLOW` in the
+     * frontend, keeper and mainnet repos. Implementing `activateLayer` would have meant
+     * inventing layer semantics the fund does not have, and spending bytes on a contract
+     * whose size is a live V8.50 constraint, to serve a value nothing reads. Deleting the
+     * caller costs nothing and makes the state machine complete, which is all any consumer
+     * has ever wanted from it.
+     *
+     * IF A DOWNTURN RESPONSE IS WANTED, IT IS A NEW FEATURE AND AN OWNER DECISION — what
+     * extra funding should do during a slow window is an economic question, not a repair.
+     * Build it against layers the fund actually has, and keep it OUT of the transaction
+     * that writes `tierVelocityGreen`: that coupling is what turned one dead call into a
+     * throttled tier. `test/V8_50_VelocityCheck.test.js` G5 is the tripwire — it goes red
+     * the moment the StabilityFund gains an `activateLayer`, and says so.
+     *
+     * ⚠ LIVE V8.48 STILL HAS THIS. The caller has existed since V8.1 and the implementation
+     *   never has, so every deployment ever made carries it. It is fixed for V8.50 only.
+     */
 
     function _doGhostEntry(address matrix, uint8 tierIdx) internal {
         if (!ghostEntryEnabled) return;  // V8.33: ghost entries disabled by default at launch
