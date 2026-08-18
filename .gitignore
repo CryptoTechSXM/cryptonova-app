@@ -33,3 +33,8 @@ _bugs_snapshot*.md
 contracts_v849b/
 artifacts_v849b/
 cache_v849b/
+ab_result_*.json
+ab_sequence_*.json
+ab_fingerprint_*.json
+gas_size*.txt
+suite_*.txt
