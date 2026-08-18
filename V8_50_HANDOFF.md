@@ -60,6 +60,109 @@ outright.** On these numbers V8.50 is not an improvement, it is the fix.
 4. **Four commit bodies have mangled dollar figures** (`fe3f594`, `da622c1`, `56140d3`,
    `2011eed`). Not rewritten; **this document is the record.** Use `git commit -F` — see 6g.
 
+## ⛔ THE V8.50 DEPLOY GATE — DECIDED 2026-08-18
+
+**The question asked:** ship V8.50 to the community and measure it live, simultaneously?
+**The answer: no — private chain first, but a SHORT one with a closed list.**
+
+### WHY NOT STRAIGHT TO THE COMMUNITY
+
+The economics are measured to exhaustion and are NOT the risk. Item A frees 67 of 67 MatA
+parkers, removes 62-65% of funding parks, and both owner decisions replicated across three
+independent samples. **The risk is one number and one untested path:**
+
+1. **EVERY GAS FIGURE WE HAVE IS `MATRIX_SIZE` 7. LIVE IS 127.** `minGasPerItem = 3.5M` is
+   a SAFETY mechanism, and its only live-size input is a ~2.6M ESTIMATE carried from V8.49.
+   Set it too low and the batch enters work it cannot finish — which, per defect 8, does
+   **not revert loudly**. It degrades into a cascade of `WorkItemFailed` indistinguishable
+   from a floor refusal. **A wrong value here hides itself.**
+2. **Defect 9's code path has NO test coverage** — stated in the contract at
+   `MatrixLogicLib:543`. No fixture builds a cascade that refills every seat.
+3. **Defect 8's gas floor has never run on a real chain.**
+4. **PHASE 7/8 are PROJECTIONS onto V8.48 data.** E1 is not deployed anywhere.
+
+And re-registration is something you do to a community **once**. A private failure costs a
+redeploy; a community failure costs the one member-facing event the scope has been
+protecting since it was written.
+
+### THE GATE — FOUR MEASUREMENTS, THEN SHIP
+
+Private chain at **`MATRIX_SIZE` 127**, bigfill to force real rescues. Hours, not days.
+The community stays on V8.48 throughout — that IS the "simultaneous", with the risk on our
+side of the line.
+
+| # | measure | against |
+|---|---|---|
+| 1 | gas per SF-funded rescue at 127 | 1.76M measured at size 7; ~2.6M assumed at 127 |
+| 2 | `BatchGasHalted` fires, and at what batch size | `GAS-5` halted 9 of 20 at size 7 |
+| 3 | MatA parkers freed outright | PHASE 2 projects 67 of 67, 100% |
+| 4 | E1 makes aggregate and ledger bases coincide | PHASE 6 claims it "by construction" |
+
+**If (1) lands above 3.5M, `minGasPerItem` is wrong and must move BEFORE the community
+deploy.** That single number is the whole reason this gate exists.
+
+**THEN re-run `model_item_a.js` against the private V8.50 chain** and re-check PARAM 59 and
+the ladder rung on a RUNNING system rather than a projection. Both are expected to hold —
+they held across three samples — but "expected to hold" is a hypothesis, and rule 2 applies.
+
+### AND RUN THE FRONTEND ABI AUDIT BEFORE THE ADDRESSES CHANGE
+
+`scripts/audit_frontend_abi.js` (new, read-only). Walks EVERY ABI fragment the frontend
+declares and diffs it against the compiled V8.50 artifacts. Two failure modes:
+
+- **MISSING** — the frontend calls something V8.50 does not have. Breaks on deploy. Loud.
+- **SHAPE DRIFT** — selector matches, OUTPUTS differ. The call succeeds and decodes to the
+  **wrong value**. Silent, and the reason this is a tool rather than a grep.
+
+A 2026-08-18 spot-check of the eight surfaces V8.50 changes came back clean: the frontend
+does not read `DIRECT_EARN_BPS` (deleted in defect 2), does not consume `MemberEntered`
+(defect 9), and its crossing hold at `index.html:7509` (`ENTRY_FEE - crossingReserve`)
+matches `MatrixLogicLib:715`, which holds the FULL fee under item A **deliberately** — it
+is the savings lock for the re-entry, not the crossing price. **Reassuring, not conclusive.
+Run the full differ.**
+
+### ✅ THE DIFFER RAN — V8.50 PASSES. 7 findings, ZERO of them V8.50's.
+
+241 fragments across 23 frontend files against 106 compiled contracts.
+
+**Every finding predates V8.50 and none blocks the deploy:**
+
+| finding | verdict |
+|---|---|
+| `getMember` x2 (SHAPE DRIFT) | **V8.50 never touched it** — the only `getMember` in the diff is `getMemberTotalWithdrawn`, a substring. The live site runs this exact contract TODAY. All fields static, so the frontend's 9 decode positionally correct against the contract's 10; it reads `crossingReserve` separately via `crossingReserveOf`. Works, and is tech debt not a break. |
+| `topUpAndCross` | **REMOVED AT V8.32** (`1e28ae9`), four versions ago. `api/rescue.js:131` still CALLS it. **The admin rescue endpoint is dead and has been since V8.32.** |
+| `hasEverJoined` | never existed as a function — it is a FIELD of the `getMember` tuple. Frontend error. |
+| `usdcBalance`, `distributeInterval`, `getFloorPrice` | never present in `contracts/`. `CryptoNovaLP.sol` and `CNOVADirectSale.sol` both exist, so these are functions the frontend invented. |
+
+**THE ANSWER TO THE QUESTION ASKED: nothing V8.50 changes breaks the frontend.** The eight
+V8.50-changed surfaces are clean and the full differ confirms it across all 241 fragments.
+
+**SEPARATELY, FIX WHEN CONVENIENT — these are broken NOW, on V8.48:** the dead
+`/api/rescue` endpoint is the only one with teeth; the other four are declarations the
+frontend never successfully calls.
+
+### ⛔ AND THE DIFFER'S FIRST RUN WAS WRONG — WHICH IS WHY IT GOT FIXED BEFORE USE
+
+It reported **23 problems**. Seventeen were noise:
+
+- **Output comparison used `format("full")`, which includes the PARAMETER NAME.** So
+  `returns (uint256)` vs `returns (uint256 locked)` — identical types — read as drift.
+  ~15 false alarms. Now compares TYPES only (`sighash`).
+- **It assumed every fragment the frontend declares is ours.** Multicall3's `aggregate3`
+  was reported as "MISSING from V8.50", which is true and irrelevant. Now reported as
+  EXTERNAL, against a deliberately tight allowlist.
+
+**A tool that cries wolf gets skimmed, and a skimmed tool is worse than none.** The report
+was NOT handed over at 23; the instrument was fixed first and re-run. 23 -> 7 -> 0 that
+matter.
+
+⚠ **THE DIFFER CHECKS THE INTERFACE, NOT THE MEANING.** A function can keep its exact
+signature and change what its number MEANS — item A halved the crossing price without
+touching a single selector. Semantic drift needs reading, and the crossing-hold check above
+is the shape of that reading.
+
+---
+
 ## READ NEXT, IN THIS ORDER
 
 **7a (THE TWO RULES)** — owner-set, and the session that earned them got five things wrong
