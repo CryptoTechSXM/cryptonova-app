@@ -2192,6 +2192,66 @@ one.
 
 ---
 
+# 6e. THREE SAMPLES IN ONE NIGHT — THE VERDICTS HOLD, THE FIGURES DO NOT
+
+`model_item_a.js` was run three times on 2026-08-18 as phases were added. The chain was
+live throughout, so each run is an INDEPENDENT SAMPLE of a moving population. That was not
+the intent, and it turned out to be the most useful thing about it.
+
+## ⛔ THE UNDERLYING FIGURES ARE VOLATILE. DO NOT QUOTE A POINT VALUE AS "THE" NUMBER.
+
+`WHAT ONE COMPLETED JOURNEY EARNS`, the same quantity, measured three ways:
+
+| when | n | min | median | max |
+|---|---|---|---|---|
+| 2026-08-16 | 63 | $3.40 | **$4.83** | $6.34 |
+| 2026-08-18 block 45630741 | 33 | $3.40 | **$3.40** | $10.90 |
+| 2026-08-18 block 45642648 | 38 | $3.40 | **$6.55** | $10.15 |
+
+**The median nearly doubled in under seven hours** (~12,000 blocks). Other figures moved
+with it — the re-entry ask went from a $2.85 median to $0.00, and the top ladder band from
+8 members to 20. **Item C's case for raising the floor rested on the $4.83 median.** That
+number is not reproducible; it is one draw from a distribution that also produces $3.40
+and $6.55. Any future argument built on a single run's median is built on sand.
+
+The MINIMUM is the stable figure: **$3.40 in all three samples**, exactly the structural
+no-referral floor (250 direct + 1800 pool + 1350 chain). That is the number to reason with.
+
+## ✅ AND THE VERDICTS SURVIVED ALL THREE, WHICH IS WHY THEY CAN BE TRUSTED
+
+Every conclusion recorded tonight was reached on one sample and then, by accident, re-run
+on two more:
+
+| verdict | run 1 | run 2 | run 3 |
+|---|---|---|---|
+| PARAM 59 at 3400 refuses | 1 of 40 | 1 of 33 | 1 of 38 |
+| PARAM 59 at 5000 refuses | 1 (same) | 1 (same) | 1 (same) |
+| members below the 4000 rung | 0 | 0 | 0 |
+| presets 2/3 rescue additionally | 0 | 0 | 0 |
+| can afford T2 at cycle-out, item A | 0 of 39 | 0 of 33 | 0 of 38 |
+| shallow seats | — | 0 of 1534 | 0 of 1412 |
+| SlotReclaimed | — | 0 | 0 |
+
+**Nothing moved.** The decisions are robust to a population that churned substantially
+underneath them, which is a much stronger claim than any of them had when it was made.
+
+## THE 5 -> 6 CO-MOVEMENT: the MemberEntered identification just got firmer
+
+PHASE 9's position-0 count and PHASE 4's "deferral parks (shortfall 0)" were both **5** in
+run 2 and both **6** in run 3. Two independently computed counts moving together across
+samples is far better evidence that they are the same events than a single coincidence
+was — the earlier note calling the cross-check "suggestive rather than conclusive" was
+right to hedge, and the hedge has now been partly discharged. Still not proof: both park
+paths emit `MemberParked(member, 0)` and only `:534` also emits `MemberEntered`.
+
+## WHAT THIS MEANS FOR THE NEXT SESSION
+
+**Run the model more than once before deciding anything.** A single run is a sample, not a
+measurement, and this chain moves fast enough that the difference matters. Where a verdict
+is a COUNT AT A THRESHOLD it appears stable; where it is a MEDIAN it is not.
+
+---
+
 # 6d. THE TWO OWNER DECISIONS — BOTH SETTLED 2026-08-18, BOTH "NO CHANGE"
 
 Settled against `scripts/model_item_a.js` PHASE 7 (added for this), read on the live
