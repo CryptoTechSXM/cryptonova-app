@@ -2247,20 +2247,38 @@ better read as part of the same repair.
 
 ## 4. ⛔ TWO THINGS IN THIS OUTPUT THAT DO NOT ADD UP — OPEN, NOT EXPLAINED
 
-**(a) The script contradicts itself, and the shape of the gap matters.** It prints
-`VERDICT INPUTS (no holes — complete)` and, four lines earlier,
+**(a) ✅ RESOLVED SAME SESSION — A SNAPSHOT RACE, AND MY HYPOTHESIS WAS WRONG.**
+
+The script printed `VERDICT INPUTS (no holes — complete)` and, four lines earlier,
 `EVENTS DO NOT RECONCILE`:
 
     events   loaned $956.46   repaid $443.41
     counters loaned $961.65   repaid $443.41      gap: $5.19 on the LOANED side only
 
-The script blames dropped ranges. **A dropped range would skew BOTH sides.** Repaid matches
-to the cent while loaned is $5.19 short, which points instead at **a lending path that does
-not emit `MemberDebtIncreased`**. If that is right, every debt total derived from events —
-anywhere, in any tool — is a floor rather than a total, and the contract counters are the
-only trustworthy source. **Find the silent path before quoting any event-derived debt
-figure again.** Start by diffing every writer of `memberDebt` against every emitter of
-`MemberDebtIncreased`.
+**I proposed a lending path that emits no event. Reading the source killed it:**
+`StabilityFund` has exactly ONE writer of `memberDebt[member] +=` (:941) and exactly ONE
+of `totalRescueLoaned +=` (:942), in the same function, emitting at :945 with the SAME
+`amount`. No silent path exists, and none ever did.
+
+**`scripts/diag_sf_debt_reconcile.js` (new) found the real cause.** Scanning the same fund
+from block 0: **EXACT on both sides — $966.84 / $966.84 and $443.41 / $443.41.** And its
+counter read $966.84 against the growth script's $961.65 — **the counter had moved by
+exactly the missing $5.19.**
+
+`diag_parked_growth.js` scans ~585k blocks across 22 matrices (minutes of wall clock) and
+then read the counters at the CURRENT head while its events stopped at `tip`. On a live
+chain the counters are ahead by whatever was lent during the scan. At the ~$211/day rate
+that script itself measures, $5.19 is about 35 minutes — the length of the scan.
+
+**FIXED:** the counter read is now pinned with `{ blockTag: tip }`, so both sides describe
+the same instant, and the misleading "some ranges dropped" text is gone. If they ever
+disagree again, the message says outright that scan timing does NOT explain it.
+
+**⚠ THE LESSON, WHICH IS THE SAME ONE AS THE TRUNCATED BATCH AND THE SWALLOWED CENSUS:**
+the instrument's own two statements contradicted each other — "no holes" and "does not
+reconcile" — and that contradiction, not the numbers, was the finding. The wrong
+explanation was reached first, twice, by reasoning instead of measuring. **The event-derived
+debt totals were never wrong.** Nothing quoted from them needs revising.
 
 **(b) Cumulative-net 212 against a live queue of 105, with ZERO evictions recorded.**
 About half the net growth is unaccounted for. Possible explanations not yet checked: park
@@ -2444,11 +2462,18 @@ verify it and close it rather than working around it.**
   ($518.24 outstanding against a $212.35 balance). It also opened two unexplained
   discrepancies, both listed in 6f: a $5.19 loaned-side gap that looks like a lending path
   emitting no event, and cumulative-net 212 against a live queue of 105.
-- **A LENDING PATH MAY NOT EMIT `MemberDebtIncreased`.** Contract counters and event sums
-  agree to the cent on REPAID and differ by $5.19 on LOANED. A dropped log range would
-  skew both. Until this is found, treat every event-derived debt total anywhere in this
-  project as a FLOOR, and read debt from the contract counters. Diff every writer of
-  `memberDebt` against every emitter of `MemberDebtIncreased`.
+- ~~**A LENDING PATH MAY NOT EMIT `MemberDebtIncreased`.**~~ **RESOLVED 2026-08-18 — IT
+  WAS A SNAPSHOT RACE, NOT A SILENT PATH.** `StabilityFund` has one writer of `memberDebt`
+  and one of `totalRescueLoaned`, same function, emitting the same amount.
+  `diag_sf_debt_reconcile.js` reconciles EXACTLY from block 0. `diag_parked_growth.js` was
+  reading the counters at the head after a multi-minute scan whose events stopped at
+  `tip`; the gap was ~35 minutes of lending. Counter read is now pinned to `tip`.
+  **Event-derived debt totals were never wrong — nothing quoted from them needs revising.**
+- **⚠ `diag_parked_growth.js` DEFAULTS TO `deployed_addresses_v8_47.json`** and reads the
+  live V8.48 chain only because `.env` line 69 sets `ADDRESSES_FILE`. Every V8.47 address
+  differs — StabilityFund, pair managers, matrices. **Run it with that variable unset and
+  it silently measures a dead deployment while printing confident numbers.**
+  `diag_sf_debt_reconcile.js` refuses to start without it, rather than guessing.
 - **The SF is draining and two instruments agree.** `diag_parked_growth.js` daily deltas
   and four `model_item_a.js` PHASE 1 balance reads both say the fund is losing ground —
   roughly $125/day, monotonic across ~9.7 hours. Testnet with bigfill stopped, so the

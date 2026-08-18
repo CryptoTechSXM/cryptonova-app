@@ -175,11 +175,42 @@ async function chunkedLogs(c, filter, from, to, label, holes) {
     console.log(`${d}  ${pad(usd(r.loaned), 11)}  ${pad(usd(r.repaid), 11)}  ${pad(usd(net), 12)}`);
   }
   console.log(`   events total: loaned ${usd(loaned)} / repaid ${usd(repaid)} / outstanding-from-events ${usd(loaned - repaid)}`);
+  // ⛔ READ THE COUNTERS AT `tip`, NOT AT "NOW". THIS USED TO BE A RACE AND IT PRINTED
+  //    A WRONG DIAGNOSIS.
+  //
+  // The event scan above walks ~585k blocks across 22 matrices — minutes of wall clock.
+  // This call used to run afterwards with no blockTag, so it read the counters at the
+  // CURRENT head while the events stopped at `tip`. On a live chain the counters are
+  // therefore ahead by whatever was lent during the scan, and the script announced
+  // "EVENTS DO NOT RECONCILE — some ranges dropped" — blaming a cause that was not there.
+  //
+  // MEASURED 2026-08-18: this script reported events $956.46 against counters $961.65,
+  // a $5.19 gap, while printing "no holes — complete" in the same breath. Those two
+  // statements cannot both be true, which is what made it worth chasing.
+  // scripts/diag_sf_debt_reconcile.js then scanned the SAME fund from block 0 and
+  // reconciled EXACTLY ($966.84 / $966.84) — and its counter read $966.84 against this
+  // run's $961.65, i.e. the counter had moved by exactly the missing $5.19. At the daily
+  // lending rate this script itself measures (~$211/day), $5.19 is about 35 minutes:
+  // the length of the scan. A snapshot race, not a defect and not a dropped range.
+  //
+  // Pinning the read to `tip` makes the two sides describe the same instant. If they
+  // still disagree after this, the cause is real and the message below says so.
   try {
-    const [L, R] = [await sf.totalRescueLoaned(), await sf.totalRescueRepaid()];
-    console.log(`   CONTRACT counters (ground truth): loaned ${usd(L)} / repaid ${usd(R)} / OUTSTANDING ${usd(L - R)}`
-      + (L - R === loaned - repaid ? "   (events reconcile exactly)" : "   << EVENTS DO NOT RECONCILE — some ranges dropped, trust the counters"));
-  } catch (e) { console.log(`   contract counters unreadable: ${(e.shortMessage || e.message || "").slice(0, 60)}`); }
+    const [L, R] = await Promise.all([
+      sf.totalRescueLoaned({ blockTag: tip }),
+      sf.totalRescueRepaid({ blockTag: tip }),
+    ]);
+    console.log(`   CONTRACT counters (ground truth, AT BLOCK ${tip}): loaned ${usd(L)} / repaid ${usd(R)} / OUTSTANDING ${usd(L - R)}`
+      + (L - R === loaned - repaid
+        ? "   (events reconcile exactly)"
+        : "   << EVENTS DO NOT RECONCILE AT THE SAME BLOCK — this is NOT the old snapshot race and NOT explained by scan timing. Investigate."));
+  } catch (e) {
+    // An archive node is needed for a historical blockTag. Say which failure this is
+    // rather than silently falling back to a head read and re-creating the race.
+    console.log(`   counters unreadable AT BLOCK ${tip}: ${(e.shortMessage || e.message || "").slice(0, 70)}`);
+    console.log(`   (a pinned read needs archive access; a head read here would reintroduce`);
+    console.log(`    the snapshot race this comment documents — not doing it silently.)`);
+  }
 
   console.log(`\nVERDICT INPUTS${holes.n ? `  (${holes.n} failed range(s)/read(s) — event-derived numbers are FLOORS; re-run with WINDOW=3000)` : "  (no holes — complete)"}`);
   console.log("  Read the three sections together: an ACCELERATING park rate + a high repeat");
