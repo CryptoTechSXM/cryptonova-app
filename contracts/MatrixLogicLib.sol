@@ -540,7 +540,33 @@ library MatrixLogicLib {
 
         try cfg.cnova.mintReward(member, cfg.tierIndex, _reserveDeposit) {} catch {}
 
-        emit MemberEntered(member, self.matrixPos[member], self.members[member].id, address(this));
+        // ⛔ V8.50 DEFECT 9 — GUARDED ON `placed`. IT USED TO FIRE UNCONDITIONALLY.
+        //
+        // The branch at :526-534 above PARKS the member when the cascade refilled every
+        // seat, and then fell through to here. A parked member has matrixPos == 0, so
+        // this event announced "member entered at position 0" for somebody who never
+        // took a seat. `MemberEntered` is the event every off-chain tool reads to mean
+        // "a member was seated"; on that path it was reporting the opposite.
+        //
+        // MEASURED ON LIVE V8.48, 2026-08-18 (scripts/model_item_a.js PHASE 9):
+        // 5 of 1539 MemberEntered events carried bfsPosition 0. Rare, and silent — the
+        // kind of wrong number that corrupts a dashboard or a rewards calculation
+        // rather than failing loudly. It was found only because a shallow-seating
+        // detector flagged those five as seat-0 members and "seat 0" is not a thing.
+        //
+        // NOTHING IS LOST BY GUARDING IT. The park path already emits
+        // MemberParked(member, 0) at :534, which is the truthful event for that
+        // outcome, and the fee is still distributed either way — the two lines above
+        // run before this one, deliberately, because a parked member has still paid.
+        //
+        // ⚠ NOT COVERED BY A TEST, AND SAY SO. Reaching :526-534 needs a cascade that
+        // refills every seat mid-entry, which no fixture in this suite constructs — it
+        // happened 5 times in 200k live blocks. The guard is justified by reading, not
+        // by a red-to-green test. Do not mistake the suite staying green for evidence
+        // that this path was exercised.
+        if (placed) {
+            emit MemberEntered(member, self.matrixPos[member], self.members[member].id, address(this));
+        }
 
         if (!cfg.isMatrixA && self.tierRouter != address(0)) {
             try ITierRouter(self.tierRouter).onCrossToMatB(member, cfg.tierIndex) {} catch {}

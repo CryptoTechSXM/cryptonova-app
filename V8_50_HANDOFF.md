@@ -286,7 +286,7 @@ and `node scripts\sizes.js` after every contract change, not just at the end.
    prediction and the script is the answer.
 2. Defects 2 and 4, within the size budget above.
 3. `maxItemsPerUpkeep` 15 -> 5 or 10.
-4. Items D, the organic growth reading, and the tier-gate recalibration.
+4. Item D and the organic growth reading. (The tier-gate recalibration is CLOSED — PHASE 8 measured it as fixture-specific; live T2 is $25 and nobody upgrades at cycle-out in either world.)
 
 # ⛔⛔ OWNER DIRECTIVE, 2026-08-17: NOTHING DEPLOYS, NOTHING DEFERS
 
@@ -343,7 +343,7 @@ floor chosen against the broken basis would be a number nobody could defend late
   changes item D's severity but not its existence.
 - **The organic growth rate.** `logs/parked_baseline.csv` and `diag_parked_growth.js` —
   parks vs rescues vs EVICTIONS per day, still never run.
-- **Tier-gate recalibration** after the acceleration finding.
+- ~~**Tier-gate recalibration** after the acceleration finding.~~ **CLOSED 2026-08-18.** `model_item_a.js` PHASE 8: live T2 is $25.00 and 0 of 39 can upgrade at cycle-out under EITHER V8.48 or item A. The acceleration was V8Elevator's fee ladder, not this chain's. No recalibration, no contract change.
 
 ## 🚨🚨 MEASURED ON CHAIN 2026-08-17: PARAM 59 = 5000 RESCUES **ZERO** MEMBERS
 
@@ -780,7 +780,55 @@ seat guard. Under item A the whole crossing IS half a fee, so the full fee trips
 `CROSSING_PRICE`, mirrored from `MatrixLogicLib`'s `internal` constant with its source
 named — the same way `V8_48_SplitGrace.test.js` mirrors it.
 
-### ⛔ SCOPE ITEM, OWNER-ACCEPTED 2026-08-17: ITEM A ACCELERATES TIER PROGRESSION
+### ✅ CLOSED 2026-08-18 ON MEASUREMENT — THE CLAIM BELOW IS FIXTURE-SPECIFIC
+
+**READ THIS BEFORE THE SECTION IT PRECEDES.** Everything below was measured on
+`V8Elevator`'s fixture, which picks its own tier fees. `scripts/model_item_a.js` PHASE 8
+(added for this) reads the REAL ladder off each tier's MatA and asks the same question:
+
+    THE LIVE FEE LADDER   T1 $10   T2 $25   T3 $50   T4 $100   T5 $250 ... T10 $10,000
+
+    HOLDINGS AT THE MatA CYCLE-OUT, n=39 members who completed a journey
+      V8.48 (crossing ate $5.00 of earnings)   min $0.00  median $0.00  max $5.90
+      item A (reserve paid it in full)         min $3.40  median $3.40  max $10.90
+
+    T2 ENTRY FEE $25.00 — who can upgrade at cycle-out?
+      under V8.48    0 of 39
+      under item A   0 of 39
+
+**THE LOGGED CLAIM IS FALSE ON THIS CHAIN.** Nobody reaches T2 at their first cycle-out
+in either world, so **T2's whale gate does not trip sooner, `tierGateThreshold` needs no
+recalibration, and there is no contract change.** The `$7.66 against a $7 T2 fee` figure
+below is the fixture's ladder; the live T2 fee is $25.00. **The open scope item is
+CLOSED — measured, not real here.**
+
+### ⛔ BUT THE REAL FINDING IS BIGGER THAN THE ONE THAT WAS LOGGED
+
+Read the two holding rows again. **Under V8.48 the median member holds $0.00 after their
+crossing.** A completed journey earns $3.40 and the crossing demands $5.00 of earnings on
+top of the reserve — so the median member cannot fund the crossing at all. They park, or
+they borrow. That is the 68 MatA parkers and the $727.05 of lending, seen from the
+member's side rather than the fund's.
+
+Under item A the same member keeps **$3.40 every cycle**.
+
+So item A's effect on progression is not "T2 arrives one cycle sooner". It is that **T2
+becomes reachable AT ALL for the median member** — roughly eight cycles of accumulation
+at $3.40, against a V8.48 per-cycle balance of zero and no upward path whatsoever.
+
+**Correct the framing wherever it appears.** This document has said "the benefit arriving
+faster than predicted". It is not faster. It is **existing where it previously did not**.
+That is a stronger claim, it is measured, and it is the one to use with members.
+
+⚠ NOT MODELLED: multi-cycle accumulation. PHASE 8 answers only "does item A move the
+FIRST cycle-out across the T2 line", which is the specific claim that was logged. The
+eight-cycle figure above is arithmetic on the median, not a simulation. A real
+progression model would simulate repeated cycles and is a separate piece of work.
+
+---
+
+### THE ORIGINAL ENTRY, KEPT VERBATIM — ⛔ ITS NUMBERS ARE THE FIXTURE'S, NOT THIS CHAIN'S
+
 
 **Two failing tests turned out to be one finding, and it is not a test problem.**
 
@@ -2141,6 +2189,71 @@ shipped lets parked take the whole batch** — defensible because parked work dr
 rescue or an eviction removes the item) while housekeeping has no deadline to miss, but
 it is a policy choice and it is reversible with a reserved-slots param if the owner wants
 one.
+
+---
+
+# 6d. THE TWO OWNER DECISIONS — BOTH SETTLED 2026-08-18, BOTH "NO CHANGE"
+
+Settled against `scripts/model_item_a.js` PHASE 7 (added for this), read on the live
+V8.48 chain, 40 MatB parkers, post-E1 basis.
+
+## PARAM 59 `insolvencyFloorBps` — STAYS AT 3400
+
+    1700 -> refuses 35 of 40      3400 -> refuses  1   <- live default
+    2500 -> refuses 32            5000 -> refuses  1   <- the proposal. SAME MEMBER.
+                                  6800 -> refuses  0
+
+**Raising 3400 -> 5000 refuses the identical member.** The change that opened this item
+buys nothing measurable. Only 6800 moves the outcome, and that one member is one of the
+two carrying existing debt — the exact case the floor exists to refuse. Nearly doubling
+the ceiling to reach them inverts the mechanism.
+
+**⚠ PHASE 5 AND PHASE 7 DISAGREE HERE AND PHASE 7 IS THE ONE TO QUOTE.** Phase 5's sweep
+reports 3400 clearing 40 of 40; phase 7 reports one refusal. Different models: phase 5
+compares the raw ask to the ceiling, phase 7 does what policy B does — trims the advance
+to `min(sfShare, shortfall)` and adds EXISTING debt. Phase 5 is the optimistic bound.
+
+## SF rescue ladder bottom rung — STAYS AT PRESET 1 (4000)
+
+    10000+  6 | 8000-8500  3 | 7000-7500 24 | 6500-7000  7 | BELOW 4000  0
+
+Nobody is off the bottom. Preset 2 would additionally rescue 0; preset 3, also 0.
+
+**The ~3400 worry was a PRE-E1 artefact.** It only exists on the ledger basis, where
+item A strands journey-A earnings in a MatA ledger the re-entry gate cannot read. E1
+carries them across, so the whole population sits at 6500 bps and up. **E1 did not just
+close the conservation hole — it removed the reason to touch the ladder.**
+
+## What this run also established, independent of the decisions
+
+- **Item A's premise holds on chain, exactly: 67 of 67 MatA parkers freed outright.**
+  $103.35 of real shortfall becomes $0.00.
+- **Item A removes 64.7% of all funding parks** — 458 of 708 — and $727.03 of lending.
+- **Phase 3 reconciles on all 171 self-funded crossings**, with the 50/50
+  reserve/withdrawable split falling out structurally rather than by coincidence.
+- **The live crossing buffer is 3600 bps; V8.50 ships `crossingBufferBps` at 0.** Already
+  a recorded decision with the knob documented at the declaration, but it means rescued
+  members stop being seeded 36% of the fee as SF money. Watch it wherever V8.50 first runs.
+- **MatB parkers carrying debt: 2 of 40**, and `_crossToPartner` claws back HARDER under
+  item A, not softer — the member arrives holding more.
+
+## ⚠ BOTH DECISIONS REST ON A PROJECTION, NOT A RUNNING SYSTEM
+
+E1 is not deployed. The live chain is V8.48, so PHASE 7 projects V8.50 onto today's
+members. Neither decision should be treated as settled for a running system until V8.50
+runs somewhere and the model is re-read there. Both were "no change", so nothing is at
+risk from the projection being wrong — but a FUTURE change to either must not cite this
+table as if it were a measurement of V8.50 in operation.
+
+## Also open, and it bit this session
+
+`model_item_a.js` treats an RPC **503** as "constant unreadable" and aborts. Refusing to
+assume `CROSSING_RESERVE_BPS` is correct — guessing it would corrupt every number
+downstream — but a busy endpoint and a missing selector are different failures sharing
+one code path. It needs a retry wrapper that distinguishes transport errors (503, 429,
+timeouts, resets) from genuine call failures, and only declares a value unreadable after
+several attempts. Same discipline as `diag_parked_ages.js`. **Do not "fix" it by changing
+the endpoint** — public endpoints were tried in this site's read pool and removed.
 
 ---
 

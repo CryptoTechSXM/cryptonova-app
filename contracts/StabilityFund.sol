@@ -812,6 +812,35 @@ contract StabilityFund is Ownable2Step {
     /// THE LESSON, worth more than the number: a floor calibrated against a total the
     /// enforcing code cannot see is not calibrated at all. Any future change to this
     /// value must state WHICH BALANCE it was measured against.
+    ///
+    /// ✅ OWNER DECISION 2026-08-18: STAYS AT 3_400. Settled against measurement, not
+    ///    caution. scripts/model_item_a.js PHASE 7 (added for this decision) models what
+    ///    the LENDER actually does — min(sfShare, shortfall) plus EXISTING debt against
+    ///    the ceiling, which is policy B — over all 40 live MatB parkers on the post-E1
+    ///    basis:
+    ///        1700 bps -> refuses 35 of 40
+    ///        2500 bps -> refuses 32
+    ///        3400 bps -> refuses  1      <- live default
+    ///        5000 bps -> refuses  1      <- THE PROPOSED CHANGE. IDENTICAL OUTCOME.
+    ///        6800 bps -> refuses  0
+    ///        10000    -> refuses  0
+    ///
+    ///    Raising 3400 -> 5000 refuses THE SAME MEMBER. The proposal that opened this
+    ///    item bought nothing measurable. The only value that changes the outcome is
+    ///    6800, and the single member it would rescue is one of the two currently
+    ///    carrying debt — precisely the case the floor exists to stop lending to.
+    ///    Nearly doubling the debt ceiling to reach them inverts the mechanism.
+    ///
+    /// ⚠ PHASE 5's SWEEP DISAGREES WITH PHASE 7 AT THIS VALUE AND PHASE 7 IS RIGHT.
+    ///    Phase 5 reports 3400 clearing 40 of 40; phase 7 reports 1 refusal. They model
+    ///    different things — phase 5 compares the raw ask to the ceiling, phase 7 adds
+    ///    the member's existing debt and trims the advance to the SF's actual share.
+    ///    Phase 5 is the OPTIMISTIC BOUND. Quote phase 7 when the number decides
+    ///    anything.
+    ///
+    /// ⚠ AND THE BASIS IS A PROJECTION. E1 is not deployed; the live chain is V8.48, so
+    ///    phase 7 projects V8.50 onto today's members. Re-check on a private-chain
+    ///    deploy of V8.50 before treating this as settled for a running system.
     uint256 public insolvencyFloorBps = 3_400;
 
     event InsolvencyFloorBpsSet(uint256 bps);

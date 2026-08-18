@@ -627,6 +627,31 @@ contract MatrixKeeper is Ownable {
         _applyLadderPreset(uint8(preset));
     }
 
+    /// @dev ✅ OWNER DECISION 2026-08-18 — THE BOTTOM RUNG STAYS AT PRESET 1 (4000 bps).
+    ///
+    ///      The question was whether item A pushes early-MatB members off the bottom of
+    ///      the ladder: their effective contribution reads ~3400 bps against preset 1's
+    ///      4000 floor, so they would fall off DEBT-FREE where V8.48 kept them on it
+    ///      owing $1.60. Presets 2 and 3 reach 3000 and 1000 and would have caught them.
+    ///
+    ///      MEASURED — scripts/model_item_a.js PHASE 7, all 40 live MatB parkers:
+    ///          10000+      6 members
+    ///          8000-8500   3
+    ///          7000-7500  24
+    ///          6500-7000   7
+    ///          BELOW 4000  0      <- NOBODY
+    ///      Preset 2 would additionally rescue 0. Preset 3 would additionally rescue 0.
+    ///
+    ///      ⛔ THE ~3400 READING WAS A PRE-E1 ARTEFACT. It only arises on the LEDGER
+    ///      basis, where item A leaves journey-A earnings stranded in the MatA ledger
+    ///      that the re-entry gate cannot see. Item E1 carries that balance across, so
+    ///      the gate sees journey A + journey B and the whole population sits at 6500
+    ///      bps and above. E1 did not only close the conservation hole — it removed the
+    ///      reason to touch this ladder at all.
+    ///
+    ///      Changing the rung would therefore be a change with NO MEASURED EFFECT, on a
+    ///      structure every rescue test is calibrated against. Re-open it only if a
+    ///      future PHASE 7 shows members below 4000.
     function _applyLadderPreset(uint8 preset) internal {
         delete sfRescueThresholds;
         delete sfRescueBpsLadder;
