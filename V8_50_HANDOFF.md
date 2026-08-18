@@ -3,7 +3,67 @@
 Written 2026-08-16 at the end of the V8.49 private measurement run.
 Sessions 2, 3 and 4 have appended to it since; read the NEWEST section first — each one
 corrects the ones below it, and says so explicitly where it does.
-Audience: a future session of Claude, plus the owner. Nobody else touches this code.
+Audience: **the next session of Claude, plus the owner. There is no third party — every
+line of this codebase was written by a previous session of Claude and executed by the
+owner.** Read section 7a (THE TWO RULES) before doing anything else; it is short, it is
+owner-set, and the session that earned it got five things wrong by ignoring what it says.
+
+---
+
+# ⬛ SESSION 5 STATE — 2026-08-18. READ THIS FIRST, BEFORE SESSION 4.
+
+**V8.50 IS CODE-COMPLETE ON EVERYTHING FOUND SO FAR. NOTHING IS DEPLOYED. NO CHAIN WAS
+TOUCHED. `.env` line 69 is unchanged.** Suite: **602 passing / 7 pending / 0 failing**
+after `npx hardhat compile --force`. Branch `v8.1`, pushed.
+
+## BUILT AND TESTED THIS SESSION
+
+| item | what it is |
+|---|---|
+| **E1** | the crossing carries the member's balance across — closed the LEDGER SPLIT that stranded journey-A earnings where the re-entry gate could not see them |
+| **defect 2** | deleted `DIRECT_EARN_BPS` (public, and wrong since V8.32) |
+| **defect 4** | `totalEarnedOf` added; keeper deliberately NOT repointed — renamed to `claimableEver` |
+| **defect 5** | `maxItemsPerUpkeep` 15 -> 20, measured not estimated |
+| **defect 6** | discovery ordered by DEADLINE — parked work no longer starves behind ghost/reclaim |
+| **defect 7** | the KeeperScan pins never collapsed anything; a 4th pin stops the batch truncating |
+| **defect 8** | **the gas floor.** An OOG batch does NOT revert — it cascades WorkItemFailed and looks like a refusal |
+| **defect 9** | `MemberEntered` fired for members who were PARKED, not seated |
+
+## CLOSED BY MEASURING — NO CODE CHANGE
+
+- **PARAM 59 stays 3400.** 5000 refuses the identical member. Replicated across 3 samples.
+- **Ladder stays preset 1.** Nobody below the 4000 rung; presets 2/3 rescue 0 more.
+- **Tier-gate recalibration: nothing to recalibrate.** Live T2 is $25.00; 0 of 38 upgrade
+  at cycle-out in EITHER world. The acceleration was V8Elevator's fixture ladder.
+- **Item D: does not occur.** 0 shallow seats in 1412 real seatings, 0 reclaims.
+
+## THE OPERATIONAL FINDING THAT MATTERS MOST
+
+**The self-sustaining loop is real, and the fund is underwater.** 773 park events across
+339 members — only **57 parked once and stayed out**; 83.2% came back. SF outstanding
+**$509.46** against a balance of **$192.99**, draining all session. **Item A removes
+62-65% of ALL funding parks (~$724 of lending) and frees 67-75 of 67-75 MatA parkers
+outright.** On these numbers V8.50 is not an improvement, it is the fix.
+
+## OPEN — NOTHING BLOCKING
+
+1. **Nothing is deployed.** The scope's plan is V8.50 -> private chain -> measure -> the
+   one member-facing deploy the community re-registers into. Both owner decisions and the
+   PHASE 7 tables are PROJECTIONS onto V8.48 data; **re-run the model after a private
+   deploy before treating them as settled for a running system.**
+2. **Four exit paths emit nothing** (`enterMatrix` re-entry, `forceCross`, `exitSeat`,
+   `deductForUpgrade`). `diag_parked_growth`'s `net` is an upper bound; `getParkedCount`
+   is exact. Not a defect — a documented limit.
+3. **The ACCELERATING/LINEAR rate label is noise** at current precision (crossed its
+   threshold by 0.2 parks/day). The loop conclusion rests on the repeat share and the
+   climbing SF outstanding, not on that label.
+4. **Four commit bodies have mangled dollar figures** (`fe3f594`, `da622c1`, `56140d3`,
+   `2011eed`). Not rewritten; **this document is the record.** Use `git commit -F` — see 6g.
+
+## READ NEXT, IN THIS ORDER
+
+**7a (THE TWO RULES)** — owner-set, and the session that earned them got five things wrong
+by ignoring what they say. Then 6f (the loop and the fund), then 6d (the two decisions).
 
 ---
 
@@ -2208,11 +2268,19 @@ of the V8.50 work.
 **ONLY 59 OF 339 MEMBERS PARKED ONCE AND STAYED OUT. 82.6% CAME BACK.**
 
 That is the rescue -> SF debt -> re-seat -> cycle out underfunded -> park again cycle,
-observed directly. The script's own criterion for the self-sustaining loop is "a high
-repeat share + climbing SF outstanding", and both are met decisively. (Its third
-criterion, an ACCELERATING park rate, it classifies as ROUGHLY LINEAR — first-half
-103.0/day against a last-3-day 149.7/day. Rising 45%, but the script's own threshold says
-linear, and its word is kept here rather than argued with.)
+observed directly. **A later run the same night, after the exit-counting fix, read 773 park
+events across the same 339 members — 1x:57, 2x:161, 3-5x:120, 6-10x:1 — a repeat share of
+51.0% and 83.2% of members returning at least once.** The direction is stable across runs.
+
+⚠ **THE RATE CLASSIFICATION IS A COIN FLIP AND MUST NOT BE QUOTED AS A VERDICT.** The
+script calls the loop real when an ACCELERATING rate joins the other two criteria. It
+printed ROUGHLY LINEAR on one run (149.7/day) and ACCELERATING on the next (154.7/day) —
+but its threshold is `lastThree > firstHalf * 1.5`, i.e. **154.5**, so the second run
+crossed by **0.2 parks/day**. At that precision the label is noise, not a finding. What is
+solid: the park rate is rising roughly 50% and sitting exactly on an arbitrary threshold.
+**Do not report "all three criteria met".** The repeat share and the climbing SF
+outstanding carry the loop conclusion on their own; the rate neither adds to it nor
+subtracts from it at this precision.
 
 ## 2. THE FINANCING — THE FUND HAS LENT 2.4x WHAT IT HOLDS
 
@@ -2280,11 +2348,33 @@ reconcile" — and that contradiction, not the numbers, was the finding. The wro
 explanation was reached first, twice, by reasoning instead of measuring. **The event-derived
 debt totals were never wrong.** Nothing quoted from them needs revising.
 
-**(b) Cumulative-net 212 against a live queue of 105, with ZERO evictions recorded.**
-About half the net growth is unaccounted for. Possible explanations not yet checked: park
-events counted per-event while the queue is per-member; members leaving via a path the
-script does not count; or the daily net arithmetic double-counting. **No explanation is
-offered here because none has been verified.**
+**(b) ✅ RESOLVED SAME SESSION — THE SCRIPT COULD NOT SEE THE KEEPER'S OWN RESCUES.**
+
+Cumulative-net read 212 against a live queue of 105. `MatrixLogicLib` has **ELEVEN** call
+sites of `_removeFromParkedQueue`; the `net` column knew about **three**:
+
+| exit | was it counted? |
+|---|---|
+| `CoPayRescue` (:1663), `SelfRescue` (:1754), `MemberEvicted` | yes |
+| **`forceCrossKeeper` (:1601) — the keeper's automated rescue** | **NO** |
+| `GhostDequeued` (:1825 / :1855 / :1863) | NO |
+| `enterMatrix` re-entry (:400), `forceCross` (:1536), `exitSeat` (:1803), `deductForUpgrade` (:1913) | **emit nothing at all** |
+
+**The keeper's rescue was missed for a specific and memorable reason: its event
+`ParkedRescued` is emitted by `MatrixKeeper`, not by the matrix**, and the script only ever
+read matrix events. That one omission is most of the gap.
+
+**FIXED and re-measured: cumulative-net 108 against a live queue of 106.** The `keeper`
+column carries 110 previously invisible exits. The residual 2 is the four silent paths,
+which no event scan can ever subtract — `net` is now labelled an UPPER BOUND and
+`getParkedCount` is the only exact figure. (`RescueLoanIssued` is not a usable substitute:
+it is guarded on `totalLoan > 0`, so a self-funded rescue emits nothing there.
+`ParkedRescued` always fires — checked, because V8.50 makes self-funded rescues the common
+case and it would otherwise have been a real observability regression.)
+
+**⚠ THE HEADLINE FINDINGS WERE NEVER AFFECTED.** The repeat share is computed from park
+events alone and the financing verdict rests on the contract counters. Only the `net` and
+`cumulative-net` columns were wrong, and they overstated growth.
 
 Neither of these changes the two headline findings — the repeat share comes from park
 events alone, and the financing verdict rests on the CONTRACT COUNTERS, not the events.
@@ -2456,6 +2546,57 @@ Contracts push to **`v8.1`**. `admin → preview → main` is the FRONTEND repo 
 **Write docs and handoffs for a future session of Claude plus the owner. Nobody else
 touches this code, so anything unexplained is an incomplete handoff from a past session:
 verify it and close it rather than working around it.**
+
+⛔ **AND STOP WRITING "WHOEVER PICKS THIS UP".** Owner correction, 2026-08-18. There is no
+third party and there never has been. Every line here was written by a previous session of
+Claude and executed by the owner. "Whoever picks this up" is **future-Claude reading its
+own notes** — vague attribution invites vague standards, and a note addressed to nobody in
+particular gets written to nobody's standard. Address it to yourself.
+
+# ⛔ 7a. THE TWO RULES — OWNER-SET 2026-08-18, AFTER A SESSION THAT EARNED THEM
+
+## RULE 1 — DO NOT HYPOTHESISE UNLESS NECESSARY.
+## RULE 2 — MEASURE AND TEST BEFORE IMPLEMENTING. NEVER BUILD ON A HYPOTHESIS.
+
+These are not general advice. They were set because of a specific, repeated failure in the
+2026-08-18 session, and the evidence is worth keeping so the rules do not decay into slogans.
+
+**EVERY WRONG ANSWER THAT SESSION CAME FROM REASONING AHEAD OF MEASURING:**
+
+| the hypothesis, asserted confidently | what measurement said |
+|---|---|
+| "A lending path emits no event — find the silent path" | ONE writer, ONE emitter, same function. It was a **snapshot race**: counters read at the head after a multi-minute scan. |
+| "Six KeeperScan failures are an un-collapsed split grace" | The **batch was truncating at 15**. Both keepers full, keeping different work by design. |
+| "0.32% of entries are shallow seats — item D is real" | Position 0 **is not a seat**. Those were parks. Zero reclaims had fired, which made it impossible on its face. |
+| "Item A accelerates tier progression; recalibrate the gates" | Measured on **V8Elevator's fixture ladder**. Live T2 is $25.00 and NOBODY upgrades at cycle-out in either world. |
+| "The suite is at 595 passing / 0 failing" | Never executed. It was a **projection written as a result**. |
+
+**AND EVERY CORRECT ANSWER CAME FROM BUILDING AN INSTRUMENT FIRST:**
+`V8_50_KeeperGas.test.js` (the cap, measured not estimated) · `diag_parked_ages.js` (the
+census with nothing swallowed) · `diag_sf_debt_reconcile.js` (the $5.19) · PHASE 7/8/9 of
+`model_item_a.js` (both owner decisions, the tier gates, item D).
+
+## HOW TO OBEY THEM IN PRACTICE
+
+1. **When two numbers disagree, THE DISAGREEMENT IS THE FINDING.** Do not explain it —
+   measure it. `no holes` beside `EVENTS DO NOT RECONCILE`; five shallow seats beside zero
+   reclaims; a batch fitting the ceiling at every cap. Each contradiction was the whole
+   answer and each was nearly explained away first.
+2. **A number you have not run is not a result.** Never write a measurement in the past
+   tense until it has executed. If it is a projection, label it a projection in the same
+   sentence.
+3. **Build the instrument before the fix.** It is cheaper than a wrong fix and it is the
+   only thing that tells you the fix worked. Three V8.50 scope items closed with NO code
+   change once measured.
+4. **State the basis with every figure.** Which ledger, which deployment, which block,
+   which matrix size. The 3400/5000 reversal happened because a floor was calibrated
+   against a total the enforcing code could not see.
+5. **One sample is not a measurement.** A count at a threshold held across three runs; a
+   median nearly doubled in seven hours. Run it again before deciding.
+6. **When a hypothesis IS necessary — and sometimes it is — say so out loud, mark it
+   UNVERIFIED, and put measuring it at the top of the list.** Rule 1 says "unless
+   necessary", not "never". What is forbidden is letting an unmarked guess become the
+   basis for code.
 
 ---
 
