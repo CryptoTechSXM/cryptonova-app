@@ -20,6 +20,112 @@ Files changed: `contracts/MatrixKeeper.sol` (the value + its write-up),
 instruments). **Suite 602 -> 606 passing / 7 pending / 0 failing**, run in full after the
 change (`npx hardhat compile --force` first). That file went 6 tests -> 10.
 
+## ⛔ THE v8.49b vs V8.50 A/B — RUN, REPLICATED 3 SEEDS, AND IT CONTRADICTS PART OF THE SCOPE
+
+**Harness:** `test_ab/` — one deterministic sequence file replayed on BOTH arms.
+`contracts_v849b/` is `git archive de27329` (the V8.49 private-deploy commit); a second
+hardhat config (`hardhat.v849b.config.js`) builds it into `artifacts_v849b/` so the V8.50
+tree cannot be perturbed. `git log de27329..HEAD -- contracts/` = SIX commits, all V8.50, so
+the A/B isolates exactly the release: item A + B + E1 + defects 2,4,5,6,7,8,9.
+
+**Conditions:** 288 members, `MATRIX_SIZE` 127, seeds 1/2/3, `AB_CAP=5` on BOTH arms, all
+grace periods 0, single tier, single pair. Validity gate passed on all three: 289 registered
+and 0 keeper failures on both arms.
+
+### ✅ THE FUND CLAIMS HOLD — 3 of 3 SEEDS, SAME DIRECTION
+
+| | v849b | V8.50 |
+|---|---|---|
+| loans per rescue | 0.98 / 1.00 / 0.99 | **0.57 / 0.48 / 0.50** |
+| loan volume | $106.91 / $96.23 / $108.19 | **$40.02 / $36.01 / $45.06** |
+| SF balance at end | $20.23 / $24.97 / $13.28 | **$96.54 / $99.12 / $90.31** |
+| distinct members who ever parked | 112 / 109 / 112 | **71 / 65 / 62** |
+
+**Half of all rescues stop touching the fund. Lending volume falls ~60%. The fund ends 4-6x
+healthier. ~40% fewer members are ever exposed to parking at all.** That is item A, measured
+against a running control rather than projected onto V8.48 data.
+
+### ⛔ AND THE LOOP CLAIM DOES NOT HOLD. DO NOT QUOTE THE SCOPE ON THIS.
+
+**TOTAL PARK EVENTS ARE UNCHANGED** — ~131 on both arms, every seed. What changes is who
+they land on:
+
+| | v849b | V8.50 |
+|---|---|---|
+| park events | 136 / 131 / 133 | 139 / 128 / 128 |
+| distinct parkers | 112 / 109 / 112 | 71 / 65 / 62 |
+| parked MORE THAN ONCE | 12 / 11 / 11 | **61 / 54 / 55** |
+| repeat-park share | 0.11 / 0.10 / 0.10 | **0.86 / 0.83 / 0.89** |
+| evictions | 1 / 1 / 0 | **9 / 11 / 10** |
+| rescues | 88 / 84 / 86 | 47 / 44 / 44 |
+
+**V8.50 HALVES THE NUMBER OF MEMBERS WHO EVER PARK, AND THE ONES WHO DO PARK CYCLE.**
+Session 5's problem statement for live V8.48 was "83.2% came back". V8.50 shows **86%** here.
+On this evidence V8.50 does not fix the loop — it reduces exposure to it.
+
+**AND V8.50 EVICTS ~10x MORE** (≈10 vs ≈1 per run). Members removed rather than helped. It
+performs HALF as many rescues yet ends with HALF as many parked; the arithmetic only closes
+via those evictions plus repeat-rescues of the same members.
+
+### WHAT IS HYPOTHESIS HERE, MARKED AS SUCH
+
+- **UNVERIFIED:** that the extra evictions are defect 6's deadline-ordered discovery finally
+  reaching eviction work V8.49 starved. Plausible and tidy; not measured.
+- **UNVERIFIED:** that item A's cheaper rescues return a member with less support, so they
+  re-park sooner. This is the obvious story for the repeat-park inversion and it is exactly
+  the kind of explanation that is easy to believe because it is neat. **Measure it before
+  building on it** — the instrument would be per-member: time-to-re-park and withdrawable
+  balance at the moment of rescue, by arm.
+
+### FIXTURE LIMITS — READ BEFORE GENERALISING ANY OF THE ABOVE
+
+- `WorkItemFailed` is **68 VELOCITY on every run, both arms, identical**. Non-confounding
+  (identical across arms) but unexplained. Worth a look before this harness is trusted further.
+- **NO SELF-RESCUE IS MODELLED.** Section 8 already says `SELF_RESCUE_RATE = 0` is a
+  pathological extreme, not a population — real members top up and pay. This harness is that
+  extreme by construction, so the repeat-park figures are an upper bound on churn.
+- Single tier, single pair, grace periods 0, cap pinned to 5 on both arms.
+
+### ⛔ WHY THE CAP HAD TO BE PINNED — A REAL V8.50 BENEFIT, FOUND BY ACCIDENT
+
+The first 127 run came back VOID: the CONTROL failed 7-8 keeper ticks, V8.50 failed none.
+v849b has **no gas floor**, so with `gasLimit` 16.7M it attempts all 15 items, runs out of
+gas and the transaction REVERTS. That is defect 8's rationale reproducing itself as an
+experimental artifact — and it means **the control cannot execute the same workload the
+subject can**. Pinning both arms to cap 5 (measured to fit at 5.11M) made the pairs valid.
+
+Worth keeping: a whole class of V8.50 benefit is invisible in the valid runs precisely
+BECAUSE the cap had to be pinned to make the comparison fair.
+
+### HARNESS TRAPS — ALL FOUND BY THE INSTRUMENT CONTRADICTING ITSELF
+
+- **Library events are not in a contract's ABI.** `RescueLoanIssued`, `SelfRescue` and
+  `CoPayRescue` are all emitted from `MatrixLogicLib` (:1611/:1660/:1665/:1756). Parsing with
+  contract interfaces alone reported **`loans: 0` alongside 18 completed rescues** — which
+  would have read as "item A removed ALL the lending", the exact headline under test. **A
+  zero that flatters the hypothesis deserves more suspicion than one that does not.**
+- **Parsing one log with five interfaces double-counts.** The first version pushed every
+  successful parse, multiplying every count. Ratios would have survived it; raw totals would
+  have been silently wrong. It surfaced only because a second bug crashed the run.
+- **A test's own leftover state is not a fact about the contract.** Record dials by READING
+  THEM BACK; an intent flag proves nothing. The seed-1 equalised pair came back byte-identical
+  to the default pair and there was no way to tell "the cap did not matter" from "the setter
+  never fired".
+- **`Select-String` with a non-ASCII pattern silently matches nothing** against a console that
+  mangles UTF-8. It hid every keeper-failure line. Diagnostics go in the RESULT FILE.
+- **A VOID pair is not a seed.** `compare.js` printed "3 seeds ✅" directly beneath three VOID
+  banners before that was fixed.
+
+### NEXT ON THE A/B
+
+1. **Explain the repeat-park inversion** — per-member time-to-re-park and withdrawable-at-rescue,
+   by arm. This is the one result that contradicts the scope and it should not stay a story.
+2. **Explain the 68 VELOCITY failures.**
+3. **Model self-rescue** at a non-zero rate; the current figures are the pathological extreme.
+4. Only then treat the loop numbers as anything more than directional.
+
+---
+
 ## ⛔ THE OWNER DECISION — `minGasPerItem` 3.5M -> 5M, TAKEN 2026-08-18
 
 **The basis:** a cold SF-funded rescue at the live `MATRIX_SIZE` 127 measures **4.37M**.

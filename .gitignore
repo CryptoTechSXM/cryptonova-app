@@ -30,3 +30,6 @@ archive/artifacts_locked_*/
 # stay out of git (same convention as CryptoNova-Testnet-App)
 _to_delete*/
 _bugs_snapshot*.md
+contracts_v849b/
+artifacts_v849b/
+cache_v849b/
