@@ -33,7 +33,27 @@ const path = require("path");
 require("dotenv").config({ path: path.join(__dirname, "..", ".env") });
 
 const RPC = process.env.RPC || process.env.BASE_SEPOLIA_RPC_URL || process.env.BASE_SEPOLIA_RPC;
-const A   = require(path.join(__dirname, process.env.ADDRESSES_FILE || "deployed_addresses_v8_47.json"));
+
+// ⛔ V8.50: REFUSE RATHER THAN GUESS. This used to default to
+//    `deployed_addresses_v8_47.json`, and it only ever read the live chain because .env
+//    line 69 sets ADDRESSES_FILE. Run it with that variable absent and every address is a
+//    DEAD DEPLOYMENT — StabilityFund, pair managers, matrices, all different — and the
+//    script prints a full, confident, entirely wrong report. That is the same failure
+//    shape as a swallowed catch, sourced from a default, and the handoff has carried it as
+//    a standing trap for weeks.
+//
+//    `diag_sf_debt_reconcile.js` already refuses to start without it. Same rule here: a
+//    diagnostic that cannot say WHICH deployment it measured has not measured anything.
+const ADDRFILE = process.env.ADDRESSES_FILE;
+if (!ADDRFILE) {
+  console.error("\n  ADDRESSES_FILE is not set, and this script will not guess.\n");
+  console.error("  It has no safe default: the old one pointed at V8.47, whose addresses are");
+  console.error("  all dead. Set it in .env (line 69 already does on this machine) or pass it:\n");
+  console.error("      $env:ADDRESSES_FILE=\"deployed_addresses_v8_48.json\"; node scripts/diag_parked_growth.js\n");
+  process.exit(1);
+}
+const A   = require(path.join(__dirname, ADDRFILE));
+console.log(`  addresses: ${ADDRFILE}`);   // every figure below carries its basis
 
 const FROM   = Number(process.env.FROM || 45_060_000);   // V8.47 deploy floor
 const CHUNK  = Number(process.env.WINDOW || 9000);
@@ -46,7 +66,20 @@ const MAT_ABI = [
   "event SelfRescue(address indexed member, uint256 shortfallPaid, uint256 withdrawableUsed)",
   "event CoPayRescue(address indexed member, uint256 sfShare, uint256 memberWalletShare, uint256 withdrawableUsed)",
   "event MemberEvicted(address indexed member, uint256 totalWithdrawn)",
+  // ⛔ V8.50: ADDED. A ghost dequeue REMOVES a member from the queue
+  // (MatrixLogicLib :1825/:1855/:1863) and was never subtracted here.
+  "event GhostDequeued(address indexed member, uint256 staleParkedAt)",
   "function getParkedCount() view returns (uint256)",
+];
+// ⛔ V8.50: THE EXIT THIS SCRIPT WAS MISSING, AND IT IS THE DOMINANT ONE.
+// The keeper's automated rescue calls MatrixLogicLib.forceCrossKeeper, which removes the
+// member from the queue at :1601 — but the observable event, ParkedRescued, is emitted by
+// MatrixKeeper, NOT by the matrix. This script only ever watched matrix events, so every
+// keeper rescue left the queue uncounted and `net` overstated growth accordingly.
+// (forceCrossKeeper's own RescueLoanIssued is NOT a reliable substitute: it is guarded on
+//  totalLoan > 0, so a self-funded rescue emits nothing there. ParkedRescued always fires.)
+const KEEPER_ABI = [
+  "event ParkedRescued(address indexed matrix, address indexed member, uint8 tierIndex)",
 ];
 const SF_ABI = [
   "event MemberDebtIncreased(address indexed member, uint8 tier, uint256 amount, uint256 newTotal)",
@@ -92,7 +125,7 @@ async function chunkedLogs(c, filter, from, to, label, holes) {
 
   // day -> {park, self, copay, evict}; member -> park count; live queue census
   const daily = new Map();
-  const bump  = (bn, k) => { const d = dayOf(bn); if (!daily.has(d)) daily.set(d, { park: 0, self: 0, copay: 0, evict: 0 }); daily.get(d)[k]++; };
+  const bump  = (bn, k) => { const d = dayOf(bn); if (!daily.has(d)) daily.set(d, { park: 0, self: 0, copay: 0, evict: 0, ghost: 0, keeper: 0 }); daily.get(d)[k]++; };
   const parksByMember = new Map();
   let liveParked = 0;
   const liveByTier = [];
@@ -116,25 +149,69 @@ async function chunkedLogs(c, filter, from, to, label, holes) {
         for (const ev of await chunkedLogs(c, c.filters.SelfRescue(),    FROM, tip, label, holes)) bump(ev.blockNumber, "self");
         for (const ev of await chunkedLogs(c, c.filters.CoPayRescue(),   FROM, tip, label, holes)) bump(ev.blockNumber, "copay");
         for (const ev of await chunkedLogs(c, c.filters.MemberEvicted(), FROM, tip, label, holes)) bump(ev.blockNumber, "evict");
+        for (const ev of await chunkedLogs(c, c.filters.GhostDequeued(),  FROM, tip, label, holes)) bump(ev.blockNumber, "ghost");
       }
     }
     liveByTier.push(`T${t + 1}: ${tierLive}`);
     liveParked += tierLive;
   }
 
+  // ── the keeper's own rescue exits (see the note on the trajectory table) ──
+  {
+    const kAddr = A.matrixKeeper || A.MatrixKeeper;
+    if (!kAddr) {
+      console.log(`\n  ⚠ NO matrixKeeper IN ${ADDRFILE} — ParkedRescued not counted, and it is`);
+      console.log(`  the dominant exit. The net column above is an upper bound by a wide margin.`);
+      holes.n++;
+    } else {
+      const k = new ethers.Contract(kAddr, KEEPER_ABI, p);
+      for (const ev of await chunkedLogs(k, k.filters.ParkedRescued(), FROM, tip, "KEEPER", holes)) {
+        bump(ev.blockNumber, "keeper");
+      }
+    }
+  }
+
   // ── 1. trajectory ──────────────────────────────────────────────────────────
+  // ⛔ THE `net` COLUMN USED TO SUBTRACT ONLY THREE EXITS AND WAS THEREFORE WRONG.
+  //
+  // Measured 2026-08-18: cumulative-net read 212 against a LIVE QUEUE OF 105 — roughly
+  // double — with zero evictions recorded. The queue is not growing twice as fast as it
+  // looks; the script was blind to most of the ways out of it.
+  //
+  // MatrixLogicLib has ELEVEN call sites of _removeFromParkedQueue. This column knew about
+  // three of them:
+  //     :1663 CoPayRescue      counted
+  //     :1754 SelfRescue       counted
+  //           MemberEvicted    counted
+  //     :1601 forceCrossKeeper NOT COUNTED — the KEEPER's automated rescue, and the
+  //                            dominant exit on this chain. Its event, ParkedRescued,
+  //                            is emitted by MatrixKeeper, not by the matrix, and this
+  //                            script only ever read matrix events.
+  //     :1825/:1855/:1863      NOT COUNTED — GhostDequeued.
+  //     :400  enterMatrix      SILENT (a parked member re-entering clears their record)
+  //     :1536 forceCross       SILENT
+  //     :1803 exitSeat         SILENT
+  //     :1913 deductForUpgrade SILENT
+  //
+  // ParkedRescued and GhostDequeued are now counted. THE FOUR SILENT PATHS REMAIN
+  // UNCOUNTABLE FROM EVENTS — so `net` is still an UPPER BOUND on queue growth, and the
+  // live getParkedCount below is the only exact figure. Printed together on purpose:
+  // if net and live diverge, the gap is the silent paths, not a defect.
   console.log("1. TRAJECTORY — per (approx) day");
-  console.log("day          parks   selfR   copay   evict   net(+q)   cumulative-net");
-  console.log("─".repeat(76));
+  console.log("day          parks   selfR   copay   keeper   ghost   evict   net(+q)   cumulative-net");
+  console.log("─".repeat(94));
   let cum = 0;
   const rows = [...daily.entries()].sort((a, b) => a[0] < b[0] ? -1 : 1);
   const netByDay = [];
   for (const [d, r] of rows) {
-    const net = r.park - r.self - r.copay - r.evict;
+    const net = r.park - r.self - r.copay - r.evict - r.ghost - r.keeper;
     cum += net; netByDay.push(r.park);
-    console.log(`${d}  ${pad(r.park, 5)}  ${pad(r.self, 6)}  ${pad(r.copay, 6)}  ${pad(r.evict, 6)}  ${pad(net, 8)}  ${pad(cum, 15)}`);
+    console.log(`${d}  ${pad(r.park, 5)}  ${pad(r.self, 6)}  ${pad(r.copay, 6)}  ${pad(r.keeper, 7)}  ${pad(r.ghost, 6)}  ${pad(r.evict, 6)}  ${pad(net, 8)}  ${pad(cum, 15)}`);
   }
   console.log(`\n  LIVE queue right now (getParkedCount, exact): ${liveParked}   [${liveByTier.join("  ")}]`);
+  console.log(`  cumulative-net ${cum} vs live ${liveParked}: any gap is the FOUR SILENT exit paths`);
+  console.log(`  (enterMatrix re-entry, forceCross, exitSeat, deductForUpgrade) — they emit`);
+  console.log(`  nothing, so no event scan can subtract them. LIVE is the exact number.`);
   if (rows.length >= 6) {
     const firstHalf = netByDay.slice(0, Math.floor(netByDay.length / 2)).reduce((a, x) => a + x, 0) / Math.floor(netByDay.length / 2);
     const lastThree = netByDay.slice(-3).reduce((a, x) => a + x, 0) / Math.min(3, netByDay.length);
