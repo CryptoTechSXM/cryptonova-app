@@ -2417,6 +2417,32 @@ the endpoint** — public endpoints were tried in this site's read pool and remo
 
 ---
 
+# 6g. ⚠ FOUR COMMIT MESSAGES HAVE MANGLED DOLLAR FIGURES — THE HANDOFF IS THE RECORD
+
+`git log` bodies for **`fe3f594`, `da622c1`, `56140d3`, `2011eed`** contain 16 destroyed
+figures: `$956.46` reads as `\.46`, `$5.19` as `\.19`, and so on.
+
+**CAUSE:** the messages were passed as `git commit -m "...\$956.46..."` from PowerShell.
+`\` is NOT PowerShell's escape character — a backtick is. So `\$956` became a literal
+backslash plus the EMPTY variable `$956`, and every dollar amount lost its digits. The
+three clean commits of that session are clean only because they contained no `$` figures.
+
+**NOT REWRITTEN, DELIBERATELY.** Every one of those figures is correct and intact in this
+document, which is the authoritative record; the commit bodies are secondary. Force-pushing
+four commits to fix presentation would trade a real risk for a cosmetic gain.
+
+**THE FIX FOR NEXT TIME — WRITE THE MESSAGE TO A FILE:**
+
+    # Claude writes .git/COMMIT_DRAFT.txt, then:
+    git commit -F .git/COMMIT_DRAFT.txt
+
+`-F` reads the file verbatim. No interpolation, no escaping, no quoting rules, and it
+handles the em-dashes and unicode this project's messages are full of. **Use it for any
+commit message longer than one line.** `.git/` is not tracked, so the draft never becomes
+a stray repo file.
+
+---
+
 # 7. HOW WE WORK
 
 Claude drives, decides direction, and makes the file edits directly. **The owner runs
