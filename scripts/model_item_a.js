@@ -117,10 +117,68 @@ const usd = v => "$" + (Number(v) / 1e6).toFixed(2);
 const pct = (a, b) => (b ? (100 * Number(a) / Number(b)).toFixed(1) + "%" : "—");
 const bar = (n = 78) => "=".repeat(n);
 
+/**
+ * ⛔ A 503 IS NOT A MISSING SELECTOR, AND THIS SCRIPT USED TO TREAT THEM THE SAME.
+ *
+ * 2026-08-18: a run died on
+ *     FATAL: CROSSING_RESERVE_BPS() unreadable (server response 503 Service Unavailable).
+ *     This constant IS item A. Refusing to assume 5000. Stopping.
+ * The REFUSAL was right — guessing that constant would silently corrupt every number
+ * downstream. The CLASSIFICATION was wrong: sepolia.base.org was busy, not broken, and
+ * the same call succeeded on the next attempt.
+ *
+ * "The server did not answer" and "this contract has no such function" share one code
+ * path and one message, so a flaky endpoint reads as a broken contract. That is the same
+ * failure shape as diag_parked_ages.js was written to remove: the failure and the
+ * all-clear must not look alike.
+ *
+ * So: retry the TRANSPORT errors, never the contract ones. A revert, a bad selector or a
+ * decode failure is a real answer and must fail on the first attempt — retrying those
+ * only wastes time and hides a genuine mismatch.
+ *
+ * ⚠ DO NOT "FIX" A 503 BY CHANGING THE ENDPOINT. Public endpoints were tried in this
+ * site's read pool, were buggy, and were removed — owner-observed operational history.
+ */
+const TRANSIENT = /50[0234]|429|timeout|ETIMEDOUT|ECONNRESET|ECONNREFUSED|socket hang up|network error|failed to fetch|rate.?limit|too many requests|SERVER_ERROR|TIMEOUT/i;
+
+async function rd(label, fn, attempts = 5) {
+  let lastErr;
+  for (let i = 1; i <= attempts; i++) {
+    try { return await fn(); }
+    catch (e) {
+      lastErr = e;
+      const msg = `${e.shortMessage || ""} ${e.message || ""} ${e.code || ""}`;
+      if (!TRANSIENT.test(msg)) {
+        // A real answer from a reachable node. Do not retry it, do not soften it.
+        e.classified = "CONTRACT";
+        throw e;
+      }
+      if (i === attempts) break;
+      const wait = 400 * 2 ** (i - 1);   // 0.4s, 0.8s, 1.6s, 3.2s
+      console.log(`    ...${label}: transport error (${e.shortMessage || e.code || "unknown"}), retry ${i}/${attempts - 1} in ${wait}ms`);
+      await new Promise(r => setTimeout(r, wait));
+    }
+  }
+  lastErr.classified = "TRANSPORT";
+  throw lastErr;
+}
+
 async function readBufferBps(mk) {
-  try   { return { bps: await mk.crossingBufferBps(),  src: "crossingBufferBps() [param, V8.49+]" }; }
-  catch { /* not on this chain */ }
-  return { bps: await mk.CROSSING_BUFFER_BPS(), src: "CROSSING_BUFFER_BPS() [constant, V8.48]" };
+  // ⛔ THE FALLBACK MUST ONLY FIRE ON A CONTRACT ERROR, NEVER A TRANSPORT ONE.
+  //
+  // This used to `catch {}` everything and fall through to the V8.48 constant. A 503 on
+  // the first call would therefore report the buffer as "CROSSING_BUFFER_BPS() [constant,
+  // V8.48]" on a chain that actually has the V8.49 param — the right NUMBER by luck on
+  // this deployment, and the wrong SOURCE LABEL, which is exactly what a future session
+  // would use to decide whether the buffer is governable. rd() retries the transport and
+  // rethrows the contract error, so the fallback now means what it says: this chain does
+  // not have the function.
+  try {
+    return { bps: await rd("crossingBufferBps", () => mk.crossingBufferBps()), src: "crossingBufferBps() [param, V8.49+]" };
+  } catch (e) {
+    if (e.classified === "TRANSPORT") throw e;   // do not silently downgrade to the constant
+  }
+  return { bps: await rd("CROSSING_BUFFER_BPS", () => mk.CROSSING_BUFFER_BPS()), src: "CROSSING_BUFFER_BPS() [constant, V8.48]" };
 }
 
 (async () => {
@@ -142,14 +200,23 @@ async function readBufferBps(mk) {
   console.log(`  keeper                   ${A.matrixKeeper}`);
 
   let crossReserveBps;
-  try { crossReserveBps = await mk.CROSSING_RESERVE_BPS(); }
+  try { crossReserveBps = await rd("CROSSING_RESERVE_BPS", () => mk.CROSSING_RESERVE_BPS()); }
   catch (e) {
     console.log(`\nFATAL: CROSSING_RESERVE_BPS() unreadable (${e.shortMessage || e.message}).`);
-    console.log(`This constant IS item A. Refusing to assume 5000. Stopping.`);
+    if (e.classified === "TRANSPORT") {
+      console.log(`This is a TRANSPORT failure — the endpoint did not answer after 5 attempts.`);
+      console.log(`The contract is probably fine. Re-run; sepolia.base.org is known flaky and`);
+      console.log(`the handoff records it as open item 2. DO NOT swap the endpoint: public ones`);
+      console.log(`were tried in this site's read pool and removed.`);
+    } else {
+      console.log(`This is a CONTRACT failure — the node answered and the call did not work.`);
+      console.log(`Check ADDRESSES_FILE (${ADDRFILE}) points at a deployment that HAS item A.`);
+    }
+    console.log(`Either way: this constant IS item A. Refusing to assume 5000. Stopping.`);
     process.exit(1);
   }
-  const floorBps = await sf.insolvencyFloorBps();
-  const sfBal    = await sf.totalBalance();
+  const floorBps = await rd("insolvencyFloorBps", () => sf.insolvencyFloorBps());
+  const sfBal    = await rd("totalBalance",       () => sf.totalBalance());
   const buf      = await readBufferBps(mk);
   console.log(`  CROSSING_RESERVE_BPS     ${crossReserveBps}  (${Number(crossReserveBps) / 100}%)  <- item A's crossing price`);
   console.log(`  insolvencyFloorBps       ${floorBps}  (${Number(floorBps) / 100}%)`);
