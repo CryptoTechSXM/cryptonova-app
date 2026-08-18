@@ -2192,6 +2192,88 @@ one.
 
 ---
 
+# 6f. ⛔ THE SECOND ORGANIC READING — THE LOOP IS REAL AND THE FUND IS UNDERWATER
+
+`node scripts/diag_parked_growth.js`, 2026-08-18, blocks 45,060,000..45,645,471
+(2026-08-05 -> 2026-08-18, ~13.6 days). Read-only. This is the second organic reading the
+handoff has been asking for since 2026-08-16, and it is the most consequential measurement
+of the V8.50 work.
+
+## 1. THE LOOP SIGNATURE — MEASURED, NOT INFERRED
+
+    758 park events across 339 unique members
+    1x: 59      2x: 167      3-5x: 113      6-10x: 0      11+: 0
+    REPEAT SHARE: 48.2% of all park events come from members who parked 3+ times
+
+**ONLY 59 OF 339 MEMBERS PARKED ONCE AND STAYED OUT. 82.6% CAME BACK.**
+
+That is the rescue -> SF debt -> re-seat -> cycle out underfunded -> park again cycle,
+observed directly. The script's own criterion for the self-sustaining loop is "a high
+repeat share + climbing SF outstanding", and both are met decisively. (Its third
+criterion, an ACCELERATING park rate, it classifies as ROUGHLY LINEAR — first-half
+103.0/day against a last-3-day 149.7/day. Rising 45%, but the script's own threshold says
+linear, and its word is kept here rather than argued with.)
+
+## 2. THE FINANCING — THE FUND HAS LENT 2.4x WHAT IT HOLDS
+
+    CONTRACT counters (ground truth)   loaned $961.65   repaid $443.41   OUTSTANDING $518.24
+    SF totalBalance, same night                                          $212.35
+
+    net-outstanding-delta by day:  08-13 +$0.33   08-14 +$34.58   08-15 +$96.66
+                                   08-16 -$44.04  08-17 +$258.17  08-18 +$167.35
+
+**Outstanding debt is 2.4x the remaining balance, and the last two days added $425.52 of
+net new debt.** Independently corroborated: `model_item_a.js` PHASE 1 read SF totalBalance
+four times across ~9.7 hours tonight — $262.79 -> $259.49 -> $243.19 -> $212.35, monotonic,
+about -$5.20/hour or ~-$125/day. Two different instruments reading different events agree
+on the direction and roughly on the rate.
+
+⚠ TESTNET, BIGFILL STOPPED. Do not extrapolate a runway figure to mainnet demand. The
+DIRECTION is the finding, not the date it reaches zero.
+
+## 3. WHAT THIS DOES TO V8.50's FRAMING
+
+**Item A stops being a throughput improvement and becomes the fix.** Every sample tonight
+put the MatA crossing at **62-65% of ALL funding parks, ~$724 of lending**, and PHASE 2
+confirmed 67-75 of 67-75 MatA parkers are freed OUTRIGHT — the reserve covers the halved
+crossing price with no fund involvement at all. E1 handles the other half by carrying the
+member's balance so the MatB re-entry is affordable. Together they attack both legs of the
+loop the section above measures.
+
+The live crossing buffer reads **3600 bps** and V8.50 ships `crossingBufferBps` at **0**.
+Every rescue today seeds 36% of the fee into the member's withdrawable as FUND money. That
+was recorded as a tuning decision; against a fund that has lent 2.4x its balance it is
+better read as part of the same repair.
+
+## 4. ⛔ TWO THINGS IN THIS OUTPUT THAT DO NOT ADD UP — OPEN, NOT EXPLAINED
+
+**(a) The script contradicts itself, and the shape of the gap matters.** It prints
+`VERDICT INPUTS (no holes — complete)` and, four lines earlier,
+`EVENTS DO NOT RECONCILE`:
+
+    events   loaned $956.46   repaid $443.41
+    counters loaned $961.65   repaid $443.41      gap: $5.19 on the LOANED side only
+
+The script blames dropped ranges. **A dropped range would skew BOTH sides.** Repaid matches
+to the cent while loaned is $5.19 short, which points instead at **a lending path that does
+not emit `MemberDebtIncreased`**. If that is right, every debt total derived from events —
+anywhere, in any tool — is a floor rather than a total, and the contract counters are the
+only trustworthy source. **Find the silent path before quoting any event-derived debt
+figure again.** Start by diffing every writer of `memberDebt` against every emitter of
+`MemberDebtIncreased`.
+
+**(b) Cumulative-net 212 against a live queue of 105, with ZERO evictions recorded.**
+About half the net growth is unaccounted for. Possible explanations not yet checked: park
+events counted per-event while the queue is per-member; members leaving via a path the
+script does not count; or the daily net arithmetic double-counting. **No explanation is
+offered here because none has been verified.**
+
+Neither of these changes the two headline findings — the repeat share comes from park
+events alone, and the financing verdict rests on the CONTRACT COUNTERS, not the events.
+But both need closing before this document's numbers are quoted as exact.
+
+---
+
 # 6e. THREE SAMPLES IN ONE NIGHT — THE VERDICTS HOLD, THE FIGURES DO NOT
 
 `model_item_a.js` was run three times on 2026-08-18 as phases were added. The chain was
@@ -2355,5 +2437,19 @@ verify it and close it rather than working around it.**
 - **Item 2 (the wallet RPC, `sepolia.base.org`)** — still open, deferred to mainnet by
   owner decision. **Do NOT propose free public endpoints**; they were tried in this site's
   read pool, were buggy, and were removed. That is owner-observed operational history.
-- **The live V8.48 chain has been organic since 03:30:44 -04:00 and has never been measured
-  that way.** Take a reading before anything restarts bigfill.
+- ~~**The live V8.48 chain has been organic since 03:30:44 -04:00 and has never been
+  measured that way.** Take a reading before anything restarts bigfill.~~ **DONE
+  2026-08-18 — see section 6f.** The reading found the self-sustaining loop (82.6% of
+  parked members park more than once) and a fund that has lent 2.4x what it holds
+  ($518.24 outstanding against a $212.35 balance). It also opened two unexplained
+  discrepancies, both listed in 6f: a $5.19 loaned-side gap that looks like a lending path
+  emitting no event, and cumulative-net 212 against a live queue of 105.
+- **A LENDING PATH MAY NOT EMIT `MemberDebtIncreased`.** Contract counters and event sums
+  agree to the cent on REPAID and differ by $5.19 on LOANED. A dropped log range would
+  skew both. Until this is found, treat every event-derived debt total anywhere in this
+  project as a FLOOR, and read debt from the contract counters. Diff every writer of
+  `memberDebt` against every emitter of `MemberDebtIncreased`.
+- **The SF is draining and two instruments agree.** `diag_parked_growth.js` daily deltas
+  and four `model_item_a.js` PHASE 1 balance reads both say the fund is losing ground —
+  roughly $125/day, monotonic across ~9.7 hours. Testnet with bigfill stopped, so the
+  DIRECTION is the finding and not any runway date.
