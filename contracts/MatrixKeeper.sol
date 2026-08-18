@@ -229,10 +229,46 @@ contract MatrixKeeper is Ownable {
     ///         exactly the shape that makes it hard to see.
     ///
     ///         THE FLOOR MUST EXCEED THE WORST SINGLE ITEM, or it lets the batch enter an
-    ///         item it cannot finish and buys nothing. Measured in
-    ///         test/V8_50_KeeperGas.test.js: worst item 1.76M at MATRIX_SIZE 7, and the
-    ///         V8.49 chain measured ~2.6M for the same item at the live 127. 3_500_000
-    ///         clears the live figure with ~35% margin.
+    ///         item it cannot finish and buys nothing.
+    ///
+    ///         ⛔ 3_500_000 -> 5_000_000, 2026-08-18, ON MEASUREMENT AT LIVE MATRIX SIZE.
+    ///         Every gas figure this project owned had been taken at MATRIX_SIZE 7.
+    ///         MATRIX_SIZE is a CONSTRUCTOR ARGUMENT (FigureEightMatrixV8:43, set :167),
+    ///         so live size is measurable in-process — no deploy, no chain touched:
+    ///             $env:GAS_MATRIX_SIZE=127; npx hardhat test test/V8_50_KeeperGas.test.js
+    ///
+    ///         AN SF-FUNDED RESCUE HAS THREE PRICES AT 127, BY POSITION IN THE BATCH:
+    ///             item #1, all storage cold                     4.37M   <- the floor's basis
+    ///             first SF item mid-batch, shared state warm    2.83M
+    ///             fully warm (marginal)                         1.43M
+    ///         Cost is ~linear in MATRIX_SIZE, ~23k/position: 1.76M at 7, 2.16M at 31,
+    ///         4.37M at 127. _distributeChainPay walks the POSITION tree
+    ///         (MatrixLogicLib:1317), so at size 7 only 2 of the 6 CP_BPS levels ever fire
+    ///         and at 127 all 6 do. That is most of the difference.
+    ///
+    ///         ⛔ THE ~2.6M THIS COMMENT USED TO CITE WAS NOT AN ITEM COST — IT WAS A
+    ///         BATCH PER-ITEM AVERAGE. testchain_keeper.js:285 records its provenance:
+    ///         "~2.6M (5 items, 12.9M)", i.e. 12.9M/5. The comparable V8.50 figure is
+    ///         12.22M/9 = 1.36M per item, so V8.50 batches are CHEAPER per item than
+    ///         V8.49 — item A showing up in the gas. The old sentence compared that
+    ///         average against a single-item cost and claimed a 35% margin that never
+    ///         existed. Do not reintroduce it.
+    ///
+    ///         WHY 5M AND NOT 3.5M: 3.5M sits BELOW the 4.37M cold price, so the invariant
+    ///         at the top of this block is violated outright. No cascade could be
+    ///         reproduced — GAS-8 measured zero WorkItemFailed across budgets 6M..16M —
+    ///         because of a COUPLING: walking gas down to the floor REQUIRES running
+    ///         rescues, and running rescues WARMS the path, so by the time gas is scarce
+    ///         nothing cold is left to start. Cheap items (~0.12M) cannot burn enough to
+    ///         matter. But that coupling is an ARGUMENT, it holds only WITHIN ONE TIER,
+    ///         and per the paragraphs above this failure does not announce itself. 5M is
+    ///         the smallest DAO menu value clearing the measured 4.37M and it holds
+    ///         however many tiers exist.
+    ///
+    ///         WHY NOT 7.5M: throughput. Projected from the measured curve (4.36M cold +
+    ///         1.43M marginal) against the 15M budget system_keeper.js:582 uses —
+    ///         3.5M ~6 rescues/tick, 5M ~4, 7.5M ~3. Deferred work is not lost; the next
+    ///         tick takes it. 5M buys the invariant for about two rescues a tick.
     ///
     ///         WHY THIS AND NOT A SMALLER maxItemsPerUpkeep: an item count is the wrong
     ///         unit. An eviction costs 0.09M and a reclaim 0.04M against a rescue's
@@ -243,7 +279,7 @@ contract MatrixKeeper is Ownable {
     ///         either being told in advance which it is.
     ///
     ///         DAO param 63. Menu 2.5M / 3.5M / 5M / 7.5M.
-    uint256 public minGasPerItem = 3_500_000;
+    uint256 public minGasPerItem = 5_000_000;
     uint256 public parkedGracePeriod   = 6 hours;
 
     /// @notice V8.48 item 12 — floor for a rescue that costs the Stability Fund NOTHING

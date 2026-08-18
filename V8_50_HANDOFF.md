@@ -1,12 +1,341 @@
 # V8.50 HANDOFF — the crossing redesign. READ THIS FIRST.
 
 Written 2026-08-16 at the end of the V8.49 private measurement run.
-Sessions 2, 3 and 4 have appended to it since; read the NEWEST section first — each one
+Sessions 2, 3, 4, 5 and 6 have appended to it since; read the NEWEST section first — each one
 corrects the ones below it, and says so explicitly where it does.
 Audience: **the next session of Claude, plus the owner. There is no third party — every
 line of this codebase was written by a previous session of Claude and executed by the
 owner.** Read section 7a (THE TWO RULES) before doing anything else; it is short, it is
 owner-set, and the session that earned it got five things wrong by ignoring what it says.
+
+---
+
+# ⬛ SESSION 6 STATE — 2026-08-18, LATER. READ THIS FIRST, BEFORE SESSION 5.
+
+**GATE MEASUREMENTS 1 AND 2 ARE ANSWERED. `minGasPerItem` MOVED 3_500_000 -> 5_000_000 ON
+MEASUREMENT. NOTHING IS DEPLOYED, NO CHAIN WAS TOUCHED, `.env` LINE 69 IS UNCHANGED.**
+
+Files changed: `contracts/MatrixKeeper.sol` (the value + its write-up),
+`contracts/V8Governance.sol` (param 63 docs), `test/V8_50_KeeperGas.test.js` (six new
+instruments). **Suite 602 -> 606 passing / 7 pending / 0 failing**, run in full after the
+change (`npx hardhat compile --force` first). That file went 6 tests -> 10.
+
+## ⛔ THE OWNER DECISION — `minGasPerItem` 3.5M -> 5M, TAKEN 2026-08-18
+
+**The basis:** a cold SF-funded rescue at the live `MATRIX_SIZE` 127 measures **4.37M**.
+3.5M sat below it, so the floor's own invariant — "the floor must exceed the worst single
+item" — was violated. 5M is the smallest DAO menu value that clears it (15% headroom).
+
+**The throughput cost, MEASURED after the change, not projected:**
+
+| | floor 3.5M | floor 5.0M |
+|---|---|---|
+| GAS-1 cap 20 at 127 | 9 items, 12.22M | **8 items, 10.81M** |
+| GAS-8 halt points across 6M..16M budgets | 2/4/6/6/8/9 | **1/3/5/6/7/8** |
+
+About ONE item per batch — cheaper than the ~2 rescues/tick projected when the decision was
+put to the owner. Deferred work is not lost; the next tick takes it.
+
+**Why not keep 3.5M:** no cascade could be reproduced under it (GAS-8, zero
+`WorkItemFailed` across every budget), because of a COUPLING — walking gas down to the floor
+requires running rescues, and running rescues warms the path. But that is an ARGUMENT, it
+holds only WITHIN ONE TIER, and per defect 8 the failure does not announce itself. **Why not
+7.5M:** it costs roughly half the rescue throughput for headroom nothing measured needs.
+
+⚠ **The live keeper scripts still carry `GAS_PER_ITEM_DEFAULT = 3_500_000`**
+(`direct_keeper.js:27`, `direct_keeper_vps.js:26`). LEFT ALONE DELIBERATELY — they run
+against **live V8.48**, which has neither item A nor E1, and editing them is a live change
+on the community chain. Revisit them with the V8.50 deploy, not before.
+
+## THE METHOD CHANGE THAT MADE THIS POSSIBLE — READ FIRST
+
+**`MATRIX_SIZE` IS A CONSTRUCTOR ARGUMENT, NOT A COMPILE-TIME CONSTANT.**
+`FigureEightMatrixV8.sol:43` declares it `immutable`; `:167` assigns it from `_matrixSize`.
+`V8_50_KeeperGas.test.js`'s `deployWorld(size)` ALREADY took it as a parameter — the only
+thing pinning the whole file to 7 was one line, `const SIZE = 7`.
+
+So **live-size gas is measurable in-process, with no deploy and no chain**, in ~15 seconds
+per run. The gate was scoped as "private chain, bigfill, hours not days" because nobody had
+noticed that. The private chain is still needed for gate measurements 3 and 4 — those need
+a running system — but the number the gate was BUILT for did not need it.
+
+`SIZE` and the population are now env knobs (`GAS_MATRIX_SIZE`, `GAS_POP`), **defaulting to
+exactly the old fixture**, so the suite result is unmoved. Run the gate measurement with:
+
+```powershell
+$env:GAS_MATRIX_SIZE=127; npx hardhat test test/V8_50_KeeperGas.test.js
+Remove-Item Env:\GAS_MATRIX_SIZE
+```
+
+## ⛔ GATE MEASUREMENT 1 — ANSWERED, AND IT IS NOT ONE NUMBER
+
+**AN SF-FUNDED RESCUE HAS THREE DIFFERENT PRICES AT `MATRIX_SIZE` 127, AND WHICH ONE
+APPLIES DEPENDS ENTIRELY ON WHERE IT SITS IN THE BATCH.** This is the single most important
+thing in this section; every wrong turn below came from collapsing them into one figure.
+
+| when it runs | cost | how it was measured |
+|---|---|---|
+| **item #1, all storage cold** | **4.37M** | GAS-2 isolated AND GAS-7 curve k=1 — two independent methods, agreeing to 0.1% |
+| **first SF item mid-batch** (shared state warm, fund state cold) | **2.83M** | GAS-7, 2 self-funded first then +1 SF-funded |
+| **fully warm, mid-batch** | **1.43M** | GAS-7 curve steps: 1.46 / 1.43 / 1.43 / 1.41 |
+
+Self-funded (item A's shape): **2.38M cold, 0.84M marginal.**
+
+`minGasPerItem = 3.50M` sits BETWEEN the mid-batch price and the cold price.
+
+### THE SCALING NOBODY HAD EVER MEASURED
+
+| | size 7 | size 31 | size 127 |
+|---|---|---|---|
+| worst SF-funded rescue (cold) | 1.76M | 2.16M | **4.37M** |
+| self-funded (cold) | 0.93M | 1.24M | 2.38M |
+| worst `register` | 2.00M | 2.62M | **7.50M** |
+| SF ÷ self ratio | 1.61x | 1.72x | **1.83x** |
+
+Roughly linear, ~23k gas per matrix position. **`_distributeChainPay` is why**
+(`MatrixLogicLib:1317`): it walks the MATRIX POSITION tree (`parentPos = myPos / 2`), so
+depth is set by `MATRIX_SIZE`. At 7 it reaches 2 levels; at 127 all 6 `CP_BPS` levels fire.
+
+**ITEM A'S GAS DIVIDEND GROWS WITH MATRIX SIZE — 1.61x -> 1.72x -> 1.83x.** Item A is worth
+more at live scale than any measurement before this showed.
+
+## ⛔ GATE MEASUREMENT 2 — ANSWERED. THE GUARD WORKS.
+
+`BatchGasHalted` fires at live matrix size, halts cleanly, and defers rather than drops.
+Under the SHIPPED 3.50M floor, swept across six transaction budgets (GAS-8):
+
+| budget | gasUsed | halted at | `WorkItemFailed` |
+|---|---|---|---|
+| 6M | 2.76M | 2/20 | **0** |
+| 8M | 4.31M | 4/20 | **0** |
+| 10M | 7.96M | 6/20 | **0** |
+| 12M | 7.96M | 6/20 | **0** |
+| 14M | 10.81M | 8/20 | **0** |
+| 16M | 12.23M | 9/20 | **0** |
+
+**ZERO items failed at any budget.** The floor halted first, every time.
+
+### ✅ CLOSED BY MEASUREMENT — the 10M/12M rows were never an anomaly
+
+Both halted at 6/20 with the same 7.96M `gasUsed`, but `gasRemaining` differs exactly as it
+should: **1.43M at a 10M budget, 3.43M at 12M** — 2M apart, the budget difference. Overhead
+is identical to the gas unit: `10.00 − 7.96 − 1.43 = 0.61M` and `12.00 − 7.96 − 3.43 = 0.61M`.
+
+Both halted at the same item because both fell below the floor; the 12M case only *just*
+did. **The refund hypothesis was unnecessary** — printing `gasRemaining` from the event made
+the real answer obvious. Note how tight the guard runs at its boundary: **3.43M against a
+3.50M floor is 70k of margin, and the 8M row halts at 3.48M — 20k under.**
+
+## ⛔ THE FLOOR DECISION IS NOT YET SAFE TO TAKE — ONE MEASUREMENT SHORT
+
+GAS-6 currently FAILS at 127: floor 3.50M vs worst item 4.37M. **That failure is honest and
+it stays red until this is settled** — but the comparison may be the wrong one, and the
+reason matters:
+
+- The floor asks *"can I afford ONE MORE item?"*. It only ever answers for an item arriving
+  **late**, when gas is scarce. At item #1 `gasleft` is the whole budget, ~15M, nowhere near
+  any floor. **So the 4.37M cold price may be one the floor never has to cover.**
+- Against the mid-batch price it actually covers — 2.83M — the 3.50M floor has 24% headroom,
+  and GAS-8 measured zero failures across every budget.
+
+**THE ONE THING THAT WOULD OVERTURN THAT: THIS FIXTURE HAS ONE TIER.** The cold premium is
+paid by whichever item touches a given tier's storage FIRST. With one tier that is always
+item #1, when gas is plentiful. **With two tiers, the first item touching tier 2 pays it
+LATE, with gas scarce.** Decomposing the measured numbers: 4.37M cold − 2.83M first-touch =
+~1.53M of shared/tier cold state. A cross-tier first touch mid-batch would plausibly cost
+~2.83M + ~1.53M ≈ 4.36M, arriving when only ~3.5M remains.
+
+**THAT IS A PROJECTION, MARKED UNVERIFIED. DO NOT SET THE FLOOR ON IT.** Live T2 exists
+($25.00, per session 5), so multi-tier batches are reachable and this is not hypothetical.
+
+### ⛔ GAS-9 — ARRIVAL CONTEXT SETTLES IT: THE INVARIANT IS GENUINELY VIOLATED
+
+The 2.83M mid-batch figure was measured after a prefix of **self-funded rescues**, and a
+self-funded rescue crosses A->B — it warms both matrices and most of the crossing path
+before the SF item runs. That is a generous prefix and it flattered the floor.
+
+Priced against three arrival contexts (GAS-9, `MATRIX_SIZE` 127):
+
+| prefix | prefix gas | the SF rescue costs |
+|---|---|---|
+| item #1, nothing warm | — | **4.36M** |
+| after 6 cheap items (evict/reclaim) | 0.37M | **4.31M** |
+| after 2 self-funded rescues | 3.24M | 2.83M |
+
+**CHEAP HOUSEKEEPING WARMS NOTHING THAT MATTERS.** An SF rescue after six evictions still
+costs 4.31M — 99% of the full cold price. The smallest DAO menu value that clears it is
+**5M**. So `minGasPerItem = 3.5M` does violate its stated invariant, and GAS-6 is right to
+be red.
+
+### ⚠ BUT A VIOLATED INVARIANT IS NOT A REACHABLE FAILURE — AND THAT DISTINCTION IS THE
+### WHOLE ARGUMENT, SO DO NOT SKIP IT
+
+For the cascade to actually fire, `gasleft` must be near the floor **at the moment a COLD
+4.31M item starts**. In a SINGLE-TIER world those two cannot co-occur:
+
+- burning ~12M of budget REQUIRES running rescues;
+- running rescues WARMS the expensive path, after which the next one costs 1.43M;
+- cheap items cost ~0.12M, so a cap-20 batch of nothing but evictions burns ~2.4M total —
+  it can never walk gas down to the floor while leaving anything cold.
+
+**GAS-8 measured exactly that: zero `WorkItemFailed` at every budget from 6M to 16M.**
+The floor is currently saved by a COUPLING between "burning gas" and "warming state".
+
+### ⛔ A SECOND TIER BREAKS THAT COUPLING. THAT IS NOW THE ONLY QUESTION LEFT.
+
+Tier-1 rescues burn gas while **tier-2 storage stays cold**. That is the one shape where a
+cold ~4.3M item can arrive with ~3.5M remaining — and it is the shape a live multi-tier
+chain produces naturally. Live T2 exists ($25.00, session 5), so this is not hypothetical.
+
+**DO NOT SETTLE `minGasPerItem` UNTIL THIS IS MEASURED.** If the coupling holds, 3.5M ships
+and GAS-6 gets rebased with the reasoning written at the point of the change. If it breaks,
+the answer is 5M, and GAS-8's table is the tool for costing the throughput given up.
+
+### ⛔ THE CHEAP SHORTCUT IS DEAD — A SECOND *PAIR* CANNOT BE REACHED BY A RESCUE
+
+A second matrix PAIR in the same tier looked like a free stand-in for a second tier: different
+contracts, therefore cold storage, reachable without the upgrade gate. **It is not reachable
+at all.** `PairManagerV8.rescueReentry` (V8.48 item 10):
+
+```solidity
+uint256 destPair = fromPairIndex;          // a rescued member ALWAYS returns to their own MatA
+if (isActiveInMatrix(member) ...) { destPair = _freePairFor(...); }   // duplicate guard only
+```
+
+The second-pair branch fires ONLY for a member already seated in that pair. A PARKED member
+holds no seat, so `destPair` is always the pair they came from. GAS-10 measured exactly this:
+**`matA2 0 -> 0, matB2 0 -> 0`, `pair2 seats 0` on every row.**
+
+That routing is CORRECT and deliberate — it fixed a measured live loop (2026-08-09: 65% of
+parked members sitting in MatB, MatA rotating 9.8x slower). Do not "fix" it.
+
+**THE LESSON IS THE INSTRUMENT, NOT THE ROUTING.** GAS-10 v1 had no occupancy check and
+printed **"NO CASCADE"** — a clean pass over an experiment that never once touched cold
+storage. It also swept five budgets in ONE world (snapshots undo deployments), so each row
+tested a more depleted world than the last: the 16M row, nominally the strongest, burned
+0.59M and rescued NOBODY, and was counted as a pass. Two independent ways of reporting a
+false negative in one test. It now reads matA2/matB2 occupancy, prints a `pair2 seats`
+column per row, rebuilds a FRESH world per budget, and says INCONCLUSIVE rather than passing
+when the cold pair was never touched.
+
+### BUILDING THE TWO-TIER FIXTURE — WHAT IT COSTS, MEASURED BEFORE STARTING
+
+`PairManagerV8.registerFor` is gated (`require(msg.sender == tierRouter)`, `:529`) and
+`TierRouter._manualUpgrade` (`:922`) requires `_requireUpgradeEligible`. **The gate has an
+open door**: `_upgradeEligible` (`:888`) returns true for any member ACTIVE IN A MatB of the
+previous tier, and this fixture has ~127 of those — no cycles or unlocks needed.
+
+**The real cost is POPULATION, not the gate.** Tier 1 needs its own ~254 members to fill and
+produce parked work, against 300 accounts configured in `hardhat.config.js` of which 298 are
+already spent. That means impersonated accounts inside the test (`impersonateAccount` +
+`setBalance`) — test-local, no shared config change — plus ~250 more registrations.
+
+**⚠ AND IT IS ONLY NEEDED IF 3.5M IS KEPT.** Setting the floor to 5M satisfies the invariant
+against the measured 4.37M worst item regardless of how many tiers exist, which makes this
+whole build unnecessary for the FLOOR decision. It would remain interesting for the CAP.
+
+### THE NEXT MEASUREMENT, AND IT IS THE LAST ONE BEFORE THE FLOOR CAN BE CHOSEN
+
+Build a **TWO-TIER** fixture in `V8_50_KeeperGas.test.js` and measure the cost of the first
+item touching tier 2 mid-batch. Then:
+
+- if it stays under 3.50M — the shipped floor holds, and GAS-6 should be REBASED onto the
+  mid-batch price with the reasoning written at the point of the change;
+- if it exceeds 3.50M — the floor moves. Menu is 2.5M / 3.5M / 5M / 7.5M (DAO param 63);
+  5M clears the 4.37M cold price by 15%, 7.5M by 72%, and GAS-8's table is the tool for
+  costing the throughput each choice gives up.
+
+## THE CAP — `maxItemsPerUpkeep` 20 IS FINE, AND GAS-4'S MODEL WAS WRONG
+
+GAS-4 projected a saturated batch as `worst single rescue x cap` and concluded NOTHING fits
+at 127 — not even a cap of 5 (21.83M vs the 17.80M ceiling). **GAS-1 measured a batch
+containing 8 rescues at 12.22M on the same world in the same run.** Both cannot be true.
+
+The projection multiplies a COLD-START cost by every slot. Slots 2..n find warm storage.
+GAS-7 now measures cold and marginal separately, and a saturated SF-funded batch costs
+`4.36M + (n−1) × 1.43M`:
+
+| cap | projected | |
+|---|---|---|
+| 5 | 10.10M | fits |
+| 10 | 17.27M | fits |
+| 15 | 24.44M | EXCEEDS |
+
+GAS-4's hard assertion is **demoted to a report off-baseline** — failing on a model this
+file has itself disproved is the definition of crying wolf. It still guards the original
+claim at size 7.
+
+## TWO CORRECTIONS TO THINGS PREVIOUSLY WRITTEN DOWN
+
+1. **`MatrixKeeper.sol:236` says the V8.49 chain "measured ~2.6M for the same item at the
+   live 127". It did not.** `testchain_keeper.js:285` records the provenance: *"cost per
+   rescue rose from ~600k (15 items, 9.0M) to ~2.6M (5 items, 12.9M)"* — **2.6M was a BATCH
+   PER-ITEM AVERAGE**, 12.9M ÷ 5, not an isolated item cost. The comparable V8.50 figure is
+   12.22M ÷ 9 = **1.36M per item**, i.e. V8.50 batches are CHEAPER per item than V8.49.
+   This session initially claimed the estimate was "68% low" by comparing it against the
+   4.37M isolated cost — two unlike quantities. **Fix the comment when the floor is settled.**
+2. **The 17.8M CEILING is an RPC limit, not a registry setting.**
+   `V8_46_CascadeGas.test.js:57`: *"public Base Sepolia rejects above ~17.8M (-32003)"*.
+   `system_keeper.js:582` sends overflow batches with `gasLimit: 15_000_000`.
+
+## TRAPS ADDED THIS SESSION
+
+- **The hardhat provider caps ONE transaction at 2^24 = 16,777,216 gas.** The original
+  `16_000_000` register limit sits just under it. A 29M limit is refused outright.
+  **It is below the 17.8M ceiling**, so an in-process run CANNOT observe a batch costing
+  between 16.78M and 17.80M — the tx is refused and reports no gas at all. Unhandled, that
+  refusal reads as "the item did not complete", identical to a floor refusal. That is defect
+  8's failure mode inside the instrument built to detect it. Every catch in the gas file now
+  identifies the cap error explicitly; capped batch rows report UNMEASURABLE, never zero.
+- **A cost curve that mixes rescue KINDS produces a number describing no item that exists.**
+  GAS-7's first version reported "cold 2.38M, marginal 1.47M" — the 2.38M was the
+  *self-funded* median, because discovery happened to hand it self-funded items first. The
+  giveaway was the step column: 0.86 / 0.83 / **2.83** / 1.43 / 1.42. Curves are per-kind now.
+- **A TEST THAT MUTATES A CONTRACT VALUE MUST RESTORE BEFORE REPORTING IT.** GAS-9's first
+  version set `minGasPerItem` to 2.5M so the guard could not interfere with its measurement,
+  then read the value back afterwards and printed **"shipped floor 2.50M"** — its own
+  leftover state, reported as a fact about the contract. It now `snap.restore()`s before
+  reading. A wrong figure printed confidently into a captured artifact is worse than none.
+- **A deep-referral fixture would have been WASTED WORK.** Chain pay walks matrix POSITION
+  (`myPos / 2`), not the referral graph. Referral depth changes one L1 credit slot from warm
+  to cold — tens of thousands of gas, not millions. One grep, not a fixture.
+
+## STATE OF THE TREE
+
+- `contracts/MatrixKeeper.sol` — `minGasPerItem` 3_500_000 -> **5_000_000**, plus the
+  measured write-up and the ~2.6M provenance correction.
+- `contracts/V8Governance.sol` — param 63 docs corrected; allowed-values array already
+  contained 5_000_000, so no menu change was needed.
+- `test/V8_50_KeeperGas.test.js` — size/population knobs (`GAS_MATRIX_SIZE`, `GAS_POP`),
+  GAS-7 (per-kind cost curves + mid-batch first touch), GAS-8 (floor sufficiency sweep),
+  GAS-9 (cost by arrival context), GAS-10 (cold-pair coupling test — INCONCLUSIVE by
+  construction, see above), cap-error handling throughout, and `ok` / `halted` /
+  `gasLeft@halt` / `pair2 seats` reporting. `LIVE_WORST_COLD_RESCUE = 4_366_374n` is the
+  named basis for GAS-6's live check.
+- **`GAS-8` reads the shipped floor FROM THE CONTRACT** rather than restating it — a
+  hardcoded copy would have kept asserting the old value's sufficiency after the default
+  moved, passing while measuring a floor nobody ships.
+- Baseline at size 7 re-verified byte-identical after every edit: 1.23/4.52/4.67/4.72/4.90/
+  4.90M, 0.93/1.49/1.76/0.10/0.04M, 1.61x, `9 of 20`, `6.47M left`.
+- Captures: `gas_size7_baseline.txt`, `gas_size31.txt`, `gas_size127*.txt` (all UTF-8, not
+  `Tee-Object`).
+
+## NEXT, IN ORDER
+
+1. **Gate measurements 3 and 4** — MatA parkers freed outright (PHASE 2 projects 67 of 67)
+   and E1 making the aggregate and ledger bases coincide. These DO need a running system,
+   so they are what the private chain is now FOR. Measurements 1 and 2 are done and the
+   private chain no longer has to discover them.
+2. **Re-run `model_item_a.js`** against the private V8.50 chain and re-check PARAM 59 and
+   the ladder rung on a running system. Expected to hold — which is a hypothesis, so rule 2.
+3. **Two-tier fixture — NO LONGER BLOCKING.** 5M clears the measured worst item whatever
+   the tier count, so this is now a CAP question, not a floor question. Worth doing before
+   `maxItemsPerUpkeep` is revisited; not worth delaying the deploy for.
+4. **`maxItemsPerUpkeep` is unfinished business.** GAS-7's measured curve says a saturated
+   SF-funded batch fits the 17.8M ceiling at cap 10 (17.27M) and EXCEEDS at 15 (24.44M).
+   The shipped cap is 20. It has never bitten because the floor stops the batch first — but
+   the cap is now doing nothing the floor does not already do better, and that should be
+   either confirmed deliberately or the cap lowered to 10 on this measurement.
 
 ---
 

@@ -323,8 +323,16 @@ contract V8Governance is Ownable {
     ///         matrix size, which moves whenever the payout walk or the SF path changes.
     ///         A floor that has drifted below the worst single item silently stops
     ///         protecting anything, and the symptom is the WorkItemFailed cascade it
-    ///         exists to prevent. Menu 2.5M / 3.5M / 5M / 7.5M; default 3_500_000, which
-    ///         clears the ~2.6M a live-size rescue measured with roughly 35% margin.
+    ///         exists to prevent. Menu 2.5M / 3.5M / 5M / 7.5M; default 5_000_000.
+    ///
+    ///         ⛔ THE DEFAULT MOVED 3_500_000 -> 5_000_000 ON 2026-08-18. A cold SF-funded
+    ///         rescue at the LIVE MATRIX_SIZE 127 measures 4.37M
+    ///         (test/V8_50_KeeperGas.test.js, GAS_MATRIX_SIZE=127), so 3.5M sat BELOW one
+    ///         item and the invariant above was violated. The ~2.6M this comment used to
+    ///         cite was never an item cost — it was a BATCH PER-ITEM AVERAGE (12.9M over
+    ///         5 items, testchain_keeper.js:285), so the "35% margin" never existed.
+    ///         Voting this back down to 3.5M or 2.5M re-arms exactly the silent cascade
+    ///         described above. See MatrixKeeper.minGasPerItem for the full measurement.
     uint8 public constant PARAM_MK_MIN_GAS_PER_ITEM        = 63;
 
     /// @dev Highest assigned param id -- update whenever a new param is added.
@@ -882,7 +890,7 @@ contract V8Governance is Ownable {
         // ── V8.49 item 1: MatrixKeeper eviction clock (default 7 days) ────────
         } else if (paramId == PARAM_MK_EVICTION_GRACE) {
             t.setEvictionGracePeriod(value);
-        // ── V8.50 defect 8: MatrixKeeper gas floor (default 3.5M) ─────────────
+        // ── V8.50 defect 8: MatrixKeeper gas floor (default 5M, measured at size 127) ──
         } else if (paramId == PARAM_MK_MIN_GAS_PER_ITEM) {
             t.setMinGasPerItem(value);
         // ── V8.33: MatrixKeeper extended idle timeout ──────────────────────────
