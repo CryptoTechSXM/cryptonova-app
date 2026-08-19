@@ -92,7 +92,34 @@ const REG_GAS = 16_700_000;   // just under the hardhat provider's 2^24 transact
  *   emit on the very next line, so once SlotParkedIdle is counted the identity is exact:
  *       queue insertions == MemberParked(matrix) + SlotParkedIdle
  */
+/**
+ * WHICH TRANSACTION DID EACH EVENT COME FROM? (added 2026-08-19, session 9)
+ *
+ * The park bookkeeping above can say HOW MANY of each event fired but not whether two of
+ * them fired TOGETHER — and that is the whole question about TierRouter's refusal event.
+ * TierRouter:1449-1458 calls `matrixB.parkCycledOut(member, shortfall)` and then emits its
+ * own `MemberParked(member, tier, "insufficient funds")`. `parkCycledOut` itself emits the
+ * MATRIX `MemberParked` (MatrixLogicLib:1939). So in the normal case ONE member cycling out
+ * underfunded produces BOTH events in ONE transaction, and counting them as two independent
+ * populations is double-reporting a single park.
+ *
+ * But not always, and that is why this is measured rather than asserted:
+ *   · `parkCycledOut` returns early when `parkedAt[member] > 0` (already parked) — router
+ *     event, no matrix event, no NEW queue entry.
+ *   · the call is wrapped in `try {} catch {}`, so a revert ("not a member", "still in
+ *     matrix") is swallowed — router event, no matrix event, AND NO QUEUE ENTRY AT ALL.
+ *     That second case is a member leaving with nothing holding them, which is precisely
+ *     what the epilogue's own comment ("NEVER a silent exit") claims cannot happen.
+ * Only pairing the two events per transaction can tell those apart.
+ *
+ * Kept in a WeakMap keyed by the destination bucket so the per-tick census bucket and the
+ * cumulative one never mix, and so nothing downstream that iterates `ev` sees a new key.
+ */
+const TX_OF = new WeakMap();      // into -> { [eventKey]: txHash[] }, index-parallel to into[key]
+
 function collect(ifaces, rc, into) {
+  let txmap = TX_OF.get(into);
+  if (!txmap) { txmap = {}; TX_OF.set(into, txmap); }
   for (const log of rc.logs) {
     for (const iface of ifaces) {
       let p = null;
@@ -102,6 +129,7 @@ function collect(ifaces, rc, into) {
       const key = p.name === "MemberParked" && p.fragment.inputs.length === 3
         ? "MemberParkedRouter" : p.name;
       (into[key] ||= []).push(p.args);
+      (txmap[key] ||= []).push(rc.hash ?? log.transactionHash);
       break;                      // <- the fix: never let a second interface see this log
     }
   }
@@ -1006,7 +1034,101 @@ async function main() {
       parkEvents: queueInsertions,
       parkEventsMatrix: n("MemberParked"),
       parkEventsIdleSlot: n("SlotParkedIdle"),
+      // ⛔ MEASURED 2026-08-19 (session 9), AND THE NAME IS WRONG: these are NOT refusals.
+      //    Pairing every router event against the matrix park in the SAME transaction for the
+      //    SAME member came back 12/12 on the control and 59/59 on V8.50, with zero orphans
+      //    on either arm (see parkRefusalPairing below). So every one of these sits on top of
+      //    a park ALREADY COUNTED in parkEventsMatrix. The number is a second label on the
+      //    cycled-out-underfunded subset of parking, not an independent population, and
+      //    11 -> 59 is not an anomaly to explain — it is the share of parks arriving via
+      //    TierRouter's no-strand epilogue rather than via the matrix's own park sites.
+      //    The key keeps its old name so results from sessions 6-9 stay comparable. Read it
+      //    as "parks that came through the router epilogue".
       parkRefusalsRouter: n("MemberParkedRouter"),
+      parkRefusalsRouterNote: "NOT refusals - each pairs 1:1 with a matrix park in the same tx (measured s9); already inside parkEventsMatrix",
+
+      // ⛔ WHY THIS BREAKDOWN EXISTS (added 2026-08-19). Router placement refusals jumped
+      //    11 -> 53 on V8.50 and stayed unexplained across three sessions, because only the
+      //    COUNT was ever kept — the event's own `reason` string was parsed and thrown away.
+      //    TierRouter emits exactly two reasons:
+      //        "insufficient funds"   (TierRouter:1458)
+      //        "autoReentry disabled" (TierRouter:1496, :1499)
+      //    Those have completely different meanings. "insufficient funds" would tie the rise
+      //    to item A's repricing; "autoReentry disabled" is a member OPTION and should not
+      //    differ between arms at all — if it does, something is setting options differently
+      //    and that is a separate defect. A single number cannot tell those apart, which is
+      //    exactly why three sessions could look at 11 -> 53 and get no further.
+      //    Keyed by TIER as well: a refusal at T1 and one at T3 are not the same event.
+      parkRefusalsByReason: (() => {
+        const out = {};
+        for (const a of (ev["MemberParkedRouter"] || [])) {
+          // Named access where the ABI carries names, positional otherwise — this file
+          // already warns that the same event is declared both ways across these ABIs.
+          const reason = String(a.reason ?? a[2] ?? "UNKNOWN");
+          const tier   = Number(a.tier   ?? a[1] ?? 0);
+          const k = `T${tier} :: ${reason}`;
+          out[k] = (out[k] || 0) + 1;
+        }
+        return out;
+      })(),
+      // Many refusals against ONE member is a stuck member; one each against many is a
+      // population effect. The count alone cannot distinguish them.
+      parkRefusalsDistinctMembers: (() => {
+        const set = new Set();
+        for (const a of (ev["MemberParkedRouter"] || [])) set.add(String(a.member ?? a[0]).toLowerCase());
+        return set.size;
+      })(),
+
+      // ⛔ IS A "ROUTER REFUSAL" EVEN A REFUSAL? (added 2026-08-19)
+      //    TierRouter:1449-1458 parks the member in matrixB and THEN emits its own event, so
+      //    the expected shape is: every router event sits in the same transaction as a matrix
+      //    MemberParked for the SAME member. If that holds, `parkRefusalsRouter` is not an
+      //    independent population at all — it is a second label on a park already counted in
+      //    parkEventsMatrix, and 11 -> 59 tracks how many members reach cycle-out underfunded,
+      //    not some new failure the router invented.
+      //    The residual is the part that matters:
+      //      pairedSameTxSameMember  — normal path, already counted as a queue insertion
+      //      sameTxNoMatrixPark      — parkCycledOut no-op'd or REVERTED (try/catch swallows it)
+      //      memberNeverParkedAtAll  — that member has no queue entry anywhere in the run.
+      //                                Non-zero here contradicts "NEVER a silent exit" and is
+      //                                a defect, not a metric. Zero here is the all-clear.
+      //    Derived from transaction hashes recorded at parse time; no arithmetic over counts.
+      parkRefusalPairing: (() => {
+        const txmap = TX_OF.get(ev) || {};
+        const rTx = txmap["MemberParkedRouter"] || [];
+        const mTx = txmap["MemberParked"] || [];
+        const rEv = ev["MemberParkedRouter"] || [];
+        const mEv = ev["MemberParked"] || [];
+        if (rTx.length !== rEv.length || mTx.length !== mEv.length) {
+          return { error: "tx index desynced from event index — do not read these numbers" };
+        }
+        const lc = (x) => String(x).toLowerCase();
+        const sameTxSameMember = new Set();     // "txhash|member" for MATRIX parks
+        const everParked = new Set();           // any member with any queue insertion
+        for (let i = 0; i < mEv.length; i++) {
+          const m = lc(mEv[i].member ?? mEv[i][0]);
+          sameTxSameMember.add(mTx[i] + "|" + m);
+          everParked.add(m);
+        }
+        for (const a of (ev["SlotParkedIdle"] || [])) everParked.add(lc(a.member ?? a[0]));
+
+        let paired = 0, sameTxNoPark = 0, neverParked = 0;
+        const orphans = [];
+        for (let i = 0; i < rEv.length; i++) {
+          const m = lc(rEv[i].member ?? rEv[i][0]);
+          if (sameTxSameMember.has(rTx[i] + "|" + m)) { paired++; continue; }
+          if (everParked.has(m)) { sameTxNoPark++; continue; }
+          neverParked++;
+          if (orphans.length < 10) orphans.push({ member: m, tx: rTx[i], reason: String(rEv[i].reason ?? rEv[i][2] ?? "?") });
+        }
+        return {
+          routerEvents: rEv.length,
+          pairedSameTxSameMember: paired,
+          sameTxNoMatrixPark: sameTxNoPark,
+          memberNeverParkedAtAll: neverParked,
+          orphanSample: orphans,
+        };
+      })(),
       distinctParkers, repeatParkers,
       rescues, loans,
       selfRescues: n("SelfRescue"),

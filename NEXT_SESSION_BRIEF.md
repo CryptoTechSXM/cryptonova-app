@@ -36,16 +36,26 @@ NOT REPORT THE ABSENCE OF SOMETHING IT CANNOT OBSERVE.**
 Corollary that saved the session: **when two discriminators disagree, one of them is
 broken — go find out which.** Do not average them.
 
-## ⛔ START HERE — THERE IS UNCOMMITTED WORK AND AN UNRUN SUITE
-**Nothing from session 9 is committed, in either repo.** First action:
+## ⛔ START HERE — WHERE SESSION 9 LEFT THINGS
+**Session 9 is committed and pushed in both repos.** Suite was green at **611 passing / 7
+pending / 0 failing** before the contracts commit.
 
-```powershell
-cd C:\CryptoNite-Smart-Contracts\CryptoNova
-npx hardhat compile --force
-npx hardhat test 2>&1 | Tee-Object -FilePath suite_after_param59.txt
-```
-Expect **611 passing / 7 pending / 0 failing**. Anything red is a test that pinned the old
-$3.40 ceiling and was missed. Only then commit — explicit paths, never `git add -A`.
+| repo | branch | at session end |
+|---|---|---|
+| `C:\CryptoNite-Smart-Contracts\CryptoNova` | `v8.1` | `e404d70` = PARAM 59 + bigfill rules + diagnostics; a second commit carries the ASCII cleanup, the event-pairing instrument and these docs |
+| `C:\CryptoNova-Testnet-App` | `admin` | `1aa9ce8` = `LOGS_DEPLOY_FLOOR` fix + parked-member status badge. **STILL ONLY ON `admin`** — not on preview, not on main, so members are not seeing it yet |
+
+**First actions, in this order:**
+1. `git -C C:\CryptoNite-Smart-Contracts\CryptoNova status` and the same for the app repo —
+   confirm clean before touching anything. Members file bug reports into `BUGS.md` on the app
+   repo, so `git pull --rebase` before you push there; a push was rejected for exactly that
+   on 2026-08-19.
+2. **The parked-member status badge has never been tested against a live chain.** It calls
+   views that do not exist on V8.48 and falls back; the fallback path is written but unproven.
+   Do that before it goes past `admin`.
+3. Is the bigfill loop still running? It was started unattended from **offset 289**,
+   one registration per run, 20-minute gap. `logs\bigfill_loop\` has one file per run and the
+   loop stops itself after 2 consecutive bad runs. Read the last file before assuming it is alive.
 
 ## WHAT IS DONE — do not re-derive any of this
 - **PARAM 59 = 5_000. OWNER DECISION 2026-08-19, LANDED IN SOURCE.** Basis (AB_FLOOR_BPS
@@ -182,8 +192,13 @@ Hit three times in one hour:
 ## EVICTION — NEVER FIRED ON LIVE V8.48, AND CANNOT WHILE BIGFILL RUNS
 `MemberEvicted`: **0** since 2026-08-13. Not a broken valve — no opportunity. Eviction needs
 the 7-day clock AND a non-NONE `_triageParked` reason, and bigfill self-rescues at 100%, so
-members are rescued first (54 of 57 in one run). Soonest clock of any parked member: **5.41
-days**. ✅ **OWNER DECISION 2026-08-19: NOT ON LIVE — DO IT IN THE V8.50 PRIVATE DEPLOY.** ("we are
+members are rescued first (54 of 57 in one run).
+**Final numbers once `diag_eviction_clock.js` could read headroom** (it needed the V8.48
+fallback — `loanHeadroom` does not exist on that build): **108 parked scanned, headroom
+derived exactly for all 108, 44 of them with a gap a loan CANNOT cover.** Soonest REAL
+eviction — out of time AND unrescuable — **129.2 h = 5.38 days**; `0xAdf9C692CB` is short
+$1.36 against $0.00 of headroom. The soonest CLOCK is not the answer to "when is the first
+eviction"; a member whose clock has run out but who is rescuable gets rescued. ✅ **OWNER DECISION 2026-08-19: NOT ON LIVE — DO IT IN THE V8.50 PRIVATE DEPLOY.** ("we are
 definitely not going to make the 6 days, we will have a deploy before that.") Nothing is
 being held back for those candidates; bigfill may self-rescue freely.
 **The private chain removes the timing problem:** `evictionGracePeriod` is DAO param 62 with
@@ -194,7 +209,9 @@ funded wallet self-rescues and never reaches the valve. That is precisely why li
 produced ZERO evictions in 6 days.
 
 ## WHAT IS NEXT
-1. **Run the suite, then commit both repos.** See "START HERE".
+1. **Get the frontend past `admin`** — the `LOGS_DEPLOY_FLOOR` fix and the parked-member
+   badge are sitting on `admin` where no member can see them. Live-chain check first (see
+   START HERE), then `admin` -> preview -> main.
 2. **Ship the frontend `LOGS_DEPLOY_FLOOR` fix** (44,840,000 -> 45,428,000, already edited
    and unpushed) and re-run `measure_page_rpc.mjs` on the healthy chain to confirm 95 -> 30
    windows. The script reads the constant BACK from index.html, so the re-run verifies the
@@ -215,7 +232,16 @@ produced ZERO evictions in 6 days.
    idempotent so a return does not double-count `uniqueMembers` or reset the join clock;
    preserve `memberReferrer` so referral history is not rewritten; TierRouter is under
    EIP-170 pressure so put any new loop in TierRouterLib from the start.
-4. **Router placement refusals, 11 -> 53** on V8.50. Still unexplained.
+4. ~~Router placement refusals, 11 -> 53~~ — **CLOSED 2026-08-19: THEY WERE NEVER REFUSALS.**
+   `TierRouter:1449-1458` parks the member in matrixB and then emits its own event, and
+   `parkCycledOut` emits the matrix `MemberParked` too — so one underfunded cycle-out makes
+   two events in one transaction. `replay.js` now records each event's tx hash and pairs them:
+   **12/12 on the control, 59/59 on V8.50, zero orphans on either arm** (`raw.parkRefusalPairing`).
+   The metric was double-labelling parks already counted in `parkEventsMatrix`. Second result
+   from the same measurement: `memberNeverParkedAtAll = 0` is the all-clear on V8.44's
+   no-strand claim — if it is ever non-zero that is a defect, not a metric. Full write-up in
+   the handoff's session 9 addendum. **Do not reopen this from the session 7 or 8 NEXT lists,
+   which still list it as open.**
 5. **Model self-rescue at a non-zero rate.** Blocking more than before — the eviction
    answer, the PARAM 59 curve and the loans-per-member result ALL carry
    `SELF_RESCUE_RATE = 0` as their headline caveat.

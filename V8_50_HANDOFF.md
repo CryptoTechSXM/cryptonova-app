@@ -319,7 +319,7 @@ outage. `check_chain_scope.mjs` (other chains, same machine) is what made the co
    idempotent so a return does not double-count `uniqueMembers` or reset the join clock;
    preserve `memberReferrer` so referral history is not rewritten; TierRouter is under
    EIP-170 pressure so put any new loop in TierRouterLib from the start.
-5. **Router placement refusals, 11 -> 53** on V8.50. Untouched, still unexplained.
+5. ~~Router placement refusals, 11 -> 53~~ — **CLOSED 2026-08-19, they were never refusals.** See the addendum section below; the metric is a second label on parks already counted, and the no-strand epilogue measured clean (0 orphans, both arms).
 6. **Model self-rescue at a non-zero rate.** Still the headline caveat on sections 2, 5 and 6 of
    session 8 and on the PARAM 59 basis.
 7. **Gate measurements 3 and 4** — need a running system; that is what the private chain is for.
@@ -410,10 +410,75 @@ member's own gap, and reads the grace period from the keeper rather than hardcod
 Failed reads render CHECKING, never "fine". All 5 inline script blocks pass `node --check`.
 ⚠ Not tested against a live chain yet — do that before it goes past `admin`.
 
+### ⛔ ROUTER PLACEMENT REFUSALS — **CLOSED 2026-08-19. THEY ARE NOT REFUSALS.**
+Supersedes "explain the router placement refusals, 11 -> 53" in the session 8 and session 7
+NEXT lists. Do not reopen it from those.
+
+**What the code does.** `TierRouter:1449-1458`, the V8.44 no-strand epilogue: when a member
+cycles out with re-entry ON and cannot fund it, the router calls
+`matrixB.parkCycledOut(member, shortfall)` and THEN emits its own
+`MemberParked(member, tier, "insufficient funds")`. `parkCycledOut` (MatrixLogicLib:1939)
+emits the MATRIX `MemberParked` on its own line. **One underfunded cycle-out therefore
+produces two differently-shaped events in one transaction**, and the harness was counting
+them as two independent populations.
+
+**Why that could not just be asserted.** Two branches break the pairing, and both matter:
+`parkCycledOut` returns early if `parkedAt[member] > 0` (router event, no new queue entry),
+and the call sits inside `try {} catch {}`, so a revert is SWALLOWED — router event, no park
+anywhere, i.e. a member leaving with nothing holding them. That last case is exactly what the
+epilogue's own comment ("NEVER a silent exit") claims is impossible. A count cannot tell the
+three apart.
+
+**Measured.** `test_ab/replay.js` now records the transaction hash of every parsed event (a
+`WeakMap` keyed by the destination bucket, so the per-tick census bucket cannot contaminate
+the cumulative one) and pairs each router event against a matrix park **in the same tx for
+the same member** — `raw.parkRefusalPairing`. Seed 1, 288 members, MATRIX_SIZE 127, AB_CAP 5:
+
+| | control v849b | V8.50 |
+|---|---|---|
+| router events | 12 | 59 |
+| paired, same tx + same member | **12** | **59** |
+| same tx, no matrix park | 0 | 0 |
+| member never parked at all | **0** | **0** |
+
+**Two conclusions, and only these two.**
+1. `parkRefusalsRouter` is a MISLABEL. Every one of these sits on top of a park already
+   counted in `parkEventsMatrix`. It is not an independent population and 11 -> 59 is not an
+   anomaly — it is the share of parks arriving through the router epilogue rather than
+   through the matrix's own park sites. The key keeps its name so sessions 6-9 results stay
+   comparable; `raw.parkRefusalsRouterNote` now says this inside every result file.
+2. **The no-strand epilogue holds.** Zero orphans on both arms is the all-clear on V8.44's
+   central claim. If this number is ever non-zero it is a defect, not a metric.
+
+⚠ ONE SEED, ONE SEQUENCE. The pairing is structural (it follows from the emit order) so a
+second seed would be confirmation rather than discovery — but it has not been run, and
+"12/12 and 59/59" is a statement about seed 1.
+
+⚠ AND WHAT IS **NOT** CLOSED: the two arms differ on `insolvencyFloorBps` (3400 vs 5000) as
+well as on build, so the CHANGE IN COMPOSITION of parking between them is confounded and is
+not a finding. Only the pairing is.
+
+### BIGFILL OUTPUT IS NOW ASCII-ONLY (owner request 2026-08-19)
+Run logs were mangling dashes and arrows. Two causes, both fixed:
+`scripts/bigfill_v8.js` had 171 non-ASCII characters in code and string literals — every one
+that can reach the console is now ASCII (`-`, `->`, `!`, `...`, `ok`, `X`). **Comment banners
+keep their box-drawing** — they never print, and flattening them would have made a 1,600-line
+diff out of a cosmetic fix. The rewrite used a state machine over the file (code / line
+comment / block comment / each quote type) rather than a blind replace, so nothing inside a
+comment moved and no string was half-converted. Second, both `run_bigfill_rr.ps1` and
+`run_bigfill_loop.ps1` now set `[Console]::OutputEncoding` and `$OutputEncoding` to UTF-8
+before launching node: PowerShell 5.1 decodes a child process's stdout with the ANSI code
+page otherwise, which is what produced the mojibake. That belt still matters for hardhat and
+ethers messages, whose text we do not control. **Both .ps1 files are now pure ASCII (0
+non-ASCII bytes)** — they have no BOM, and a non-ASCII byte in executable code broke a run on
+2026-08-19.
+
 ### STILL OPEN AT SESSION END
-1. **The suite has still not been run** after PARAM 59 = 5000. Nothing is committed.
-2. `scripts/probe_sf_views.js` — run it to find which SF views V8.48 actually exposes, then
-   point the headroom fallback at whichever debt getter answered.
+1. ~~The suite has still not been run~~ — **DONE**: 611 passing, committed and pushed as
+   `e404d70` on `v8.1`. The ASCII + pairing work of the late session is a separate commit.
+2. ~~`probe_sf_views.js`~~ — **DONE**: 8 of 10 views present on V8.48; `loanHeadroom` and
+   `evictionGracePeriod` are the two absent ones, exactly as predicted, and the fallbacks in
+   `diag_eviction_clock.js` and `index.html` are pointed at what answered.
 3. T1.1 is now FULL on both halves (127/127). **Prediction to verify:** its MatB rotations
    should now graduate into T1.2's MatA via `chainNext`. If T1.2 stays empty, chase it.
 4. Bigfill's batch line prints the ACTIVE pair's occupancy while the snapshot prints T1.1 —

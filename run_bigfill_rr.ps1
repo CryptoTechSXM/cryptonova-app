@@ -30,7 +30,7 @@ param(
 )
 
 # ---------------------------------------------------------------------------
-# COHORT BLEED — -Offset DOES NOT ISOLATE A COHORT  (found 2026-08-16)
+# COHORT BLEED - -Offset DOES NOT ISOLATE A COHORT  (found 2026-08-16)
 #
 # bigfill_v8.js:1261-1269 builds the rescue/upgrade population as
 #     historicalCount = max(0, HDR_OFFSET - SCAN_FROM)
@@ -48,7 +48,7 @@ param(
 # Default stays bigfill's own (0) so ordinary runs keep sweeping everything,
 # which is how the system is normally kept moving. But a run with a non-default
 # self-rescue rate is a COHORT, and a cohort must not touch wallets outside its
-# own range — so we pin SCAN_FROM to its offset and say so loudly.
+# own range - so we pin SCAN_FROM to its offset and say so loudly.
 # ---------------------------------------------------------------------------
 if ($SelfRescueRate -ne 1.0 -and $ScanFrom -lt 0) {
     $ScanFrom = $Offset
@@ -118,6 +118,17 @@ if ($AddressesFile -ne "") {
 #   BURN_SIMULATE=false- no earlyUnlockAll() burn sweep (default is ON)
 # Do NOT remove these three lines. See BIGFILL_RULES.md.
 # ---------------------------------------------------------------------------
+# ---- console encoding -------------------------------------------------------------
+# node writes UTF-8. Windows PowerShell 5.1 decodes a child process's output with the
+# ANSI code page unless told otherwise, which is what turned dashes into mojibake in the
+# run logs. bigfill_v8.js is now ASCII-only on every line that can reach the console, so
+# this is the second belt rather than the first - it still matters for hardhat and ethers
+# messages, whose text we do not control.
+# NOTE: keep this file pure ASCII. It has no BOM, so a non-ASCII byte in executable code
+# is read as ANSI and can break quoting outright (cost this project a run on 2026-08-19).
+[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+$OutputEncoding           = [System.Text.Encoding]::UTF8
+
 $env:CNOVA_BUY_RATE   = "0"
 $env:CNOVA_SELL_RATE  = "0"
 $env:BURN_SIMULATE    = "false"

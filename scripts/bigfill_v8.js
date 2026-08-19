@@ -100,8 +100,8 @@ const fmt6   = n  => "$" + (Number(n) / 1e6).toFixed(2);
 const pct    = (a, b) => b === 0n ? "0%" : (Number(a * 100n / b)).toFixed(0) + "%";
 
 function sep(label = "") {
-  const dashes = "─".repeat(60);
-  if (label) console.log(`\n  ── ${label} ${"─".repeat(Math.max(0, 56 - label.length))}`);
+  const dashes = "-".repeat(60);
+  if (label) console.log(`\n  -- ${label} ${"-".repeat(Math.max(0, 56 - label.length))}`);
   else       console.log(`  ${dashes}`);
 }
 
@@ -113,7 +113,7 @@ function makeWallets(count, startOffset) {
   if (startOffset === undefined) startOffset = HDR_OFFSET;
   const mnemo = process.env.FILL_MNEMONIC;
   if (!mnemo) {
-    console.error("\n  ❌  FILL_MNEMONIC not set in .env.");
+    console.error("\n  X  FILL_MNEMONIC not set in .env.");
     console.error("     Generate one: node -e \"const {ethers}=require('ethers');console.log(ethers.Wallet.createRandom().mnemonic.phrase)\"");
     console.error("     Then add FILL_MNEMONIC=<phrase> to .env");
     process.exit(1);
@@ -180,7 +180,7 @@ async function readGates(tierRouter) {
   const g = {};
   try { for (let t = 2; t <= 10; t++) g[t] = await tierRouter.isWhaleGateActiveForTier(t); }
   catch (e) {
-    console.warn(`  ⚠ whale-gate read FAILED (${e.shortMessage || e.message?.slice(0,80)}) — skipping climb`);
+    console.warn(`  ! whale-gate read FAILED (${e.shortMessage || e.message?.slice(0,80)}) - skipping climb`);
     return null;
   }
   return g;
@@ -199,7 +199,7 @@ async function readCeilingIdx(tierRouter) {
   } catch (e) {
     // NEVER collapse a failed read into "gate shut" — that reads as a design state
     // rather than a broken instrument. Say so and climb nothing this run.
-    console.warn(`  ⚠ whale-gate read FAILED (${e.shortMessage || e.message?.slice(0,80)}) — skipping climb`);
+    console.warn(`  ! whale-gate read FAILED (${e.shortMessage || e.message?.slice(0,80)}) - skipping climb`);
     return null;
   }
   return ceilingNum - 1;
@@ -272,7 +272,7 @@ async function reportWatchedWallets(watchList, { tierRouter, matA1, matB1, commu
   if (watchList.length === 0) return;
   console.log('');
   sep('WATCHED WALLETS');
-  const COHORT = ['—', 'Genesis', 'Pioneer'];
+  const COHORT = ['-', 'Genesis', 'Pioneer'];
   for (const addr of watchList) {
     try {
       const [tier, wdA, wdB, cohortVal, cwBalance] = await Promise.all([
@@ -282,8 +282,8 @@ async function reportWatchedWallets(watchList, { tierRouter, matA1, matB1, commu
         communityWallet ? communityWallet.cohort(addr).catch(() => 0n) : Promise.resolve(0n),
         usdc.balanceOf(addr).catch(() => 0n),
       ]);
-      const label = addr.slice(0, 10) + '…';
-      const cohortStr = COHORT[Number(cohortVal)] || '—';
+      const label = addr.slice(0, 10) + '...';
+      const cohortStr = COHORT[Number(cohortVal)] || '-';
       const wdStr = (wdA > 0n || wdB > 0n)
         ? `T1A: ${fmt6(wdA)}  T1B: ${fmt6(wdB)}`
         : 'no withdrawable';
@@ -291,7 +291,7 @@ async function reportWatchedWallets(watchList, { tierRouter, matA1, matB1, commu
         `  ${label}  T${tier || 0}  ${wdStr.padEnd(30)}  CW: ${cohortStr.padEnd(8)}  USDC: ${fmt6(cwBalance)}`
       );
     } catch (e) {
-      console.warn(`  ⚠  watchWallet ${addr.slice(0,10)} query failed: ${e.message.slice(0,60)}`);
+      console.warn(`  !  watchWallet ${addr.slice(0,10)} query failed: ${e.message.slice(0,60)}`);
     }
   }
   console.log('');
@@ -306,7 +306,7 @@ async function reportWatchedWallets(watchList, { tierRouter, matA1, matB1, commu
 async function burnSweep(walletList, cnova) {
   if (process.env.BURN_SIMULATE === "false") return;
 
-  sep("Early Unlock Sweep — simulating member sell pressure");
+  sep("Early Unlock Sweep - simulating member sell pressure");
   let swept = 0, skipped = 0;
   let totalPenalty = 0n;
 
@@ -381,7 +381,7 @@ async function cnovaBuySweep(walletList, directSale, usdc) {
 
   // Randomly sample CNOVA_BUY_RATE of registered wallets
   const candidates = walletList.filter(() => Math.random() < CNOVA_BUY_RATE);
-  if (candidates.length === 0) { console.log(`  💰 CNOVA buy sweep: no wallets selected this cycle`); return; }
+  if (candidates.length === 0) { console.log(`  $ CNOVA buy sweep: no wallets selected this cycle`); return; }
 
   let bought = 0, skipped = 0;
   let totalUsdcSpent = 0n, totalCnovaReceived = 0n;
@@ -425,8 +425,8 @@ async function cnovaBuySweep(walletList, directSale, usdc) {
   }
   const cnovaFmt = totalCnovaReceived > 0n
     ? (Number(totalCnovaReceived) / 1e18).toFixed(2) + ' CNOVA'
-    : '—';
-  console.log(`  💰 CNOVA buy sweep: ${bought}/${candidates.length} bought | ${fmt6(totalUsdcSpent)} USDC → ${cnovaFmt} (${skipped} skipped)`);
+    : '-';
+  console.log(`  $ CNOVA buy sweep: ${bought}/${candidates.length} bought | ${fmt6(totalUsdcSpent)} USDC -> ${cnovaFmt} (${skipped} skipped)`);
 }
 
 // ── Manual upgrade simulation (V8.18, self-funded + multi-tier as of V8.19) ──
@@ -484,7 +484,7 @@ async function simulateManualUpgrades({
 
   if (eligible.length === 0) {
     if (notSelfFunded > 0) {
-      console.log(`  Manual upgrade → ${tierLabel}: 0 eligible (${notSelfFunded} in prior MatB but lack own-wallet ${tierLabel} fee — not self-funded)`);
+      console.log(`  Manual upgrade -> ${tierLabel}: 0 eligible (${notSelfFunded} in prior MatB but lack own-wallet ${tierLabel} fee - not self-funded)`);
     }
     return fNonce;
   }
@@ -493,7 +493,7 @@ async function simulateManualUpgrades({
   const shuffled = eligible.sort(() => Math.random() - 0.5);
   const toUpgrade = shuffled.slice(0, Math.max(1, Math.round(shuffled.length * UPGRADE_RATE)));
 
-  sep(`Manual Upgrade Simulation → ${tierLabel} — ${eligible.length} self-funded eligible (+${notSelfFunded} lacking own funds) → upgrading ${toUpgrade.length} (${Math.round(UPGRADE_RATE * 100)}%)`);
+  sep(`Manual Upgrade Simulation -> ${tierLabel} - ${eligible.length} self-funded eligible (+${notSelfFunded} lacking own funds) -> upgrading ${toUpgrade.length} (${Math.round(UPGRADE_RATE * 100)}%)`);
   let upgraded = 0, skipped = 0;
 
   for (const w of toUpgrade) {
@@ -542,7 +542,7 @@ async function simulateManualUpgrades({
       }
 
       await (await tierRouter.connect(conn).manualUpgrade(targetTierIndex, { gasLimit: 15_000_000 })).wait();
-      console.log(`  ✓ manualUpgrade ${tierLabel}  ${w.address.slice(0, 10)}…`);
+      console.log(`  ok manualUpgrade ${tierLabel}  ${w.address.slice(0, 10)}...`);
       upgraded++;
 
       // OWNER RULE: "upgrade eligible and climb ladder to highest possible tier".
@@ -556,17 +556,17 @@ async function simulateManualUpgrades({
           tierRouter, tierRouterAddr, usdc, fees, w, conn, gates, gasCap,
         });
         if (climb.climbed > 0) {
-          console.log(`     ↑ climbed to T${climb.reached} (+${climb.climbed} tier${climb.climbed === 1 ? "" : "s"})` +
-            (climb.note ? ` — stopped: ${climb.note}` : ""));
+          console.log(`     ^ climbed to T${climb.reached} (+${climb.climbed} tier${climb.climbed === 1 ? "" : "s"})` +
+            (climb.note ? ` - stopped: ${climb.note}` : ""));
         } else if (climb.note && climb.note !== "already at ceiling") {
-          console.log(`     · no further climb — ${climb.note}`);
+          console.log(`     - no further climb - ${climb.note}`);
         }
       }
     } catch (e) {
       const msg = e.shortMessage || e.message?.slice(0, 100) || 'unknown';
       // "TR: cross to MatB first" = not eligible yet — quiet skip
       if (!msg.includes("cross to MatB")) {
-        console.warn(`  ⚠ upgrade ${w.address.slice(0, 10)}… failed: ${msg}`);
+        console.warn(`  ! upgrade ${w.address.slice(0, 10)}... failed: ${msg}`);
       }
       skipped++;
       try { fNonce = Number(await ethers.provider.getTransactionCount(funderAddr, 'pending')); } catch {}
@@ -615,7 +615,7 @@ async function simulateSelfRescues({ walletList, matrices, usdc, usdcFunder, raw
   }
 
   if (parked.length === 0) {
-    console.log(`  🆘 Self-rescue scan: 0 parked members in test wallets`);
+    console.log(`  SOS Self-rescue scan: 0 parked members in test wallets`);
     return fNonce;
   }
 
@@ -625,8 +625,8 @@ async function simulateSelfRescues({ walletList, matrices, usdc, usdcFunder, raw
   const remaining = parked.length - toRescue.length;
 
   sep(
-    `Self-Rescue — ${parked.length} parked · rescuing ${toRescue.length}` +
-    ` (${Math.round(SELF_RESCUE_RATE * 100)}%) · ${remaining} wait for keeper`
+    `Self-Rescue - ${parked.length} parked - rescuing ${toRescue.length}` +
+    ` (${Math.round(SELF_RESCUE_RATE * 100)}%) - ${remaining} wait for keeper`
   );
 
   let rescued = 0, skipped = 0;
@@ -654,7 +654,7 @@ async function simulateSelfRescues({ walletList, matrices, usdc, usdcFunder, raw
       // Skip wallets with no USDC — keeper's SF loan will handle them instead.
       const usdcBal = await usdc.balanceOf(w.address);
       if (usdcBal === 0n) {
-        console.log(`  ⚠ selfRescue ${label} ${w.address.slice(0, 10)}… — $0 USDC, keeper SF path`);
+        console.log(`  ! selfRescue ${label} ${w.address.slice(0, 10)}... - $0 USDC, keeper SF path`);
         skipped++;
         continue;
       }
@@ -701,7 +701,7 @@ async function simulateSelfRescues({ walletList, matrices, usdc, usdcFunder, raw
       // effect on some wallets (observed allowance $11.00 where $25 was expected).
       // Print the actual decision so the next run says WHY instead of us guessing.
       if (RESCUE_DEBUG) {
-        console.log(`     · approve[${label}] ${w.address.slice(0,10)}… need=${fmt6(_needApprove)} ` +
+        console.log(`     - approve[${label}] ${w.address.slice(0,10)}... need=${fmt6(_needApprove)} ` +
                     `before=${fmt6(allowance)} approved=${_approved} after=${fmt6(_after)} spender=${addr}${_feeErr}`);
       }
 
@@ -722,7 +722,7 @@ async function simulateSelfRescues({ walletList, matrices, usdc, usdcFunder, raw
           'unknown reason';
         if (reason.includes('not parked') || reason.includes('not a member') ||
             reason.includes('already in matrix') || reason.includes('still in matrix')) {
-          console.log(`  ℹ  ${w.address.slice(0, 10)}… keeper rescued first — all good`);
+          console.log(`  i  ${w.address.slice(0, 10)}... keeper rescued first - all good`);
         } else {
           // Log wallet state to help diagnose
           let walletState = '';
@@ -774,7 +774,7 @@ async function simulateSelfRescues({ walletList, matrices, usdc, usdcFunder, raw
             const before  = await usdc.balanceOf(w.address).catch(() => null);
             let   sent    = false, how = "", topErr = null;
 
-            console.log(`     · USDC top-up ${w.address.slice(0, 10)}… +${fmt6(topUp)} (short ${fmt6(_shortfall)})`);
+            console.log(`     - USDC top-up ${w.address.slice(0, 10)}... +${fmt6(topUp)} (short ${fmt6(_shortfall)})`);
 
             // 1) transfer from the funder wallet
             if (usdcFunder) {
@@ -827,22 +827,22 @@ async function simulateSelfRescues({ walletList, matrices, usdc, usdcFunder, raw
               const why = topErr
                 ? (topErr.shortMessage || topErr.reason || topErr.message?.split("\n")[0]?.slice(0, 160) || "no reason given")
                 : "send reported success but balance did not change";
-              console.warn(`  ⚠ top-up DID NOT LAND for ${w.address.slice(0, 10)}… — ${why}` +
+              console.warn(`  ! top-up DID NOT LAND for ${w.address.slice(0, 10)}... - ${why}` +
                 (before !== null ? ` [balance still ${fmt6(after ?? before)}]` : ""));
             } else {
               try {
                 await matrix.connect(conn).selfRescue.staticCall({ gasLimit: 15_000_000 });
                 _recovered = true;            // dry run passes now — fall through and send
-                console.log(`       ✓ topped up via ${how} → ${fmt6(after)}`);
+                console.log(`       ok topped up via ${how} -> ${fmt6(after)}`);
               } catch (retryErr) {
-                console.warn(`  ⚠ selfRescue ${label} ${w.address.slice(0, 10)}… still reverts after a LANDED top-up ` +
+                console.warn(`  ! selfRescue ${label} ${w.address.slice(0, 10)}... still reverts after a LANDED top-up ` +
                   `(${fmt6(after)}): ${retryErr.reason || retryErr.shortMessage || retryErr.message?.slice(0, 120) || "unknown"}`);
               }
             }
           }
 
           if (!_recovered) {
-            console.warn(`  ⚠ selfRescue ${label} ${w.address.slice(0, 10)}… STATIC CALL REVERT: ${reason}${walletState}${rawHexStr}`);
+            console.warn(`  ! selfRescue ${label} ${w.address.slice(0, 10)}... STATIC CALL REVERT: ${reason}${walletState}${rawHexStr}`);
           }
         }
         if (!_recovered) {
@@ -856,20 +856,20 @@ async function simulateSelfRescues({ walletList, matrices, usdc, usdcFunder, raw
       // gasLimit 15M: selfRescue can trigger a 127-seat MatB cycle-out (double
       // cycle-out costs ~8M gas) — same ceiling used for register() and manualUpgrade().
       await (await matrix.connect(conn).selfRescue({ gasLimit: 15_000_000 })).wait();
-      console.log(`  ✓ selfRescue ${label}  ${w.address.slice(0, 10)}…  (${fmt6(usdcBal)} USDC in wallet)`);
+      console.log(`  ok selfRescue ${label}  ${w.address.slice(0, 10)}...  (${fmt6(usdcBal)} USDC in wallet)`);
       rescued++;
     } catch (e) {
       const msg = e.shortMessage || e.message?.slice(0, 120) || 'unknown';
       if (msg.includes("not parked")) {
         // Keeper rescued them first — totally fine, member is back in matrix
-        console.log(`  ℹ  ${w.address.slice(0, 10)}… keeper rescued first — all good`);
+        console.log(`  i  ${w.address.slice(0, 10)}... keeper rescued first - all good`);
       } else if (_isTransport(msg)) {
         // The node did not answer. This wallet was NOT refused and must not be counted
         // as though it were.
         transportFails++; consecutiveTransport++;
-        console.warn(`  ⚠ selfRescue ${w.address.slice(0, 10)}… NETWORK (not a refusal): ${msg}`);
+        console.warn(`  ! selfRescue ${w.address.slice(0, 10)}... NETWORK (not a refusal): ${msg}`);
         if (consecutiveTransport >= TRANSPORT_ABORT) {
-          console.error(`\n  ⛔ ABORTING THE SWEEP — ${consecutiveTransport} consecutive network failures.`);
+          console.error(`\n  !! ABORTING THE SWEEP - ${consecutiveTransport} consecutive network failures.`);
           console.error(`     The chain is not answering. Continuing would produce a partial sweep that`);
           console.error(`     reads like a result. Re-run when watch_base_sepolia.mjs shows a clean streak.`);
           console.error(`     (Raise TRANSPORT_ABORT to override, but read the number you get afterwards`);
@@ -877,7 +877,7 @@ async function simulateSelfRescues({ walletList, matrices, usdc, usdcFunder, raw
           throw new Error(`sweep aborted: ${consecutiveTransport} consecutive RPC transport failures`);
         }
       } else {
-        console.warn(`  ⚠ selfRescue ${w.address.slice(0, 10)}… unexpected TX error: ${msg}`);
+        console.warn(`  ! selfRescue ${w.address.slice(0, 10)}... unexpected TX error: ${msg}`);
         skipped++; consecutiveTransport = 0;
       }
       if (msg.includes("not parked")) { skipped++; consecutiveTransport = 0; }
@@ -887,9 +887,9 @@ async function simulateSelfRescues({ walletList, matrices, usdc, usdcFunder, raw
   }
 
   console.log(
-    `  Self-rescues: ${rescued} succeeded · ${skipped} skipped` +
-    (transportFails ? ` · ⚠ ${transportFails} NETWORK FAILURES (not refusals — these wallets were never asked; treat this sweep as INCOMPLETE)` : ``) +
-    (remaining > 0 ? ` · ${remaining} parked wallets left for keeper` : '')
+    `  Self-rescues: ${rescued} succeeded - ${skipped} skipped` +
+    (transportFails ? ` - ! ${transportFails} NETWORK FAILURES (not refusals - these wallets were never asked; treat this sweep as INCOMPLETE)` : ``) +
+    (remaining > 0 ? ` - ${remaining} parked wallets left for keeper` : '')
   );
   return fNonce;
 }
@@ -932,21 +932,21 @@ async function reinstateEvicted({
   const RATE = Number(process.env.EVICT_REENTRY ?? "1");
   const MAX  = Number(process.env.EVICT_REENTRY_MAX || "25");
   const FROM = Number(process.env.EVICT_SCAN_FROM || "45428000");
-  if (!RATE) { console.log("  EVICT_REENTRY=0 — skipping eviction re-entry"); return fNonce; }
+  if (!RATE) { console.log("  EVICT_REENTRY=0 - skipping eviction re-entry"); return fNonce; }
 
-  sep("Eviction re-entry — bringing evicted wallets back (they pay full fees)");
+  sep("Eviction re-entry - bringing evicted wallets back (they pay full fees)");
 
   // The owner key must actually own TierRouter, or setGlobalJoined reverts and every
   // wallet below fails one at a time. Check once, say so plainly, skip the phase.
   try {
     const owner = await tierRouter.owner();
     if (owner.toLowerCase() !== deployerAddr.toLowerCase()) {
-      console.log(`  ⚠  SKIPPING: TierRouter owner is ${owner}, this run signs as ${deployerAddr}.`);
+      console.log(`  !  SKIPPING: TierRouter owner is ${owner}, this run signs as ${deployerAddr}.`);
       console.log("     Reinstatement needs the owner key. Nothing else in the run is affected.");
       return fNonce;
     }
   } catch (e) {
-    console.log(`  ⚠  SKIPPING: could not read TierRouter.owner() — ${(e.shortMessage || e.message || "").slice(0, 70)}`);
+    console.log(`  !  SKIPPING: could not read TierRouter.owner() - ${(e.shortMessage || e.message || "").slice(0, 70)}`);
     return fNonce;
   }
 
@@ -967,7 +967,7 @@ async function reinstateEvicted({
       evicted.add(ethers.getAddress("0x" + l.topics[1].slice(26)).toLowerCase());
     }
   }
-  console.log(`  MemberEvicted addresses found: ${evicted.size}${holes ? `   ⚠ ${holes} failed ranges — this is a FLOOR` : ""}`);
+  console.log(`  MemberEvicted addresses found: ${evicted.size}${holes ? `   ! ${holes} failed ranges - this is a FLOOR` : ""}`);
   if (!evicted.size) { console.log("  Nothing to reinstate."); return fNonce; }
 
   const candidates = [];
@@ -1016,21 +1016,21 @@ async function reinstateEvicted({
 
       await (await tierRouter.connect(conn).register(ref, { gasLimit: 15_000_000 })).wait();
       back++;
-      console.log(`  ✓ ${tag} reinstated and re-registered (sponsor ${ref.slice(0, 10)})`);
+      console.log(`  ok ${tag} reinstated and re-registered (sponsor ${ref.slice(0, 10)})`);
     } catch (e) {
       failed++;
-      console.warn(`  ⚠ ${tag} failed: ${(e.shortMessage || e.message || "").slice(0, 90)}`);
+      console.warn(`  ! ${tag} failed: ${(e.shortMessage || e.message || "").slice(0, 90)}`);
       // LEAVE NO WALLET STRANDED. globalJoined=false with no seat is a state no organic
       // path produces; it would corrupt later runs and any member-count reading.
       if (cleared) {
-        try { await (await tierRouterOwner.setGlobalJoined(w.address, true)).wait(); console.warn(`    ↳ globalJoined restored for ${tag}`); }
-        catch (e2) { console.error(`    ⛔ COULD NOT RESTORE globalJoined for ${w.address} — FIX BEFORE THE NEXT RUN: ${(e2.shortMessage || e2.message || "").slice(0, 70)}`); }
+        try { await (await tierRouterOwner.setGlobalJoined(w.address, true)).wait(); console.warn(`    -> globalJoined restored for ${tag}`); }
+        catch (e2) { console.error(`    !! COULD NOT RESTORE globalJoined for ${w.address} - FIX BEFORE THE NEXT RUN: ${(e2.shortMessage || e2.message || "").slice(0, 70)}`); }
       }
       try { fNonce = Number(await ethers.provider.getTransactionCount(funderAddr, "pending")); } catch {}
     }
   }
   console.log(`  Re-entry summary: ${back} back in, ${failed} failed, ${evicted.size} evicted lifetime`);
-  console.log("  (Upgrades are handled by the existing sweeps — a re-registered member sits in");
+  console.log("  (Upgrades are handled by the existing sweeps - a re-registered member sits in");
   console.log("   MatA and becomes upgrade-eligible only after reaching MatB, same as anyone else.)");
   return fNonce;
 }
@@ -1124,13 +1124,13 @@ async function snapshot(label, { tierRouter, pm1, matA1, matB1, matA2, matB2,
     console.log(`  Treasury USDC:       ${fmt6(tUsdc)}`);
   } catch {}
   console.log(`  CNOVA minted:        ${ethers.formatEther(totalSupply)}`);
-  console.log(`  Treasury CNOVA:      ${ethers.formatEther(treasuryBal)} (via buybacks only — 0 is normal)`);
+  console.log(`  Treasury CNOVA:      ${ethers.formatEther(treasuryBal)} (via buybacks only - 0 is normal)`);
 }
 
 // ── Main ──────────────────────────────────────────────────────────────────────
 async function main() {
   if (!fs.existsSync(ADDRESSES_FILE)) {
-    console.error(`\n  ❌  ${ADDRESSES_FILE} not found. Run deploy_v8.js first.`);
+    console.error(`\n  X  ${ADDRESSES_FILE} not found. Run deploy_v8.js first.`);
     process.exit(1);
   }
 
@@ -1149,9 +1149,9 @@ async function main() {
   const deployerAddr = rawSigner.address;
   const funderAddr   = rawFunder.address;
   if (funderAddr === deployerAddr) {
-    console.log(`  ⚠  FILL_FUNDER_KEY not set — using deployer for ETH sends (may hit in-flight limit)`);
+    console.log(`  !  FILL_FUNDER_KEY not set - using deployer for ETH sends (may hit in-flight limit)`);
   } else {
-    console.log(`  Funder:     ${funderAddr}  (ETH + USDC sends — fresh wallet)`);
+    console.log(`  Funder:     ${funderAddr}  (ETH + USDC sends - fresh wallet)`);
     // Do NOT auto-topup here — that would burn the deployer's 1 allowed TX slot.
     // Run fund_funder.js once before bigfill to pre-load funder with ETH + bulk USDC.
   }
@@ -1236,7 +1236,7 @@ async function main() {
       activeMatB1Addr = pmMatBs[lastPair];
       activeMatA1 = await ethers.getContractAt("FigureEightMatrixV8", activeMatA1Addr);
       activeMatB1 = await ethers.getContractAt("FigureEightMatrixV8", activeMatB1Addr);
-      console.log(`  ℹ  T1 factory: ${pmMatAs.length} pairs. T1.1 archived (127/127). Active: T1.${pmMatAs.length} (${activeMatA1Addr.slice(0,10)}…)`);
+      console.log(`  i  T1 factory: ${pmMatAs.length} pairs. T1.1 archived (127/127). Active: T1.${pmMatAs.length} (${activeMatA1Addr.slice(0,10)}...)`);
       // Rebuild allMatrices: T1.1 (archived) + T1.2 … T1.N (active) + T2 + T3
       allMatrices = [
         { matrix: matA1, label: "T1.1 MatA", addr: T1.matA },
@@ -1256,15 +1256,15 @@ async function main() {
       console.log(`  allMatrices rebuilt: ${allMatrices.map(m => m.label).join(', ')}`);
     }
   } catch(e) {
-    console.warn(`  ⚠  PM pair discovery failed — using T1.1 static addresses: ${e.message?.slice(0,80)}`);
+    console.warn(`  !  PM pair discovery failed - using T1.1 static addresses: ${e.message?.slice(0,80)}`);
   }
 
   const MK_ADDR    = addrs.matrixKeeper || addrs.MatrixKeeper || null;
   const matrixKeeper = MK_ADDR ? await ethers.getContractAt("MatrixKeeper", MK_ADDR, deployer) : null;
   const DS_ADDR    = addrs.directSale || addrs.CNOVADirectSale || null;
   const directSale = DS_ADDR ? await ethers.getContractAt("CNOVADirectSale", DS_ADDR) : null;
-  if (DS_ADDR) console.log(`  📦 CNOVADirectSale: ${DS_ADDR}`);
-  else         console.log(`  ⚠  CNOVADirectSale not in addresses file — CNOVA buy sweep disabled`);
+  if (DS_ADDR) console.log(`  * CNOVADirectSale: ${DS_ADDR}`);
+  else         console.log(`  !  CNOVADirectSale not in addresses file - CNOVA buy sweep disabled`);
 
   // CommunityWallet for watched-wallet cohort queries (graceful fallback if not in addresses file)
   const CW_ADDR = addrs.communityWallet || addrs.CommunityWallet || null;
@@ -1323,12 +1323,12 @@ async function main() {
     : (_blkCap < 30_000_000n ? _blkCap : 30_000_000n);
 
   console.log(`  Climb ceiling:  ${CLIMB_CEILING_IDX === null ? "UNKNOWN (gate read failed)" : "T" + (CLIMB_CEILING_IDX + 1)}` +
-              `  · full climb ${fmt6(CLIMB_COST)}  · gas cap ${(Number(CLIMB_GAS_CAP) / 1e6).toFixed(1)}M`);
+              `  - full climb ${fmt6(CLIMB_COST)}  - gas cap ${(Number(CLIMB_GAS_CAP) / 1e6).toFixed(1)}M`);
   if (FUND_AMOUNT < CLIMB_COST) {
-    console.log(`  ⚠  FUND_AMOUNT (${fmt6(FUND_AMOUNT)}) < full climb (${fmt6(CLIMB_COST)}) — wallets will stall on MONEY before the gate stops them.`);
+    console.log(`  !  FUND_AMOUNT (${fmt6(FUND_AMOUNT)}) < full climb (${fmt6(CLIMB_COST)}) - wallets will stall on MONEY before the gate stops them.`);
   }
   if (FUND_AMOUNT < TIER_FEE_SUM) {
-    console.log(`  ⚠  FUND_AMOUNT (${fmt6(FUND_AMOUNT)}) is less than T1+T2+T3 fees (${fmt6(TIER_FEE_SUM)}) — some wallets won't be able to self-fund all the way to T3.`);
+    console.log(`  !  FUND_AMOUNT (${fmt6(FUND_AMOUNT)}) is less than T1+T2+T3 fees (${fmt6(TIER_FEE_SUM)}) - some wallets won't be able to self-fund all the way to T3.`);
   }
   const mSize   = await matA1.MATRIX_SIZE();
   const W1_ADDR = process.env.REFERRER || addrs.accountOne || addrs.AccountOne;
@@ -1338,14 +1338,14 @@ async function main() {
     ...WATCH_WALLETS_RAW.split(',').map(a => a.trim()).filter(a => ethers.isAddress(a))
   ].filter((a, i, arr) => a && arr.indexOf(a) === i); // dedupe
 
-  sep(`bigfill_v8.js — ${COUNT} wallets · batch ${BATCH_SIZE} · delay ${BATCH_DELAY}s · offset ${HDR_OFFSET}`);
+  sep(`bigfill_v8.js - ${COUNT} wallets - batch ${BATCH_SIZE} - delay ${BATCH_DELAY}s - offset ${HDR_OFFSET}`);
   console.log(`  Deployer:   ${deployerAddr}`);
   console.log(`  Referrer:   ${W1_ADDR}  (W1 / Account #1)`);
   console.log(`  T1 fee:     ${fmt6(T1_FEE)}  (T2: ${fmt6(T2_FEE)}  T3: ${fmt6(T3_FEE)})`);
   console.log(`  Wallet reserve: ${fmt6(FUND_AMOUNT)} per member at registration (self-funds T1 signup + up to T2/T3 upgrades)`);
   console.log(`  Matrix sz:  ${mSize}  (testnet)`);
   console.log(`  TierRouter: ${addrs.tierRouter || addrs.TierRouter}`);
-  console.log(`  Watching:   ${watchAddrs.length} wallet(s) — report every ${WATCH_EVERY} batches`);
+  console.log(`  Watching:   ${watchAddrs.length} wallet(s) - report every ${WATCH_EVERY} batches`);
   if (watchAddrs.length > 0) watchAddrs.forEach(a => console.log(`              ${a}`));
   sep();
 
@@ -1353,15 +1353,15 @@ async function main() {
   {
     const w1Tier = await tierRouter.memberHighestTier(W1_ADDR);
     if (w1Tier === 0n) {
-      console.log(`  ℹ  W1 not yet registered — referrer resolves to address(0), OK`);
+      console.log(`  i  W1 not yet registered - referrer resolves to address(0), OK`);
     } else {
-      console.log(`  ✓ W1 confirmed registered (tier ${w1Tier})`);
+      console.log(`  ok W1 confirmed registered (tier ${w1Tier})`);
     }
   }
 
   // ── Guard: system must not be paused ───────────────────────────────────────
   if (await tierRouter.systemPaused()) {
-    console.error("  ❌  TierRouter.systemPaused = true. Cannot register.");
+    console.error("  X  TierRouter.systemPaused = true. Cannot register.");
     process.exit(1);
   }
 
@@ -1377,17 +1377,17 @@ async function main() {
     for (const addr of ROUND_ROBIN_ADDRS) {
       const tier = await tierRouter.memberHighestTier(addr);
       if (tier === 0n) {
-        console.log(`  [ ] ${addr} NOT registered — skipped`);
+        console.log(`  [ ] ${addr} NOT registered - skipped`);
         continue;
       }
-      console.log(`    ✓ ${addr}  (tier ${tier})`);
+      console.log(`    ok ${addr}  (tier ${tier})`);
       _registered.push(addr);
     }
     // Rotate only across registered sponsors.
     ROUND_ROBIN_ADDRS.length = 0;
     ROUND_ROBIN_ADDRS.push(..._registered);
     if (ROUND_ROBIN_ADDRS.length === 0) {
-      console.log(`  !  No round-robin address is registered yet — falling back to W1 for every wallet.`);
+      console.log(`  !  No round-robin address is registered yet - falling back to W1 for every wallet.`);
     } else {
       console.log(`  => ${ROUND_ROBIN_ADDRS.length} active sponsor(s) in rotation.`);
     }
@@ -1403,7 +1403,7 @@ async function main() {
     const w1Joined = await tierRouter.globalJoined(W1_ADDR);
     if (w1Joined) {
       const t = await tierRouter.memberHighestTier(W1_ADDR);
-      console.log(`  ✓ W1 already registered (tier ${t}) — skip seed`);
+      console.log(`  ok W1 already registered (tier ${t}) - skip seed`);
     } else {
       // W1 needs a private key to sign transactions. If SEED_W1_KEY is set use
       // that signer; otherwise fund + register via deployer using enterFor-style
@@ -1412,7 +1412,7 @@ async function main() {
       // msg.sender to be the member.  Instead we fund W1 and it signs itself.
       const w1Key = process.env.SEED_W1_KEY;
       if (!w1Key) {
-        console.log(`  ⚠  SEED_W1_KEY not set — W1 cannot self-register.`);
+        console.log(`  !  SEED_W1_KEY not set - W1 cannot self-register.`);
         console.log(`     Set SEED_W1_KEY=<private-key-of-${W1_ADDR.slice(0,10)}> to enable.`);
         console.log(`     W1 upgrade tracking will not work this run.`);
       } else {
@@ -1420,7 +1420,7 @@ async function main() {
         // Fund W1 with ETH if needed
         const w1Eth = await ethers.provider.getBalance(W1_ADDR);
         if (w1Eth < ETH_PER / 2n) {
-          console.log(`  Sending ETH to W1 from funder (nonce ${fNonce})…`);
+          console.log(`  Sending ETH to W1 from funder (nonce ${fNonce})...`);
           await (await rawFunder.sendTransaction({ to: W1_ADDR, value: ETH_PER, nonce: fNonce })).wait();
           fNonce++;
         }
@@ -1428,19 +1428,19 @@ async function main() {
         // burning the deployer's rate-limited TX slot.
         const w1Usdc = await usdc.balanceOf(W1_ADDR);
         if (w1Usdc < T1_FEE) {
-          console.log(`  Transferring USDC for W1 from funder (nonce ${fNonce})…`);
+          console.log(`  Transferring USDC for W1 from funder (nonce ${fNonce})...`);
           await (await usdcFunder.transfer(W1_ADDR, T1_FEE, { nonce: fNonce })).wait();
           fNonce++;
         }
         // Approve + register
         const allowance = await usdc.allowance(W1_ADDR, T1.pm);
         if (allowance < T1_FEE) {
-          console.log(`  W1 approving T1 PM…`);
+          console.log(`  W1 approving T1 PM...`);
           await (await usdc.connect(w1Wallet).approve(T1.pm, T1_FEE)).wait();
         }
-        console.log(`  W1 registering…`);
+        console.log(`  W1 registering...`);
         await (await tierRouter.connect(w1Wallet).register(ethers.ZeroAddress, { gasLimit: 8_000_000 })).wait();
-        console.log(`  ✓ W1 registered as T1 MatA seed (position-1 root)`);
+        console.log(`  ok W1 registered as T1 MatA seed (position-1 root)`);
       }
     }
   }
@@ -1456,7 +1456,7 @@ async function main() {
     : [...wallets];
   console.log(`  Generated ${wallets.length} new test wallets  (HDR_OFFSET=${HDR_OFFSET})`);
   if (historicalCount > 0)
-    console.log(`  + ${historicalCount} historical wallets (SCAN_FROM=${SCAN_FROM}..${HDR_OFFSET - 1}) → ${allWallets.length} total for rescue/upgrade`);
+    console.log(`  + ${historicalCount} historical wallets (SCAN_FROM=${SCAN_FROM}..${HDR_OFFSET - 1}) -> ${allWallets.length} total for rescue/upgrade`);
   sep();
 
   // ── Pre-snapshot ───────────────────────────────────────────────────────────
@@ -1500,7 +1500,7 @@ async function main() {
   // Runs BEFORE new registrations so parked/eligible old wallets are handled
   // immediately without waiting for the registration loop to encounter them.
   if (allWallets.length > wallets.length) {
-    sep(`Pre-run sweep — ${historicalCount} historical wallets (rescue + upgrade)`);
+    sep(`Pre-run sweep - ${historicalCount} historical wallets (rescue + upgrade)`);
     fNonce = await simulateSelfRescues({
       walletList: allWallets, matrices: allMatrices, usdc: usdcContract,
       usdcFunder, rawFunder, funderAddr, fNonce,
@@ -1537,7 +1537,7 @@ async function main() {
   }
 
   // ── Fund wallets in slices (explicit nonces to avoid collision) ─────────────
-  sep("Funding wallets — ETH + USDC");
+  sep("Funding wallets - ETH + USDC");
   const SLICE = 20;
   let ok = 0;
 
@@ -1562,16 +1562,16 @@ async function main() {
   console.log(`  Funder ETH:     ${ethers.formatEther(funderBal2)}  (need ${ethers.formatEther(ethNeeded)})`);
   console.log(`  Funder USDC:    ${fmt6(funderUsdc2)}  (need ${fmt6(usdcNeeded2)})`);
   if (funderBal2 < ethNeeded) {
-    console.error(`  ❌  Funder has insufficient ETH (${ethers.formatEther(funderBal2)} < ${ethers.formatEther(ethNeeded)}).`);
+    console.error(`  X  Funder has insufficient ETH (${ethers.formatEther(funderBal2)} < ${ethers.formatEther(ethNeeded)}).`);
     console.error(`      Run: npx hardhat run scripts/fund_funder.js --network baseSepolia`);
     process.exit(1);
   }
   if (funderUsdc2 < usdcNeeded2) {
-    console.error(`  ❌  Funder has insufficient USDC (${fmt6(funderUsdc2)} < ${fmt6(usdcNeeded2)}).`);
+    console.error(`  X  Funder has insufficient USDC (${fmt6(funderUsdc2)} < ${fmt6(usdcNeeded2)}).`);
     console.error(`      Run: npx hardhat run scripts/fund_funder.js --network baseSepolia`);
     process.exit(1);
   }
-  console.log(`  ✓ Funder has enough ETH + USDC`);
+  console.log(`  ok Funder has enough ETH + USDC`);
 
   // Re-sync fNonce before the funding loop in case the W1 seed block incremented it.
   fNonce = Number(await ethers.provider.getTransactionCount(funderAddr, "pending"));
@@ -1592,7 +1592,7 @@ async function main() {
         await tx.wait();
         fNonce++; // only increment after confirmed
       } catch (e) {
-        console.warn(`  ⚠  ETH send to ${w.address.slice(0,10)} failed: ${e.shortMessage || e.message.slice(0,80)}`);
+        console.warn(`  !  ETH send to ${w.address.slice(0,10)} failed: ${e.shortMessage || e.message.slice(0,80)}`);
         fundingFailed.push(w.address);
         // Re-sync nonce from chain so next wallet uses correct nonce (don't guess)
         fNonce = Number(await ethers.provider.getTransactionCount(funderAddr, "pending"));
@@ -1607,7 +1607,7 @@ async function main() {
         await tx.wait();
         fNonce++; // only increment after confirmed
       } catch (e) {
-        console.warn(`  ⚠  USDC transfer to ${w.address.slice(0,10)} failed: ${e.shortMessage || e.message.slice(0,80)}`);
+        console.warn(`  !  USDC transfer to ${w.address.slice(0,10)} failed: ${e.shortMessage || e.message.slice(0,80)}`);
         // Re-sync nonce from chain
         fNonce = Number(await ethers.provider.getTransactionCount(funderAddr, "pending"));
       }
@@ -1615,13 +1615,13 @@ async function main() {
 
     ok += slice.length;
 
-    console.log(`  ✓ Funded ${ok} / ${walletsToFund.length} (${wallets.length} total)`);
+    console.log(`  ok Funded ${ok} / ${walletsToFund.length} (${wallets.length} total)`);
   }
 
   // Give the Base Sepolia RPC time to reflect the funded balances.
   // publicnode sometimes lags 30-60s on balance queries even after confirmation.
   // 113/300 wallets showed 0 ETH at 30s on June 8 run — increased to 90s.
-  console.log(`  ⏳ Waiting 90s for RPC to catch up with funded balances…`);
+  console.log(`  ... Waiting 90s for RPC to catch up with funded balances...`);
   await sleep(90);
 
   // Post-sleep verification: check all funded wallets actually have ETH
@@ -1631,7 +1631,7 @@ async function main() {
   for (const w of walletsToFund) {
     const bal = await ethers.provider.getBalance(w.address);
     if (bal < ETH_PER / 2n) {
-      console.warn(`  ⚠  ${w.address.slice(0,10)} only has ${ethers.formatEther(bal)} ETH after funding — retrying`);
+      console.warn(`  !  ${w.address.slice(0,10)} only has ${ethers.formatEther(bal)} ETH after funding - retrying`);
       // One retry: sequential send — wait longer then VERIFY balance actually updated
       let retried = false;
       for (let attempt = 0; attempt < 3; attempt++) {
@@ -1647,14 +1647,14 @@ async function main() {
             retried = true;
             break;
           }
-          console.warn(`     attempt ${attempt+1}: still ${ethers.formatEther(newBal)} ETH — retrying`);
+          console.warn(`     attempt ${attempt+1}: still ${ethers.formatEther(newBal)} ETH - retrying`);
         } catch(e) {
           console.warn(`     attempt ${attempt+1} failed: ${e.message.slice(0,80)}`);
           fNonce = Number(await ethers.provider.getTransactionCount(funderAddr, "pending"));
         }
       }
       if (!retried) {
-        console.warn(`     ❌ ${w.address.slice(0,10)} could not be funded after 3 attempts — will skip registration`);
+        console.warn(`     X ${w.address.slice(0,10)} could not be funded after 3 attempts - will skip registration`);
         insufficientEth.add(w.address);
         fundingFail++;
       }
@@ -1676,7 +1676,7 @@ async function main() {
     const usdcBal = await usdc.balanceOf(w.address).catch(() => 0n);
     if (usdcBal < FUND_AMOUNT) {
       const deficit = FUND_AMOUNT - usdcBal;
-      console.warn(`  ⚠  ${w.address.slice(0,10)} only has ${fmt6(usdcBal)} USDC (need ${fmt6(FUND_AMOUNT)}) — retrying`);
+      console.warn(`  !  ${w.address.slice(0,10)} only has ${fmt6(usdcBal)} USDC (need ${fmt6(FUND_AMOUNT)}) - retrying`);
       let retried = false;
       for (let attempt = 0; attempt < 3; attempt++) {
         try {
@@ -1690,14 +1690,14 @@ async function main() {
             retried = true;
             break;
           }
-          console.warn(`     attempt ${attempt+1}: still ${fmt6(newBal)} USDC — retrying`);
+          console.warn(`     attempt ${attempt+1}: still ${fmt6(newBal)} USDC - retrying`);
         } catch(e) {
           console.warn(`     attempt ${attempt+1} failed: ${e.message.slice(0,80)}`);
           fNonce = Number(await ethers.provider.getTransactionCount(funderAddr, "pending"));
         }
       }
       if (!retried) {
-        console.warn(`     ❌ ${w.address.slice(0,10)} could not receive USDC after 3 attempts — will skip registration`);
+        console.warn(`     X ${w.address.slice(0,10)} could not receive USDC after 3 attempts - will skip registration`);
         insufficientUsdc.add(w.address);
         usdcFail++;
       }
@@ -1727,7 +1727,7 @@ async function main() {
     );
   }
   if (ROUND_ROBIN_ADDRS.length > 0) {
-    console.log(`  Round-robin: ${wallets.length} wallets → ${ROUND_ROBIN_ADDRS.length} referrers (${Math.round(wallets.length / ROUND_ROBIN_ADDRS.length)} each avg)`);
+    console.log(`  Round-robin: ${wallets.length} wallets -> ${ROUND_ROBIN_ADDRS.length} referrers (${Math.round(wallets.length / ROUND_ROBIN_ADDRS.length)} each avg)`);
   }
 
   const batches = [];
@@ -1751,15 +1751,15 @@ async function main() {
         // genuine failures — seeing "all wallets already registered" means wrong HDR_OFFSET.
         const alreadyJoined = await tierRouter.globalJoined(wallet.address);
         if (alreadyJoined) {
-          throw Object.assign(new Error(`wallet ${wallet.address.slice(0,10)} already registered — skip`), { _alreadyJoined: true });
+          throw Object.assign(new Error(`wallet ${wallet.address.slice(0,10)} already registered - skip`), { _alreadyJoined: true });
         }
 
         // Skip wallets that failed funding after all retries
         if (insufficientEth.has(wallet.address)) {
-          throw new Error(`wallet ${wallet.address.slice(0,10)} had insufficient ETH after all funding attempts — skipped`);
+          throw new Error(`wallet ${wallet.address.slice(0,10)} had insufficient ETH after all funding attempts - skipped`);
         }
         if (insufficientUsdc.has(wallet.address)) {
-          throw new Error(`wallet ${wallet.address.slice(0,10)} had insufficient USDC after all funding attempts — skipped`);
+          throw new Error(`wallet ${wallet.address.slice(0,10)} had insufficient USDC after all funding attempts - skipped`);
         }
 
         // Skip wallets with insufficient ETH for gas.
@@ -1772,7 +1772,7 @@ async function main() {
           bal = await ethers.provider.getBalance(wallet.address);
         }
         if (bal < 200_000_000_000n) { // < 0.0002 ETH — not enough for register
-          throw new Error(`wallet ${wallet.address.slice(0,10)} has ${ethers.formatEther(bal)} ETH — skipped (need ≥0.0002)`);
+          throw new Error(`wallet ${wallet.address.slice(0,10)} has ${ethers.formatEther(bal)} ETH - skipped (need >=0.0002)`);
         }
 
         // Approve T1 PairManager to spend USDC — skip if allowance already sufficient
@@ -1823,7 +1823,7 @@ async function main() {
           // Print the actual revert reason so we can diagnose mainnet issues
           // (e.g. "already in matrix", "velocity gate", "OOG", etc.)
           if (msg && !msg.includes("insufficient ETH") && !msg.includes("skip")) {
-            console.warn(`    ⚠ reg fail: ${msg.slice(0, 120)}`);
+            console.warn(`    ! reg fail: ${msg.slice(0, 120)}`);
           }
         }
       }
@@ -1833,7 +1833,7 @@ async function main() {
     const curTier = await tierRouter.memberHighestTier(W1_ADDR);
     if (curTier >= 2n && upgradedAt.length === 0) {
       upgradedAt.push(registered);
-      console.log(`\n  🎉  W1 UPGRADED to T2 after ${registered} registrations!`);
+      console.log(`\n  **  W1 UPGRADED to T2 after ${registered} registrations!`);
     }
 
     // Per-batch stats — use ACTIVE pair (T1.2 after factory) not archived T1.1
@@ -1851,23 +1851,23 @@ async function main() {
       `reg ${String(registered).padStart(4)}/${COUNT}${skipStr}${failStr} | ` +
       `T1A ${occ1A}/${mSize}  T1B ${occ1B}/${mSize} | ` +
       `cycles ${sysCyc} | ` +
-      `W1→T${w1Tier}(cyc${w1Cyc}) | ` +
-      (paused ? "⚠ PAUSED" : "running")
+      `W1->T${w1Tier}(cyc${w1Cyc}) | ` +
+      (paused ? "! PAUSED" : "running")
     );
 
     if (paused) {
-      console.log("  ⚠  System paused — stopping registration.");
+      console.log("  !  System paused - stopping registration.");
       break;
     }
 
     // Burn + withdraw sweep + CNOVA buy sweep — runs on every new matrix cycle
     if (sysCyc > prevSysCyc) {
-      console.log(`\n  🔄 Cycle detected (${prevSysCyc} → ${sysCyc})`);
-      if (process.env.BURN_SIMULATE !== "false") { console.log(`  ↳ Running early-unlock burn sweep (simulate CNOVA sell)…`); }
+      console.log(`\n  ~ Cycle detected (${prevSysCyc} -> ${sysCyc})`);
+      if (process.env.BURN_SIMULATE !== "false") { console.log(`  -> Running early-unlock burn sweep (simulate CNOVA sell)...`); }
       await burnSweep(wallets, cnova);
-      console.log(`  ↳ Running withdraw sweep (USDC exit simulation)…`);
+      console.log(`  -> Running withdraw sweep (USDC exit simulation)...`);
       await withdrawSweep(wallets, allMatrices);
-      if (Number(process.env.CNOVA_BUY_RATE ?? "0.25") > 0) { console.log(`  ↳ Running CNOVA buy sweep (simulate purchases via DirectSale)…`); }
+      if (Number(process.env.CNOVA_BUY_RATE ?? "0.25") > 0) { console.log(`  -> Running CNOVA buy sweep (simulate purchases via DirectSale)...`); }
       await cnovaBuySweep(wallets, directSale, usdc);
       // Self-rescue sweep on every cycle — most likely time wallets just got parked
       fNonce = await simulateSelfRescues({
@@ -1935,7 +1935,7 @@ async function main() {
   sep("Registration summary");
   console.log(`  Registered:       ${registered} / ${COUNT}`);
   if (skippedAlready > 0) {
-    console.log(`  Already joined:   ${skippedAlready}  ← wrong HDR_OFFSET, not real failures`);
+    console.log(`  Already joined:   ${skippedAlready}  <- wrong HDR_OFFSET, not real failures`);
   }
   if (failures.length > 0) {
     console.log(`  Genuine failures: ${failures.length}`);
@@ -1948,7 +1948,7 @@ async function main() {
   // ── Final burn sweep — catch any remaining vest batches ───────────────────
   if (process.env.BURN_SIMULATE !== "false") {
     sep("Final Burn Sweep");
-    console.log("  Running earlyUnlockAll() on all wallets with remaining vest batches…");
+    console.log("  Running earlyUnlockAll() on all wallets with remaining vest batches...");
   }
   await burnSweep(wallets, cnova);
 
@@ -1969,18 +1969,18 @@ async function main() {
   sep("NEXT RUN HINT");
   const nextOffset = HDR_OFFSET + wallets.length;
   if (skippedAlready === wallets.length) {
-    console.log(`  ⚠  ALL ${wallets.length} wallets at HDR_OFFSET=${HDR_OFFSET} were already registered on a prior run.`);
-    console.log(`     This is why reg showed 0/${COUNT} — NOT a payment or cascade bug.`);
+    console.log(`  !  ALL ${wallets.length} wallets at HDR_OFFSET=${HDR_OFFSET} were already registered on a prior run.`);
+    console.log(`     This is why reg showed 0/${COUNT} - NOT a payment or cascade bug.`);
     console.log(`     Use the next offset to get fresh wallets:`);
     console.log(`     HDR_OFFSET=${nextOffset} COUNT=${COUNT} npx hardhat run scripts/bigfill_v8.js --network baseSepolia`);
   } else {
     console.log(`  To continue with fresh wallets:`);
     console.log(`  HDR_OFFSET=${nextOffset} COUNT=${COUNT} npx hardhat run scripts/bigfill_v8.js --network baseSepolia`);
     if (skippedAlready > 0) {
-      console.log(`  (${skippedAlready} wallets were already registered from a prior run — use HDR_OFFSET=${nextOffset} to avoid)`);
+      console.log(`  (${skippedAlready} wallets were already registered from a prior run - use HDR_OFFSET=${nextOffset} to avoid)`);
     }
     if (failures.length > 0) {
-      console.log(`  (${failures.length} genuine registration failures — check ⚠ lines above for revert reasons)`);
+      console.log(`  (${failures.length} genuine registration failures - check ! lines above for revert reasons)`);
     }
   }
   sep();
@@ -1988,6 +1988,6 @@ async function main() {
 
 
 main().catch(e => {
-  console.error('\n  ❌  bigfill_v8.js fatal error:', e);
+  console.error('\n  X  bigfill_v8.js fatal error:', e);
   process.exit(1);
 });
