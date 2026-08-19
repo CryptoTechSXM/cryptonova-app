@@ -55,7 +55,8 @@ const FEE = M6(10);                       // T1
 // change detectors that explain nothing — the item-42 anti-pattern this suite names
 // elsewhere. The invariant is "the ceiling is the fee times the declared default", so
 // state that and let the number follow. sfFixture() asserts the default separately.
-const FLOOR_BPS_DEFAULT = 3400n;          // StabilityFund.sol declared default, asserted below
+const FLOOR_BPS_DEFAULT = 5000n;          // StabilityFund.sol declared default, asserted below
+                                          // (3400 -> 5000, owner decision 2026-08-19)
 const CEIL = FEE * FLOOR_BPS_DEFAULT / 10_000n;
 
 const WORK_PARKED_RESCUE = 4;
@@ -90,7 +91,7 @@ describe("V8.49 item 1b — policy B: the insolvency floor includes the loan bei
 
     it("IF-1: the boundary is debt + advance <= ceiling — exactly at it passes, one wei over is refused", async function () {
       const { member, sf, mock } = await sfFixture();
-      expect(await sf.insolvencyFloorBps(), "declared default").to.equal(3400n);   // V8.50: proposed 5000, reverted — see StabilityFund.sol
+      expect(await sf.insolvencyFloorBps(), "declared default").to.equal(FLOOR_BPS_DEFAULT);   // V8.50 ships 5000 — see StabilityFund.sol
 
       // Zero debt, and an advance that lands EXACTLY on the ceiling. Under V8.48 this
       // was never the question — any advance was allowed as long as prior debt was

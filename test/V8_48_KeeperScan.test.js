@@ -326,9 +326,11 @@ describe("V8.48 item 12a — MatrixKeeperLib extraction is behaviour-preserving"
     // in one parameter — which is exactly the shape the two pins above already handle.
     //
     // Pinning it to 0 does NOT hide a keeper difference: both keepers call the same
-    // loanEligibleFor, and this suite was green at the shipping 3400 before item A. It
+    // loanEligibleFor, and this suite was green at the then-shipping 3400 before item A
+    // (V8.50 moved the declared default to 5000 on 2026-08-19; the sweep at the bottom
+    // still probes 3400 because that is where the divergence is known to exist). It
     // neutralises the one INPUT item A moved. The divergence itself is not swept away —
-    // it is asserted, at the shipping value, by "V8.50 item A: the two keepers diverge
+    // it is asserted, at the cliff value, by "V8.50 item A: the two keepers diverge
     // ONLY at the insolvency floor" at the bottom of this file. Between them the file
     // now covers more than it did: the extraction is still pinned byte-for-byte, and the
     // economic change has a test that fails if it ever stops happening.
@@ -900,11 +902,19 @@ describe("V8.48 item 12a — MatrixKeeperLib extraction is behaviour-preserving"
     //    would have lent to and item A's keeper evicts — never the reverse. A flip the
     //    other way would mean item A is lending to somebody V8.48 refused, which is not
     //    a trade-off anyone chose.
-    const shipping = sweep.find((r) => r.bps === 3_400);
-    expect(shipping.flips.length,
-      "the shipping floor must actually produce the cliff — a zero here means this test " +
+    // ⚠ 3_400 IS THE CLIFF PROBE, NOT "the shipping floor", AND THE DISTINCTION IS NEW.
+    //    V8.50 moved the declared default to 5_000 (owner decision 2026-08-19). This row
+    //    is still 3_400 ON PURPOSE: it is the value where the divergence is known to
+    //    EXIST, so it is the only row that can test the SHAPE of the divergence. Retargeting
+    //    it at 5_000 would be asserting a flip count nobody has measured, and if 5_000
+    //    happens to produce zero flips the assertion below would go red for a reason that
+    //    has nothing to do with what this test is about. The sweep prints every row, so
+    //    what the shipped 5_000 actually does is READABLE here without being asserted.
+    const cliff = sweep.find((r) => r.bps === 3_400);
+    expect(cliff.flips.length,
+      "the cliff floor must actually produce the cliff — a zero here means this test " +
       "has stopped measuring anything").to.be.gt(0);
-    for (const f of shipping.flips) {
+    for (const f of cliff.flips) {
       expect(f.o.workType, `${f.who}: V8.48 side must be a RESCUE`).to.equal(WORK.PARKED_RESCUE);
       expect(f.n.workType, `${f.who}: V8.50 side must be an EVICT`).to.equal(WORK.EVICT_PARKED);
       expect(f.n.addr1,

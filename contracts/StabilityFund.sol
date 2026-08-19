@@ -787,7 +787,14 @@ contract StabilityFund is Ownable2Step {
     /// @notice Expected per-cycle earnings as BPS of the loan tier's entry fee.
     ///         The floor refuses a new loan when memberDebt >= fee x this / 10000.
     ///         0 = floor disabled (every member stays loan-eligible).
-    /// V8.50: STAYS AT 3_400 — AND THE ROUND TRIP IS RECORDED BECAUSE IT WAS INSTRUCTIVE.
+    /// ✅ V8.50 SHIPS 5_000. OWNER DECISION 2026-08-19, TAKEN ON A MEASURED CURVE — the
+    /// full basis is the block at the BOTTOM of this comment; read that first if you only
+    /// want the current value and why. Everything between here and there is the history of
+    /// two earlier reversals, kept deliberately: each one was measured, each one was wrong
+    /// about its BASIS, and that is why the final block states its basis before its number.
+    ///
+    /// V8.50 FIRST WROTE "STAYS AT 3_400" — AND THE ROUND TRIP IS RECORDED BECAUSE IT WAS
+    /// INSTRUCTIVE.
     ///
     /// This was changed to 5_000 on 2026-08-17 and changed back the same day. The 5_000
     /// case was measured, not guessed: scripts/model_item_a.js showed the post-item-A
@@ -813,8 +820,12 @@ contract StabilityFund is Ownable2Step {
     /// enforcing code cannot see is not calibrated at all. Any future change to this
     /// value must state WHICH BALANCE it was measured against.
     ///
-    /// ✅ OWNER DECISION 2026-08-18: STAYS AT 3_400. Settled against measurement, not
-    ///    caution. scripts/model_item_a.js PHASE 7 (added for this decision) models what
+    /// ⛔ OWNER DECISION 2026-08-18: STAYS AT 3_400. **SUPERSEDED 2026-08-19 — see the
+    ///    final block below.** Kept because its basis is what the 2026-08-19 curve had to
+    ///    be reconciled against, and because the two do not fully agree.
+    ///
+    ///    Settled against measurement, not caution at the time.
+    ///    scripts/model_item_a.js PHASE 7 (added for that decision) models what
     ///    the LENDER actually does — min(sfShare, shortfall) plus EXISTING debt against
     ///    the ceiling, which is policy B — over all 40 live MatB parkers on the post-E1
     ///    basis:
@@ -841,7 +852,65 @@ contract StabilityFund is Ownable2Step {
     /// ⚠ AND THE BASIS IS A PROJECTION. E1 is not deployed; the live chain is V8.48, so
     ///    phase 7 projects V8.50 onto today's members. Re-check on a private-chain
     ///    deploy of V8.50 before treating this as settled for a running system.
-    uint256 public insolvencyFloorBps = 3_400;
+    ///
+    /// ══════════════════════════════════════════════════════════════════════════════════
+    /// ✅ OWNER DECISION 2026-08-19 — 3_400 -> 5_000. THIS IS THE VALUE THAT SHIPS.
+    /// ══════════════════════════════════════════════════════════════════════════════════
+    ///
+    /// BASIS — say it first, because the two reversals above both came from a basis nobody
+    /// stated. Measured on the A/B harness (`test_ab/replay.js`, `AB_FLOOR_BPS=<n>`), V8.50
+    /// arm, MATRIX_SIZE 127, 288 members, 69 ticks, AB_CAP=5, seeds 1/2/3, SELF_RESCUE_RATE
+    /// 0. NOT the live chain and NOT a projection onto it — a running V8.50 build, with the
+    /// floor read BACK off the contract on every run. Five ceiling values x three seeds:
+    ///
+    ///     PARAM 59 | evicted having NEVER been lent to | FLOOR evictions | SF end $
+    ///        3400  |            9 / 9 / 9             |    7 / 6 / 5    | 96.54/97.82/88.80
+    ///        4000  |            3 / 3 / 6             |    1 / 0 / 2    | 80.04/91.83/81.17
+    ///        4500  |            3 / 3 / 3             |    0 / 0 / 0    | 80.55/91.83/77.25
+    ///        5000  |            3 / 3 / 3             |    0 / 0 / 0    |  identical to 4500
+    ///        6800  |            3 / 3 / 3             |    0 / 0 / 0    |  identical to 4500
+    ///       10000  |            3 / 3 / 3             |    0 / 0 / 0    |  identical to 4500
+    ///
+    /// THE CURVE SATURATES AT 4500 — the raw result block at 4500/5000/6800/10000 is
+    /// BYTE-IDENTICAL on all three seeds. Above 4500 the floor does not bind at all. That
+    /// is why the sweep was RUN: an earlier turn asserted from headroom arithmetic that
+    /// higher ceilings would keep helping, and they do nothing.
+    ///
+    /// WHY 5_000 AND NOT 4_500, given they measure the same. Observed FLOOR asks across the
+    /// 3400 runs range $3.42 to $4.52 (n=55). A $4.50 ceiling is TWO CENTS UNDER the worst
+    /// ask actually seen; it only measures clean because that one member was never routed.
+    /// The ask is structurally `crossingCost - effectiveContrib`, so a thinner population
+    /// asks MORE. 5_000 buys $0.48 of real margin at zero measured cost.
+    ///
+    /// WHAT IT COSTS: ~$11-16 of ending fund balance (SF ends $77-92 against $89-98 at
+    /// 3400) — still 4-6x the v849b control's $13-25. `loansPerRescue` stays ~0.5 and
+    /// `unfundedRescueShare` ~0.39-0.51, so ITEM A'S FUND CLAIMS ARE UNTOUCHED by this.
+    ///
+    /// WHAT IT BUYS, against the owner's stated bar ("members are expected to take loans
+    /// and be evicted if they never invite anyone" — the eviction must be the DESIGNED
+    /// one): at 3400, NINE members per run are evicted having never been offered a loan at
+    /// all, 5-7 of them because this floor refused. At 5000 that is three, and none of the
+    /// three is a floor refusal. Evicting a member the fund never lent to is not the
+    /// designed eviction.
+    ///
+    /// ⚠ UNRECONCILED, AND DELIBERATELY NOT EXPLAINED HERE. Phase 7 above measured 3400 and
+    ///    5000 as refusing THE SAME ONE MEMBER of 40 — "identical outcome". This curve
+    ///    measures them as clearly different (9 -> 3 never-lent-to, 7/6/5 -> 0/0/0 floor
+    ///    evictions). The two are different populations on different bases — phase 7 is 40
+    ///    live V8.48 MatB parkers projected post-E1, this is 288 members inside a running
+    ///    V8.50 build — so they are not the same statistic. But that is a reason they COULD
+    ///    differ, not a measurement that they differ for that reason. **Rule 1: it is
+    ///    logged as a disagreement, not resolved by argument.** If it matters again, the
+    ///    instrument is phase 7 re-run against a private V8.50 chain.
+    ///
+    /// ⚠ CARRIED CAVEAT: SELF_RESCUE_RATE 0, one tier, one pair. The harness is the
+    ///    pathological extreme by construction (section 8 of the handoff has said so since
+    ///    before session 6). Real members top up and pay, which can only REDUCE the number
+    ///    of members this floor is deciding for.
+    ///
+    /// 5_000 was already on the DAO menu (V8Governance `_allowedValues[59]`), so this is a
+    /// default change only — no governance change was needed, same as minGasPerItem.
+    uint256 public insolvencyFloorBps = 5_000;
 
     event InsolvencyFloorBpsSet(uint256 bps);
 

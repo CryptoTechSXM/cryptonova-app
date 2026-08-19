@@ -630,6 +630,23 @@ async function simulateSelfRescues({ walletList, matrices, usdc, usdcFunder, raw
   );
 
   let rescued = 0, skipped = 0;
+  // ── TRANSPORT ERRORS ARE NOT REFUSALS (added 2026-08-19 after a run lost 30 wallets) ──
+  //
+  // The catch below used to treat every failure the same way: count it as "skipped" and
+  // move on. On 2026-08-19 a Base Sepolia wobble produced `HH110: Invalid JSON-RPC
+  // response received` on THIRTY-ONE consecutive wallets. Each was recorded as a skip, the
+  // run continued, and it printed "Self-rescues: 17 succeeded - 36 skipped" — a summary
+  // that reads like a measurement of member behaviour when it is a measurement of the
+  // network. Those wallets were never asked; the node did not answer.
+  //
+  // A contract revert ("not parked", "WALLET TOO POOR") is a real answer and still skips.
+  // A transport error is the ABSENCE of an answer and is now counted separately, and a run
+  // of them ABORTS THE SWEEP rather than grinding out a partial result that looks whole.
+  // Same principle the diagnostics learned the hard way today: never report the absence of
+  // something the instrument could not observe.
+  let transportFails = 0, consecutiveTransport = 0;
+  const TRANSPORT_ABORT = Number(process.env.TRANSPORT_ABORT || 5);
+  const _isTransport = (m) => /HH110|Invalid JSON-RPC|ECONNRESET|ETIMEDOUT|socket hang up|network|timeout|503|502|504|fetch failed|could not coalesce/i.test(m || "");
   for (const { w, matrix, label, addr } of toRescue) {
     try {
       const conn = w.connect(ethers.provider);
@@ -786,7 +803,24 @@ async function simulateSelfRescues({ walletList, matrices, usdc, usdcFunder, raw
             //    "top-up +$3.71" and the very next line still read walletUSDC=$2.23.
             //    A top-up that reports success while the balance is unchanged is worse
             //    than one that fails loudly. Never trust the send; read the balance.
-            const after = await usdc.balanceOf(w.address).catch(() => null);
+            // ⛔ AND READ IT MORE THAN ONCE. Added 2026-08-19 after two runs PROVED the
+            //    single read was wrong: 0xaFF03A85 was topped up +$4.00 and reported
+            //    "DID NOT LAND [balance still $3.00]"; the next run found it holding
+            //    exactly $7.00. 0x0f822360 was topped +$2.11, reported unchanged at
+            //    $3.00, and turned up at $5.11. Both top-ups landed precisely as sent —
+            //    the VERIFICATION was reading stale state, not the transfer failing.
+            //    QuickNode is load-balanced, so the balanceOf immediately after .wait()
+            //    can hit a node that has not caught up yet. The registration path already
+            //    allows for this ("a lagging node may return 0 for a wallet whose funding
+            //    tx confirmed seconds ago"); this check did not, so it skipped ~3 rescuable
+            //    wallets per run and printed a false alarm each time.
+            //    Retry before declaring failure. Still never trusts the SEND — it trusts a
+            //    balance that has had a fair chance to settle.
+            let after = await usdc.balanceOf(w.address).catch(() => null);
+            for (let a = 0; a < 3 && before !== null && (after === null || after <= before); a++) {
+              await new Promise(r => setTimeout(r, 3000));
+              after = await usdc.balanceOf(w.address).catch(() => null);
+            }
             const landed = (before !== null && after !== null) ? (after > before) : sent;
 
             if (!landed) {
@@ -829,10 +863,24 @@ async function simulateSelfRescues({ walletList, matrices, usdc, usdcFunder, raw
       if (msg.includes("not parked")) {
         // Keeper rescued them first — totally fine, member is back in matrix
         console.log(`  ℹ  ${w.address.slice(0, 10)}… keeper rescued first — all good`);
+      } else if (_isTransport(msg)) {
+        // The node did not answer. This wallet was NOT refused and must not be counted
+        // as though it were.
+        transportFails++; consecutiveTransport++;
+        console.warn(`  ⚠ selfRescue ${w.address.slice(0, 10)}… NETWORK (not a refusal): ${msg}`);
+        if (consecutiveTransport >= TRANSPORT_ABORT) {
+          console.error(`\n  ⛔ ABORTING THE SWEEP — ${consecutiveTransport} consecutive network failures.`);
+          console.error(`     The chain is not answering. Continuing would produce a partial sweep that`);
+          console.error(`     reads like a result. Re-run when watch_base_sepolia.mjs shows a clean streak.`);
+          console.error(`     (Raise TRANSPORT_ABORT to override, but read the number you get afterwards`);
+          console.error(`      as a FLOOR, never as a measurement.)\n`);
+          throw new Error(`sweep aborted: ${consecutiveTransport} consecutive RPC transport failures`);
+        }
       } else {
         console.warn(`  ⚠ selfRescue ${w.address.slice(0, 10)}… unexpected TX error: ${msg}`);
+        skipped++; consecutiveTransport = 0;
       }
-      skipped++;
+      if (msg.includes("not parked")) { skipped++; consecutiveTransport = 0; }
       try { fNonce = Number(await ethers.provider.getTransactionCount(funderAddr, 'pending')); } catch {}
     }
     await sleep(2); // 2s gap — stay under Base Sepolia in-flight limit
@@ -840,8 +888,150 @@ async function simulateSelfRescues({ walletList, matrices, usdc, usdcFunder, raw
 
   console.log(
     `  Self-rescues: ${rescued} succeeded · ${skipped} skipped` +
+    (transportFails ? ` · ⚠ ${transportFails} NETWORK FAILURES (not refusals — these wallets were never asked; treat this sweep as INCOMPLETE)` : ``) +
     (remaining > 0 ? ` · ${remaining} parked wallets left for keeper` : '')
   );
+  return fNonce;
+}
+
+
+// ── EVICTION RE-ENTRY (owner rule 2026-08-19) ────────────────────────────────
+// Owner: "any eviction gets back in and pays their fees and upgrade if eligible."
+//
+// ⛔ THE CONTRACT HAS NO MEMBER-CALLABLE PATH FOR THIS. Verified 2026-08-19, and it is a
+// product finding rather than a scripting detail:
+//   · MatrixLogicLib.evictParked releases the crossing reserve and dequeues — it does NOT
+//     clear globalJoined.
+//   · TierRouter.register() and registerWithCoupon() both `revert TRState()` when
+//     globalJoined[msg.sender] is true (TierRouter:772, :808).
+//   · autoReentryEnabled / doubleReentryEnabled are read inside the CYCLE-OUT handler
+//     (TierRouter:1338, :1342) — they need a seat the evicted member no longer holds.
+// The only way back is setGlobalJoined(member,false) — onlyOwner — then a normal,
+// fee-paying register(). AN EVICTED MEMBER CANNOT RETURN ON THEIR OWN TODAY.
+//
+// ⚠ SO THIS PHASE SIMULATES A CAPABILITY LIVE MEMBERS DO NOT HAVE. Owner decision
+// 2026-08-19 was BOTH: run it here now so the fund stops draining and stays measurable,
+// AND scope a real member-callable re-entry into V8.50 so production matches the test.
+// UNTIL V8.50 SHIPS, DO NOT READ "evicted members returned" IN THIS DATA AS SOMETHING THE
+// LIVE COMMUNITY CAN DO. That is exactly the data pollution BIGFILL_RULES.md warns about —
+// accepted deliberately, with a stated expiry, not overlooked.
+//
+// ✅ WHAT IS CLEAN ABOUT IT: PairManagerV8._recordJoin is idempotent
+// (`if (memberJoinedAt[member] == 0)`), so a returning member does NOT double-count
+// uniqueMembers and KEEPS their original join clock. The V8.48 item-7 people-count and the
+// V4 penalty ladder both stay honest through a reinstatement. Checked before writing this,
+// because "totalMembers counts PEOPLE not entries" was itself a fix.
+//
+// Evicted members are identified from the MemberEvicted EVENT, not from wallet state.
+// State ("no seat and not parked") would also catch members who merely cycled out and have
+// not re-entered yet, and re-registering those would be wrong.
+async function reinstateEvicted({
+  walletList, tierRouter, tierRouterOwner, matrixAddrSet, usdc, usdcFunder,
+  rawFunder, funderAddr, fNonce, T1, T1_FEE, W1_ADDR, ETH_PER, deployerAddr,
+}) {
+  const RATE = Number(process.env.EVICT_REENTRY ?? "1");
+  const MAX  = Number(process.env.EVICT_REENTRY_MAX || "25");
+  const FROM = Number(process.env.EVICT_SCAN_FROM || "45428000");
+  if (!RATE) { console.log("  EVICT_REENTRY=0 — skipping eviction re-entry"); return fNonce; }
+
+  sep("Eviction re-entry — bringing evicted wallets back (they pay full fees)");
+
+  // The owner key must actually own TierRouter, or setGlobalJoined reverts and every
+  // wallet below fails one at a time. Check once, say so plainly, skip the phase.
+  try {
+    const owner = await tierRouter.owner();
+    if (owner.toLowerCase() !== deployerAddr.toLowerCase()) {
+      console.log(`  ⚠  SKIPPING: TierRouter owner is ${owner}, this run signs as ${deployerAddr}.`);
+      console.log("     Reinstatement needs the owner key. Nothing else in the run is affected.");
+      return fNonce;
+    }
+  } catch (e) {
+    console.log(`  ⚠  SKIPPING: could not read TierRouter.owner() — ${(e.shortMessage || e.message || "").slice(0, 70)}`);
+    return fNonce;
+  }
+
+  const EVICTED_TOPIC = ethers.id("MemberEvicted(address,uint256)");
+  const tip = await ethers.provider.getBlockNumber();
+  const evicted = new Set();
+  let holes = 0;
+  for (let a = FROM; a <= tip; a += 9000) {
+    const b = Math.min(a + 8999, tip);
+    let logs = null;
+    for (let att = 0; att < 3 && logs === null; att++) {
+      try { logs = await ethers.provider.getLogs({ fromBlock: a, toBlock: b, topics: [EVICTED_TOPIC] }); }
+      catch { await new Promise(r => setTimeout(r, 700 * (att + 1))); }
+    }
+    if (logs === null) { holes++; continue; }
+    for (const l of logs) {
+      if (matrixAddrSet.size && !matrixAddrSet.has(l.address.toLowerCase())) continue;
+      evicted.add(ethers.getAddress("0x" + l.topics[1].slice(26)).toLowerCase());
+    }
+  }
+  console.log(`  MemberEvicted addresses found: ${evicted.size}${holes ? `   ⚠ ${holes} failed ranges — this is a FLOOR` : ""}`);
+  if (!evicted.size) { console.log("  Nothing to reinstate."); return fNonce; }
+
+  const candidates = [];
+  for (const w of walletList) {
+    if (!evicted.has(w.address.toLowerCase())) continue;
+    let joined = false;
+    try { joined = await tierRouter.globalJoined(w.address); } catch { continue; }
+    if (!joined) continue;
+    let seated = false;
+    try { seated = await tierRouter.holdsSeatIn(w.address); } catch {}
+    if (seated) continue;
+    candidates.push(w);
+    if (candidates.length >= MAX) break;
+  }
+  console.log(`  Evicted wallets in this run's set, still out: ${candidates.length}` +
+    (candidates.length >= MAX ? `  (capped at EVICT_REENTRY_MAX=${MAX})` : ""));
+  if (!candidates.length) return fNonce;
+
+  let back = 0, failed = 0;
+  for (const w of candidates) {
+    const conn = w.connect(ethers.provider);
+    const tag  = w.address.slice(0, 10);
+    let cleared = false;
+    try {
+      const ethBal = await ethers.provider.getBalance(w.address);
+      if (ethBal < ETH_PER / 2n) {
+        const tx = await rawFunder.sendTransaction({ to: w.address, value: ETH_PER, nonce: fNonce });
+        await tx.wait(); fNonce++;
+      }
+      const usdcBal = await usdc.balanceOf(w.address);
+      if (usdcBal < T1_FEE) {
+        const tx = await usdcFunder.transfer(w.address, T1_FEE * 3n, { nonce: fNonce });
+        await tx.wait(); fNonce++;
+      }
+
+      await (await tierRouterOwner.setGlobalJoined(w.address, false)).wait();
+      cleared = true;
+
+      const allowance = await usdc.allowance(w.address, T1.pm);
+      if (allowance < T1_FEE) await (await usdc.connect(conn).approve(T1.pm, T1_FEE)).wait();
+
+      // Keep their ORIGINAL sponsor if the chain still knows it — a returning member
+      // rejoining under a different upline would quietly rewrite referral history.
+      let ref = W1_ADDR;
+      try { const prev = await tierRouter.memberReferrer(w.address); if (prev && prev !== ethers.ZeroAddress) ref = prev; } catch {}
+
+      await (await tierRouter.connect(conn).register(ref, { gasLimit: 15_000_000 })).wait();
+      back++;
+      console.log(`  ✓ ${tag} reinstated and re-registered (sponsor ${ref.slice(0, 10)})`);
+    } catch (e) {
+      failed++;
+      console.warn(`  ⚠ ${tag} failed: ${(e.shortMessage || e.message || "").slice(0, 90)}`);
+      // LEAVE NO WALLET STRANDED. globalJoined=false with no seat is a state no organic
+      // path produces; it would corrupt later runs and any member-count reading.
+      if (cleared) {
+        try { await (await tierRouterOwner.setGlobalJoined(w.address, true)).wait(); console.warn(`    ↳ globalJoined restored for ${tag}`); }
+        catch (e2) { console.error(`    ⛔ COULD NOT RESTORE globalJoined for ${w.address} — FIX BEFORE THE NEXT RUN: ${(e2.shortMessage || e2.message || "").slice(0, 70)}`); }
+      }
+      try { fNonce = Number(await ethers.provider.getTransactionCount(funderAddr, "pending")); } catch {}
+    }
+  }
+  console.log(`  Re-entry summary: ${back} back in, ${failed} failed, ${evicted.size} evicted lifetime`);
+  console.log("  (Upgrades are handled by the existing sweeps — a re-registered member sits in");
+  console.log("   MatA and becomes upgrade-eligible only after reaching MatB, same as anyone else.)");
   return fNonce;
 }
 
@@ -1291,6 +1481,19 @@ async function main() {
       });
     }
     return n;
+  }
+
+  // ── Eviction re-entry (owner rule 2026-08-19) — BEFORE the rescue/upgrade sweep so a
+  //    reinstated member is seated in time to be picked up by everything that follows.
+  {
+    const matrixAddrSet = new Set(
+      allMatrices.filter(Boolean).map((m) => (m.target || m.address || "").toLowerCase()).filter(Boolean)
+    );
+    fNonce = await reinstateEvicted({
+      walletList: allWallets, tierRouter, tierRouterOwner: tierRouter.connect(deployer),
+      matrixAddrSet, usdc, usdcFunder, rawFunder, funderAddr, fNonce,
+      T1, T1_FEE, W1_ADDR, ETH_PER, deployerAddr,
+    });
   }
 
   // ── Pre-run: rescue + upgrade ALL historical wallets ──────────────────────

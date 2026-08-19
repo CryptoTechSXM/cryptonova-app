@@ -1,15 +1,54 @@
 # BIGFILL RULES - read before every stress/fill run
 
-**OWNER RULE (2026-07-25). Bigfill does FOUR things and nothing else:**
+**OWNER RULE (2026-07-25, EXTENDED 2026-08-19). Bigfill does FIVE things and nothing else:**
 
 ```
-1. register
+1. register  — ONE new member per run (was 127; changed 2026-08-19)
 2. self rescue
 3. manual upgrade
-4. repeat
+4. eviction re-entry — an evicted member gets back in, pays their fees, upgrades if eligible
+5. repeat
 ```
 
 Anything else is noise that pollutes the test data and burns test funds.
+
+## Why ONE registration per run (measured, 2026-08-19)
+
+The fund is fed by the SWEEPS, not by bulk registration. `scripts/diag_sf_usdc_ledger.js`
+read every USDC transfer in and out of the StabilityFund over V8.48's life and reconciled
+exactly (in $1,401.79 / out $1,364.86 / balance $36.94 = balanceOf = totalBalance):
+
+| regime | daily net | self-rescues/day | keeper rescues/day | SF lending/day |
+|---|---|---|---|---|
+| bigfill running | **+$111** | 73.5 | 11.5 | $76.72 |
+| bigfill stopped | **-$136** | 16.0 | 44.3 | $345.68 |
+
+Four bigfill days all positive, three quiet days all negative, no overlap. Stopping bigfill
+QUADRUPLED the rescues the fund pays for. Bulk registration inflates the member count
+without adding any of that — the sweeps run over ALL historical wallets regardless of
+`-Count`, so one registration per run keeps the economy moving without the inflation.
+
+⚠ NEITHER REGIME IS THE REAL WORLD: bigfill wallets self-rescue and upgrade every time
+(~100%), stopped they do neither (0%). Real members sit between. Read +$111 and -$136 as a
+BRACKET, never as the answer.
+
+## ⚠ ABOUT ACTION 4 — IT SIMULATES SOMETHING PRODUCTION CANNOT DO (yet)
+
+Verified in the contracts 2026-08-19: eviction does NOT clear `globalJoined`, `register()`
+reverts for anyone who has ever joined, and auto-reentry/double-entry are read inside the
+CYCLE-OUT handler so they need a seat an evicted member no longer holds. **An evicted member
+has no way back on their own.** The phase works by owner `setGlobalJoined(member,false)`
+followed by a normal fee-paying registration.
+
+Owner decision 2026-08-19 was BOTH: run it here now so the fund stays measurable, AND scope
+a real member-callable re-entry into V8.50. **Until V8.50 ships, do not read "evicted members
+returned" in bigfill data as something the live community can do.**
+
+What is clean: `_recordJoin` is idempotent, so a returning member does not double-count
+`uniqueMembers` and keeps their original join clock. Sponsor is preserved from
+`memberReferrer` where the chain still knows it, so referral history is not rewritten.
+
+Turn it off with `-NoEvictReentry`; cap it with `-EvictReentryMax <n>` (default 25).
 
 ---
 

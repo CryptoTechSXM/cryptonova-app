@@ -278,8 +278,10 @@ contract V8Governance is Ownable {
     /// @notice V8.48 item 46 (owner policy 2026-08-13): the SF insolvency floor —
     ///         expected per-cycle earnings as BPS of the loan tier's fee; a member
     ///         whose debt reaches it gets no new SF loans and the item-47 valve
-    ///         evicts them. Default 3400 (the measured ~34% median). 0 on the menu
-    ///         = floor disabled, the escape hatch.
+    ///         evicts them. V8.50 DEFAULT 5000 (owner decision 2026-08-19, on the
+    ///         AB_FLOOR_BPS curve — full basis at the declaration in StabilityFund.sol;
+    ///         it was 3400, the measured ~34% median, from V8.48 through V8.49).
+    ///         0 on the menu = floor disabled, the escape hatch.
     uint8 public constant PARAM_SF_INSOLVENCY_FLOOR        = 59;
 
     /// @notice V8.48 (owner decision 2026-08-13): the SF surplus-to-community dial,
@@ -512,8 +514,11 @@ contract V8Governance is Ownable {
         _allowedValues[PARAM_SF_MULT_T10] = [5, 10, 15, 20, 30, 40, 50, 75, 100, 150];
         // V8.32 param #50: rescue loan repayment BPS — 10%→100% in 10% steps
         _allowedValues[PARAM_SF_RESCUE_REPAY_BPS] = [1000, 2000, 3000, 4000, 5000, 6000, 7000, 8000, 9000, 10000];
-        // V8.48 item 46: insolvency floor — 0 = disabled (escape hatch), default 3400
-        // (measured ~34% median per-cycle earnings), both on the menu (item-42 lesson).
+        // V8.48 item 46: insolvency floor — 0 = disabled (escape hatch). V8.50 default
+        // 5000 (owner decision 2026-08-19); it was 3400 through V8.49. BOTH values were
+        // already on this menu before the default moved, so the change needed no menu
+        // edit — which is the item-42 lesson working as intended: put the plausible
+        // values on the menu when the param is created, not when someone wants one.
         _allowedValues[PARAM_SF_INSOLVENCY_FLOOR] = [0, 1700, 2500, 3400, 5000, 6800, 10000];
         // V8.48: surplus-to-community dial — MUST mirror StabilityFund's setter
         // enumeration exactly; default 10000 and 0 both on the menu.

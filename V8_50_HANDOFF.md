@@ -1,7 +1,7 @@
 # V8.50 HANDOFF — the crossing redesign. READ THIS FIRST.
 
 Written 2026-08-16 at the end of the V8.49 private measurement run.
-Sessions 2-8 have appended to it since; read the NEWEST section first — each one
+Sessions 2-9 have appended to it since; read the NEWEST section first — each one
 corrects the ones below it, and says so explicitly where it does.
 Audience: **the next session of Claude, plus the owner. There is no third party — every
 line of this codebase was written by a previous session of Claude and executed by the
@@ -10,7 +10,421 @@ owner-set, and the session that earned it got five things wrong by ignoring what
 
 ---
 
-# ⬛ SESSION 8 STATE — 2026-08-19, LATEST. READ THIS FIRST, BEFORE SESSION 7.
+# ⬛ SESSION 9 STATE — 2026-08-19, LATEST. READ THIS FIRST, BEFORE SESSION 8.
+
+**THE HEADLINE: PARAM 59 IS DECIDED AND LANDED (3_400 -> 5_000). THE SUITE HAS NOT BEEN RUN
+YET — that is the first thing to do. Most of this session was spent on a LIVE CUSTOMER-FACING
+INCIDENT on V8.48 which turned out to be an UPSTREAM BASE SEPOLIA OUTAGE and NOT our code, and
+on an owner-raised routing concern which is now CLOSED — nothing reverted, nothing is skewed.
+Nothing was deployed. No chain was written to. `.env` line 69 is unchanged.**
+
+Contracts changed: `StabilityFund.sol` (the default + its full measured basis),
+`V8Governance.sol` (param 59 docs only). Tests touched: six files that pinned or described the
+old ceiling. **NONE of it is committed yet — see STATE OF THE TREE.**
+
+---
+
+## 1. ⛔ PARAM 59 — OWNER DECISION TAKEN 2026-08-19: **5_000**
+
+Session 8 left this open with a measured curve and a recommendation. The owner chose **5000**.
+Landed in source the same turn:
+
+- `contracts/StabilityFund.sol:844` — `insolvencyFloorBps = 5_000`, with the whole basis
+  written at the declaration: the AB_FLOOR_BPS curve, why 5000 and not the saturation point
+  4500, what it costs, and the carried `SELF_RESCUE_RATE = 0` caveat.
+- `contracts/V8Governance.sol` — PARAM 59 docs. **No menu change was needed**; 5000 was
+  already in `_allowedValues[59]`. Same as `minGasPerItem`.
+- `test/V8_49_InsolvencyFloor.test.js` — `FLOOR_BPS_DEFAULT` 3400n -> 5000n (CEIL derives
+  from it, so the boundary tests follow automatically).
+- `test/V8_48_GhostFloor.test.js` — GF-F1's declared-default assert 3400n -> 5000n.
+- `test/CycleOutDebug.test.js`, `test/stress_test_full.js`, `test/V8_49_CrossingBuffer.test.js`
+  — prose and assertion messages that described the old $3.40 ceiling. No logic changes; every
+  one of those assertions holds at any on-menu ceiling.
+
+⚠ **`V8_48_KeeperScan.test.js`'s PARAM 59 sweep STILL PROBES 3_400 AND THAT IS DELIBERATE.**
+The variable was renamed `shipping` -> `cliff` and the reasoning written at the point of the
+change. That row tests the SHAPE of the item-A divergence, and 3400 is the value where the
+divergence is known to exist. Retargeting it at 5000 would assert a flip count nobody has
+measured, and a zero there would go red for a reason unrelated to what the test is about. The
+sweep prints every row, so what the shipped 5000 does is READABLE without being asserted.
+
+⚠ **ONE DISAGREEMENT IS LOGGED, NOT RESOLVED.** `model_item_a.js` PHASE 7 measured 3400 and
+5000 as refusing THE SAME ONE MEMBER of 40 — "identical outcome". The A/B curve measures them
+as clearly different (9 -> 3 evicted-never-lent-to; 7/6/5 -> 0/0/0 floor evictions). Different
+populations on different bases (40 live V8.48 MatB parkers projected post-E1, vs 288 members
+inside a running V8.50 build) is a reason they COULD differ, not a measurement that they DO
+differ for that reason. Written into StabilityFund.sol as UNRECONCILED. The instrument if it
+matters again is phase 7 re-run against a private V8.50 chain.
+
+**⛔ NOT DONE: THE SUITE HAS NOT BEEN RUN SINCE THE CHANGE.** Expected 611 passing / 7 pending
+/ 0 failing. Anything red is a test that pinned the old ceiling and was missed.
+
+```powershell
+cd C:\CryptoNite-Smart-Contracts\CryptoNova
+npx hardhat compile --force
+npx hardhat test 2>&1 | Tee-Object -FilePath suite_after_param59.txt
+```
+
+---
+
+## 2. 🚨 THE LIVE V8.48 INCIDENT — UPSTREAM BASE SEPOLIA, PROVEN WITH A CONTROL
+
+Owner reported the community site erroring, "ongoing for a while, getting worse". Symptoms:
+dashboard "Couldn't load your status", Live Stats all `—`, Matrix Tree View
+`missing revert data (data=null, reason=null)` on `0x3f728455`, Status page
+`0/127 · MatA 0%` and "Could not read keeper this poll" while showing 109 parked and $87.50 SF.
+
+**WHAT IT WAS: Base Sepolia stopped serving STATE READS while still producing blocks.**
+
+| method | Base Sepolia | Base mainnet | Ethereum Sepolia |
+|---|---|---|---|
+| `eth_blockNumber` | ok, advancing | ok | ok |
+| `eth_getCode` | **HTTP 503** | ok | ok |
+| `eth_call` | **HTTP 503** | ok | ok |
+
+Five QuickNode endpoints AND Coinbase's `sepolia.base.org` failed identically; two other
+chains answered fine **from the same machine in the same minute**. Base's status page said
+"all operational" throughout — it was wrong, or lagging. Timeline: healthy at 15:20 UTC
+(`occupancy()` = 127), hard down 15:54, intermittent 16:14–16:38, stable from 16:39.
+`base_sepolia_watch.csv` in the frontend repo is the timestamped record.
+
+**ONE UPSTREAM CAUSE PRODUCED ALL FOUR SYMPTOMS**: `occupancy()` fails -> ethers reports
+`missing revert data` (Matrix view); the same failure inside `rpc()` loses its 8-second race
+and `.catch(()=>null)` discards it -> cards paint `—`; the keeper reads state the same way ->
+"could not read keeper". **Parked rescues stall for the duration** — expect a backlog after any
+future outage.
+
+**THE INSTRUMENTS BUILT (all in `C:\CryptoNova-Testnet-App`, read-only, no keys):**
+- `check_rpc.ps1` — per-endpoint health. ⚠ **ITS FIRST VERSION ONLY TESTED `eth_chainId` AND
+  `eth_blockNumber` — the two methods that never broke — and reported "all six endpoints
+  healthy" during a live outage.** See the traps section.
+- `measure_page_rpc.mjs` — page workload + true contract creation blocks. Reads
+  `LOGS_DEPLOY_FLOOR` BACK out of index.html rather than restating it.
+- `check_matrix_calls.mjs` — every endpoint asked the same call, side by side.
+- `repro_page_load.mjs` — reproduces the page's load shape (pooled provider, batching on).
+- `check_chain_scope.mjs` — **the one that settled it.** Other chains, same machine.
+- `watch_base_sepolia.mjs` — recovery sampler; calls recovery only on a 3-sample streak on
+  BOTH operators, because a flapping service returns single green reads (it did, at 16:14).
+
+---
+
+## 3. ⛔ FRONTEND FINDING — `LOGS_DEPLOY_FLOOR` WAS 588,000 BLOCKS TOO LOW. FIXED, **UNPUSHED**.
+
+Found while chasing the incident; **it is NOT the incident's cause** and must not be quoted as
+one. It is real on its own measured merits.
+
+`index.html` floored every lifetime log scan at block **44,840,000** (a V8.46-era number) and
+walked back to it in 9,000-block windows. Measured 2026-08-19 with `measure_page_rpc.mjs`:
+
+| | block | windows per lifetime scan |
+|---|---|---|
+| chain head | 45,691,990 | — |
+| old floor | 44,840,000 | **95** |
+| cnova created | 45,428,148 | 30 |
+| tierRouter created | 45,428,223 | 30 |
+| communityWallet created | 45,430,266 | 30 |
+
+**65 of every 95 windows — 68% of ALL lifetime history reading the site does — scanned blocks
+that provably contain nothing**, because they predate the creation of every contract queried.
+Six call sites do a floor-bound scan. Measured 103 ms/window, **0 failed windows, 0 retries** —
+the endpoints were never refusing us, the page was simply asking ~3.2x more than it needed to.
+
+Changed to **45,428,000** (148 blocks below the earliest creation, as slack against an
+off-by-one in the search). Safety is a property, not an estimate: a contract cannot emit an
+event before the block it was created in. All five inline script blocks pass `node --check`.
+
+⚠ **THE REAL DEFECT IS THAT THIS CONSTANT GOES STALE BY DESIGN.** The head moves ~43,200
+blocks/day and the floor does not, so every scan grows ~4.8 windows/day — ~29 more requests per
+dashboard load per day, forever. Raising it buys ~4 months and then the same curve resumes.
+Structural fixes, in order of value: (1) `safeGetLogs` already takes `opts.fromBlock` so a deep
+history could be paid ONCE per wallet and cached — no call site passes it; (2) per-contract
+floors instead of one global one.
+
+**STATUS: edited in the working tree of `C:\CryptoNova-Testnet-App`, NOT committed, NOT
+pushed.** Backup at `index.html.bak_session9`. Held deliberately so it would not be deployed
+mid-incident and confuse the before/after.
+
+---
+
+## 4. ✅ THE OWNER'S T2 ROUTING CONCERN — CLOSED. NOTHING REVERTED.
+
+Owner: *"T2.2 opened and started filling before T2.1 was completely filled, and T1.1 is still
+taking members and cycling while T1.2 is on standby like it should — so something got skewed in
+that deploy, maybe something reverted."* Then, from memory: *"we opened a pair in the event a
+member has double entry enabled and cannot seat in the existing pair — a new pair opens up to
+accommodate them vs parking them silently."*
+
+**Measured on the live chain (`diag_pair_chain.mjs`, `diag_pair1_occupants.mjs`,
+`diag_pair_birth.mjs`, all in the frontend repo):**
+
+| | T1 | T2 |
+|---|---|---|
+| pair0 MatA | 127/127, rot 599, parked 26 | 127/127, rot 124, parked 4 |
+| pair0 MatB | 126/127, rot 447, parked 81 | 118/127, **rot 0**, parked 0 |
+| pair1 MatA | 0/127 | **5/127** |
+| MatB % at pair1's birth | **92.1%** | **90.6%** |
+
+**THE ANSWER IS TWO ANSWERS, AND CONFLATING THEM IS WHAT MADE IT LOOK WRONG:**
+
+1. **WHAT CREATED EACH PAIR: the routine trigger.** Both births were above
+   `factoryExpandThresholdBps` (9000). `_forceExpand()` never fired, and could not have — it is
+   only reached when `_freePairFor()` returns `type(uint256).max`, and `_tryAdvancePair()` runs
+   FIRST on every entry path, so the fresh empty pair always gives it somewhere to point. **The
+   "normally unreachable" comments at :351 and :569 STAND — do not weaken them.**
+2. **WHAT FILLED T2.2: the double-entry accommodation, exactly as the owner remembered.** All
+   **5 of 5** occupants already hold a seat in T2.1's **MatB**. They could not take a second
+   seat in the same pair (universal pair guard, `MatrixLogicLib:278` rejects a seat in EITHER
+   half), so `registerFor` (:561) routed them forward. Joined 00:55–03:45 the same morning at a
+   ~50-minute cadence — **bigfill wallets, not organic members.**
+
+Both mechanisms fired in the same transaction, in that order, which is precisely why it looks
+from outside like the double created the pair.
+
+**ALSO CLOSED, AND IT CORRECTS SOMETHING THIS SESSION SAID FIRST:**
+- **CHAIN WIRING IS CORRECT ON EVERY TIER.** Each MatB's `chainNext` is the next pair's MatA;
+  the last MatB points back to pair 0's MatA. The circle closes on T1 and T2. No deploy defect.
+- **T1.2 BEING EMPTY IS NOT STARVATION.** This session first suggested T1's graduates were
+  parking instead of graduating. The simpler explanation is right: **before T1.2 existed,
+  `chainNext` pointed T1.1's MatB back at its OWN MatA** — the self-sustaining loop, which is
+  why MatA has 599 rotations against MatB's 447. T1.2 was wired in only when MatB crossed 90%,
+  so it is empty because MatB has not rotated SINCE. Meanwhile 249 have joined T2's MatA — the
+  ladder is absorbing people.
+- **T2.1's MatB has NEVER rotated (rot 0)**, so it has produced zero graduates. Any future
+  claim that "pair 1 is receiving graduates" must check the SOURCE's rotation count first.
+
+**STILL TRUE AND STILL THE REAL NUMBER: 107 of 111 parked members sit in T1** (81 in MatB, 26
+in MatA). That is the crossing-cost problem V8.50 item A + E1 exist to fix. It is not a routing
+fault and no routing change touches it.
+
+---
+
+## TRAPS ADDED THIS SESSION — ONE TRAP, **THREE** INSTANCES IN ONE AFTERNOON
+
+**AN INSTRUMENT MUST NOT REPORT THE ABSENCE OF SOMETHING IT CANNOT OBSERVE.** Already on the
+list from session 8 ("testing the wrong slice looks like a refutation"). It was walked into
+three more times today, so it is restated with all three:
+
+1. **`check_rpc.ps1` reported "all six endpoints healthy" DURING A LIVE OUTAGE** — it only sent
+   `eth_chainId` and `eth_blockNumber`, the two methods that never broke. It never sent an
+   `eth_call`. That reading sent the session down a load/latency detour.
+2. **`diag_pair_chain.mjs` reported "pair 1 IS receiving graduates"** from the fact that pair 1
+   had members — without checking that pair 0's MatB had ever rotated. It had not. Zero
+   rotations means zero graduates; the members came from somewhere else entirely.
+3. **`diag_pair_birth.mjs` reported "no registration in this tx"** because its hand-written ABI
+   guesses did not match the deployed signatures, so every event decoded as `unknown(0x...)`.
+   Fixed by building the topic0 dictionary from the repo's own `artifacts/` — **227 signatures
+   instead of 9 guesses.**
+
+**AND A FOURTH, WORSE, WHICH THE ABI FIX WOULD NOT HAVE CAUGHT: A DISCRIMINATOR THAT CANNOT
+DISCRIMINATE.** `diag_pair_birth.mjs` v1 was built on "a registration tx means the routine
+trigger, a cycle-out tx means the on-demand spawn". That premise is FALSE — `_tryAdvancePair()`
+is the first statement of `registerDirectFor`, `registerFor` AND `registerForMatB`, so it runs
+on every entry path and the transaction type carries NO information about which created the
+pair. The script decoded real events into a conclusion the data could never support. **Before
+building a discriminator, prove the two cases actually differ in what it measures.**
+
+**WHEN TWO DISCRIMINATORS DISAGREE, ONE OF THEM IS BROKEN — GO FIND OUT WHICH.** v1 printed
+92.1% and 90.6% (both above the trigger) in one column and "PATH B" in the next. The
+disagreement was the finding, exactly as rule 1 says, and it was the instrument.
+
+**A STATUS PAGE IS NOT A MEASUREMENT.** status.base.org said "All Systems Operational, 100%
+uptime" throughout a total state-read outage.
+
+**AND THE CONFOUND THAT NEARLY LANDED: SIX ENDPOINTS ON ONE NETWORK PATH ARE NOT SIX
+INDEPENDENT OBSERVATIONS.** Every reading came from the owner's machine. A middlebox inspecting
+POST bodies would pass `eth_blockNumber` and fail `eth_call` and look identical to an upstream
+outage. `check_chain_scope.mjs` (other chains, same machine) is what made the conclusion safe.
+
+---
+
+## STATE OF THE TREE — ⚠ NOTHING FROM THIS SESSION IS COMMITTED
+
+**Contracts repo (`v8.1`), all UNCOMMITTED working-tree edits:**
+- `contracts/StabilityFund.sol`, `contracts/V8Governance.sol`
+- `test/V8_49_InsolvencyFloor.test.js`, `test/V8_48_GhostFloor.test.js`,
+  `test/V8_48_KeeperScan.test.js`, `test/CycleOutDebug.test.js`, `test/stress_test_full.js`,
+  `test/V8_49_CrossingBuffer.test.js`
+- Last commit remains `c177938`. **Run the suite BEFORE committing.**
+
+**Frontend repo (`C:\CryptoNova-Testnet-App`), all UNCOMMITTED:**
+- `index.html` — `LOGS_DEPLOY_FLOOR` 44840000 -> 45428000 + both stale comments corrected.
+  Backup `index.html.bak_session9`.
+- NEW diagnostics: `check_rpc.ps1`, `measure_page_rpc.mjs`, `check_matrix_calls.mjs`,
+  `repro_page_load.mjs`, `check_chain_scope.mjs`, `watch_base_sepolia.mjs`,
+  `diag_pair_chain.mjs`, `diag_pair1_occupants.mjs`, `diag_pair_birth.mjs`
+- Result files: `rpc_health_*.json`, `page_rpc_workload_*.json`, `matrix_call_probe_*.json`,
+  `repro_page_load_*.json`, `pair_chain_*.json`, `pair1_occupants_T2_*.json`,
+  `pair_birth_*.json`, `base_sepolia_watch.csv`
+- `INCIDENT_2026-08-19_BASE_SEPOLIA.md` — the incident write-up.
+- ⚠ Remember the push ladder: `git push origin admin` — admin -> preview -> main, and MEMBERS
+  SEE MAIN ONLY.
+
+---
+
+## NEXT, IN ORDER
+
+1. **RUN THE SUITE** after the PARAM 59 change (command in section 1). Nothing else in the
+   release is blocked on it, but nothing should be committed before it.
+2. **Commit both repos** — explicit paths only. ⛔ NEVER `git add -A` from the device side
+   (core.autocrlf unset there shows 31 files modified on line endings alone).
+3. **Ship the `LOGS_DEPLOY_FLOOR` fix** to admin and re-run `measure_page_rpc.mjs` against the
+   healthy chain to confirm 95 -> 30 windows end to end. It reads the constant back, so the
+   re-run verifies the SHIPPED value.
+4. **Owner decision 2 is STILL OPEN — live V8.48: leave organic, bigfill, or fund the SF?**
+   ⛔ **SESSION 8'S "BIGFILL DOES NOT REPLENISH" IS WITHDRAWN — the owner corrected it
+   2026-08-19 and he is right on mechanism.** It rested on one bps figure the same document
+   flagged as unconfirmed, and missed three inflows: registrations (1-5 new wallets per run),
+   UPGRADES to the highest eligible tier (a $25 T2 or $50 T3 fee carries a proportionally
+   larger stability split than a $10 registration), and SELF-RESCUES (the crossing fee is
+   still distributed so the SF gains its split, AND no SF loan is drawn).
+   **The third dominates, and it is avoided OUTFLOW, not income:** a wallet that self-rescues
+   does not draw the $3.42-$4.52 SF share and still pays in — roughly a $4 swing per event
+   against the passive case, an order of magnitude above the $0.238-$0.30 that session 8
+   reasoned from.
+   ⛔ **THEREFORE THE DRAIN SERIES IS CONTAMINATED AND "PRESERVE THE BEFORE-PICTURE" IS DEAD
+   AS AN ARGUMENT.** The bigfill wallets stay seated whether bigfill runs or not: with it
+   stopped they still cycle out, park and get SF-rescued, but no longer register, upgrade or
+   self-rescue. Stopping bigfill removed the income and kept the liability — the population is
+   100% PASSIVE BY CONSTRUCTION, the same pathological extreme as `SELF_RESCUE_RATE = 0`.
+   The ~$125/day drain may be an artifact of the regime, not a property of the economics.
+   ✅ **MEASURED 2026-08-19 — OWNER RIGHT, ON GROUND-TRUTH USDC.** `scripts/diag_sf_flows.js`
+   and `scripts/diag_sf_usdc_ledger.js` (both new). The USDC ledger reconciles EXACTLY
+   (in $1,401.79 / out $1,364.86 / balance $36.94 = balanceOf = totalBalance) so there is NO
+   LEAK. Daily net separates perfectly by regime: bigfill days 08-13..08-16 **+$72.87 /
+   +$75.82 / +$81.39 / +$214.74**, quiet days 08-17..08-19 **-$114.31 / -$185.02 / -$108.55**.
+   **+$111/day running vs -$136/day stopped, no overlap.** The -$136 matches the ~$125/day
+   drain previously recorded — that series measured the passive regime, nothing more.
+   Mechanism: stopping bigfill took keeper rescues 11.5 -> 44.3/day and SF lending
+   $76.72 -> $345.68/day while self-rescues fell 73.5 -> 16.0/day.
+   ⚠ `diag_sf_flows.js`'s `net/day` column is VOID (double-counts repayments, treats
+   FundDeposit events as cash — they overstate real inflow ~$300 over this range) and its
+   inflow ATTRIBUTION is misleading ("keeper-rescue 58.6%" is the fund's largest COST, not
+   its largest source). Its OUTFLOW column is sound — it reconciles to the contract counter.
+   ⚠ Neither regime is the real world (~100% vs 0% self-rescue) — read them as a BRACKET.
+   This is the best empirical anchor yet for the open self-rescue-rate item.
+   ⚠ Still also true: the figures are days old and the SF has moved ($212.35 -> $87.50 on the
+   status page 2026-08-19), and `diag_parked_growth.js` with `WINDOW=3000` is still owed.
+   ⚠ Operational: restarting bigfill collides with a future V8.50 private deploy on wallet
+   nonces. Sequence them, never overlap.
+5. ⛔ **NEW V8.50 SCOPE ITEM — MEMBER-CALLABLE RE-ENTRY AFTER EVICTION.** Owner decision
+   2026-08-19. Verified in the contracts that day: eviction does NOT clear `globalJoined`,
+   `register()`/`registerWithCoupon()` revert `TRState()` for anyone who has ever joined,
+   and `autoReentryEnabled`/`doubleReentryEnabled` are read inside the CYCLE-OUT handler
+   (TierRouter:1338/:1342) so they need a seat an evicted member no longer holds.
+   **AN EVICTED MEMBER CANNOT RETURN ON THEIR OWN — the only door is the onlyOwner
+   `setGlobalJoined(member,false)`.** That contradicts the owner's stated intent that
+   evicted members come back and pay their fees. Bigfill now simulates it via the owner
+   override (see BIGFILL_RULES.md action 4) as an INTERIM measure with a stated expiry;
+   the contract path is what makes the test honest. Design notes: `_recordJoin` is already
+   idempotent so a return does not double-count `uniqueMembers` or reset the join clock;
+   preserve `memberReferrer` so referral history is not rewritten; TierRouter is under
+   EIP-170 pressure so put any new loop in TierRouterLib from the start.
+5. **Router placement refusals, 11 -> 53** on V8.50. Untouched, still unexplained.
+6. **Model self-rescue at a non-zero rate.** Still the headline caveat on sections 2, 5 and 6 of
+   session 8 and on the PARAM 59 basis.
+7. **Gate measurements 3 and 4** — need a running system; that is what the private chain is for.
+8. **`maxItemsPerUpkeep`** — still vestigial at 20. Confirm deliberately or lower to 10.
+
+---
+
+## ⛔ LATE-SESSION ADDENDUM (2026-08-19, after the write-up above)
+
+### THE TRAP THAT COST THE MOST: **V8.49/V8.50 NAMES CALLED AGAINST THE V8.48 CHAIN**
+The repo tree is V8.50. **The community chain is V8.48.** A view added after V8.48 reverts
+there with `missing revert data`, which looks exactly like a network fault and is not one.
+Caught THREE times in one hour:
+| called | added in | V8.48 has instead |
+|---|---|---|
+| `evictionGracePeriod()` | V8.49 item 1 (`b14eba7`) | `extendedIdleTimeout()` — same 604_800 |
+| `loanHeadroom(addr,u8)` | V8.49 item 1b (`40d7843`) | derive: `fee*insolvencyFloorBps/10000 - memberDebt` |
+| (same, in the new dashboard code) | | would have made every badge read CHECKING on live |
+**RULE: any new code that calls the chain must be checked against the DEPLOYED ABI, not the
+source tree.** `scripts/probe_v848_getters.js` exists for this; `scripts/probe_sf_views.js`
+(new) is the narrow SF version. Extend them rather than re-inventing.
+
+### EVICTION HAS NEVER FIRED ON LIVE V8.48 — AND CANNOT WHILE BIGFILL RUNS
+`MemberEvicted` events: **0**, on a chain live since 2026-08-13. Not a broken valve — the
+mechanism has never had an opportunity. Eviction needs BOTH the 7-day clock AND a non-NONE
+`_triageParked` reason, and bigfill self-rescues at 100%, so parked members are rescued long
+before the clock expires (54 of 57 in one run). Measured: soonest clock of ANY parked member
+**5.41 days**; eviction candidates **not determinable** on V8.48 (see the ABI trap above).
+**RECOMMENDATION, owner to confirm: do NOT test eviction on live V8.48.** It means racing a
+5-day clock the sweep keeps resetting, and a V8.50 deploy resets the chain anyway. Test it in
+the V8.50 private deploy with a cohort deliberately parked, UNFUNDED and EXCLUDED from the
+sweep. Shortening the grace period on live is the only faster lever and it moves the deadline
+for every real member — an owner policy call, not a test convenience.
+
+### ⛔ EVICTION TEST — OWNER DECISION 2026-08-19: **NOT ON LIVE. DO IT IN THE V8.50 PRIVATE DEPLOY.**
+Owner, verbatim in substance: *"we are definitely not going to make the 6 days, we will have
+a deploy before that."* So the natural test on live V8.48 is dead — the soonest candidates
+were ~146h out and the deploy lands first. **Stop holding anything back for them; bigfill may
+self-rescue freely.**
+
+✅ **AND THE PRIVATE CHAIN REMOVES THE TIMING PROBLEM ALTOGETHER — THIS IS THE UNLOCK.**
+`evictionGracePeriod` is DAO param 62 with a setter. On live it is untouchable because it
+moves the deadline for every real member. **On a private chain with no members, set it to
+MINUTES.** The 7-day wait was never a property of the mechanism; it was a property of having
+customers on the chain. The whole test collapses from 6 days to one coffee.
+
+**THE RECIPE, so this is not re-derived:**
+1. Deploy V8.50 privately. Confirm PARAM 59 = 5_000 on the deployed SF (`insolvencyFloorBps()`),
+   not just in source — a dial set is not a dial in force.
+2. `setEvictionGracePeriod(<minutes>)` on the keeper. **READ IT BACK.**
+3. Seat a small cohort, cycle them out so they park, and leave them UNFUNDED — a funded
+   wallet self-rescues and never reaches the valve, which is exactly why live V8.48 has
+   produced ZERO `MemberEvicted` events in 6 days of running.
+4. Run the keeper. Assert on `ParkedMemberEvicted` / `MemberEvicted`, and check the member
+   keeps their withdrawable, the crossing reserve is RELEASED (`EvictionReserveReleased`),
+   and the debt stays booked — the valve is supposed to remove them, not confiscate.
+5. Then re-run with PARAM 59 at 3_400 as the control. On live V8.48 the T1 ceiling is
+   $10.00 x 3400/10000 = **$3.40**, and parked gaps of $4.39 / $5.00 / $5.00 were measured
+   sitting ABOVE it — uncoverable by any loan. At 5_000 the ceiling is $5.00 and all three
+   are covered. That is the A/B curve's 9 -> 3 result reproduced from live data, and it is
+   worth asserting end to end rather than trusting twice-derived numbers.
+6. Also exercise the V8.50 member-callable re-entry (scope item above) — an evicted member
+   returning under their own power is the half bigfill currently fakes with an owner override.
+
+### BIGFILL — CHANGED, WORKING, AND THE FUND RECOVERED
+`-Count` 127 -> **1** (owner rule; sweeps feed the fund, not bulk registration), plus the new
+`reinstateEvicted()` phase (owner override — see BIGFILL_RULES.md action 4 for why that
+simulates something production cannot do). Two robustness fixes, both measured not guessed:
+- **Transport errors are no longer counted as refusals.** A run logged `HH110` on 31
+  consecutive wallets and still printed "17 succeeded - 36 skipped" — a measurement of the
+  NETWORK read as a measurement of MEMBERS. Now classified, counted separately, and 5 in a
+  row ABORTS the sweep rather than producing a partial result that looks whole.
+- **The USDC top-up verification read stale state.** Two runs PROVED it: `0xaFF03A85` was
+  topped +$4.00, reported "DID NOT LAND [still $3.00]", and turned up next run holding
+  exactly $7.00; `0x0f822360` +$2.11 -> $5.11. The transfers landed; the CHECK was wrong.
+  Now retries the balance read 3x with 3s gaps before declaring failure.
+
+**RESULT, on ground-truth USDC: SF $36.94 -> $352.58 in one afternoon.** Combined with the
+regime table above (bigfill days +$111/day, quiet days -$136/day), the owner's correction is
+confirmed twice over — by history and by live recovery.
+
+### FRONTEND — PARKED-MEMBER STATUS BADGE (BUILT, **UNPUSHED**)
+`index.html` `renderParkedList()` now labels each parked position **IN RESCUE QUEUE** /
+**WAITING ON FUND** / **PENDING EVICTION** / **CHECKING**, with the eviction countdown. It
+does NOT re-implement `_triageParked` (its reason is an internal uint8, never emitted) — it
+compares two exact figures, `loanHeadroom` (with the V8.48 derivation above) against the
+member's own gap, and reads the grace period from the keeper rather than hardcoding it.
+Failed reads render CHECKING, never "fine". All 5 inline script blocks pass `node --check`.
+⚠ Not tested against a live chain yet — do that before it goes past `admin`.
+
+### STILL OPEN AT SESSION END
+1. **The suite has still not been run** after PARAM 59 = 5000. Nothing is committed.
+2. `scripts/probe_sf_views.js` — run it to find which SF views V8.48 actually exposes, then
+   point the headroom fallback at whichever debt getter answered.
+3. T1.1 is now FULL on both halves (127/127). **Prediction to verify:** its MatB rotations
+   should now graduate into T1.2's MatA via `chainNext`. If T1.2 stays empty, chase it.
+4. Bigfill's batch line prints the ACTIVE pair's occupancy while the snapshot prints T1.1 —
+   two different "T1" numbers in one output. Same class as the dashboard pill fixed with
+   "Pair N of M". Cosmetic, but it has already caused confusion once.
+5. `FUND_AMOUNT $11.00` is below the T2 ($25) upgrade fee, so members reach MatB and cannot
+   climb — 6 wallets stuck on that in the last run. Raise it if you want the ladder exercised.
+
+---
+
+# ⬛ SESSION 8 STATE — 2026-08-19. READ AFTER SESSION 9, BEFORE SESSION 7.
 
 **THE HEADLINE: THE ~10x EVICTIONS ARE EXPLAINED, REPLICATED 3/3, AND THEY ARE NOT A DEFECT.
 They are three measured factors, and the largest of them is that V8.50 moves the parked
@@ -285,7 +699,7 @@ money.** The "two" never arises because the second crossing was already paid for
 
 ---
 
-# ⬛ SESSION 7 STATE — 2026-08-18, LATEST. READ THIS FIRST, BEFORE SESSION 6.
+# ⬛ SESSION 7 STATE — 2026-08-18. READ AFTER SESSION 8, BEFORE SESSION 6.
 
 **THE HEADLINE: SESSION 6'S ONE RESULT THAT "CONTRADICTS THE SCOPE" WAS AN INSTRUMENT
 ARTIFACT. IT IS WITHDRAWN. Corrected and replicated 3 of 3 seeds: V8.50 CUTS TOTAL PARKING

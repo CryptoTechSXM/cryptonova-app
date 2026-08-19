@@ -195,15 +195,16 @@ describe("CycleOutDebug", function () {
     // Here both steps are driven directly, with owner acting as keeper.
     //
     // This fixture models "the SF covers 100% of the fee" — an advance of the WHOLE $10
-    // against the declared 3400bps ceiling ($3.40). So the default floor refuses,
+    // against the declared 5000bps ceiling ($5.00). So the default floor refuses,
     // correctly, and that refusal is asserted FIRST because a fixture that merely
     // sidestepped it would hide the rule.
     //
     // The ceiling is read from the SF rather than written here on purpose: PARAM 59 went
-    // 3400 -> 5000 -> 3400 inside one day in V8.50 (the 5000 case was measured against a
-    // balance the enforcing code cannot see — see StabilityFund.sol). A hard-coded
-    // number here would have survived that round trip while quietly meaning something
-    // else.
+    // 3400 -> 5000 -> 3400 inside one day in V8.50 (the first 5000 case was measured
+    // against a balance the enforcing code cannot see), and then 3400 -> 5000 for good on
+    // 2026-08-19 on the AB_FLOOR_BPS curve — see StabilityFund.sol. A hard-coded number
+    // here would have survived all three moves while quietly meaning something else. Note
+    // the phase-3 assertion holds at ANY ceiling: a full $10 advance is above all of them.
     const floorBps = await sf.insolvencyFloorBps();
     console.log("  insolvencyFloorBps: " + floorBps.toString() + " → ceiling $" +
                 (Number(FEE * floorBps / 10_000n) / 1e6).toFixed(2) + " vs a $10.00 advance");

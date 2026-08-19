@@ -369,7 +369,9 @@ describe("V8.48 items 45+46+47 — ghosts, the insolvency floor, and the evictio
       const mock = await (await ethers.getContractFactory("MockRescueMatrix"))
         .deploy(await sf.getAddress(), await usdc.getAddress());
       await sf.setMatrixAuthorized(await mock.getAddress(), true);
-      await sf.setTierFee(0, FEE); // $10 → default ceiling = $10 x 3400/10000 = $3.40
+      await sf.setTierFee(0, FEE); // $10 → default ceiling = $10 x 5000/10000 = $5.00
+                                   // (V8.50 moved the default 3400 -> 5000, 2026-08-19;
+                                   //  every ceiling below is DERIVED, never the literal)
       // Seed the fund so "SF: below floor" can never shadow the floor check.
       await usdc.mint(owner.address, M6(1000));
       await usdc.approve(await sf.getAddress(), M6(1000));
@@ -379,7 +381,7 @@ describe("V8.48 items 45+46+47 — ghosts, the insolvency floor, and the evictio
 
     it("GF-F1: the boundary is debt >= fee x floorBps/10000, and the revert names the floor", async function () {
       const { member, sf, mock } = await sfFixture();
-      expect(await sf.insolvencyFloorBps(), "declared default").to.equal(3400n);   // V8.50: proposed 5000, reverted — see StabilityFund.sol
+      expect(await sf.insolvencyFloorBps(), "declared default").to.equal(5000n);   // V8.50 ships 5000 (2026-08-19) — see StabilityFund.sol
 
       // One unit under the ceiling: still eligible in the V8.48 sense.
       // V8.50: DERIVED from the declared default, not the old literal $3.40 — the

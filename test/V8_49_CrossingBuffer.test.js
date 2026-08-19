@@ -12,9 +12,13 @@
  *     buffer's share of the ask   $187.20 of $232.29  =  80%
  *
  *   Three things followed, and all three are what this file exists to keep fixed:
- *     1. insolvencyFloorBps is 3_400. The buffer at 3_600 was LARGER, so every
- *        advance cleared the floor on its way past — including for a member with
+ *     1. insolvencyFloorBps was 3_400 AT THE TIME. The buffer at 3_600 was LARGER, so
+ *        every advance cleared the floor on its way past — including for a member with
  *        zero debt and zero shortfall. The floor could not refuse anyone.
+ *        (V8.50 moved the floor default to 5_000 on 2026-08-19, which would no longer be
+ *        smaller than a 3_600 buffer. That does NOT weaken the reason this file exists:
+ *        the buffer default is 0 and the defect was the buffer being unconditional, not
+ *        the particular pair of numbers.)
  *     2. The buffer was computed OUTSIDE every branch on sfShare, so a SELF-FUNDED
  *        member (sfShare == 0, "costs the fund nothing") was still advanced $3.60,
  *        which made totalSfNeeded > 0, which called payForceCross, which could
@@ -121,8 +125,10 @@ describe("V8.49 item 1b — crossing buffer OFF by default, governed, reversible
     });
 
     it("CB-4: rejects off-menu values — free ranges are not the house style", async function () {
-      // 3_400 is deliberately chosen: it is insolvencyFloorBps, the value someone
-      // might reach for to "make the buffer match the floor". It is not on the menu.
+      // 3_400 and 5_000 are both deliberately chosen: they are the OLD and the CURRENT
+      // insolvencyFloorBps, the values someone might reach for to "make the buffer match
+      // the floor". Neither is on this menu, and both stay in the list so the check keeps
+      // covering the reach whichever value PARAM 59 is sitting at.
       for (const bad of [1, 3400, 5000, 10000]) {
         await expect(mk.setCrossingBufferBps(bad), `${bad} should be rejected`)
           .to.be.revertedWith("MK: invalid crossing buffer (0/900/1800/2700/3600)");

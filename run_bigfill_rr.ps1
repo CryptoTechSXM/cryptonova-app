@@ -12,14 +12,21 @@
 #   Against a TEST deployment: add -AddressesFile deployed_addresses_v8_49.json
 
 param(
-    [int]$Count  = 127,
+    # OWNER RULE 2026-08-19: ONE new member per run (was 127). The fund is fed by the
+    # SWEEPS (self-rescue + upgrade over ALL historical wallets), not by bulk
+    # registration. Measured 2026-08-19 on the USDC ledger: bigfill days ran +$111/day,
+    # quiet days -$136/day; self-rescues 73.5/day vs 16.0 and SF lending $76.72/day vs
+    # $345.68. Bulk registration inflates the member count without adding any of that.
+    [int]$Count  = 1,
     [int]$Offset = 0,
     [double]$SelfRescueRate = 1.0,   # 1.0 = every parked wallet self-rescues
     [double]$UpgradeRate    = 1.0,   # 1.0 = upgrade whenever eligible
     [int]$BatchSize  = 1,            # wallets per batch
     [int]$BatchDelay = 300,          # seconds between batches (300 = 5 min drip)
     [string]$AddressesFile = "",     # "" = inherit .env; see the block below
-    [int]$ScanFrom = -1              # -1 = leave bigfill's default; see COHORT BLEED below
+    [int]$ScanFrom = -1,             # -1 = leave bigfill's default; see COHORT BLEED below
+    [switch]$NoEvictReentry,         # turn OFF the eviction re-entry phase
+    [int]$EvictReentryMax = 25       # cap reinstatements per run, keeps a run bounded
 )
 
 # ---------------------------------------------------------------------------
@@ -118,6 +125,14 @@ $env:SELF_RESCUE_RATE = "$SelfRescueRate"
 $env:UPGRADE_RATE     = "$UpgradeRate"
 $env:BATCH_SIZE       = "$BatchSize"
 $env:BATCH_DELAY      = "$BatchDelay"
+# OWNER RULE 2026-08-19, the fifth action: an evicted member gets back in, pays their
+# fees, and upgrades if eligible. WARNING: there is NO member-callable path for this on
+# chain. It runs as an owner reinstatement (setGlobalJoined) plus a normal fee-paying
+# register, so it SIMULATES a capability live members do not have. A real member-callable
+# re-entry is scoped for V8.50; until it ships, do not read "evicted members returned" in
+# this data as something the community can do. Set EVICT_REENTRY=0 to turn the phase off.
+if ($NoEvictReentry) { $env:EVICT_REENTRY = "0" } else { $env:EVICT_REENTRY = "1" }
+$env:EVICT_REENTRY_MAX = "$EvictReentryMax"
 
 # Full 41-leader roster (2026-08-05). Identical to VPS SPONSORS/ROUND_ROBIN.
 $leaders = @(
@@ -174,6 +189,12 @@ Write-Host ("  ADDRESSES FILE   : {0}" -f $effectiveAddrs)
 Write-Host ("    source         : {0}" -f $addrsSource)
 Write-Host ("  leaders supplied : {0}" -f $leaders.Count)
 Write-Host ("  COUNT            : {0}" -f $Count)
+if ($NoEvictReentry) {
+    $evictLabel = "OFF"
+} else {
+    $evictLabel = "ON   (max $EvictReentryMax per run, OWNER OVERRIDE - not a member-callable path)"
+}
+Write-Host ("  evict re-entry   : {0}" -f $evictLabel)
 Write-Host ("  HDR_OFFSET       : {0}" -f $Offset)
 Write-Host ("  wallet range     : HDR {0} .. {1}" -f $Offset, ($Offset + $Count - 1))
 if ($ScanFrom -ge 0) {

@@ -341,13 +341,15 @@ describe("S2: Parked wallet rescue", function () {
     // ⚠ V8.49 item 1b (policy B). This line used to read "w1 has no debt, so the floor
     // passes" — true under V8.48, where the floor tested only the debt a loan STARTED
     // from. It now tests debt + advance, and the advance here is the WHOLE $10 entry fee
-    // against a ceiling that defaults to 34% of it. Zero debt is no longer a free pass:
-    // one loan of this size is, by itself, three times what one cycle can repay.
+    // against a ceiling that defaults to 50% of it (V8.50, 2026-08-19; it was 34% through
+    // V8.49). Zero debt is no longer a free pass: one loan of this size is, by itself,
+    // twice what one cycle can repay.
     //
     // Asserted rather than sidestepped, because it is the new behaviour and this test's
-    // stated job is to exercise the payForceCross interface "live".
+    // stated job is to exercise the payForceCross interface "live". The assertion holds at
+    // EVERY on-menu ceiling below 10_000, so it is not a change detector for the default.
     expect(await sf.loanEligibleFor(w1.address, 0, T1_FEE),
-      "policy B: a full-fee advance is 294% of the $3.40 default ceiling, debt or no debt"
+      "policy B: a full-fee advance is 200% of the $5.00 default ceiling, debt or no debt"
     ).to.equal(false);
     await expect(sf.connect(keeper).payForceCross(w1.address, 0, await matA.getAddress(), T1_FEE))
       .to.be.revertedWith("SF: insolvency floor");
