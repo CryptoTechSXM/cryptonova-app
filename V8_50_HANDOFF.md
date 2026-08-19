@@ -473,6 +473,16 @@ ethers messages, whose text we do not control. **Both .ps1 files are now pure AS
 non-ASCII bytes)** — they have no BOM, and a non-ASCII byte in executable code broke a run on
 2026-08-19.
 
+**⚠ AND THE VERIFICATION OF THIS HAS ITS OWN TRAP.** `logs\bigfill_loop\*.log` are written
+by `Tee-Object`, which on PowerShell 5.1 writes **UTF-16LE**. `Select-String` and
+`Get-Content` decode it correctly; a byte-level `grep` does not, and returns "0 matches" for
+every pattern — which reads exactly like "the log is clean". The first check run against the
+ASCII fix came back 0 for that reason before it came back 0 for the right one. Decode the
+file (or use `Select-String`) before believing any count taken from these logs. Confirmed
+clean afterwards on positive evidence, not absence: the banner prints as 60 ASCII hyphens and
+the header reads `bigfill_v8.js - 1 wallets - batch 1`. Note the self-rescue and CNOVA
+buy-sweep lines were converted in source but had not printed yet in that run.
+
 ### STILL OPEN AT SESSION END
 1. ~~The suite has still not been run~~ — **DONE**: 611 passing, committed and pushed as
    `e404d70` on `v8.1`. The ASCII + pairing work of the late session is a separate commit.
