@@ -10,7 +10,221 @@ owner-set, and the session that earned it got five things wrong by ignoring what
 
 ---
 
-# ⬛ SESSION 6 STATE — 2026-08-18, LATER. READ THIS FIRST, BEFORE SESSION 5.
+# ⬛ SESSION 7 STATE — 2026-08-18, LATEST. READ THIS FIRST, BEFORE SESSION 6.
+
+**THE HEADLINE: SESSION 6'S ONE RESULT THAT "CONTRADICTS THE SCOPE" WAS AN INSTRUMENT
+ARTIFACT. IT IS WITHDRAWN. Corrected and replicated 3 of 3 seeds: V8.50 CUTS TOTAL PARKING
+BY ~42% AND HALVES DISTINCT EXPOSURE. Do not quote session 6's park table again — it is
+struck through below.**
+
+Also: the 68 VELOCITY `WorkItemFailed` are explained, fixed and gone (68 -> 0). Suite
+606 -> 611 passing / 7 pending / 0 failing. Both pre-session-6 loose ends closed. Nothing
+deployed, no chain written to, `.env` line 69 unchanged.
+
+Commits: `8c60b64` (velocity), `e9d32b1` (diag_parked_growth), plus this session's harness
+commit. Pushed to `v8.1`.
+
+## ⛔ 1. THE 68 VELOCITY FAILURES — CAUSE FOUND, FIXED, CONFIRMED END TO END
+
+`MatrixKeeper._setStabilityLayers` called `activateLayer(uint8,bool)` on the StabilityFund.
+**That function was declared in `IStabilityFundKeeper` and implemented nowhere.**
+`git log -S activateLayer -- contracts/StabilityFund.sol` returns **zero commits** — the
+fund has never had it, in any version, since `a06aad4 V8.1 Elevator` introduced the caller.
+The fund's layer model is 1, 3 and 5 (`receiveLayer` requires exactly those). Layers 2 and 4
+do not exist in it. It was a call into a design V8.7 removed.
+
+Measured (`test_ab/diag_velocity.js`, both arms, byte-identical): call 1 OK, calls 2-5
+REVERTED "function selector was not recognized", `lastVelocityCheck` frozen from call 2,
+`deflationState` never leaving NORMAL on any call.
+
+**THE FAILED EVENT WAS NOT THE DAMAGE.** The revert discarded the whole of
+`_doVelocityCheck`, including the `tierVelocityGreen` writes that run BEFORE the deflation
+block. Harm band, per window: entries at/above `deflationThreshold` take the green branch and
+pass; entries below `velocityThreshold` are correctly red anyway; **entries BETWEEN the two
+mean the tier qualified for a green velocity gate and could not be given one.** That flag
+throttles auto-upgrades and is read by index.html, status.html, gate_status.js, rr_keeper.js
+and system_keeper.js.
+
+Deleted rather than implemented: `deflationState` is read by NOTHING — no contract branches
+on it, and there are zero hits for it, `DeflationStateChanged`, `activateLayer` or
+`STATE_SLOW` across the frontend, keeper and mainnet repos.
+
+**A/B re-run confirms it: V8.50 `workItemFailed` 68 -> 0, control unchanged at 68, and every
+other figure byte-identical to session 6. Only `totalGas` moved, down 8,868,812.** So the
+velocity bug was never confounding the park numbers — something else was.
+
+⚠ **LIVE V8.48 STILL HAS THIS.** Caller since V8.1, implementation never. Every deployment
+ever made carries it. Fixed for V8.50 only. Regression test: `test/V8_50_VelocityCheck.test.js`
+(G5 is a tripwire that goes red if the fund ever gains an `activateLayer`).
+
+## ⛔⛔ 2. THE PARK NUMBERS WERE WRONG. TWO DEFECTS, BOTH IN COUNTING, PULLING OPPOSITE WAYS.
+
+**DEFECT A — TWO DIFFERENT EVENTS SHARE THE NAME `MemberParked`.**
+`FigureEightMatrixV8.sol:98` — `MemberParked(address indexed member, uint256 shortfall)` —
+a member ENTERING THE PARKED QUEUE.
+`TierRouter.sol:372` — `MemberParked(address indexed member, uint8 tier, string reason)` —
+TierRouter reporting it could NOT PLACE someone ("insufficient funds", "autoReentry
+disabled"), emitted at :1458/:1496/:1499.
+
+Different signatures, so different topic0, so the "first interface that parses wins" rule was
+never violated — the damage was keying the bucket by `p.name`. Both landed in
+`ev["MemberParked"]`. `args[0]` is `member` in both, so every per-member tally kept working,
+silently, over a mixture. `args[1]` is `shortfall` in one and `tier` in the other, so
+`shortfallVolume` was summing across both.
+
+**DEFECT B — A QUEUE INSERTION THAT EMITS NO `MemberParked` AT ALL.**
+`MatrixLogicLib:1516` (idle-slot reclaim) pushes to `parkedMembers` and emits
+`SlotParkedIdle`, not `MemberParked`. The other six pushes (:527 :879 :906 :936 :977 :1937)
+are each paired 1:1 with an emit on the next line, so the exact identity is:
+
+> **queue insertions == MemberParked(matrix) + SlotParkedIdle**
+
+Defect A inflated V8.50 (57 router refusals per run); defect B deflated the control (18-20
+idle-slot parks per run). Opposite directions, different sizes per arm — which is the worst
+possible shape, because it manufactures a difference between arms out of nothing.
+
+### HOW IT WAS CAUGHT — THE QUEUE CENSUS, AND IT DISAGREED IMMEDIATELY
+
+`test_ab/replay.js` now takes `AB_CENSUS=1`: it enumerates both matrices' parked arrays
+before and after every keeper tick and diffs membership, so a member leaving the queue is
+observed **whether or not anything was emitted**. Exits are attributed to a rescue or an
+eviction only if a matching event fired in that same tick; everything else is recorded
+SILENT rather than guessed.
+
+First censused run: events said 139 park events / 71 distinct / 86% repeat. The census said
+71 members, 71 episodes, **max 1 episode per member, ZERO re-parks.** Two instruments,
+flatly opposed, same run. That contradiction was the whole finding — it was not explained,
+it was measured.
+
+⚠ It also refuted the guess this session STARTED with. Session 6's arithmetic gap
+(139 - 47 - 9 = 83 expected vs 26 actual) looked like ~57 silent exits through the four
+unemitting paths. **Measured `silentExitShare`: 0.0 on BOTH arms, all seeds.** The gap was
+never exits. It was the park count itself. Predicting the answer before the instrument ran
+would have sent the next session hunting a phantom.
+
+### ✅ THE CORRECTED NUMBERS — 3 OF 3 SEEDS, `AB_CAP=5`, `MATRIX_SIZE` 127, 288 members
+
+| | v849b (s1/s2/s3) | V8.50 (s1/s2/s3) |
+|---|---|---|
+| **queue insertions** | 142 / 140 / 142 | **82 / 82 / 80** |
+| — of which idle-slot | 18 / 20 / 20 | **0 / 0 / 0** |
+| router placement refusals | 12 / 11 / 11 | 57 / 51 / 51 |
+| distinct parkers | 130 / 129 / 132 | **71 / 67 / 64** |
+| repeat parkers (absolute) | 12 / 11 / 10 | 11 / 13 / 15 |
+| repeat-park share | .092 / .085 / .076 | .155 / .194 / .234 |
+| rescues | 88 / 84 / 86 | 47 / 47 / 45 |
+| evictions | 1 / 1 / 0 | **9 / 10 / 10** |
+| census episodes | 142 / 140 / 142 | 71 / 67 / 64 |
+| censusMissed | **0 / 0 / 0** | 11 / 15 / 16 |
+
+**READ IT THIS WAY:**
+
+1. **Total parking is NOT unchanged. It falls ~42%** (141 avg -> 81 avg). Session 6's
+   "~131 on both arms, every seed" was the artifact, and it was the entire basis for
+   "V8.50 does not fix the loop".
+2. **Distinct exposure halves** (130 avg -> 67 avg). That part session 6 had right.
+3. **V8.50 eliminates idle-slot parking outright** — 18-20 per run on the control, ZERO on
+   V8.50, all three seeds. Not previously noticed, and it is a real chunk of the reduction.
+4. **The repeat-park "inversion" is mostly a denominator effect.** The ABSOLUTE number of
+   repeat parkers is ~11 on the control and ~13 on V8.50 — the same handful of members. The
+   SHARE rises from 8.4% to 19.4% because the base halved. That is a far weaker claim than
+   "10% vs 86%", and it does not support "V8.50 concentrates parking onto repeat members".
+5. **The census/event reconciliation is now printed every run.** Control reconciles EXACTLY
+   (censusMissed 0). V8.50's gap of 11-16 is members who park and are rescued inside a single
+   `performUpkeep`, invisible between snapshots — a lower-bound artifact of the census, and it
+   tracks the repeat-parker count as it should. A NEGATIVE gap would mean an undiscovered
+   insertion path; treat it as a stop-work signal.
+
+### WHAT STILL STANDS, AND WHAT IS NOW OPEN
+
+- **The fund claims are untouched** — loans per rescue, loan volume, SF balance, all
+  unchanged by this correction. Item A holds.
+- **Evictions ~10x, replicated 3/3 (9/10/10 vs 1/1/0), STILL UNEXPLAINED.** This is now the
+  only surviving anomaly from session 6's list and it is the next thing to measure.
+- ⛔ **`withdrawableOf` at rescue DOES NOT REPLICATE, and the failure to replicate is itself
+  the observation.** Control: **$3.73 / $3.75 / $3.72** — remarkably tight. V8.50:
+  **$7.43 / $4.45 / $2.15** — a 3.5x spread across seeds, straddling the control.
+  Seed 1 alone would have read as "V8.50 rescues members with twice the support", which is
+  the tidy refutation of session 6's UNVERIFIED hypothesis and was nearly written up as one.
+  **It is not a result. Rule 5 caught it.** The variance itself needs explaining; sample
+  sizes (29-36 vs 84-88) are smaller but not small enough to obviously account for it.
+- **Router placement refusals jumped 11 -> 53** on V8.50. Unexplained, new, and it is the
+  number that was polluting the park count — so it deserves a look on its own terms rather
+  than as an accounting nuisance.
+
+## TRAPS ADDED THIS SESSION
+
+- **TWO CONTRACTS CAN DECLARE THE SAME EVENT NAME WITH DIFFERENT SIGNATURES, AND NOTHING
+  WILL TELL YOU.** Bucketing parsed logs by `p.name` merges them. It is the sibling of the
+  already-recorded double-count trap and it is harder to see, because the per-member
+  accessors keep working. Key by name PLUS arity, or by topic0.
+- **A NUMBER THAT LOOKS LIKE AN ANSWER, TWICE, FROM THE SAME BAD SOURCE.** Session 6 read
+  139 park events on V8.50 and 136 on the control and concluded "unchanged". Both were wrong,
+  by different amounts, and their agreeing was the artifact — two contaminated numbers that
+  happen to be close read as a robust null result.
+- **A DECLARED-BUT-UNIMPLEMENTED INTERFACE FUNCTION IS NOT A COMPILE ERROR.** Solidity
+  compiles it and it fails at the one moment the branch is reached. `activateLayer` survived
+  from V8.1 to now this way.
+- **CHECK EVERY WRITER OF A QUEUE, NOT EVERY EMITTER OF AN EVENT.** `grep "push"` on the
+  array found the seventh insertion path in one command; no amount of event archaeology would
+  have. Same lesson as `diag_parked_growth.js` this session — count the state change, not the
+  announcement of it.
+- **THE INSTRUMENT MUST PRINT ITS OWN RECONCILIATION.** The census and the event tally are
+  now compared in the result file on every run. Session 6 had both numbers available and no
+  line that put them side by side, so a 2x discrepancy sat in plain sight.
+- **`Select-String` filters are fine when the full result also lands in a FILE.** Used
+  deliberately this session for the seed 2/3 runs; the JSON was written regardless.
+
+## LOOSE ENDS — BOTH CLOSED
+
+- **`scripts/diag_parked_growth.js`** — the uncommitted change was a previous session's
+  finished work: it added `ParkedRescued` (the keeper's rescue, emitted by MatrixKeeper not
+  the matrix, and the DOMINANT exit) and `GhostDequeued` to the exit accounting. Verified all
+  three of its assumptions against the contracts before committing, then RAN it: **cumulative
+  net 108 vs live queue 106.** Section 6f's "212 against a live queue of 105" is explained and
+  closed. Committed as `e9d32b1`, plus it now REFUSES to start without `ADDRESSES_FILE` rather
+  than defaulting to the dead V8.47 addresses — that standing trap is closed too.
+  ⚠ That run reported **9 failed ranges** ("event-derived numbers are FLOORS"), while the SF
+  section reconciled EXACTLY against the contract counters. Those two statements are in
+  tension. Re-run with `WINDOW=3000` before quoting its park figures.
+- **Eight stray `.txt` captures** — moved to `archive/captures/`, not deleted. Root is clean;
+  `git status` shows only that untracked folder.
+
+## STATE OF THE TREE
+
+- `contracts/MatrixKeeper.sol` — `_setStabilityLayers` and its two call sites deleted, header
+  corrected, full write-up left where the function was. 21,377 bytes, 3,199 headroom.
+- `contracts/MatrixKeeperLib.sol` — the dead `activateLayer` declaration removed.
+- `test/V8_50_VelocityCheck.test.js` — NEW, G1-G5. Red before the fix for the right reason.
+- `test_ab/diag_velocity.js` — NEW, the velocity instrument, runs on both arms in seconds.
+- `test_ab/replay.js` — event-name collision fixed, `SlotParkedIdle` counted, `AB_CENSUS=1`
+  per-member queue census, census/event reconciliation printed every run. **Verified
+  UNPERTURBED: a no-census run reproduces the canonical result byte-for-byte ignoring wall
+  clock.** Censused runs write to `*_census.json` so they cannot overwrite the canonical pair.
+- `scripts/diag_parked_growth.js` — committed, plus the addresses-file guard.
+- `ab_results_session6/` — session 6's original result files, preserved before any re-run.
+
+## NEXT, IN ORDER
+
+1. **Explain the ~10x evictions (9/10/10 vs 1/1/0).** The last surviving session-6 anomaly.
+   The census already records every eviction with its member and tick; extend it to record
+   WHY discovery routed them to `WORK_EVICT_PARKED` rather than `WORK_PARKED_RESCUE` —
+   `loanEligible` false, deadline order, or queue position. Session 6's UNVERIFIED guess
+   (defect 6's deadline ordering reaching starved eviction work) is still unmeasured.
+2. **Explain the withdrawable-at-rescue variance** ($2.15-$7.43 across seeds against a
+   control that sits at $3.73 +/- $0.02). Until this is understood, no claim about member
+   "support at rescue" is safe in either direction.
+3. **Explain the router placement refusals, 11 -> 53.**
+4. **Model self-rescue at a non-zero rate.** `SELF_RESCUE_RATE = 0` is still the pathological
+   extreme by construction, and section 8 has said so since before session 6.
+5. **Gate measurements 3 and 4** — MatA parkers freed outright, E1 base coincidence. These
+   genuinely need a running system; that is what the private chain is FOR.
+6. **`maxItemsPerUpkeep`** — still vestigial at 20; the floor halts the batch first. Confirm
+   deliberately or lower to 10 on GAS-7's measured curve.
+
+---
+
+# ⬛ SESSION 6 STATE — 2026-08-18, LATER. ⚠ ITS PARK/LOOP TABLE IS WITHDRAWN — SEE SESSION 7.
 
 **GATE MEASUREMENTS 1 AND 2 ARE ANSWERED. `minGasPerItem` MOVED 3_500_000 -> 5_000_000 ON
 MEASUREMENT. NOTHING IS DEPLOYED, NO CHAIN WAS TOUCHED, `.env` LINE 69 IS UNCHANGED.**
@@ -45,9 +259,24 @@ and 0 keeper failures on both arms.
 healthier. ~40% fewer members are ever exposed to parking at all.** That is item A, measured
 against a running control rather than projected onto V8.48 data.
 
-### ⛔ AND THE LOOP CLAIM DOES NOT HOLD. DO NOT QUOTE THE SCOPE ON THIS.
+### ⛔⛔ WITHDRAWN 2026-08-18 BY SESSION 7 — EVERY NUMBER IN THIS SUBSECTION IS WRONG.
+###
+### The park counts below came from a bucket that merged TWO DIFFERENT EVENTS both named
+### `MemberParked` (the matrix's queue insertion, and TierRouter's placement REFUSAL), while
+### missing a third insertion path that emits `SlotParkedIdle` instead. The errors run in
+### OPPOSITE directions on the two arms, so the difference between them was manufactured.
+###
+### Corrected and replicated 3/3 seeds: queue insertions 142/140/142 (control) vs 82/82/80
+### (V8.50) — a ~42% REDUCTION, not "unchanged". Repeat-park share .092/.085/.076 vs
+### .155/.194/.234 — and the ABSOLUTE repeat-parker count is ~11 vs ~13, i.e. the same
+### handful of members over a halved base. See SESSION 7 at the top of this file.
+###
+### KEPT BELOW UNALTERED because the reasoning is the record of how it went wrong, and
+### because the FUND table above it is unaffected and still holds. Do not quote this table.
 
-**TOTAL PARK EVENTS ARE UNCHANGED** — ~131 on both arms, every seed. What changes is who
+### ~~AND THE LOOP CLAIM DOES NOT HOLD. DO NOT QUOTE THE SCOPE ON THIS.~~
+
+**~~TOTAL PARK EVENTS ARE UNCHANGED~~** — ~131 on both arms, every seed. What changes is who
 they land on:
 
 | | v849b | V8.50 |
