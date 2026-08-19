@@ -117,8 +117,30 @@ async function deployWorld(hre, size) {
   await optional(wiring, "setSelfFundedGracePeriod", () => keeper.setSelfFundedGracePeriod(0));
   await optional(wiring, "setEvictionGracePeriod", () => keeper.setEvictionGracePeriod(0));
 
-  return { owner, W1, devOps, sigs, usdc, cnova, treasury, sf, tr, pm, keeper, matA, matB,
-           matAAddr, matBAddr, pmAddr, sfAddr, trAddr, keeperAddr, size, wiring };
+  // ⛔ AB_FLOOR_BPS — PARAM 59 AS A SWEEP DIAL, SO THE OWNER DECISION IS MEASURED.
+  //
+  // insolvencyFloorBps is the ceiling in `loanHeadroom` = fee * bps / 10_000 - memberDebt,
+  // and session 8 measured it as the binding constraint on most V8.50 evictions: every
+  // refusal had memberDebt 0 and headroom a flat $3.40, so the ceiling refuses FIRST loans.
+  // The handoff's phase-6 section recommends 6800 and that was never taken.
+  //
+  // The point of putting it here rather than reasoning about it: "6800 would rescue the
+  // seven floor cases and cost the fund about $27" is ARITHMETIC ON ONE RUN, not a result.
+  // Rule 2 says run it. Unset leaves the contract default untouched, so every existing
+  // result stays reproducible byte-for-byte.
+  if (process.env.AB_FLOOR_BPS) {
+    await optional(wiring, `setInsolvencyFloorBps(${process.env.AB_FLOOR_BPS})`,
+      () => sf.setInsolvencyFloorBps(Number(process.env.AB_FLOOR_BPS)));
+  }
+
+  // keeperLib is RETURNED, not merely wired. It carries `rescueBpsFor` as an external pure
+  // function on BOTH arms, which is the only way an off-chain instrument can ask the SF
+  // rescue ladder the same question discovery asks WITHOUT re-implementing the ladder walk
+  // in JavaScript. A re-implementation would make the instrument a second hypothesis about
+  // the contract rather than a reading of it. Returning it deploys nothing extra and sends
+  // no transaction, so a replay is unperturbed by this line.
+  return { owner, W1, devOps, sigs, usdc, cnova, treasury, sf, tr, pm, keeper, keeperLib,
+           matA, matB, matAAddr, matBAddr, pmAddr, sfAddr, trAddr, keeperAddr, size, wiring };
 }
 
 /**

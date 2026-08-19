@@ -15,6 +15,11 @@
  *                        ab_result_<arm>_s<seed>_census.json so it cannot overwrite the
  *                        canonical pair. Costs roughly 2x wall clock. See the big comment
  *                        at `doCensus`, and read it before trusting a silent-exit count.
+ * Optional: AB_EVICT=1   the ROUTING instrument (session 8). Decodes performData every tick
+ *                        — the exact work list discovery produced — and derives, for every
+ *                        parked member in it, WHICH of _triageParked's four eviction
+ *                        branches fired. Implies AB_CENSUS. Writes to
+ *                        ab_result_<arm>_s<seed>_census_evict.json. See `doEvict`.
  *
  * ⛔ WHAT IS MEASURED, AND WHY THESE AND NOT TOTALS.
  *   Four of the defects between these builds change KEEPER THROUGHPUT, not economics
@@ -140,8 +145,209 @@ async function main() {
   const dials = {
     maxItemsPerUpkeep: String(await w.keeper.maxItemsPerUpkeep()),
     minGasPerItem: await (async () => { try { return String(await w.keeper.minGasPerItem()); } catch { return "ABSENT"; } })(),
+    // READ BACK, not recorded from intent — AB_FLOOR_BPS asks the SF to move PARAM 59 and
+    // this is the only evidence it did. Same reason the cap is read back: the seed-1
+    // equalised pair came back byte-identical and nothing could tell "the dial did not
+    // matter" from "the setter never fired".
+    insolvencyFloorBps: await (async () => { try { return String(await w.sf.insolvencyFloorBps()); } catch { return "ABSENT"; } })(),
   };
-  console.log(`  dials in force: maxItemsPerUpkeep=${dials.maxItemsPerUpkeep} minGasPerItem=${dials.minGasPerItem}`);
+  console.log(`  dials in force: maxItemsPerUpkeep=${dials.maxItemsPerUpkeep} minGasPerItem=${dials.minGasPerItem} ` +
+    `insolvencyFloorBps=${dials.insolvencyFloorBps}`);
+
+  /**
+   * ══ AB_EVICT=1 — THE ROUTING INSTRUMENT (session 8) ════════════════════════════════════
+   *
+   * THE QUESTION. The corrected A/B leaves exactly one unexplained anomaly: V8.50 evicts
+   * 9/10/10 members per run against the control's 1/1/0. Session 6 guessed defect 6's
+   * deadline-ordered discovery was finally reaching eviction work V8.49 starved. That guess
+   * is UNVERIFIED and this session must not inherit it — the last three tidy explanations
+   * this harness produced were all wrong, and the census that killed them worked because it
+   * read STATE instead of reasoning about it.
+   *
+   * WHY EVENTS CANNOT ANSWER IT. `ParkedMemberEvicted(matrix, member, totalWithdrawn)`
+   * carries NO reason. The reason is `_triageParked`'s uint8, which is an INTERNAL return
+   * inside a view library — it is never emitted, never stored, and never reaches a log.
+   * An event-only instrument can count evictions forever and never say why one happened.
+   *
+   * WHAT THIS READS INSTEAD, AND WHY IT IS NOT ARCHAEOLOGY.
+   *
+   *   1. THE DECISION ITSELF, FOR FREE. `checkUpkeep` returns
+   *      `performData = abi.encode(WorkItem[])` and `WorkItem` is
+   *      `(uint8 workType, uint8 tierIndex, address addr1, address addr2)` — declared
+   *      field-order-load-bearing at MatrixKeeperLib:175. The replay already holds that
+   *      blob; decoding it costs ZERO chain calls and yields the exact routing discovery
+   *      chose: who went to WORK_EVICT_PARKED (6) and who to WORK_PARKED_RESCUE (4).
+   *      That half of the answer needs no derivation at all.
+   *
+   *   2. THE BRANCH, DERIVED FROM THE SAME INPUTS THE CONTRACT USED. `_triageParked` is
+   *      four ordered tests over public view functions:
+   *         GHOST  isInMatrix(member) OR partner.isActiveInMatrix(member)
+   *         RATIO  withdrawn*10_000/(withdrawn+withdrawable) > rescueRatioBps
+   *         LADDER rescueBpsFor(thresholds, ladder, reserve+withdrawable, PRICE) == max
+   *         FLOOR  advance > 0 AND NOT loanEligibleFor(member, tier, advance)
+   *      Every input is readable, and the ladder walk is not re-implemented — it is asked
+   *      of the deployed `MatrixKeeperLib.rescueBpsFor`, which is `external pure` on BOTH
+   *      arms. Only the ORDER of the four tests is JavaScript, and the order is checked
+   *      against the contract's own routing on every single item (see 4).
+   *
+   *   3. ⛔ THE ONE PLACE THE ARMS DIFFER IS MEASURED, NOT ASSUMED. `PRICE` above is the
+   *      denominator, and it is the whole of V8.50 item A inside this function:
+   *         v849b  MatrixKeeperLib:432   priceBasis = fee
+   *         V8.50  MatrixKeeperLib:429   priceBasis = isMatrixA ? fee*5_000/10_000 : fee
+   *      Hard-coding "this arm uses that one" would smuggle a hypothesis into the
+   *      instrument. So BOTH are computed for every item and BOTH are scored against the
+   *      contract's actual routing. Which basis reconciles is then a READING of the build,
+   *      and if the expected one does not reconcile, that is a finding about item A rather
+   *      than a silently wrong reason column.
+   *
+   *   4. ⛔ AND IT PRINTS ITS OWN RECONCILIATION, WHICH IS THE POINT. For every parked work
+   *      item the contract produced, the derived reason must agree with the route taken:
+   *      routed to EVICT => reason != NONE; routed to RESCUE => reason == NONE. Every
+   *      disagreement lands in `mismatches`. A NON-EMPTY mismatch list VOIDS the reason
+   *      column — do not quote a single figure out of it until that list is empty. This is
+   *      the trap session 7 wrote down: two contaminated numbers that happen to agree read
+   *      as a robust result, and nothing catches it unless the instrument is made to check
+   *      itself in the file, every run.
+   *
+   * WHAT IT DOES NOT MEASURE, STATED SO IT IS NOT READ IN. This sees only members
+   * discovery REACHED. With `AB_CAP=5` the batch fills, and `_scanParked` walks the queue
+   * from index 0 and stops at the cap — so members deeper in the queue were never triaged
+   * by the contract and are absent here. That is exactly the queue-position/starvation
+   * hypothesis, so it is recorded separately and NOT inferred: `batches` keeps the cap, the
+   * item count, the parked-queue lengths and the deepest queue index reached per tick.
+   *
+   * COST. Two decode-only operations per tick plus roughly six eth_calls per PARKED item in
+   * the batch — at most `cap` of them. Reads mine no blocks and move no clock.
+   */
+  const doEvict  = process.env.AB_EVICT === "1";
+  // Indexed BY workType — the constants at MatrixKeeper:155-164. Used by the WorkItemFailed
+  // tally at the end AND by AB_EVICT's per-batch histogram, so it is declared before both.
+  const WORK_NAMES = ["VELOCITY", "GHOST", "RECLAIM", "CHAIN_LINK", "PARKED_RESCUE",
+                      "VELOCITY_GATE", "EVICT_PARKED", "DISTRIBUTE_CW", "FORCE_ROTATE", "ADVANCE_EPOCH"];
+  const WORKITEM_ABI = ["tuple(uint8 workType,uint8 tierIndex,address addr1,address addr2)[]"];
+  const REASON_NAMES = ["NONE", "GHOST", "RATIO", "LADDER", "FLOOR"];
+  const routedItems = [];      // one row per parked work item discovery produced
+  const batches     = [];      // one row per tick: what discovery could and could not reach
+  const mismatches  = [];      // derived reason vs the route actually taken — MUST stay empty
+  const evictCfgErr = [];
+  const queueRows   = [];      // the POPULATION census — see below
+
+  /**
+   * ⛔ AB_QUEUE_EVERY — WHY THE BATCH IS NOT THE POPULATION, AND WHY THIS EXISTS.
+   *
+   * Run 1 of the routing instrument answered "why were these nine evicted" and immediately
+   * raised a question it structurally CANNOT answer. Discovery reached queue indices 0-2
+   * while the queue behind them was 26-31 deep, so the batch rows describe the HEAD of the
+   * queue and nothing else. Worse, the two arms park in different halves of the pair — the
+   * control's queue ends 41 in MatA / 12 in MatB, V8.50's ends 2 / 24 — and the control's
+   * MatB members were never routed at all, so a batch-only instrument has ZERO observations
+   * of the one cohort the comparison turns on.
+   *
+   * Reading a population difference off one arm's head-of-queue would be the session-6
+   * mistake exactly: a real number, from a source that cannot see the thing being claimed.
+   *
+   * So every Nth tick this triages the ENTIRE parked queue of both matrices — the same
+   * four-branch walk, on members discovery never looked at. N is a cost dial, not a
+   * finding: at cap 5 the queue is ~30 deep and a per-tick full census would be ~6x the
+   * run. Sampling every 5th tick is stated here so a count from this block is never quoted
+   * as if it were a per-tick total. 0 disables it.
+   */
+  const queueEvery = doEvict ? Number(process.env.AB_QUEUE_EVERY ?? 5) : 0;
+
+  /** The dials `_triageParked` reads, taken from the contract, tolerantly. */
+  let ecfg = null;
+  if (doEvict) {
+    const readArray = async (fn) => {
+      const out = [];
+      for (let i = 0; i < 64; i++) { try { out.push(BigInt(await fn(i))); } catch { break; } }
+      return out;
+    };
+    const readOne = async (label, fn, fallback) => {
+      try { return BigInt(await fn()); }
+      catch (e) { evictCfgErr.push(`${label}: ${(e.shortMessage || e.message || "").slice(0, 80)}`); return fallback; }
+    };
+    ecfg = {
+      fee:               await readOne("ENTRY_FEE", () => w.matA.ENTRY_FEE(), FEE),
+      rescueRatioBps:    await readOne("rescueRatioBps", () => w.keeper.rescueRatioBps(), 7_000n),
+      crossingBufferBps: await readOne("crossingBufferBps", () => w.keeper.crossingBufferBps(), 0n),
+      thresholds:        await readArray((i) => w.keeper.sfRescueThresholds(i)),
+      ladder:            await readArray((i) => w.keeper.sfRescueBpsLadder(i)),
+      isA: {},
+    };
+    for (const [addr, m] of [[w.matAAddr, w.matA], [w.matBAddr, w.matB]]) {
+      ecfg.isA[addr.toLowerCase()] = await readOne("isMatrixA", async () => (await m.isMatrixA()) ? 1n : 0n, 0n) === 1n;
+    }
+    console.log(`  evict instrument: fee=${ecfg.fee} rescueRatioBps=${ecfg.rescueRatioBps} ` +
+      `buffer=${ecfg.crossingBufferBps} ladderRungs=${ecfg.thresholds.length}` +
+      (evictCfgErr.length ? `  ⚠ ${evictCfgErr.length} config read(s) failed` : ""));
+  }
+
+  /**
+   * `_triageParked` re-walked off-chain under ONE price basis. Returns the branch index,
+   * the numbers behind it, and nothing inferred: a call that reverts is recorded as an
+   * error, never coerced to a passing test — a silently-zero withdrawable would read as
+   * poverty, which is one of the four answers being counted.
+   */
+  async function deriveReason(matAddr, member, tierIdx, priceBasis) {
+    const m = matAddr.toLowerCase() === w.matAAddr.toLowerCase() ? w.matA : w.matB;
+    const out = { reason: 0, err: null };
+    try {
+      if (await m.isInMatrix(member)) { out.reason = 1; return out; }
+      const partner = await m.partner();
+      if (partner !== hre.ethers.ZeroAddress) {
+        const pm2 = w.matA.attach(partner);
+        if (await pm2.isActiveInMatrix(member)) { out.reason = 1; return out; }
+      }
+      const withdrawable = BigInt(await m.withdrawableOf(member));
+      const withdrawn    = BigInt(await m.getMemberTotalWithdrawn(member));
+      const claimableEver = withdrawn + withdrawable;
+      const withdrawRatio = claimableEver > 0n ? (withdrawn * 10_000n) / claimableEver : 0n;
+      out.withdrawable = withdrawable.toString();
+      out.withdrawn    = withdrawn.toString();
+      out.withdrawRatio = Number(withdrawRatio);
+      if (withdrawRatio > ecfg.rescueRatioBps) { out.reason = 2; return out; }
+
+      const reserve = BigInt(await m.crossingReserveOf(member));
+      const effectiveContrib = reserve + withdrawable;
+      out.reserve = reserve.toString();
+      out.effectiveContrib = effectiveContrib.toString();
+      out.priceBasis = priceBasis.toString();
+      out.wBps = priceBasis > 0n ? Number((effectiveContrib * 10_000n) / priceBasis) : null;
+
+      // Asked of the DEPLOYED library, not re-implemented here.
+      const sfBps = BigInt(await w.keeperLib.rescueBpsFor(ecfg.thresholds, ecfg.ladder,
+                                                         effectiveContrib, priceBasis));
+      const MAXU = (1n << 256n) - 1n;
+      if (sfBps === MAXU) { out.reason = 3; return out; }
+      out.sfBps = sfBps.toString();
+
+      const maxShortfall = priceBasis > effectiveContrib ? priceBasis - effectiveContrib : 0n;
+      let sfShare = (priceBasis * sfBps) / 10_000n;
+      if (sfShare > maxShortfall) sfShare = maxShortfall;
+      out.sfShare = sfShare.toString();
+
+      const advance = sfShare + (ecfg.fee * ecfg.crossingBufferBps) / 10_000n;
+      out.advance = advance.toString();
+      if (advance > 0n) {
+        // ⛔ RECORD WHAT THE FLOOR ACTUALLY COMPARED, NOT JUST THAT IT REFUSED.
+        //    loanEligibleFor reduces to `advance <= loanHeadroom(member, tier)`, and
+        //    loanHeadroom is `fee * insolvencyFloorBps / 10_000 - memberDebt` — a CEILING
+        //    (PARAM 59) minus EXISTING DEBT. Those are two completely different stories
+        //    about the same refusal: a ceiling that is structurally below what this class
+        //    of member ever needs, versus a member who has borrowed their way up to it.
+        //    Reading only the boolean makes them indistinguishable, and picking one to
+        //    believe is the thing rule 1 forbids. Both numbers, every time.
+        try { out.owed = String(await w.sf.memberDebtOf(member)); } catch { out.owed = null; }
+        try { out.headroom = String(await w.sf.loanHeadroom(member, tierIdx)); } catch { out.headroom = null; }
+        if (!(await w.sf.loanEligibleFor(member, tierIdx, advance))) { out.reason = 4; return out; }
+      }
+      return out;                       // EVICT_NONE — discovery should be rescuing them
+    } catch (e) {
+      out.err = (e.shortMessage || e.message || "").slice(0, 120);
+      out.reason = null;                // unknown, and said so
+      return out;
+    }
+  }
 
   // ⛔ THE LIBRARY INTERFACES ARE NOT OPTIONAL — THE FIRST RUN MISSED EVERY LOAN WITHOUT THEM.
   //    RescueLoanIssued, SelfRescue and CoPayRescue are all emitted from MatrixLogicLib
@@ -211,7 +417,8 @@ async function main() {
    * blocks and move no clock, so the replay is unperturbed — which is asserted, not assumed:
    * run once with AB_CENSUS unset and the result file must stay byte-identical.
    */
-  const doCensus = process.env.AB_CENSUS === "1";
+  // AB_EVICT needs the pre-tick queue snapshot for queue-position, so it implies the census.
+  const doCensus = process.env.AB_CENSUS === "1" || doEvict;
   const episodes = new Map();      // member -> [{ parkTs, exitTs, how, wdAtPark, wdAtExit }]
   const openEp   = new Map();      // member -> the currently-open episode object
   const censusErr = [];
@@ -231,7 +438,10 @@ async function main() {
           // withdrawableOf is the "support" figure the UNVERIFIED hypothesis is about.
           // Read it here, BEFORE the tick, so a rescue's reading is genuinely pre-rescue.
           let wd = 0n; try { wd = await m.withdrawableOf(addr); } catch {}
-          seen.set(addr, { mat: tag, wd });
+          // `idx` is the member's POSITION in that matrix's parked array at this instant.
+          // _scanParked walks it from 0 and stops at cfg.maxItems, so position is the whole
+          // of the starvation hypothesis and must be recorded, not reconstructed later.
+          seen.set(addr, { mat: tag, matAddr: await m.getAddress(), idx: i, count, wd });
         } catch (e) {
           // Do not silently shorten the queue: a truncated snapshot would read as members
           // exiting, which is the exact signal being measured.
@@ -251,7 +461,10 @@ async function main() {
   function reconcile(snap, ts, rescued, evicted) {
     for (const [m, info] of snap) {
       if (!openEp.has(m)) {
-        const ep = { parkTs: ts, exitTs: null, how: null, wdAtPark: info.wd.toString(), wdAtExit: null };
+        // `mat` is carried on the EPISODE — session 8. Without it every withdrawable
+        // median here is pooled across two populations that do not overlap, and the
+        // pooled median is not a statistic about anybody. See `atRescueByMatrix`.
+        const ep = { parkTs: ts, exitTs: null, how: null, mat: info.mat, wdAtPark: info.wd.toString(), wdAtExit: null };
         openEp.set(m, ep);
         if (!episodes.has(m)) episodes.set(m, []);
         episodes.get(m).push(ep);
@@ -292,7 +505,94 @@ async function main() {
         if (!needed || data === "0x") continue;
         // BEFORE. Also catches any parking done by the register txs since the last tick,
         // so an episode that opens and closes off-tick is still seen opening.
-        if (doCensus) reconcile(await snapshot(), await nowTs(), new Set(), new Set());
+        let preSnap = null;
+        if (doCensus) { preSnap = await snapshot(); reconcile(preSnap, await nowTs(), new Set(), new Set()); }
+
+        // ⛔ THE ROUTING CAPTURE. Runs on the SAME pre-tick state discovery ran on — after
+        //    the before-snapshot, before performUpkeep. Reading a member's balances AFTER
+        //    the tick that rescued or evicted them would describe the outcome and be
+        //    written up as the cause.
+        if (doEvict) {
+          let items = null;
+          try { items = hre.ethers.AbiCoder.defaultAbiCoder().decode(WORKITEM_ABI, data)[0]; }
+          catch (e) { evictCfgErr.push(`decode performData tick ${keeperTicks}: ${(e.shortMessage || e.message || "").slice(0, 80)}`); }
+          if (items) {
+            const parked = [];
+            for (let k = 0; k < items.length; k++) {
+              const wt = Number(items[k].workType);
+              if (wt === 4 || wt === 6) parked.push({ k, wt, item: items[k] });
+            }
+            const hist = {};
+            for (const it of items) { const nme = WORK_NAMES[Number(it.workType)] || `type${it.workType}`; hist[nme] = (hist[nme] || 0) + 1; }
+            let deepest = -1;
+            for (const p of parked) {
+              const member  = p.item.addr2;
+              const matAddr = p.item.addr1;
+              const tierIdx = Number(p.item.tierIndex);
+              const pos     = preSnap ? preSnap.get(member) : null;
+              if (pos && pos.idx > deepest) deepest = pos.idx;
+
+              // Both price bases, every item. Which one reconciles is a reading of the
+              // build, not an assumption about which arm this is — see the header.
+              const feeBasis   = ecfg.fee;
+              const crossBasis = ecfg.isA[matAddr.toLowerCase()] ? (ecfg.fee * 5_000n) / 10_000n : ecfg.fee;
+              const byFee   = await deriveReason(matAddr, member, tierIdx, feeBasis);
+              const byCross = crossBasis === feeBasis ? byFee
+                            : await deriveReason(matAddr, member, tierIdx, crossBasis);
+
+              const routedEvict = p.wt === 6;
+              const agrees = (r) => r.reason !== null && (routedEvict ? r.reason !== 0 : r.reason === 0);
+              const row = {
+                tick: keeperTicks, batchIdx: p.k, batchLen: items.length,
+                route: routedEvict ? "EVICT" : "RESCUE",
+                member, matrix: ecfg.isA[matAddr.toLowerCase()] ? "A" : "B", tierIdx,
+                queueIdx: pos ? pos.idx : null, queueLen: pos ? pos.count : null,
+                reasonByFee:   byFee.reason   === null ? "ERR" : REASON_NAMES[byFee.reason],
+                reasonByCross: byCross.reason === null ? "ERR" : REASON_NAMES[byCross.reason],
+                agreesByFee: agrees(byFee), agreesByCross: agrees(byCross),
+                detail: byCross,
+              };
+              routedItems.push(row);
+              if (!row.agreesByFee && !row.agreesByCross) {
+                mismatches.push({ tick: keeperTicks, member, route: row.route,
+                                  reasonByFee: row.reasonByFee, reasonByCross: row.reasonByCross,
+                                  err: byCross.err || byFee.err || null });
+              }
+            }
+            batches.push({
+              tick: keeperTicks, cap: Number(dials.maxItemsPerUpkeep), items: items.length,
+              saturated: items.length >= Number(dials.maxItemsPerUpkeep),
+              parkedItems: parked.length, deepestQueueIdxReached: deepest,
+              queueLenA: preSnap ? [...preSnap.values()].filter((v) => v.mat === "A").length : null,
+              queueLenB: preSnap ? [...preSnap.values()].filter((v) => v.mat === "B").length : null,
+              byType: hist,
+            });
+          }
+
+          // THE POPULATION, on the same pre-tick state — including everyone discovery
+          // never reached. Crossing basis only: the batch rows above already establish
+          // which basis this build prices on, so asking twice here buys nothing.
+          if (queueEvery && keeperTicks % queueEvery === 0 && preSnap) {
+            for (const [member, info] of preSnap) {
+              const isA = ecfg.isA[info.matAddr.toLowerCase()];
+              const basis = isA ? (ecfg.fee * 5_000n) / 10_000n : ecfg.fee;
+              // tierIdx 0 BY CONSTRUCTION, not by assumption: world.js registers exactly
+              // one tier. If this fixture ever gains a second, the queue census needs the
+              // member's tier read from the router — the batch rows take theirs from the
+              // WorkItem and would stay correct while this block silently would not.
+              const d = await deriveReason(info.matAddr, member, 0, basis);
+              queueRows.push({
+                tick: keeperTicks, member, matrix: isA ? "A" : "B",
+                queueIdx: info.idx, queueLen: info.count,
+                reason: d.reason === null ? "ERR" : REASON_NAMES[d.reason],
+                reserve: d.reserve ?? null, withdrawable: d.withdrawable ?? null,
+                effectiveContrib: d.effectiveContrib ?? null, wBps: d.wBps ?? null,
+                sfShare: d.sfShare ?? null, advance: d.advance ?? null,
+                owed: d.owed ?? null, headroom: d.headroom ?? null,
+              });
+            }
+          }
+        }
         const rc = await (await w.keeper.performUpkeep(data, { gasLimit: REG_GAS })).wait();
         parseAll(rc); totalGas += rc.gasUsed;
         if (doCensus) {
@@ -352,8 +652,7 @@ async function main() {
   // (MatrixKeeper:448), so tally it: a cascade of PARKED_RESCUE failures means something
   // very different from a steady drip of RECLAIM ones, and "16 failures" alone cannot tell
   // them apart — which is defect 8's whole complaint about this event.
-  const WORK_NAMES = ["VELOCITY", "GHOST", "RECLAIM", "CHAIN_LINK", "PARKED_RESCUE",
-                      "VELOCITY_GATE", "EVICT_PARKED", "DISTRIBUTE_CW", "FORCE_ROTATE", "ADVANCE_EPOCH"];
+  // (WORK_NAMES is declared above the replay loop — AB_EVICT's batch histogram needs it.)
   const failedByType = {};
   for (const a of ev["WorkItemFailed"] || []) {
     const wt = Number(field(a, "workType", 0));
@@ -379,6 +678,7 @@ async function main() {
     const exitsByHow = { rescued: 0, evicted: 0, silent: 0 };
     const reParkGaps = [];        // seconds between an exit and that member's NEXT park
     const wdAtRescue = [];        // withdrawable at the tick a rescue took them out
+    const wdAtRescueBy = { A: [], B: [] };   // ...and the same, NOT pooled. See below.
     const wdAtSilentExit = [];
     const wdAtFirstPark = [], wdAtRePark = [];
     const epCounts = [];
@@ -390,7 +690,7 @@ async function main() {
         if (ep.exitTs === null) { stillParked++; return; }
         exitsByHow[ep.how] = (exitsByHow[ep.how] || 0) + 1;
         const wd = Number(ep.wdAtExit || 0) / 1e6;
-        if (ep.how === "rescued") wdAtRescue.push(wd);
+        if (ep.how === "rescued") { wdAtRescue.push(wd); if (wdAtRescueBy[ep.mat]) wdAtRescueBy[ep.mat].push(wd); }
         if (ep.how === "silent")  wdAtSilentExit.push(wd);
         (i === 0 ? wdAtFirstPark : wdAtRePark).push(Number(ep.wdAtPark || 0) / 1e6);
         const next = eps[i + 1];
@@ -411,8 +711,30 @@ async function main() {
       // The direct test of "cheaper rescues return a member with less support".
       timeToRePark: { n: reParkGaps.length, medianSecs: median(reParkGaps),
                       minSecs: reParkGaps.length ? Math.min(...reParkGaps) : null },
+      /**
+       * ⛔⛔ `atRescue` IS A POOLED MEDIAN OVER A BIMODAL MIXTURE. DO NOT QUOTE IT ON THE
+       *     V8.50 ARM. Session 8, replicated 3/3:
+       *
+       *       control  rescues 88/84/86 members and 100% of them are MatA -> ONE mode,
+       *                and the median is correspondingly steady: $3.73 / $3.75 / $3.72.
+       *       V8.50    rescues a MIXTURE, 40% / 49% / 50% MatA. The two modes are ~$0.25
+       *                (MatA, holding a crossing reserve instead of withdrawable) and
+       *                ~$7.5 (MatB, holding a carried balance and no reserve). With the
+       *                mix sitting on 50%, the 50th percentile FLIPS BETWEEN THE MODES:
+       *                $7.43 / $4.45 / $2.15.
+       *
+       *     That 3.5x spread was open item 2 and it is not variance in member support. It
+       *     is a median of a two-humped distribution taken where the humps are equal, and
+       *     it describes no member in either hump. The split below is the readable form;
+       *     the pooled figure is kept only so the old number stays reconstructable.
+       */
       withdrawableUSD: {
-        atRescue:     { n: wdAtRescue.length,     median: median(wdAtRescue) },
+        atRescue:     { n: wdAtRescue.length,     median: median(wdAtRescue),
+                        WARNING: "POOLED ACROSS MatA+MatB — bimodal on the V8.50 arm. Read atRescueByMatrix." },
+        atRescueByMatrix: {
+          A: { n: wdAtRescueBy.A.length, median: median(wdAtRescueBy.A) },
+          B: { n: wdAtRescueBy.B.length, median: median(wdAtRescueBy.B) },
+        },
         atSilentExit: { n: wdAtSilentExit.length, median: median(wdAtSilentExit) },
         atFirstPark:  { n: wdAtFirstPark.length,  median: median(wdAtFirstPark) },
         atRePark:     { n: wdAtRePark.length,     median: median(wdAtRePark) },
@@ -445,6 +767,117 @@ async function main() {
     };
   }
 
+  /**
+   * ══ AB_EVICT AGGREGATION ══════════════════════════════════════════════════════════════
+   *
+   * ⛔ READ `reconciliation` BEFORE ANY OTHER FIELD IN THIS BLOCK.
+   *
+   * `reasonHistogram` is only worth reading if the derivation agrees with the contract on
+   * EVERY item. `agreeByCross` / `agreeByFee` say how many of the N parked work items each
+   * price basis explains; `mismatches` lists the items NEITHER explains. A non-empty
+   * `mismatches` means the four-branch walk here is not the walk the contract took, and the
+   * whole reason column is void — it does not mean "mostly right". Session 6's park table
+   * was 95% of a number and 100% wrong.
+   *
+   * `basisThatReconciles` is the item-A finding stated as a measurement: v849b should be
+   * explained by the FEE basis and V8.50 by the CROSSING basis, and the file says which one
+   * actually did rather than assuming it from the arm name.
+   */
+  let evictBlock = null;
+  if (doEvict) {
+    const evicted  = routedItems.filter((r) => r.route === "EVICT");
+    const rescued  = routedItems.filter((r) => r.route === "RESCUE");
+    const histOf = (rows, key) => rows.reduce((acc, r) => { acc[r[key]] = (acc[r[key]] || 0) + 1; return acc; }, {});
+    const nums = (rows, f) => rows.map(f).filter((x) => x !== null && x !== undefined);
+    const stat = (xs) => xs.length
+      ? { n: xs.length, min: Math.min(...xs), max: Math.max(...xs), median: median(xs) }
+      : { n: 0, min: null, max: null, median: null };
+    const agreeByFee   = routedItems.filter((r) => r.agreesByFee).length;
+    const agreeByCross = routedItems.filter((r) => r.agreesByCross).length;
+    evictBlock = {
+      reconciliation: {
+        parkedWorkItems: routedItems.length,
+        agreeByFee, agreeByCross,
+        basisThatReconciles: routedItems.length === 0 ? null
+          : agreeByCross === routedItems.length && agreeByFee === routedItems.length ? "BOTH (indistinguishable in this run)"
+          : agreeByCross === routedItems.length ? "CROSSING COST (item A priced)"
+          : agreeByFee   === routedItems.length ? "ENTRY FEE (unpriced)"
+          : "NEITHER — THE REASON COLUMN IS VOID",
+        mismatchCount: mismatches.length,
+        mismatches: mismatches.slice(0, 20),
+        configReadErrors: evictCfgErr.slice(0, 20),
+        note: "mismatchCount MUST be 0. Anything else voids reasonHistogram entirely — the " +
+              "derived branch order is then not the contract's branch order, and a partly " +
+              "correct reason column reads exactly like a correct one.",
+      },
+      // THE ANSWER, if and only if the reconciliation above is clean.
+      routedToEvict: evicted.length,
+      routedToRescue: rescued.length,
+      reasonHistogram: { byCrossingBasis: histOf(evicted, "reasonByCross"),
+                         byFeeBasis:      histOf(evicted, "reasonByFee") },
+      // Discovery only triages what it REACHES. These say how much of the queue it reached,
+      // so "starved by queue position" is measured rather than argued.
+      reach: {
+        batches: batches.length,
+        saturatedBatches: batches.filter((b) => b.saturated).length,
+        parkedItemsPerBatch: stat(batches.map((b) => b.parkedItems)),
+        deepestQueueIdxReached: stat(batches.map((b) => b.deepestQueueIdxReached).filter((x) => x >= 0)),
+        queueLenAtTick: stat(batches.map((b) => (b.queueLenA || 0) + (b.queueLenB || 0))),
+      },
+      queuePosition: { ofEvicted: stat(nums(evicted, (r) => r.queueIdx)),
+                       ofRescued: stat(nums(rescued, (r) => r.queueIdx)) },
+      matrixOfEvicted: histOf(evicted, "matrix"),
+      matrixOfRescued: histOf(rescued, "matrix"),
+
+      /**
+       * ⛔ THE POPULATION BLOCK. Read `sampledEveryNTicks` before any count here: these are
+       * MEMBER-TICK OBSERVATIONS of a sampled queue, not members and not events. The same
+       * member sitting in the queue for twenty ticks contributes four rows at N=5. So the
+       * shares and the medians are the readable quantities; the raw counts are not a
+       * population size and must never be quoted as one.
+       *
+       * `reserveZeroShare` is the column this exists for. `_triageParked`'s numerator is
+       * `crossingReserveOf + withdrawableOf`, and a member holding no crossing reserve is a
+       * completely different case from a member holding the carve — but both look identical
+       * in every event this system emits.
+       */
+      population: (() => {
+        if (!queueRows.length) return { sampledEveryNTicks: queueEvery, observations: 0 };
+        const grp = {};
+        for (const r of queueRows) {
+          const k = r.matrix;
+          (grp[k] ||= { observations: 0, reasons: {}, reserveZero: 0, wBps: [], reserveUSD: [], withdrawableUSD: [] });
+          const g = grp[k];
+          g.observations++;
+          g.reasons[r.reason] = (g.reasons[r.reason] || 0) + 1;
+          if (r.reserve !== null) { if (BigInt(r.reserve) === 0n) g.reserveZero++; g.reserveUSD.push(Number(r.reserve) / 1e6); }
+          if (r.withdrawable !== null) g.withdrawableUSD.push(Number(r.withdrawable) / 1e6);
+          if (r.wBps !== null && r.wBps !== undefined) g.wBps.push(r.wBps);
+        }
+        const out = { sampledEveryNTicks: queueEvery, observations: queueRows.length, byMatrix: {} };
+        for (const [k, g] of Object.entries(grp)) {
+          out.byMatrix[k] = {
+            observations: g.observations,
+            reasons: g.reasons,
+            reserveZeroShare: g.reserveUSD.length ? +(g.reserveZero / g.reserveUSD.length).toFixed(4) : null,
+            medianReserveUSD: median(g.reserveUSD),
+            medianWithdrawableUSD: median(g.withdrawableUSD),
+            medianWBps: median(g.wBps),
+          };
+        }
+        return out;
+      })(),
+
+      // Every routed item and every batch, in full — a histogram must never be the only
+      // record of a decision. These are FILE-ONLY; the console prints counts (see below),
+      // because a 1,500-line paste is how a diagnostic gets skimmed instead of read.
+      evictions: evicted,
+      items: routedItems,
+      queueCensus: queueRows,
+      batches,
+    };
+  }
+
   const rescues = n("ParkedRescued");
   const loans = n("RescueLoanIssued");
   const coPay = ev["CoPayRescue"] || [];
@@ -460,6 +893,105 @@ async function main() {
   //    the only terms this fixture actually produces, and it needs no control — it is a
   //    within-arm count.
   const unfundedRescues = Math.max(0, rescues - loans);
+
+  /**
+   * ══ LOANS PER MEMBER — THE OWNER'S ACTUAL BAR ═════════════════════════════════════════
+   *
+   * The design intent, owner-stated 2026-08-19: **members are not meant to cross forever.
+   * They are meant to get ONE OR TWO LOANS, and to be evicted if they never invite
+   * anyone.** So "how many members were evicted" was never the question. The question is
+   * how many loans a member actually receives before that happens — and if the answer is
+   * ZERO, the floor is refusing people the system intended to carry, whatever the eviction
+   * count looks like.
+   *
+   * ⛔ WHY NOT JUST READ `owed` AT THE REFUSAL. Session 8 found `owed: 0` on every single
+   *    FLOOR refusal across six runs, which LOOKS like "refused their first loan". It is
+   *    not evidence of that. Debt is clawed back from earnings, so a member who borrowed
+   *    once and repaid also reads `owed: 0`. Those are opposite stories — "never got a
+   *    loan" versus "got one and settled it" — and a point-in-time debt reading cannot
+   *    separate them. Counting the ISSUANCE can.
+   *
+   * ⛔ TWO INSTRUMENTS, RECONCILED IN THE FILE. `RescueLoanIssued` comes from
+   *    MatrixLogicLib (a LIBRARY event — invisible without libIfaces, the trap already
+   *    recorded above). `MemberDebtIncreased` comes from the StabilityFund, which the
+   *    handoff establishes has exactly ONE writer of `memberDebt` emitting the same
+   *    amount. They are two independent views of one act. If they disagree on the count or
+   *    on the set of borrowers, one of them is wrong and neither number should be quoted —
+   *    which is the only reason to compute both.
+   */
+  const perMember = (evName) => {
+    const m = {};
+    for (const a of ev[evName] || []) {
+      const who = field(a, "member", 0);
+      m[who] = (m[who] || 0) + 1;
+    }
+    return m;
+  };
+  const loansPer = perMember("RescueLoanIssued");
+  const debtPer  = perMember("MemberDebtIncreased");
+  // ⛔ RESCUES PER MEMBER — ADDED BECAUSE A CONCLUSION WAS WRONG WITHOUT IT.
+  //
+  // Session 8 measured `maxLoansToOneMember == 1` at PARAM 59 = 3400, 6800 AND 10000, and
+  // wrote up "the second loan is refused, here is the headroom arithmetic". The 10000 row
+  // refutes that outright: at a $10.00 ceiling a member holding ~$4.00 of debt has ~$6.00
+  // of headroom against a ~$4.00 ask, so a refusal is impossible — and 10000 came back
+  // BYTE-IDENTICAL to 6800 on every figure. Nothing was refused. Nothing was asked.
+  //
+  // A second loan requires a second RESCUE, and nothing here counted those. So "the system
+  // gives one loan" and "this 69-tick fixture never asks for a second" were indistinguishable,
+  // and the arithmetic-flavoured one got written down. `ParkedRescued` carries the member
+  // (MatrixKeeper:451, member is the SECOND arg — the first is the matrix), so the count is
+  // one map away.
+  //
+  // ⚠ READ THE ANSWER AGAINST THE FIXTURE LIMITS, NOT AS A SYSTEM PROPERTY:
+  //   SELF_RESCUE_RATE 0, one tier, one pair, 69 ticks. If nobody is rescued twice HERE,
+  //   that is a statement about this harness first and about V8.50 only second.
+  const rescuePer = (() => {
+    const m = {};
+    for (const a of ev["ParkedRescued"] || []) {
+      const who = field(a, "member", 1);
+      m[who] = (m[who] || 0) + 1;
+    }
+    return m;
+  })();
+  const histOfCounts = (m) => Object.values(m).reduce((acc, c) => { acc[c] = (acc[c] || 0) + 1; return acc; }, {});
+  const evictedMembers = doEvict
+    ? [...new Set(routedItems.filter((r) => r.route === "EVICT").map((r) => r.member))]
+    : [...new Set((ev["ParkedMemberEvicted"] || []).map((a) => field(a, "member", 1)))];
+  const loansBeforeEvictionCounts = evictedMembers.map((m) => loansPer[m] || 0);
+
+  const lending = {
+    loanEvents: loans,
+    distinctBorrowers: Object.keys(loansPer).length,
+    loansPerBorrowerHistogram: histOfCounts(loansPer),
+    maxLoansToOneMember: Math.max(0, ...Object.values(loansPer)),
+    // The denominator for the loan histogram above. A member cannot take a second loan
+    // without a second rescue, so `maxRescuesToOneMember == 1` means the loan ceiling was
+    // never the constraint and no PARAM 59 value could have changed the answer.
+    distinctRescuedMembers: Object.keys(rescuePer).length,
+    rescuesPerMemberHistogram: histOfCounts(rescuePer),
+    maxRescuesToOneMember: Math.max(0, ...Object.values(rescuePer)),
+    secondLoanOpportunities: Object.values(rescuePer).filter((c) => c > 1).length,
+    // THE BAR, STATED THE WAY THE OWNER STATED IT.
+    evictedMembers: evictedMembers.length,
+    loansBeforeEviction: {
+      histogram: loansBeforeEvictionCounts.reduce((acc, c) => { acc[c] = (acc[c] || 0) + 1; return acc; }, {}),
+      zeroLoanEvictions: loansBeforeEvictionCounts.filter((c) => c === 0).length,
+      note: "key = loans that member received before being evicted. A large bucket at 0 " +
+            "means the system evicted members it never lent to, which is NOT the designed " +
+            "behaviour (owner 2026-08-19: one or two loans, then eviction if no invites).",
+    },
+    reconcile: {
+      rescueLoanIssuedEvents: loans,
+      memberDebtIncreasedEvents: (ev["MemberDebtIncreased"] || []).length,
+      distinctByLoanEvent: Object.keys(loansPer).length,
+      distinctByDebtEvent: Object.keys(debtPer).length,
+      borrowerSetsAgree: Object.keys(loansPer).length === Object.keys(debtPer).length &&
+                         Object.keys(loansPer).every((k) => debtPer[k] !== undefined),
+      note: "two independent views of one act — the matrix library issuing, the fund " +
+            "booking. Disagreement voids both counts; it does not average out.",
+    },
+  };
 
   const result = {
     arm, seed: seq.seed, members: seq.members, size: seq.size, equalize,
@@ -482,6 +1014,18 @@ async function main() {
       coPaySelfFunded: selfFunded,
       unfundedRescues,
       evictions: n("ParkedMemberEvicted"),
+      // ⛔ IS ITEM E1 ACTUALLY FIRING IN THIS FIXTURE? Added session 8 because two numbers
+      //    disagree and the disagreement is the finding. The handoff records E1's measured
+      //    effect as "MatB ledger at the gate $7.66 -> $8.32"; this harness's V8.50 arm,
+      //    which contains E1, measures the MatB parked median at $7.66 — the PRE-E1 figure,
+      //    to the cent. Either the two are different bases (live V8.48 population vs this
+      //    fixture) or E1 never fires here, and in the second case every V8.50 number this
+      //    A/B has produced describes a build without its balance carry.
+      //    BalanceCarried is emitted from MatrixLogicLib._crossToPartner, so it is a LIBRARY
+      //    event — invisible without libIfaces, which is the trap already recorded above.
+      //    A zero here must be read against that, not taken at face value.
+      balanceCarried: n("BalanceCarried"),
+      balanceCarriedVolume: (() => { try { return sum("BalanceCarried", "amount", 3).toString(); } catch (e) { return `ERR ${(e.message || "").slice(0, 60)}`; } })(),
       workItemFailed: n("WorkItemFailed"),
       workItemFailedByType: failedByType,
       batchGasHalted: n("BatchGasHalted"),
@@ -506,17 +1050,76 @@ async function main() {
       parkedA: await (async () => { try { return String(await w.matA.getParkedCount()); } catch (e) { return `ERR ${(e.shortMessage || "").slice(0, 40)}`; } })(),
       parkedB: await (async () => { try { return String(await w.matB.getParkedCount()); } catch (e) { return `ERR ${(e.shortMessage || "").slice(0, 40)}`; } })(),
     },
+    lending,
     ...(censusBlock ? { census: censusBlock } : {}),
+    ...(evictBlock ? { evictRouting: evictBlock } : {}),
   };
 
-  console.log(JSON.stringify(result, null, 2));
+  /**
+   * ⛔ THE CONSOLE GETS A SUMMARY; THE FILE GETS EVERYTHING.
+   *
+   * Not cosmetics. The full result with AB_EVICT on is ~1,500 lines, almost all of it the
+   * per-tick batch table and the queue census, and a diagnostic that long is read by
+   * scrolling past it. The bulky arrays are replaced with their lengths here and written in
+   * full to the JSON. This is the same rule as "diagnostics go in the RESULT FILE", applied
+   * in the other direction: the file must be complete, the console must be legible.
+   */
+  const slim = JSON.parse(JSON.stringify(result));
+  if (slim.evictRouting) {
+    for (const k of ["items", "queueCensus", "batches"]) {
+      slim.evictRouting[k] = `[${(result.evictRouting[k] || []).length} rows — in the JSON file]`;
+    }
+  }
+  console.log(JSON.stringify(slim, null, 2));
   // A censused run writes to its OWN file. The canonical ab_result_<arm>_s<seed>.json is
   // the validated pair the handoff quotes and the thing a no-census run must reproduce
   // byte-for-byte; a censused run must not be able to overwrite it.
+  // ⛔ EVERY DIAL THAT CHANGES THE ANSWER GOES IN THE FILENAME. Learned the hard way in
+  //    session 8: a re-run with AB_QUEUE_EVERY=0 silently overwrote a censused result and
+  //    destroyed one seed's population block, because the two runs shared a name. A sweep
+  //    row must never be able to land on top of the canonical pair.
+  const floorTag = process.env.AB_FLOOR_BPS ? `_floor${process.env.AB_FLOOR_BPS}` : "";
+  const popTag   = doEvict && !queueEvery ? "_nopop" : "";
   const out = path.join(hre.config.paths.root,
-    `ab_result_${arm}_s${seq.seed}${equalize ? "_eq" : ""}${doCensus ? "_census" : ""}.json`);
+    `ab_result_${arm}_s${seq.seed}${equalize ? "_eq" : ""}${doCensus ? "_census" : ""}${doEvict ? "_evict" : ""}${popTag}${floorTag}.json`);
   fs.writeFileSync(out, JSON.stringify(result, null, 2) + "\n");
   console.log(`\n  written: ${path.basename(out)}`);
+  {
+    const L = result.lending;
+    console.log(`  LENDING: ${L.loanEvents} loans to ${L.distinctBorrowers} distinct members  ` +
+      `per-borrower ${JSON.stringify(L.loansPerBorrowerHistogram)}  max ${L.maxLoansToOneMember}`);
+    console.log(`  RESCUES: ${L.distinctRescuedMembers} distinct rescued  ` +
+      `per-member ${JSON.stringify(L.rescuesPerMemberHistogram)}  max ${L.maxRescuesToOneMember}  ` +
+      `members with a 2nd rescue (i.e. a chance at a 2nd loan): ${L.secondLoanOpportunities}`);
+    console.log(`  loans received BEFORE eviction (${L.evictedMembers} evicted): ` +
+      `${JSON.stringify(L.loansBeforeEviction.histogram)}  ` +
+      `zero-loan evictions ${L.loansBeforeEviction.zeroLoanEvictions}`);
+    if (!L.reconcile.borrowerSetsAgree) {
+      console.log(`  ⛔ LOAN/DEBT BORROWER SETS DISAGREE (${L.reconcile.distinctByLoanEvent} vs ` +
+        `${L.reconcile.distinctByDebtEvent}) — both counts are void.`);
+    }
+  }
+  if (doEvict) {
+    const r = result.evictRouting.reconciliation;
+    console.log(`\n  ROUTING: ${result.evictRouting.routedToEvict} evict / ` +
+      `${result.evictRouting.routedToRescue} rescue work items over ${r.parkedWorkItems} total`);
+    console.log(`  basis that reconciles: ${r.basisThatReconciles}`);
+    if (r.mismatchCount) {
+      console.log(`  ⛔ ${r.mismatchCount} MISMATCH(ES) — the reason column is VOID. Do not quote it.`);
+    } else {
+      console.log(`  reasons (crossing basis): ${JSON.stringify(result.evictRouting.reasonHistogram.byCrossingBasis)}`);
+      console.log(`  evicted from matrix: ${JSON.stringify(result.evictRouting.matrixOfEvicted)}` +
+                  `   rescued from matrix: ${JSON.stringify(result.evictRouting.matrixOfRescued)}`);
+      const p = result.evictRouting.population;
+      if (p && p.byMatrix) {
+        for (const [k, g] of Object.entries(p.byMatrix)) {
+          console.log(`  queue pop Mat${k}: ${g.observations} obs  reserve==0 ${(g.reserveZeroShare * 100).toFixed(0)}%  ` +
+            `medReserve $${(g.medianReserveUSD ?? 0).toFixed(2)}  medWd $${(g.medianWithdrawableUSD ?? 0).toFixed(2)}  ` +
+            `medWBps ${g.medianWBps}  ${JSON.stringify(g.reasons)}`);
+        }
+      }
+    }
+  }
   if (keeperFailures) {
     console.log(`  ⚠ ${keeperFailures} keeper tick(s) FAILED on this arm. If the other arm's count`);
     console.log(`    differs, the two runs did not receive equivalent treatment and the pair is void.`);

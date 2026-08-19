@@ -1,12 +1,284 @@
 # V8.50 HANDOFF — the crossing redesign. READ THIS FIRST.
 
 Written 2026-08-16 at the end of the V8.49 private measurement run.
-Sessions 2, 3, 4, 5 and 6 have appended to it since; read the NEWEST section first — each one
+Sessions 2-8 have appended to it since; read the NEWEST section first — each one
 corrects the ones below it, and says so explicitly where it does.
 Audience: **the next session of Claude, plus the owner. There is no third party — every
 line of this codebase was written by a previous session of Claude and executed by the
 owner.** Read section 7a (THE TWO RULES) before doing anything else; it is short, it is
 owner-set, and the session that earned it got five things wrong by ignoring what it says.
+
+---
+
+# ⬛ SESSION 8 STATE — 2026-08-19, LATEST. READ THIS FIRST, BEFORE SESSION 7.
+
+**THE HEADLINE: THE ~10x EVICTIONS ARE EXPLAINED, REPLICATED 3/3, AND THEY ARE NOT A DEFECT.
+They are three measured factors, and the largest of them is that V8.50 moves the parked
+population out of MatA and into MatB. Session 7's open item 2 (the withdrawable variance) is
+also CLOSED — the statistic was invalid, not the system. Nothing was deployed, no chain was
+written to, `.env` line 69 is unchanged, and NO CONTRACT FILE WAS TOUCHED THIS SESSION.**
+
+Changed: `test_ab/replay.js`, `test_ab/world.js`. That is the whole diff.
+
+⛔ **OWNER FRAMING GIVEN THIS SESSION, 2026-08-19 — IT CHANGES WHAT IS A DEFECT.**
+Recorded verbatim in substance because two sessions have now spent effort on the wrong bar:
+- **Members are NOT meant to cross forever.** The bar is that they can get **one or two
+  loans**, not that everyone crosses indefinitely.
+- **Nobody can get stuck at the A→B crossing — everyone crosses on the reserve.**
+- **Members are EXPECTED to take loans and to be evicted if they never invite anyone.**
+So "V8.50 evicts 10x more" was never, on its own, a finding about a defect. The question is
+only ever whether the eviction is the *designed* one.
+
+---
+
+## 1. THE INSTRUMENT — `AB_EVICT=1`, AND WHY IT IS NOT EVENT ARCHAEOLOGY
+
+`ParkedMemberEvicted(matrix, member, totalWithdrawn)` carries **no reason**. The reason is
+`_triageParked`'s `uint8` — an internal return inside a view library. Never emitted, never
+stored, never in a log. An event-only instrument can count evictions forever and never say
+why one happened. So this reads two other things:
+
+1. **THE DECISION ITSELF, FOR FREE.** `checkUpkeep` returns `performData =
+   abi.encode(WorkItem[])`, `WorkItem` is `(uint8 workType, uint8 tierIndex, address addr1,
+   address addr2)` (field order declared load-bearing at MatrixKeeperLib:175), and the
+   replay already holds that blob. Decoding costs ZERO chain calls and gives the exact
+   routing: who went to `WORK_EVICT_PARKED` (6) and who to `WORK_PARKED_RESCUE` (4).
+2. **THE BRANCH**, re-walked off-chain from the same public views the contract used. The
+   ladder walk is **not re-implemented** — it is asked of the deployed
+   `MatrixKeeperLib.rescueBpsFor`, which is `external pure` on BOTH arms. Only the ORDER of
+   the four tests is JavaScript.
+
+**IT RECONCILES ITSELF, IN THE FILE, EVERY RUN.** Routed to EVICT ⇒ derived reason ≠ NONE;
+routed to RESCUE ⇒ reason == NONE. Disagreements land in `mismatches`, and a non-empty list
+**VOIDS the entire reason column** — it does not mean "mostly right". Measured:
+**`mismatchCount` 0 on every run this session** (429 routed items on the first six alone).
+
+**THE ONE PLACE THE ARMS DIFFER IS MEASURED, NOT ASSUMED.** The price basis is the whole of
+item A inside this function (v849b `fee`; V8.50 `isMatrixA ? fee/2 : fee`). Hard-coding
+"this arm uses that one" would smuggle a hypothesis into the instrument, so BOTH bases are
+scored against the contract's actual routing every run. Result: control reconciles on ENTRY
+FEE, V8.50 on CROSSING COST. **Item A confirmed live inside discovery by reading, not by
+assuming from the arm name.**
+
+**AND IT HAS A BLIND SPOT, STATED SO IT IS NOT READ INTO.** Discovery reaches queue indices
+0-2 while the queue behind runs 26-31 deep, so batch rows describe the HEAD only. Hence
+`AB_QUEUE_EVERY` (default 5): every Nth tick it triages the ENTIRE parked queue of both
+matrices, including members discovery never looked at. Those rows are **member-tick
+observations of a sampled queue** — not members, not events. Never quote a raw count from
+`population`; quote the shares and medians.
+
+---
+
+## 2. THE ~10x EVICTIONS — THREE FACTORS, ALL REPLICATED 3/3
+
+### FACTOR 1 (LARGEST) — WHERE MEMBERS PARK
+
+| parked queue, sampled | v849b (s1/s2/s3) | V8.50 (s1/s2/s3) |
+|---|---|---|
+| share of queue in MatB | .23 / .20 / .19 | **.95 / .96 / .97** |
+| MatA observations evictable | **0** of 81 / 83 / 88 | **0** of 4 / 3 / 2 |
+| MatB observations evictable | 5/24, 4/21, 4/21 | 18/72, 20/74, 21/75 |
+
+**A PARKED MatA MEMBER WAS NEVER EVICTABLE, IN EITHER BUILD, IN 258 OBSERVATIONS.** All
+eviction risk in this system lives in MatB. The control's queue is three-quarters MatA;
+V8.50's is almost entirely MatB. ~4.5x on its own. **This also confirms the owner's
+statement that nobody gets stuck at the A→B crossing** — median MatA reserve $5.00, median
+wBps 10500 against a ladder whose bottom rung is 4000.
+
+### FACTOR 2 — WHETHER DISCOVERY REACHES PARKED WORK (defect 6)
+
+- **v849b: 25-26% of ticks with a NON-EMPTY parked queue produced ZERO parked work items**,
+  all three seeds. The batch was full of VELOCITY + GHOST + RECLAIM. ~390 member-ticks per
+  run went unscanned.
+- **V8.50: 0%. All three seeds.**
+
+⛔ **CORRECTION — SESSION 6'S GUESS WAS RIGHT AND SESSION 8 CALLED IT WRONG FIRST.** On seed
+1 this session wrote "session 6's starvation guess does not survive", on the basis that
+evicted and rescued members had identical queue positions (median 1, range 0-2). **That was
+the wrong test.** Queue position INSIDE a batch that was reached cannot see a batch that was
+never reached at all. Measured properly, defect 6's reordering is a real contributor, worth
+~1.35x. The UNVERIFIED session-6 hypothesis is now VERIFIED.
+
+### FACTOR 3 — THE RESERVE, VIA ONE THRESHOLD IDENTICAL ON BOTH ARMS
+
+A member fails the floor when effective contribution < **$6.60** (price $10.00 − the $3.40
+ceiling at PARAM 59 = 3400). The census lands on it exactly:
+
+- v849b MatB — rescuable ≥ $6.65, floor-refused ≤ $6.02
+- V8.50 MatB — rescuable ≥ $6.61, floor-refused ≤ $6.40
+
+**Same rule, same place.** The difference is that a control MatB parker gets **$5.00 of that
+$6.60 free** from the crossing-reserve carve (`reserveZeroShare` 0.00, all seeds), while
+**every V8.50 MatB parker holds zero reserve** (1.00, all seeds, 221 observations). ~1.35x.
+
+⛔ **$6.60 IS NOT A NEW NUMBER.** The phase-6 section already measured it on live V8.48
+(2026-08-17, n=70, min = median = max = $6.60). This session reproduced the same boundary in
+a fresh LOCAL fixture, different population, different build. **Two independent instruments
+to the cent.** The evictions are not a new phenomenon — they are the known PARAM 59 /
+MatB-ledger problem surfacing as evictions because V8.50's queue is 96% MatB.
+
+**The three factors multiply to ~8x against an observed ~10x. THAT MULTIPLICATION IS
+ARITHMETIC OVER MEASURED FACTORS, NOT AN INDEPENDENT MEASUREMENT** — independence was never
+tested. Do not quote "8x" as a result.
+
+---
+
+## 3. ✅ OPEN ITEM 2 CLOSED — THE WITHDRAWABLE VARIANCE WAS AN INVALID STATISTIC
+
+| | rescued MatA / MatB | pooled `atRescue` median |
+|---|---|---|
+| v849b | 88/0, 84/0, 86/0 — **100% MatA** | $3.73 / $3.75 / $3.72 |
+| V8.50 | 19/28, 23/24, 23/23 — **40% / 49% / 50% MatA** | $7.43 / $4.45 / $2.15 |
+
+The parked population holds two clusters that do not overlap: a MatA parker sits at **$0.25**
+withdrawable (their money is in the crossing reserve), a MatB parker at **$7.38-$7.66**
+(carried balance, no reserve). **The MatB medians are TIGHTER across seeds than the
+control's.**
+
+The control rescues one cluster only, so its median is steady. V8.50 rescues a near-50/50
+mixture, so the 50th percentile lands wherever the mix falls and **flips between humps**.
+The "3.5x spread straddling the control" is a pooled median of a bimodal distribution taken
+exactly where the two humps are equal. **It describes no member in either hump and is not
+evidence about member support in any direction.** Session 7 was right to refuse to write it
+up.
+
+`withdrawableUSD.atRescue` now carries a `WARNING` field and `atRescueByMatrix` beside it.
+**Never quote the pooled figure on the V8.50 arm again.**
+
+---
+
+## 4. ✅ ITEM E1 IS FIRING — CONFIRMED, NOT ASSUMED
+
+The handoff records E1's effect as "MatB ledger at the gate $7.66 → $8.32". This harness's
+V8.50 arm measures the MatB parked median at **$7.66** — the PRE-E1 figure, to the cent. Two
+numbers disagreeing is a finding, so it was measured rather than explained:
+**`balanceCarried` 201 / 198 / 198 events, $913.10 / $909.99 / $904.80 carried.** E1 fires.
+The $7.66 match was two different bases landing on the same number (live V8.48 population vs
+this fixture). Counter is permanent in `raw`.
+
+---
+
+## 5. ⛔ THE PARAM 59 CURVE — MEASURED, 5 VALUES × 3 SEEDS, V8.50 ARM
+
+| PARAM 59 | evictions | FLOOR | LADDER | **evicted having NEVER been lent to** | rescues | loanVol $ | SF end $ |
+|---|---|---|---|---|---|---|---|
+| 3400 | 9/10/10 | 7/6/5 | 2/4/5 | **9/9/9** | 47/47/45 | 40.02/38.98/47.29 | 96.54/97.82/88.80 |
+| 4000 | 4/3/7 | 1/0/2 | 3/3/5 | 3/3/6 | 51/53/48 | 58.66/47.35/57.29 | 80.04/91.83/81.17 |
+| **4500** | 4/3/5 | **0/0/0** | 4/3/5 | **3/3/3** | 51/53/50 | 58.15/47.35/63.36 | 80.55/91.83/77.25 |
+| 5000 | 4/3/5 | 0/0/0 | 4/3/5 | 3/3/3 | 51/53/50 | 58.15/47.35/63.36 | 80.55/91.83/77.25 |
+| 6800 | 4/3/5 | 0/0/0 | 4/3/5 | 3/3/3 | 51/53/50 | 58.15/47.35/63.36 | 80.55/91.83/77.25 |
+| 10000 | 4/3/5 | 0/0/0 | 4/3/5 | 3/3/3 | 51/53/50 | 58.15/47.35/63.36 | 80.55/91.83/77.25 |
+
+**THE CURVE SATURATES AT 4500. The `raw` block at 4500, 5000, 6800 and 10000 is BYTE-IDENTICAL
+on all three seeds.** Above 4500 the floor does not bind at all. This is why the sweep was
+run rather than argued: an earlier turn this session asserted from headroom arithmetic that
+higher ceilings would keep helping. They do nothing.
+
+⛔ **BUT 4500 IS TWO CENTS SHORT, AND ONLY THE POPULATION CENSUS SEES IT.** Across the 3400
+runs the observed FLOOR ask (`advance`) ranges **$3.42 to $4.52**, n=55. A $4.50 ceiling is
+**−$0.02 against the worst observed ask**; it measures identically to 6800 only because that
+one member was never routed. **$5.00 gives $0.48 of margin at ZERO measured cost.** The ask
+is structurally `crossingCost − effectiveContrib`, so a thinner population asks more.
+**RECOMMENDATION: 5000, not 4500** — same measured outcome, real margin instead of a
+rounding error. ⚠ OWNER DECISION STILL OPEN as of session end.
+
+⛔ **AND THIS REVERSES THE PHASE-6 REVERSAL — CORRECTLY, BECAUSE E1 CHANGED THE INPUT.** The
+phase-6 section measured **5000 as rescuing ZERO members** and said "DO NOT DEPLOY 5000".
+That was **before E1**, when a MatB parker reached the gate holding $3.40 and asked $6.60.
+Post-E1 they hold $7.4-7.7 and ask $3.42-$4.52. **The earlier reversal was right on the
+evidence it had; E1 is what makes 5000 viable.** Do not read the phase-6 section as still
+binding without carrying E1 with it.
+
+**What 5000 costs and what it does NOT cost:** ~$11-16 of ending fund balance (SF ends
+$77-92 vs $89-98), still **4-6x the control's $13-25**. `loansPerRescue` stays ~0.5 and
+`unfundedRescueShare` ~0.39-0.51. **Item A's fund claims are untouched by the change.**
+
+---
+
+## 6. ✅ LOANS PER MEMBER — THE OWNER'S ACTUAL BAR, AND A THIRD ANSWER
+
+Two independent views, reconciled every run: `RescueLoanIssued` (MatrixLogicLib) and
+`MemberDebtIncreased` (StabilityFund, one writer). **They agreed on count AND on borrower
+set in every run.**
+
+- **159 loans across six runs, 159 distinct members, `max 1`. Not one second loan, at ANY
+  ceiling value.**
+- **7 / 11 / 10 members per run ARE rescued a second time** (`maxRescuesToOneMember` 2).
+- Rescued-from-MatA (20/27/23) ≈ fund-free rescues (20/27/22).
+
+⛔ **SO THE SECOND LOAN IS NEITHER REFUSED NOR UNREQUESTED — THE SECOND RESCUE IS FREE.**
+Session 8 asserted "refused" (headroom arithmetic — killed by the 10000 row) and then
+"never requested" (killed by the rescue counter). Both were wrong. The cycle:
+- **MatB re-entry** — full fee, no reserve, needs the fund → **one loan.**
+- **A→B crossing** — the reserve covers it → **free, no loan, no debt.**
+
+That is item A's headline claim measured within-arm, exactly as `replay.js`'s own header says
+it must be. **Against the owner's bar, a member takes one loan and then crosses on their own
+money.** The "two" never arises because the second crossing was already paid for.
+
+⚠ **FIXTURE LIMIT ON THAT CONCLUSION:** `SELF_RESCUE_RATE = 0`, one tier, one pair, 69 ticks,
+288 members. Section 8 has called this a pathological extreme since before session 6.
+
+---
+
+## TRAPS ADDED THIS SESSION
+
+- **ARITHMETIC OVER MEASURED NUMBERS IS NOT A MEASUREMENT.** Twice this session a correct
+  input produced a confident wrong mechanism: "the floor refuses the second loan" (the 10000
+  row disproved it — nothing changed) and "the second loan is never requested" (the rescue
+  counter disproved it — 7-11 members ARE rescued twice). Both READ like results. Rule 2
+  covers derivations from measured values, not just guesses.
+- **TESTING THE WRONG SLICE LOOKS LIKE A REFUTATION.** Queue position *inside* reached
+  batches said starvation was not happening. It cannot see a batch that was never reached.
+  Before writing "X does not survive", check that the instrument can observe X's absence.
+- **A POOLED MEDIAN OVER A BIMODAL POPULATION DESCRIBES NOBODY.** V8.50's rescued members
+  are two non-overlapping clusters ($0.25 and ~$7.5). At a ~50/50 mix the median flips
+  between humps and reads as 3.5x "variance". Split by population before quoting a median.
+- **THE BATCH IS NOT THE POPULATION.** Discovery reached indices 0-2 of a 31-deep queue, and
+  the CONTROL'S ENTIRE MatB COHORT — the one the comparison turns on — was never routed at
+  all. A head-of-queue instrument has zero observations of it and will not say so.
+- **A RE-RUN THAT SHARES AN OUTPUT FILENAME DESTROYS THE EARLIER RESULT.** A run with
+  `AB_QUEUE_EVERY=0` silently overwrote a censused file and lost one seed's population
+  block. Every dial that changes the answer is now in the filename (`_nopop`, `_floor<n>`).
+- **A DIAL SET IS NOT A DIAL IN FORCE.** `insolvencyFloorBps` is read BACK into `dials` on
+  every run. Same lesson as the cap, restated because the sweep would be void without it.
+- **THE CONSOLE MUST BE LEGIBLE OR IT IS NOT READ.** The full AB_EVICT result is ~1,500
+  lines. Console now prints a summary; the file keeps everything. Complement to "diagnostics
+  go in the RESULT FILE", not a contradiction of it.
+
+---
+
+## STATE OF THE TREE
+
+- **NO CONTRACT FILE CHANGED.** Suite untouched at 611 passing / 7 pending / 0 failing (not
+  re-run this session — nothing it covers moved).
+- `test_ab/replay.js` — `AB_EVICT`, `AB_QUEUE_EVERY`, `AB_FLOOR_BPS` plumbing, loans and
+  rescues per member, per-matrix rescue medians, slim console, dial-encoded filenames.
+- `test_ab/world.js` — returns the already-deployed `keeperLib`; optional
+  `setInsolvencyFloorBps` from `AB_FLOOR_BPS`. No extra deployment, no extra transaction.
+- Result files: `ab_result_v850_s{1,2,3}_census_evict[_floor{4000,4500,5000,6800,10000}].json`
+  plus the v849b censused trio. The canonical no-census pair is untouched.
+
+---
+
+## NEXT, IN ORDER
+
+1. **OWNER DECISION — PARAM 59.** Curve above; recommendation 5000. Nothing else in the
+   release is blocked on it.
+2. **⚠ OWNER QUESTION RAISED AT SESSION END, NOT YET ANSWERED — WHAT TO DO WITH LIVE V8.48:
+   leave organic, bigfill to replenish the SF, or fund the SF directly.** Reasoning is in
+   the session-8 write-up below this list. **The figures it would rest on ($212.35 balance,
+   $518.24 outstanding, ~$125/day drain) ARE DAYS OLD AND ITEM 7 BELOW SAYS THEY ARE IN
+   TENSION.** Re-measure before deciding.
+3. **Router placement refusals, 11 → 53** on V8.50. Still unexplained. Untouched this
+   session. Note they rose further under the floor sweep (57 → 59 at 6800), which is a clue
+   that they track rescue throughput rather than being independent.
+4. **Model self-rescue at a non-zero rate.** Now blocking more than before: sections 2, 5 and
+   6 above all carry `SELF_RESCUE_RATE = 0` as their headline caveat.
+5. **Gate measurements 3 and 4** — need a running system; that is what the private chain is for.
+6. **`maxItemsPerUpkeep`** — still vestigial at 20. Confirm deliberately or lower to 10.
+7. **Re-run `diag_parked_growth.js` with `WINDOW=3000`.** Unchanged from session 7 and now
+   also a prerequisite for item 2.
 
 ---
 
