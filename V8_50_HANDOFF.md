@@ -252,6 +252,9 @@ money.** The "two" never arises because the second crossing was already paid for
 
 - **NO CONTRACT FILE CHANGED.** Suite untouched at 611 passing / 7 pending / 0 failing (not
   re-run this session — nothing it covers moved).
+- **Committed and pushed as `51c57fd` on `v8.1`** — three explicit paths: `test_ab/replay.js`,
+  `test_ab/world.js`, `V8_50_HANDOFF.md`. (Hash added in a follow-up commit; it did not exist
+  when this section was written, and amending a pushed commit is worse than the gap.)
 - `test_ab/replay.js` — `AB_EVICT`, `AB_QUEUE_EVERY`, `AB_FLOOR_BPS` plumbing, loans and
   rescues per member, per-matrix rescue medians, slim console, dial-encoded filenames.
 - `test_ab/world.js` — returns the already-deployed `keeperLib`; optional
