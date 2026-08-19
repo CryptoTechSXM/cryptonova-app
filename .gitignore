@@ -38,3 +38,4 @@ ab_sequence_*.json
 ab_fingerprint_*.json
 gas_size*.txt
 suite_*.txt
+archive/captures/
