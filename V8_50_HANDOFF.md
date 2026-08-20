@@ -276,6 +276,39 @@ counter. `run_bigfill_loop.ps1` now treats that marker as a bad run, so two in a
 loop. ⚠ **The loop change only takes effect when the LOOP restarts** (PowerShell has already read
 the script); the bigfill change lands on the next run, since node re-reads it each time.
 
+✅ **7a CONFIRMED AGAINST LIVE 2026-08-20**: the next snapshot read `T1 unique members: 370`
+(exactly the site's Total Registered) against `T1 entries (all routings): 904`. That also settles
+the guarded question — **`uniqueMembers` DOES exist on the deployed V8.48**, measured not assumed.
+⚠ **7b IS NOT CONFIRMED.** That run's sweep was clean (18 succeeded) and printed no
+`(recovered - stale nonce, resent at N)` line, so **the retry path was never exercised**. A quiet
+run is not a passing test. Its first real test is the next time the RPC lags.
+
+### 7c. THE SNAPSHOT WAS PRINTING AN **ARCHIVED** PAIR AS BARE "T1"
+Same run's header: `T1 factory: 2 pairs. T1.1 archived (127/127). Active: T1.2`. **T1.1 has
+filled both halves and the factory has moved on** — which is exactly what session 9 predicted
+would happen via `chainNext` and asked the next session to verify. It happened.
+But `matA1`/`matB1` are bound ONCE from the addresses file, so they are pair 0 forever, and the
+snapshot was printing `T1 MatA occupancy: 127 / 127` with no pair name. **That number is now
+frozen at full permanently** and will keep reading healthy while the pair actually taking entries
+fills unwatched. Session 9 logged this as cosmetic; it stopped being cosmetic the moment the pair
+archived. Fixed by NAMING the pair and printing the active one beside it — `matA1`/`matB1` were
+deliberately NOT re-pointed, because 28 other sites use them.
+⚠ **T2 has the same latent shape** — one pair today, so it has not bitten yet.
+⚠ **STILL TO WATCH: does T1.2's MatA actually start filling?** That is the confirmation of
+session 9's chainNext prediction, and it needs a few runs of observation.
+
+### 7d. REGISTRATION NONCE COLLISIONS WERE "GENUINE FAILURES" AND THE LOOP WALKED PAST THEM
+A later run failed registration with `replacement transaction underpriced` — a transaction with
+that nonce already in the mempool, i.e. **the wallet was never asked**. It was counted under a
+heading that literally read `Genuine failures`, and because the loop only greps for its own abort
+markers, the run was judged GOOD and **the offset advanced over a wallet that never registered**.
+Unattended overnight that quietly scatters gaps through the wallet range.
+**FIXED:** registration failures are split into genuine on-chain reverts and nonce/transport
+failures; the latter emit the same `STALE-NONCE FAILURES` marker the loop treats as a bad run, so
+the offset holds. **THIS IS THE THIRD INSTANCE OF ONE MISTAKE IN ONE EVENING** — 7a, 7b and 7d are
+all an infrastructure condition presented as a statement about members or about the chain's
+answer.
+
 ---
 
 ## TRAPS ADDED THIS SESSION
@@ -299,6 +332,17 @@ the script); the bigfill change lands on the next run, since node re-reads it ea
   with `<` must be caught before the comparison or it takes out the whole render.
 - **A NEW FORM FIELD NEEDS THREE EDITS, NOT ONE:** the input, the payload, and `resetForm`.
   Missing the third silently carries one member's data into the next member's report.
+- **"INFRASTRUCTURE FAILURE DRESSED AS MEMBER BEHAVIOUR" IS THIS PROJECT'S RECURRING BUG.**
+  Four instances now: `HH110` counted as refusals (session 9), stale nonces counted as `skipped`,
+  nonce collisions counted as `Genuine failures`, and an entry counter labelled as people. The
+  question to ask of EVERY counter: *if the chain never answered, which bucket does this land in,
+  and does that bucket's NAME claim something the run did not observe?*
+- **A QUIET RUN IS NOT A PASSING TEST.** The stale-nonce retry shipped and the next sweep was
+  clean — but it printed no recovery line, so the retry never ran. Confirm a fix by observing the
+  fix's own output, not by the absence of the symptom.
+- **"COSMETIC" HAS A SHELF LIFE.** The snapshot printing pair 0 as bare "T1" was harmless for
+  weeks and became actively misleading the hour T1.1 archived. A label that is merely ambiguous
+  today is a wrong answer waiting for a state change.
 - **`git commit` CAN FAIL ON A STALE `.git/index.lock` FROM A CRASHED EARLIER PROCESS.** Check
   `Get-Process git` FIRST — if none is running the lock is debris and its `CreationTime` tells
   you which session left it. (One was found here dated 18:49:54, from session 9.)

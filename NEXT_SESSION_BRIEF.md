@@ -44,13 +44,17 @@ session 10 because nothing it covers moved.
    `COMMIT_MSG_s10.txt` in BOTH repos (delete it), and in contracts
    `scripts/bigfill_v8.js.bak_ascii`, `test_ab/replay.js.bak_s9b`, `test_ab/replay.js.bak_s9c`
    (session 9 leftovers — house pattern is to move strays into `archive/`, not delete them).
-2. **CHECK THE NEXT BIGFILL SNAPSHOT READS `T1 unique members: 370`** (matching the site's
-   Total Registered) rather than the ~900 entry count it used to print under that label. If it
-   says "unavailable on this build", `uniqueMembers` is not on the deployed V8.48 and the people
-   count has to be derived another way. Also confirm NO `STALE-NONCE FAILURES` line appears —
-   if one does, that sweep was INCOMPLETE and its totals are a floor, not a measurement.
-   (The screenshot upload is already VERIFIED end to end — real browser, real image, a
-   50,123-byte JPEG at `bug-screenshots/2026-08-20T01-54-38-741Z-bugtest.jpg`.)
+2. **CHECK THE BIGFILL SNAPSHOT.** ✅ Already confirmed once: it read `T1 unique members: 370`,
+   matching the site's Total Registered, against `T1 entries (all routings): 904` — so
+   `uniqueMembers` DOES exist on the deployed V8.48. What to watch now is the pair labelling
+   (`T1.1 ... (ARCHIVED)` plus a `T1 ACTIVE pair: T1.2` line) and whether any
+   `STALE-NONCE FAILURES` line appears — if one does, that run was INCOMPLETE, its totals are a
+   floor rather than a measurement, and the loop should have held the offset.
+   ⚠ **THE LOOP MUST BE RESTARTED for the stop-condition change to be live** — PowerShell reads
+   `run_bigfill_loop.ps1` once at launch. Restart with the offset of the wallet that last failed,
+   NOT a higher one, or that wallet is skipped for good.
+   (The screenshot upload is VERIFIED end to end — real browser, real image, a 50,123-byte JPEG
+   at `bug-screenshots/2026-08-20T01-54-38-741Z-bugtest.jpg`.)
 3. Is the bigfill loop still alive? `logs\bigfill_loop\` has one file per run and the loop stops
    itself after 2 consecutive bad runs. **Those logs are UTF-16 — use `Select-String`, never a
    byte-level grep, which returns "0 matches" for everything and reads as "clean".**
@@ -147,9 +151,12 @@ be left UNFUNDED**, because a funded wallet self-rescues and never reaches the v
 precisely why live V8.48 has produced ZERO evictions.
 
 ## WHAT IS NEXT
-1. **Confirm the two bigfill fixes took** (see FIRST ACTIONS) — the unique-members label and the
-   stale-nonce classifier. ⚠ The loop's new stop condition only applies once the LOOP itself is
-   restarted; PowerShell had already read the old script.
+1. **Watch T1.2's MatA start filling.** T1.1 archived (127/127 both halves) and T1.2 is now the
+   ACTIVE pair — session 9 predicted this would happen via `chainNext` and asked for it to be
+   verified. The birth happened; the FILLING is what still needs observing over a few runs.
+   ⚠ Also still unconfirmed: the stale-nonce RETRY path. It shipped, and the next sweep was clean
+   and printed no `(recovered - stale nonce, resent at N)` line — meaning it never ran. A quiet
+   run is not a passing test.
 2. **Ask @bevmawire to retry the Dashboard.** His "Couldn't find your status" was submitted
    13:50 GMT and the outage ran 15:54-16:39, so **his fault predates it and has a different
    cause**. The `LOGS_DEPLOY_FLOOR` fix has now shipped to main. Either it is fixed or there is
