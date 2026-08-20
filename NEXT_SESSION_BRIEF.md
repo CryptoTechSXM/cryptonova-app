@@ -1,9 +1,9 @@
 # NEXT SESSION BRIEF — V8.50, branch `v8.1`
-Repo: `C:\CryptoNite-Smart-Contracts\CryptoNova`. Written at the end of session 11,
+Repo: `C:\CryptoNite-Smart-Contracts\CryptoNova`. Written at the end of session 12,
 2026-08-20. Paste this in as the opening message of the next session.
 
-Read `V8_50_HANDOFF.md`, newest first: **section 11.1 → 11.5** (session 11), then section 7a
-THE TWO RULES, then SESSION 10 and below. 11.1–11.5 supersede nothing older; they add.
+Read `V8_50_HANDOFF.md`, newest first: **section 12.1 → 12.7** (session 12), then 11.1–11.5
+with the withdrawal banners in them, then section 7a THE TWO RULES, then SESSION 10 below.
 
 ## THE TWO RULES — these govern everything
 1. Do not hypothesise unless necessary.
@@ -12,132 +12,87 @@ THE TWO RULES, then SESSION 10 and below. 11.1–11.5 supersede nothing older; t
 When two numbers disagree, the disagreement IS the finding — measure it, do not explain it.
 A number you have not run is not a result. One sample is not a measurement.
 
-## ⛔ START HERE — WHERE SESSION 11 LEFT THINGS
+## ⛔ START HERE — WHERE SESSION 12 LEFT THINGS
+Contracts `v8.1`; frontend `admin` = `preview` = `main` at `74a1588`, untouched since
+session 10. **NOTHING DEPLOYED. NO CHAIN WRITTEN TO. NO CONTRACT FILE TOUCHED.** Owner
+instruction still in force: *"we are not changing code yet just discussing until we come to
+a conclusion."* Session 12 was measurement only: one new test file, one new read-only
+script, handoff section 12. Clean apart from the three known `.bak` files (session 9
+leftovers; house pattern is `archive/`, not delete).
 
-| repo | branch | at session end |
-|---|---|---|
-| `C:\CryptoNite-Smart-Contracts\CryptoNova` | `v8.1` | **`4d28b34`** — two new instruments + the session-11 docs. Pushed. No contract or existing test file touched. |
-| `C:\CryptoNova-Testnet-App` | `admin` = `preview` = `main` | **`74a1588`** — unchanged since session 10. Not touched in session 11. |
+## ⛔ THE ONE THING SESSION 12 PROVED, AND IT UNDOES A LOT OF SESSION 11
+**"ZERO GRADUATIONS" WAS A DEAD COUNTER, NOT A PROPERTY OF THE SYSTEM.**
+`_cycleOutRoot` sends every MatB cycle-out to TierRouter, so `_crossToPartner` — the only
+emitter of `MemberCrossedToPartner` — is unreachable for a MatB root. TierRouter emits
+`MemberReentered` instead. **Success is silent on the event sessions 11 and 12 both
+counted; only failure is loud.** Anything measured on that counter reported 0 forever.
 
-**NOTHING WAS DEPLOYED. NO CHAIN WAS WRITTEN TO. NO CONTRACT OR EXISTING TEST FILE WAS
-TOUCHED.** Owner instruction 2026-08-20, still in force: *"we are not changing code yet just
-discussing until we come to a conclusion."*
+Corrected, and all of it reconciles with 0 unaccounted:
+* **Fixture, size 127, zero referrals anywhere:** 508 hops → 485 parked, **23 RE-ENTERED**,
+  22 members round twice, one three times. **But every success came during the fill phase
+  and the last 237 consecutive hops produced zero** — the steady-state rate really is 0.
+  The fixture is the FLOOR (no referrals, no lending), not the forecast.
+* **LIVE V8.48, first time ever counted:** 945 hops → 764 parked, **175 RE-ENTERED,
+  18.52% cleared. 91 distinct members have cleared the forward hop, 40 more than once, one
+  five times.**
+* **175 of 175 clearances had NO SF loan or discount in their own transaction** — paid from
+  earnings. (Tests the clearing tx only; 53 of the 91 have borrowed at some earlier point.
+  The SF sits upstream at the A→B crossing, not at the hop.)
+* **THE LOAN BOOK: $1,511.34 borrowed / $1,447.51 repaid = 95.78%**, 836 repayments against
+  459 loans. **This refutes 11.4's case against option B.** 11.4 reasoned only about the
+  cycle that took the loan; repayment is collected continuously by `withdrawCore`, the
+  banded clawback, and the debt sweep at MatB cycle-out. **B is not dead on arithmetic.**
+* **CORRECTED: orphaned L1 does NOT all go to accountOne.** 20% does; ~40% to the community
+  wallet (or the SF) and ~40% straight out to the dev wallet. So lever C costs the COMMUNITY
+  WALLET and the DEV WALLET, not accountOne. That changes what C is, politically.
 
-Session 11 was a MEASUREMENT session. It produced two new test files and five new handoff
-sections. **ALL OF IT IS COMMITTED AND PUSHED at `4d28b34`.** Nothing is owed.
+**UNAFFECTED AND STILL GOOD:** every shortfall number. Median holding at the hop $5.5916,
+the closed-form gap, the composition table. `V8_50_MemberLedger.test.js` reconciles the
+withdrawable against every credit ever received, three independent readings, both sizes,
+**largest disagreement $0.0000 — to the wei.** Nothing is lost, capped, withheld or settled
+late. Do not re-chase lazy settlement or an earnings cap; both stayed refuted.
 
-`git status` should be clean apart from three known untracked `.bak` files under `scripts/`
-and `test_ab/` — session 9 leftovers, house pattern is to move strays into `archive/`, not
-delete them. Suite untouched at 611/7/0; session 11 added two test files but ran neither as
-part of the suite.
+## ⛔ FIRST THING TO DO — AND DO NOT REORDER THIS
+**SEPARATE THE BIGFILL WALLETS FROM ORGANIC MEMBERS AND RE-RUN `diag_forward_hop.js`.**
+The live entry flow is bigfill, funded with the owner's own USDC, so 12.6's numbers are
+measured on a population the owner is paying for. The repayment MECHANISM is proven either
+way — that part holds — but a 95.78% ratio on an owner-funded entry stream is not evidence
+that B works organically. Bigfill wallets are identifiable: round-robin leader sponsors,
+lifetime withdrawn $0.00, reserve exactly $5.00. Split the 12.6 table by cohort.
+**THE OWNER'S DECISION SHOULD NOT BE TAKEN UNTIL THAT ROW EXISTS.**
 
-## WHAT SESSION 11 SETTLED — do not re-derive any of this
-1. ✅ **T1.1 IS THE ONLY FRONT DOOR, PERMANENTLY. CLOSED — DO NOT CHASE.**
-   `PairManagerV8._findExternalPair()` is `internal pure { return 0; }`. It is `pure`, so it
-   cannot read state and **no number anywhere can change where a registration lands.** The
-   owner's "254/255 magic number" describes a mechanism that existed twice and was deleted
-   twice — a cumulative counter froze 254 members in T1.1 MatA for three days. Full basis in
-   handoff 11.1.
-2. ✅ **THE GATE IS A PRICE, NOT A COUNT.** MatA→MatB costs the discounted crossing and is
-   pre-funded by the reserve. **MatB→next pair costs the FULL ENTRY FEE with no reserve
-   behind it.** That is the wall.
-3. ⛔ **MEASURED, live matrix size, no referral income: 485 of 485 cycle-outs at the forward
-   hop PARKED. ZERO graduated.** All 485 were genuine shortfalls — the two non-affordability
-   park causes were bucketed separately and came back nil. Median member arrives holding
-   ~56% of one fee. Matches live chain: T1 pair0 MatB has 773 rotations and 4 members ever
-   reached T1.2.
-4. ✅ **THE GAP IS FULLY ACCOUNTED FOR IN CLOSED FORM AND MATCHES THE MEASUREMENT TO SIX
-   CENTS.** Both halves distribute 5000 bps of the entry fee, so a full A+B cycle distributes
-   the whole $10.00. A no-referral member collects pool + chain + direct = $5.536; measured
-   median holding $5.5916. The gap is exactly the two leaks: **system take $2.564 + orphaned
-   L1 $1.900 = $4.464**; measured median shortfall $4.4084.
-   **CONSEQUENCE: while the protocol takes ANY fee, a member who never recruits can NEVER
-   self-fund the forward hop. It is conservation of money, not a tuning problem.**
-5. ✅ **EACH INVITEE IS WORTH EXACTLY $1.90** — 950 bps at their MatA entry plus 950 bps
-   again when they cross to MatB. **L1 PAYS IN BOTH HALVES.** The second $0.95 arrives late,
-   so recruiting early is worth more than recruiting late.
-6. ✅ **OWNER CORRECTED CLAUDE ON MECHANISM AND WAS RIGHT — THIRD TIME.** Claude called the
-   identical MatA/MatB earnings an anomaly ("MatB should earn half"). Owner: *"only $5 is
-   distributed which is the crossing fee as well so it should be the same not half."*
-   Verified in source. **When he pushes back on how the money moves, read the code before
-   defending the finding.**
+Then, in order:
+2. **Open one of the 5 unexplained cycle-outs** (tx hashes in the script output, 0.53% of
+   attempts). 7 `DoubleEntryFired` are the leading candidate — UNVERIFIED, so look.
+3. **Fix `V8_50_ReferralBreakeven.test.js` v4 to count `MemberReentered`.** It counts the
+   same dead event, so its "0 graduations at rates 0–4" measured nothing. The referral
+   break-even is still genuinely unknown.
+4. Session 10 backlog, untouched: stale-nonce retry backoff (3s sleep + single re-fetch
+   failed 24/24; try growing gaps), @bevmawire's Dashboard retry, restate
+   `maxItemsPerUpkeep` against 15 not 20, member-callable re-entry after eviction +
+   eviction end-to-end in the private deploy, re-measure bigfill fund figures.
 
-## ⛔ THE FIRST THING TO CHASE — THE BOUNDED DISTRIBUTION
-**Nobody ever reaches the fee, even when they get within eight cents.** Across 3,600+ hops
-at referral rates 0 through 4, not one forward crossing. A member who made it would leave the
-shortfall sample and appear as a graduation; FORWARD is 0 everywhere. **So the distribution
-appears bounded below $10.00 and nobody has ever had enough.**
+## ⛔ THE OWNER DECISION IS STILL OPEN — ASK, DO NOT DECIDE
+How to close the gap for members who never recruit. Still A (accept) / B (lend) / C (change
+the splits) — but **B is back on the table** and **C costs the community and dev wallets**,
+so 11.4's framing of both is out of date. Owner's stated bar: *"give members at least two
+full cycles but not at the expense of an unpaid loan — if it means only one loan that is
+what it is."* Measured against it: with zero referrals AND zero loans, 22 fixture members
+got exactly two cycles and then it stopped. **The two-cycle goal is currently a startup
+privilege, not an unreachable bar.**
 
-**ALREADY RULED OUT — do not re-chase:**
-- ❌ Lazy pool settlement. `_cycleOutRoot` calls `_settlePool` at MatrixLogicLib:805, BEFORE
-  the crossing logic at :900+.
-- ❌ An earnings/payout cap. None exists; `_settlePool` is an exact rational with no ceiling.
-
-**DO THIS:** take ONE parked member at the hop and account for their withdrawable to the cent
-against every credit they ever received — pool, chain, direct, L1, carried balance — and find
-what bounds it. Do not reason about it. If the ceiling is structural, referrals cannot close
-the gap either and option A below wins by arithmetic rather than by choice.
-
-## THEN — THE REFERRAL BREAK-EVEN, INSTRUMENT READY BUT NOT YET TRUSTED
-`test/V8_50_ReferralBreakeven.test.js` is at **v4 and has NOT produced a trustworthy row.**
-**DO NOT QUOTE ANY NUMBER FROM SESSION 11'S RUNS OF IT.** Three earlier versions, three
-faults — full table in handoff 11.5. The last one (v3) scaled the budget with the referral
-rate, which measured every rate at a different system maturity and produced a flatly
-non-monotonic table with 100+ hops per row. v4 holds the budget FIXED across rates.
-
-```powershell
-cd C:\CryptoNite-Smart-Contracts\CryptoNova
-$env:CYCLE_SIZE=127
-npx hardhat test test/V8_50_ReferralBreakeven.test.js
-Remove-Item Env:\CYCLE_SIZE
-```
-~17 minutes. Dials: `CYCLE_REFS` (default `0,1,2,3,4`), `CYCLE_BUDGET` (default 6 x SIZE —
-**fixed across rates ON PURPOSE, do not "fix" it back**), `CYCLE_MIN_HOPS` (default 10).
-
-## ⛔ ONE OWNER DECISION IS OPEN — ASK, DO NOT DECIDE
-**How to close the ~44% gap.** Economic/product, not determinable from code:
-- **A. Accept it.** Matches his standing framing — members who never invite are expected to
-  take loans and be evicted. Cost: the next pair fills at ~0 without referrals.
-- **B. Lend it.** ⚠ **Owner's own $5 idea is ALREADY the V8.50 decision** (PARAM 59 = 5000,
-  taken 2026-08-19; live V8.48 still reads 3400 = $3.40). **New fact: measured shortfalls run
-  to $5.08, so a $5.00 ceiling is eight cents short of the worst case** — the identical trap
-  as the $4.50-vs-$4.52 finding, one rung up. Menu's next step is 6800.
-  ⚠ **AND THE ARITHMETIC KILLS IT ANYWAY:** a cycle consumes $10 and returns ~$5.59, so
-  lending $4.41 means arriving at the next hop owing $4.41 AND still short. The debt is never
-  repaid because there is never a surplus. **Under the owner's own constraint — "not at the
-  expense of an unpaid loan" — B is not viable at the current yield.**
-- **C. Change the splits.** Levers, largest first: orphaned L1 950 bps (goes to accountOne,
-  costs real referrers nothing); system take 1282 bps; what the forward hop costs. Splits
-  must sum to exactly 4750 — every option is a reallocation, never an increase.
-
-Owner's stated goal: *"give members at least two full cycles but not at the expense of an
-unpaid loan — if it means only one loan that is what it is."*
-
-## ⚠ SESSION 11'S OWN TRAPS — ADD TO THE LIST
-- **A HARNESS THAT REMOVES A FAILURE MODE CANNOT THEN REPORT ITS ABSENCE.** v2 registered
-  invitees immediately, making stranded L1 zero BY CONSTRUCTION, then printed that zero as a
-  finding. v3 measured it non-zero (~0.6% of L1 — real, but far too small to matter).
-- **EVENING OUT SAMPLE SIZES BY CHANGING RUN LENGTH INTRODUCES A MATURITY CONFOUND.** A thin
-  row labelled thin is honest; a confounded row lies quietly.
-- **ONE SAMPLE IS NOT A MEASUREMENT — INCLUDING ONE HAND-PICKED MEMBER.** The first cycle
-  fixture tracked a single subject and refused twice at size 127 before being rewritten as a
-  census.
-- **`isActiveInMatrix` DOES NOT MEAN "HOLDS A SEAT".** It read `true` for a member while 485
-  parked and occupancy never moved. Parked members still answer true.
-- **V8.50 ITEM A IS ALREADY IN THIS TREE AND DOES NOT FIX THE FORWARD HOP.** The fixture ran
-  with item A in force — A→B cost $5.00 funded 100% from reserve — and still ended 0 of 485.
-  Item A was never aimed at this hop. LIVE V8.48 does not have item A at all.
-
-## STILL ON THE BACKLOG FROM SESSION 10 — NOT TOUCHED
-1. **The stale-nonce retry does not work.** Classifier and offset-hold are proven good; the
-   3-second sleep and single re-fetch failed 24 of 24. Pre-run sweep succeeded 24/24 and the
-   post-registration sweep failed 24/24, so the lag only appears after those wallets have
-   just transacted. Try a longer backoff or several attempts with growing gaps.
-2. **Ask @bevmawire to retry the Dashboard.** His fault predates the outage and has a
-   different cause. `LOGS_DEPLOY_FLOOR` fix has shipped to main.
-3. **Restate the `maxItemsPerUpkeep` item against 15**, not 20.
-4. **Member-callable re-entry after eviction** + **eviction end-to-end in the private deploy.**
-5. Bigfill loop / fund figures — RE-MEASURE, do not carry session 10's numbers forward.
+## ⚠ TRAPS — SESSION 12 ADDED THREE, ALL PAID FOR TWICE
+- **AN INSTRUMENT CANNOT REPORT THE ABSENCE OF WHAT IT CANNOT OBSERVE.** Session 11 wrote
+  this rule about v2's stranded-L1 zero and then walked into it two sections later. Session
+  12 walked into it again with the same event. **Before believing any zero, prove the event
+  CAN fire on that path.**
+- **DO NOT MERGE THE PARK BUCKETS.** `MemberParked` has six emit sites and only two carry a
+  real shortfall. Merging them made outcomes exceed attempts (−9). 11.4 says this in as many
+  words and session 12 did it anyway.
+- **A PROXY THAT CANNOT COME BACK NEGATIVE IS NOT A MEASUREMENT.** "The SF emitted a log in
+  this tx" read 100% because `FundDeposit` fires on every entry's stability split. The loan
+  signal is `MemberDebtIncreased`. Also: **a debt SNAPSHOT is not a repayment HISTORY** —
+  the same mistake as the 2026-08-16 current-balance-vs-lifetime-ledger error.
 
 ## HOW WE WORK
 You drive, decide direction, and make the file edits directly. I run every command and paste

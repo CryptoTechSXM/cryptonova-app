@@ -156,6 +156,82 @@ unknown and is one event query away.** Get it before taking the 11.4 decision.
 and "why is T1.2 empty" are different questions with different answers. 12.1 answers the
 first. The second is answered by `_sameTierTarget` and is not an affordability problem.
 
+## 12.6 ⛔⛔ LIVE CHAIN, FIRST TIME EVER COUNTED — AND IT OVERTURNS 11.4's CASE AGAINST B
+`scripts/diag_forward_hop.js` (session 12), live V8.48, blocks 45430468..45739452, whole
+deployment. Read-only. **Every block range read cleanly — these are counts, not bounds.**
+
+| tier | MatB hops | parked SHORT | park-0 | RE-ENTERED | cleared | unexplained |
+|---|---|---|---|---|---|---|
+| T1 | 861 | 699 | 15 | **156** | **18.12%** | 5 |
+| T2 | 84 | 65 | 1 | **19** | **22.62%** | 0 |
+| ALL | 945 | 764 | 16 | **175** | **18.52%** | 5 |
+
+**91 DISTINCT MEMBERS HAVE CLEARED THE FORWARD HOP ON LIVE. 40 OF THEM MORE THAN ONCE.
+ONE HAS DONE IT FIVE TIMES.** The project has never had this number.
+
+⚠ `unexplained` = a MatB cycle-out whose own tx contains neither a park nor a re-entry.
+5 of 945 (0.53%). 7 `DoubleEntryFired` exist overall and are the leading candidate but
+that is **UNVERIFIED** — the 5 tx hashes are printed by the script; open one, do not
+assume. The cleared % is good to within that residual and no better.
+
+### WHO PAID — AND IT IS NOT THE STABILITY FUND
+Tested on `MemberDebtIncreased`, the ONLY loan signal:
+
+| | | |
+|---|---|---|
+| SF LOAN in the same tx as the clearance | **0** | 0.00% |
+| SF discount in the same tx | **0** | 0.00% |
+| **NO SF credit — paid from their own earnings** | **175** | **100.00%** |
+
+⚠ **THIS TESTS THE CLEARING TRANSACTION ONLY.** A loan taken earlier and carried in
+`withdrawable` would not show. **53 of the 91 clearers HAVE borrowed at some point** — the
+SF sits UPSTREAM (funding the A->B crossing) rather than at the forward hop. The claim is
+"self-funded AT THE HOP", not "never assisted". Do not let it drift into the stronger one.
+
+### ⛔ THE LOAN BOOK — THIS IS WHAT 11.4 GOT WRONG
+
+| population | borrowed | repaid | ratio |
+|---|---|---|---|
+| whole deployment — 304 members, 459 loans, 836 repayments | $1,511.3415 | $1,447.5106 | **95.78%** |
+| restricted to the 91 hop-clearers (53 ever borrowed) | $233.5810 | $205.9208 | **88.16%** |
+
+11.4 killed option B on this reasoning: *"a cycle consumes $10 and returns ~$5.59, so
+lending $4.41 means arriving at the next hop owing $4.41 AND still short. The debt is never
+repaid because there is never a surplus."* **That is refuted.** It reasoned only about the
+cycle that TOOK the loan. Repayment is not drawn from that cycle — it is collected
+continuously out of ongoing earnings by three paths that 11.4 never accounted for:
+`withdrawCore` repaying before payout, the banded clawback, and the debt sweep at MatB
+cycle-out (MatrixLogicLib:838-852). 836 repayments against 459 loans: the book retires in
+pieces, and it retires. **OPTION B IS NOT DEAD ON ARITHMETIC. RE-PRICE IT BEFORE CHOOSING.**
+
+### ⚠⚠ THE CONFOUND THAT COULD MAKE ALL OF 12.6 WORTHLESS — DO NOT SKIP THIS
+**The live entry flow is currently BIGFILL, funded with the owner's own USDC.** The
+repayment paths are mechanically proven — that much is real and holds regardless. But the
+earnings that repay the loans come from entry fees, and right now the owner is supplying
+those entries. **A 95.78% repayment ratio measured on an owner-funded entry stream is not
+evidence that B works against organic membership.** It is not nothing either: it proves the
+COLLECTION MECHANISM works, which is exactly the thing 11.4 asserted could not.
+
+### ⚠ WHY LIVE CLEARS 18% WHERE THE FIXTURE CLEARS 0 IN STEADY STATE
+Not a contradiction. The fixture gives EVERY member `referrer = address(0)`, so it is a
+true worst case with no referral income anywhere in the population, and it runs with no
+Stability Fund lending at all. Live has real referrers and upstream rescue loans.
+**The fixture is the FLOOR, not the forecast.** Quote it as such.
+
+## 12.7 ⛔ NEXT SESSION, IN ORDER — DO NOT REORDER 1 AND 2
+1. **SEPARATE THE BIGFILL WALLETS FROM ORGANIC MEMBERS AND RE-RUN 12.6.** Until that is
+   done, every number in 12.6 is measured on a population the owner is funding. Bigfill
+   wallets are identifiable (round-robin leader sponsors, lifetime withdrawn $0.00,
+   reserve exactly $5.00 — see the 2026-08-16 correction). Split the table by cohort. **The
+   owner's 11.4 decision should not be taken until this row exists.**
+2. **OPEN ONE OF THE 5 UNEXPLAINED CYCLE-OUTS** (tx hashes in the script output). Small,
+   but it is the only thing between the cleared % and an exact partition.
+3. **FIX `V8_50_ReferralBreakeven.test.js` (v4) TO COUNT `MemberReentered`.** It counts the
+   same dead event, so its "0 graduations at rates 0-4" measured nothing and no row from it
+   is quotable. This is why the referral break-even is still unknown.
+4. Then the backlog from session 10: stale-nonce retry backoff, @bevmawire's Dashboard
+   retry, `maxItemsPerUpkeep` restated against 15, member-callable re-entry after eviction.
+
 ---
 
 # ⬛ SESSION 11 STATE — 2026-08-20, ⚠ 11.4 AND 11.5 ARE PARTLY WITHDRAWN BY SESSION 12 ABOVE — READ 12.1 FIRST.
