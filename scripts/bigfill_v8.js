@@ -1043,13 +1043,38 @@ async function snapshot(label, { tierRouter, pm1, matA1, matB1, matA2, matB2,
   const w1Cycles = await tierRouter.tierCycles(w1Addr, 0);
   const totalCyc = await tierRouter.totalSystemCycles();
   const paused   = await tierRouter.systemPaused();
+  // ── "T1 total registered" WAS A PEOPLE LABEL ON AN ENTRY COUNTER (fixed 2026-08-20) ──
+  // Owner spotted it: the snapshot printed 895 while the site's Live Stats read 370
+  // all-time joins. Both numbers were right; the LABEL was wrong.
+  // `PairManagerV8.sol:86` says so itself: totalRegistrations "increments on EVERY routing
+  // - register, rescue re-entry, MatB placement, doubles - so it is an ENTRY counter". On a
+  // chain with 597 system cycles the same people are routed again and again, so it climbs
+  // far past the headcount and reads like runaway growth.
+  // V8.48 item 7 added the people-denominated counter for exactly this reason (two other
+  // consumers had already been bitten - the treasury's early-exit penalty ladder read 0,
+  // and Universe Mode's 500-MEMBER gate would have opened on entry CHURN). Print both, each
+  // under a name that says what it counts.
   const totalReg = await pm1.totalRegistrations();
+
+  // ⛔ GUARDED, BECAUSE pm1 IS THE LOCAL V8.50 ABI POINTED AT A LIVE V8.48 DEPLOYMENT
+  // (`getContractAt("PairManagerV8", ...)`). The ABI having a function proves nothing about
+  // the deployed bytecode - that mismatch cost this project an afternoon on 2026-08-19.
+  // uniqueMembers/totalMembers arrived in V8.48 item 7 so they should be on the live build,
+  // but "should" is not a measurement, and this run is what measures it.
+  // ⚠ IF THE READ FAILS IT PRINTS "unavailable", NEVER 0. Zero is a legitimate value here
+  // and a failed read shown as 0 would say the system has no members at all.
+  let uniqueMem = null;
+  try { uniqueMem = await pm1.uniqueMembers(); }
+  catch (_) {
+    try { uniqueMem = await pm1.totalMembers(); } catch (_) { uniqueMem = null; }
+  }
 
   const occ1A = await matA1.occupancy();
   const occ1B = await matB1.occupancy();
   const mSize = await matA1.MATRIX_SIZE();
 
-  console.log(`  T1 total registered: ${totalReg}`);
+  console.log(`  T1 unique members:   ${uniqueMem === null ? "unavailable on this build (read failed - NOT zero)" : uniqueMem}   <- people; matches the site's Total Registered`);
+  console.log(`  T1 entries (all routings): ${totalReg}   <- includes re-entries, MatB placements and doubles, so it exceeds the headcount`);
   console.log(`  T1 MatA occupancy:   ${occ1A} / ${mSize}`);
   console.log(`  T1 MatB occupancy:   ${occ1B} / ${mSize}`);
   console.log(`  W1 highest tier:     T${w1Tier}  ${w1Tier === 0n ? "(not yet registered as matrix member)" : ""}`);
