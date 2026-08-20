@@ -209,10 +209,12 @@ accept.** Fixed by giving him the fields it promised rather than deleting the pr
 - `resetForm()` clears steps, the file input, the status line and the in-memory base64 —
   without it the NEXT report from the same page load carries the PREVIOUS member's screenshot.
 
-⚠ **NOT YET VERIFIED END TO END.** `node --check` passes on both files, the field is threaded
-through, and `buildEntry` was rendered for four cases — but **no real browser has done the
-canvas downscale and no real image has gone through the GitHub API.** File a throwaway report
-with a screenshot and confirm the entry, the link and the file in `bug-screenshots/`.
+✅ **VERIFIED END TO END 2026-08-20**, owner filed a real report from a real browser:
+`bug-screenshots/2026-08-20T01-54-38-741Z-bugtest.jpg` — a valid JPEG (magic `ff d8 ff e0`),
+**50,123 bytes**, so the client-side downscale worked. `BUGS.md` carries the fenced
+**Steps to reproduce** block and a resolving **Screenshot:** link, inserted at the top of Open
+Issues. **And the commit order is right: `97e2d6e` (image) lands BEFORE `4e038ef` (report)**,
+which is the ordering that keeps a report alive when an upload fails.
 
 ⚠ **AND THE UNDERLYING COMPLAINT IS NOT CLOSED.** @bevmawire's actual problem was "Couldn't
 find your status" on the Dashboard at **13:50 GMT**; the Base Sepolia state-read outage ran
@@ -234,6 +236,45 @@ does its own `$offset++` and the next log should be named `...offset290.log`.
 isolates the sweep-only inflow by accident and is the cleanest evidence yet that **the SWEEPS,
 not the registrations, feed the fund** — which is what `BIGFILL_RULES.md` already says. Not a
 designed experiment; do not quote a rate from it.
+
+---
+
+## 7. ⛔ BIGFILL — TWO FIXES, ONE COSMETIC AND ONE THAT WAS HIDING A BROKEN SWEEP
+
+### 7a. "T1 total registered" WAS A PEOPLE LABEL ON AN ENTRY COUNTER
+Owner spotted it: the snapshot printed **895** while the site's Live Stats read **370** all-time
+joins. Both numbers were correct; the LABEL was wrong. `PairManagerV8.sol:86` says so itself —
+`totalRegistrations` "increments on EVERY routing — register, rescue re-entry, MatB placement,
+doubles — so it is an ENTRY counter". With 597 system cycles the same people are routed over and
+over, so it climbs far past the headcount and reads like runaway growth.
+**This has bitten the codebase twice before**, which is why V8.48 item 7 added `uniqueMembers`:
+the treasury's early-exit penalty ladder was reading 0, and Universe Mode's 500-MEMBER gate would
+have opened on entry CHURN (~12 real members' worth of re-entries). The snapshot now prints both,
+each named for what it counts. The `uniqueMembers` read is GUARDED — `pm1` is the local V8.50 ABI
+pointed at a live V8.48 chain — and prints "unavailable", never 0, if it fails.
+
+### 7b. ⛔ STALE-NONCE FAILURES WERE COUNTED AS MEMBER REFUSALS — HH110 IN A NEW HAT
+A post-registration sweep logged `nonce too low` on **16 of 16** wallets and printed
+**"Self-rescues: 0 succeeded - 16 skipped"**. Those members were never asked. Worse than the
+original HH110 case, because the `else` branch also does `consecutiveTransport = 0`, so **every
+stale-nonce failure RESET the 5-in-a-row abort guard** — the sweep could fail indefinitely
+without tripping it, and `run_bigfill_loop.ps1` (which only looked for `NETWORK FAILURES`) judged
+the run GOOD and advanced the offset.
+
+**CAUSE, BY ELIMINATION RATHER THAN ASSUMPTION:** member wallets are plain
+`w.connect(ethers.provider)` with **no NonceManager** (deliberate — see the funder comment), so
+ethers fetches the count itself at send time; a process check found **exactly one** bigfill
+running, ruling out a concurrent sweep; and each wallet was behind by roughly the number of
+transactions it had already sent earlier in that same run. That is a load-balanced RPC answering
+`getTransactionCount` from a replica that had not caught up — the same lag this file already
+sleeps 90s for after funding, and the same class as session 9's stale top-up read.
+
+**FIXED:** stale-nonce errors are classified separately, **retried once with an explicitly
+re-fetched nonce**, counted in their own bucket, reported in the summary as
+`STALE-NONCE FAILURES ... treat this sweep as INCOMPLETE`, and they no longer reset the transport
+counter. `run_bigfill_loop.ps1` now treats that marker as a bad run, so two in a row stop the
+loop. ⚠ **The loop change only takes effect when the LOOP restarts** (PowerShell has already read
+the script); the bigfill change lands on the next run, since node re-reads it each time.
 
 ---
 
@@ -285,9 +326,11 @@ that checks out local `preview` and merges will make a mess.** Fix them or delet
 
 ## NEXT, IN ORDER
 
-1. **Verify the screenshot upload end to end** — file a throwaway bug report with an image and
-   confirm the `BUGS.md` entry, the link, and the file in `bug-screenshots/`. The one thing in
-   this session that has not been proven against reality.
+1. ~~Verify the screenshot upload end to end~~ — **DONE 2026-08-20, see section 5.**
+   Instead: **confirm the two bigfill fixes actually took.** The next run's snapshot should read
+   `T1 unique members: 370` (matching the site) rather than a 900-ish entry count, and no
+   `STALE-NONCE FAILURES` line should appear. If it says "unavailable on this build",
+   `uniqueMembers` is not on the deployed V8.48 and the people count must be derived another way.
 2. **Ask @bevmawire to retry the Dashboard.** His fault predates the outage and the block-floor
    fix has now shipped to main. Either it is fixed or we have a second, still-unidentified cause.
 3. **Restate the `maxItemsPerUpkeep` item against 15, not 20**, then decide.

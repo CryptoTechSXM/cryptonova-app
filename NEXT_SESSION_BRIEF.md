@@ -44,12 +44,13 @@ session 10 because nothing it covers moved.
    `COMMIT_MSG_s10.txt` in BOTH repos (delete it), and in contracts
    `scripts/bigfill_v8.js.bak_ascii`, `test_ab/replay.js.bak_s9b`, `test_ab/replay.js.bak_s9c`
    (session 9 leftovers — house pattern is to move strays into `archive/`, not delete them).
-2. **VERIFY THE SCREENSHOT UPLOAD END TO END.** It is the one thing session 10 shipped that has
-   not been proven against reality — `node --check` passes and `buildEntry` was rendered for
-   four cases, but no real browser has done the canvas downscale and no real image has gone
-   through the GitHub API. File a throwaway bug report with an image; confirm the `BUGS.md`
-   entry, the link, and the file in `bug-screenshots/`. If the upload fails the entry SAYS SO
-   by design, so either outcome is informative.
+2. **CHECK THE NEXT BIGFILL SNAPSHOT READS `T1 unique members: 370`** (matching the site's
+   Total Registered) rather than the ~900 entry count it used to print under that label. If it
+   says "unavailable on this build", `uniqueMembers` is not on the deployed V8.48 and the people
+   count has to be derived another way. Also confirm NO `STALE-NONCE FAILURES` line appears —
+   if one does, that sweep was INCOMPLETE and its totals are a floor, not a measurement.
+   (The screenshot upload is already VERIFIED end to end — real browser, real image, a
+   50,123-byte JPEG at `bug-screenshots/2026-08-20T01-54-38-741Z-bugtest.jpg`.)
 3. Is the bigfill loop still alive? `logs\bigfill_loop\` has one file per run and the loop stops
    itself after 2 consecutive bad runs. **Those logs are UTF-16 — use `Select-String`, never a
    byte-level grep, which returns "0 matches" for everything and reads as "clean".**
@@ -146,7 +147,9 @@ be left UNFUNDED**, because a funded wallet self-rescues and never reaches the v
 precisely why live V8.48 has produced ZERO evictions.
 
 ## WHAT IS NEXT
-1. **Verify the screenshot upload end to end** (see FIRST ACTIONS).
+1. **Confirm the two bigfill fixes took** (see FIRST ACTIONS) — the unique-members label and the
+   stale-nonce classifier. ⚠ The loop's new stop condition only applies once the LOOP itself is
+   restarted; PowerShell had already read the old script.
 2. **Ask @bevmawire to retry the Dashboard.** His "Couldn't find your status" was submitted
    13:50 GMT and the outage ran 15:54-16:39, so **his fault predates it and has a different
    cause**. The `LOGS_DEPLOY_FLOOR` fix has now shipped to main. Either it is fixed or there is
