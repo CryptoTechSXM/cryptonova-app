@@ -1,105 +1,49 @@
-# NEXT SESSION BRIEF — V8.50, branch `v8.1`
-Repo: `C:\CryptoNite-Smart-Contracts\CryptoNova`. Written at the end of session 12,
-2026-08-20. Paste this in as the opening message of the next session.
+NEXT SESSION BRIEF — V8.50, branch `v8.1`
+Written end of session 17, 2026-08-20. Paste this in to open the next session. Repo: `C:\CryptoNite-Smart-Contracts\CryptoNova`.
+Read `V8_50_HANDOFF.md` section 17 first — 17.1 is the result, 17.2 is the method lesson, 17.5 is the owner's open call — then 16, 15, 14, then section 7a THE TWO RULES. Everything below is a pointer, not a substitute.
 
-Read `V8_50_HANDOFF.md`, newest first: **section 12.1 → 12.7** (session 12), then 11.1–11.5
-with the withdrawal banners in them, then section 7a THE TWO RULES, then SESSION 10 below.
+STATE
+Contracts `v8.1`, frontend `admin` = `preview` = `main` at `74a1588`. NOTHING DEPLOYED, NO CHAIN WRITTEN TO. Session 17 edited two contract files as a FIXTURE, measured them, and REVERTED — `git diff contracts/` is empty for both. Sessions 13–17 are measurement only.
 
-## THE TWO RULES — these govern everything
-1. Do not hypothesise unless necessary.
-2. Measure and test before implementing. Never build on a hypothesis.
+SUITE: **618 passing / 8 pending / 0 failing**, RE-RUN IN FULL 2026-08-20 at the end of session 17 — this is the current baseline, use it. The old 611/7/0 was stale: it predated sessions 11 and 12, which added `V8_50_CycleEconomics`, `V8_50_ReferralBreakeven` and `V8_50_MemberLedger`. Those three were run alone and report exactly 7, so the +7 is fully accounted for and is NOT a drift. The 8th pending is `V8_50_GateCost.test.js`, skipped on purpose (17.8).
 
-When two numbers disagree, the disagreement IS the finding — measure it, do not explain it.
-A number you have not run is not a result. One sample is not a measurement.
+THE RULES
 
-## ⛔ START HERE — WHERE SESSION 12 LEFT THINGS
-Contracts `v8.1`; frontend `admin` = `preview` = `main` at `74a1588`, untouched since
-session 10. **NOTHING DEPLOYED. NO CHAIN WRITTEN TO. NO CONTRACT FILE TOUCHED.** Owner
-instruction still in force: *"we are not changing code yet just discussing until we come to
-a conclusion."* Session 12 was measurement only: one new test file, one new read-only
-script, handoff section 12. Clean apart from the three known `.bak` files (session 9
-leftovers; house pattern is `archive/`, not delete).
+1. Do not hypothesise unless necessary. 2. Measure and test before implementing. When two numbers disagree, the disagreement IS the finding. A number you have not run is not a result. One sample is not a measurement. Build the instrument so it can contradict you.
 
-## ⛔ THE ONE THING SESSION 12 PROVED, AND IT UNDOES A LOT OF SESSION 11
-**"ZERO GRADUATIONS" WAS A DEAD COUNTER, NOT A PROPERTY OF THE SYSTEM.**
-`_cycleOutRoot` sends every MatB cycle-out to TierRouter, so `_crossToPartner` — the only
-emitter of `MemberCrossedToPartner` — is unreachable for a MatB root. TierRouter emits
-`MemberReentered` instead. **Success is silent on the event sessions 11 and 12 both
-counted; only failure is loud.** Anything measured on that counter reported 0 forever.
+AND THE ONE SESSIONS 15–17 EARNED: BUILD THE SECOND INSTRUMENT. Not a review pass, not a re-read — a different measurement of an overlapping quantity, with a printed line where the two must meet. Three sessions, three times it paid.
 
-Corrected, and all of it reconciles with 0 unaccounted:
-* **Fixture, size 127, zero referrals anywhere:** 508 hops → 485 parked, **23 RE-ENTERED**,
-  22 members round twice, one three times. **But every success came during the fill phase
-  and the last 237 consecutive hops produced zero** — the steady-state rate really is 0.
-  The fixture is the FLOOR (no referrals, no lending), not the forecast.
-* **LIVE V8.48, first time ever counted:** 945 hops → 764 parked, **175 RE-ENTERED,
-  18.52% cleared. 91 distinct members have cleared the forward hop, 40 more than once, one
-  five times.**
-* **175 of 175 clearances had NO SF loan or discount in their own transaction** — paid from
-  earnings. (Tests the clearing tx only; 53 of the 91 have borrowed at some earlier point.
-  The SF sits upstream at the A→B crossing, not at the hop.)
-* **THE LOAN BOOK: $1,511.34 borrowed / $1,447.51 repaid = 95.78%**, 836 repayments against
-  459 loans. **This refutes 11.4's case against option B.** 11.4 reasoned only about the
-  cycle that took the loan; repayment is collected continuously by `withdrawCore`, the
-  banded clawback, and the debt sweep at MatB cycle-out. **B is not dead on arithmetic.**
-* **CORRECTED: orphaned L1 does NOT all go to accountOne.** 20% does; ~40% to the community
-  wallet (or the SF) and ~40% straight out to the dev wallet. So lever C costs the COMMUNITY
-  WALLET and the DEV WALLET, not accountOne. That changes what C is, politically.
+⛔ AND THE ONE SESSION 17 EARNED, WHICH IS 14.3 IN A NEW COAT: A MEASUREMENT WHOSE CONTROL ARM MOVED IS NOT A MEASUREMENT. The gate fixture was first built with a real ceiling, it BOUND, the fund refused loans, parked members were evicted instead of rescued, and the batch mix went from PARKED_RESCUEx8/EVICT_PARKEDx4 to x2/x10. The gas run priced a different population and read as a saving. To price a MECHANISM, install it so it cannot BIND, then check the work mix came back identical before believing a single number.
 
-**UNAFFECTED AND STILL GOOD:** every shortfall number. Median holding at the hop $5.5916,
-the closed-form gap, the composition table. `V8_50_MemberLedger.test.js` reconciles the
-withdrawable against every credit ever received, three independent readings, both sizes,
-**largest disagreement $0.0000 — to the wei.** Nothing is lost, capped, withheld or settled
-late. Do not re-chase lazy settlement or an earnings cap; both stayed refuted.
+⛔ THE POLICY IS SETTLED — 16.5 STANDS, ALL FIVE
+Asked once and accepted by the owner 2026-08-20. Keep lending; price it at 20.2% ending in debt vs 10.0%; PARAM 59 stays at 5000; do NOT cut the floor to 40%/20%; do NOT touch `setClawbackBands` for this purpose; the exit is sponsorship. Build on it without re-asking. The lending investigation (13→16) is CLOSED — its record is in the handoff and in memory; do not re-open it, and never requote 13.5's 7.1/31.7 or 15.2's 2.4/31.8. The balanced pair is 8.0% vs 19.6%.
 
-## ⛔ FIRST THING TO DO — AND DO NOT REORDER THIS
-**SEPARATE THE BIGFILL WALLETS FROM ORGANIC MEMBERS AND RE-RUN `diag_forward_hop.js`.**
-The live entry flow is bigfill, funded with the owner's own USDC, so 12.6's numbers are
-measured on a population the owner is paying for. The repayment MECHANISM is proven either
-way — that part holds — but a 95.78% ratio on an owner-funded entry stream is not evidence
-that B works organically. Bigfill wallets are identifiable: round-robin leader sponsors,
-lifetime withdrawn $0.00, reserve exactly $5.00. Split the 12.6 table by cohort.
-**THE OWNER'S DECISION SHOULD NOT BE TAKEN UNTIL THAT ROW EXISTS.**
+✅ WHAT SESSION 17 CLOSED — THE GATE FITS, AND FEASIBILITY IS NO LONGER A REASON TO WAIT
+* SIZE: TierRouter +136 bytes (530 left), StabilityFund +447 (9,066 left), and MatrixPairFactory (78 bytes) and MatrixLogicLib (295) did not move a byte — the matrix and the library are never touched.
+* GAS: the added router read costs 7,720 cold / 1,220 warm, measured in exact gas units. Against a live worst item of 4.37M that is 0.18%; a saturated 15-item batch adds ~0.3% of the 17.80M ceiling; `minGasPerItem` is untouched.
+* PLACEMENT — this CORRECTS 13.11 and 16.5. The gate does NOT go in `coPayRescue`. It goes in `StabilityFund.loanHeadroom`, the only place the ceiling arithmetic lives, so the keeper's triage and the fund's enforcement cannot drift apart. The SF already stores `tierRouter` (StabilityFund.sol:98) and the matrix needs no change at all.
+* NOT MEASURED, stated plainly: the end-to-end delta at MATRIX_SIZE 127 (only the size-7 arm was run; the added read touches no matrix storage, which is REASONING not a measurement), and the register SSTORE beyond "+0.01M measured".
 
-Then, in order:
-2. **Open one of the 5 unexplained cycle-outs** (tx hashes in the script output, 0.53% of
-   attempts). 7 `DoubleEntryFired` are the leading candidate — UNVERIFIED, so look.
-3. **Fix `V8_50_ReferralBreakeven.test.js` v4 to count `MemberReentered`.** It counts the
-   same dead event, so its "0 graduations at rates 0–4" measured nothing. The referral
-   break-even is still genuinely unknown.
-4. Session 10 backlog, untouched: stale-nonce retry backoff (3s sleep + single re-fetch
-   failed 24/24; try growing gaps), @bevmawire's Dashboard retry, restate
-   `maxItemsPerUpkeep` against 15 not 20, member-callable re-entry after eviction +
-   eviction end-to-end in the private deploy, re-measure bigfill fund figures.
+⛔ OWNER DECISION OPEN — DO NOT TREAT AS TAKEN
+A BINDING sponsorship gate converts rescues into EVICTIONS. Session 17's binding arm evicted 6 members the baseline rescued. ⚠ That is a fixture world where nobody has a sponsor and it is NOT a live prediction — but the direction is real, eviction has fired 0 times in 1,803 live episodes, and a binding gate is what would start it. What base ceiling, and whether a refused loan should route to eviction at all, are the owner's economic calls. Do not design them before item 1 below.
 
-## ⛔ THE OWNER DECISION IS STILL OPEN — ASK, DO NOT DECIDE
-How to close the gap for members who never recruit. Still A (accept) / B (lend) / C (change
-the splits) — but **B is back on the table** and **C costs the community and dev wallets**,
-so 11.4's framing of both is out of date. Owner's stated bar: *"give members at least two
-full cycles but not at the expense of an unpaid loan — if it means only one loan that is
-what it is."* Measured against it: with zero referrals AND zero loans, 22 fixture members
-got exactly two cycles and then it stopped. **The two-cycle goal is currently a startup
-privilege, not an unreachable bar.**
+NEXT, IN ORDER
 
-## ⚠ TRAPS — SESSION 12 ADDED THREE, ALL PAID FOR TWICE
-- **AN INSTRUMENT CANNOT REPORT THE ABSENCE OF WHAT IT CANNOT OBSERVE.** Session 11 wrote
-  this rule about v2's stranded-L1 zero and then walked into it two sections later. Session
-  12 walked into it again with the same event. **Before believing any zero, prove the event
-  CAN fire on that path.**
-- **DO NOT MERGE THE PARK BUCKETS.** `MemberParked` has six emit sites and only two carry a
-  real shortfall. Merging them made outcomes exceed attempts (−9). 11.4 says this in as many
-  words and session 12 did it anyway.
-- **A PROXY THAT CANNOT COME BACK NEGATIVE IS NOT A MEASUREMENT.** "The SF emitted a log in
-  this tx" read 100% because `FundDeposit` fires on every entry's stability split. The loan
-  signal is `MemberDebtIncreased`. Also: **a debt SNAPSHOT is not a repayment HISTORY** —
-  the same mistake as the 2026-08-16 current-balance-vs-lifetime-ledger error.
+1. RE-MEASURE 14.1 AND 16.2 ON THE PRIVATE V8.50 DEPLOY. The only blocking item now. `crossingBufferBps = 0` is in the tree and NOT deployed; the buffer manufactured most of the debt behind every number in 13→16. The gate's base ceiling must be chosen on V8.50 numbers.
+2. Split 14.1 by tier and cap time-at-risk (14.4's one real imbalance).
+3. The gate's policy shape — after item 1, and partly the owner's.
+4. Backlog, untouched throughout: the 5 unexplained cycle-outs (still exactly 5, organic); `contracts/test/CryptoNovaCommunityWallet.sol` shows a whole-file 474/474 diff, the signature of a line-ending change, predating session 17 and never investigated; `V8_50_ReferralBreakeven.test.js` v4 counts the dead event; stale-nonce retry backoff; @bevmawire's Dashboard retry; `maxItemsPerUpkeep` live 15 vs 20 in source; member-callable re-entry.
 
-## HOW WE WORK
-You drive, decide direction, and make the file edits directly. I run every command and paste
-back the output. Copy-paste blocks that name the folder, one step at a time, then wait.
-Explain in plain language; I am not deep on the technical side. Do not ask which item to take
-next — decide, tell me, and we continue. Ask only when the answer is genuinely mine: a policy
-or economic trade-off. Dial back on long chains of runs.
-Contracts push to `v8.1`. Frontend pushes to `origin admin`, then `admin:preview` and
-`admin:main` (members see MAIN only). There is no third party: every line of this codebase was
-written by a previous session of you and executed by me. Write handoffs to yourself accordingly.
+TOOLS THAT NOW EXIST — use them, do not rebuild them
+* `node scripts/fixture_gate_apply.js` reapplies session 17's exact fixture (`--binding` for the policy arm, `--undo` to revert). It aborts rather than half-apply.
+* `test/V8_50_GateCost.test.js` is the probe, `describe.skip` ON PURPOSE — it only means anything with the fixture applied. Its header has the run recipe.
+* `contracts/test/GateProbe.sol` measures cold and warm in one transaction with no matrix world.
+
+TRAPS, CARRIED FORWARD
+* A GATE THAT EXISTS IS NOT A GATE THAT BINDS (14.3), and its mirror: A GATE INSTALLED TO BE MEASURED MUST NOT BIND (17.2).
+* READING SOURCE MEASURES THE MECHANISM, NOT THE POPULATION. It IS valid for where code lives — that is how 17.4 corrected the `coPayRescue` claim.
+* A WINDOW THAT LEAKS INVENTS A FINDING (16.1). DECISIVE ≠ COVERAGE — 67.4% of the missing dollars, 5 of 123 members; quote both or neither. A CONTROL WHOSE BASELINE IS ON THE FLOOR CANNOT CARRY A VERDICT (bigfill, 1.4%).
+* AN INSTRUMENT'S RESOLUTION IS PART OF ITS RESULT. `V8_50_KeeperGas` prints to 0.01M; a 7,720-gas change reads as +0.01M. That is agreement, not absence — and it is also why 17.3 says "consistent with", not "established".
+
+HOW WE WORK
+You drive and decide direction; you make the file edits; I run every command and paste back the output. Copy-paste blocks that name the folder, one step at a time, then wait. Plain language — I am not deep on the technical side. Do not ask which item to take next: decide, tell me, and we continue. Ask only when the answer is genuinely mine (a policy or economic trade-off). Fewer, smaller steps — converge on the decision rather than chasing every thread; park the rest in the handoff. Contracts push to `v8.1`; frontend `origin admin` → `admin:preview` → `admin:main`. There is no third party: every line here was written by a previous session of you and executed by me. Write handoffs to yourself accordingly.

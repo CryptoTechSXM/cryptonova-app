@@ -1,7 +1,7 @@
 # V8.50 HANDOFF — the crossing redesign. READ THIS FIRST.
 
 Written 2026-08-16 at the end of the V8.49 private measurement run.
-Sessions 2-10 have appended to it since; read the NEWEST section first — each one
+Sessions 2-17 have appended to it since; read the NEWEST section first — each one
 corrects the ones below it, and says so explicitly where it does.
 Audience: **the next session of Claude, plus the owner. There is no third party — every
 line of this codebase was written by a previous session of Claude and executed by the
@@ -10,7 +10,979 @@ owner-set, and the session that earned it got five things wrong by ignoring what
 
 ---
 
-# ⬛ SESSION 12 STATE — 2026-08-20, LATEST. READ THIS FIRST, BEFORE SESSION 11.
+# ⬛ SESSION 17 STATE — 2026-08-20, LATEST. READ THIS FIRST. 16.6 ITEM 1 IS CLOSED.
+
+Measurement only. **Nothing deployed, no chain written to.** Contract files were edited as a
+FIXTURE, measured, and reverted — `git diff contracts/` is empty for both. Two new
+instruments, both kept: `scripts/fixture_gate_apply.js` and `test/V8_50_GateCost.test.js`
+(skipped in the suite on purpose — see 17.8).
+
+## 17.0 ⛔ THE OWNER'S DECISION: 16.5 STANDS, ALL FIVE. IT IS NO LONGER A RECOMMENDATION.
+
+Asked once at the top of the session, accepted as presented, 2026-08-20. **Keep lending;
+price it at 20.2% vs 10.0%; PARAM 59 stays at 5000; do NOT cut the floor to 40% or 20%; do
+NOT touch `setClawbackBands` for this purpose; the exit is sponsorship.** Later sessions may
+build on all six points without re-asking. What is still open is the BUILD, not the policy.
+
+## 17.1 ⛔⛔ THE ANSWER TO 16.6 ITEM 1: THE GATE FITS. SIZE AND GAS ARE NOT THE OBSTACLE.
+
+The blocking item since 13.11 has been "`directCount` needs a router read at a call already
+near the block gas ceiling — measure before promising". **Measured. It is not close.**
+
+### SIZE — deployed bytecode, baseline vs fixture, EIP-170 limit 24,576
+
+| contract | baseline | fixture | delta | headroom after |
+|---|---|---|---|---|
+| **TierRouter** | 23,910 | 24,046 | **+136** | **530** |
+| **StabilityFund** | 15,063 | 15,510 | **+447** | 9,066 |
+| MatrixPairFactory | 24,498 | 24,498 | **0** | 78 |
+| MatrixLogicLib | 24,281 | 24,281 | **0** | 295 |
+| FigureEightMatrixV8 | 14,230 | 14,230 | **0** | 10,346 |
+
+**+583 bytes total and the two contracts with almost no room left did not move a byte.** That
+was predicted before the run and it held: the matrix and the library are not touched, so the
+factory — which embeds the matrix's CREATION code and has 78 bytes — cannot inflate. The
+whole size cost lands on TierRouter (the mapping and one increment) and on the SF, which has
+9k spare. ⚠ The SF's +447 includes a placeholder `baseAdvanceBps` param, its setter and its
+event; a shipped design keeps roughly that much.
+
+### GAS — the added read, measured alone, in gas units (`test/V8_50_GateCost.test.js`)
+
+| arm | cold | warm |
+|---|---|---|
+| ungated (`tierRouter` unset — branch short-circuits) | 12,902 | 2,391 |
+| gated, member with **0** directs | 20,622 | 3,611 |
+| gated, member with **1** direct | 18,497 | 3,486 |
+| **ADDED PER `loanHeadroom` CALL** | **7,720** | **1,220** |
+
+The reading decomposes exactly against the EVM's own schedule, which is itself a validity
+check nobody had to trust me for: 7,720 = cold account 2,600 + cold `directCount` slot 2,100
++ cold `baseAdvanceBps` 2,100 + ~920 of call and opcode overhead. And the 0-directs arm costs
+**2,125 more than the 1-direct arm** because only the 0-directs path enters the branch and
+SLOADs `baseAdvanceBps` — one cold SLOAD, 2,100, landing where it should.
+
+### THE VERDICT, against the numbers that actually constrain
+
+* Worst measured single item at **live MATRIX_SIZE 127: 4.37M gas**. The gate's absolute
+  worst case adds **7,720 — 0.18% of one item.**
+* A saturated 15-item batch adds at most **~53,000 gas** (one fully cold read, then 14 at
+  ~3,220 each) against the **17.80M ceiling — 0.3%.**
+* `minGasPerItem` is 5.00M against a 4.37M worst item, so the floor has 0.63M of headroom.
+  **The gate spends at most 0.008M of it.** It does not touch the floor decision.
+* Register pays one SSTORE on the sponsor's counter: worst REGISTER moved **2.00M → 2.01M**.
+
+**Three orders of magnitude of margin. Size and gas are closed as objections. What remains
+open about the gate is entirely POLICY and the V8.50 re-measure — not feasibility.**
+
+## 17.2 ⛔⛔ THE FIRST RUN WAS UNINTERPRETABLE, AND THE REASON IS A RULE, NOT AN ACCIDENT
+
+The fixture was first built with a REAL base ceiling (`baseAdvanceBps = 1500`) — the natural
+thing to write. The gas run came back cheaper than baseline and two tests failed. It was not
+noise. **The gate BOUND, the fund refused loans it had granted at baseline, and the keeper's
+work list changed underneath the measurement:**
+
+| batch mix at cap 15 | PARKED_RESCUE | EVICT_PARKED |
+|---|---|---|
+| baseline | **8** | 4 |
+| binding fixture (1500 bps) | **2** | **10** |
+
+Every gas figure in that run priced a DIFFERENT POPULATION. GAS-5 and GAS-7 failed because
+too few SF-funded rescues existed to build a curve — the fixture's own instruments correctly
+refusing to report on a world that had changed. **Nothing was wrong with the code; the
+control arm had moved.**
+
+The fix is the distinction this project already owns: a gate that EXISTS is not a gate that
+BINDS (14.3). To price the MECHANISM, set the ceiling to 10,000 bps — the router read happens
+on every call, so the gas is real, but the ceiling never drops. **The re-run's work mix came
+back byte-identical at every cap (`PARKED_RESCUEx8 EVICT_PARKEDx4 RECLAIMx1`, 10 passing),
+and that identity is what makes the delta mean anything.** `fixture_gate_apply.js` takes
+`--binding` for the policy question and defaults to non-binding for the cost question, with
+the trap written into its header.
+
+## 17.3 THE TWO INSTRUMENTS, AND WHERE THEY MEET
+
+**BUILD THE SECOND INSTRUMENT — third session running, third time it paid.**
+
+| | |
+|---|---|
+| end-to-end, cap-15 batch containing **8** SF-funded rescues | 6.40M → **6.43M = +0.03M** |
+| probe's prediction, one gated read per rescued member | 7,720 + 7 × 3,220 = **30,260** |
+| probe's prediction, two reads per member | **40,020** |
+
+**The measured delta lands on the one-read row.** Per-rescue that is ~3,750 gas, which sits
+between the probe's warm reading (1,220) and its fresh-member reading (3,220) — the two
+instruments bound each other and nothing is left unexplained.
+
+⚠ **DO NOT OVERSTATE WHAT THAT IDENTIFIES.** `V8_50_KeeperGas` prints to 0.01M, so the
+measured delta is 0.03M ± 0.01M and the one-read reading is CONSISTENT with the data, not
+proven by it. The two-read row is not excluded with confidence. It does not matter for the
+verdict — both rows are ~0.2% of one item — and resolving it would need a raw-gas end-to-end
+probe nobody currently needs. **Recorded as consistent, not as established.**
+
+Every single-item reading moved by the same +0.01M and none moved by more: sfFunded median
+1.49M→1.50M, max 1.76M→1.77M, GAS-7 cold 1.50M→1.51M and marginal 0.99M→1.00M, GAS-9's three
+arrival contexts 1.50→1.51 / 0.56→0.57 / 1.14→1.15. **A uniform shift with no outlier is what
+a constant added read looks like; a single anomalous row would have been a finding.**
+
+## 17.4 ⚠ WHAT THIS SESSION DID NOT MEASURE — STATED SO NOBODY QUOTES IT WRONGLY
+
+* **THE END-TO-END DELTA AT MATRIX_SIZE 127 WAS NOT RUN.** The end-to-end arm is at size 7.
+  The ADDED cost is one external read that touches no matrix storage and no position loop, so
+  matrix size cannot plausibly change it — and the probe measured that read in exact gas with
+  no matrix in the world at all. ⚠ **That last sentence is REASONING, not a measurement.** It
+  is carried because the margin is 0.18% and a 127 delta costs two long runs; if anyone ever
+  needs it, revert-run-apply-run with `GAS_MATRIX_SIZE=127`.
+* **THE REGISTER SSTORE IS COARSE.** +0.01M at two-decimal resolution. On the EVM schedule
+  that is 22,100 for a sponsor's first direct and 5,000 after — ⚠ schedule arithmetic, not a
+  measurement. Nobody should quote a register figure tighter than "+0.01M measured".
+* **THE PLACEMENT IS A SOURCE READING.** The gate belongs in `StabilityFund.loanHeadroom`
+  because that is the only place the ceiling arithmetic lives — `loanEligibleFor`,
+  `loanEligible` and `MatrixKeeperLib._triageParked` all derive from it, so the keeper's "can
+  this member be rescued" and the fund's "will I lend" cannot drift apart. **This corrects
+  13.11 and 16.5, which both said the read had to go into `coPayRescue`. It does not: the
+  matrix never needs to change, and the SF already stores `tierRouter` (StabilityFund.sol:98).**
+  Reading source is valid for WHERE CODE LIVES. It is not valid for what a population does —
+  that is 14.3's lesson and it still stands.
+
+## 17.5 ⛔ THE BINDING RUN LEFT A POLICY FINDING BEHIND. IT IS THE OWNER'S, NOT CLAUDE'S.
+
+The failed first run is evidence about one thing, and it is not gas: **a binding sponsorship
+gate converts rescues into evictions.** In that fixture 6 members who were rescued at baseline
+were evicted instead.
+
+⚠ **THAT IS A FIXTURE-WORLD RESULT AND MUST NOT BE READ AS A LIVE PREDICTION.** In the
+KeeperGas harness every member refers to W1, so essentially nobody has a direct and the gate
+refuses almost everyone — the harshest possible case. On live, 13.11 measured that 52.3% of
+members who cleared their debt had sponsored someone (11.5% of those still owing), so the
+refused share would be far smaller. **But the direction is real and it is exactly the trade
+the owner has to price: eviction has fired 0 times in 1,803 live episodes (14.3), and a
+binding gate is the mechanism that would start it firing.** Rule 3 ("if they cannot cover it
+they are not given the loan") and rule 1 ("not at the expense of the ecosystem") meet here.
+**NOT A DECISION FOR CLAUDE. Do not design the base ceiling before the V8.50 re-measure.**
+
+## 17.6 STATE OF THE TREE — AND THE SUITE BASELINE IS 618/8/0, NOT 611/7/0
+
+**Full suite re-run at the end of this session: 618 passing / 8 pending / 0 failing.** The
+611/7/0 carried since the param 59 commit was STALE, not a regression: sessions 11 and 12
+added `V8_50_CycleEconomics`, `V8_50_ReferralBreakeven` and `V8_50_MemberLedger` after that
+figure was taken. Run alone those three report **exactly 7**, which accounts for the whole
+difference — measured, not assumed. The 8th pending is `V8_50_GateCost.test.js` (17.8).
+⚠ `V8_50_ReferralBreakeven` generates its five `R=0..4` cases from a loop, so counting `it(`
+in the source undercounts it. Run the file if you need the number.
+
+
+Contracts `v8.1`, frontend `admin` = `preview` = `main` at `74a1588`. **NOTHING DEPLOYED, NO
+CHAIN WRITTEN TO, NO CONTRACT FILE CHANGED — the fixture was applied and reverted, and
+`git diff` on `contracts/TierRouter.sol` and `contracts/StabilityFund.sol` is empty.**
+New untracked files: `scripts/fixture_gate_apply.js`, `test/V8_50_GateCost.test.js`,
+`contracts/test/GateProbe.sol`, and the run logs `gate_baseline_*.txt`, `gate_probe.txt`,
+`gate_gas_nonbinding.txt`, `gate_sizes2.txt`.
+
+⚠ **AN OLD LOOSE END, SEEN IN PASSING, NOT INVESTIGATED:**
+`contracts/test/CryptoNovaCommunityWallet.sol` shows as modified with 474 insertions and 474
+deletions — every line — which is the signature of a line-ending change, not an edit. It
+predates this session. It is in the BACKLOG now rather than in anyone's memory.
+
+## 17.7 NEXT, IN ORDER
+
+1. **RE-MEASURE 14.1 AND 16.2 ON THE PRIVATE V8.50 DEPLOY.** Now the only blocking item.
+   `crossingBufferBps = 0` is in the tree and NOT deployed; the buffer manufactured most of
+   the debt behind every number in 13→16. Less debt means less collection and the whole table
+   shrinks. **The gate's base ceiling must be chosen on V8.50 numbers, not V8.48 ones** — and
+   17.1 means feasibility is no longer a reason to delay that.
+2. **SPLIT 14.1 BY TIER** and cap time-at-risk (14.4's one real imbalance).
+3. **THE GATE'S POLICY SHAPE — after item 1, and it is partly the owner's.** What base ceiling,
+   and whether refusing a loan should route to eviction at all given 17.5.
+4. Backlog: the 5 unexplained cycle-outs (still exactly 5, organic); `CryptoNovaCommunityWallet.sol`'s
+   whole-file diff (17.6); `V8_50_ReferralBreakeven.test.js` v4 counts the dead event;
+   stale-nonce retry backoff; @bevmawire's Dashboard retry; `maxItemsPerUpkeep` live 15 vs 20
+   in source; member-callable re-entry.
+
+## 17.8 TOOLS BUILT — both kept, both read the trap in their own headers
+
+* **`scripts/fixture_gate_apply.js`** — applies the exact measured fixture (five edits, two
+  files), `--binding` for the policy arm, `--undo` to revert. Refuses to half-apply: any
+  anchor that does not match exactly once aborts the whole run. A later session gets THIS
+  fixture rather than a new one it has to re-argue.
+* **`test/V8_50_GateCost.test.js`** — the probe. **`describe.skip` ON PURPOSE**: without the
+  fixture applied both arms are the same contract, the delta is 0 and the assertions fail.
+  Its header carries the four-step run recipe. It also asserts the non-binding gate does not
+  change the ANSWER (headroom identical across all three arms) — a free correctness check
+  that would have caught a gate that silently altered the ceiling while looking cheap.
+* **`contracts/test/GateProbe.sol`** — `probeTwice` measures cold and warm in one transaction,
+  plus `MockDirectRouter` so the probe needs no matrix world. Not in the `sizes.js` watch
+  list, never deployed.
+
+---
+
+# ⬛ SESSION 16 STATE — 2026-08-20. READ AFTER SESSION 17. IT CLOSES THE LENDING QUESTION.
+
+Measurement only. **No contract file touched, nothing deployed, no chain written to.**
+`scripts/diag_clawback_window.js` (v2, read-only). Live V8.48, blocks 45430468..45744353.
+✅ no unreadable ranges. **This section is the conclusion of the 13→16 lending investigation.
+If you read one section, read 16.4 and 16.5.**
+
+## 16.1 ⛔ A DEFECT CAUGHT BEFORE IT SHIPPED, BY THE ONLY THING THAT CATCHES THEM
+
+v1 of this script reported **36 of 123 organic borrowers held back by debt collection** and
+printed "(a) IS ESTABLISHED". **It was wrong and it would have been quoted.** What caught it was
+not review — it was that a SECOND instrument had already measured an overlapping quantity and
+the two did not agree:
+
+| | |
+|---|---|
+| `diag_debt_sweep.js`, total collected at organic hops | **$336.36** |
+| v1's HOP class, same population, same blocks | **$535.76** |
+
+**$199.40 — a third of the money — and the strict total was the entire finding.** The cause:
+v1's window ran from the member's previous forward hop, block-INCLUSIVE, over collections from
+EVERY matrix. So each cycle was charged the previous cycle's sweep, plus money taken in other
+tiers' ledgers that never touched the balance this hop tests.
+
+**v2's window is ONE OCCUPANCY** — from the member's most recent `MemberEntered` AT THE CYCLING
+MATRIX to the hop, counting only collections EMITTED BY THAT MATRIX, because the hop tests
+`self.members[root].withdrawable` in that matrix and nothing else can have spent it. v2 carries
+a **boundary audit** that goes ⛔ across section 3 if HOP-class money ever appears from a second
+transaction, which within one occupancy is impossible. **It now reads $336.36 and $0.00 leakage,
+and 0 hops needed excluding for a missing anchor.** The two instruments agree.
+
+> **THE RULE THIS EARNS, and it is the second time in two sessions: BUILD THE SECOND
+> INSTRUMENT. Not a review pass, not a re-read — a different measurement of an overlapping
+> quantity, and a printed line where they must meet.** 15.6's fund-vs-matrix cross-check
+> ($696.85 = $696.85) and this session's boundary audit are the same device. Both defects this
+> pair of sessions produced were caught by it and neither would have been caught by reasoning.
+
+## 16.2 ⛔⛔ THE ANSWER: BOTH MECHANISMS ARE REFUTED. THERE IS NO FREE LEVER.
+
+15.4 posed the fork — **(a)** the protocol's own debt collection is what stops borrowers
+graduating, in which case `setClawbackBands` is a lever needing no redeploy; or **(b)** they
+were simply short. ORGANIC, 385 forward-hop attempts, 123 of them parked while owing the fund:
+
+| where the collected money came from, inside the occupancy | |
+|---|---|
+| **CLAWBACK** — the 60% band, deducted from pool credits in place | **$0.00 — 0.0%** |
+| **HOP** — taken in the cycle-out transaction itself | **$336.36 — 100.0%** |
+| CROSSING / WITHDRAWAL | $0.00 |
+
+| | |
+|---|---|
+| parked short while owing | 123 |
+| ...with any collection during the occupancy | 123 — 100% |
+| **⛔ ...where the collection alone would have covered the shortfall** | **5 — 4.1%** |
+
+**THE 60% CLAWBACK BAND TOOK NOTHING AT ALL INSIDE A MatB OCCUPANCY.** Not "a little" — zero,
+across the entire deployment. Whatever the clawback collects (v1's wider window saw $23.58
+organic), it collects it in the MatA ledger, which on V8.48 is not the balance the forward hop
+is judged against. **And the hop-transaction collection was decisive in 5 of 123 — the same 5
+`diag_debt_sweep.js` found independently.** (a) is dead. `setClawbackBands` is not the lever.
+
+## 16.3 ⚠ BUT "DECISIVE" IS A HIGH BAR AND THE OTHER READING MATTERS — QUOTE BOTH
+
+| | organic |
+|---|---|
+| collected in-occupancy | min $0.01 · p25 $1.54 · **med $3.40** · p75 $3.51 · max $8.24 |
+| shortfall at the hop | min $0.48 · p25 $3.11 · **med $4.80** · p75 $5.00 · max $11.87 |
+| **aggregate collected / aggregate shortfall** | **$330.39 / $490.25 = 67.4%** |
+
+**The collection accounts for two-thirds of every dollar missing at the organic forward hop —
+and still gets only 5 more members over the line.** In 118 of 123 cases the amount taken was
+LESS than the shortfall, so removing it shrinks the gap without closing it. **Reducing a gap and
+closing a gap are different results and this run produced one of each.** Never quote 67.4%
+without 5-of-123 beside it, or the reverse.
+
+⚠ **THE BIGFILL PANEL READS 37 of 127 DECISIVE (29.1%) AND THAT IS NOT A CONTRADICTION.**
+Bigfill's median shortfall is **$2.36** against organic's $4.80, so the same ~$3.45 collection
+clears the bar there. It shows the mechanism CAN be decisive when the shortfall is small. It
+says nothing about members — 15.3 already established this control cannot carry a verdict, and
+v1's boilerplate "(a) IS ESTABLISHED" line firing on the control was an instrument wording
+defect, fixed in v2.1.
+
+## 16.4 ⛔⛔ SO WHAT IS ACTUALLY STOPPING THEM — AND IT WAS ALREADY MEASURED IN SESSION 11
+
+Nothing new is needed to explain the residual. Session 11's closed form: a member with no
+referral income receives **pool 3136 + chain 1900 + own direct 500 = 5536 bps** of a cycle and
+needs 10000; the leaks are the system take 2564 bps and orphaned L1 1900 bps. **A member who
+never recruits cannot self-fund the forward hop while the protocol takes any fee at all.** That
+is conservation of money, not tuning, and no split table, loan ceiling, clawback band or
+threshold changes it.
+
+**Debt collection is not why borrowers fail the hop. It makes their failure bigger, not their
+success possible.** Sessions 14→16 have now ruled out, by measurement, every candidate that
+would have made the graduation gap a policy artefact:
+
+* the eviction ladder and ratio gates — **have never fired on live** (14.3)
+* the debt sweep at cycle-out — **5 of 295 parks** (15.1)
+* the continuous banded clawback — **$0.00 inside the occupancy** (16.2)
+
+## 16.5 ⛔⛔ WHERE THIS LEAVES THE OWNER'S FIVE RULES — CLAUDE'S RECOMMENDATION, HIS DECISION
+
+1. **KEEP LENDING. RULE 1's FIRST HALF IS VINDICATED BY MEASUREMENT.** From a common parked
+   state, loan-rescued organic members reach 2+ cycles at **83.2%** against **13.0%** for the
+   never-rescued (14.1). The owner's two-cycle bar is met and it is the loan that meets it.
+2. **PRICE IT HONESTLY: 20.2% end still owing against 10.0% for self-rescuers** (14.2). That is
+   rule 1's second half and it is the real cost. It is not a reason to stop lending; it is the
+   number to state when explaining why lending has limits.
+3. **PARAM 59 — KEEP 5000. Re-confirmed a third time and on a third basis.** 13.11 said the AB
+   curve beats V8.48 data; 14.3 said the ladder has never rejected anybody on live; 16.2 says
+   the collection machinery is not what binds either. **Nothing measured on V8.48 can calibrate
+   this parameter.**
+4. **DO NOT CUT THE FLOOR TO 40% OR 20%.** 13.11 showed 100% repayment is reachable only at
+   1000 bps, which caps 101 of 114 borrowers — ending lending to keep the book clean. 14.3 adds
+   that no member has ever been thin enough for the ladder to refuse them. **The floor is not
+   the instrument the owner is looking for.**
+5. **DO NOT TOUCH `setClawbackBands` FOR THIS PURPOSE.** It looked like a free lever for one
+   session. Measured, it plays no part at the forward hop. ⚠ It may still matter for how fast
+   debt retires and how much members can withdraw — that has NOT been measured and should not
+   be assumed either way.
+6. **THE EXIT IS SPONSORSHIP, AND THAT IS THE OWNER'S OWN RULE 4.** It is the only route with a
+   measured effect left standing: of organic members still owing, 11.5% ever sponsored anyone;
+   of those who cleared, 52.3% (13.11). Repayment at loan time by directs: 0 → 67.2%, 1 → 92.6%
+   (13.6). ⚠ ASSOCIATION, NOT CAUSATION — sufficient for a GATE, never quotable as "recruiting
+   makes you solvent".
+
+**THE ONE BUILD THIS POINTS AT — and it is still not promised.** 13.11's shape: keep the floor
+at 5000 as the outer ceiling, give a small first advance at 0 directs, unlock the rest of the
+headroom at `directCount >= 1`. `directCount` does not exist (TierRouter:216 stores only
+`memberReferrer`), and `coPayRescue` sees only `withdrawable` and `crossingReserve`, so the gate
+needs a router read **at a call already near the block gas ceiling. SIZE AND GAS MUST BE
+MEASURED BEFORE ANY OF IT IS PROMISED.** That measurement is next and it is the last thing
+between this investigation and a decision the owner can act on.
+
+## 16.6 NEXT, IN ORDER
+
+1. **MEASURE SIZE AND GAS for `directCount` + the gate.** The only blocking item left. Build a
+   fixture that adds the mapping and the router read, and measure contract size delta and the
+   gas delta at `coPayRescue` / `forceCrossKeeper` against the block ceiling. **Do not design
+   the gate before this number exists.**
+2. **RE-MEASURE 14.1 AND 16.2 ON THE PRIVATE V8.50 DEPLOY.** `crossingBufferBps = 0` is in the
+   tree and NOT deployed; the buffer manufactured most of the debt measured across 13→16. Less
+   debt means less collection and the whole table shrinks. Every number in these four sections
+   is on the old build.
+3. **SPLIT 14.1 BY TIER** and cap time-at-risk (14.4's one real imbalance).
+4. Backlog, untouched throughout: the 5 unexplained cycle-outs (still exactly 5, organic);
+   `V8_50_ReferralBreakeven.test.js` v4 counts the dead event; stale-nonce retry backoff;
+   @bevmawire's Dashboard retry; `maxItemsPerUpkeep` live **15** vs 20 in source;
+   member-callable re-entry.
+
+## 16.7 TOOL — `scripts/diag_clawback_window.js` v2.1, read-only
+
+Per forward hop: the occupancy window, every debt collection inside it classified by what else
+was in its transaction (the four `RescueDebtRepaid` emit sites cannot be told apart from logs,
+so the transaction's other events are the discriminator), the shortfall, and the exact
+counterfactual. Prints STRICT and LOOSE side by side so the ambiguity in the CROSSING and
+WITHDRAWAL classes is visible rather than buried in one figure. Boundary audit in every panel.
+v2.1 also stopped the control cohort from printing a verdict it is not entitled to.
+
+---
+
+# ⬛ SESSION 15 STATE — 2026-08-20. ⚠ 15.4's FORK IS ANSWERED BY 16.2 ABOVE — (a) IS REFUTED.
+
+Measurement only. **No contract file touched, nothing deployed, no chain written to.** One new
+read-only diagnostic, `scripts/diag_debt_sweep.js`. Live V8.48, blocks 45430468..45743935.
+✅ no unreadable ranges, and the run's own cross-check closed exactly: $696.85 collected per the
+matrices, $696.85 received per the fund, **0 transactions where the two readings disagree.**
+
+## 15.1 ⛔⛔ 14.5's HYPOTHESIS IS REFUTED. THE CYCLE-OUT SWEEP DOES NOT COST MEMBERS THE HOP.
+
+14.5 proposed that the debt sweep at MatB cycle-out takes the member's balance at exactly the
+moment they need it for the forward hop. It was marked UNVERIFIED. **It has now been tested
+with an exact same-transaction counterfactual — `swept >= shortfall`, both numbers off the
+chain — and it is WRONG.**
+
+| ORGANIC, 295 parks with a shortfall | |
+|---|---|
+| debt collected in the same transaction | 123 — 41.7% of parks |
+| **⛔ collected ENOUGH to have caused the park** | **5 — 1.7% of parks** |
+| collected, but less than the shortfall (made it worse, not decisive) | 118 |
+| no collection at all — a genuine shortfall | 172 |
+
+**Five cases, $3.45 of shortfall between them, across the entire deployment.** The sweep is not
+the mechanism. Strike the 14.5 hypothesis; do not soften it, do not keep it as "partly true".
+
+**AND THE INSTRUMENT WAS LOOKING AT THE WRONG MOMENT — that is the real lesson here.** The
+median collection *in the hop's own transaction* is $3.40, which is small precisely BECAUSE the
+member has already been skimmed all cycle: `clawbackBpsFor` redirects a band of EVERY pool share
+to the fund (V8.31 raised it to 50%), and `withdrawCore` repays before it pays out. By the time
+the sweep runs there is little left to take. **I measured the last bite and concluded there had
+been no meal.**
+
+## 15.2 ⛔⛔ AND THE SAME RUN PRODUCED A FAR STRONGER NUMBER THAN THE ONE IT WENT LOOKING FOR
+
+| ORGANIC — 385 MatB forward-hop attempts | hops | re-entered | cleared |
+|---|---|---|---|
+| owed the fund NOTHING going in | 258 | 82 | **31.8%** |
+| **owed the fund something going in** | 127 | 3 | **2.4%** |
+
+**A member carrying debt into the forward hop graduates at 2.4%. A member carrying none
+graduates at 31.8%.** Overall organic clearance 22.1%, consistent with 13.1's 22.49%.
+
+⚠ **THIS TABLE IS CONFOUNDED AND THE HONEST NUMBER IS SMALLER — 14.1 ALREADY SUPPLIES IT.**
+You owe the fund because you were short, so debtors were the weaker population first. The
+balanced version of the same comparison is in 14.1, held to a common parked starting state:
+**loan-rescued clear the hop at 8.0%, self-rescued at 19.6%.** A factor of ~2.4, not of 13.
+**Quote 8.0/19.6, never 2.4/31.8.** The 13x is what the effect looks like before selection is
+removed and it is exactly the shape 13.5 got burned by.
+
+## 15.3 ⚠ THE BIGFILL CONTROL CANNOT DISCRIMINATE HERE — SAY SO RATHER THAN SPEND IT
+
+| BIGFILL | hops | cleared |
+|---|---|---|
+| no debt going in | 360 | 1.4% |
+| owed something | 130 | 2.3% |
+
+The control's own no-debt baseline is **1.4%**, on the floor, because since 2026-08-19 bigfill
+registers one fresh wallet per run with no referral income (13.1). **A control whose baseline is
+already at the floor cannot show a penalty below it.** It neither supports nor refutes 15.2 and
+must not be quoted in either direction. What it DOES confirm is that the collection machinery
+bites hard when there is something to take: 37 of bigfill's parks were decisive by the same
+exact test, uniformly $4.10 swept against a $2.10 shortfall — the machine, doing the same thing
+every time.
+
+## 15.4 ⛔ THE QUESTION THAT IS NOW THE LAST ONE STANDING ⚠ ANSWERED BY 16.2 — THERE IS NO FREE LEVER
+> **16.2 RAN IT. (a) IS REFUTED.** The 60% clawback band collected **$0.00** inside a MatB
+> occupancy across the whole deployment, and the hop-transaction collection was decisive in 5 of
+> 123. `setClawbackBands` is NOT the lever this section hoped for. The fork below is the record
+> of the question; 16.2 and 16.4 are the answer. Read those before quoting anything here.
+
+15.1 killed the *concentrated* mechanism. That leaves two live explanations for 14.1's
+balanced 8.0% vs 19.6%, and **they point at different decisions:**
+
+* **(a) CONTINUOUS COLLECTION.** The banded clawback takes its share of every pool credit for
+  the whole journey, so a borrower arrives at the hop having been drained gradually rather than
+  at once. If this is it, **the protocol's own repayment schedule is what prevents borrowers
+  graduating** — and the fix costs no new contract surface, because `clawbackBpsFor` is driven
+  by **DAO param 50**, already governed, already on a menu.
+* **(b) SELECTION.** Borrowers were simply poorer and would not have graduated either way. If
+  this is it there is no lever and lending is a palliative, not a path.
+
+**THE SAME EXACT COUNTERFACTUAL DECIDES IT, JUST OVER THE RIGHT WINDOW:** total debt collected
+from the member between the loan and the hop, against the shortfall at the hop. If everything
+taken from them across the journey would have covered the shortfall, (a) is established with the
+same rigour that killed 14.5. **NOT YET RUN. Nothing about the lending rules should be settled
+before it.**
+
+⚠ AND THE FRAME THAT MUST TRAVEL WITH IT, unchanged from 14.9's script header: **THE MONEY IS
+NOT FREE.** "Would have cleared without the collection" is not "should not have been collected"
+— the debt would still be outstanding and would travel into the next cycle. This is an ORDERING
+policy — collect now, or let them graduate and collect later — and choosing it is the owner's.
+
+## 15.5 NEXT, IN ORDER
+
+1. **THE EXTENDED-WINDOW COUNTERFACTUAL (15.4).** Decides (a) vs (b). Last thread before the
+   lending rules can be settled.
+2. **SPLIT 14.1 BY TIER** and cap time-at-risk (14.4's imbalance). Unchanged.
+3. **MEASURE SIZE AND GAS for `directCount` + the gate.** Unchanged, still unmeasured, still
+   must not be promised until it is. ⚠ Note the ordering point 15.4 raises: if (a) holds, param
+   50 is a lever with NO new storage and NO new gas at a call already near the block ceiling,
+   which makes it strictly cheaper than the `directCount` gate and it should be priced first.
+4. **RE-MEASURE EVERYTHING ON THE PRIVATE V8.50 DEPLOY.** Unchanged.
+5. Backlog: the 5 unexplained cycle-outs (5 again in this run, organic, at the same hop — the
+   count has not moved); `V8_50_ReferralBreakeven.test.js` v4 counts the dead event; stale-nonce
+   retry backoff; @bevmawire's Dashboard retry; `maxItemsPerUpkeep` live 15 vs 20 in source;
+   member-callable re-entry.
+
+## 15.6 TOOL BUILT — `scripts/diag_debt_sweep.js`, read-only
+
+Every MatB cycle-out, its outcome in the same transaction (`MemberReentered` = cleared,
+`MemberParked` with shortfall > 0 = failed), the member's debt going in, and every debt
+repayment charged to them in that transaction. Organic and bigfill panels.
+
+**Two design points worth keeping:**
+* `RescueDebtRepaid` has **FOUR emit sites** (MatrixLogicLib:638 clawback, :853 the sweep, :1015
+  a crossing, :1393 withdrawCore) and two of them can fire in one cycle-out transaction. They
+  cannot be told apart from logs and **do not need to be** — both reduce the same numerator, so
+  the script sums them and says so rather than pretending to attribute.
+* **The same money is read twice** — `RescueDebtRepaid` at the matrix and `MemberDebtRepaid` at
+  the fund — and printed side by side as an AGREE-not-add check. It closed at $696.85 = $696.85,
+  0 disagreements. If it ever does not, stop and find the repayment path that misses the fund.
+
+---
+
+# ⬛ SESSION 14 STATE — 2026-08-20. ⚠ 14.5 IS REFUTED BY 15.1 ABOVE — READ 15.1 BEFORE QUOTING 14.5.
+
+Measurement only. **No contract file touched, nothing deployed, no chain written to.** One new
+read-only diagnostic, `scripts/diag_parked_experiment.js`. Live V8.48, blocks
+45430468..45743290, tiers T1-T3, 12 matrices, ✅ no unreadable block ranges.
+
+## 14.1 ⛔⛔ THE NEAR-EXPERIMENT RAN, THE ARMS CAME OUT BALANCED, AND 13.5's HEADLINE IS REFUTED
+
+13.9 item 1 asked for co-pay-rescued vs self-rescued vs never-rescued, all measured from the
+same parked-with-shortfall state. **It exists now. 1,803 episodes, arms reconcile to 0
+unaccounted.** ORGANIC cohort, by FILL_MNEMONIC key derivation:
+
+| | n | cycled again | cleared hop | **2+ cycles** | **owing now** | med contribBps |
+|---|---|---|---|---|---|---|
+| **SF-LOAN** (rescued, debt booked) | 238 | 98.7% | 8.0% | **83.2%** | **20.2%** | 7939 |
+| ASSIST-NOLOAN (rescued, no debt) | 8 | 75.0% | 25.0% | 50.0% | 0.0% | 9316 |
+| **SELF-RESCUE** (own wallet money) | 219 | 83.6% | 19.6% | **64.4%** | **10.0%** | 7800 |
+| **STILL PARKED** (never rescued) | 192 | 38.5% | 2.1% | **13.0%** | 7.3% | 7815 |
+| EVICTED | **0** | — | — | — | — | — |
+
+**AND THE ARMS ARE BALANCED AT BASELINE — the whole point of the design.** contribBps is
+`(crossingReserve + withdrawable)` as bps of the crossing cost, reconstructed from the park
+event's own shortfall, which IS the variable the selector uses:
+
+| | min | p25 | med | p75 | max | debt@park | directs@park |
+|---|---|---|---|---|---|---|---|
+| SF-LOAN | 4653 | 6800 | 7939 | 8900 | 9979 | $0.00 | 0.65 |
+| SELF-RESCUE | 4640 | 6800 | 7800 | 8668 | 9939 | $0.00 | 0.76 |
+| STILL PARKED | 4667 | 6811 | 7815 | 8653 | 9974 | $0.00 | 0.70 |
+
+Three arms, indistinguishable on every observable that goes into the decision, then wildly
+different outcomes. **13.5 measured borrowers (7.1% reach 2+ cycles) against non-borrowers
+(31.7%) across the whole population and warned in bold that it was selection. It was. Held to
+the same starting state the ordering INVERTS: 83.2% for the loan, 64.4% for own money, 13.0%
+for nothing.** Do not quote 13.5's table again without this one beside it.
+
+**THE OWNER'S TWO-CYCLE BAR IS MET, AND IT IS THE LOAN THAT MEETS IT.**
+
+## 14.2 ⚠ AND THE COST IS IN THE SAME TABLE — THIS IS RULE 1's TRADE-OFF, PRICED
+
+**20.2% of loan-rescued episodes end with the member still owing, against 10.0% for the
+members who paid their own way out of the identical position.** Same starting state, so this
+one is not selection either. The loan doubles the odds of ending in debt and it buys 19
+percentage points of two-cycle attainment. That is the whole of rule 1 — *"members need loans
+and that is good, but not at the expense of the ecosystem"* — in two numbers, and it is the
+first time the trade has been priced from a balanced comparison rather than asserted.
+
+## 14.3 ⛔⛔ TWO GATES AND ONE WHOLE ARM DO NOT EXIST ON LIVE — AND I CALLED THIS WRONG FIRST
+
+**EVICTED = 0 of 1,803.** Eviction has still never fired on live V8.48 (session 9's addendum
+said so; this confirms it across every episode, not just a snapshot). The "never-rescued"
+counterfactual 13.5 wanted is STILL PARKED, not evicted, and those members are still sitting
+there.
+
+**AND NOBODY HAS EVER BEEN BELOW THE LADDER'S BOTTOM RUNG. 657 of 657 organic episodes and
+1054 of 1054 bigfill episodes sit at or above 4000 bps; the lowest contribution ever observed
+is 4640.** So `EVICT_LADDER` has never rejected anybody, and neither has `EVICT_RATIO` as far
+as this run can see.
+
+> ⛔ **A CORRECTION I OWE THE RECORD, AND IT IS RULE 1 IN MY OWN HANDS.** Before building this
+> I read `MatrixKeeperLib._triageParked`, found the four gates (ghost / ratio / **ladder** /
+> **floor**), and told the owner the near-experiment was dead — that assignment is "positive on
+> wealth and positive on creditworthiness" and "there is no unfiltered arm anywhere". **The code
+> reading was correct and the CONCLUSION FROM IT WAS NOT.** A gate that exists is not a gate
+> that binds, and whether it binds is empirical. Two of the three merit gates have never fired,
+> the arms came out balanced, and the comparison I declared dead is the strongest result of the
+> session. **Reading source is measuring the MECHANISM, not the POPULATION. Do not let one
+> stand in for the other again.**
+>
+> What survives from that reading: the gates are real and they will bind the moment the
+> population gets poorer, and `EVICT_FLOOR` (insolvencyFloorBps, live at 3400) is the one gate
+> this run cannot see fire, because a refused rescue emits nothing. **That is the instrument's
+> biggest blind spot — a member the floor refused looks identical to one nobody reached.**
+
+**CONSEQUENCE FOR THE FLOOR DECISION, AND IT STRENGTHENS 13.11:** the ladder has never rejected
+a member and eviction has never fired, so live V8.48 cannot calibrate either. 13.11 said the
+AB curve is the better basis for PARAM 59 than tonight's V8.48 data. This is the stronger form
+of the same point. **RE-CONFIRM RECOMMENDATION UNCHANGED: KEEP 5000.**
+
+## 14.4 ⚠ THE FOUR OUTCOME COLUMNS ARE NOT EQUALLY TRUSTWORTHY. RANK THEM BEFORE QUOTING THEM.
+
+* **`cycled again` and `2+ cycles` are PARTLY MECHANICAL.** A rescued member is put back in a
+  seat, and a seated member cycles. A parked member cannot cycle in the matrix they are parked
+  in. The 38.5% the STILL-PARKED arm does show comes from activity in OTHER tiers, which is
+  why it is not zero — but the gap is inflated by construction and must never be quoted as
+  "the loan makes members 2.6x more active".
+* **`owing now` is CLEAN.** Nothing about being seated forces a debt balance at the head block.
+  20.2% vs 10.0% is the honest number in this table.
+* **`cleared hop` is CLEAN and it is the surprising one.** See 14.5.
+* ⚠ **ONE REAL IMBALANCE, and it is in dollars not ratios.** Median shortfall is $2.65 for
+  STILL-PARKED against $1.58 / $1.60 for the two rescued arms, while contribBps is the same
+  across all three. Same ratio, bigger dollars means **the never-rescued arm skews to higher
+  tiers.** Not fatal — the selector works in bps — but a per-tier split has not been run and
+  should be before this table is used to set anything.
+* ⚠ No time-at-risk adjustment. Outcomes run to the head block, so an early rescue has had
+  longer to produce cycles than a recent one.
+
+## 14.5 ⛔ THE LOAN BUYS CYCLES BUT NOT GRADUATION ⚠ THE MECHANISM NAMED HERE IS REFUTED BY 15.1
+> **THE FINDING STANDS, THE EXPLANATION DOES NOT.** 8.0% vs 19.6% is real and is still the
+> honest number. The debt-sweep-at-cycle-out mechanism proposed below was tested in session 15
+> with an exact same-transaction counterfactual and caused **5 of 295 organic parks**. Read 15.1
+> and 15.4 — the surviving candidate is the CONTINUOUS banded clawback, not this.
+
+**Loan-rescued members clear the forward hop at 8.0%. Members who paid their own way out of
+the same position clear it at 19.6% — nearly two and a half times better — while cycling
+LESS (83.6% vs 98.7%).** More laps, fewer exits. Those two columns point opposite ways and
+that disagreement is the finding.
+
+⚠ **UNVERIFIED HYPOTHESIS, STATED OUT LOUD PER RULE 1 BECAUSE IT IS NECESSARY AND IT IS
+CHEAP TO TEST: the debt sweep at MatB cycle-out (`MatrixLogicLib:838-852) takes the member's
+balance at precisely the moment they would need it for the forward hop.** A borrower goes round
+and round the A↔B loop while the sweep and the banded clawback keep skimming the accumulation
+the $10.00 forward hop requires. If that is right, lending as currently structured does not
+merely fail to graduate members — it **holds them in the loop**, and that is a far more serious
+finding than the debt number in 14.2. **NOBODY HAS MEASURED IT. It is next (14.8 item 1) and
+nothing should be built on it until it has run.**
+
+## 14.6 THE BIGFILL CONTROL EARNED ITS KEEP AGAIN — IT SPLITS MECHANISM FROM MEMBERS
+
+| BIGFILL (known machine) | n | cycled again | cleared hop | 2+ cycles | owing now |
+|---|---|---|---|---|---|
+| SF-LOAN | 178 | 100.0% | 2.2% | 100.0% | **1.1%** |
+| SELF-RESCUE | 859 | 80.3% | 1.6% | 61.9% | **0.0%** |
+| STILL PARKED | 16 | 0.0% | 0.0% | 0.0% | 6.3% |
+
+**THE CYCLING ORDERING IS IDENTICAL ON A POPULATION OF SCRIPTS.** loan > self > parked appears
+in both panels, which confirms 14.4's warning: that ordering is a property of the MECHANISM
+(seated members cycle), not a fact about members. **What does NOT reproduce is the debt: 1.1%
+of bigfill loan episodes end owing against 20.2% organic, and organic self-rescuers clear the
+hop at 19.6% against bigfill's 1.6%.** Those two are member-specific and they are the columns
+worth spending.
+
+## 14.7 ⛔ SECTION 4 OF THE OUTPUT IS VOID — THE DISCONTINUITY WINDOW HAS AN EMPTY SIDE
+
+The script's regression-discontinuity window around the 4000 bps rung is unusable and says so
+itself: the below-rung side is **0 episodes** in both cohorts, because of 14.3. **There is
+therefore no clean causal reading anywhere in this run.** 14.1's balance table is the whole of
+the case, and it is a strong one — but it is balance on OBSERVABLES, not randomisation. A
+member who self-rescued had wallet money and chose to spend it; that choice is unobserved and
+it is exactly the kind of thing that also predicts repayment. **State that sentence every time
+14.1 is quoted.**
+
+## 14.8 NEXT, IN ORDER
+
+1. **THE DEBT SWEEP AND THE FORWARD HOP (14.5).** Does an outstanding balance at MatB cycle-out
+   consume the accumulation the hop needs? Split forward-hop clearance by debt-at-cycle-out and
+   measure what the sweep took in the same tx. This decides whether lending traps members, and
+   nothing about the lending rules should be settled before it runs.
+2. **SPLIT 14.1 BY TIER** (14.4's imbalance) and re-run with time-at-risk capped, so early and
+   late episodes are compared over equal windows.
+3. **MEASURE SIZE AND GAS for `directCount` + the gate** (13.6 / 13.11) — still unmeasured,
+   still must not be promised until it is. TierRouter:216 stores only `memberReferrer`;
+   `coPayRescue` sees only `withdrawable` and `crossingReserve`.
+4. **RE-MEASURE EVERYTHING ON THE PRIVATE V8.50 DEPLOY.** Unchanged from 13.9.
+5. Backlog, still untouched: the 5 unexplained cycle-outs; `V8_50_ReferralBreakeven.test.js` v4
+   counts the dead event; stale-nonce retry backoff; @bevmawire's Dashboard retry;
+   `maxItemsPerUpkeep` (read live tonight as **15**) vs the 20 in source; member-callable
+   re-entry.
+
+## 14.9 TOOL BUILT — `scripts/diag_parked_experiment.js`, read-only
+
+Episode-based: a `MemberParked` with shortfall > 0 opens an episode, the first exit event in
+that matrix closes it, and every event that does not fit is counted and printed rather than
+dropped. Reads the live ladder / ratio / floor / maxItems off chain and prints them as the
+basis before any result. Prints the BALANCE CHECK before the outcomes, by design. Runs the
+whole analysis twice — organic and bigfill — because 13.8 cost a session's credibility to learn
+that a fingerprint run only on the subject tells whichever story you went in wanting.
+
+⚠ Two things noticed in its own output, both minor, both real:
+* `crossingBufferBps` read as **unreadable (-1)** — the getter does not exist on the deployed
+  V8.48 keeper. Not a script defect: it is direct confirmation that live predates the V8.49
+  parameter, which is what 13.11 asserts.
+* `maxItemsPerUpkeep` reads **15** on chain against **20** in `MatrixKeeper.sol:218`. Expected
+  (it is settable) but it is the backlog item that has been restated wrongly twice — the live
+  value is 15.
+
+---
+
+# ⬛ SESSION 13 STATE — 2026-08-20. ⚠ 13.5 IS REFUTED AND 13.9 IS RE-ORDERED BY SESSION 14 ABOVE — READ 14.1 FIRST.
+
+Measurement only. **No contract file touched, nothing deployed, no chain written to.** Five
+new read-only diagnostics. Everything below is live V8.48, blocks 45430468..~45741800.
+
+## 13.1 ⛔⛔ THE COHORT ROW 12.7 DEMANDED — AND THE CONFOUND POINTED THE OTHER WAY
+
+12.7 said the owner's A/B/C decision must not be taken until the bigfill wallets were
+separated from organic members. **That row now exists. The confound was real and it was
+BACKWARDS from what 12.6 feared.**
+
+| | ORGANIC (real members) | BIGFILL (owner-funded) | LEADER (roster) |
+|---|---|---|---|
+| MatB hop attempts | 369 | 453 | 137 |
+| RE-ENTERED | 83 | 8 | 85 |
+| **cleared %** | **22.49%** | **1.77%** | 62.04% |
+| borrowed | **$727.63** | $712.33 | $71.38 |
+| repaid | **91.88%** | 99.82% | 100.00% |
+| borrowers | 113 | 170 | 21 |
+
+**ORGANIC IS THE LARGER HALF OF THE LOAN BOOK AND CLEARS THE HOP TWELVE TIMES BETTER THAN
+BIGFILL.** 12.6 worried the 95.78% headline was the owner repaying the owner. It was not:
+the owner-funded population was dragging the headline DOWN. Bigfill clears at 1.77% because
+since 2026-08-19 it registers one fresh wallet per run with no referral income — it is the
+fixture floor showing up live, exactly as 12.1's fixture predicted.
+
+**The LEADER column is not evidence of anything.** The 41 roster addresses are bigfill's
+round-robin sponsors, so every bigfill registration pays them L1. They clear at 62% because
+bigfill feeds them. Do not spend that number in either direction.
+
+## 13.2 HOW THE COHORT WAS ESTABLISHED — KEY DERIVATION, NOT RESEMBLANCE
+
+12.7 proposed identifying bigfill by "round-robin leader sponsor, lifetime withdrawn $0.00,
+reserve exactly $5.00". **All three are properties a real member can also have, so all three
+can misclassify — and misclassifying a bigfill wallet as organic is the direction that
+FLATTERS.** Instead `diag_forward_hop_cohort.js` re-derives the wallets from `FILL_MNEMONIC`
+at `m/44'/60'/0'/0/i`, the same derivation `bigfill_v8.js` uses to create them. Exact test,
+not a similarity test. Verified in a sandbox first: `deriveChild(i)` off the account node
+gives byte-identical addresses to the full-path form.
+
+**THREE LEAKS WERE HUNTED AND ALL THREE ARE CLOSED:**
+1. **Short index window** — re-ran at COHORT_MAX 1200 and 2400. Identical output, highest
+   index seen 296. The window was never leaking.
+2. **A second phrase** — only `FILL_MNEMONIC` exists in `.env`. `organic_drip.js`,
+   `community_drip.js`, `slow_drip.js` and `fill_t2.js` all read it; `community_sim.js`
+   reads `MNEMONIC`, which is unset, so it cannot have populated anything.
+3. **The VPS keeper** — `stress_keeper.js:22` reads `process.env.FILL_MNEMONIC` and derives
+   `m/44'/60'/0'/0/${index}`: **the same phrase on the same path**, so its wallets were
+   already inside BIGFILL. Owner confirmed independently: "the stress and the bigfill uses
+   the same thing, we just run one or the other." **No VPS `.env` read was needed.**
+
+## 13.3 ⛔ "ORGANIC" IS NOT AUTOMATICALLY "HUMAN" — AND THE DISAGREEMENT WAS THE FINDING
+
+The first run classified **152 addresses as organic while BUGS.md holds 13**. A community of
+dozens cannot be 152, so ORGANIC meant "everything the classifier could not name". Chasing it
+produced the strongest evidence of the session, in `diag_who_are_they.js`, which runs the
+same fingerprint over TWO CONTROL GROUPS (BIGFILL = known machine, NAMED = known human)
+because a fingerprint run only on the subject tells whichever story you went in wanting:
+
+| | BIGFILL | NAMED | UNIDENTIFIED |
+|---|---|---|---|
+| distinct sponsors | 38 | 8 | **70** |
+| sponsored by a roster leader | **100.0%** | 36.4% | **16.1%** |
+| biggest single sponsor's share | 17.0% | 36.4% | **4.9%** |
+
+**A round-robin script produces 100% roster sponsorship. 70 distinct sponsors with no sponsor
+above 4.9% is a referral tree spreading through people.** Combined with 13.2's three closed
+leaks and six alternative derivation paths coming back clean, the 143 are real members.
+
+## 13.4 ⛔ THE LOAN IS CREDIT, NOT PLUMBING — AND MY GUESS WAS WRONG
+
+Borrowed and repaid match to the cent across most organic wallets, which looked like the SF
+fronting a shortfall inside one atomic flow and taking it straight back. **Measured: 0 of 239
+organic loans clear in their own transaction. 0 clear in the same block.** Median time to
+zero debt: **13.5 hours organic, 40.5 hours bigfill**. These are real balances carried across
+cycles. Option B carries genuine risk that has to be priced, and the "bookkeeping change"
+reading is dead.
+
+**42 of 239 organic loans (17.6%) never reached zero**, against 2 of 182 for bigfill.
+
+⚠ **INSTRUMENT LIMIT, CARRY IT FORWARD:** loans are not tracked individually. "Cleared" means
+the member's debt returned to zero at some point after that loan. At ~2.1 loans per borrower
+one zero event can close several loans, so the 42 never-cleared count is solid but the median
+time is smeared.
+
+## 13.5 ⛔⛔ ⚠ THIS SECTION IS REFUTED BY 14.1. READ 14.1 FIRST.
+> **14.1 RAN THE NEAR-EXPERIMENT THIS SECTION ASKED FOR AND THE ORDERING INVERTS.** Held to the
+> same parked-with-shortfall starting state, loan-rescued organic members reach 2+ cycles at
+> **83.2%**, self-rescued at 64.4%, never-rescued at 13.0%. The 7.1%-vs-31.7% table below is the
+> selection effect its own warning predicted. Keep the table as the record of the confounded
+> comparison; do not quote it as a result.
+
+### THE OWNER'S BAR, MEASURED FOR THE FIRST TIME — AND IT FAILS BOTH HALVES (⚠ SUPERSEDED)
+
+The bar is *"give members at least two full cycles but not at the expense of an unpaid loan."*
+That is a COMPARISON, and nobody had run it. ORGANIC members only:
+
+| | BORROWED | NEVER BORROWED |
+|---|---|---|
+| members | 113 | 41 |
+| clear rate | 14.6% | 43.1% |
+| cycles per member | 0.35 | 1.07 |
+| **reached 2+ cycles** | **8 (7.1%)** | 13 (31.7%) |
+
+⚠ **SELECTION, NOT CAUSATION — STATE IT EVERY TIME THIS TABLE IS QUOTED.** You borrow BECAUSE
+you were short, so borrowers were the weaker population before the loan touched them. This
+CANNOT show the loan harmed anyone. What it shows without confound is that lending as
+currently priced does not deliver the two-cycle bar, and that 42 loans went unpaid.
+
+**THE NEAR-EXPERIMENT NOBODY HAS RUN:** every co-pay borrower was PARKED WITH A SHORTFALL at
+the moment of the loan — and so were the members who SELF-RESCUED with their own money, and
+so were the ones who STAYED PARKED. Same starting condition, three outcomes, and the keeper
+picks co-pay recipients by walking a queue rather than by merit. That is as close to random
+assignment as this chain offers and it would separate "the loan did not help" from "these
+members were already sinking."
+
+## 13.6 THE OWNER'S FIVE RULES (2026-08-20) AND WHERE EACH ONE LANDED
+
+Owner set these while calling for a conclusion: (1) members need loans but not at the expense
+of the ecosystem; (2) find the number where 100% of loans are repayable; (3) no loan if
+earnings cannot cover it; (4) 2-3 recruits or coupon-sponsored recruits make you
+self-sustaining; (5) possibly enforce pay-it-forward in code for coupon members.
+
+* **RULE 3 IS ALREADY IMPLEMENTED AND LIVE.** `payCoRescue` (StabilityFund:686) requires
+  `loanEligibleFor(member, tier, advance)`, which caps total debt at
+  `tierEntryFees[tier] * insolvencyFloorBps / 10_000`. The comment at StabilityFund:781
+  states the intent in the owner's own words: *"expected per-cycle earnings ~= tier fee x
+  insolvencyFloorBps."* **Live on V8.48 at 3400 bps = $3.40 at T1.**
+* **RULE 2 HAS NO ANSWER IN THAT PARAMETER.** Peak debt does not predict repayment — CLEAN is
+  94.7% in the $4-5 band but 76.0% at $1-2 and 0% at $2-3. No dose-response, so tuning the cap
+  does not sort good loans from bad. The tightest setting tested avoids $43.79 of bad debt by
+  refusing 103 of 113 members and withholding $382.85 of lending. That is not a gate.
+* **RULE 2's REAL ANSWER IS ONE DIRECT REFERRAL.** Repayment by directs held AT LOAN TIME:
+  **0 directs 67.2% (67 members), 1 direct 92.6% (27 members), 2 directs 93.3% (15).** The
+  cliff is 0 -> 1; 1 -> 2 adds nothing measurable. The 100% buckets are 2, 1 and 1 members —
+  **100% of two people is not a policy** and must not be quoted as the threshold.
+* **RULE 4 IS SUPPORTED, BY A DIFFERENT MECHANISM THAN EXPECTED.** Recruiting barely improves
+  REPAYMENT past the first direct; what it improves is CYCLING — 2+ cycles reached by 3.5%,
+  10.8%, 27.8% at 0, 1, 2 directs. Two different mechanisms; keep them separate in member copy.
+* **RULES 3-gate AND 5 BOTH NEED A COUNTER THAT DOES NOT EXIST.** TierRouter:216 stores only
+  `memberReferrer` (child -> sponsor). Nothing counts a downline. Needs
+  `mapping(address => uint32) public directCount;` incremented where `memberReferrer` is
+  assigned (TierRouter:762 register, :813 coupon). New mapping, no existing struct touched —
+  but `coPayRescue` reads only `withdrawable` and `crossingReserve`, so the gate needs the
+  count passed in or read through the router, **and that call has to be paid for in gas at a
+  point already near the block ceiling. Size and gas both need measuring before it is promised.**
+
+## 13.7 ⛔ PARAM 59 — ⚠ THIS SECTION IS CORRECTED BY 13.11. READ 13.11 FIRST.
+
+> **13.11 REVERSES THE CONCLUSION BELOW.** 5000 was measured on the V8.50 arm with the
+> crossing buffer already at zero; the V8.48 data in this section was generated WITH the
+> buffer, which is what pushed 62 members past the ceiling. For the floor VALUE the AB curve
+> is the better basis. **Re-confirm recommendation: KEEP 5000.** The rest of this section
+> still stands as the record of the exposure question.
+
+Session 10 item 1 records the owner choosing **5000** on 2026-08-19, landed in source. Live
+V8.48 runs **3400** because nothing has been deployed since — **this is NOT source/chain
+drift, and a mid-session claim that it was drift was wrong and is corrected here.**
+
+But note what the queued change does: **it raises the T1 debt cap from $3.40 to $5.00, 47%
+more exposure per member.** It was chosen on the eviction curve (floor evictions 7/6/5 ->
+0/0/0; evicted-never-lent-to 9 -> 3) — a member-protective rationale, and a real one. 13.4
+and 13.5 supply the other side of that trade, which did not exist on 2026-08-19: more lending
+means more unpaid debt, and **organic members still carrying debt average 0.04 cycles against
+0.43 for those who cleared.** An unpaid loan does not merely go unpaid — the floor then caps
+the member out of borrowing again, so they stop cycling entirely. **25 organic members, ~16%
+of the organic population, are in that state now.** Direction of causation is not established
+(they may carry debt because they stopped, not stop because they carry debt) but the standing
+population is a fact. **The 5000 decision is the owner's and stands; it should be re-confirmed
+against this section before V8.50 deploys, not silently.**
+
+## 13.8 ⚠ THREE INSTRUMENT DEFECTS PAID FOR THIS SESSION — TWO CAUGHT, ONE SHIPPED
+
+1. **THE CONTROL GROUP EARNED ITS KEEP.** The USDC funding panel read **14% for BIGFILL**, a
+   group we KNOW is owner-funded. That is not a fact about bigfill — the scan window starts at
+   the V8.48 deploy block while those wallets were funded on the same mock USDC long before.
+   Without a known-machine control, "most bigfill wallets are self-funded" would have been
+   reported as a finding. **Section B of `diag_who_are_they.js` is void; do not quote it.**
+2. **TWO OF MY THREE HYPOTHESES WERE WRONG AND THE INSTRUMENTS CAUGHT BOTH.** "The loan is
+   plumbing" — refuted, 0% same-transaction. "The registration bursts are one sponsor
+   onboarding their team" — refuted, 21 of 25 bursts have mixed sponsors. The sampled bursts
+   sit within ~3h of deployment, so a launch-day rush is the likely reading, **UNVERIFIED and
+   marked as such.** The population conclusion rests on 13.3's sponsor tree, not on this.
+3. **A DEFECT THAT SHIPPED — `diag_insolvency_floor.js` MIXES TIERS.** The ceiling is PER
+   TIER ($3.40 at T1, $8.50 at T2) but tables 1 and 2 bucket raw dollars and apply the T1 cap
+   to everyone, so the ">$5.00" band is largely T2 members sitting INSIDE their own cap rather
+   than members who exceeded one. **Both floor tables are weaker than they look and neither
+   should be used to set the parameter.** Fix: express peak debt as bps-of-own-tier-fee before
+   bucketing. The 13.6 conclusion does not rest on them — it rests on the directs analysis,
+   which has no tier-mixing problem — but a floor change does and must not be made until this
+   is re-run. Also: 3400 was not among the hardcoded candidates, so the `<- CURRENT` marker
+   never printed.
+
+## 13.9 NEXT, IN ORDER   ⚠ item 2 is ANSWERED by 13.11 — the corrected floor run is done
+
+1. **THE PARKED NEAR-EXPERIMENT (13.5).** Co-pay-rescued vs self-rescued vs never-rescued,
+   all measured from the same parked-with-shortfall starting state. This is the one comparison
+   that can separate selection from causation and it decides whether lending helps at all.
+2. **RE-RUN THE FLOOR ANALYSIS IN BPS-OF-OWN-TIER-FEE** (13.8 item 3) before any floor change,
+   and re-confirm PARAM 59's 5000 against 13.7.
+3. **UNVERIFIED PROPOSAL, NOT MEASURED — first loan free, second needs a direct.** Allow the
+   first loan at 0 directs so every member gets their shot at a cycle, require 1+ direct for a
+   second. 0-direct members took 135 loans across 67 members (~2 each) with 22 still owing, so
+   the exposure is concentrated in repeat lending. **This is an idea, not a finding — it needs
+   a per-loan-sequence run before anyone builds it.**
+4. **THEN the carried backlog**, still untouched: open one of the 5 unexplained cycle-outs
+   (tx hashes in `diag_forward_hop_cohort.js` output, all 5 organic); fix
+   `V8_50_ReferralBreakeven.test.js` v4 to count `MemberReentered`; stale-nonce retry backoff;
+   @bevmawire's Dashboard retry; `maxItemsPerUpkeep` against 15; member-callable re-entry.
+
+## 13.10 TOOLS BUILT THIS SESSION — all read-only, all default to `deployed_addresses_v8_48.json`
+
+* `diag_forward_hop_cohort.js` — the hop split bigfill/leader/organic by key derivation, with
+  the organic column split again into NAMED vs UNIDENTIFIED. Hard-exits if `FILL_MNEMONIC` is
+  absent, warns if the HD window is saturated, and reconciles every cohort sum against the
+  ungrouped total with a visible ✅/⛔ per line.
+* `diag_who_are_they.js` — alternative derivation paths, USDC funding shape (**section B void,
+  see 13.8**), registration bursts, sponsor spread. Two control groups.
+* `diag_loan_lifetime.js` — burst composition, same-tx vs days-outstanding, borrowers vs
+  non-borrowers on cycles, outstanding debt by cohort and age.
+* `diag_referral_threshold.js` — directs vs repayment, lifetime AND at-loan-time, plus what a
+  1/2/3-direct gate would have refused.
+* `diag_insolvency_floor.js` — peak debt vs repayment, candidate bps replay, dead-end check.
+  **v1 carried the tier-mixing defect in 13.8 item 3; v2 (shipped) fixes it — see 13.11.**
+
+## 13.11 ⛔⛔ THE FLOOR, TIER-CORRECTED — AND THE ANSWER TO THE OWNER'S 100% TARGET
+
+Owner's call, 2026-08-20: *"my call stands where we need to make the system not carry anyone's
+debts — if they will not be able to pay we do not offer them a loan. I am looking for 100% loan
+repayment, so if that means a reduction from 50% to 40% or even 20% so be it. The way to get out
+would be to sponsor one or more."* Also: **PARAM 59 is to be RE-CONFIRMED, not shipped as-is**,
+because it "was handed by a previous session before this evidence was presented."
+
+`diag_insolvency_floor.js` v2 re-measures peak debt as **bps of the member's OWN tier fee** and
+replaces v1's counterfactual with a purely observational question — *among members who never
+exceeded B, what share ended clean?* Monotonic, and it answers the target directly:
+
+| cap B | T1 cap | members at/below | clean | owing | CLEAN % |
+|---|---|---|---|---|---|
+| 1000 bps | $1.00 | 13 | 13 | 0 | **100.0%** |
+| 1700 bps | $1.70 | 33 | 28 | 5 | 84.8% |
+| 2500 bps | $2.50 | 45 | 36 | 9 | 80.0% |
+| 3400 bps LIVE | $3.40 | 52 | 39 | 13 | 75.0% |
+
+**THE FLOOR CAN REACH 100% — AT 1000 bps (10%), AND ONLY THERE.** The cost is in section 3 of
+the output: **1000 bps would have capped 101 of 114 organic borrowers (88.6%)** to remove 26
+defaulters. That is not "lending with a sane ceiling", it is ending lending to keep the book
+clean, and it contradicts the first half of the owner's own rule 1 (*"members need loans to help
+them and that is good"*). **The 100% target is reachable by parameter only by abolishing the
+thing the parameter governs.**
+
+### ⛔ AND TONIGHT'S DATA IS THE WRONG BASIS FOR SETTING THE FLOOR ANYWAY — A CORRECTION TO 13.7
+Section 1 shows **62 organic members with peak debt ABOVE the live 3400 cap**, which should be
+impossible. It is not a floor failure: `forceCrossKeeper` (MatrixLogicLib:1612) books
+`sfContribution + crossingBuffer` as one advance, and the crossing buffer pushed members past the
+ceiling — the exact effect recorded on 2026-08-15 as *"it exceeded insolvencyFloorBps so the floor
+could refuse nobody"*. **`crossingBufferBps = 0` has been the default in the tree since V8.49
+(MatrixKeeper.sol:153) but IS NOT DEPLOYED. V8.48 is live.**
+
+**CONSEQUENCE, AND IT REVERSES 13.7's FRAMING:** most of the debt measured tonight was
+manufactured by a mechanism already removed in the undeployed build. PARAM 59's 5000 was measured
+on the **V8.50 arm — buffer already zero** — so for the FLOOR VALUE SPECIFICALLY the AB_FLOOR_BPS
+curve is the BETTER evidence and tonight's numbers are the worse one. 13.7 said the 5000 decision
+predated this evidence; that is true but misleading, because this evidence is on the old build.
+**RE-CONFIRM RECOMMENDATION: KEEP 5000.** Nothing measured tonight improves on the basis it was
+already chosen from, and lowering the floor on V8.48 data would be tuning against a mechanism
+that will not exist in V8.50.
+
+### ⛔ WHAT TONIGHT DOES ADD, AND IT IS THE ANSWER TO RULES 1-4 TOGETHER
+The AB curve measured EVICTIONS. It never measured repayment or who repays. Section 4 does, and
+it is the strongest single signal of the session — **the owner's own stated exit route, confirmed
+observationally with no model behind it:**
+
+| organic members | count | have sponsored anyone |
+|---|---|---|
+| STILL OWING | 26 | **3 (11.5%)** |
+| CLEAN | 88 | **46 (52.3%)** |
+
+**A member who has sponsored someone is 4.5x more likely to have cleared their debt.** With
+13.6's at-loan-time figures (0 directs 67.2% repayment, 1 direct 92.6%), sponsorship is the
+discriminating variable and the floor is not.
+
+### THE SHAPE THAT SATISFIES ALL FIVE RULES AT ONCE
+Not a decision — the owner's — but this is what the evidence supports, and it uses his own exit
+route as the qualifying condition rather than inventing a new one:
+
+* **Keep the floor at 5000** as the outer ceiling (re-confirmed on the V8.50-arm curve, above).
+* **Gate the HEADROOM ABOVE A BASE on `directCount >= 1`.** A member who has sponsored nobody
+  gets a small first advance; the rest of the ceiling unlocks when they sponsor one person.
+  Rule 1 keeps lending alive, rule 2 targets the population that actually repays, rule 3 refuses
+  the advance that cannot be covered, rule 4's "invite 2 or 3" becomes the literal mechanism, and
+  rule 5's pay-it-forward is the same counter again.
+* **⚠ UNVERIFIED — THE SPLIT IS ASSOCIATION, NOT CAUSATION.** Sponsoring may mark an engaged
+  member rather than cause solvency. For a GATE that is sufficient (a filter only has to
+  predict), but nobody should claim recruiting makes you solvent on this data.
+* **BLOCKING WORK BEFORE ANY OF IT SHIPS:** `directCount` does not exist (TierRouter:216 stores
+  only `memberReferrer`), and `coPayRescue` sees only `withdrawable` and `crossingReserve`, so the
+  gate needs a router read **at a call already near the block gas ceiling. Measure size and gas
+  first — this has not been done and must not be promised until it is.**
+* **THEN RE-MEASURE ON V8.50.** With the buffer at zero, loans are the real shortfall only, debt
+  per member falls, and the floor binds differently. Every number in 13.11 should be re-run on
+  the private V8.50 deploy before the floor is touched again.
+
+
+---
+
+# ⬛ SESSION 12 STATE — 2026-08-20. ⚠ 12.6 IS RE-PRICED BY SESSION 13 ABOVE — READ 13.1 FIRST.
 
 ## 12.1 ⛔⛔ "ZERO GRADUATIONS" WAS THE COUNTER, NOT THE SYSTEM. 11.4 AND 11.5 ARE CORRECTED.
 
