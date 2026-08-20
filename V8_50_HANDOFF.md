@@ -1,12 +1,308 @@
 # V8.50 HANDOFF — the crossing redesign. READ THIS FIRST.
 
 Written 2026-08-16 at the end of the V8.49 private measurement run.
-Sessions 2-9 have appended to it since; read the NEWEST section first — each one
+Sessions 2-10 have appended to it since; read the NEWEST section first — each one
 corrects the ones below it, and says so explicitly where it does.
 Audience: **the next session of Claude, plus the owner. There is no third party — every
 line of this codebase was written by a previous session of Claude and executed by the
 owner.** Read section 7a (THE TWO RULES) before doing anything else; it is short, it is
 owner-set, and the session that earned it got five things wrong by ignoring what it says.
+
+---
+
+# ⬛ SESSION 10 STATE — 2026-08-19/20, LATEST. READ THIS FIRST, BEFORE SESSION 9.
+
+**THE HEADLINE: THE PARKED-MEMBER BADGE WAS REACHING NOBODY — 0 OF 107 PARKED MEMBERS COULD
+SEE IT — AND ITS V8.48 FALLBACK DISAGREED WITH THE CONTRACT ON TWO OF FIVE CASES. Both fixed,
+both shipped ALL THE WAY TO MAIN (owner decision). The bug-report form's advertised-but-missing
+fields are fixed and it now takes screenshots. Nothing was deployed, no chain was written to,
+`.env` line 69 is unchanged, NO CONTRACT OR TEST FILE WAS TOUCHED, and the suite is untouched
+at 611 passing / 7 pending / 0 failing (not re-run — nothing it covers moved).**
+
+| repo | branch | at session end |
+|---|---|---|
+| `C:\CryptoNite-Smart-Contracts\CryptoNova` | `v8.1` | **`63de747`** — two new instruments only |
+| `C:\CryptoNova-Testnet-App` | `admin` = `preview` = `main` | **`74a1588`** — badge fix + bug form. **THE LADDER IS LEVEL; members have everything.** |
+
+---
+
+## 1. ⛔ THE BADGE WAS INVISIBLE. 107 OF 107 PARKED MEMBERS COULD NOT SEE IT.
+
+`renderParkedList()` opened with `if (cands.length < 2) { box.style.display='none'; return; }`.
+Measured on live V8.48 with the new `scripts/diag_badge_preview.js`:
+
+| | |
+|---|---|
+| parked positions | 107 |
+| distinct parked members | **107** |
+| members holding 2+ positions (badge RENDERS) | **0** |
+| members holding exactly 1 (badge HIDDEN) | **107** |
+| **share of parked members who could see the feature** | **0.0%** |
+| of those positions, gap a loan CANNOT cover | 37 |
+
+The whole of session 9's badge work reached nobody, while 37 members sat on an uncoverable gap.
+
+**THE GATE'S REASONING WAS HALF RIGHT AND THAT IS WHY IT SURVIVED.** "One position is the
+existing card's job" is TRUE OF THE ACTION — the single-position card's Self Rescue and Copay
+buttons work fine. It was NEVER TRUE OF THE STATUS: that card renders label, withdrawable,
+reserve, fee and shortfall, and says nothing about the eviction clock or whether the fund can
+cover the gap. Verified by reading the card's own render path (`index.html` ~5752-5807).
+
+**FIXED:** the list now renders STATUS-ONLY for a single position — badge and clock line, no
+per-row buttons, no bulk bar, no header — and does NOT hide the card's own buttons the way the
+multi-row path does. It reuses `_evictInfo` rather than forming a second verdict.
+
+⚠ **COST STATED SO IT IS NOT DISCOVERED LATER:** single-position members now also pay the
+status reads, ~5 extra `eth_call`s per dashboard load. The wallet-balance read was moved BELOW
+the status-only return so it is not paid by members who never see a button. If it ever needs
+cutting, cache the two chain-wide reads (grace period, SF balance) across the page — those are
+the part that does NOT differ per member.
+
+---
+
+## 2. ⛔ THE V8.48 HEADROOM FALLBACK DID NOT MATCH `loanHeadroom`. IT INVERTED THE VERDICT.
+
+`StabilityFund.sol:956-964` has **THREE** outcomes. The shipped fallback implemented **one**:
+
+| condition | contract returns | old fallback computed |
+|---|---|---|
+| `insolvencyFloorBps == 0` | `type(uint256).max` — **unlimited** | `fee * 0 / 10000` = **0** |
+| `tierEntryFees[t] == 0` | `type(uint256).max` — **unlimited** | **0** |
+| otherwise | `fee*bps/10000 - debt` | same ✅ |
+
+A zero ceiling reads as zero headroom, which renders **PENDING EVICTION on every parked row** —
+the exact INVERSE of the truth, and it fires at the moment PARAM 59 is set to 0, which is the
+documented ESCAPE HATCH for disabling the floor. **Measured, not argued:** old and new run
+against the contract's own logic, **old disagreed on 2 of 5 cases**. It was right on live only
+because the chain happens to read 3400 and a $10.00 fee — right by luck, not by construction.
+This is the "two models of one rule, drifting" failure `StabilityFund.sol:938` names by hand.
+
+**ALSO FIXED IN THE SAME BLOCK:**
+- **The clock fallback no longer fires on a FAILED read.** `evictionGracePeriod` (V8.49+) and
+  `extendedIdleTimeout` (V8.48) are SEPARATE DIALS — `MatrixKeeper.sol:1066` says in terms
+  "Do NOT re-point this at extendedIdleTimeout to keep them in step." On V8.48 both are 604800
+  so substituting is correct THERE; the substitution used to happen on ANY failure of the first
+  call, so on a V8.49+ chain one transient RPC hiccup would silently render a countdown from the
+  IDLE-SLOT RECLAIM clock and look healthy doing it. Now gated on the chain reporting the
+  function ABSENT (empty return / missing revert data), never on a read that merely failed.
+- **The three derivation reads are no longer `Promise.all`.** That all-or-nothing shape is
+  exactly what made `diag_eviction_clock.js` report 107 of 107 unknown; that script was rebuilt
+  for it in session 9 and `index.html` still carried the original. Read separately, an
+  unreadable `memberDebt` leaves the ceiling standing as an UPPER BOUND — so "a loan cannot
+  cover this" stays sound while "you are fine" correctly downgrades to CHECKING.
+- **A `Symbol` sentinel now carries "unlimited",** and it is caught BEFORE any `<` comparison.
+  JavaScript throws a TypeError on `Symbol < BigInt`, which would have taken the whole parked
+  list down rather than mislabelling one row.
+
+✅ **REFUTED, SO NOBODY RE-RAISES IT:** the badge does NOT consult `loanEligible`, which exists
+on V8.48 — and it does not need to. `StabilityFund.sol:988` is literally
+`loanHeadroom(member, tierIdx) > 0`. It carries nothing the badge does not already have.
+Separately, `loanEligibleFor` IS the enforcement rule (`advance <= loanHeadroom`), and the
+badge's `headroom < shortfall` test is that rule reproduced correctly.
+
+---
+
+## 3. ⛔ A HANDOFF CORRECTION — SESSION 9 CREDITED AN INSTRUMENT WITH A RESULT IT NEVER PRODUCED
+
+Session 9 records "`probe_sf_views.js` found `loanHeadroom` AND `evictionGracePeriod` are the
+two absent ones". **It cannot have.** Its case list has ten entries and `evictionGracePeriod`
+is not one of them — it probes the **StabilityFund**, and `evictionGracePeriod` is declared on
+**MatrixKeeper** (`MatrixKeeper.sol:372`). The claim was read off the SOURCE TREE and attributed
+to an instrument that never asked the question, so the keeper half of the badge's fallback had
+**never been measured against the deployed keeper**.
+
+**THIS IS THE SESSION 9 TRAP ONE LEVEL UP: an instrument must not report the absence of what it
+cannot observe — AND A HANDOFF MUST NOT REPORT WHAT THE INSTRUMENT NEVER ASKED.**
+(To session 9's credit, `diag_eviction_clock.js:66-76` records the SF probe results correctly
+and in full. The sloppiness was only in the summary.)
+
+Now measured, `scripts/probe_keeper_views.js`, live V8.48 keeper `0x9Ade59F9` (20,211 bytes),
+**4 of 4 controls green so these are statements about the ABI and not the network**:
+
+| view | verdict | value | note |
+|---|---|---|---|
+| `idleSlotTimeout()` | EXISTS [ctrl] | 259200 | |
+| `maxItemsPerUpkeep()` | EXISTS [ctrl] | **15** | ⛔ source default is 20 |
+| `stabilityFund()` | EXISTS [ctrl] | `0xeb36ee74…` | matches the addresses file |
+| `tierRouter()` | EXISTS [ctrl] | `0xD78eD884…` | |
+| `evictionGracePeriod()` | **ABSENT** | — | V8.49+; badge takes its fallback |
+| `extendedIdleTimeout()` | EXISTS | 604800 | the fallback answers |
+| `parkedGracePeriod()` | EXISTS | **86400** | ⚠ source default is 6 hours |
+| `minGasPerItem()` | **ABSENT** | — | ⛔ not on live at all |
+
+SF probe re-run the same minute: `insolvencyFloorBps` **3400**, `tierEntryFees(0)` **$10.00**,
+`memberDebt` and `memberDebtOf` both present, `loanEligible` true, `loanHeadroom` and
+`loanEligibleFor` ABSENT, `totalBalance` $486.66, `totalRescueLoaned` $1,375.43. **Live T1
+ceiling = $3.40**, exactly as predicted.
+
+### ⛔ TWO BACKLOG ITEMS ARE STATED AGAINST THE WRONG NUMBER — FIX THE ITEMS, NOT THE CHAIN
+1. **"`maxItemsPerUpkeep` is still vestigial at 20"** describes the SOURCE default. **The live
+   chain runs 15.** Restate the item against the real number before deciding whether to lower
+   it to 10. There is a `scripts/set_max_items.js`, so it was set deliberately at some point.
+2. **`minGasPerItem` DOES NOT EXIST ON LIVE V8.48.** The measured 5M owner decision is a
+   V8.49+/V8.50 property and is **NOT in force on the community chain** — consistent with the
+   live keeper scripts still carrying `GAS_PER_ITEM_DEFAULT = 3_500_000`, which the guardrails
+   say was left alone deliberately. Do not quote 5M as a live figure.
+3. Minor, same class: `parkedGracePeriod` is 86400 on live against `6 hours` in source.
+
+---
+
+## 4. ✅ THE PARKED POPULATION MOVES ON A SCALE OF SECONDS — SO MOST OF ITS NUMBERS ARE SNAPSHOTS
+
+`diag_badge_preview.js` first reported 37 uncoverable of 107; `diag_eviction_clock.js`, run
+3m40s later, reported 41 of 108. Two instruments, one population, different answers — treated as
+the finding rather than averaged.
+
+**On every member both instruments list, they agree TO THE CENT** — gap, headroom and verdict
+(`0xAdf9C692CB` $1.36/$0.00, `0xA9B019e7` $4.39/$3.40, `0x396DFA14` $5.00/$2.90, `0x7e323C4d`
+$5.00/$2.96). So the rules are the same rule.
+
+**PROVED WITH ONE INSTRUMENT INSTEAD OF TWO:** `diag_badge_preview.js` run twice, **20 seconds
+apart, scanned 109 then 110 positions.** Population drift is demonstrated outright; no
+cross-instrument comparison was ever needed.
+
+⚠ **AND A SECOND RESULT FELL OUT OF IT.** Across four readings the counts went
+**37/107, 41/108, 40/109, 40/110** — the uncoverable count moves MORE SLOWLY than the
+population. That is what you would expect if **new parkers arrive rescuable** and the
+uncoverable set is the accumulated hard cases. Consistent with the 20-second pair, where the
+population moved and the uncoverable count did not.
+
+⛔ **THEREFORE: `44 -> 41 -> 37` IS NOT A TREND.** It is snapshots of a population being churned
+by bigfill. Any parked-population figure taken while the loop runs is a snapshot with a
+timestamp, not a measurement of a stable quantity. **To compare the two instruments honestly,
+stop the bigfill loop first, or compare only the PER-MEMBER rows** — that check has no drift in
+it. Written into `diag_badge_preview.js`'s own output so it is not rediscovered.
+
+⚠ **AND THE DIRECTION IS WORTH WATCHING:** across this session the SF climbed
+**$486.66 -> $507.13 -> $517.20 -> $529.20** while the parked queue grew **107 -> 110**.
+**Parking is currently outrunning rescue even as the fund recovers.** Neither number alone says
+that; both together do.
+
+---
+
+## 5. ✅ BUG-REPORT FORM — @bevmawire WAS RIGHT AND THE BUG WAS THE WORDING
+
+Reported 2026-08-19: *"Additional notes (optional) tab does not seem to be giving access to
+'Steps to reproduce, screenshot filename, error message'... it does not seem to have facility
+for uploading screenshots either."*
+
+There was **one** free-text box whose PLACEHOLDER listed three things, so it read as a section
+that should open up three fields. It never had them. **A form must not advertise what it cannot
+accept.** Fixed by giving him the fields it promised rather than deleting the promise.
+
+- **Steps to reproduce** — new optional textarea, threaded form -> `/api/submit-bug` ->
+  `BUGS.md`, rendered as a fenced block (multi-line by nature; a newline on the bullet line
+  breaks the markdown list). **Optional server-side on purpose:** a cached `bug-report.html`
+  keeps not sending it, and output for an old client is byte-identical to before.
+- **Screenshot upload** (owner decision: *"build it in the repo, keep it simple, if anything in
+  the future could be an issue we revert"*). Downscaled IN THE BROWSER to ~1200px JPEG q0.82
+  (~200-400KB) because a phone screenshot is 2-5MB and Vercel caps a serverless body at 4.5MB.
+  Committed to `bug-screenshots/` through the same GitHub Contents API the reports already use,
+  and **linked, not embedded** — `![](...)` would render every screenshot full-size inline and
+  make `BUGS.md` unscrollable within a dozen reports.
+- ⛔ **THE REPORT SURVIVES A FAILED UPLOAD.** The image is written BEFORE `BUGS.md` is touched
+  and that path never throws; any failure becomes a `screenshotError` and the report is filed
+  anyway **with a line saying a screenshot was attached and did not upload**. Worst case is an
+  orphaned image, which is cheap and obvious. The other order loses reports.
+- **iPhone HEIC is handled out loud** — most browsers will not decode it into a canvas, so the
+  picker says so and says what to do, rather than failing silently.
+- `resetForm()` clears steps, the file input, the status line and the in-memory base64 —
+  without it the NEXT report from the same page load carries the PREVIOUS member's screenshot.
+
+⚠ **NOT YET VERIFIED END TO END.** `node --check` passes on both files, the field is threaded
+through, and `buildEntry` was rendered for four cases — but **no real browser has done the
+canvas downscale and no real image has gone through the GitHub API.** File a throwaway report
+with a screenshot and confirm the entry, the link and the file in `bug-screenshots/`.
+
+⚠ **AND THE UNDERLYING COMPLAINT IS NOT CLOSED.** @bevmawire's actual problem was "Couldn't
+find your status" on the Dashboard at **13:50 GMT**; the Base Sepolia state-read outage ran
+**15:54-16:39**. **His report PREDATES the outage and has a different cause.** The likeliest
+candidate is the `LOGS_DEPLOY_FLOOR` load problem now shipped at `9d0940f`. **Ask him to retry
+— do not assume it is fixed.** (Session 9's commit `1aa9ce8` had already spotted this class.)
+
+---
+
+## 6. BIGFILL — ALIVE, AND THE OFFSET QUESTION IS CLOSED
+
+Three runs all logged `HDR_OFFSET=289` and the second registered **0 of 1**, its own NEXT RUN
+HINT saying the wallet was already registered. Not a loop defect: **the owner restarted the loop
+three times, each with `-StartOffset 289`** (confirmed by him and by the process list — PID 2836
+started 18:58:37 with `-StartOffset 289`, which is run 3's own timestamp). Left alone the loop
+does its own `$offset++` and the next log should be named `...offset290.log`.
+
+⚠ Worth keeping: those three runs registered **nobody** and the fund still climbed. That
+isolates the sweep-only inflow by accident and is the cleanest evidence yet that **the SWEEPS,
+not the registrations, feed the fund** — which is what `BIGFILL_RULES.md` already says. Not a
+designed experiment; do not quote a rate from it.
+
+---
+
+## TRAPS ADDED THIS SESSION
+
+- **A HANDOFF MUST NOT REPORT WHAT THE INSTRUMENT NEVER ASKED.** Session 9's summary credited
+  `probe_sf_views.js` with an `evictionGracePeriod` verdict it has no case for. The detailed
+  write-up in `diag_eviction_clock.js` was correct; the SUMMARY drifted. **When a handoff
+  attributes a result to a named script, the cheapest possible check is to open the script and
+  look for the case.** It took one grep and it was wrong.
+- **A FALLBACK MUST REPRODUCE THE WHOLE DEFINITION, NOT THE ARITHMETIC.** `loanHeadroom` has two
+  early returns before its formula and the frontend copy had neither, which inverted the verdict
+  in exactly the configuration an operator would reach for in an emergency.
+- **"THE FUNCTION IS ABSENT" AND "THE READ FAILED" ARE DIFFERENT ANSWERS.** Any fallback gated
+  on a bare `catch` will substitute during an outage. Gate on the error SHAPE.
+- **A FEATURE THAT RENDERS FOR NOBODY STILL PASSES EVERY CODE REVIEW.** The badge was correct,
+  tested, committed — and gated behind a condition no live member satisfied. **Before shipping a
+  conditional feature, measure how many real users meet the condition.**
+- **A POPULATION THAT MOVES IN SECONDS CANNOT BE CROSS-CHECKED BY TWO SCRIPTS RUN MINUTES
+  APART.** Compare per-member rows, or stop the thing that is changing it.
+- **`Symbol < BigInt` THROWS IN JAVASCRIPT.** A sentinel added to a value that is later compared
+  with `<` must be caught before the comparison or it takes out the whole render.
+- **A NEW FORM FIELD NEEDS THREE EDITS, NOT ONE:** the input, the payload, and `resetForm`.
+  Missing the third silently carries one member's data into the next member's report.
+- **`git commit` CAN FAIL ON A STALE `.git/index.lock` FROM A CRASHED EARLIER PROCESS.** Check
+  `Get-Process git` FIRST — if none is running the lock is debris and its `CreationTime` tells
+  you which session left it. (One was found here dated 18:49:54, from session 9.)
+
+---
+
+## STATE OF THE TREE
+
+**Contracts (`v8.1`, `63de747`, pushed):** `scripts/probe_keeper_views.js` and
+`scripts/diag_badge_preview.js`, both NEW, both ASCII-only with no BOM, both `node --check`
+clean. **No contract file, no test file, no `.env` change.** Suite untouched at 611/7/0.
+⚠ Still untracked and unexplained: `scripts/bigfill_v8.js.bak_ascii`, `test_ab/replay.js.bak_s9b`,
+`test_ab/replay.js.bak_s9c` — session 9 leftovers. House pattern is to move strays into
+`archive/`, not delete them.
+
+**Frontend (`admin` = `preview` = `main`, `74a1588`, pushed):** `index.html` (badge visibility +
+headroom + clock gating), `bug-report.html` and `api/submit-bug.js` (steps field + screenshots).
+⚠ `COMMIT_MSG_s10.txt` is untracked debris in BOTH repos — delete it.
+⚠ **Local `preview` and `main` are 30 commits behind their remotes.** Not touched, because the
+ladder was pushed as `git push origin admin:preview` / `admin:main` (both fast-forwards —
+`origin/main` and `origin/preview` were strict ancestors of `origin/admin`). **A future session
+that checks out local `preview` and merges will make a mess.** Fix them or delete them.
+
+---
+
+## NEXT, IN ORDER
+
+1. **Verify the screenshot upload end to end** — file a throwaway bug report with an image and
+   confirm the `BUGS.md` entry, the link, and the file in `bug-screenshots/`. The one thing in
+   this session that has not been proven against reality.
+2. **Ask @bevmawire to retry the Dashboard.** His fault predates the outage and the block-floor
+   fix has now shipped to main. Either it is fixed or we have a second, still-unidentified cause.
+3. **Restate the `maxItemsPerUpkeep` item against 15, not 20**, then decide.
+4. ⛔ **MEMBER-CALLABLE RE-ENTRY AFTER EVICTION** — V8.50 scope, owner decision 2026-08-19.
+   Unchanged from session 9; nothing this session touched it. `_recordJoin` is already
+   idempotent, preserve `memberReferrer`, put any new loop in TierRouterLib (EIP-170 pressure).
+5. **Eviction end to end in the V8.50 private deploy** — recipe in session 9's late addendum.
+   The cohort must be left UNFUNDED or it self-rescues and never reaches the valve.
+6. **Model self-rescue at a non-zero rate.** Still the headline caveat on the PARAM 59 basis,
+   the eviction answer and the loans-per-member result.
+7. **Gate measurements 3 and 4** — need a running system; that is what the private chain is for.
+8. **The open owner decision on live V8.48** (leave organic / bigfill / fund the SF) is STILL
+   OPEN. ⚠ Re-measure before deciding — and note this session's finding that the parked queue is
+   GROWING (107 -> 110) while the fund recovers ($486 -> $529). The bracket from session 9
+   (-$136/day stopped vs +$111/day running) is unchanged but its inputs have moved again.
 
 ---
 
