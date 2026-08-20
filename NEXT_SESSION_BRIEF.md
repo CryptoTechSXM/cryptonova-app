@@ -13,23 +13,23 @@ When two numbers disagree, the disagreement IS the finding — measure it, do no
 A number you have not run is not a result. One sample is not a measurement.
 
 ## ⛔ START HERE — WHERE SESSION 11 LEFT THINGS
+
+| repo | branch | at session end |
+|---|---|---|
+| `C:\CryptoNite-Smart-Contracts\CryptoNova` | `v8.1` | **`4d28b34`** — two new instruments + the session-11 docs. Pushed. No contract or existing test file touched. |
+| `C:\CryptoNova-Testnet-App` | `admin` = `preview` = `main` | **`74a1588`** — unchanged since session 10. Not touched in session 11. |
+
 **NOTHING WAS DEPLOYED. NO CHAIN WAS WRITTEN TO. NO CONTRACT OR EXISTING TEST FILE WAS
 TOUCHED.** Owner instruction 2026-08-20, still in force: *"we are not changing code yet just
 discussing until we come to a conclusion."*
 
 Session 11 was a MEASUREMENT session. It produced two new test files and five new handoff
-sections. **All of it is UNCOMMITTED — land it first:**
+sections. **ALL OF IT IS COMMITTED AND PUSHED at `4d28b34`.** Nothing is owed.
 
-```powershell
-cd C:\CryptoNite-Smart-Contracts\CryptoNova
-git status
-git add test/V8_50_CycleEconomics.test.js test/V8_50_ReferralBreakeven.test.js V8_50_HANDOFF.md NEXT_SESSION_BRIEF.md
-# write the message to a file and use -F: `git commit -m` from PowerShell mangles $ figures
-git commit -F COMMIT_MSG_s11.txt
-git push origin v8.1
-```
-Stage EXPLICIT PATHS. Never `git add -A`. Suite untouched at 611/7/0 — session 11 added two
-files but ran neither as part of the suite.
+`git status` should be clean apart from three known untracked `.bak` files under `scripts/`
+and `test_ab/` — session 9 leftovers, house pattern is to move strays into `archive/`, not
+delete them. Suite untouched at 611/7/0; session 11 added two test files but ran neither as
+part of the suite.
 
 ## WHAT SESSION 11 SETTLED — do not re-derive any of this
 1. ✅ **T1.1 IS THE ONLY FRONT DOOR, PERMANENTLY. CLOSED — DO NOT CHASE.**
