@@ -21,7 +21,7 @@ at 611 passing / 7 pending / 0 failing (not re-run — nothing it covers moved).
 
 | repo | branch | at session end |
 |---|---|---|
-| `C:\CryptoNite-Smart-Contracts\CryptoNova` | `v8.1` | **`63de747`** — two new instruments only |
+| `C:\CryptoNite-Smart-Contracts\CryptoNova` | `v8.1` | **`917b105`** — two new instruments + the session-10 docs |
 | `C:\CryptoNova-Testnet-App` | `admin` = `preview` = `main` | **`74a1588`** — badge fix + bug form. **THE LADDER IS LEVEL; members have everything.** |
 
 ---
@@ -266,7 +266,7 @@ designed experiment; do not quote a rate from it.
 
 ## STATE OF THE TREE
 
-**Contracts (`v8.1`, `63de747`, pushed):** `scripts/probe_keeper_views.js` and
+**Contracts (`v8.1`, `917b105`, pushed):** `scripts/probe_keeper_views.js` and
 `scripts/diag_badge_preview.js`, both NEW, both ASCII-only with no BOM, both `node --check`
 clean. **No contract file, no test file, no `.env` change.** Suite untouched at 611/7/0.
 ⚠ Still untracked and unexplained: `scripts/bigfill_v8.js.bak_ascii`, `test_ab/replay.js.bak_s9b`,

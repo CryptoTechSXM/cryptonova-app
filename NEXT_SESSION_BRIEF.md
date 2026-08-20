@@ -33,7 +33,7 @@ for the case.** It cost one grep to disprove.
 
 | repo | branch | at session end |
 |---|---|---|
-| `C:\CryptoNite-Smart-Contracts\CryptoNova` | `v8.1` | **`63de747`** — two new instruments only; no contract or test file touched |
+| `C:\CryptoNite-Smart-Contracts\CryptoNova` | `v8.1` | **`917b105`** — two new instruments + the session-10 docs; no contract or test file touched |
 | `C:\CryptoNova-Testnet-App` | `admin` = `preview` = `main` | **`74a1588`** — badge fix + bug form. **Members have everything.** |
 
 Suite: **611 passing / 7 pending / 0 failing**, as of session 9's `e404d70`. Not re-run in
