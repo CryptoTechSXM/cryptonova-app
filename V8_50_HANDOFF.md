@@ -10,7 +10,155 @@ owner-set, and the session that earned it got five things wrong by ignoring what
 
 ---
 
-# ⬛ SESSION 11 STATE — 2026-08-20, LATEST. READ THIS FIRST, BEFORE SESSION 10.
+# ⬛ SESSION 12 STATE — 2026-08-20, LATEST. READ THIS FIRST, BEFORE SESSION 11.
+
+## 12.1 ⛔⛔ "ZERO GRADUATIONS" WAS THE COUNTER, NOT THE SYSTEM. 11.4 AND 11.5 ARE CORRECTED.
+
+**THE HEADLINE: 23 MEMBERS WITH NO REFERRAL INCOME DID PAY THE FULL $10.00 AND TOOK
+ANOTHER SEAT. 22 OF THEM WENT ROUND A SECOND TIME; ONE WENT ROUND THREE TIMES. Session
+11 measured 0 because it was watching an event this code path cannot emit.**
+
+### THE DEFECT, IN THE SOURCE
+`_cycleOutRoot` (MatrixLogicLib:834) hands EVERY MatB cycle-out to
+`TierRouter.handleCycleOut` whenever a tierRouter is wired — which is always, in every
+fixture and on live. `_crossToPartner` is the ELSE branch and **is unreachable for a MatB
+root.** `_crossToPartner` is the only emitter of `MemberCrossedToPartner`.
+
+TierRouter, when the member CAN pay, calls `_takeSeat` and emits **`MemberReentered`**;
+`PairManagerV8.registerFor` -> `_enterMatrix` emits `MemberEntered` at the destination.
+Neither is `MemberCrossedToPartner`.
+
+> **SUCCESS AT THE FORWARD HOP IS SILENT ON THE EVENT SESSION 11 COUNTED. ONLY FAILURE
+> (`MemberParked`) IS LOUD.** A census built on `MemberCrossedToPartner@MatB` returns 0
+> forever regardless of what members can afford. It is not a measurement of affordability.
+
+This is the traps list's own rule — *an instrument must not report the absence of what it
+cannot observe* — in a new hat. Session 11 wrote that rule about v2's stranded-L1 zero and
+then walked into it two sections later. Session 12's first fixture did too, until the
+ledger contradicted it.
+
+### WHAT CAUGHT IT — THE LEDGER'S OWN COMPOSITION TABLE
+Not reasoning. Two columns that must be equal and were not:
+
+| | median | min | max |
+|---|---|---|---|
+| LIFETIME CREDITED | $5.5916 | $4.9192 | **$19.2583** |
+| HELD AT THE HOP | $5.5916 | $4.9192 | **$9.9218** |
+
+Equal at median and min, wildly apart at max. For a member with no debt and no withdrawal
+those are the same number. And `direct entry` maxed at **$1.0000** — four $0.25 entry
+carves, i.e. **four matrix entries = two complete A+B cycles.** You cannot start a second
+cycle without having paid the $10.00 at the end of the first. At MATRIX_SIZE 7 the same
+column maxes at exactly $0.50 and nobody re-enters — the control that makes it a finding.
+
+### THE CORRECTED CENSUS — `test/V8_50_MemberLedger.test.js` (v3, session 12)
+Counted three independent ways so no single event has to be trusted: `MemberCycledOut@B`
+is the denominator, `MemberParked@B` the failures, `MemberReentered@TierRouter` the
+successes. They reconcile with **0 unaccounted**.
+
+| MATRIX_SIZE 127, 762 registrations, every member `referrer = address(0)` | |
+|---|---|
+| MatB cycle-outs (every attempt at the hop) | **508** |
+| PARKED, could not afford it | **485** — 95.47% |
+| PARKED, shortfall 0 (guard / deferral) | **0** |
+| **RE-ENTERED — PAID THE FULL $10.00** | **23** — 4.53% |
+| unaccounted for | **0** |
+| `MemberCrossedToPartner` at MatB (the old counter) | **0** |
+| members who entered MatA more than once | **22** (max 3 entries by one member) |
+
+### ⛔ AND THIS IS THE PART THAT MATTERS — IT IS A STARTUP EFFECT, AND IT DECAYS TO ZERO
+
+| after reg | hops at the gate | re-entered |
+|---|---|---|
+| 275 | 21 | 3 |
+| 375 | 121 | 16 |
+| 400 | 146 | 22 |
+| 525 | 271 | **23** |
+| 750 | 496 | **23** |
+| end | 508 | **23** |
+
+**EVERY SUCCESS HAPPENED WHILE MatA WAS STILL FILLING. THE LAST 237 CONSECUTIVE HOPS
+PRODUCED ZERO.** Do not quote 4.53% as a graduation rate — it is a lifetime average over a
+population that stopped graduating a third of the way through the run. The steady-state
+rate measured here is **0**.
+
+Same curve session 11 already saw in the shortfalls ($9.30, $9.35, $9.40, $9.45, then
+$6.66, $6.71): a member who rode MatA while it filled was paid out of 127 full $10 entries,
+a steady-state member is paid out of $5.00 crossings.
+
+### SO WHAT STANDS AND WHAT FALLS
+- ❌ **FALLS: "a member who never recruits can NEVER self-fund the forward hop" (11.4), and
+  "ZERO GRADUATIONS AT EVERY RATE TESTED 0-4" (11.5).** Both rest on the dead counter.
+- ❌ **FALLS: "the distribution is bounded below $10.00 / nobody has ever had enough"
+  (11.5).** It is not bounded. Members above the line left the sample silently.
+- ✅ **STANDS, and is now measured properly: in STEADY STATE a zero-referral member does
+  not self-fund the forward hop.** 237 consecutive hops, zero successes.
+- ✅ **STANDS UNTOUCHED: every shortfall number.** Those come off `MemberParked`, which
+  fires correctly. The ledger reconciles them against every credit ever received —
+  **largest disagreement across all six subjects, at both sizes: $0.0000, to the wei.**
+  Median holding $5.5916 reproduces 11.4 exactly.
+- ✅ **STANDS: the closed-form gap.** pool + chain + direct = $5.536 predicted vs $5.5916
+  measured.
+- ⚠ **THE TWO-CYCLE GOAL IS NOT UNREACHABLE — IT IS CURRENTLY A STARTUP PRIVILEGE.** The
+  owner's bar is *"at least two full cycles but not at the expense of an unpaid loan."*
+  With zero referrals AND zero loans, 22 members hit exactly that, then it stopped.
+
+### ⛔ DO NOT RE-CHASE — CLOSED BY THE SAME RUN
+The ledger reconciles the withdrawable at the hop against every credit ever received, three
+readings, both sizes, **$0.0000 apart**. Nothing is lost, capped, withheld or settled late.
+`un-settled pool still owed` is $0.00 and `crossingReserve held at the park` is $0.00 on
+every subject. **The composition table IS the bound and there is nothing else to find.**
+
+## 12.2 ⛔ ORPHANED L1 DOES NOT GO TO accountOne. 11.4's TABLE IS WRONG ON DESTINATION.
+11.4 says L1 1900 bps goes to *"the referrer — or accountOne if orphaned."* Measured off
+the contract's own `OrphanFeeRouted` event, 1,420 routings totalling $1,349.00 at size 127:
+
+| destination | share | measured |
+|---|---|---|
+| accountOne (a ledger credit) | 20% | $269.80 |
+| community wallet, or **Stability Fund** if unset | ~40% | $539.60 |
+| **dev wallet**, transferred straight out | ~40% | $539.60 |
+
+`_routeOrphanFee` (MatrixLogicLib:1250) takes 20% for accountOne, then splits the rest by
+`_getOrphanRoutingRatios` (:1305), which **adapts** 4000/4000 -> 6000/2000 or 2000/6000 to
+keep the running split near even. ⚠ `_forwardToCommunityPool` is a misleading name: it
+sends to the community wallet or the SF, **NOT** to the members' rotation pool.
+
+**11.4's CONCLUSION SURVIVES — none of it returns to the member side.** But **lever C reads
+very differently**: reallocating orphaned L1 takes **80% of it from the community wallet
+and the dev wallet**, not 100% from accountOne. That is an owner decision, not a knob.
+
+## 12.3 THE CONSERVATION TABLE — AND THE DOUBLE-COUNT THAT WAS IN IT
+v2's "where every dollar went" listed member ledger credits AND the matrices' USDC
+balances as separate rows; the second contains the first. Now two levels, and it closes
+exactly. At size 127, 762 x $10.00 = $7,620.00:
+
+| | | |
+|---|---|---|
+| **LEFT THE PAIR** — Treasury $1,012.46 + SF $877.56 + dev/ops $1,009.62 | **$2,899.64** | 38.05% |
+| **STILL INSIDE** — member ledgers $3,625.09 + accountOne $269.80 + unspent reserves & dust $825.47 | **$4,720.36** | 61.95% |
+| | **$7,620.00** | EXACT |
+
+## 12.4 STILL THE OWNER'S DECISION — UNCHANGED, BUT BETTER PRICED
+A, B and C in 11.4 are still the three options and still his call. What session 12 changes
+is the framing: the question is not *"how do we make graduation possible"* — it happens.
+It is **"how do we keep it happening once the fill phase is over."**
+
+## 12.5 ⛔ NEXT, AND IT IS CHEAP — COUNT `MemberReentered` ON LIVE V8.48
+Nobody has ever counted this on chain. Live T1 pair 0 MatB shows 773 rotations and 4
+members reaching **T1.2** — but re-entry goes to the member's **OWN** MatA by design
+(`_sameTierTarget`, TierRouter:1571: *"Re-entry ALWAYS returns to the member's own MatA"*),
+so T1.2 was never the destination for a T1.1 graduate and those 4 arrived by some other
+route. **The number of real members who have completed a cycle and gone round again is
+unknown and is one event query away.** Get it before taking the 11.4 decision.
+
+⚠ **SESSION 11 AND SESSION 12 MERGED TWO QUESTIONS.** "Can a member afford to leave MatB"
+and "why is T1.2 empty" are different questions with different answers. 12.1 answers the
+first. The second is answered by `_sameTierTarget` and is not an affordability problem.
+
+---
+
+# ⬛ SESSION 11 STATE — 2026-08-20, ⚠ 11.4 AND 11.5 ARE PARTLY WITHDRAWN BY SESSION 12 ABOVE — READ 12.1 FIRST.
 
 ## 11.1 ⛔ CLOSED FOR GOOD: "WHY IS T1.2 EMPTY / WHERE DO NEW MEMBERS LAND?"
 **DO NOT CHASE THIS AGAIN. Owner instruction 2026-08-20: verify it, write it down, stop.**
@@ -120,12 +268,22 @@ censuses EVERY cycle-out at the forward hop. Run it with:
 |---|---|
 | A→B crossing price | **$5.00**, funded $5.00 from reserve + **$0.00** from earnings |
 | forward hop price (MatB → next MatA) | **$10.00**, full entry fee, no reserve behind it |
-| **GRADUATED forward** | **0** — 0.00% |
+| **GRADUATED forward** | ~~**0** — 0.00%~~ ⛔ **WITHDRAWN — SEE 12.1. The real figure is 23 of 508; this counted an event the MatB path cannot emit.** |
 | **PARKED, could not afford it** | **485** — 100.00% |
 | PARKED, shortfall 0 (seat guard / deferral) | **0** — 0.00% |
 
-**ZERO OF 485.** Without referral income the forward hop does not merely cost a lot — it
-**never succeeds, not once.**
+~~**ZERO OF 485.** Without referral income the forward hop does not merely cost a lot — it
+**never succeeds, not once.**~~
+
+> ⛔⛔ **WITHDRAWN 2026-08-20 BY SESSION 12 — SEE 12.1 AT THE TOP OF THIS FILE.**
+> `GRADUATED forward` counted `MemberCrossedToPartner@MatB`, which a MatB cycle-out
+> **cannot emit** (it goes through TierRouter, which emits `MemberReentered`). Re-counted:
+> **508 hops, 485 parked, 23 RE-ENTERED having paid the full $10.00**, 22 members round
+> twice, one round three times. **The claim that a no-referral member can NEVER self-fund
+> the hop is false as stated.** What IS true, and is what session 12 measured: every
+> success came during the fill phase and **the last 237 consecutive hops produced zero**,
+> so the STEADY-STATE rate is 0. **Every SHORTFALL number below is unaffected** — those
+> come off `MemberParked`, and session 12 reconciled them to the wei.
 
 The zero-shortfall bucket being empty is what makes the affordability claim legitimate.
 `MemberParked` is emitted from three places and only one means "could not afford it"; the
@@ -275,11 +433,19 @@ invitees per cycle does it take before they do? That number is what goes to memb
   interleaving: $9.50 / $13.30 / $15.20 / $16.15 at R=1..4, against ~$2,500 of L1 paid.
   **~0.6%.** Real behaviour, not a rounding artefact, but far too small to explain anything
   in 11.4. Do not promote it to a headline.
-- ⛔ **ZERO GRADUATIONS AT EVERY RATE TESTED, 0 THROUGH 4** — 1,120 subject hops and 2,495
-  invitee hops, not one forward crossing. Even where the median subject was **65 cents**
-  short. **THIS IS THE THING TO CHASE NEXT** (see below).
+- ⛔ ~~**ZERO GRADUATIONS AT EVERY RATE TESTED, 0 THROUGH 4** — 1,120 subject hops and 2,495
+  invitee hops, not one forward crossing.~~ **WITHDRAWN BY SESSION 12 — SEE 12.1.** Same
+  dead counter. The rates were never measured on an instrument that could observe success,
+  so the referral sweep must be re-run with `MemberReentered` counted before ANY row from
+  it is quoted. v4 still needs this fix.
 
-### ⛔ THE OPEN ANOMALY — NOBODY EVER REACHES THE FEE, EVEN WHEN CLOSE
+### ~~⛔ THE OPEN ANOMALY — NOBODY EVER REACHES THE FEE, EVEN WHEN CLOSE~~
+### ⛔ CLOSED 2026-08-20 BY SESSION 12 — THERE WAS NO ANOMALY. SEE 12.1.
+**They DO reach the fee. 23 of them did.** The distribution is not bounded below $10.00;
+members above the line left the sample silently because success emits no event this census
+watched. Everything below is the record of chasing a counter defect as if it were an
+economic property — kept because the two ruled-out causes below are still correctly ruled
+out, and because the reasoning is the record of how it went wrong. **Do not act on it.**
 At R=2 the median parked subject was $0.6472 short, and the 11.4 census found a minimum
 shortfall of **$0.0782**. Members get to within eight cents and stop. Across thousands of
 hops the distribution never crosses $10.00. A graduating member would leave the shortfall
