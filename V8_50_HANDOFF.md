@@ -171,17 +171,32 @@ difference — measured, not assumed. The 8th pending is `V8_50_GateCost.test.js
 in the source undercounts it. Run the file if you need the number.
 
 
-Contracts `v8.1`, frontend `admin` = `preview` = `main` at `74a1588`. **NOTHING DEPLOYED, NO
-CHAIN WRITTEN TO, NO CONTRACT FILE CHANGED — the fixture was applied and reverted, and
+Contracts `v8.1` at **`d1d78ef`** (session 17's commit, pushed), frontend `admin` = `preview`
+= `main` at `74a1588`. **NOTHING DEPLOYED, NO CHAIN WRITTEN TO, NO CONTRACT FILE CHANGED — the fixture was applied and reverted, and
 `git diff` on `contracts/TierRouter.sol` and `contracts/StabilityFund.sol` is empty.**
 New untracked files: `scripts/fixture_gate_apply.js`, `test/V8_50_GateCost.test.js`,
 `contracts/test/GateProbe.sol`, and the run logs `gate_baseline_*.txt`, `gate_probe.txt`,
 `gate_gas_nonbinding.txt`, `gate_sizes2.txt`.
 
-⚠ **AN OLD LOOSE END, SEEN IN PASSING, NOT INVESTIGATED:**
-`contracts/test/CryptoNovaCommunityWallet.sol` shows as modified with 474 insertions and 474
-deletions — every line — which is the signature of a line-ending change, not an edit. It
-predates this session. It is in the BACKLOG now rather than in anyone's memory.
+### ⛔ A TRAP THIS SESSION CREATED AND THEN CAUGHT — READ IT BEFORE TRUSTING ANY `git status`
+
+`contracts/test/CryptoNovaCommunityWallet.sol` reads as modified with 474 insertions and 474
+deletions **from Claude's side and NOT from the owner's.** The owner's `git status --short
+contracts/` returns empty; the same command through Claude's file bridge returns that file.
+The first version of this section recorded it as an unexplained backlog item on the strength
+of Claude's reading alone. **That was one instrument, unchecked, and it was the wrong one.**
+
+Measured: `git diff --ignore-all-space` on the file is **empty**, the worktree copy holds
+**474 carriage returns across 491 lines**, and the committed blob holds **0**. The file has
+mixed line endings on disk, git stores it as LF, and the owner's git normalises on
+comparison so it never appears. **There is nothing wrong with the repository.**
+
+> ⛔ **THE STANDING TRAP: CLAUDE'S FILE BRIDGE DOES NOT APPLY THE OWNER'S LINE-ENDING
+> NORMALISATION. `git status` and `git diff` read from Claude's side can show whole-file
+> diffs that DO NOT EXIST for the owner.** Before recording any whole-file diff as a finding,
+> run `git diff --ignore-all-space` and ask the owner what HIS `git status` says. His machine
+> is the authoritative one. A session that "fixes" one of these will commit a 474-line churn
+> that changes nothing and hides what else is in the commit.
 
 ## 17.7 NEXT, IN ORDER
 

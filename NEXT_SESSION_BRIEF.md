@@ -3,7 +3,7 @@ Written end of session 17, 2026-08-20. Paste this in to open the next session. R
 Read `V8_50_HANDOFF.md` section 17 first — 17.1 is the result, 17.2 is the method lesson, 17.5 is the owner's open call — then 16, 15, 14, then section 7a THE TWO RULES. Everything below is a pointer, not a substitute.
 
 STATE
-Contracts `v8.1`, frontend `admin` = `preview` = `main` at `74a1588`. NOTHING DEPLOYED, NO CHAIN WRITTEN TO. Session 17 edited two contract files as a FIXTURE, measured them, and REVERTED — `git diff contracts/` is empty for both. Sessions 13–17 are measurement only.
+Contracts `v8.1` at **`d1d78ef`**, frontend `admin` = `preview` = `main` at `74a1588`. NOTHING DEPLOYED, NO CHAIN WRITTEN TO. Session 17 edited two contract files as a FIXTURE, measured them, and REVERTED — `git diff contracts/` is empty for both. Sessions 13–17 are measurement only.
 
 SUITE: **618 passing / 8 pending / 0 failing**, RE-RUN IN FULL 2026-08-20 at the end of session 17 — this is the current baseline, use it. The old 611/7/0 was stale: it predated sessions 11 and 12, which added `V8_50_CycleEconomics`, `V8_50_ReferralBreakeven` and `V8_50_MemberLedger`. Those three were run alone and report exactly 7, so the +7 is fully accounted for and is NOT a drift. The 8th pending is `V8_50_GateCost.test.js`, skipped on purpose (17.8).
 
@@ -32,7 +32,7 @@ NEXT, IN ORDER
 1. RE-MEASURE 14.1 AND 16.2 ON THE PRIVATE V8.50 DEPLOY. The only blocking item now. `crossingBufferBps = 0` is in the tree and NOT deployed; the buffer manufactured most of the debt behind every number in 13→16. The gate's base ceiling must be chosen on V8.50 numbers.
 2. Split 14.1 by tier and cap time-at-risk (14.4's one real imbalance).
 3. The gate's policy shape — after item 1, and partly the owner's.
-4. Backlog, untouched throughout: the 5 unexplained cycle-outs (still exactly 5, organic); `contracts/test/CryptoNovaCommunityWallet.sol` shows a whole-file 474/474 diff, the signature of a line-ending change, predating session 17 and never investigated; `V8_50_ReferralBreakeven.test.js` v4 counts the dead event; stale-nonce retry backoff; @bevmawire's Dashboard retry; `maxItemsPerUpkeep` live 15 vs 20 in source; member-callable re-entry.
+4. Backlog, untouched throughout: the 5 unexplained cycle-outs (still exactly 5, organic); `V8_50_ReferralBreakeven.test.js` v4 counts the dead event; stale-nonce retry backoff; @bevmawire's Dashboard retry; `maxItemsPerUpkeep` live 15 vs 20 in source; member-callable re-entry.
 
 TOOLS THAT NOW EXIST — use them, do not rebuild them
 * `node scripts/fixture_gate_apply.js` reapplies session 17's exact fixture (`--binding` for the policy arm, `--undo` to revert). It aborts rather than half-apply.
@@ -40,6 +40,7 @@ TOOLS THAT NOW EXIST — use them, do not rebuild them
 * `contracts/test/GateProbe.sol` measures cold and warm in one transaction with no matrix world.
 
 TRAPS, CARRIED FORWARD
+* ⛔ CLAUDE'S FILE BRIDGE DOES NOT APPLY YOUR LINE-ENDING NORMALISATION. `contracts/test/CryptoNovaCommunityWallet.sol` reads as a 474/474 whole-file diff from Claude's side and is CLEAN from yours — measured: `git diff --ignore-all-space` is empty, the worktree holds 474 CRs across 491 lines, the blob holds 0. Nothing is wrong with the repo. Session 17 recorded it as a backlog item on Claude's reading alone before checking, which is one instrument unchecked. Before treating any whole-file diff as a finding, run `--ignore-all-space` and ask what YOUR `git status` says — your machine is authoritative. Do not 'fix' it: the commit would churn 474 lines and change nothing.
 * A GATE THAT EXISTS IS NOT A GATE THAT BINDS (14.3), and its mirror: A GATE INSTALLED TO BE MEASURED MUST NOT BIND (17.2).
 * READING SOURCE MEASURES THE MECHANISM, NOT THE POPULATION. It IS valid for where code lives — that is how 17.4 corrected the `coPayRescue` claim.
 * A WINDOW THAT LEAKS INVENTS A FINDING (16.1). DECISIVE ≠ COVERAGE — 67.4% of the missing dollars, 5 of 123 members; quote both or neither. A CONTROL WHOSE BASELINE IS ON THE FLOOR CANNOT CARRY A VERDICT (bigfill, 1.4%).
