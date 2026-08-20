@@ -10,6 +10,310 @@ owner-set, and the session that earned it got five things wrong by ignoring what
 
 ---
 
+# ⬛ SESSION 11 STATE — 2026-08-20, LATEST. READ THIS FIRST, BEFORE SESSION 10.
+
+## 11.1 ⛔ CLOSED FOR GOOD: "WHY IS T1.2 EMPTY / WHERE DO NEW MEMBERS LAND?"
+**DO NOT CHASE THIS AGAIN. Owner instruction 2026-08-20: verify it, write it down, stop.**
+
+**T1.1 (pair 0) is the ONLY place a new member can land, on every tier, permanently.**
+`PairManagerV8._findExternalPair()` (:760) is:
+
+```solidity
+function _findExternalPair() internal pure returns (uint256) {
+    return 0;
+}
+```
+
+It is `pure`. It cannot read state. **So no threshold, no counter and no configured number
+anywhere in the system can change where a new registration goes.** Every registration path and
+every upgrade path calls `registerFor(..., 0)`.
+
+**THERE IS NO "MAGIC NUMBER" THAT FLIPS ROUTING TO THE NEXT PAIR, AND THERE MUST NOT BE.**
+The owner's intuition on 2026-08-20 — "we get to 254 and we are full, so 255 should be the
+number where the other pair starts filling" — describes a mechanism that **existed twice and
+was deleted twice**, because it is the direct cause of the worst freeze this project has had:
+
+- `pairExpansionThreshold` — deleted in V8.46 once it was proved inert.
+- `deployEntryThreshold` (375) / `routeEntryThreshold` (400/381) — deleted as ROUTING inputs in
+  V8.48 (items 10b and 33). Kept only as the deploy trigger, then replaced there too.
+
+Why they had to go, in the source's own words (PairManagerV8:169-186): a cumulative counter only
+ever increments, so a pair that passed the threshold was excluded from new registrations FOREVER
+— even after its members cycled out and freed seats. **A full MatA only rotates when it RECEIVES
+an entry (MatrixLogicLib:407.)** Exclude it and it stops rotating, and every member in seats
+2..127 stops moving. `route_rr.js` was written on 2026-07-27 purely to walk the threshold around
+the pairs and mask this; when that keeper was switched off on 2026-08-06, **254 members froze in
+T1.1 MatA within three days.**
+
+**Concentrating every new entry into pair 0 is the thing that keeps pair 0 rotating.** Diluting
+the front door across pairs is what stops it. This is settled design, not an open question.
+
+## 11.2 THE MEASUREMENT THAT REPLACES THE QUESTION — live V8.48, head block 45733042
+`diag_pair_chain.mjs`, 2026-08-20 13:59 UTC, against the 2026-08-19 16:57 UTC run (21h apart):
+
+| T1 | occupancy | rotations | totalJoined | parked |
+|---|---|---|---|---|
+| pair 0 MatA | 127/127 (=) | 599 → **924** (+325) | 364 → **387** (+23) | 26 → **45** |
+| pair 0 MatB | 126 → **127** | 447 → **773** (+326) | 352 → **370** (+18) | 81 → **83** |
+| pair 1 MatA | 0 → **4** | 0 | 0 → **4** | 0 |
+| pair 1 MatB | 0/127 | 0 | 0 | 0 |
+
+Chain wiring verified correct on T1 (2 pairs) and T2 (3 pairs): every MatB's `chainNext` is the
+next pair's MatA and the last MatB closes the circle back to pair 0 MatA. **Not a wiring defect.**
+
+**THE TWO NUMBERS THAT DISAGREE — THIS IS THE FINDING:**
+
+- **T1** pair 0 MatB: **773 lifetime rotations → 4 members have EVER reached T1.2.** 83 parked in it.
+- **T2** pair 0 MatB: **75 lifetime rotations → 37 members reached T2.2** (and 3 more reached T2.3).
+
+Same code, same wiring, ~100x difference in how many graduates come out the far end. T1.2 is not
+starved of a routing rule. **T1.2 is starved of members who can afford to leave T1.1 MatB.**
+
+## 11.3 THE GATE IS A PRICE, NOT A COUNT — `MatrixLogicLib._crossToPartner`
+This is the mechanism, read off the source (MatrixLogicLib:~926-980):
+
+```solidity
+address destination = (!cfg.isMatrixA && self.chainNext != address(0))
+    ? self.chainNext          // from MatB  -> the NEXT pair's MatA
+    : self.partner;           // from MatA  -> this pair's MatB
+uint256 reentryFee  = destination.ENTRY_FEE();
+uint256 crossingCost = cfg.isMatrixA ? _crossingPrice(reentryFee) : reentryFee;
+```
+
+- **MatA → MatB** costs `_crossingPrice(fee)` — the discounted crossing, pre-funded by the 50%
+  crossing reserve carved at MatA entry.
+- **MatB → next pair's MatA** costs the **FULL ENTRY FEE**, because it is a NEW CYCLE, not a
+  crossing — and the member's crossing reserve was already spent on the A→B hop.
+
+Funding order is `crossingReserve` first, then `withdrawable`. If `withdrawable` is short:
+
+```solidity
+self.parkedMembers.push(member);
+emit MemberParked(member, shortfall);
+return;
+```
+
+**So graduating forward out of MatB costs a T1 member a fresh $10 of EARNED withdrawable, with
+zero reserve behind it. That is the wall. 83 of them are stacked against it in T1.1 MatB right
+now, and 4 have ever cleared it.**
+
+Corollary for V8.50 item A: item A makes the A→B hop reserve-funded and removes mid-cycle
+parking, which is real — but **it does not touch this hop.** The owner already accepted that
+("they only need a loan when the full A+B cycle is completed", 2026-08-16). This measurement is
+what that sentence looks like on live chain.
+
+## 11.4 ⛔ THE OPEN QUESTION — NOW ANSWERED. MEASURED 2026-08-20.
+"What number makes the loop self-sustaining?" is **not** a routing number. There is no
+routing number (11.1). It is this, and it has now been measured, not reasoned about:
+
+> **What does a member with NO referral income earn across one full A+B cycle, against the
+> full entry fee they must pay to graduate forward out of MatB?**
+
+**INSTRUMENT: `test/V8_50_CycleEconomics.test.js` (written session 11).** One pair, size 127,
+every member registering with `referrer = address(0)` so nobody has referral income. It
+censuses EVERY cycle-out at the forward hop. Run it with:
+`$env:CYCLE_SIZE=127; npx hardhat test test/V8_50_CycleEconomics.test.js`
+
+### THE RESULT — 485 cycle-outs at the forward hop, MATRIX_SIZE 127
+
+| | |
+|---|---|
+| A→B crossing price | **$5.00**, funded $5.00 from reserve + **$0.00** from earnings |
+| forward hop price (MatB → next MatA) | **$10.00**, full entry fee, no reserve behind it |
+| **GRADUATED forward** | **0** — 0.00% |
+| **PARKED, could not afford it** | **485** — 100.00% |
+| PARKED, shortfall 0 (seat guard / deferral) | **0** — 0.00% |
+
+**ZERO OF 485.** Without referral income the forward hop does not merely cost a lot — it
+**never succeeds, not once.**
+
+The zero-shortfall bucket being empty is what makes the affordability claim legitimate.
+`MemberParked` is emitted from three places and only one means "could not afford it"; the
+other two (duplicate-seat guard, `crossingInProgress` deferral) both emit shortfall 0. They
+are counted separately on purpose. **All 485 were real shortfalls.** Do not merge these
+buckets in any future counter — a merged count would claim an affordability result the run
+did not observe.
+
+### WHAT THE MEMBER ACTUALLY ARRIVES HOLDING
+Shortfall across the 485, straight from `MemberParked(member, shortfall)`:
+
+| | shortfall | so they arrive holding | as % of the fee |
+|---|---|---|---|
+| best case | **$0.0782** | $9.9218 | 99.2% |
+| **median** | **$4.4084** | **$5.5916** | **55.9%** |
+| worst case | **$5.0808** | $4.9192 | 49.2% |
+
+**THE MEDIAN NO-REFERRAL MEMBER FINISHES A FULL A+B CYCLE HOLDING ~56% OF ONE ENTRY FEE AND
+NEEDS 100%.** That ~44% gap is the system's own take. It is the whole answer.
+
+⚠ **AND IT GETS WORSE AS THE SYSTEM MATURES — this is the part worth acting on.** The
+earliest cycle-outs nearly made it and later ones did not. Directly observed in the first
+twelve parked members, in order: $9.30, $9.35, $9.40, $9.45, then $6.66, $6.71. The reason is
+structural: a member who rode MatA while it was FILLING was paid out of 127 full $10 entry
+fees, while a member in steady state is paid out of $5.00 crossings. **Startup economics
+flatter the model. Do not generalise any early-life number to steady state.**
+`min $0.0782` deserves one look on its own: a member completed an entire A+B cycle and
+missed the next step **by eight cents.**
+
+### ⚠ TWO THINGS IN THAT RUN'S OUTPUT THAT ARE NOT RESULTS
+1. **`median lifetime earnings across the sample: $6.9748` IS BIASED — DO NOT QUOTE IT.**
+   The sample is the FIRST 12 parked members, i.e. the earliest and richest cycle-outs, and
+   the decline above is exactly why that is not the population. THE BATCH IS NOT THE
+   POPULATION — already in the traps list, walked into anyway. The trustworthy figure is the
+   **median shortfall**, which is computed over all 485 and comes straight off the contract's
+   own event. Fix by sampling evenly across the run, or delete the line.
+2. **CLOSED, NOT A DEFECT — and the OWNER closed it, 2026-08-20.** Claude flagged the
+   identical MatA/MatB `totalEarned` as an anomaly on the grounds that "MatB is funded by
+   $5.00 crossings while MatA is funded by $10.00 entries, so MatB should earn half." **That
+   reasoning was wrong.** The owner's correction: *"only $5 is distributed which is the
+   crossing fee as well so it should be the same not half... $10 goes in but only $5 is
+   distributed and $5 laced for crossing which in turn is distributed then."*
+
+   Verified in source, `MatrixLogicLib._distributePayments` (:1121-1156) and the item A
+   docblock (:193-215):
+   - `payBase = cfg.entryFee` — **the FULL entry fee, in BOTH halves.** Splits are absolute
+     BPS of the entry fee, never of a sub-pool.
+   - MatA entry: carve 5000 reserve, then distribute `250 + 4750 = 5000` bps = **$5.00**.
+   - MatB crossing entry: `skipReserveCarve = true` (no second carve), then distribute the
+     same `250 + 4750 = 5000` bps = **$5.00**, which is exactly the crossing price received.
+   - The docblock states the invariant plainly: *"The destination is made whole because it
+     skips its own reserve carve: direct 250 + splits 4750 = 5000 = exactly this price...
+     NOT ONE SPLIT BPS CHANGES."*
+
+   **So both halves distribute $5.00 and identical per-member earnings is the CORRECT
+   result.** THIRD TIME THE OWNER HAS CORRECTED A CLAUDE FINDING ON MECHANISM AND BEEN
+   RIGHT. Recorded as a working pattern: when he pushes back on how the money moves, read
+   the code before defending the finding.
+
+### ⛔ THE GAP IS NOW FULLY ACCOUNTED FOR — CLOSED FORM, AND IT MATCHES THE MEASUREMENT
+Because both halves distribute 5000 bps of the entry fee, **a full A+B cycle distributes the
+ENTIRE $10.00.** Nothing is retained. Doubling each split across the two halves:
+
+| destination | bps per cycle | per $10 cycle | who gets it |
+|---|---|---|---|
+| pool (seats 2..127) | 3136 | **$3.136** | members |
+| chain pay (6 levels) | 1900 | **$1.900** | members |
+| direct earn | 500 | **$0.500** | the entrant themselves |
+| **L1 referral** | 1900 | **$1.900** | the referrer — **or accountOne if orphaned** |
+| **system** (treasury 1426, SF 476, dev 286, ops 190, community 96, buyback 90) | 2564 | **$2.564** | not members |
+| | **10000** | **$10.00** | |
+
+A no-referral member in a uniform population collects pool + chain + their own direct =
+**$5.536 per cycle.** **MEASURED MEDIAN HOLDING AT THE HOP: $5.5916.** The structure and the
+census agree to within six cents. The gap is therefore exactly the two leaks:
+
+> **$2.564 system take + $1.900 orphaned L1 = $4.464 short.**
+> **MEASURED MEDIAN SHORTFALL: $4.4084.** Same number.
+
+**THE DECISIVE CONSEQUENCE — this is conservation of money, not a tuning problem:**
+since a cycle distributes exactly 100% of the fee, a zero-referral member can only reach
+100% if BOTH leaks go to zero. **So long as the protocol takes ANY fee at all, a member who
+never recruits can NEVER self-fund the forward hop.** No split table, no loan ceiling and no
+threshold changes that. It is arithmetic.
+
+### ⚠ AND THE REFERRAL BAR IS LOWER THAN FIRST STATED — L1 PAYS IN BOTH HALVES
+Claude first put break-even at ~4.6 invitees by counting L1 once at 950 bps. **Wrong for the
+same reason as the "half" error above:** L1 is paid in BOTH halves, so a referrer earns
+**1900 bps = $1.90 per invitee per invitee-cycle**, not $0.95.
+
+`$4.464 / $1.90` ≈ **2.35 invitees per cycle.** ⚠ UNVERIFIED — arithmetic over measured
+numbers, and it EXCLUDES chain pay from a growing downline, which pushes the true bar LOWER.
+Measure it, do not quote it.
+
+⚠ **AND IT IS A RATE, NOT A TOTAL.** ~2.35 invitees *per cycle the member takes*, not 2.35
+ever. Recruit once and you fund one cycle. Whatever is said to members must not blur that.
+
+### ⚠ ITEM A IS ALREADY IN THIS TREE, AND IT DOES NOT FIX THIS HOP
+The fixture ran against the V8.50 source, so **item A was in force** — confirmed by its own
+output: the A→B hop cost $5.00 funded **100% from reserve, $0.00 from earnings**. Item A
+works exactly as designed and kills mid-cycle parking at the A→B crossing. **It still ends
+0 for 485 at the forward hop.** Item A was never aimed here; do not let a future session
+report it as the fix for the graduation chain. LIVE V8.48 does not have item A at all.
+
+### THE DECISION THIS PUTS IN FRONT OF THE OWNER — HIS CALL, NOT CLAUDE'S
+The gap is real, measured, and closes only three ways:
+- **A. Accept it.** Matches his standing framing: "members are EXPECTED to take loans and be
+  evicted if they never invite anyone." The cost is that T1.2 fills at ~0 without referrals,
+  and the parked queue is the product for anyone who does not invite.
+- **B. Lend it.** The SF covers the ~44%. Bounded by `insolvencyFloorBps` (PARAM 59, now
+  5000). Note the live T1 loan ceiling is **$3.40** and the median shortfall is **$4.41** —
+  **the current ceiling cannot cover the median member.** That is a new, concrete fact.
+- **C. Change the splits** so one A+B cycle pays for the next entry. Structural, needs
+  modelling against the live population before any contract code is written.
+
+**DO NOT DECIDE THIS FROM THE CODE. It is an economic and product trade-off.**
+
+---
+
+## 11.5 THE REFERRAL BREAK-EVEN SWEEP — INSTRUMENT BUILT, ANSWER NOT YET TAKEN
+**File: `test/V8_50_ReferralBreakeven.test.js`. THREE VERSIONS, THREE DIFFERENT FAULTS. The
+current file is v4 and has NOT yet produced a trustworthy row. Do not quote any number from
+sessions 11's runs of it.**
+
+The question: the 11.4 census proves a ZERO-referral member never graduates. How many
+invitees per cycle does it take before they do? That number is what goes to members.
+
+| version | what it did | why it was wrong |
+|---|---|---|
+| v1 | R-ary referral tree over the whole population | Later invitees joined AFTER their referrer had crossed to MatB, so their L1 landed in a MatA the referrer had left. R=2,3,5 came back **identical to R=0 to the cent**; only R=1 differed, because in a chain the invitee always arrives before the referrer leaves. The harness conflated referral RATE with referral TIMING. |
+| v2 | interleaved — each subject's invitees registered immediately after them | Fixed the timing, but then **reported "stranded L1 = zero" as a finding.** It is zero BY CONSTRUCTION: no invitee CAN arrive late in this design. An instrument must not report the absence of what it cannot observe. Also fixed-budget starved the high rates — R=5 had TWO subject hops and duly broke the trend. |
+| v3 | budget scaled with R to even out subject counts | **Traded a small-sample problem for a far worse confound.** Shortfall grows with system maturity (11.4), so scaling the budget measured each rate at a different point in the system's life. Result was flatly non-monotonic with 100+ hops per row: R=0 $3.2390, R=1 $2.5096, R=2 $0.6472, **R=3 $3.3812 (worse than R=0)**, R=4 $1.6212. Two effects fighting inside one column. |
+| **v4 (current)** | **budget FIXED across all rates**; L1 split into @entry vs @crossing; thin rows labelled | **NOT YET RUN.** |
+
+### WHAT IS NEVERTHELESS ESTABLISHED FROM THOSE RUNS
+- ✅ **CONTROL REPRODUCES EVERY TIME.** R=0 graduated 0 of 105 at size 127 and 0 of 28 at
+  size 7, matching 11.4's 0 of 485. The baseline is solid.
+- ✅ **EACH INVITEE IS WORTH EXACTLY $1.90** — 950 bps at the invitee's MatA entry plus 950
+  bps again when that invitee crosses to MatB. Seen cleanly in the size-7 v2 run:
+  $5.128 → $3.228 → $1.328 as invitees went 0 → 1 → 2. **L1 pays in BOTH halves;** counting
+  it once at $0.95 was Claude's error and doubled the apparent referral bar.
+- ✅ **AN INVITEE'S SECOND $0.95 ARRIVES MUCH LATER** — only when that invitee themselves
+  crosses. A referrer who reaches the forward hop early collects only the first half of
+  their newest invitees. The size-7 third invitee was worth $0.95, not $1.90, for exactly
+  this reason. v4 splits the two buckets so this is visible, not inferred.
+- ✅ **STRANDED L1 IS REAL — CONFIRMED, AND SMALL.** v3 measured it NON-ZERO even under
+  interleaving: $9.50 / $13.30 / $15.20 / $16.15 at R=1..4, against ~$2,500 of L1 paid.
+  **~0.6%.** Real behaviour, not a rounding artefact, but far too small to explain anything
+  in 11.4. Do not promote it to a headline.
+- ⛔ **ZERO GRADUATIONS AT EVERY RATE TESTED, 0 THROUGH 4** — 1,120 subject hops and 2,495
+  invitee hops, not one forward crossing. Even where the median subject was **65 cents**
+  short. **THIS IS THE THING TO CHASE NEXT** (see below).
+
+### ⛔ THE OPEN ANOMALY — NOBODY EVER REACHES THE FEE, EVEN WHEN CLOSE
+At R=2 the median parked subject was $0.6472 short, and the 11.4 census found a minimum
+shortfall of **$0.0782**. Members get to within eight cents and stop. Across thousands of
+hops the distribution never crosses $10.00. A graduating member would leave the shortfall
+sample and appear in FORWARD, and FORWARD is 0 everywhere — **so this is not a sampling
+artefact, nobody has ever had enough.**
+
+**TWO CANDIDATE CAUSES ALREADY RULED OUT — do not re-chase these:**
+- ❌ *Lazy pool settlement leaving earned-but-uncredited money out of the affordability
+  check.* **REFUTED:** `_cycleOutRoot` calls `_settlePool(self, cfg, root)` at
+  MatrixLogicLib:805, BEFORE the crossing logic at :900+. The pool is settled first.
+- ❌ *An earnings or payout cap.* **REFUTED:** no cap exists in MatrixLogicLib; `_settlePool`
+  computes an exact rational share `(k*dA1 - dAr) / W` with no ceiling.
+
+**STILL OPEN.** Next session: take ONE parked member at the hop and account for their
+withdrawable to the cent against every credit they ever received — pool, chain, direct, L1,
+carried balance — and find what the distribution is bounded by. Do not reason about it.
+
+### HOW TO RUN v4
+```powershell
+cd C:\CryptoNite-Smart-Contracts\CryptoNova
+$env:CYCLE_SIZE=127
+npx hardhat test test/V8_50_ReferralBreakeven.test.js
+Remove-Item Env:\CYCLE_SIZE
+```
+~17 minutes at size 127. Dials: `CYCLE_REFS` (default `0,1,2,3,4`), `CYCLE_BUDGET`
+(default 6 x SIZE — **fixed across rates on purpose**), `CYCLE_MIN_HOPS` (default 10).
+
+⚠ **NOTHING WAS DEPLOYED AND NO CONTRACT FILE WAS TOUCHED IN SESSION 11.** Two new test
+files only: `V8_50_CycleEconomics.test.js` and `V8_50_ReferralBreakeven.test.js`. The owner
+stated 2026-08-20: *"we are not changing code yet just discussing until we come to a
+conclusion."* Honour that — the decision in 11.4 is his and is still open.
+
+---
+
 # ⬛ SESSION 10 STATE — 2026-08-19/20, LATEST. READ THIS FIRST, BEFORE SESSION 9.
 
 **THE HEADLINE: THE PARKED-MEMBER BADGE WAS REACHING NOBODY — 0 OF 107 PARKED MEMBERS COULD
