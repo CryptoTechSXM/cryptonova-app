@@ -71,14 +71,22 @@ while ($true) {
         -Offset $offset -EvictReentryMax $EvictMax *>&1 | Tee-Object -FilePath $log
 
     # A run is judged on its LOG, not on the exit code - bigfill swallows a lot internally and
-    # can exit 0 while the chain refused most of the sweep. The two markers that matter:
+    # can exit 0 while the chain refused most of the sweep. The markers that matter:
+    #
+    # STALE-NONCE added 2026-08-20. A run that day logged "nonce too low" on 16 of 16 wallets
+    # in the post-registration sweep and reported "0 succeeded - 16 skipped". The loop saw no
+    # abort marker, judged the run GOOD, advanced the offset and carried on - which is exactly
+    # the outcome this stop condition exists to prevent. A sweep that could not ASK its members
+    # is incomplete in the same way a sweep the network refused is incomplete, and its totals
+    # are a FLOOR, not a measurement. Treat the two identically.
     $text        = Get-Content $log -Raw -ErrorAction SilentlyContinue
     $fatal       = $text -match "fatal error|ABORTING THE SWEEP"
     $networkWall = $text -match "NETWORK FAILURES"
+    $nonceWall   = $text -match "STALE-NONCE FAILURES"
 
-    if ($fatal -or $networkWall) {
+    if ($fatal -or $networkWall -or $nonceWall) {
         $failRun++
-        Write-Host ("  ** run {0} looks BAD (fatal or network failures) - consecutive: {1}/{2}" -f $i, $failRun, $AbortAfter) -ForegroundColor Yellow
+        Write-Host ("  ** run {0} looks BAD (fatal, network or stale-nonce failures) - consecutive: {1}/{2}" -f $i, $failRun, $AbortAfter) -ForegroundColor Yellow
         if ($failRun -ge $AbortAfter) {
             Write-Host ""
             Write-Host "  STOPPING THE LOOP - $failRun consecutive bad runs." -ForegroundColor Red

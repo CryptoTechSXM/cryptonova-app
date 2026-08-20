@@ -647,6 +647,27 @@ async function simulateSelfRescues({ walletList, matrices, usdc, usdcFunder, raw
   let transportFails = 0, consecutiveTransport = 0;
   const TRANSPORT_ABORT = Number(process.env.TRANSPORT_ABORT || 5);
   const _isTransport = (m) => /HH110|Invalid JSON-RPC|ECONNRESET|ETIMEDOUT|socket hang up|network|timeout|503|502|504|fetch failed|could not coalesce/i.test(m || "");
+
+  // ── STALE-NONCE FAILURES ARE INFRASTRUCTURE, NOT MEMBER BEHAVIOUR (added 2026-08-20) ──
+  // On 2026-08-20 a post-registration sweep logged "nonce too low" on 16 of 16 wallets and
+  // printed "Self-rescues: 0 succeeded - 16 skipped". THAT IS THE HH110 BUG WEARING A NEW
+  // HAT: an infrastructure failure counted as though the members had been asked and had
+  // declined. Worse than the original, because it also RESET consecutiveTransport, so the
+  // 5-in-a-row abort guard could never trip no matter how long it went on.
+  //
+  // WHY IT HAPPENS, and it is NOT bigfill caching a nonce: member wallets are plain
+  // `w.connect(ethers.provider)` with no NonceManager (deliberate - see the funder comment),
+  // so ethers fetches the count itself at send time. A reported tx nonce 2-6 BELOW the
+  // chain's next nonce means the RPC answered getTransactionCount from a replica lagging
+  // behind the wallet's own recent sends. Same lag this file already sleeps 90s for after
+  // funding, and the same class as the top-up check that read stale balances in session 9.
+  //
+  // SO: RETRY ONCE WITH AN EXPLICITLY RE-FETCHED NONCE. The wallet can send - only the
+  // count was wrong. If it still fails, count it in its OWN bucket, report it in the summary
+  // like NETWORK FAILURES, and do NOT reset the transport counter. A sweep that could not
+  // ask must never read as a sweep that was refused.
+  let nonceFails = 0;
+  const _isNonceStale = (m) => /nonce too low|nonce has already been used|replacement transaction underpriced/i.test(m || "");
   for (const { w, matrix, label, addr } of toRescue) {
     try {
       const conn = w.connect(ethers.provider);
@@ -876,6 +897,28 @@ async function simulateSelfRescues({ walletList, matrices, usdc, usdcFunder, raw
           console.error(`      as a FLOOR, never as a measurement.)\n`);
           throw new Error(`sweep aborted: ${consecutiveTransport} consecutive RPC transport failures`);
         }
+      } else if (_isNonceStale(msg)) {
+        // The RPC gave us a stale transaction count. The member was never actually asked.
+        let _resent = false;
+        try {
+          await sleep(3);   // let the replica catch up before asking again
+          const fresh = Number(await ethers.provider.getTransactionCount(w.address, 'pending'));
+          await (await matrix.connect(conn).selfRescue({ gasLimit: 15_000_000, nonce: fresh })).wait();
+          console.log(`  ok selfRescue ${label}  ${w.address.slice(0, 10)}...  (recovered - stale nonce, resent at ${fresh})`);
+          rescued++; _resent = true; consecutiveTransport = 0;
+        } catch (e2) {
+          const m2 = e2.shortMessage || e2.message?.slice(0, 120) || 'unknown';
+          if (m2.includes("not parked")) {
+            // It landed after all, or the keeper got there first. Either way, not a refusal.
+            console.log(`  i  ${w.address.slice(0, 10)}... already rescued on retry - all good`);
+            _resent = true;
+          } else {
+            console.warn(`  ! selfRescue ${w.address.slice(0, 10)}... STALE NONCE, retry failed (not a refusal): ${m2}`);
+          }
+        }
+        // NOT counted as `skipped`, and consecutiveTransport is deliberately NOT reset -
+        // this wallet was never asked, and pretending otherwise is the whole bug.
+        if (!_resent) nonceFails++;
       } else {
         console.warn(`  ! selfRescue ${w.address.slice(0, 10)}... unexpected TX error: ${msg}`);
         skipped++; consecutiveTransport = 0;
@@ -889,6 +932,7 @@ async function simulateSelfRescues({ walletList, matrices, usdc, usdcFunder, raw
   console.log(
     `  Self-rescues: ${rescued} succeeded - ${skipped} skipped` +
     (transportFails ? ` - ! ${transportFails} NETWORK FAILURES (not refusals - these wallets were never asked; treat this sweep as INCOMPLETE)` : ``) +
+    (nonceFails ? ` - ! ${nonceFails} STALE-NONCE FAILURES (not refusals - the RPC gave a stale tx count and the retry did not land; treat this sweep as INCOMPLETE)` : ``) +
     (remaining > 0 ? ` - ${remaining} parked wallets left for keeper` : '')
   );
   return fNonce;
