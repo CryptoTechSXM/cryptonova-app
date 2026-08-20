@@ -3,7 +3,7 @@ Written end of session 17, 2026-08-20. Paste this in to open the next session. R
 Read `V8_50_HANDOFF.md` section 17 first — 17.1 is the result, 17.2 is the method lesson, 17.5 is the owner's open call — then 16, 15, 14, then section 7a THE TWO RULES. Everything below is a pointer, not a substitute.
 
 STATE
-Contracts `v8.1` at **`d1d78ef`**, frontend `admin` = `preview` = `main` at `74a1588`. NOTHING DEPLOYED, NO CHAIN WRITTEN TO. Session 17 edited two contract files as a FIXTURE, measured them, and REVERTED — `git diff contracts/` is empty for both. Sessions 13–17 are measurement only.
+Contracts `v8.1` — session 17's MEASUREMENT commit is **`d1d78ef`** and a docs-only addendum sits on top of it, so HEAD is one or two commits later; run `git log --oneline -3` and trust that, not a hash written here. Frontend `admin` = `preview` = `main` at `74a1588`. NOTHING DEPLOYED, NO CHAIN WRITTEN TO. Session 17 edited two contract files as a FIXTURE, measured them, and REVERTED — `git diff contracts/` is empty for both. Sessions 13–17 are measurement only.
 
 SUITE: **618 passing / 8 pending / 0 failing**, RE-RUN IN FULL 2026-08-20 at the end of session 17 — this is the current baseline, use it. The old 611/7/0 was stale: it predated sessions 11 and 12, which added `V8_50_CycleEconomics`, `V8_50_ReferralBreakeven` and `V8_50_MemberLedger`. Those three were run alone and report exactly 7, so the +7 is fully accounted for and is NOT a drift. The 8th pending is `V8_50_GateCost.test.js`, skipped on purpose (17.8).
 
