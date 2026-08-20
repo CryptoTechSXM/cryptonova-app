@@ -44,7 +44,7 @@ session 10 because nothing it covers moved.
    `COMMIT_MSG_s10.txt` in BOTH repos (delete it), and in contracts
    `scripts/bigfill_v8.js.bak_ascii`, `test_ab/replay.js.bak_s9b`, `test_ab/replay.js.bak_s9c`
    (session 9 leftovers — house pattern is to move strays into `archive/`, not delete them).
-2. **CHECK THE BIGFILL SNAPSHOT.** ✅ Already confirmed once: it read `T1 unique members: 370`,
+2. **CHECK THE BIGFILL SNAPSHOT.** ✅ Confirmed repeatedly overnight: it read `T1 unique members: 370`,
    matching the site's Total Registered, against `T1 entries (all routings): 904` — so
    `uniqueMembers` DOES exist on the deployed V8.48. What to watch now is the pair labelling
    (`T1.1 ... (ARCHIVED)` plus a `T1 ACTIVE pair: T1.2` line) and whether any
@@ -151,18 +151,28 @@ be left UNFUNDED**, because a funded wallet self-rescues and never reaches the v
 precisely why live V8.48 has produced ZERO evictions.
 
 ## WHAT IS NEXT
-1. **Watch T1.2's MatA start filling.** T1.1 archived (127/127 both halves) and T1.2 is now the
-   ACTIVE pair — session 9 predicted this would happen via `chainNext` and asked for it to be
-   verified. The birth happened; the FILLING is what still needs observing over a few runs.
-   ⚠ Also still unconfirmed: the stale-nonce RETRY path. It shipped, and the next sweep was clean
-   and printed no `(recovered - stale nonce, resent at N)` line — meaning it never ran. A quiet
-   run is not a passing test.
-2. **Ask @bevmawire to retry the Dashboard.** His "Couldn't find your status" was submitted
+1. ⛔ **T1.2's MatA IS NOT FILLING, AND THAT IS THE FIRST THING TO CHASE.** Measured across the
+   night of 2026-08-19/20: `T1 unique members` went **374 -> 386** while
+   `T1 ACTIVE pair: T1.2 MatA` sat at **4 / 127 the entire time**, nine hours and ~13 runs, with
+   `T1 entries (all routings)` climbing 1000 -> 1079. T1.1 is archived and full on both halves.
+   **Sixteen new members joined and the active pair did not move — so where are registrations
+   landing?** This is session 9's "if T1.2 stays empty, chase it" condition, now triggered.
+   Measure it, do not theorise it: `diag_pair_chain.mjs` in the frontend repo reports every
+   tier's pairs with occupancy, rotations, parked and `chainNext`.
+2. ⛔ **THE STALE-NONCE RETRY DOES NOT WORK — the accounting is right, the recovery is not.**
+   Proven the same night: the 00:58 run hit **24 STALE-NONCE FAILURES** and **24 of 24 retries
+   failed**. The classifier and the loop's offset-hold DID work (the log directory shows
+   `offset297` twice, which is the loop correctly refusing to advance past a run that could not
+   ask its members). What failed is the 3-second sleep and single re-fetch. Shape worth using:
+   the PRE-run sweep in that same run succeeded 24/24 and the POST-registration sweep failed
+   24/24, so the lag only appears after those wallets have just transacted. Try a longer backoff
+   or several attempts with growing gaps.
+3. **Ask @bevmawire to retry the Dashboard.** His "Couldn't find your status" was submitted
    13:50 GMT and the outage ran 15:54-16:39, so **his fault predates it and has a different
    cause**. The `LOGS_DEPLOY_FLOOR` fix has now shipped to main. Either it is fixed or there is
    a second, still-unidentified cause.
-3. **Restate the `maxItemsPerUpkeep` item against 15**, then confirm deliberately or lower.
-4. ⛔ **MEMBER-CALLABLE RE-ENTRY AFTER EVICTION.** V8.50 scope, owner decision 2026-08-19.
+4. **Restate the `maxItemsPerUpkeep` item against 15**, then confirm deliberately or lower.
+5. ⛔ **MEMBER-CALLABLE RE-ENTRY AFTER EVICTION.** V8.50 scope, owner decision 2026-08-19.
    Eviction does NOT clear `globalJoined`; `register()`/`registerWithCoupon()` revert `TRState()`
    for anyone who has ever joined; `autoReentryEnabled`/`doubleReentryEnabled` are read inside
    the CYCLE-OUT handler (TierRouter:1338/:1342) so they need a seat an evicted member no longer
@@ -171,11 +181,11 @@ precisely why live V8.48 has produced ZERO evictions.
    INTERIM measure (BIGFILL_RULES.md action 4). Design notes: `_recordJoin` is already idempotent
    so a return does not double-count `uniqueMembers`; preserve `memberReferrer`; TierRouter is
    under EIP-170 pressure so put any new loop in TierRouterLib from the start.
-5. **Eviction end to end in the private deploy** — recipe in the handoff addendum.
-6. **Model self-rescue at a non-zero rate.** Still the headline caveat on the PARAM 59 basis, the
+6. **Eviction end to end in the private deploy** — recipe in the handoff addendum.
+7. **Model self-rescue at a non-zero rate.** Still the headline caveat on the PARAM 59 basis, the
    eviction answer and the loans-per-member result.
-7. **Gate measurements 3 and 4** — need a running system; that is what the private chain is for.
-8. **The open owner decision above.**
+8. **Gate measurements 3 and 4** — need a running system; that is what the private chain is for.
+9. **The open owner decision above.**
 
 ## DO NOT REOPEN
 - PARAM 59 (decided, 5000).

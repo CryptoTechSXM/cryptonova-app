@@ -309,6 +309,39 @@ the offset holds. **THIS IS THE THIRD INSTANCE OF ONE MISTAKE IN ONE EVENING** �
 all an infrastructure condition presented as a statement about members or about the chain's
 answer.
 
+### 7e. ⛔ OVERNIGHT RESULT 2026-08-19/20 — 15 RUNS, OFFSETS 294 -> 309, LOOP STILL ALIVE
+
+✅ **THE CLASSIFIER AND THE LOOP HOLD ARE PROVEN IN PRODUCTION, NOT JUST IN THEORY.** The 00:58
+run hit **24 STALE-NONCE FAILURES** in its post-registration sweep, `run_bigfill_loop.ps1` judged
+the run BAD, **held the offset at 297 and re-ran it** — the log directory shows `offset297` twice,
+which is the mechanism working. Before last night that run would have been judged GOOD, the
+offset would have advanced, and 24 members would have been recorded as having declined.
+
+⛔ **BUT THE RETRY DOES NOT WORK, AND THE SAME RUN PROVES IT: 24 of 24 RETRIES FAILED.**
+`Self-rescues: 0 succeeded - 1 skipped - ! 24 STALE-NONCE FAILURES`. A 3-second sleep and one
+re-fetch is not enough for the replica lag. **The ACCOUNTING is right and the RECOVERY is not** —
+do not read 7b as closed. Note the shape, which repeats: the PRE-run sweep in that same run
+succeeded 24/24 and the POST-registration sweep failed 24/24. The lag appears only after those
+wallets have just transacted, which is consistent with a load-balanced replica and points at a
+longer backoff (or several attempts with growing gaps) rather than a different mechanism.
+
+⛔ **AND THE OPEN QUESTION THE NIGHT PRODUCED — TWO NUMBERS THAT DISAGREE:**
+
+| | 00:58 | 09:33 |
+|---|---|---|
+| `T1 unique members` | 374 | **386** |
+| `T1 ACTIVE pair: T1.2 MatA` | 4 / 127 | **4 / 127** |
+
+**SIXTEEN NEW MEMBERS JOINED OVERNIGHT AND THE ACTIVE PAIR DID NOT MOVE.** T1.1 is archived and
+full on both halves; T1.2's MatA has sat at 4/127 for nine hours across ~13 runs while
+`T1 entries (all routings)` climbed 1000 -> 1079. **This is exactly session 9's "if T1.2 stays
+empty, chase it" condition.** Where new registrations are actually landing is now the clearest
+open question in the system, and the pair labelling added in 7c is what made it visible at all.
+⚠ Do not theorise the mechanism — measure where a registration lands. `diag_pair_chain.mjs`
+(frontend repo) reports every tier's pairs with occupancy, rotations, parked and `chainNext`.
+
+✅ Fund: **$555 -> $1,041.60 overnight**, nearly doubled, on ~15 runs of sweeps.
+
 ---
 
 ## TRAPS ADDED THIS SESSION
