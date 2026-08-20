@@ -1117,10 +1117,39 @@ async function snapshot(label, { tierRouter, pm1, matA1, matB1, matA2, matB2,
   const occ1B = await matB1.occupancy();
   const mSize = await matA1.MATRIX_SIZE();
 
+  // ── WHICH T1 PAIR ARE THOSE TWO NUMBERS ABOUT? (added 2026-08-20) ────────────────────
+  // matA1/matB1 are bound ONCE from the addresses file, so they are pair 0 (T1.1) forever.
+  // That was harmless while T1.1 was the active pair. It stopped being harmless the moment
+  // T1.1 filled both halves and the factory moved on: this run's own header printed
+  // "T1.1 archived (127/127). Active: T1.2" while the snapshot below printed a bare
+  // "T1 MatA occupancy: 127 / 127". THAT NUMBER IS NOW FROZEN AT FULL FOREVER and will keep
+  // reading healthy while the pair actually taking entries fills up unwatched.
+  // Session 9 logged this as cosmetic ("two different T1 numbers in one output"). It is not
+  // cosmetic any more - it is an instrument confidently reporting the wrong subject, which
+  // is the same failure as every other one on the traps list.
+  // ⛔ matA1/matB1 are NOT re-pointed here: 28 other sites use them and re-binding at this
+  // depth would change behaviour far beyond a print. The fix is to SAY WHICH PAIR, and to
+  // print the active one beside it.
+  // ⚠ Guarded - pm1 is the local V8.50 ABI against a live V8.48 chain. On failure the line
+  // says so rather than inventing a pair.
+  let activeIdx = null, actOccA = null, actOccB = null;
+  try {
+    activeIdx = Number(await pm1.activePairIndex());
+    const [aA, aB] = await pm1.getPairAt(activeIdx);
+    actOccA = await (await ethers.getContractAt("FigureEightMatrixV8", aA)).occupancy();
+    actOccB = await (await ethers.getContractAt("FigureEightMatrixV8", aB)).occupancy();
+  } catch (_) { activeIdx = null; }
+  const pair0Tag = activeIdx === null ? "" : (activeIdx === 0 ? "  (ACTIVE)" : "  (ARCHIVED - not taking entries)");
+
   console.log(`  T1 unique members:   ${uniqueMem === null ? "unavailable on this build (read failed - NOT zero)" : uniqueMem}   <- people; matches the site's Total Registered`);
   console.log(`  T1 entries (all routings): ${totalReg}   <- includes re-entries, MatB placements and doubles, so it exceeds the headcount`);
-  console.log(`  T1 MatA occupancy:   ${occ1A} / ${mSize}`);
-  console.log(`  T1 MatB occupancy:   ${occ1B} / ${mSize}`);
+  console.log(`  T1.1 MatA occupancy: ${occ1A} / ${mSize}${pair0Tag}`);
+  console.log(`  T1.1 MatB occupancy: ${occ1B} / ${mSize}${pair0Tag}`);
+  if (activeIdx === null) {
+    console.log(`  T1 ACTIVE pair:      could not read (pm1.activePairIndex/getPairAt failed) - NOT a claim that T1.1 is active`);
+  } else if (activeIdx !== 0) {
+    console.log(`  T1 ACTIVE pair:      T1.${activeIdx + 1}  MatA ${actOccA} / ${mSize}   MatB ${actOccB} / ${mSize}   <- this is where entries are going`);
+  }
   console.log(`  W1 highest tier:     T${w1Tier}  ${w1Tier === 0n ? "(not yet registered as matrix member)" : ""}`);
   console.log(`  W1 T1 cycles:        ${w1Cycles}`);
   console.log(`  Total system cycles: ${totalCyc}`);
@@ -2006,8 +2035,32 @@ async function main() {
   if (skippedAlready > 0) {
     console.log(`  Already joined:   ${skippedAlready}  <- wrong HDR_OFFSET, not real failures`);
   }
-  if (failures.length > 0) {
-    console.log(`  Genuine failures: ${failures.length}`);
+  // ── NOT EVERY REGISTRATION FAILURE IS A "GENUINE" ONE (added 2026-08-20) ──────────────
+  // This line used to call all of them "Genuine failures". On 2026-08-20 a run failed with
+  // `replacement transaction underpriced` - a NONCE COLLISION, i.e. a transaction with that
+  // nonce already sitting in the mempool - and it was reported under that heading while the
+  // loop, which only greps for its own abort markers, judged the run GOOD and ADVANCED THE
+  // OFFSET. The wallet was never registered and the loop walked straight past it.
+  //
+  // That is the same mistake as the self-rescue sweep's "skipped" bucket and the snapshot's
+  // "T1 total registered", for the third time in one evening: an infrastructure condition
+  // presented as a statement about members or about the chain's answer.
+  //
+  // A nonce/transport failure means THE MEMBER WAS NEVER ASKED. It is not a refusal, it is
+  // not a revert, and a run containing one is INCOMPLETE - so it emits the same
+  // STALE-NONCE FAILURES marker run_bigfill_loop.ps1 already treats as a bad run, which
+  // stops the offset advancing over a wallet that never got its chance.
+  const _regInfra = failures.filter((m) =>
+    /nonce too low|nonce has already been used|replacement transaction underpriced|HH110|Invalid JSON-RPC|ECONNRESET|ETIMEDOUT|socket hang up|network|timeout|503|502|504|fetch failed|could not coalesce/i.test(m || "")
+  );
+  const _regReal = failures.length - _regInfra.length;
+  if (_regReal > 0) {
+    console.log(`  Genuine failures: ${_regReal}   <- on-chain reverts; read the ! lines above for reasons`);
+  }
+  if (_regInfra.length > 0) {
+    console.log(`  ! ${_regInfra.length} registration(s) failed on NONCE/TRANSPORT, not on-chain - STALE-NONCE FAILURES`);
+    console.log(`    These wallets were never actually asked. This run is INCOMPLETE and the offset`);
+    console.log(`    must NOT advance over them - the loop's stop condition reads the marker above.`);
   }
 
   // ── Post-registration snapshot ────────────────────────────────────────────
