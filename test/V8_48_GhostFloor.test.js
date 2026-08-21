@@ -314,15 +314,39 @@ describe("V8.48 items 45+46+47 — ghosts, the insolvency floor, and the evictio
       //                               MemberEvicted, and releases nothing)
       //   :1461 softParkIdle          releases the reserve itself at :1447-1450
       //   MatB, any cause             nothing to hold — item A spent it
-      //   :906  mid-cascade deferral  holds a reserve, not a ghost  <- still reachable
-      //   :523  cascade-refill entry  holds a reserve, not a ghost  <- still reachable
+      //   :906  containment pre-check ⛔ CORRECTED 2026-08-21 — IT IS A GHOST TOO.
+      //                               It parks only inside
+      //                               `if (dest != 0 && dest.isActiveInMatrix(root))`,
+      //                               which is precisely the test evictParked runs
+      //                               first. Same case as :876 one row above. NOT a door.
+      //   :936  mid-cascade deferral  ⛔ ADDED 2026-08-21 — A DIFFERENT SITE ENTIRELY,
+      //                               and this row used to be MERGED INTO the one above
+      //                               under :906's number. It lives in _crossToPartner
+      //                               behind `crossingInProgress`, has NO ghost test in
+      //                               it, and the member's reserve is unspent.
+      //                               UNCLASSIFIED — 0 firings in 45 registrations at
+      //                               size 7, which is not the same as unreachable.
+      //   :523  cascade-refill entry  holds a reserve, not a ghost  <- A CONFIRMED DOOR
       //
-      // Only the last two survive, and no test in this suite constructs either
-      // deliberately. So on the live chain the release is now essentially unreachable:
-      // the members who still hold a reserve when they park are ghosts, and ghosts are
-      // dequeued. THAT IS A SCOPE FINDING, NOT A TEST BUG — see V8_50_HANDOFF.md. This
-      // test pins the behaviour that actually ships; the release path needs a decision
-      // about whether it is still worth carrying.
+      // ⛔ THOSE TWO ROWS ARE WHY THIS BLOCK USED TO SAY "the last two". It was written
+      // from a source walk, carried unchallenged for several sessions, and the handoff
+      // repeated it into three later sections — carrying ONE row that held the NAME of
+      // :936 and the ANALYSIS of :906. A fixture built against :906 constructs a ghost,
+      // watches it dequeue, and PASSES while proving nothing — the expensive failure,
+      // because it looks exactly like success.
+      //
+      // ✅ AND THE DOOR IS NOW EXERCISED: `test/V8_50_EvictionReserve.test.js` reaches
+      // :523 from ORDINARY registrations (#20 at matrixSize 7 — no impersonation, no
+      // partner swing) and asserts the release fires for the full $5.00. Its ER-2 pins
+      // the :906 shape as a ghost so the two can never be confused again.
+      // It needed no deploy: evictParked requires parkedAt > 0, not seated in either
+      // half, and crossingReserve > 0 — no chain, no keeper, no clock. Every session
+      // that said "stage it on the private V8.50 deploy" was reasoning from how the
+      // state arises ORGANICALLY rather than from what the function requires.
+      //
+      // This test still pins what ships on the ORDINARY path: a MatB cycle-out parker
+      // has no reserve, so nothing is released. That remains true, and it is why the
+      // release is RARE — it was never why the release was untestable.
       const ctx = await deployPair(15);
       await driveW1IntoMatB(ctx);
       // W1 in MatB: item A left them NO reserve, so the $10 re-entry falls short on
