@@ -38,4 +38,18 @@ ab_sequence_*.json
 ab_fingerprint_*.json
 gas_size*.txt
 suite_*.txt
+
+# Measurement transcripts, sessions 13-19. Same class as suite_*/gas_size* above —
+# the handoff is the record, these are the raw runs. They were untracked rather than
+# ignored, and ~40 of them made `git status` noisy enough to hide a real new file.
+gate_*.txt
+lb_s*.txt
+evict_ledger_*.txt
+ab_rerun_*.txt
+clawback_window*.txt
+debt_sweep.txt
+parked_experiment.txt
+
+# device-VM cannot delete, so backup snapshots accumulate in place
+*.bak_*
 archive/captures/

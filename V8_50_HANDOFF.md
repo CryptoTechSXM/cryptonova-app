@@ -170,11 +170,12 @@ V8.50 LIVE and weeks of accrual (18.0's reasoning, unchanged). Two consequences:
 
 ## 19.8 NEXT, IN ORDER — SUPERSEDES 18.21. ⚠ ITEMS 1 AND 3 OF 18.21 ARE BOTH DONE.
 
-1. **EXERCISE `EvictionReserveReleased` DELIBERATELY** (18.15). Every evicted member ever
-   measured came from MatB with a zero reserve, so the release path has still never run.
-   Needs a MatA eviction, which the private V8.50 deploy can stage with
-   `evictionGracePeriod` in minutes (session 9's recipe). **This is the last untested path
-   in the eviction route the gate now feeds.**
+1. **EXERCISE `EvictionReserveReleased` DELIBERATELY** (18.15) — **AS A HARDHAT UNIT TEST,
+   NOT A DEPLOY (19.18a), AND AGAINST `:523`, WHICH IS THE ONLY SURVIVING DOOR (19.18b).**
+   Every evicted member ever measured came from MatB with a zero reserve, so the release
+   path has still never run. It is the last untested path in the eviction route the gate now
+   feeds. ⛔ A test written against `:906` constructs a GHOST, watches it dequeue, and passes
+   while proving nothing — read 19.18b first.
 2. **LENGTHEN THE A/B TAIL** until `stillParkedAtEnd` approaches zero, so the loan counts
    stop being censored (18.19). Cheap, and it makes 18.6 quotable.
 3. **SPLIT 14.1 BY TIER** and cap time-at-risk (14.4). ⚠ V8.48 measurement; 18.0 applies.
@@ -423,6 +424,72 @@ gained nothing — its three setters already existed; only their governance path
 TRANSCRIPTS FROM ONE DAY AND NONE OF THEM IS DRIFT: 629/8/0 predates un-skipping GateCost,
 631/7/0 predates the DAO params, 638/7/0 is the tree as committed. 18.1 applies to this
 file's own outputs as much as to A/B results — check WHICH run before quoting a number.
+
+## 19.18 ⛔⛔ TWO CORRECTIONS THAT WOULD HAVE COST THE NEXT SESSION A DAY
+
+Both concern **19.8 item 1** — exercising `EvictionReserveReleased` — which is the very next
+thing a session picks up. Both were found by reading the source after the owner pushed back
+on the plan, and neither is in the record above.
+
+### 19.18a ⛔ IT DOES NOT NEED A DEPLOY. IT IS A HARDHAT UNIT TEST.
+
+18.15, 18.21 item 2 and 19.8 item 1 all say the release path *"needs a MatA eviction, which
+the private V8.50 deploy can stage with `evictionGracePeriod` in minutes."* **That is
+wrong.** `MatrixLogicLib.evictParked` releases the reserve under exactly three conditions
+and no more: `parkedAt[member] > 0`, the member is NOT seated in this matrix or its partner,
+and `crossingReserve > 0`. No chain, no keeper, no clock. Every session that said "deploy"
+was reasoning from how the situation arises ORGANICALLY — which is rare — rather than from
+what the function requires. **A test does not have to wait for the state to arise; it
+constructs it.** That deletes a whole deploy cycle from the next session.
+
+⚠ **AND THE LIMIT, WHICH IS 14.3 AGAIN.** A unit test proves the MECHANISM, not the
+POPULATION. It answers "if a MatA eviction happens, does the member get their reserve back"
+completely, and says nothing about how often that happens live. **That is the right trade
+here**: if the path never fires nothing is lost, and if it does fire we would know it is
+correct. The population question is not the safety question.
+
+### 19.18b ⛔⛔ THE UNREACHABILITY TABLE IS WRONG ON `:906`. ONE DOOR SURVIVES, NOT TWO.
+
+The owner's challenge was: *"MatA has no way to evict since the reserve always crosses them
+to MatB."* He is right about the ordinary path — item A deleted the `:947` funding-shortfall
+park, which the table already records. Checking the two the table claims survive:
+
+* **`:906` mid-cascade deferral — IT IS A GHOST BY CONSTRUCTION.** It parks only inside
+  `if (dest != address(0) && IFigureEightMatrixV8Cross(dest).isActiveInMatrix(root))` — the
+  member is parked *because* they are already seated in the partner. That is **precisely the
+  test `evictParked` runs first**, so it takes the GHOST branch, dequeues, and touches no
+  balance. The table says "a ghost? no". **It is the same case as `:876`, one row above it.**
+* **`:523` cascade-refill on entry — SURVIVES, and the ordering was checked not assumed.**
+  The member is parked at line **527**; `_distributePayments` runs at line **539**, after the
+  park, in the same transaction, and credits the 50% reserve at `:1143`. So they end parked
+  in MatA, not seated anywhere, holding a reserve, not a ghost.
+
+**CONSEQUENCE FOR WHOEVER BUILDS THE TEST: there is exactly ONE door and it is `:523`.**
+The fixture has to reach "cascade refilled every seat" — matrix full, a cycle-out ran, and
+the refill took every freed slot so there is nowhere to place the entrant. A test written
+against `:906` will construct a ghost, watch it dequeue, and prove nothing; and because
+`GhostDequeued` fires and no balance moves, **it would look like a passing test of the wrong
+thing.** That is the expensive failure this correction exists to prevent.
+
+⛔ **THE STANDING LESSON, AND IT IS THE OWNER'S RULE POINTED AT OUR OWN DOCUMENTS: A
+MECHANISM TABLE IN A HANDOFF IS AN ASSERTION, NOT A MEASUREMENT.** The table at "NEW SCOPE
+FINDING: `EvictionReserveReleased` IS NOW ALL BUT UNREACHABLE" was written from a source
+walk and carried for several sessions without anyone re-reading the two rows it depended on.
+A correction banner now sits on it. **When a table is what sends the next session to work,
+re-walk it before you follow it.**
+
+### 19.18c HOUSEKEEPING COMMITTED WITH THIS — small, but each one is a live trap
+
+* **`.gitignore` was missing every instrument built since session 13.** `suite_*.txt`,
+  `gas_size*.txt`, `ab_result_*.json` were ignored; `gate_*.txt`, `lb_*.txt`,
+  `evict_ledger_*.txt`, `ab_rerun_*.txt`, `clawback_window*.txt`, `debt_sweep.txt`,
+  `parked_experiment.txt` and the `*.bak_*` snapshots were not. **~40 untracked files made
+  `git status` noisy enough to hide a genuinely new one** — and this session had two real new
+  files in that list. Patterns added; the convention was already there, it just was not kept
+  up.
+* ⚠ **`handover_session13.md` and `archive/_session13_*.md` ARE ORPHAN FRAGMENTS.** Untracked,
+  superseded, and named closely enough to a handoff to be opened as one. The entry point is
+  and remains `V8_50_HANDOFF.md` (newest section first), then `V8_50_SCOPE.md`.
 
 ---
 
@@ -5275,6 +5342,14 @@ against the live population before the thresholds are trusted. `scripts/model_it
 does not model tier progression today; it would need a new phase.
 
 ### ⛔ NEW SCOPE FINDING: `EvictionReserveReleased` IS NOW ALL BUT UNREACHABLE
+
+> ⛔⛔ **CORRECTED 2026-08-21 (19.18b) — THE TABLE BELOW IS WRONG ON `:906`, AND `:906` IS
+> ONE OF THE TWO ROWS IT CONCLUDES WITH.** `:906` parks a member ONLY when they are already
+> `isActiveInMatrix` in the partner, which is exactly the ghost test `evictParked` runs
+> first — so it dequeues and releases nothing, the same as `:876` one row above it. **ONE
+> door survives, not two, and it is `:523`.** Read 19.18b before building anything against
+> this table. Also: exercising the release path does NOT need a deploy (19.18a).
+
 
 Found while walking GF-V3, and it is worth more than the test fix it came from.
 
