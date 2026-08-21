@@ -1,7 +1,7 @@
 # V8.50 HANDOFF — the crossing redesign. READ THIS FIRST.
 
 Written 2026-08-16 at the end of the V8.49 private measurement run.
-Sessions 2-22 have appended to it since; read the NEWEST section first — each one
+Sessions 2-23 have appended to it since; read the NEWEST section first — each one
 corrects the ones below it, and says so explicitly where it does.
 Audience: **the next session of Claude, plus the owner. There is no third party — every
 line of this codebase was written by a previous session of Claude and executed by the
@@ -10,7 +10,134 @@ owner-set, and the session that earned it got five things wrong by ignoring what
 
 ---
 
-# ⬛ SESSION 22 STATE — 2026-08-21, LATEST. READ THIS FIRST.
+# ⬛ SESSION 23 STATE — 2026-08-21, LATEST. READ THIS FIRST.
+# ✅ THE CLAWBACK PRESETS ARE PRICED. 19.17b's OPEN HALF IS CLOSED — AS A UNIT TEST.
+
+Test-only session. **Nothing deployed, no contract file touched.** One new test file.
+
+## 23.0 ✅ THE ANSWER, AND IT IS A FRACTION OF EVERY EARNING
+
+`test/V8_50_ClawbackPresets.test.js` — **7 passing.** For a member who owes the fund, at
+each settled pool share:
+
+| preset | band 3 | redirected to the fund | **the member keeps** |
+|---|---|---|---|
+| 0 OFF | 0 | $0.0000 | **100%** |
+| 1 GENTLE | 3000 | $0.4704 | **70%** |
+| **2 CURRENT (shipped)** | 6000 | $0.9408 | **40%** |
+| 3 HARD | 8000 | $1.2544 | **20%** |
+
+(measured against a real accrued share of **$1.5680**; the dollar figures are this
+fixture's, the **percentages are the dial** and are exact.)
+
+⛔ **SO THE SHIPPED DEFAULT LEAVES AN INDEBTED MEMBER 40% OF EACH DISTRIBUTION.** That is
+the number 19.17b said had never been measured — *"how fast debt retires and how much a
+member can withdraw were NOT measured"* — and it is the one an owner needs to hold the
+menu against. Preset 3 leaves them a fifth; preset 1 leaves them seven tenths.
+
+## 23.1 ✅ WHAT ELSE THE RUN ESTABLISHED, NONE OF WHICH WAS KNOWN
+
+* **THE ARITHMETIC IS EXACT.** The redirect is `share × band3 / 10000` to the unit at
+  every preset, the member's debt falls by exactly that, and **the fund RECEIVES exactly
+  that** — asserted on all three ledgers, not just the event.
+* **THE MENU IS ORDERED AS IT READS.** Strictly monotone 0 < GENTLE < CURRENT < HARD, and
+  `redirect + kept` reconstructs the share exactly, so no money leaves the ledger in
+  between.
+* **THE CLAMP WORKS AND RESETS THE BAND.** A debt smaller than the redirect clamps to the
+  debt rather than over-collecting, clears it, and resets `debtIssuingTier` to 0 so a later
+  debt re-bands from scratch (CP-5). That branch had no coverage.
+* ✅ **THE ESTIMATE AND THE COLLECTION AGREE TO THE UNIT** (CP-6). 22.3 found
+  `withdrawableOf`'s estimate moving while the A/B collected $0.00; that was the harness
+  never firing the settle, not a divergence. When the settle DOES fire, the number the
+  member was shown is the number they end up holding. **That is the thing that would have
+  been a real defect, and it is now pinned.**
+* **A TIER-0 DEBT RESOLVES TO BAND 3**, read off `clawbackBpsFor` rather than assumed
+  (CP-0), and the four bands are read back and compared against this file's own table so a
+  renumbered menu fails the run instead of silently pricing different values.
+
+## 23.2 ⛔ THE TRIGGER CHOICE IS THE WHOLE EXPERIMENT, AND THE OBVIOUS ONE IS A TRAP
+
+`withdrawCore` settles the pool too — and then repays the member's **ENTIRE remaining
+debt** out of withdrawable (`MatrixLogicLib:1381-1395`), emitting a SECOND
+`RescueDebtRepaid` in the same transaction. **A test built on `withdraw()` would see the
+debt cleared at every preset and report "the preset does nothing"** — the same false null
+the A/B produced in 22.0, arrived at by a different route and just as believable.
+
+`softParkIdle` settles (`:1500`) and performs no other repayment, so exactly one repayment
+site is in play and the number measured is the redirect itself.
+
+⚠ **AND THE ORDERING IS THE CONTROL.** Registrations run first and identically in all four
+worlds; the debt is booked and the preset armed only afterwards, so the accrued share is
+the same number in every run. **CP-1 asserts that rather than trusting it** — without it a
+difference in the redirect would be part dial and part fixture in unknown proportion, which
+is the V8.49 run's own worst failure.
+
+## 23.3 ⚠ WHAT THIS DOES NOT SAY
+
+* **BAND 3 ONLY.** `_bandOf` sends T1-T3 to band 3 and this fixture is single-tier. Bands
+  0-2 (T4-T10) are unpriced and no assertion here pretends otherwise. 19.17b's "in practice
+  only band 3 has a population" is why that is the right scope, not a gap.
+* **NOT A RETIREMENT RATE.** "How fast debt retires" has no single number: it is
+  `band3` of each settle, and how often a member settles is a property of the population,
+  not of the dial. What is measured is the fraction; the frequency is 22.0's territory and
+  22.0 showed the A/B never reaches it.
+* **NO POPULATION CLAIM.** A unit test proves the mechanism, not how many members are in
+  it — 19.18a's caveat, and 14.3's before that.
+* ⛔ **AND IT DOES NOT MAKE A RECOMMENDATION.** The bands are economics and economics is
+  the owner's call. What changed is that the menu now has a measured meaning attached to
+  every entry instead of only to preset 2.
+
+## 23.4 ⛔ THE TWO FINDINGS TOGETHER ARE THE POLICY SHAPE, AND NEITHER IS OBVIOUS ALONE
+
+22.0: on the A/B — a young, park-heavy population — **every preset collects $0.00 and
+changes nothing**, because borrowers are parked and parked members hold no seat.
+23.0: on a member who holds a seat through rotations, **the dial takes 0/30/60/80% of every
+distribution.**
+
+**So the clawback is a lever on ESTABLISHED indebted members and a no-op on new ones.** A
+change to this menu would not be felt by the population the gate decision (18.18/19.0) was
+argued about; it would be felt by members who have already settled in and are still
+carrying debt. Nobody had those two halves side by side before, and either one on its own
+invites the wrong conclusion.
+
+## 23.5 ⚠ A NAMING COLLISION CAUGHT BY THE SUITE TRANSCRIPT, NOT BY THE TEST
+
+The new file's cases were first written as `CB-0..CB-6`. **`CB-*` already belongs to
+`test/V8_49_CrossingBuffer.test.js`** (CB-1..CB-8, the crossingBufferBps package), so the
+full-suite transcript carried two different `CB-3`s. Nothing failed — test ids are just
+strings — but this repo uses them as stable handles (GF-V1, ER-1, DP-5, GATE-2 all get
+quoted in the handoff and grepped for), and a duplicate makes every future reference
+ambiguous. **Renamed to `CP-0..CP-6`.**
+
+⛔ **IT WAS ONLY VISIBLE IN THE FULL-SUITE OUTPUT.** Running the new file alone showed a
+clean `CB-0..CB-6` and looked right. **Grep the suite for a new id prefix before adopting
+it** — a single-file run cannot see a collision by construction.
+
+## 23.6 SUITE
+
+**648 passing / 7 pending / 0 failing** (`suite_session23.txt`) — 22's 641 plus the 7 new
+ones, so nothing existing moved. ⚠ Container run on `solcjs`; 21.5 established that
+reproduces the owner's machine to the unit, but 20.7's rule still holds — **no size figure
+from a container run.**
+
+## 23.7 NEXT, IN ORDER — SUPERSEDES 22.7. ⚠ ITEM 1 IS DONE.
+
+1. **SPLIT 14.1 BY TIER** and cap time-at-risk (14.4). ⚠ V8.48 measurement; 18.0 applies.
+2. **CLASSIFY `:936`** (20.3a). Until it is settled nobody may write "exactly one door".
+3. **THE PRIVATE V8.50 DEPLOY GATE** — risks 1, 3 and 4. Risk 2 is closed by 20.4. Read
+   20.5 first: the gate's own text still tests against `minGasPerItem` 3.5M and the source
+   has been 5,000,000 since 2026-08-18.
+4. **POST-MIGRATION, NOT BEFORE:** GO_LIVE_RUNBOOK PHASE 7b — pre-flight, check the live
+   histogram against 19.1, then arm at 3000. Then re-run `diag_referral_threshold.js`
+   section 4 + the loan book against live V8.50 (19.6).
+5. Backlog, untouched: the 5 unexplained cycle-outs; `V8_50_ReferralBreakeven.test.js` v4
+   counts the dead event; stale-nonce retry backoff; @bevmawire's Dashboard retry;
+   `maxItemsPerUpkeep` live 15 vs 20 in source; member-callable re-entry. Plus the three
+   orphan session-13 fragments 19.18c flagged.
+
+---
+
+# ⬛ SESSION 22 STATE — 2026-08-21. READ AFTER SESSION 23.
 # ⛔⛔ THE CLAWBACK PRESETS CANNOT BE PRICED ON THIS HARNESS. ALL FOUR COLLECT $0.00.
 
 Measurement only. **Nothing deployed, no contract file touched.** Two additive instrument
@@ -106,6 +233,10 @@ cannot.** The base ceiling bound on a quantity the measured run produces in quan
   had called a deploy task. **That is the next item, and it replaces "price the presets on
   the A/B harness" wherever that appears.**
 
+  ✅ **BUILT AND RUN 2026-08-21 — `test/V8_50_ClawbackPresets.test.js`, 7 passing. THE
+  ANSWER IS IN 23.0:** the member keeps 100 / 70 / 40 / 20% of each settled share at
+  presets 0 / 1 / 2 / 3. The shipped default leaves an indebted member 40%.
+
 ## 22.5 ⛔⛔ AN INSTRUMENT DEFECT THIS SESSION CREATED IN THE LAST ONE, AND IT BIT WITHIN THE HOUR
 
 21.4 made the A/B tail a parameter. **It did not put the tail in the output filename.**
@@ -147,6 +278,7 @@ even leave a gap — it leaves a plausible wrong number with a recent timestamp.
   `_cb<bands>`, never as a preset id.
 
 ## 22.7 NEXT, IN ORDER — SUPERSEDES 21.7.
+⛔ **SUPERSEDED BY 23.6. ITEM 1 BELOW IS DONE — the presets are priced (23.0).**
 
 1. **PRICE THE PRESETS AS A UNIT TEST** (22.4). Seat a borrower, rotate until a pool share
    settles, read the redirect at each preset. The A/B route is closed.
