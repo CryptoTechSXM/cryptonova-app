@@ -148,17 +148,36 @@ node scripts\bigfill_v8.js
 🖥️PS. *Why: a keeper batch that only reclaims idle slots costs 0.04M and proves nothing.
 The dear item is an SF-funded rescue and the queue has to contain some.*
 
-**G.2 ⛔ PIN THE BATCH TO ONE ITEM. This step is what makes measurement 1 possible.**
+**G.2 ⛔ DRIVE ONE ITEM PER TRANSACTION. This step is what makes measurement 1 possible.**
 ```powershell
-npx hardhat run scripts\set_max_items.js --network baseSepolia
+$env:ADDRESSES_FILE="deployed_addresses_v8_50_private.json"
+$env:ONE_ITEM="1"
+$env:INTERVAL_SECS="3"
+$env:MAX_TICKS="60"
+npx hardhat run scripts\testchain_keeper.js --network baseSepolia
 ```
-Set it to **1**. *Why: `gasUsed` is per BATCH. A mixed batch tells you what the batch cost
-and nothing about the parts, and a number fitted from mixed batches is a model, not a
-measurement. At a cap of 1 every `performUpkeep` runs exactly one item and its `gasUsed`
-IS that item's cost plus a fixed overhead — the same trick `V8_50_KeeperGas.test.js` uses
-at size 7, which is what makes the two comparable at all.*
+🖥️PS — `testchain_keeper.js` is the private-chain driver (signs as the deployer, so no
+`setUpkeepCaller` is needed, uses an estimateGas ladder, and survives a revert instead of
+exiting on it). `ONE_ITEM=1` sends the FIRST discovered work item as its own transaction
+and leaves the rest for the next tick.
 
-**G.3** Let the keeper run through a few dozen upkeeps at cap 1, then measure:
+⛔ *Why not `maxItemsPerUpkeep = 1`: **it is not on the menu.**
+`setMaxItemsPerUpkeep` accepts 5 | 10 | 15 | 20 | 30 | 40 and reverts on anything else, so
+the obvious way to price one item does not exist. But `performUpkeep` decodes its work list
+straight from calldata and never checks that the list came from `checkUpkeep`, and the
+owner is always allowlisted — so the driver just sends one item.*
+
+⛔ *Why one item at all: `gasUsed` is per BATCH, and `gasUsed / items.length` is a **fitted
+number, not a measurement** — an eviction costs 1/18th of a rescue, so a mixed batch's mean
+describes nothing that happened. One item per transaction makes the figure exact. It is the
+same basis `V8_50_KeeperGas.test.js` used at size 7, which is what makes the two
+comparable.*
+
+⚠ Defect 6 orders discovery to take parked work FIRST, so the first item is usually the
+dear one — which is the one the gate needs priced. Watch the console: each tick prints the
+work type it sent and `k/item EXACT`.
+
+**G.3** Then measure:
 ```powershell
 npx hardhat run scripts\diag_keeper_gas_live.js --network baseSepolia
 ```
@@ -174,12 +193,15 @@ npx hardhat run scripts\diag_keeper_gas_live.js --network baseSepolia
 > ⚠ **"NO VERDICT" IS NOT A PASS.** If no single-item rescue was observed, or no cheap type
 > was seen to measure the overhead with, the script refuses to answer. Fill more and re-run.
 
-**G.4** Restore the cap and let a deep queue build:
+**G.4** Now the opposite: full batches against a deep queue. Drop `ONE_ITEM`, let bigfill
+build the queue past one batch, and run the driver normally:
 ```powershell
-npx hardhat run scripts\set_max_items.js --network baseSepolia
+Remove-Item Env:\ONE_ITEM
+npx hardhat run scripts\testchain_keeper.js --network baseSepolia
 ```
-Set it back to **20**, then run the keeper against a queue deeper than one batch and
-re-run `diag_keeper_gas_live.js`.
+then re-run `diag_keeper_gas_live.js`.
+⚠ `maxItemsPerUpkeep` should be at its normal value for this (20 in source, 15 on live —
+handoff 25.6). **Record which one this chain is running**; the halt behaviour depends on it.
 
 > **MEASUREMENT 2 — does `BatchGasHalted` fire, and at what batch size?**
 > **PASS:** it fires, `processed < total`, and `gasRemaining` sits just under 5,000,000 —

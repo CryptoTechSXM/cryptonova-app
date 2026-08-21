@@ -215,6 +215,41 @@ async function main() {
         ["(uint8 workType,uint8 tierIdx,address addr1,address addr2)[]"], performData);
     } catch { /* keep going; the batch is still sendable */ }
 
+    // ── ONE_ITEM=1 — THE GAS-PRICING MODE (GO_LIVE_RUNBOOK PHASE G, session 28) ──
+    //
+    // ⛔ WHY THIS EXISTS AND WHY IT IS NOT `maxItemsPerUpkeep = 1`. setMaxItemsPerUpkeep
+    //    accepts 5|10|15|20|30|40 and NOTHING ELSE — a cap of 1 is not on the menu, so the
+    //    obvious way to price one item does not exist. But performUpkeep decodes its work
+    //    list straight from calldata and never checks that the list came from checkUpkeep,
+    //    and the owner is always allowlisted. So a driver can simply send ONE item.
+    //
+    // ⛔ AND `gasUsed / items.length` IS NOT A PER-ITEM COST. The line further down does
+    //    exactly that division and it is a fitted number, not a measurement: an eviction
+    //    costs 1/18th of a rescue, so the average of a mixed batch describes nothing that
+    //    happened. With one item per transaction the division is exact and the figure is
+    //    real. That is the whole point of this mode.
+    //
+    // Takes the FIRST item only; checkUpkeep rediscovers the rest next tick, with fresh
+    // state each time. Defect 6 orders discovery to take parked work FIRST, so the first
+    // item is usually the dear one — which is the one the gate needs priced.
+    // Set INTERVAL_SECS low (2-3) on a private chain, or this is one item per minute.
+    if (process.env.ONE_ITEM === "1") {
+      if (!items.length) {
+        console.log(`[${stamp()}] tick ${tick}  ONE_ITEM: performData did not decode — sending the batch WHOLE.`);
+        console.log(`            ⚠ THIS TICK CANNOT PRICE AN ITEM. Do not read its gas as a per-item cost.`);
+      } else {
+        const first = items[0];
+        performData = ethers.AbiCoder.defaultAbiCoder().encode(
+          ["(uint8 workType,uint8 tierIdx,address addr1,address addr2)[]"],
+          [[[first.workType, first.tierIdx, first.addr1, first.addr2]]]);
+        const dropped = items.length - 1;
+        items = [first];
+        if (dropped > 0) {
+          console.log(`[${stamp()}] tick ${tick}  ONE_ITEM: 1 of ${dropped + 1} sent; ${dropped} left for the next tick.`);
+        }
+      }
+    }
+
     const summary = items.length
       ? items.map(i => WORK_NAMES[Number(i.workType)] || String(i.workType)).join(",")
       : "(undecoded)";
@@ -290,11 +325,14 @@ async function main() {
     // projects to ~39M, and KEEPER_VPS_CONFIG puts the practical tx ceiling near
     // 17.8M. That is a batch failure with a GAS cause that would look exactly
     // like a floor failure in the results. Warn before it happens.
+    // ⚠ EXACT under ONE_ITEM=1 (one item, one transaction). A FITTED AVERAGE otherwise —
+    //   an eviction costs 1/18th of a rescue, so a mixed batch's mean describes nothing
+    //   that happened. Only quote this as a per-item cost in ONE_ITEM mode.
     const perItem = items.length ? Number(receipt.gasUsed) / items.length : 0;
     const projected = perItem * 15;   // a full maxItemsPerUpkeep batch
     console.log(`            gas ${receipt.gasUsed}  rescued ${rescued}  reclaimed ${reclaimed}  skipped ${failed}` +
                 (failedDetail.length ? `  [${failedDetail.join(" ")}]` : "") +
-                (perItem ? `  (${Math.round(perItem / 1000)}k/item)` : ""));
+                (perItem ? `  (${Math.round(perItem / 1000)}k/item${process.env.ONE_ITEM === "1" ? " EXACT" : " avg"})` : ""));
     if (projected > 17_800_000) {
       console.log(`            *** GAS WARNING: ${Math.round(perItem / 1000)}k/item projects to ` +
                   `${(projected / 1e6).toFixed(1)}M for a full 15-item batch, above the ~17.8M`);

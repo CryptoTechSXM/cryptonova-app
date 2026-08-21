@@ -27,14 +27,15 @@ path. So the gate's single most important number had a threshold and no instrume
 
 **`scripts/diag_keeper_gas_live.js`** — read-only, 12 self-test assertions passing.
 
-## 27.1 ⛔⛔ THE DESIGN CALL THAT MAKES MEASUREMENT 1 POSSIBLE: PIN THE BATCH TO ONE ITEM
+## 27.1 ⛔⛔ THE DESIGN CALL THAT MAKES MEASUREMENT 1 POSSIBLE: ONE ITEM PER TRANSACTION
+⚠ **READ 27.5 WITH THIS.** The first version of this said "pin `maxItemsPerUpkeep` to 1" — which the setter does not allow. The mechanism below is unchanged; the way it is reached is not.
 
 `gasUsed` is per **batch**. A mixed batch tells you what the batch cost and nothing about
 the parts, and a per-item number fitted from mixed batches is **a model, not a
 measurement** — which rule 1 exists to keep out of this record.
 
-So the runbook sets `maxItemsPerUpkeep = 1` for the measurement window. Every
-`performUpkeep` then runs exactly one item and its `gasUsed` IS that item's cost plus a
+So the runbook drives **one item per transaction** (`testchain_keeper.js ONE_ITEM=1`;
+27.5 explains why not the cap). Every `performUpkeep` then runs exactly one item and its `gasUsed` IS that item's cost plus a
 fixed overhead — **and the overhead is measured too**, read off the cheapest work type in
 the same run (a reclaim is ~0.04M at size 7), never assumed. The tool enforces this: single-
 item batches are the only ones that enter a per-item figure, and mixed ones are **counted
@@ -93,7 +94,39 @@ plus weeks), 14.1 re-measured honestly (18.0). **Those wait for the community an
 should be held back for them.** The two are not alternatives: PHASE G asks whether the
 machine runs at real size; the community asks how people behave.
 
-## 27.5 NEXT, IN ORDER — SUPERSEDES 26.5.
+## 27.5 ⛔⛔ A STEP IN MY OWN RUNBOOK THAT COULD NOT HAVE RUN — CAUGHT BEFORE THE OWNER HIT IT
+
+PHASE G's measurement 1 was first written as *"set `maxItemsPerUpkeep` to 1"*.
+**`setMaxItemsPerUpkeep` accepts 5 | 10 | 15 | 20 | 30 | 40 and reverts on anything else.**
+A cap of 1 is not on the menu and never was. The step was written from the shape of the
+measurement rather than from the setter, and it would have stopped the owner at G.2 on a
+freshly deployed private chain — the most expensive place to discover it.
+
+⛔ **THIS IS RULE 2 IN MY OWN HANDS, AND IT IS THE SECOND TIME THIS WEEK** (22.5 was the
+untagged tail dial). **A runbook step is a claim about a contract, and it needs reading
+before it is written down.** `set_max_items.js` also hardcodes its value — the comment says
+30, `NEW_CAP` says 20 — so it could not have been used for this either way.
+
+✅ **THE REPLACEMENT IS BETTER THAN THE ORIGINAL, AND NEEDS NO SETTER.** `performUpkeep`
+decodes its work list straight from calldata and never checks that the list came from
+`checkUpkeep`; the owner is always allowlisted. So the driver simply **sends one item**.
+`scripts/testchain_keeper.js` — already the private-chain driver, already signing as
+deployer, already laddering the gas estimate and surviving reverts — gains `ONE_ITEM=1`:
+it sends the FIRST discovered item as its own transaction and leaves the rest for the next
+tick, with fresh `checkUpkeep` state between them. Defect 6 orders discovery to take parked
+work first, so the item priced is usually the dear one.
+
+⚠ **AND IT FIXES A FIGURE THAT WAS ALREADY BEING PRINTED WRONG.** That driver has always
+logged `gasUsed / items.length` as "k/item". **That is a fitted average, not a measurement**
+— an eviction costs 1/18th of a rescue, so the mean of a mixed batch describes nothing that
+happened. It is the number the ~2.6M estimate the gate tests against came from. The line
+now prints `EXACT` under `ONE_ITEM` and `avg` otherwise, and carries the warning inline.
+
+⚠ **THE RE-ENCODE IS THE ONE RISKY LINE AND IT WAS ROUND-TRIP CHECKED** (decode a 3-item
+batch → re-encode the first → decode again → same work type, tier and both addresses). The
+rest of the mode is unexercised until the private chain runs it.
+
+## 27.6 NEXT, IN ORDER — SUPERSEDES 26.5.
 
 1. **RUN `GO_LIVE_RUNBOOK.md` PHASE G.** Owner's machine, private chain, `MATRIX_SIZE` 127,
    hours not days. G.3 and G.6 are the two stop conditions.
