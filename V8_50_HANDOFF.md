@@ -1,7 +1,7 @@
 # V8.50 HANDOFF — the crossing redesign. READ THIS FIRST.
 
 Written 2026-08-16 at the end of the V8.49 private measurement run.
-Sessions 2-27 have appended to it since; read the NEWEST section first — each one
+Sessions 2-28 have appended to it since; read the NEWEST section first — each one
 corrects the ones below it, and says so explicitly where it does.
 Audience: **the next session of Claude, plus the owner. There is no third party — every
 line of this codebase was written by a previous session of Claude and executed by the
@@ -10,7 +10,139 @@ owner-set, and the session that earned it got five things wrong by ignoring what
 
 ---
 
-# ⬛ SESSION 27 STATE — 2026-08-21, LATEST. READ THIS FIRST.
+# ⬛ SESSION 28 STATE — 2026-08-21, LATEST. READ THIS FIRST.
+# ⛔ PHASE G ATTEMPTED AND NOT COMPLETED. FOUR DEPLOYS, FOUR DIFFERENT INFRASTRUCTURE
+# FAILURES, ZERO CONTRACT FAULTS. NOTHING WAS WRITTEN — THE CHAIN DOES NOT EXIST YET.
+
+Driven step-by-step with the owner at the console. **No deploy completed, no addresses file
+was created, `.env` was never modified, and the VPS crontab is restored.** Base Sepolia was
+serving inconsistent state throughout.
+
+## 28.0 ⛔ STATE, SO NOBODY HUNTS FOR SOMETHING THAT ISN'T THERE
+
+* **`deployed_addresses_v8_50_private.json` DOES NOT EXIST.** `deploy_v8.js` writes it at
+  the END; every run died before that. There is no private chain.
+* **FOUR ORPHANED CONTRACT SETS** are on Base Sepolia from the four partial runs (each got
+  as far as CNOVAToken/Treasury/StabilityFund, one reached T1-T3 fully wired plus MatA T4).
+  Harmless, unreferenced, testnet gas only. Do not try to reuse them — no run recorded its
+  addresses.
+* ✅ **THE VPS CRONTAB IS RESTORED** from `/root/crontab.backup.phaseG`; all 11 lines are
+  active again and were verified after restore. **The community was never left unattended
+  by the main engine** — see 28.2.
+* ✅ **`.env` IS UNTOUCHED** (a backup sits at `.env.backup.phaseG`). Everything was driven
+  through PowerShell session variables.
+* ⚠ A throwaway `check_sf.js` was written at the repo root during diagnosis. Delete it.
+
+## 28.1 ⛔⛔ THE FAILURE THAT MATTERS, BECAUSE IT WILL RECUR: A STALE `estimateGas` AFTER A FRESH DEPLOY
+
+Two of the four runs died with an identical, unmistakable signature:
+
+| | attempt 3 | attempt 4 |
+|---|---|---|
+| gas limit sent | **22,414** | **22,056** |
+| gas used | **22,414** | **22,056** |
+| status | 0 | 0 |
+
+**`gasUsed == gasLimit` is out-of-gas, not a revert.** Both happened on the first call to a
+StabilityFund that had *just* been deployed, and ~22k is almost exactly what a transfer to
+an address **with no code** costs. So `eth_estimateGas` was answered from a block that did
+not yet contain the deployment: the node saw an empty address, priced a bare transfer, and
+hardhat sent that as the limit.
+
+⛔ **IT IS NOT ENDPOINT-SPECIFIC.** It happened on `fluent-neat-moon` AND on
+`cosmopolitan-still-fire`, and attempt 4's receipt carried a **`blockHash` of all zeros** —
+a node returning a receipt it cannot place in a block. `deploy_v8.js` already sleeps 8
+seconds before every send precisely for this class of problem; it was not enough today.
+
+✅ **PROOF IT WAS NEVER THE CONTRACTS:** the failing call was replayed with `eth_call`
+against the same deployed StabilityFund and **succeeded** (`result: "0x"`). Deployed
+bytecode was 16,119 bytes — exactly 19.17d's measured size — the selector was present in
+both the on-chain code and the artifact, and `owner()` returned the deployer.
+
+⛔ **THE FIX TO TRY FIRST NEXT TIME — AND IT IS NOT ENDPOINT ROULETTE.** Set
+**`gasMultiplier`** on the `baseSepolia` network in `hardhat.config.js`. A bogus 22k
+estimate multiplied by 4 becomes ~88k, which comfortably covers these small setter calls,
+while genuine estimates for real deploys are already correct and are capped at the block
+limit anyway. **Four endpoints were tried before this occurred to anyone; try the multiplier
+before the fifth.**
+
+## 28.2 ✅ FOUR RUNBOOK CORRECTIONS THAT ARE WORTH MORE THAN THE FAILED DEPLOY
+
+All four were found by checking rather than by failing, and all four are now in
+`GO_LIVE_RUNBOOK.md` PHASE G.
+
+**(a) ⛔ DO NOT DISABLE ALL THE KEEPERS FOR A *PRIVATE* DEPLOY.** PHASE 0.2 says disable
+everything — correct for a COMMUNITY deploy, where the old chain is retired. For a private
+one the community stays live and still needs rescuing. The real risk is only nonce
+collision on the DEPLOYING wallet, so the question is which cron jobs sign with it.
+**Measured: `grep -l DEPLOYER_PRIVATE_KEY *.js` on the VPS.** Of 11 active lines, exactly
+**three** use the deployer key — `copay_rescue`, `fastlane_rescue`, `system_keeper`. The
+main engine `direct_keeper` signs with the KEEPER key and can keep running. Three lines
+were commented, not eleven, and the community kept its engine throughout.
+
+**(b) ⛔ DO NOT REPOINT `.env` FOR A PRIVATE DEPLOY — IT BREAKS OUR OWN DRIVER.** PHASE 0.5
+says edit `ADDRESSES_FILE` in `.env`. **`testchain_keeper.js` REFUSES to run when
+`ADDRESSES_FILE` equals what `.env` names**, on the correct reasoning that an inherited
+value means nobody chose it and `.env` names the LIVE chain by definition. So a private
+deploy must name its file in the SESSION, leaving `.env` alone. ✅ `predeploy_check.js`
+independently agrees — it printed *"ENV OVERRIDE — committed default left alone… Intended
+for a PRIVATE deploy."*
+
+**(c) ⛔⛔ `PARKED_GRACE_SECS=300` IS MANDATORY OR PHASE G MEASURES NOTHING FOR 24 HOURS.**
+`deploy_v8.js` sets `parkedGracePeriod` to **86,400s** by default, and that is the clock
+gating **loan-backed** rescues (`MatrixKeeperLib` picks the clock by `sfShare`; self-funded
+gets the separate 5-minute `selfFundedGracePeriod`). An SF-funded rescue — the exact item
+measurement 1 must price — would not become due for a day, and the run would look like the
+fund simply never lends. Caught from `predeploy_check.js`'s own output line, before deploying.
+
+**(d) ✅ THREE TIERS ARE SCIENTIFICALLY SUFFICIENT — `DEPLOY_TIERS=1,2,3`.** Ten tiers is
+~3x the transactions for no measurement benefit: **matrix SIZE drives per-item gas, not
+tier count**, and discovery's walk across matrices happens in `checkUpkeep`, which is a
+**view** and costs no transaction gas. Fewer transactions is also a materially better
+chance of surviving a flaky node.
+
+## 28.3 ⛔ AN INSTRUMENT LIMITATION FOUND THE HARD WAY, AND IT IS THE TOOL'S OWN LESSON
+
+`check_deploy_rpc.js` reads the endpoint **out of `.env` on disk**. It does NOT see a
+PowerShell session override — so while the session pointed hardhat at one endpoint, the
+checker kept probing and reporting on another, printing `from .env BASE_SEPOLIA_RPC` on
+every run. **It cannot validate an overridden endpoint, and it silently reports on the
+wrong one instead of saying so.** That is precisely the trap its own header describes:
+*"an instrument reporting on a slice that does not contain the thing under test."*
+
+⚠ **AND A SHALLOW HEALTH CHECK IS WORSE THAN NONE.** An endpoint answered
+`eth_blockNumber` 5/5 and was declared healthy; it was returning **HTTP 503 on every state
+call**. `eth_blockNumber` can come from cache. **Probe `eth_getCode` and `eth_call`, never
+block height alone** — which is exactly why `check_deploy_rpc.js` probes all three.
+
+## 28.4 ⚠ THE BILLING CAUSE, AND WHY IT LOOKED LIKE A CODE FAULT
+
+The first wave of failures was an **unpaid QuickNode invoice**. The account degrades in a
+way that reads like a node bug: `eth_blockNumber` keeps answering while `eth_getCode` and
+`eth_call` return 503, and *different* endpoints appear to fail at different moments. Once
+paid, all six endpoints went 20/20 immediately. **A 503 on state calls only, with block
+height still moving, should send the next session to the billing page before the code.**
+
+⚠ Separately and briefly: for a while the run showed the **site's read pool**
+(`frequent-misty-meme`) degraded while the deploy endpoint was healthy — members affected,
+bigfill not. Both recovered. Worth knowing that the two pools fail independently.
+
+## 28.5 NEXT, IN ORDER — SUPERSEDES 27.6.
+
+1. **RETRY PHASE G**, in a fresh session, with: `gasMultiplier` set first (28.1),
+   `DEPLOY_TIERS=1,2,3`, `PARKED_GRACE_SECS=300`, `ADDRESSES_FILE` named in the SESSION
+   only, and only the three deployer-key cron lines paused. ⚠ Check Base Sepolia is
+   behaving before starting — `node scripts\check_deploy_rpc.js 20` on the endpoint `.env`
+   actually names.
+2. **THEN G.1 ONWARD** as written, including `-SelfRescueRate 0.1` (27.5a — without it the
+   fund never lends and measurement 1 has nothing to price).
+3. **BATCH THE `:936` LOG SPLIT** (26.4) into the same RPC session.
+4. **PHASE 2 ONWARDS** — community deploy — only after PHASE G passes.
+5. Backlog unchanged from 27.6.
+
+---
+
+# ⬛ SESSION 27 STATE — 2026-08-21. READ AFTER SESSION 28.
 # ✅ THE DEPLOY GATE IS A RUNBOOK PHASE NOW — `GO_LIVE_RUNBOOK.md` PHASE G — AND THE ONE
 # TOOL IT WAS MISSING IS BUILT AND SELF-VALIDATED.
 
@@ -158,6 +290,8 @@ to G.2 on an empty queue.
 > before anyone follows it onto a fresh deploy.**
 
 ## 27.6 NEXT, IN ORDER — SUPERSEDES 26.5.
+⛔ **SUPERSEDED BY 28.5. PHASE G WAS ATTEMPTED 2026-08-21 AND DID NOT COMPLETE — read 28.0
+for what exists on chain (nothing) and 28.1 for the failure to fix first.**
 
 1. **RUN `GO_LIVE_RUNBOOK.md` PHASE G.** Owner's machine, private chain, `MATRIX_SIZE` 127,
    hours not days. G.3 and G.6 are the two stop conditions.

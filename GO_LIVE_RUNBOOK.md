@@ -108,6 +108,54 @@ V8.44 shipped with all unit tests green and still corrupted a live matrix within
 
 ---
 
+## PHASE G.PRE — FOUR THINGS A PRIVATE DEPLOY DOES DIFFERENTLY FROM A COMMUNITY ONE
+
+⛔ **PHASES 0 AND 1 ARE WRITTEN FOR A COMMUNITY DEPLOY. For a PRIVATE gate chain, four of
+their steps are wrong.** All four were established on 2026-08-21; handoff 28.2 has the
+evidence.
+
+**1. DO NOT DISABLE ALL KEEPERS (contra PHASE 0.2).** The community stays LIVE on the old
+build during a private deploy and still needs rescuing. The only real risk is nonce
+collision on the DEPLOYING wallet, so pause only the cron lines that sign with it:
+```powershell
+ssh -i C:\Users\CryptoTech\.ssh\do_keeper root@167.99.0.250 "cd /root/keeper && grep -l DEPLOYER_PRIVATE_KEY *.js"
+```
+Measured 2026-08-21: of 11 active lines, exactly THREE use the deployer key —
+`copay_rescue`, `fastlane_rescue`, `system_keeper`. **`direct_keeper`, the main engine,
+signs with the KEEPER key and must keep running.** Back the crontab up first
+(`crontab -l > /root/crontab.backup.phaseG`), comment only those three, and **restore it
+the moment the deploy is done** — that is member-facing service.
+
+**2. DO NOT REPOINT `.env` (contra PHASE 0.5).** `testchain_keeper.js` REFUSES to run when
+`ADDRESSES_FILE` matches what `.env` names — an inherited value means nobody chose it, and
+`.env` names the LIVE chain by definition. Name the private file in the SESSION instead:
+```powershell
+$env:ADDRESSES_FILE="deployed_addresses_v8_50_private.json"
+```
+⚠ That variable lives only in that PowerShell window. If it is lost, `deploy_v8.js` falls
+back to `.env` and **overwrites the live addresses record.** Guard every command with it.
+
+**3. `PARKED_GRACE_SECS=300` IS MANDATORY.** The default is 86,400s, and that is the clock
+gating LOAN-BACKED rescues — the exact item measurement 1 prices. Left alone, PHASE G waits
+a day and looks like "the fund never lends".
+
+**4. `DEPLOY_TIERS="1,2,3"`.** Matrix SIZE drives per-item gas, not tier count, and
+discovery's scan is a `checkUpkeep` VIEW that costs no transaction gas. Ten tiers is ~3x the
+transactions for zero measurement benefit — and fewer transactions survive a flaky node.
+
+⛔ **AND BEFORE STARTING, CHECK THE CHAIN IS BEHAVING:** `node scripts\check_deploy_rpc.js 20`.
+⚠ It reads the endpoint from `.env` ON DISK and **cannot see a session override** — it will
+silently report on a different endpoint than hardhat is using. ⚠ Never judge an endpoint by
+`eth_blockNumber` alone; that answers from cache while state calls 503. A 503 on state calls
+with block height still moving means **check the QuickNode invoice before the code.**
+
+⚠ **IF A TRANSACTION FAILS WITH `gasUsed == gasLimit` AT ~22k RIGHT AFTER A CONTRACT
+DEPLOY**, that is out-of-gas from an `estimateGas` answered against a block that did not yet
+contain the deployment — not a revert. Set **`gasMultiplier`** on the `baseSepolia` network
+in `hardhat.config.js` before hunting for a healthier endpoint. Handoff 28.1.
+
+---
+
 ## PHASE G — THE PRIVATE GATE. ⛔ BEFORE PHASE 2, AND IT IS THE ONLY THING BETWEEN A GREEN SUITE AND THE COMMUNITY.
 
 **Private chain, closed list, `MATRIX_SIZE` 127, bigfill to force real rescues. Hours, not
