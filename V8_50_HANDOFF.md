@@ -1,7 +1,7 @@
 # V8.50 HANDOFF — the crossing redesign. READ THIS FIRST.
 
 Written 2026-08-16 at the end of the V8.49 private measurement run.
-Sessions 2-19 have appended to it since; read the NEWEST section first — each one
+Sessions 2-20 have appended to it since; read the NEWEST section first — each one
 corrects the ones below it, and says so explicitly where it does.
 Audience: **the next session of Claude, plus the owner. There is no third party — every
 line of this codebase was written by a previous session of Claude and executed by the
@@ -10,7 +10,227 @@ owner-set, and the session that earned it got five things wrong by ignoring what
 
 ---
 
-# ⬛ SESSION 19 STATE — 2026-08-21, LATEST. READ THIS FIRST.
+# ⬛ SESSION 20 STATE — 2026-08-21, LATEST. READ THIS FIRST.
+# 19.8 ITEM 1 IS CLOSED. `EvictionReserveReleased` HAS NOW EXECUTED — AND IT NEEDED NO DEPLOY.
+
+Test-only session. **Nothing deployed, no chain written to, no contract file touched.**
+One new test file, one comment correction in an existing one. Suite run end to end.
+
+## 20.0 ✅ THE RESULT: THE RELEASE PATH FIRES, AND THE MEMBER KEEPS EVERY CENT
+
+`test/V8_50_EvictionReserve.test.js` — **3 passing.** ER-1 reaches the `:523`
+cascade-refill park, drives `evictParked`, and gets
+**`EvictionReserveReleased(member, $5.00)`** — the first execution of that path
+anywhere, in the suite or on any chain. The reserve moves into `withdrawable`
+(**$0.25 → $5.25**), `crossingReserve` goes to 0, the member is dequeued, and:
+
+| checked | result |
+|---|---|
+| USDC balance of the matrix, before vs after | **unchanged** — a ledger move, not a transfer |
+| USDC balance of the StabilityFund | **unchanged** — no penalty on an involuntary exit |
+| `totalEarned` / `totalWithdrawn` / `cyclesCompleted` | **unchanged** |
+| SF `memberDebtOf` | **unchanged** — eviction is not debt forgiveness |
+| occupancy / rotationCount / matrixPos | **unchanged** |
+
+**18.15's "removal, not confiscation" now holds on the half of the state it could
+never reach.** Its 34 members all came from MatB holding nothing; this is the first
+member evicted while actually holding a reserve.
+
+## 20.1 ⛔ 19.18a WAS RIGHT AND IT IS WORTH RESTATING: NO DEPLOY, AND NO STAGED STATE EITHER
+
+19.18a said this is a unit test, not a deploy. True — and the run went further than
+that. **The `:523` state arises from ORDINARY REGISTRATIONS.** No impersonation, no
+partner swing, no forced rotation: register members one after another into a
+`matrixSize` 7 pair and the entrant at **#20** is parked by the cascade-refill branch
+holding the full 50% carve. The construction that three sessions called a
+private-deploy task is twenty `tr.register()` calls.
+
+The mechanism, read off the run rather than reasoned about: entry lands in a FULL
+MatA → `_cycleOutRoot` compacts the array, frees exactly slot `matrixSize` and sets
+`nextSlot` there → the root crosses into a FULL MatB → MatB cycles ITS root out →
+`handleCycleOut` re-enters that member into the pair's MatA, taking the one free slot
+→ control returns to the outer frame, `_lowestFreeSlot` returns 0, the ENTRANT parks
+at `:527-529`. Then `_distributePayments` at `:539` carves the reserve — **after** the
+park, with `skipReserveCarve` false because a registration is not a crossing. That
+ordering is the whole reason a reserve exists to release, and ER-1 asserts it rather
+than assuming it.
+
+## 20.2 ⛔⛔ FOUR SITES EMIT `MemberParked(m, 0)`. A ZERO SHORTFALL IS NOT THE SIGNATURE.
+
+Line numbers below are **re-read from the current source**, not carried from an
+earlier section — the ones this handoff has been quoting had drifted, and checking
+them is what turned up 20.3's finding.
+
+| site | who is parked | companion event |
+|---|---|---|
+| `:527-529` cascade-refill entry | **THE ENTRANT** | none |
+| `:879-881` `handleCycleOut` catch (MatB) | the ROOT | `CycleOutFailed` |
+| `:906-908` containment pre-check (MatA) | the ROOT | `CycleOutFailed` |
+| `:936-938` `crossingInProgress` deferral | the crossing member | **none** |
+| `:977-979` funding shortfall | the crossing member | (shortfall is non-zero) |
+
+`driveToCascadeRefillPark` therefore requires the parked member to **BE the
+transaction's entrant** and the receipt to carry **no `CycleOutFailed`** — which
+separates `:523` from both root parks by construction rather than by luck, and from
+`:936` because that one parks a root mid-crossing, never the entrant. ⚠ The helper
+THROWS with a named message if it does not find the state inside its bound, rather
+than returning nothing and letting the assertions pass vacuously.
+
+## 20.3 ✅ THE :906 TRAP IS NOW A TEST, NOT A COMMENT — AND THE STALE TABLE HAD A SECOND COPY
+
+19.18b warned that a fixture built against `:906` constructs a ghost, watches it
+dequeue, and passes while proving nothing. **ER-2 pins that**: the same member, same
+$5.00 reserve, given one partner seat, takes the GHOST branch — `GhostDequeued`
+fires, `EvictionReserveReleased` does **not**, and the reserve is untouched. The
+difference between the real test and the worthless one is one partner seat, so it is
+held down by one partner seat.
+
+⛔ **AND THE CORRECTION 19.18b MADE TO THE HANDOFF HAD NOT BEEN MADE TO THE SUITE.**
+The same unreachability table lives inside `V8_48_GhostFloor.test.js`'s GF-V3
+comment, and it still read *":906 … holds a reserve, not a ghost ← still reachable"*
+and *"Only the last two survive"*. The handoff got a banner in session 19; the test
+did not, and the test is what a session building a fixture actually opens. Corrected
+in place, with a pointer to the new file. **A stale assertion does not live in only
+one place just because you found it in one place — 19.18b's own standing lesson,
+applied to the document 19.18b was written from.**
+
+⚠ **ER-2 IS NOT GF-V1 REPEATED.** GF-V1's ghost reaches the queue via `softParkIdle`,
+which releases the reserve on its way in (`:1447-1450`), so its "reserve unchanged"
+assertion compares 0 against 0. ER-2's reserve is a real $5.00.
+
+### 20.3a ⛔⛔ AND THE TABLE HAS ONE MORE PROBLEM: `:906` AND "THE MID-CASCADE DEFERRAL" ARE TWO DIFFERENT SITES
+
+19.18b's row reads **`:906` mid-cascade deferral**. Those are not the same thing:
+
+* **`:906` is the containment pre-check** in `_cycleOutRoot`'s MatA branch — it parks
+  only inside `if (dest != 0 && dest.isActiveInMatrix(root))`. 19.18b's *reasoning*
+  about that code is correct and stands: it is a ghost by construction, not a door.
+* **The mid-cascade deferral is `:936`**, in `_crossToPartner`, guarded by
+  `self.crossingInProgress` — a different function, a different condition, and
+  crucially **no ghost test in it at all**. The member is parked while crossing, so
+  they are seated in neither half and their reserve has not been spent yet. On its
+  face that is a door.
+
+**One row was carrying the name of one site and the analysis of another.** Every
+session that read that row — including this one, until the line numbers were
+re-checked — inherited both.
+
+⚠ **WHETHER `:936` IS ACTUALLY REACHABLE IS NOT ESTABLISHED, AND THIS SESSION DOES
+NOT CLAIM IT EITHER WAY.** Measured: a probe classifying every zero-shortfall park
+across **45 registrations at `matrixSize` 7 saw `:936` fire ZERO times** while
+correctly catching two `:523` parks in the same run — so the classifier is not blind,
+but it has never seen a `:936` positive and by the standing rule its zero is not yet
+worth much.
+
+There is a structural reason to expect zero in THIS fixture, offered as an
+explanation and **marked UNVERIFIED**: `:936` needs `_crossToPartner(MatA, ·)` while
+MatA's own `crossingInProgress` is already true. The only cascade a one-pair,
+one-tier fixture produces is MatA crossing → full MatB cycles out → re-entry into
+MatA — and at that instant MatA has just freed a slot, so the re-entrant is seated
+and no nested `_cycleOutRoot` runs. Firing `:936` needs MatA to be full DURING the
+nested re-entry, which needs two members returning to MatA in one cascade or a second
+pair routing back. **That is a hypothesis about why the count is zero, not a proof
+that the count must be zero.** It goes on the open list (20.8 item 4), not into a
+conclusion.
+
+⛔ **SO: DO NOT WRITE "THERE IS EXACTLY ONE DOOR" ANYWHERE.** `:523` is a door and is
+now exercised. `:906` is a ghost and is now pinned as one. `:936` is unclassified.
+
+## 20.4 ✅ THIS ALSO CLOSES RISK 2 OF THE V8.50 PRIVATE DEPLOY GATE
+
+The deploy gate lists four risks. Risk 2 is *"defect 9's code path has NO test
+coverage — stated in the contract at `MatrixLogicLib:543`. No fixture builds a
+cascade that refills every seat."* **That cascade IS this fixture.** One construction
+retires 19.8 item 1 and deploy-gate risk 2 together. Risks 1, 3 and 4 are gas and
+population questions and still need the private chain.
+
+## 20.5 ⛔ A DOC DRIFT FOUND WHILE READING THE GATE — NOT FIXED, FLAGGED
+
+The deploy-gate section still reads *"If (1) lands above 3.5M, `minGasPerItem` is
+wrong and must move BEFORE the community deploy"*, and its table's "against" column
+says `minGasPerItem = 3.5M`. **Source is `MatrixKeeper.sol:290 → 5_000_000`**, changed
+by the owner decision of 2026-08-18 and recorded in this file two sections below the
+stale text. The threshold sentence is measuring against a number that no longer
+exists. Left as-is deliberately — it is the deploy gate's own text and whoever runs
+the gate should re-read it — but **do not carry 3.5M into that run.**
+
+## 20.6 ⚠ WHAT THIS SESSION DID NOT MEASURE — STATED SO NOBODY QUOTES IT WRONGLY
+
+* **A UNIT TEST PROVES THE MECHANISM, NOT THE POPULATION** (19.18a's own caveat, and
+  14.3 before it). ER-1 answers "if a MatA cascade-refill eviction happens, does the
+  member get their reserve back" completely. It says **nothing** about how often that
+  happens live, and 18.15's 0-in-1,803 still stands as the frequency.
+* **`matrixSize` 7, not 127.** The cascade's SHAPE is what is pinned; no gas figure
+  from this run is quotable and none is quoted.
+* **NO GAS MEASUREMENT AT ALL.** The fixture caps every entry at Hardhat's 2^24 and
+  was not built to price anything.
+
+## 20.7 ⚠ THE BASIS FOR THE SUITE NUMBER, BECAUSE IT IS NOT THE OWNER'S MACHINE
+
+**SUITE: 641 passing / 7 pending / 0 failing** (`suite_session20.txt`). Exactly
+19.17d's 638 plus the three new tests, so nothing existing moved.
+
+⚠ **RUN IN A LINUX CONTAINER ON `solcjs`, NOT ON THE OWNER'S NATIVE `solc`.** The
+container's egress allows npm but not `binaries.soliditylang.org`, so the compiler
+cache was seeded from the npm `solc@0.8.26` package and Hardhat fell through to its
+WASM path. Same compiler version, same settings from `hardhat.config.js`. Bytecode
+from solcjs and native solc of one version is identical, and the suite result landing
+exactly on 638+3 is consistent with that — **but it is an inference, not a check.**
+Nobody diffed the artifacts. **If a size figure is ever needed, run `scripts/sizes.js`
+on the owner's machine; do not quote one from a container run.**
+
+## 20.9 ⛔ TWO ENVIRONMENT TRAPS FOR ANY SESSION WORKING THROUGH THE DEVICE BRIDGE
+
+Neither is a code finding; both cost real time and both will recur.
+
+**(a) A COMMIT FROM THE DEVICE VM LEAVES A STALE `.git/HEAD.lock`, AND THE NEXT
+COMMIT FAILS.** The VM cannot delete files, so git's own cleanup fails with
+`unable to unlink '.git/HEAD.lock': Operation not permitted` — a WARNING, not an
+error, so the commit itself SUCCEEDS and the failure surfaces one commit later as
+`Unable to create '.git/HEAD.lock': File exists`. The same happens to
+`.git/objects/*/tmp_obj_*`, which are harmless. **Fix: `mv` the lock aside — this
+session put them in `.git/_stale_locks/` — and do not conclude the repo is wedged.**
+Same family as every other "the device VM cannot delete" workaround already in
+`.gitignore`.
+
+**(b) THE SUITE CANNOT COMPILE IN A CLOUD CONTAINER WITHOUT SEEDING THE COMPILER.**
+Egress allows npm but not `binaries.soliditylang.org`, so `hardhat compile` hangs and
+then fails on the compiler download. Working recipe, in case it is wanted again:
+`npm pack solc@0.8.26`, then write its `soljson.js` into
+`~/.cache/hardhat-nodejs/compilers-v2/wasm/` with a hand-built `list.json` carrying
+that file's keccak256, plus the same entry under `linux-amd64/` with a
+`.does.not.work` marker so Hardhat falls through to the WASM path. **Read 20.7 before
+quoting any number from such a run** — it is a different compiler backend from the
+owner's.
+
+## 20.8 NEXT, IN ORDER — SUPERSEDES 19.8. ⚠ ITEM 1 IS DONE.
+
+1. **LENGTHEN THE A/B TAIL** until `stillParkedAtEnd` approaches zero, so the loan
+   counts stop being censored (18.19). Cheap, and it makes 18.6 quotable. **Do this
+   BEFORE item 2** — a preset sweep run on a censoring harness inherits the artefact.
+2. **PRICE THE CLAWBACK PRESETS** on the cleaned harness (19.17b). Presets 0/1/3
+   shipped with no evidence and are now one DAO vote from live; only preset 2 has any.
+   One dial, three seeds — the shape that priced the base ceiling.
+3. **SPLIT 14.1 BY TIER** and cap time-at-risk (14.4). ⚠ V8.48 measurement; 18.0 applies.
+4. **CLASSIFY `:936`** (20.3a). Zero firings in 45 registrations at size 7, and a
+   marked-UNVERIFIED reason to expect zero in a one-pair fixture. Either reach it —
+   a two-pair or two-tier cascade where MatA is full during a nested re-entry — or
+   establish that `crossingInProgress` cannot be true on a matrix entering its own
+   `_cycleOutRoot`, which would close it by argument. **Cheap, and until it is done
+   nobody may write "exactly one door".**
+5. **THE PRIVATE V8.50 DEPLOY GATE** — risks 1, 3 and 4. Risk 2 is closed by 20.4.
+   Read 20.5 before running it.
+6. **POST-MIGRATION, NOT BEFORE:** GO_LIVE_RUNBOOK PHASE 7b — pre-flight, check the
+   live histogram against 19.1, then arm at 3000. Then re-run `diag_referral_threshold.js`
+   section 4 + the loan book against live V8.50 (19.6).
+7. Backlog, untouched throughout: the 5 unexplained cycle-outs; `V8_50_ReferralBreakeven.test.js`
+   v4 counts the dead event; stale-nonce retry backoff; @bevmawire's Dashboard retry;
+   `maxItemsPerUpkeep` live 15 vs 20 in source; member-callable re-entry. Plus the three
+   orphan session-13 fragments 19.18c flagged, still untracked.
+
+---
+
+# ⬛ SESSION 19 STATE — 2026-08-21. READ AFTER SESSION 20.
 # 18.21 ITEMS 1 AND 3 CLOSED — THE GATE IS IN THE TREE, INERT. PLUS THE ITEM-43 DAO SWEEP (19.17).
 
 Measurement only. **Nothing deployed, no chain written to, no contract file touched.** One
