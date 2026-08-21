@@ -214,6 +214,26 @@ contract TierRouter is Ownable2Step {
 
     // ─── Member registry ──────────────────────────────────────────────────────
     mapping(address => address) public memberReferrer;
+
+    /// @notice V8.50: how many members this address has directly sponsored.
+    ///         Written ONLY by _bookkeepJoin, which is the only place
+    ///         memberReferrer is assigned and which both join paths (register and
+    ///         registerWithCoupon) funnel through. Both callers revert first on
+    ///         globalJoined[msg.sender], so this increments at most once per member
+    ///         and can never double-count a re-entry.
+    ///
+    ///         WHY IT EXISTS: StabilityFund.loanHeadroom lowers the borrowing
+    ///         ceiling for members who have sponsored nobody (baseAdvanceBps).
+    ///         Nothing else reads it. Measured basis for the policy: handoff 18.4,
+    ///         18.16 and 19.2.
+    ///
+    ///         ⛔ IT DOES NOT BACKFILL. This is a fresh mapping on a fresh deploy,
+    ///         so every migrating member reads 0 until people register BENEATH them
+    ///         on this deployment. That is why the fund ships with the gate inert
+    ///         (StabilityFund.baseAdvanceBps = 10_000) and it is switched on with
+    ///         setBaseAdvanceBps once the live histogram has been re-checked —
+    ///         see the deploy note on baseAdvanceBps.
+    mapping(address => uint32)  public directCount;
     mapping(address => uint8)   public memberHighestTier;
     mapping(address => bool)    public globalJoined;
     /// @notice V8.32 Task #59: admin grants a free re-entry to a wrongfully reclaimed member.
@@ -760,6 +780,10 @@ contract TierRouter is Ownable2Step {
     ///      memberHighestTier write (see original note in git history).
     function _bookkeepJoin(address resolved) internal {
         memberReferrer[msg.sender]    = resolved;
+        // V8.50: the sponsorship counter the loan gate reads. _resolveRef already
+        // collapsed an unknown/absent referrer to address(0), so this credits only a
+        // real sponsor and never address(0).
+        if (resolved != address(0)) directCount[resolved] += 1;
         globalJoined[msg.sender]      = true;
         _checkTierFirstEntry(msg.sender, 1);
         memberHighestTier[msg.sender] = 1;

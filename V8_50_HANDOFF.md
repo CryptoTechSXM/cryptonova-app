@@ -1,7 +1,7 @@
 # V8.50 HANDOFF — the crossing redesign. READ THIS FIRST.
 
 Written 2026-08-16 at the end of the V8.49 private measurement run.
-Sessions 2-18 have appended to it since; read the NEWEST section first — each one
+Sessions 2-19 have appended to it since; read the NEWEST section first — each one
 corrects the ones below it, and says so explicitly where it does.
 Audience: **the next session of Claude, plus the owner. There is no third party — every
 line of this codebase was written by a previous session of Claude and executed by the
@@ -10,7 +10,315 @@ owner-set, and the session that earned it got five things wrong by ignoring what
 
 ---
 
-# ⬛ SESSION 18 STATE — 2026-08-20, LATEST. READ THIS FIRST.
+# ⬛ SESSION 19 STATE — 2026-08-21, LATEST. READ THIS FIRST.
+# 18.21 ITEM 1 IS CLOSED (3000 bps STANDS) AND ITEM 3 IS BUILT — THE GATE IS IN THE TREE, INERT.
+
+Measurement only. **Nothing deployed, no chain written to, no contract file touched.** One
+script extended — `scripts/diag_referral_threshold.js` gains a section 4; tables 1-3 are
+byte-for-byte the code that produced session 13's numbers and were not edited. Run once
+against **live V8.48, blocks 45430468..45756873, every block range read cleanly**.
+
+## 19.0 ⛔⛔ THE VERDICT: BASE CEILING STAYS AT 3000 bps. 18.18 IS CLOSED, NOT RE-OPENED.
+
+18.18 named exactly one thing that could overturn the ceiling: *"the live `directCount`
+distribution turning out so much thinner than the fixture's that $3.00 would refuse a large
+share of real members rather than six per 288."* **It is thinner, but not so much thinner** —
+and the way it is thinner is the argument FOR the gate rather than against it. Details below;
+the decision does not move. What WOULD move it now is a different measurement entirely, and it
+cannot be taken before V8.50 is live (19.6).
+
+## 19.1 THE LIVE DISTRIBUTION — MEASURED, EXACT, AND THE FIRST TIME IT HAS BEEN COUNTED
+
+406 registrations, 406 distinct members, **405 referrer edges** (everyone has a sponsor), 106
+members with at least one direct. Zero edges point outside the member set, so nothing is being
+silently dropped at the root.
+
+| lifetime directs at head | ALL | organic | bigfill | leader |
+|---|---|---|---|---|
+| 0 | 300 | **87** | 212 | 1 |
+| 1 | 37 | 36 | 0 | 1 |
+| 2 | 19 | 19 | 0 | 0 |
+| 3 | 3 | 3 | 0 | 0 |
+| 4 | 26 | 5 | 0 | 21 |
+| 5-9 | 13 | 5 | 0 | 8 |
+| 10+ | 8 | 0 | 0 | 8 |
+| **zero-direct share** | 73.9% | **56.1%** | 100.0% | 2.6% |
+
+⚠ **ORGANIC IS THE ONLY COLUMN THIS DECISION RESTS ON.** bigfill is 212 scripts that have
+sponsored nobody by construction — 14.6's standing reason its member-specific columns are not
+facts about members. The leader column is the roster, and it is the mirror image (2.6% zero).
+
+## 19.2 ⛔⛔ THE FINDING: THE POPULATION IS BARELY THINNER. THE BORROWERS ARE MUCH THINNER.
+
+Two ratios, and they disagree — which is the whole result:
+
+| | live organic | A/B fixture, pooled 3 seeds | ratio |
+|---|---|---|---|
+| zero-direct share of **MEMBERS** (lifetime) | 56.1% (87/155) | 49.7% (429/864) | **1.13x** |
+| zero-direct share of **ADVANCES** (at that block) | **59.2% (183/309)** | 30.6% (26/85) | **1.94x** |
+
+The fixture side is read off `ab_sequence_s{1,2,3}.json` by the script itself, not transcribed
+— a regenerated sequence file cannot silently desynchronise the comparison.
+
+**In the fixture, zero-direct members are UNDER-represented among borrowers (30.6% of advances
+from 49.7% of members). On live they are OVER-represented (59.2% of advances from 56.1% of
+members).** The gate's target population is not rarer on live; it borrows nearly twice as
+often relative to its size.
+
+⛔ **AND THAT IS THE CASE FOR THE GATE, NOT AGAINST IT.** Rule 1's "not at the expense of the
+ecosystem" names precisely the member who has sponsored nobody and keeps drawing advances. The
+live data says that member is more of the loan book than any fixture suggested, not less.
+
+## 19.3 THE PROJECTION, AND EVERY BOUND ON IT
+
+⚠ **PROJECTION, LABELLED AS ONE (7a rule 6). NOT A RUN.** Holding 18.4's V8.50 conditional
+fixed — of 26 zero-sponsor advances, 14 exceeded $3.00, so P(refused | zero directs) = 53.8% —
+and substituting the live zero-direct share of advances:
+
+| | fixture, measured | live, projected |
+|---|---|---|
+| advances refused at base 3000 | 16.5% | **31.9%** |
+| FLOOR refusals per 288 members per run | 6 | **~11.6** |
+
+**Roughly double. Not an order of magnitude, and ~4% of members per run.** Three bounds sit on
+top of it, all of them in the same direction:
+
+* ⛔ **THE SHORTFALL HALF IS A FIXTURE QUANTITY AND CANNOT BE MEASURED ON THIS CHAIN.** There
+  is no live V8.50 (18.10), and live V8.48 advance sizes are the wrong basis in BOTH directions
+  at once — the crossing buffer inflates them (13.11) while V8.50 shortfalls are bigger again
+  (18.3). The projection assumes live V8.50 shortfalls look like the fixture's.
+* ✅ **THE ONE CROSS-CHECK AVAILABLE DOES NOT CONTRADICT IT.** On live V8.48, **85 of 183**
+  zero-direct organic advances (**46.4%**) already exceed 3000 bps of the borrower's own tier
+  fee — median 2,650 bps, max 8,600. Wrong build, so it confirms nothing; but 46.4% and 53.8%
+  are the same neighbourhood, which is more than the projection was entitled to expect.
+* ⛔ **EVERY REFUSAL FIGURE IS A NO-GRACE UPPER BOUND** (18.17). Live `evictionGracePeriod` is
+  SEVEN DAYS. A refused member is PARKED, with the badge session 10 made visible, and inviting
+  ONE person inside that week makes them eligible again. Nothing here models that, and the
+  refused population is the one most able to act (18.16: they hold $5.58-$6.82 and owe $0.00).
+
+## 19.4 ✅ THE STRONGEST PRO-GATE NUMBER OF THE WHOLE INVESTIGATION CAME OUT OF THE SAME RUN
+
+Table 2, live organic, **directs the member ALREADY HELD at the block the advance was made** —
+the figure a contract could enforce, with no lifetime hindsight in it:
+
+| directs @ loan | loans | lent | members | fully repaid | still owing |
+|---|---|---|---|---|---|
+| 0 | **183** | $595.59 | 75 | **52.0%** | 36 |
+| 1 | 83 | $269.64 | 30 | 60.0% | 12 |
+| 2 | 33 | $108.55 | 17 | **94.1%** | 1 |
+| 3 | 6 | $19.46 | 3 | 100.0% | 0 |
+| 4 | 3 | $10.13 | 2 | 100.0% | 0 |
+| 5+ | 1 | $1.53 | 1 | 100.0% | 0 |
+
+**59% of organic advances go to the class that repays half the time.** The discriminator is
+real and it is enforceable. ⚠ Selection, as ever: directs may mark an engaged member rather
+than cause solvency. For a GATE that is sufficient — a filter only has to predict — and no
+causal claim is made.
+
+## 19.5 ⛔⛔ 13.11's "4.5x" DOES NOT REPRODUCE. THE CLEAN SIDE IS STABLE; THE OWING SIDE MOVED.
+
+13.11 (2026-08-20) measured, among organic members who borrowed: **26 still owing, 3 (11.5%)
+had sponsored anyone; 88 clean, 46 (52.3%)** — and concluded *"a member who has sponsored
+someone is 4.5x more likely to have cleared their debt."* Derived from tonight's table 1, one
+day later:
+
+| | 13.11, 2026-08-20 | tonight, 2026-08-21 |
+|---|---|---|
+| clean borrowers | 88 | **75** |
+| of those, had sponsored anyone | 46 = **52.3%** | 39 = **52.0%** |
+| still owing | 26 | **49** |
+| of those, had sponsored anyone | 3 = **11.5%** | 13 = **26.5%** |
+| implied advantage | **4.5x** | **2.0x** |
+
+**The clean side reproduced to a third of a percentage point across 36% population growth. The
+owing side nearly tripled.** The arithmetic hangs together — borrowers 114 → 124, clean 88 →
+75, owing 26 → 49: thirteen members who were clean took a new advance and are owing again, and
+ten new borrowers all landed owing. Nothing is inconsistent; **the point estimate was just
+never stable.**
+
+> ⛔ **STANDING CORRECTION: DO NOT REQUOTE "4.5x". Quote the direction, not the multiple.**
+> This is 7a rule 5 (one sample is not a measurement) catching a figure that had already been
+> carried into three sections. The DIRECTION survives on a better instrument — 19.4's
+> at-loan-time table, which has no hindsight in it and is not a single ratio — so nothing that
+> was built on the direction falls. ⚠ WHY the owing side moved is NOT measured and is not
+> guessed at here.
+
+## 19.6 ⛔ WHAT WOULD MOVE 3000 bps NOW — AND IT IS NOT AVAILABLE YET
+
+The directs question is answered and should not be re-asked. The only live quantity that could
+still move the ceiling is **the V8.50 shortfall distribution with real members**, which needs
+V8.50 LIVE and weeks of accrual (18.0's reasoning, unchanged). Two consequences:
+
+* **THE CEILING SHIPS WITH A SETTER.** Already in 18.21 item 3's scope; this is the reason it
+  is not optional. `baseAdvanceBps` must be a DAO/owner parameter so the number can be re-read
+  against live V8.50 without a redeploy.
+* **PUT THE RE-READ IN THE POST-MIGRATION LIST.** Re-run this script's section 4 plus the loan
+  book a few weeks after migration; if live V8.50 zero-direct shortfalls cluster below $3.00
+  the ceiling is loose and can come down, and if they cluster above it the gate is refusing
+  more than 4% and the owner should see that number before it becomes routine.
+
+## 19.7 ⚠ WHAT THIS SESSION DID NOT MEASURE — STATED SO NOBODY QUOTES IT WRONGLY
+
+* **NO LIVE V8.50 ANYTHING.** There is no such chain. Every V8.50 figure quoted here is the
+  A/B fixture's, and every one says so on its own line.
+* **NO BEHAVIOURAL RESPONSE, ON EITHER SIDE.** Neither the fixture nor this chain contains a
+  member who recruited *because* they were refused — the gate has never been live.
+* **TIME-IN-SYSTEM IS NOT CONTROLLED.** Some of the 87 zero-direct organic members registered
+  recently and have not had time to sponsor anyone. The zero-direct share is therefore an upper
+  bound on the permanently-sponsorless population, not a measure of it.
+* **THE LOAN-SIZE COLUMN IS THE WRONG BUILD** and is printed with that warning attached, twice.
+
+## 19.8 NEXT, IN ORDER — SUPERSEDES 18.21. ⚠ ITEMS 1 AND 3 OF 18.21 ARE BOTH DONE.
+
+1. **EXERCISE `EvictionReserveReleased` DELIBERATELY** (18.15). Every evicted member ever
+   measured came from MatB with a zero reserve, so the release path has still never run.
+   Needs a MatA eviction, which the private V8.50 deploy can stage with
+   `evictionGracePeriod` in minutes (session 9's recipe). **This is the last untested path
+   in the eviction route the gate now feeds.**
+2. **LENGTHEN THE A/B TAIL** until `stillParkedAtEnd` approaches zero, so the loan counts
+   stop being censored (18.19). Cheap, and it makes 18.6 quotable.
+3. **SPLIT 14.1 BY TIER** and cap time-at-risk (14.4). ⚠ V8.48 measurement; 18.0 applies.
+4. **THE OWNER'S ONE QUESTION: a DAO parameter id for `baseAdvanceBps`?** (19.15) Ask, do
+   not build.
+5. **POST-MIGRATION, NOT BEFORE:** run GO_LIVE_RUNBOOK PHASE 7b — pre-flight, check the live
+   histogram against 19.1, then arm at 3000. Then re-run section 4 + the loan book against
+   live V8.50 (19.6).
+6. Backlog, untouched throughout: the 5 unexplained cycle-outs (still exactly 5, organic);
+   `V8_50_ReferralBreakeven.test.js` v4 counts the dead event; stale-nonce retry backoff;
+   @bevmawire's Dashboard retry; `maxItemsPerUpkeep` live 15 vs 20 in source; member-callable
+   re-entry.
+
+## 19.9 TOOL — `scripts/diag_referral_threshold.js` SECTION 4, read-only, additive
+
+4A the live lifetime histogram by cohort · 4B directs at the moment of the advance · 4C the
+fixture's tree read off `ab_sequence_s*.json` rather than transcribed · 4D the crossing, with
+the live half and the fixture half labelled separately on every line. Guards: it ABORTS if no
+member has any direct (the address-case fault that would look like the strongest possible
+finding and would never throw — the loan book's `directsSanity` trap, 18.13), it reports how
+many referrer edges point outside the member set, and it SKIPS the bps column rather than
+guessing if `tierEntryFees` is unreadable. `AB_SEQ_FILES=` overrides the fixture file list.
+
+## 19.10 ✅ THE GATE IS BUILT. 18.21 ITEM 3 IS DONE — CONTRACTS, TESTS, SUITE, RUNBOOK.
+
+Still **nothing deployed and no chain written to.** What is in the tree on `v8.1`:
+
+* **`TierRouter.directCount`** — `mapping(address => uint32) public`, incremented in
+  `_bookkeepJoin` when the resolved referrer is non-zero. That is the ONLY write.
+* **`StabilityFund.baseAdvanceBps`** (default **10_000**), `BaseAdvanceBpsSet`,
+  `setBaseAdvanceBps` (`onlyOwnerOrGovernance`, capped at 10_000), the `directCount` entry
+  added to `ITierRouterTierInfo`, and the gate itself inside **`loanHeadroom`** — 17.4's
+  placement, unchanged, because that is the only place the ceiling arithmetic lives.
+* **`test/V8_50_GateBase.test.js`** — 11 tests, all passing.
+* **`test/V8_50_GateCost.test.js`** — UN-SKIPPED and rewritten (19.13).
+* **`scripts/set_base_advance.js`** and **GO_LIVE_RUNBOOK PHASE 7b** (19.11).
+
+## 19.11 ⛔⛔ TWO DESIGN CALLS THE SOURCE FORCED, NEITHER OF WHICH WAS IN 18.21 ITEM 3
+
+**(a) `directCount` DOES NOT BACKFILL, SO THE GATE SHIPS INERT AT 10_000.**
+These contracts carry no proxy machinery — no `Upgradeable`, no `initializer`, no `__gap`,
+no `_authorizeUpgrade` in either file. **V8.50 is a FRESH DEPLOY**, `directCount` is a fresh
+mapping, and `memberReferrer` is written in exactly one place that only a real registration
+reaches. So on migration day **every member reads 0 directs, including a member who
+sponsored twenty on V8.48**, until their downline re-registers on the new chain. A 3000
+default would have refused them **for an empty counter rather than for a policy**, and
+18.14 routes a refused rescue to eviction.
+
+The fix costs no bytes: ship at 10_000 (inert), arm with the setter afterwards. That also
+turns switching the gate on into a **measured event with a pre-flight** instead of a deploy
+side-effect. `scripts/set_base_advance.js` is read-only unless `ARM=1`, and before it will
+send anything it **rebuilds the expected `directCount` for every sponsor off-chain from the
+`MemberRegistered` log, reads the on-chain mapping for each, and aborts on any
+disagreement** — including the reverse check that non-sponsors read exactly 0 and that
+`address(0)` holds none. Second instrument, same shape as the loan book reconciling against
+`raw.loanVolume`. **A gate armed against a broken counter refuses real members silently,
+which is the worst failure this system has available.** GO_LIVE_RUNBOOK **PHASE 7b** carries
+the pre-flight, the arm, what to watch afterwards, and the one-call back-out.
+
+**(b) THE READ SHORT-CIRCUITS AND FAILS OPEN.** `if (baseAdvanceBps < bps && tierRouter !=
+address(0))` puts the dial check FIRST, so an inert gate never touches the router at all —
+measured at exactly zero added gas (19.13, GATE-2). And the read sits in `try/catch`: if
+the SF is ever wired to an older router with no `directCount`, the ordinary floor stays in
+force. **`loanHeadroom` reverting would take a whole keeper batch with it** (the reason
+IF-8 exists next door), so a gate that cannot read its counter must refuse nobody.
+
+⚠ **BOTH CHANGES MEAN THE SHIPPED FORM IS NOT SESSION 17's FIXTURE**, which is why 19.13
+re-measured rather than carrying 17.1 forward. `scripts/fixture_gate_apply.js` is now
+SUPERSEDED and says so in its own header; it is kept because it is what 17.1, 18.4 and 18.6
+were measured on.
+
+## 19.12 ⛔ A STALE NOTE CORRECTED: ONE WRITE SITE, NOT TWO
+
+`diag_referral_threshold.js` has said since session 13 that `memberReferrer` is assigned at
+"TierRouter:762 register, :813 coupon path", and 13.11 and 16.5 both repeated it. **:813 is
+a comment line.** V8.44's size diet funnelled BOTH join paths through `_bookkeepJoin`, so
+there is exactly one assignment, and both callers (`_register` and `registerWithCoupon`)
+revert on `globalJoined[msg.sender]` before reaching it. The counter therefore increments
+**at most once per member and cannot double-count a re-entry** — checked in the source, and
+pinned by GB-12. The single-anchor edit is complete, not a half-fix.
+
+## 19.13 MEASURED THIS SESSION — SIZE, SUITE, GAS
+
+**SIZE**, run with the gate in the tree: **TierRouter 24,046 / 530 spare**, StabilityFund
+**15,513 / 9,063 spare**, EIP-170 limit 24,576. Identical headroom to 17.1's fixture on
+TierRouter and 3 bytes tighter on the SF — the `try/catch` and short-circuit cost about
+three bytes. ⚠ The gated figures were RUN; the "+136 / +450 versus no gate" deltas are
+derived from 17.1's recorded baseline, which was NOT re-run today.
+
+**SUITE: 629 passing / 8 pending / 0 failing.** Exactly session 17's 618 plus the 11 new
+ones, so nothing existing moved. Transcript in `suite_session19.txt`. ⚠ The 618 baseline
+was itself not re-verified in session 18; the arithmetic landing exactly is what makes it
+trustworthy here.
+
+**GAS — and it DISAGREES with 17.1, in the cheap direction.** The armed read costs
+**5,634 cold / 1,134 warm**, against the fixture's 7,720 / 1,220.
+
+| | fixture (17.1) | shipped (19) | gap |
+|---|---|---|---|
+| cold | 7,720 | **5,634** | 2,086 |
+| warm | 1,220 | **1,134** | 86 |
+
+A cold SLOAD is 2,100 and a warm one is 100. **Both gaps land within opcode noise of
+exactly one SLOAD at the right temperature**, and there is a structural reason for exactly
+one: the fixture put the `baseAdvanceBps` check INSIDE the router branch, so its plain arm
+short-circuited on `tierRouter` and never loaded `baseAdvanceBps` — charging that SLOAD to
+the delta. The shipped form loads it first in both arms, so it cancels.
+⚠ **THAT READING IS AN INFERENCE FROM TWO ARITHMETIC AGREEMENTS, NOT A RUN — UNVERIFIED.**
+Nobody re-applied session 17's ordering to confirm it. Two independent temperatures telling
+the same single-SLOAD story is much stronger than one, and the decision does not depend on
+it either way, but it must not be written up as measured.
+
+✅ **AND THE ONE THAT PINS THE INERT DEFAULT: GATE-2 reads a delta of EXACTLY ZERO**, cold
+and warm (12,884 / 2,373 on both arms). Shipping the gate switched off is free, not merely
+cheap. That is the whole justification for PHASE 7b.
+
+⛔ **DO NOT CARRY 18.5's +0.41% FORWARD AS "THE GATE'S COST".** It priced the fixture's
+ALWAYS-READ form. The shipped form reads only when armed and not at all at the default, so
+that figure is an upper bound on an armed run and simply does not describe an unarmed one.
+
+## 19.14 TOOLS AND DOCS TOUCHED — all additive, none rebuilt
+
+* `scripts/diag_referral_threshold.js` — section 4 (19.9).
+* `scripts/set_base_advance.js` — NEW. Read-only pre-flight + reconciliation; `ARM=1` to send.
+* `GO_LIVE_RUNBOOK.md` — NEW **PHASE 7b**, after bigfill, marked NOT on go-live day.
+* `test_ab/world.js` — `AB_GATE_BPS`'s comment and error message rewritten: the guard still
+  works (it tests for the setter, which now exists), but it pointed at a fixture that is
+  gone. ⚠ It also now records that **an unswept replay measures the ungated world by
+  DEFAULT rather than by ABSENCE** — say which one a result rests on.
+* `scripts/fixture_gate_apply.js` — banner: SUPERSEDED, do not run, kept as the record of
+  what 17.1/18.4/18.6 were measured on.
+
+## 19.15 ⛔ ONE QUESTION THAT IS GENUINELY THE OWNER'S — NOT DECIDED HERE
+
+`setBaseAdvanceBps` is `onlyOwnerOrGovernance`, so the owner can always move it. But
+**`baseAdvanceBps` has no V8Governance parameter id**, which means the DAO cannot PROPOSE a
+change to it the way it can for `insolvencyFloorBps` (param 59). Adding one is cheap —
+V8Governance has 11,752 bytes of headroom — but whether the DAO should be able to vote on
+the lending gate at all is a governance choice, not a technical one. **Not designed, not
+promised. Ask before building.**
+
+---
+
+# ⬛ SESSION 18 STATE — 2026-08-20. READ AFTER SESSION 19.
 # 17.7 ITEM 1 IS ANSWERED (NOT AS ASKED), AND THE OWNER'S GATE DECISION IS TAKEN — 18.14, 18.18.
 
 Measurement only. **Nothing deployed, no chain written to.** The session-17 gate fixture was

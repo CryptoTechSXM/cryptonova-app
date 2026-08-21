@@ -135,15 +135,22 @@ async function deployWorld(hre, size) {
 
   // ⛔ AB_GATE_BPS — THE SPONSORSHIP GATE'S BASE CEILING, AS A SWEEP DIAL (session 18).
   //
-  // Only meaningful with `scripts/fixture_gate_apply.js` applied: that fixture adds
-  // `baseAdvanceBps` + its setter to the SF and the directCount branch to `loanHeadroom`.
-  // Setting it HERE rather than re-applying the fixture per value means ONE compile serves
-  // the whole sweep, so every row of the sweep runs identical bytecode and a difference
-  // between rows can only be the dial.
+  // ⛔ SESSION 19 (2026-08-21): THE GATE IS NOW IN THE TREE. `StabilityFund.baseAdvanceBps`,
+  // its setter and the directCount branch in `loanHeadroom` all ship, so this no longer
+  // needs `scripts/fixture_gate_apply.js` — that script is SUPERSEDED and its anchors no
+  // longer match the source. Setting the dial HERE rather than recompiling per value is
+  // still right: ONE compile serves the whole sweep, so every row runs identical bytecode
+  // and a difference between rows can only be the dial.
+  //
+  // ⚠ AND THE SHIPPED DEFAULT IS 10_000 — INERT, AND IT DOES NOT EVEN READ THE ROUTER
+  //   (the short-circuit is `baseAdvanceBps < insolvencyFloorBps`). A replay that does not
+  //   set AB_GATE_BPS therefore measures the UNGATED world, which is the correct baseline —
+  //   but that is now a DEFAULT rather than an ABSENCE. Say which one a result rests on.
   //
   // ⛔ THIS ONE IS DELIBERATELY *NOT* `optional`. Everything else here tolerates a missing
   //    setter because the two arms are different builds and one may genuinely lack a dial.
-  //    Here a missing setter means THE FIXTURE IS NOT APPLIED, and a run that continued
+  //    Here a missing setter means the SF being replayed is an OLDER BUILD than this
+  //    harness assumes, and a run that continued
   //    would produce a sweep row reading "the gate changed nothing" — indistinguishable
   //    from a real null result, and it would be believed. Fail loudly instead. Same shape
   //    as session 17's "a flag recording our INTENT is not evidence about the contract's
@@ -151,8 +158,9 @@ async function deployWorld(hre, size) {
   if (process.env.AB_GATE_BPS) {
     if (typeof sf.setBaseAdvanceBps !== "function") {
       throw new Error(
-        "AB_GATE_BPS is set but StabilityFund has no setBaseAdvanceBps — the gate fixture is " +
-        "NOT applied. Run: node scripts/fixture_gate_apply.js  then npx hardhat compile. " +
+        "AB_GATE_BPS is set but StabilityFund has no setBaseAdvanceBps. Since session 19 the " +
+        "gate ships in the tree, so this means the SF being compiled is an OLDER BUILD — check " +
+        "which contracts directory this arm points at, then `npx hardhat compile`. " +
         "Refusing to run: the result would read as 'the gate did nothing'.");
     }
     await sf.setBaseAdvanceBps(Number(process.env.AB_GATE_BPS));

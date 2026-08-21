@@ -1,6 +1,8 @@
 "use strict";
 /**
- * V8_50_GateCost.test.js — session 17. What does the sponsorship gate COST?
+ * V8_50_GateCost.test.js — what does the sponsorship gate COST?
+ * Session 17 built it; session 19 (2026-08-21) UN-SKIPPED and rewrote it when the gate
+ * was promoted from a fixture into the tree.
  *
  * ⛔ WHY THIS FILE EXISTS, AND IT IS THE LESSON OF THE RUN THAT PRECEDED IT.
  *   The gate was first priced end-to-end through V8_50_KeeperGas with a BINDING ceiling
@@ -8,45 +10,49 @@
  *   batch composition moved from PARKED_RESCUEx8/EVICT_PARKEDx4 to x2/x10, and every gas
  *   figure in that run priced a DIFFERENT POPULATION rather than a different mechanism.
  *   A measurement whose control arm changed is not a measurement.
+ *   THIS is the second instrument: the added read, measured alone, in gas units and not
+ *   in two-decimal millions. The end-to-end delta must then equal a WHOLE-NUMBER multiple
+ *   of what this reads. A non-integer multiple means loanHeadroom is called more often
+ *   than the call graph says — and that would be the real finding.
  *
- *   Two things follow, and both are built here:
- *     1. baseAdvanceBps is now 10_000 — the gate reads the router on every call but the
- *        ceiling never drops, so the keeper's work list is identical to baseline.
- *     2. THIS is the second instrument: the added read, measured alone, in gas units and
- *        not in two-decimal millions. The end-to-end delta must then equal a WHOLE-NUMBER
- *        multiple of what this reads. A non-integer multiple means loanHeadroom is called
- *        more often than the call graph says — and that would be the real finding.
+ * ⛔ WHAT SESSION 19 CHANGED, AND WHY THE OLD SHAPE NO LONGER WORKS.
+ *   Session 17's fixture read the router UNCONDITIONALLY, so it could be held at
+ *   baseAdvanceBps = 10_000 and price the read without changing any answer. The SHIPPED
+ *   code short-circuits on `baseAdvanceBps < insolvencyFloorBps` BEFORE touching the
+ *   router, so at 10_000 there is no read to price — the old GATE-1 would have failed on
+ *   its own "the branch never ran" assertion, correctly.
+ *   The fix is to price the read in the configuration production will actually run in
+ *   (gate ARMED) and to hold the ANSWER constant a different way: measure a member who
+ *   HAS a direct. The branch runs, the router is read, and the ceiling comes back
+ *   unchanged — so any gas difference is the read and nothing else.
  *
- * WHAT THE TWO ARMS ARE
- *   sfPlain — tierRouter never wired, so `tierRouter != address(0)` short-circuits and no
- *             router call happens. Everything else is the same bytecode.
- *   sfGated — tierRouter wired to a mock with the same storage and call shape as
- *             TierRouter.directCount, which is all the gas depends on.
- *   The difference is therefore the staticcall plus the directCount slot. ⚠ It is a LOWER
- *   BOUND on the change against the ORIGINAL contract, which did not read `tierRouter` in
- *   this function at all — that SLOAD is inside BOTH arms here and cancels. The
- *   end-to-end run is what carries the total.
+ * THE THREE ARMS
+ *   plain  — same bytecode, tierRouter never wired. Enters the branch, finds
+ *            address(0), stops. The `tierRouter` SLOAD is in BOTH arms and cancels.
+ *   gated  — tierRouter wired to MockDirectRouter (same storage and call shape as
+ *            TierRouter.directCount, which is all the gas depends on).
+ *   inert  — both wired, both at baseAdvanceBps = 10_000. Nothing should be read at all
+ *            and the delta must be EXACTLY ZERO. That is GATE-2, and it is the pin on
+ *            the claim that shipping the gate switched off is free.
+ *
+ * ⚠ STILL A LOWER BOUND on the change against the pre-gate contract, which did not read
+ *   `tierRouter` in this function at all. The end-to-end run carries the total.
  *
  * Run:  npx hardhat test test/V8_50_GateCost.test.js
  */
 const { ethers } = require("hardhat");
 const { expect } = require("chai");
 
-const FEE = 10_000_000n;
+const FEE  = 10_000_000n;
+const BASE = 3_000n;                 // the armed policy value (18.18 / 19.0)
 const pad = (s, n) => String(s).padEnd(n);
 const num = (v, n = 8) => String(v).padStart(n);
 
-// ⛔ SKIPPED ON PURPOSE. This test only means anything while the fixture is applied —
-//    without it sfPlain and sfGated are the same contract, the delta is 0, and the
-//    assertions fail. The tree ships WITHOUT the gate (session 17 measured and reverted).
-//    To run it:  node scripts/fixture_gate_apply.js
-//                change describe.skip to describe below
-//                npx hardhat compile && npx hardhat test test/V8_50_GateCost.test.js
-//                node scripts/fixture_gate_apply.js --undo   <- do not forget this
-describe.skip("V8.50 session 17 — the sponsorship gate, priced in isolation", function () {
-  it("GATE-1: one gated loanHeadroom against one ungated one, in gas units", async function () {
-    const [owner, noDirects, oneDirect] = await ethers.getSigners();
+describe("V8.50 — the sponsorship gate, priced in isolation", function () {
+  this.timeout(120_000);
 
+  async function rig() {
+    const [owner, noDirects, oneDirect] = await ethers.getSigners();
     const usdc = await (await ethers.getContractFactory("MockUSDC")).deploy(owner.address);
     const U    = await usdc.getAddress();
     const SF   = await ethers.getContractFactory("StabilityFund");
@@ -61,39 +67,46 @@ describe.skip("V8.50 session 17 — the sponsorship gate, priced in isolation", 
     await router.setDirects(oneDirect.address, 1);
 
     const probe = await (await ethers.getContractFactory("GateProbe")).deploy();
-
     // Each probeTwice is its own transaction, so costCold is genuinely cold every time.
-    async function read(sf, member) {
+    const read = async (sf, member) => {
       await (await probe.probeTwice(await sf.getAddress(), member, 0)).wait();
-      return {
-        cold:  await probe.costCold(),
-        warm:  await probe.costWarm(),
-        value: await probe.value(),
-      };
-    }
+      return { cold: await probe.costCold(), warm: await probe.costWarm(), value: await probe.value() };
+    };
+    return { owner, noDirects, oneDirect, sfPlain, sfGated, router, read };
+  }
 
-    const plain0 = await read(sfPlain, noDirects.address);
-    const gated0 = await read(sfGated, noDirects.address);
-    const gated1 = await read(sfGated, oneDirect.address);
+  it("GATE-1: the added read, armed, measured alone in gas units", async function () {
+    const { noDirects, oneDirect, sfPlain, sfGated, read } = await rig();
+
+    // ARM BOTH ARMS. Both then enter the branch; only the wired one reaches the router,
+    // so the tierRouter SLOAD cancels and the delta is the staticcall plus the slot.
+    await sfPlain.setBaseAdvanceBps(BASE);
+    await sfGated.setBaseAdvanceBps(BASE);
+
+    const plain1 = await read(sfPlain, oneDirect.address);
+    const gated1 = await read(sfGated, oneDirect.address);   // HAS a direct: answer unchanged
+    const gated0 = await read(sfGated, noDirects.address);   // no direct: the gate binds
 
     console.log(`\n      THE ADDED READ, MEASURED ALONE (gas units, not millions)\n`);
     console.log(`      arm                                     cold      warm     headroom`);
     console.log(`      ------------------------------------------------------------------`);
-    console.log(`      ${pad("ungated (tierRouter unset)", 34)}${num(plain0.cold)}  ${num(plain0.warm)}  ${num(plain0.value, 11)}`);
+    console.log(`      ${pad("plain (tierRouter unset)", 34)}${num(plain1.cold)}  ${num(plain1.warm)}  ${num(plain1.value, 11)}`);
+    console.log(`      ${pad("gated, member WITH 1 direct", 34)}${num(gated1.cold)}  ${num(gated1.warm)}  ${num(gated1.value, 11)}`);
     console.log(`      ${pad("gated, member with 0 directs", 34)}${num(gated0.cold)}  ${num(gated0.warm)}  ${num(gated0.value, 11)}`);
-    console.log(`      ${pad("gated, member with 1 direct", 34)}${num(gated1.cold)}  ${num(gated1.warm)}  ${num(gated1.value, 11)}`);
 
-    const dCold = gated0.cold - plain0.cold;
-    const dWarm = gated0.warm - plain0.warm;
+    const dCold = gated1.cold - plain1.cold;
+    const dWarm = gated1.warm - plain1.warm;
     console.log(`      ------------------------------------------------------------------`);
     console.log(`      ADDED COST      cold ${dCold}   warm ${dWarm}   (per loanHeadroom call)\n`);
 
-    // ── The answer must not move. A non-binding gate that changes the RESULT is a bug,
-    //    not a cost. This is the cheapest correctness check available and it is free here.
-    expect(gated0.value, "the non-binding gate CHANGED the headroom — it is not non-binding")
-      .to.equal(plain0.value);
-    expect(gated1.value, "headroom differs by direct count while baseAdvanceBps is 10_000")
-      .to.equal(plain0.value);
+    // ── The COST arm must not move the ANSWER. A member with a direct is untouched at
+    //    any base — 18.4's framing correction, asserted here as well as in GateBase.
+    expect(gated1.value, "a member WITH a direct must read the same headroom gated or not")
+      .to.equal(plain1.value);
+    // ── And the gate must actually bind for the member it is aimed at, or this whole
+    //    file is pricing a mechanism that does nothing.
+    expect(gated0.value, "the armed gate did not lower the zero-direct ceiling")
+      .to.equal(FEE * BASE / 10_000n);
 
     // ── Warm/cold must behave like the EVM, or the probe is measuring something else.
     expect(dCold > dWarm, "cold access did not cost more than warm — probe is not measuring the read")
@@ -111,5 +124,31 @@ describe.skip("V8.50 session 17 — the sponsorship gate, priced in isolation", 
     console.log(`      -> V8_50_KeeperGas prints to 0.01M, so anything under ~10,000 gas is`);
     console.log(`         BELOW THAT INSTRUMENT'S RESOLUTION and will read as +0.00M or +0.01M.`);
     console.log(`         That is agreement, not absence. Say so rather than claiming zero.\n`);
+  });
+
+  it("GATE-2: SHIPPING IT SWITCHED OFF IS FREE — at the default the router is never read", async function () {
+    const { oneDirect, noDirects, sfPlain, sfGated, read } = await rig();
+
+    // Defaults, untouched: baseAdvanceBps 10_000 >= insolvencyFloorBps 5_000.
+    expect(await sfGated.baseAdvanceBps(), "declared default").to.equal(10_000n);
+
+    const plain = await read(sfPlain, noDirects.address);
+    const gated = await read(sfGated, noDirects.address);
+
+    console.log(`\n      INERT ARM — default baseAdvanceBps, router wired but unreachable`);
+    console.log(`      plain cold ${plain.cold}  warm ${plain.warm}`);
+    console.log(`      gated cold ${gated.cold}  warm ${gated.warm}\n`);
+
+    // This is the whole justification for the inert default in the deploy runbook: the
+    // gate can sit in the contract from day one at ZERO gas until it is armed.
+    expect(gated.cold - plain.cold, "inert gate cost cold gas — the short-circuit is not short-circuiting")
+      .to.equal(0n);
+    expect(gated.warm - plain.warm, "inert gate cost warm gas — the short-circuit is not short-circuiting")
+      .to.equal(0n);
+    expect(gated.value, "inert gate changed the answer").to.equal(plain.value);
+
+    // And a member with a direct is equally untouched, for the same reason.
+    const g1 = await read(sfGated, oneDirect.address);
+    expect(g1.value).to.equal(plain.value);
   });
 });

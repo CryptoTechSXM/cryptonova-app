@@ -2,6 +2,20 @@
 /**
  * fixture_gate_apply.js — session 17, 2026-08-20. REAPPLIES THE MEASUREMENT FIXTURE.
  *
+ * ⛔⛔ SUPERSEDED 2026-08-21 (session 19). DO NOT RUN IT. THE GATE IS IN THE TREE.
+ *   `StabilityFund.baseAdvanceBps` + `setBaseAdvanceBps` + the directCount branch in
+ *   `loanHeadroom`, and `TierRouter.directCount`, all ship now. Every anchor below refers
+ *   to source that no longer looks like that, so this script will abort rather than
+ *   half-apply — which is the behaviour it was built with and the reason it is safe to
+ *   leave here. It is KEPT, not deleted, because it is the exact fixture that produced
+ *   the 17.1 size/gas figures and the 18.4/18.6 sweep, and a later session re-reading
+ *   those numbers needs to see what they were measured on.
+ *   THE SHIPPED FORM IS NOT IDENTICAL TO THIS FIXTURE — it short-circuits on
+ *   `baseAdvanceBps < insolvencyFloorBps` BEFORE reading the router, and wraps the read
+ *   in try/catch so it fails OPEN. That is why 19.13 re-measured size and gas instead of
+ *   carrying 17.1 forward, and why the armed read prices 5,634 cold rather than 7,720.
+ *   To sweep the gate now: set AB_GATE_BPS (test_ab/world.js). No fixture step at all.
+ *
  * WHAT IT IS: the `directCount` sponsorship gate of 13.11/16.5, in the smallest honest
  * form, applied to the working tree so its SIZE and GAS can be measured. It is NOT the
  * shipped design — the base ceiling below is a placeholder and the policy is still open.

@@ -83,6 +83,8 @@ interface ICommunityWallet {
 ///      organic progress signal (highest tier both deployed and velocity-green).
 interface ITierRouterTierInfo {
     function highestOpenTier() external view returns (uint8);
+    /// V8.50: sponsorship counter read by loanHeadroom. See baseAdvanceBps.
+    function directCount(address member) external view returns (uint32);
 }
 
 contract StabilityFund is Ownable2Step {
@@ -920,6 +922,49 @@ contract StabilityFund is Ownable2Step {
         emit InsolvencyFloorBpsSet(bps);
     }
 
+    // ── V8.50: THE SPONSORSHIP GATE — A CEILING, NOT A FIRST ADVANCE ─────────
+    //
+    // ⛔ READ THIS BEFORE CHANGING THE NUMBER. It is a LOWER CEILING applied to
+    // members whose TierRouter.directCount is 0. It is NOT "a small first advance":
+    // the advance SIZE is set by the member's shortfall, loanEligibleFor is a boolean
+    // on the WHOLE advance, and there is no partial-funding path — so a zero-direct
+    // member whose shortfall exceeds this ceiling receives NOTHING, and _triageParked
+    // routes that refusal to eviction (reason 4). Handoff 18.8 corrected three earlier
+    // sections that described it the other way; do not reintroduce that wording.
+    //
+    // THE OWNER'S DESIGN, verbatim 2026-08-20 (18.14): "we are giving some passive
+    // earnings and one needs to help themselves in order to earn so invite, self
+    // rescue or get evicted." Invite, self-rescue, or be evicted — the three-way is
+    // the policy and the non-zero ceiling is the "some help" half of it.
+    //
+    // THE VALUE: 3_000 bps ($3.00 at a $10 T1 fee), decided 18.18 and re-confirmed
+    // against the live referral distribution in 19.0. Measured basis: on the V8.50
+    // A/B arm it holds 72 of 85 loans, cuts zero-sponsor lending 26 -> 5, and costs
+    // ~6 extra evictions per 288 members per run, ~9 in 10 of them members who never
+    // borrowed (18.6, 18.7, 18.16). Live crossing (19.2/19.3) projects roughly double
+    // that bite. Below ~$3.70 the gate refuses the near-miss cluster; at $4.00 it
+    // grants 17 of 18 and asks nothing — there is no gentle setting between.
+    //
+    // ⛔ BUT IT SHIPS INERT AT 10_000, AND THAT IS DELIBERATE. directCount is a NEW
+    // mapping on a FRESH deploy: it does not backfill, so on migration day every
+    // member reads 0 directs including members with twenty. A 3_000 default would
+    // refuse them for an empty counter rather than for a policy. Deploy at 10_000
+    // (>= insolvencyFloorBps, so the branch below short-circuits and the router is
+    // never even read), let the tree rebuild, re-run diag_referral_threshold.js
+    // section 4 against the new chain, THEN call setBaseAdvanceBps(3_000).
+    // THE GO-LIVE RUNBOOK MUST CARRY THAT AS A NUMBERED STEP.
+    uint256 public baseAdvanceBps = 10_000;
+
+    event BaseAdvanceBpsSet(uint256 bps);
+
+    /// @notice Set the ceiling applied to members who have sponsored nobody.
+    ///         Any value >= insolvencyFloorBps disables the gate entirely.
+    function setBaseAdvanceBps(uint256 bps) external onlyOwnerOrGovernance {
+        require(bps <= 10_000, "SF: base bps > 100%");
+        baseAdvanceBps = bps;
+        emit BaseAdvanceBpsSet(bps);
+    }
+
     // ── V8.49 item 1b, POLICY B: THE FLOOR INCLUDES THE LOAN BEING ASKED FOR ──
     //
     // V8.48 tested `memberDebt < ceiling` BEFORE the advance and never added the
@@ -958,7 +1003,27 @@ contract StabilityFund is Ownable2Step {
         if (tierIdx >= MAX_TIERS) return 0;
         uint256 fee = tierEntryFees[tierIdx];
         if (fee == 0) return type(uint256).max;                  // no fee registered — no estimate to form
-        uint256 ceiling = fee * insolvencyFloorBps / 10_000;
+        // V8.50 SPONSORSHIP GATE. Placement is deliberate: loanHeadroom is the ONLY
+        // place the ceiling arithmetic lives, so the keeper's "can this member be
+        // rescued" (MatrixKeeperLib._triageParked) and the fund's "will I lend"
+        // (loanEligibleFor) cannot drift apart. Putting it in coPayRescue instead —
+        // which is what 13.11 and 16.5 both assumed — would have created exactly the
+        // two-models-of-one-rule split this file already warns about above.
+        uint256 bps = insolvencyFloorBps;
+        // Short-circuit FIRST: when the gate is inert (base >= floor, which is how it
+        // ships) the router is never read and the added cost is exactly zero. The
+        // 7,720 cold / 1,220 warm figure from handoff 17.1 prices the always-read
+        // fixture and is therefore an UPPER BOUND on this form.
+        if (baseAdvanceBps < bps && tierRouter != address(0)) {
+            // ⛔ FAILS OPEN, ON PURPOSE. If the router is an older build with no
+            // directCount, or is miswired, this catch leaves the ordinary floor in
+            // force. A gate that cannot read its counter must not refuse anybody —
+            // and loanHeadroom reverting would take the whole keeper batch with it.
+            try ITierRouterTierInfo(tierRouter).directCount(member) returns (uint32 d) {
+                if (d == 0) bps = baseAdvanceBps;
+            } catch {}
+        }
+        uint256 ceiling = fee * bps / 10_000;
         uint256 owed    = memberDebt[member];
         return ceiling > owed ? ceiling - owed : 0;
     }

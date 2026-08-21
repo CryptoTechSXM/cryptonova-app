@@ -257,6 +257,73 @@ deploy (backup: `stress_state.v8XX.json`).
 
 ---
 
+## PHASE 7b — ARM THE SPONSORSHIP GATE (V8.50+). ⛔ NOT ON GO-LIVE DAY.
+
+**The contract ships with the gate INERT** (`StabilityFund.baseAdvanceBps = 10_000`). That
+is deliberate and it is not an oversight to "fix" during deploy.
+
+**WHY.** `TierRouter.directCount` is a fresh mapping on a fresh deploy. **It does not
+backfill.** On migration day every member reads 0 directs — including a member who
+sponsored twenty people on V8.48 — because their downline has not re-registered on THIS
+deployment yet. Arming the gate before the tree rebuilds refuses real members for an
+**empty counter** rather than for a policy, and a refused rescue routes to eviction
+(handoff 18.8, 18.14). Ceiling value and reasoning: 18.18 and 19.0.
+
+**7b.1** Pre-flight, read-only. Send nothing; just look:
+```powershell
+cd C:\CryptoNite-Smart-Contracts\CryptoNova
+$env:ADDRESSES_FILE="deployed_addresses_v8_50.json"
+npx hardhat run scripts/set_base_advance.js --network baseSepolia
+```
+🖥️PS. It rebuilds the expected `directCount` for every sponsor from the `MemberRegistered`
+log, reads the on-chain mapping for each one, and **aborts if they disagree** — a gate
+armed against a broken counter refuses members silently, which is the worst failure this
+system has available. Then it prints the live zero-direct histogram.
+
+**7b.2** Read the histogram against the pre-migration numbers (handoff 19.1): live V8.48
+organic **56.1%** zero-direct, A/B fixture pooled **49.7%**. A share far above those means
+the tree has not rebuilt — **wait, do not arm.** Also run the cohort split, because a
+filled chain reads high for a reason that is not about members:
+```powershell
+npx hardhat run scripts/diag_referral_threshold.js --network baseSepolia
+```
+🖥️PS — section 4. bigfill is 100% zero-direct by construction; **organic is the only
+column this decision rests on** (14.6).
+
+**7b.3** Only once 7b.2 looks like a rebuilt tree, arm it:
+```powershell
+$env:ARM="1"
+npx hardhat run scripts/set_base_advance.js --network baseSepolia
+```
+🖥️PS. Same checks run again, then `setBaseAdvanceBps(3000)`. Confirm the script prints
+`baseAdvanceBps = 3000` and the new zero-direct T1 ceiling of $3.00.
+
+**7b.4** ⚠ **EXPECT EVICTIONS TO RISE, AND WATCH WHO.** The gate converts some refused
+rescues into evictions by design — the owner's frame is *invite, self-rescue, or be
+evicted* (18.14, verbatim). What to watch:
+* **`ParkedMemberEvicted` count week over week.** The A/B measured ~6 extra FLOOR
+  evictions per 288 members per run and the live crossing projects roughly double
+  (19.3) — but **every A/B eviction figure is a NO-GRACE UPPER BOUND** (18.17): the A/B
+  world zeroes all three grace clocks and live `evictionGracePeriod` is SEVEN DAYS.
+* **Who they are.** 18.16: the members the cap refuses hold $5.58–$6.82 of their own
+  money and owe $0.00 — near-misses, the most engaged non-inviters. If evictions start
+  landing on members holding ~$0.25 instead, that is the RESCUE LADDER, not this gate,
+  and lowering the base will not help.
+* **`EvictionReserveReleased`.** Still never executed anywhere (18.15) — every evicted
+  member so far came from MatB with a zero reserve. First live MatA eviction is the first
+  real exercise of that path.
+* Eviction is **removal, not confiscation** — 34 of 34 kept their withdrawable to the cent
+  (18.15). If any member ever loses withdrawable at eviction, stop and report it.
+
+**7b.5** To back it out at any time — one call, no redeploy, effective immediately:
+```powershell
+$env:ARM="1"; $env:BASE_BPS="10000"
+npx hardhat run scripts/set_base_advance.js --network baseSepolia
+```
+🖥️PS. `base >= floor` makes the gate inert and the router is not even read.
+
+---
+
 ## HARD-WON LESSONS (from the V8.44 go-live, 2026-07-25)
 
 1. **NEVER retype a redacted value into a live file.** Masking secrets when *sharing*
