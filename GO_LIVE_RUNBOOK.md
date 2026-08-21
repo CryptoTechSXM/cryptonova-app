@@ -140,13 +140,34 @@ and the frontend NOT repointed. Being off the frontend is what makes it private.
 *Why: PHASE 1.4's integrity gate applies here too — a corrupted matrix invalidates every
 gas number taken after it.*
 
-**G.1** Fill it. Bigfill until real rescues are happening — parked members with shortfalls,
-not just registrations.
+**G.1 ⛔ FILL IT WITH SELF-RESCUE TURNED DOWN — OR MEASUREMENT 1 IS IMPOSSIBLE.**
 ```powershell
-node scripts\bigfill_v8.js
+powershell -ExecutionPolicy Bypass -File C:\CryptoNite-Smart-Contracts\CryptoNova\run_bigfill_rr.ps1 -Count 300 -Offset 0 -SelfRescueRate 0.1 -UpgradeRate 0.75
 ```
-🖥️PS. *Why: a keeper batch that only reclaims idle slots costs 0.04M and proves nothing.
-The dear item is an SF-funded rescue and the queue has to contain some.*
+🖥️PS — always through the wrapper, never `npx hardhat run scripts\bigfill_v8.js` directly
+(BIGFILL_RULES.md: the raw defaults switch on CNOVA buy/sell and the burn sweep, which the
+owner rule forbids).
+
+⛔ *`-SelfRescueRate 0.1` is a DELIBERATE DEPARTURE from the wrapper's normal `1.0`, and it
+is the difference between this phase working and returning nothing. At 1.0 **every parked
+wallet pays its own shortfall**, the fund never lends, no `WORK_PARKED_RESCUE` with
+`sfShare > 0` is ever queued — and an SF-funded rescue is exactly the item measurement 1
+exists to price. G.3 would return "NO VERDICT" forever and it would look like a tooling
+problem.*
+
+⚠ *This is not a claim about realism. Live V8.48 self-rescues about 72% of episodes
+(handoff 25). **Gas does not care** — the item costs what it costs. Turn the rate back up
+for anything economic.*
+
+*Why fill at all: a keeper batch that only reclaims idle slots costs 0.04M and proves
+nothing. The queue has to contain the dear item.*
+
+**G.1b** Confirm the queue actually holds fund-backed work before spending a measurement on it:
+```powershell
+node scripts\diag_keeper_work.js
+```
+🖥️PS — you want `PARKED_RESCUE` items in the discovered list. If there are none, bigfill
+more or drop `-SelfRescueRate` further. ⛔ **Do not proceed to G.2 on an empty queue.**
 
 **G.2 ⛔ DRIVE ONE ITEM PER TRANSACTION. This step is what makes measurement 1 possible.**
 ```powershell
@@ -179,9 +200,11 @@ work type it sent and `k/item EXACT`.
 
 **G.3** Then measure:
 ```powershell
-npx hardhat run scripts\diag_keeper_gas_live.js --network baseSepolia
+node scripts\diag_keeper_gas_live.js
 ```
-🖥️PS. **Save the output** — `gate_size127.txt` is already gitignored.
+🖥️PS — **plain node, not `npx hardhat run`**: it builds its own provider from
+`BASE_SEPOLIA_RPC_URL` in `.env`, so there is no `--network` flag. Set
+`$env:ADDRESSES_FILE` first. **Save the output** — `gate_size127.txt` is gitignored.
 
 > **MEASUREMENT 1 — gas per SF-funded rescue at 127.**
 > The script prints its own verdict. It computes the marginal cost as *dearest single-rescue
@@ -199,7 +222,7 @@ build the queue past one batch, and run the driver normally:
 Remove-Item Env:\ONE_ITEM
 npx hardhat run scripts\testchain_keeper.js --network baseSepolia
 ```
-then re-run `diag_keeper_gas_live.js`.
+then re-run `node scripts\diag_keeper_gas_live.js`.
 ⚠ `maxItemsPerUpkeep` should be at its normal value for this (20 in source, 15 on live —
 handoff 25.6). **Record which one this chain is running**; the halt behaviour depends on it.
 
@@ -214,8 +237,9 @@ handoff 25.6). **Record which one this chain is running**; the halt behaviour de
 
 **G.5**
 ```powershell
-npx hardhat run scripts\model_item_a.js --network baseSepolia
+node scripts\model_item_a.js
 ```
+🖥️PS — plain node; reads `ADDRESSES_FILE` and the RPC from `.env`.
 > **MEASUREMENT 3 — MatA parkers freed outright.** PHASE 2 of that script projects 67 of
 > 67, 100%. On the private chain this is `selfFundedRescues / rescues` on the V8.50 arm,
 > and it needs **no control**: `CoPayRescue` carries `sfShare` directly, so `sfShare == 0`
@@ -226,8 +250,9 @@ npx hardhat run scripts\model_item_a.js --network baseSepolia
 
 **G.6**
 ```powershell
-npx hardhat run scripts\diag_sf_debt_reconcile.js --network baseSepolia
+node scripts\diag_sf_debt_reconcile.js
 ```
+🖥️PS — plain node; reads `ADDRESSES_FILE` and the RPC from `.env`.
 > **MEASUREMENT 4 — E1 makes the aggregate and ledger bases coincide.** PHASE 6 claims this
 > "by construction"; this is the first time it runs anywhere.
 > **PASS:** the two bases agree.
@@ -244,8 +269,10 @@ world; do not compare a private figure against a V8.48 one without saying so.
 
 **G.8 RUN THE FRONTEND ABI AUDIT BEFORE THE ADDRESSES CHANGE:**
 ```powershell
-npx hardhat run scripts\audit_frontend_abi.js
+node scripts\audit_frontend_abi.js
 ```
+🖥️PS — plain node. It defaults `FRONTEND` to `C:\CryptoNova-Testnet-App`; override with
+`$env:FRONTEND` for the mainnet app.
 Two failure modes it exists for: **MISSING** (the frontend calls something V8.50 does not
 have — breaks on deploy, loud) and **SHAPE DRIFT** (selector matches, OUTPUTS differ — the
 call succeeds and decodes to the WRONG VALUE, silent).

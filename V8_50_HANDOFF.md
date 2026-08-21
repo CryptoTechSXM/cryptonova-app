@@ -126,6 +126,37 @@ now prints `EXACT` under `ONE_ITEM` and `avg` otherwise, and carries the warning
 batch → re-encode the first → decode again → same work type, tier and both addresses). The
 rest of the mode is unexercised until the private chain runs it.
 
+### 27.5a ⛔⛔ AND IT WAS NOT ONE STEP — A FULL AUDIT FOUND FIVE MORE, PLUS ONE THAT WOULD HAVE MADE THE PHASE RETURN NOTHING
+
+After 27.5 the whole phase was re-walked against the scripts rather than against
+convention. **Five of eight commands had the wrong invocation.** `diag_keeper_gas_live.js`
+(mine), `model_item_a.js`, `diag_sf_debt_reconcile.js` and `audit_frontend_abi.js` are
+**plain node** — they build their own provider from `.env` and have no `--network` flag —
+and were all written as `npx hardhat run … --network baseSepolia`. `bigfill_v8.js` is the
+reverse: written as `node`, and it is hardhat. `testchain_keeper.js` was the only one right.
+
+⛔⛔ **AND THE ONE THAT MATTERS MOST WAS NOT AN INVOCATION.** `run_bigfill_rr.ps1` sets
+**`SELF_RESCUE_RATE = 1.0`** — every parked wallet pays its own shortfall. **The fund then
+never lends, no `WORK_PARKED_RESCUE` with `sfShare > 0` is ever queued, and an SF-funded
+rescue is precisely the item measurement 1 exists to price.** Run as written, G.3 would
+have returned "NO VERDICT" indefinitely on a correctly-built chain, and it would have read
+as a broken tool rather than a fill that could not produce the work.
+
+**G.1 now runs the wrapper with `-SelfRescueRate 0.1`,** flagged as a deliberate departure
+from the owner-approved default and scoped to the measurement window. ⚠ It is **not** a
+claim about realism — live self-rescues ~72% of episodes (25.x) — but **gas does not care**:
+the item costs what it costs. Turn it back up for anything economic.
+
+**And a new G.1b:** `node scripts\diag_keeper_work.js` to confirm `PARKED_RESCUE` items are
+actually in the discovered list **before** spending a measurement on them. ⛔ Do not proceed
+to G.2 on an empty queue.
+
+> ⛔ **THE STANDING LESSON, AND IT IS 7a RULE 2 POINTED AT DOCUMENTS:** a runbook step is a
+> claim about a script and about a contract. **Six of the eight in this phase were written
+> from the shape of the task and were wrong.** Nothing here was found by running it — every
+> one came from reading the file the step names. **Re-walk a runbook against its scripts
+> before anyone follows it onto a fresh deploy.**
+
 ## 27.6 NEXT, IN ORDER — SUPERSEDES 26.5.
 
 1. **RUN `GO_LIVE_RUNBOOK.md` PHASE G.** Owner's machine, private chain, `MATRIX_SIZE` 127,
