@@ -4,7 +4,7 @@ Read `V8_50_HANDOFF.md` section 19 first — 19.0 and 19.2 are the DECISION, 19.
 
 STATE
 Contracts `v8.1` — run `git log --oneline -3` and trust that, not a hash written here. Frontend `admin` = `preview` = `main` at `74a1588`. **NOTHING DEPLOYED, NO CHAIN WRITTEN TO.** Sessions 13–19 are measurement plus, in 19, the first code change since 18: THE SPONSORSHIP GATE IS NOW IN THE TREE, SHIPPING INERT.
-SUITE: 629 passing / 8 pending / 0 failing, run 2026-08-21 with the gate in (`suite_session19.txt`). ⚠ That was BEFORE `V8_50_GateCost.test.js` was un-skipped (+2 passing, −1 pending), so the next full run should read 631/7/0. If it does not, that is the finding.
+SUITE: **631 passing / 7 pending / 0 failing**, run 2026-08-21 with the gate in and GateCost un-skipped (`suite_session19b.txt`). The earlier `suite_session19.txt` reads 629/8/0 — that is the same tree BEFORE GateCost was un-skipped (+2 passing, −1 pending), not drift. Quote 631/7/0.
 
 THE RULES
 1. Do not hypothesise unless necessary. 2. Measure and test before implementing. When two numbers disagree, the disagreement IS the finding. A number you have not run is not a result. One sample is not a measurement. Build the instrument so it can contradict you.
@@ -52,7 +52,7 @@ TOOLS THAT NOW EXIST — use them, do not rebuild them
 * Sweep recipe, no fixture step any more: `npx hardhat compile`, then `$env:AB_CAP="5"`, `$env:AB_EVICT="1"`, `$env:AB_GATE_BPS="<n>"`, `$env:AB_SEQ="ab_sequence_s<n>.json"`, `npx hardhat run test_ab/replay.js`.
 
 TRAPS, CARRIED FORWARD
-* ⛔ CLAUDE'S FILE BRIDGE DOES NOT APPLY YOUR LINE-ENDING NORMALISATION. Files can read as whole-file diffs from Claude's side and be CLEAN from yours — measured again in 19 on this very handoff (identical content, 3,341-byte size difference). Run `--ignore-all-space` and trust YOUR `git status`. Never `git add -A`.
+* ⛔ RESOLVED 2026-08-21 — THE MECHANISM OF THE LINE-ENDING TRAP IS `core.autocrlf`. Git said so out loud on the session-19 commit: `warning: in the working copy of '<file>', LF will be replaced by CRLF the next time Git touches it`, on all 11 files. The repo stores LF, the owner's working tree is CRLF, and Claude's bridge writes LF — so a file Claude has just written reads a different BYTE COUNT from one git considers clean, with a ZERO-LINE diff. **THE WARNING IS BENIGN AND WILL FIRE ON EVERY FILE CLAUDE WRITES THROUGH THE BRIDGE. It is not a finding and it needs no action.** The proof it does no harm is the commit's own stat line: 11 files, 1,350 insertions, 113 deletions — the size of the real changes, not a whole-file rewrite. STILL TRUE: never `git add -A`, and if a diff ever looks like whole-file churn, run `--ignore-all-space` and trust YOUR `git status`.
 * THE GATE ONLY LOWERS THE CEILING FOR MEMBERS WITH ZERO DIRECTS. The wrong column is the intuitive one.
 * A GATE THAT EXISTS IS NOT A GATE THAT BINDS (14.3); a gate installed to be MEASURED must not bind (17.2). ⚠ And as of 19 the shipped gate exists and does not bind BY DEFAULT — check `baseAdvanceBps` on chain before reading anything as a gate effect.
 * READING SOURCE MEASURES THE MECHANISM, NOT THE POPULATION — valid for where code lives, which is how 19.11 and 19.12 were settled.

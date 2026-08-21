@@ -316,6 +316,14 @@ V8Governance has 11,752 bytes of headroom — but whether the DAO should be able
 the lending gate at all is a governance choice, not a technical one. **Not designed, not
 promised. Ask before building.**
 
+## 19.16 ✅ A TRAP THAT HAS COST SEVERAL SESSIONS IS NOW EXPLAINED, NOT JUST DESCRIBED
+
+⛔ RESOLVED 2026-08-21 — THE MECHANISM OF THE LINE-ENDING TRAP IS `core.autocrlf`. Git said so out loud on the session-19 commit: `warning: in the working copy of '<file>', LF will be replaced by CRLF the next time Git touches it`, on all 11 files. The repo stores LF, the owner's working tree is CRLF, and Claude's bridge writes LF — so a file Claude has just written reads a different BYTE COUNT from one git considers clean, with a ZERO-LINE diff. **THE WARNING IS BENIGN AND WILL FIRE ON EVERY FILE CLAUDE WRITES THROUGH THE BRIDGE. It is not a finding and it needs no action.** The proof it does no harm is the commit's own stat line: 11 files, 1,350 insertions, 113 deletions — the size of the real changes, not a whole-file rewrite. STILL TRUE: never `git add -A`, and if a diff ever looks like whole-file churn, run `--ignore-all-space` and trust YOUR `git status`.
+
+Every earlier note on this said WHAT happened and that it was measured; none said WHY. It is
+not a bridge defect and it is not something to work around — it is one git setting behaving
+exactly as configured, and the correct response to the warning is to ignore it.
+
 ---
 
 # ⬛ SESSION 18 STATE — 2026-08-20. READ AFTER SESSION 19.
