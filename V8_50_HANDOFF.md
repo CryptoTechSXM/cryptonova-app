@@ -1,7 +1,7 @@
 # V8.50 HANDOFF — the crossing redesign. READ THIS FIRST.
 
 Written 2026-08-16 at the end of the V8.49 private measurement run.
-Sessions 2-21 have appended to it since; read the NEWEST section first — each one
+Sessions 2-22 have appended to it since; read the NEWEST section first — each one
 corrects the ones below it, and says so explicitly where it does.
 Audience: **the next session of Claude, plus the owner. There is no third party — every
 line of this codebase was written by a previous session of Claude and executed by the
@@ -10,7 +10,162 @@ owner-set, and the session that earned it got five things wrong by ignoring what
 
 ---
 
-# ⬛ SESSION 21 STATE — 2026-08-21, LATEST. READ THIS FIRST.
+# ⬛ SESSION 22 STATE — 2026-08-21, LATEST. READ THIS FIRST.
+# ⛔⛔ THE CLAWBACK PRESETS CANNOT BE PRICED ON THIS HARNESS. ALL FOUR COLLECT $0.00.
+
+Measurement only. **Nothing deployed, no contract file touched.** Two additive instrument
+changes (`AB_CLAWBACK` dial, the debt ledger) and one instrument DEFECT FIXED — 21.4's own
+tail dial was missing from the output filename and destroyed a baseline within the hour
+(22.5). Transcript: `ab_rerun_clawback_presets.txt`.
+
+## 22.0 ⛔⛔ THE RESULT: EVERY PRESET COLLECTS EXACTLY $0.00, AND EVERY OUTCOME IS IDENTICAL
+
+V8.50 arm, gate inert, `AB_CAP=5`, 288 members, `MATRIX_SIZE` 127, 12-tick tail. The
+fixture is single-tier, so `_bandOf` sends every debt to **band 3** — the `band3` column is
+the dial actually under test, and this sweep says nothing about bands 0-2 (19.17b: "in
+practice only band 3 has a population").
+
+| seed | preset | band 3 | repayments | **collected** | still owing | outstanding | **withdrawable** | rescues | loans | evict | parked |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| 1 | 0 OFF | 0 | 0 | **$0.00** | 31 | $58.15 | **$1,517.49** | 51 | 31 | 4 | 31 |
+| 1 | 1 GENTLE | 3000 | 0 | **$0.00** | 31 | $58.15 | **$1,513.80** | 51 | 31 | 4 | 31 |
+| 1 | **2 CURRENT** | 6000 | 0 | **$0.00** | 31 | $58.15 | **$1,510.32** | 51 | 31 | 4 | 31 |
+| 1 | 3 HARD | 8000 | 0 | **$0.00** | 31 | $58.15 | **$1,508.01** | 51 | 31 | 4 | 31 |
+| 2 | 0 OFF | 0 | 0 | **$0.00** | 26 | $47.35 | $1,497.48 | 53 | 26 | 3 | 32 |
+| 2 | **2 CURRENT** | 6000 | 0 | **$0.00** | 26 | $47.35 | $1,491.14 | 53 | 26 | 3 | 32 |
+| 2 | 3 HARD | 8000 | 0 | **$0.00** | 26 | $47.35 | $1,489.03 | 53 | 26 | 3 | 32 |
+
+**Every debt-side and outcome column is byte-identical across all four presets, on both
+seeds.** Not "similar" — identical. Turning the clawback OFF entirely and turning it up to
+80% produce the same 31 borrowers owing the same $58.15, the same 51 rescues, the same 31
+loans, the same 4 evictions. ⚠ Seed 2 ran presets 0/2/3 only; preset 1 sits between two
+identical rows and was not spent.
+
+**This reproduces session 16 on a different build and a different instrument.** 16.x
+measured the clawback collecting $0.00 inside a MatB occupancy across the whole V8.48
+deployment; it collects $0.00 across a whole V8.50 A/B run as well.
+
+## 22.1 ⛔ WHY: THE BORROWERS AND THE CLAWBACK-ELIGIBLE ARE DISJOINT INSIDE THE MEASURED RUN
+
+The redirect lives in `_settlePool` (`MatrixLogicLib:624-641`): it takes a slice of a
+member's **settled pool share**. A pool share requires a SEAT and at least one rotation
+since the member's checkpoint. **The members who borrow are the members who are PARKED** —
+they hold no seat, accrue no pool share, and so present the redirect with nothing to take.
+The second repayment path, the MatB cycle-out sweep, needs the borrower to reach a
+cycle-out, which a parked member also does not do. Within 69 ticks neither ever happens.
+
+## 22.2 ✅ THE ZERO IS REAL, NOT A BLIND DETECTOR — CHECKED WITH A PLANTED POSITIVE
+
+⛔ A count of zero from an instrument that has never seen a one is not a measurement. The
+same debt ledger was run against the **tail-200** sequence, where rescued borrowers have
+had time to hold seats and rotate:
+
+> **45 repayments, $40.40 collected** ($19.84 emitted by MatA, $20.56 by MatB), 104 members
+> still owing $225.03.
+
+So the instrument sees repayments when repayments exist. ⚠ **That row is NOT a pricing
+row** — 21.0 established that a long tail is a different world, driven by idle-slot
+reclamation that never fires in the measured one. It is offered only as proof the detector
+works.
+
+## 22.3 ⛔⛔ THE ONE THING THE DIAL DOES MOVE IS AN ESTIMATE, NOT MONEY — AND THAT IS THE FINDING WORTH KEEPING
+
+`totalWithdrawable` is the only column that responds, and it responds monotonically:
+**$1,517.49 → $1,513.80 → $1,510.32 → $1,508.01** across presets 0 → 3 on seed 1, a spread
+of **$9.49 (0.63%)**; seed 2 traces the same direction ($1,497.48 → $1,491.14 → $1,489.03).
+
+The mechanism is in the source, not inferred: `withdrawableOf`'s accrual view nets off the
+banded clawback as an **ESTIMATE** on *un-settled* pool accrual
+(`MatrixLogicLib:749-775`, "net of the member-level redirect estimate"), while the actual
+redirect in `_settlePool` never fires. So a harder preset makes members **look poorer
+without the fund collecting a cent**.
+
+⛔ **AND `withdrawableOf` IS THE AFFORDABILITY FIGURE** the rescue and crossing paths read.
+A preset therefore tightens what a member can afford before it collects anything from them.
+⚠ **In these runs it crossed no threshold** — rescues, loans and evictions are identical
+across presets — so this is a coupling that was measured and did not bite, NOT a measured
+harm. Do not quote it as one. But it does mean "preset 3 is harsher" is true of the
+estimate first and of the ledger only later, which is the opposite of how a menu reads.
+
+## 22.4 ⛔ SO THE HONEST ANSWER TO 19.17b, WHICH ASKED FOR THIS SWEEP
+
+19.17b said preset 2 is the only entry with evidence and that the A/B harness could price
+the others "exactly the way it priced the base ceiling (one dial, three seeds)". **It
+cannot.** The base ceiling bound on a quantity the measured run produces in quantity
+(advances); the clawback bounds on a quantity the measured run produces **none of**.
+
+* **PRESET 2 REMAINS THE ONLY ENTRY WITH EVIDENCE.** This sweep adds none for 0, 1 or 3 —
+  it establishes that this harness cannot produce any at the measured length.
+* **DO NOT READ "ALL FOUR ARE IDENTICAL" AS "THE PRESET IS SAFE TO CHANGE."** It means the
+  fixture never reaches the state the dial governs. On a live chain with members seated
+  across many rotations, the redirect is the ordinary case rather than the absent one.
+* ✅ **WHAT WOULD ACTUALLY PRICE THEM — AND IT IS A UNIT TEST, NOT AN A/B.** Seat a
+  borrower, rotate the matrix until a pool share settles, and read the redirect at each
+  preset. Deterministic, seconds long, and it measures the mechanism the A/B cannot reach —
+  the same shape as `V8_50_EvictionReserve.test.js`, which reached a state five sessions
+  had called a deploy task. **That is the next item, and it replaces "price the presets on
+  the A/B harness" wherever that appears.**
+
+## 22.5 ⛔⛔ AN INSTRUMENT DEFECT THIS SESSION CREATED IN THE LAST ONE, AND IT BIT WITHIN THE HOUR
+
+21.4 made the A/B tail a parameter. **It did not put the tail in the output filename.**
+`replay.js` has carried the rule since session 8 — *"EVERY DIAL THAT CHANGES THE ANSWER GOES
+IN THE FILENAME"*, written after a re-run destroyed a seed's population block — and the new
+dial was added without obeying it. Consequence, one hour later: the tail-200 detector run
+of 22.2 wrote to `ab_result_v850_s1_gate10000.json` and **silently replaced the tail-12
+default-preset baseline**, which then appeared in the sweep table as a preset-2 row showing
+121 loans and 43 evictions. It was caught because that row disagreed with its own
+neighbours, not because anything complained.
+
+**FIXED:** `tailTag` now reads `seq.tail` from the sequence FILE (a sequence with no `tail`
+field predates the parameter and is a 12-tick tail by construction) and both affected rows
+were re-run. ⛔ **THE STANDING LESSON IS 21.6's, POINTED AT THIS SESSION: A NEW DIAL IS NOT
+FINISHED UNTIL IT IS IN THE FILENAME.** The VM cannot delete, so a clobbered result does not
+even leave a gap — it leaves a plausible wrong number with a recent timestamp.
+
+## 22.6 TOOLS — both additive, both fail loudly rather than quietly
+
+* **`AB_CLAWBACK=<0..3>`** in `test_ab/world.js`. One compile serves the whole sweep, so a
+  difference between rows can only be the dial. It is deliberately NOT `optional`: a missing
+  `setClawbackPreset` means an older SF, and a run that continued would report "the preset
+  changed nothing" — indistinguishable from a real null result, and this session shows how
+  believable that reading would have been. It also **asserts the read-back bands against
+  the expected table**, because the SF stores no preset id (19.17b) and the bands are the
+  only evidence the call landed; a renumbered menu fails the run instead of sweeping the
+  wrong values.
+* **THE DEBT LEDGER** in `test_ab/replay.js` — the half 19.17b recorded as NOT measured.
+  Repayment count and volume, **split by emitting half** (MatA can only be `_settlePool`'s
+  clawback; MatB mixes it with the cycle-out sweep the preset does not control — labelled
+  by half rather than guessed into site names), plus the end-state read: members still
+  owing, outstanding total and median, total withdrawable, total crossing reserve.
+  ⛔ It **reconciles two contracts' tallies of the same money** — `RescueDebtRepaid` from
+  the matrix against `MemberDebtRepaid` from the SF — and voids both on disagreement, the
+  same discipline the loan book uses against `raw.loanVolume`. ⚠ `stillOwing` is an
+  end-state read, not a retirement rate; a fixed-length run cannot give a half-life and
+  21.0 rules out lengthening it.
+* `dials.clawbackBands` is read back off the contract and lands in the filename as
+  `_cb<bands>`, never as a preset id.
+
+## 22.7 NEXT, IN ORDER — SUPERSEDES 21.7.
+
+1. **PRICE THE PRESETS AS A UNIT TEST** (22.4). Seat a borrower, rotate until a pool share
+   settles, read the redirect at each preset. The A/B route is closed.
+2. **SPLIT 14.1 BY TIER** and cap time-at-risk (14.4). ⚠ V8.48 measurement; 18.0 applies.
+3. **CLASSIFY `:936`** (20.3a). Until it is settled nobody may write "exactly one door".
+4. **THE PRIVATE V8.50 DEPLOY GATE** — risks 1, 3 and 4. Risk 2 is closed by 20.4. Read
+   20.5 first: the gate's own text still tests against `minGasPerItem` 3.5M and the source
+   has been 5,000,000 since 2026-08-18.
+5. **POST-MIGRATION, NOT BEFORE:** GO_LIVE_RUNBOOK PHASE 7b — pre-flight, check the live
+   histogram against 19.1, then arm at 3000. Then re-run `diag_referral_threshold.js`
+   section 4 + the loan book against live V8.50 (19.6).
+6. Backlog, untouched: the 5 unexplained cycle-outs; `V8_50_ReferralBreakeven.test.js` v4
+   counts the dead event; stale-nonce retry backoff; @bevmawire's Dashboard retry;
+   `maxItemsPerUpkeep` live 15 vs 20 in source; member-callable re-entry. Plus the three
+   orphan session-13 fragments 19.18c flagged.
+
+---
+
+# ⬛ SESSION 21 STATE — 2026-08-21. READ AFTER SESSION 22.
 # ⛔⛔ 20.8 ITEM 1 IS ANSWERED BY REFUTING IT. THE A/B TAIL CANNOT DRAIN THE QUEUE.
 
 Measurement only. **Nothing deployed, no contract file touched.** One additive change to
@@ -89,6 +244,10 @@ no cleaner harness to wait for. The clawback sweep should run on the 12-tick tai
 other sweep, at equal tail across rows, quoting `stillParkedAtEnd` with each row. It is now
 the next item.
 
+⚠ **RAN 2026-08-21, AND IT CAME BACK EMPTY — SEE 22.0.** The unblocking was correct; the
+sweep executed exactly as described here and every preset collected $0.00, because the
+measured run never reaches the state the dial governs. The route is closed, not pending.
+
 ## 21.4 ✅ THE TAIL IS A PARAMETER NOW, AND THE CANONICAL FILES CANNOT BE OVERWRITTEN
 
 `node test_ab/gen_sequence.js <seed> <members> <size> [tail]`. The default is **12**, and at
@@ -134,6 +293,8 @@ before session 19 and is not comparable to anything produced now. Same family as
 three suite transcripts in one day.
 
 ## 21.7 NEXT, IN ORDER — SUPERSEDES 20.8. ⚠ ITEM 1 IS REFUTED, NOT DONE.
+⛔ **SUPERSEDED BY 22.7. ITEM 1 BELOW ("price the clawback presets on the A/B harness") IS
+CLOSED THE WRONG WAY — the harness cannot price them at all. READ 22.0 BEFORE ACTING.**
 
 1. **PRICE THE CLAWBACK PRESETS** (19.17b). Presets 0/1/3 shipped with no evidence and are
    one DAO vote from live; only preset 2 has any. One dial, three seeds, 12-tick tail,

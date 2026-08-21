@@ -132,10 +132,16 @@ const REG_GAS = 16_700_000;   // just under the hardhat provider's 2^24 transact
  * cumulative one never mix, and so nothing downstream that iterates `ev` sees a new key.
  */
 const TX_OF = new WeakMap();      // into -> { [eventKey]: txHash[] }, index-parallel to into[key]
+// Session 22: the EMITTING CONTRACT, index-parallel the same way. RescueDebtRepaid is
+// emitted from two different repayment sites and carries no site tag in its args, so the
+// only honest way to split the clawback from the cycle-out sweep is which half emitted it.
+const ADDR_OF = new WeakMap();    // into -> { [eventKey]: address[] }
 
 function collect(ifaces, rc, into) {
   let txmap = TX_OF.get(into);
   if (!txmap) { txmap = {}; TX_OF.set(into, txmap); }
+  let amap = ADDR_OF.get(into);
+  if (!amap) { amap = {}; ADDR_OF.set(into, amap); }
   for (const log of rc.logs) {
     for (const iface of ifaces) {
       let p = null;
@@ -146,6 +152,7 @@ function collect(ifaces, rc, into) {
         ? "MemberParkedRouter" : p.name;
       (into[key] ||= []).push(p.args);
       (txmap[key] ||= []).push(rc.hash ?? log.transactionHash);
+      (amap[key] ||= []).push(log.address);
       break;                      // <- the fix: never let a second interface see this log
     }
   }
@@ -197,9 +204,21 @@ async function main() {
     // ABSENT here is the honest reading of "the gate fixture is not applied", and it is the
     // difference between a sweep row and a baseline row. Never infer it from the env var.
     baseAdvanceBps: await (async () => { try { return String(await w.sf.baseAdvanceBps()); } catch { return "ABSENT"; } })(),
+    // ⛔ THE BANDS, NEVER A PRESET ID. The SF deliberately stores no id (19.17b:
+    // "clawbackBpsByBand is the single source of truth"), so these four numbers are the
+    // only statement of what the clawback actually did this run — and they are read back
+    // off the contract for the same reason every other dial here is.
+    clawbackBands: await (async () => {
+      try {
+        const b = [];
+        for (let i = 0; i < 4; i++) b.push(String(await w.sf.clawbackBpsByBand(i)));
+        return b.join("/");
+      } catch { return "ABSENT"; }
+    })(),
   };
   console.log(`  dials in force: maxItemsPerUpkeep=${dials.maxItemsPerUpkeep} minGasPerItem=${dials.minGasPerItem} ` +
-    `insolvencyFloorBps=${dials.insolvencyFloorBps} baseAdvanceBps=${dials.baseAdvanceBps}`);
+    `insolvencyFloorBps=${dials.insolvencyFloorBps} baseAdvanceBps=${dials.baseAdvanceBps} ` +
+    `clawbackBands=${dials.clawbackBands}`);
 
   /**
    * ══ AB_EVICT=1 — THE ROUTING INSTRUMENT (session 8) ════════════════════════════════════
@@ -1253,6 +1272,99 @@ async function main() {
     };
   })() : null;
 
+  /**
+   * ══ THE DEBT LEDGER (session 22) — what 19.17b said was NOT measured ═══════════════════
+   *
+   * 19.17b shipped the clawback preset menu with the warning attached: session 16 measured
+   * that this clawback collected $0.00 inside a MatB occupancy, and recorded that **how
+   * fast debt retires and how much a member can withdraw were NOT measured**. Without those
+   * two numbers a preset sweep can only report side effects. This block is the missing half.
+   *
+   * ⛔ TWO INDEPENDENT TALLIES OF THE SAME MONEY, AND THEY MUST AGREE. `RescueDebtRepaid`
+   *    is emitted by the MATRIX at each repayment site (_settlePool's clawback, and the
+   *    MatB cycle-out sweep); `MemberDebtRepaid` is emitted by the SF when it books one.
+   *    They are different contracts counting the same event, so a disagreement means a
+   *    repayment path is missing from one of them and BOTH figures are void — the same
+   *    discipline as the loan book's reconcile against raw.loanVolume.
+   *
+   * ⚠ `clawbackCollected` IS NOT THE SAME AS `repaidTotal`. The clawback is the redirect
+   *   inside _settlePool; the cycle-out sweep at MatB is a SECOND repayment path that the
+   *   preset does not control. Reporting only the total would credit the dial with money it
+   *   never touched. They are split here, by emitting site.
+   *
+   * ⚠ AND `stillOwing` IS AN END-STATE READ, NOT A RATE. "How fast debt retires" is not a
+   *   single number; what is measurable in a fixed-length run is how much is left standing
+   *   at the end and across how many members. Do not quote it as a half-life.
+   */
+  const debtBlock = await (async () => {
+    const usd = (v) => +(Number(v) / 1e6).toFixed(4);
+    const bySite = { matA: 0n, matB: 0n, elsewhere: 0n };
+    const rows = ev["RescueDebtRepaid"] || [];
+    const from = (ADDR_OF.get(ev) || {})["RescueDebtRepaid"] || [];
+    let repaidEvents = 0;
+    for (let i = 0; i < rows.length; i++) {
+      repaidEvents++;
+      const amt = BigInt(field(rows[i], "amount", 1));
+      // ⚠ SPLIT BY EMITTING HALF, WHICH IS NOT THE SAME AS SPLIT BY SITE. _settlePool runs
+      //   in BOTH halves, so MatB's total mixes its clawback with the cycle-out sweep that
+      //   only MatB has. MatA's total is clawback and nothing else — that is the clean one,
+      //   and it is the only column the preset wholly controls. Labelled by half on purpose
+      //   rather than guessed into site names.
+      const a = String(from[i] || "").toLowerCase();
+      if (a === String(w.matBAddr).toLowerCase()) bySite.matB += amt;
+      else if (a === String(w.matAAddr).toLowerCase()) bySite.matA += amt;
+      else bySite.elsewhere += amt;
+    }
+    const repaidTotal = bySite.matA + bySite.matB + bySite.elsewhere;
+    const sfSideTotal = (ev["MemberDebtRepaid"] || [])
+      .reduce((s, a) => s + BigInt(field(a, "amount", 1)), 0n);
+
+    // End state, read member by member off the chain rather than derived from events.
+    const addrs = [w.W1.address];
+    for (let i = 0; i < seq.members; i++) addrs.push(addrOf(i));
+    let owedTotal = 0n, owing = 0, wdTotal = 0n, resTotal = 0n;
+    const owedEach = [];
+    for (const a of addrs) {
+      let d = 0n; try { d = BigInt(await w.sf.memberDebtOf(a)); } catch {}
+      if (d > 0n) { owing++; owedEach.push(d); }
+      owedTotal += d;
+      for (const m of [w.matA, w.matB]) {
+        try { wdTotal  += BigInt(await m.withdrawableOf(a)); } catch {}
+        try { resTotal += BigInt(await m.crossingReserveOf(a)); } catch {}
+      }
+    }
+    owedEach.sort((x, y) => (x < y ? -1 : x > y ? 1 : 0));
+    const med = owedEach.length ? owedEach[Math.floor((owedEach.length - 1) / 2)] : null;
+
+    return {
+      clawbackBands: dials.clawbackBands,
+      repaymentEvents: repaidEvents,
+      repaidTotalUSD: usd(repaidTotal),
+      // MatA can only be _settlePool's clawback — the clean read on the dial.
+      matAClawbackUSD: usd(bySite.matA),
+      // MatB mixes _settlePool's clawback with the cycle-out sweep the preset does not control.
+      matBMixedUSD: usd(bySite.matB),
+      elsewhereUSD: usd(bySite.elsewhere),
+      reconcile: {
+        matrixSide: repaidTotal.toString(),
+        sfSide: sfSideTotal.toString(),
+        agree: repaidTotal === sfSideTotal,
+        note: "RescueDebtRepaid (matrix) vs MemberDebtRepaid (SF) — two contracts counting " +
+              "the same repayments. Disagreement means a repayment path is missing from one " +
+              "tally and BOTH figures are void.",
+      },
+      endState: {
+        membersStillOwing: owing,
+        totalOutstandingUSD: usd(owedTotal),
+        medianOutstandingUSD: med === null ? null : usd(med),
+        totalWithdrawableUSD: usd(wdTotal),
+        totalCrossingReserveUSD: usd(resTotal),
+        note: "an end-state read at the last tick, not a retirement rate — the run has a " +
+              "fixed length and 21.0 established that lengthening it changes the world.",
+      },
+    };
+  })();
+
   const result = {
     arm, seed: seq.seed, members: seq.members, size: seq.size, equalize,
     ran: { registered, keeperTicks, keeperFailures, seconds: Math.round((Date.now() - t0) / 1000) },
@@ -1407,6 +1519,7 @@ async function main() {
     lending,
     loanBook: loanBookBlock,
     ...(evictionLedgerBlock ? { evictionLedger: evictionLedgerBlock } : {}),
+    debtLedger: debtBlock,
     ...(censusBlock ? { census: censusBlock } : {}),
     ...(evictBlock ? { evictRouting: evictBlock } : {}),
   };
@@ -1444,11 +1557,36 @@ async function main() {
   // ⛔ TAG FROM THE CONTRACT, NOT THE ENV VAR. Same rule as the dials: if the fixture were
   //    missing the env var would still name a file `_gate3000` that contains an ungated run.
   const gateTag = dials.baseAdvanceBps !== "ABSENT" ? `_gate${dials.baseAdvanceBps}` : "";
+  // ⛔ SAME RULE, FROM THE CONTRACT: the bands, joined, never the AB_CLAWBACK id. The SF
+  //    stores no preset id, so tagging from the env var would let a row that failed to
+  //    apply still be named after the preset it was supposed to be.
+  const cbTag = (dials.clawbackBands && dials.clawbackBands !== "ABSENT"
+                 && dials.clawbackBands !== "9000/8000/7000/6000")
+                 ? `_cb${dials.clawbackBands.replace(/\//g, "-")}` : "";
+  // ⛔ THE TAIL IS A DIAL AND IT MUST BE TAGGED. Session 21 made the tail a parameter and
+  //    did NOT put it in the filename; within the hour a tail-200 run silently overwrote the
+  //    tail-12 baseline, because the two differ in nothing the name records. Read from the
+  //    SEQUENCE FILE, not an env var — same rule as every other tag here. A sequence without
+  //    a `tail` field predates the parameter and is a 12-tick tail by construction.
+  const tailTag  = (seq.tail !== undefined && Number(seq.tail) !== 12) ? `_tail${seq.tail}` : "";
   const popTag   = doEvict && !queueEvery ? "_nopop" : "";
   const out = path.join(hre.config.paths.root,
-    `ab_result_${arm}_s${seq.seed}${equalize ? "_eq" : ""}${doCensus ? "_census" : ""}${doEvict ? "_evict" : ""}${popTag}${floorTag}${gateTag}.json`);
+    `ab_result_${arm}_s${seq.seed}${equalize ? "_eq" : ""}${doCensus ? "_census" : ""}${doEvict ? "_evict" : ""}${popTag}${tailTag}${floorTag}${gateTag}${cbTag}.json`);
   fs.writeFileSync(out, JSON.stringify(result, null, 2) + "\n");
   console.log(`\n  written: ${path.basename(out)}`);
+  {
+    const D = result.debtLedger;
+    if (!D.reconcile.agree) {
+      console.log(`\n  \u26d4 DEBT LEDGER VOID: matrix side ${D.reconcile.matrixSide} != SF side ` +
+        `${D.reconcile.sfSide} — a repayment path is missing from one tally. Do not quote either.`);
+    } else {
+      console.log(`\n  DEBT LEDGER (bands ${D.clawbackBands}): ${D.repaymentEvents} repayments, ` +
+        `$${D.repaidTotalUSD} total  [MatA clawback $${D.matAClawbackUSD} | MatB mixed $${D.matBMixedUSD}]`);
+      console.log(`    end state: ${D.endState.membersStillOwing} still owing $${D.endState.totalOutstandingUSD} ` +
+        `(median $${D.endState.medianOutstandingUSD})   withdrawable $${D.endState.totalWithdrawableUSD}   ` +
+        `reserve $${D.endState.totalCrossingReserveUSD}`);
+    }
+  }
   {
     const L = result.lending;
     console.log(`  LENDING: ${L.loanEvents} loans to ${L.distinctBorrowers} distinct members  ` +

@@ -171,6 +171,52 @@ async function deployWorld(hre, size) {
     wiring.applied.push(`setBaseAdvanceBps(${back})`);
   }
 
+  // ⛔ AB_CLAWBACK — THE CLAWBACK PRESET, AS A SWEEP DIAL (session 22).
+  //
+  // 19.17b shipped the preset menu with an explicit warning that its effect is NOT
+  // measured and that only preset 2 has evidence behind it. This is the dial that
+  // prices the other three. Same discipline as AB_GATE_BPS: ONE compile serves the
+  // whole sweep, so a difference between rows can only be the dial.
+  //
+  // ⚠ THIS FIXTURE IS SINGLE-TIER, SO IT MEASURES BAND 3 AND NOTHING ELSE.
+  //   `_bandOf` maps issuing tiers T1-T3 to band 3; every debt in this world is issued
+  //   at tier 0. The sweep therefore varies band 3 (6000 / 3000 / 6000... see below) and
+  //   says NOTHING about bands 0-2. That is the right scope rather than a limitation —
+  //   19.17b: "in practice only band 3 has a population" — but a row must never be
+  //   quoted as if it priced the whole preset.
+  //
+  // ⛔ NOT `optional`, for the same reason AB_GATE_BPS is not: a missing setter means an
+  //   OLDER SF, and a run that continued would produce a row reading "the preset changed
+  //   nothing", indistinguishable from a real null result and just as believable.
+  if (process.env.AB_CLAWBACK !== undefined && process.env.AB_CLAWBACK !== "") {
+    if (typeof sf.setClawbackPreset !== "function") {
+      throw new Error(
+        "AB_CLAWBACK is set but StabilityFund has no setClawbackPreset — that setter arrived " +
+        "with the item-43 DAO sweep (session 19), so this SF is an OLDER BUILD. Check which " +
+        "contracts directory this arm points at, then `npx hardhat compile`. " +
+        "Refusing to run: the result would read as 'the preset did nothing'.");
+    }
+    const want = Number(process.env.AB_CLAWBACK);
+    if (!Number.isInteger(want) || want < 0 || want > 3) {
+      throw new Error(`AB_CLAWBACK must be 0..3 (the preset ids), got ${process.env.AB_CLAWBACK}`);
+    }
+    await sf.setClawbackPreset(want);
+    // READ THE BANDS BACK, NOT THE ID — the contract deliberately stores no preset id
+    // (19.17b: "clawbackBpsByBand is the single source of truth"), so the bands ARE the
+    // only evidence the call landed. Asserting against the expected table here is what
+    // stops a renumbered menu from silently sweeping the wrong values.
+    const EXPECT = [[0, 0, 0, 0], [6000, 5000, 4000, 3000],
+                    [9000, 8000, 7000, 6000], [10000, 9500, 9000, 8000]][want];
+    const back = [];
+    for (let i = 0; i < 4; i++) back.push(Number(await sf.clawbackBpsByBand(i)));
+    if (back.join(",") !== EXPECT.join(",")) {
+      throw new Error(`AB_CLAWBACK=${want} read back as [${back}], expected [${EXPECT}] — ` +
+        `the menu in setClawbackPreset does not match this harness's table. Fix one of them ` +
+        `before sweeping; a mislabelled row is worse than no row.`);
+    }
+    wiring.applied.push(`setClawbackPreset(${want}) -> [${back}]`);
+  }
+
   // keeperLib is RETURNED, not merely wired. It carries `rescueBpsFor` as an external pure
   // function on BOTH arms, which is the only way an off-chain instrument can ask the SF
   // rescue ladder the same question discovery asks WITHOUT re-implementing the ladder walk
