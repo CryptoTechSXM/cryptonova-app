@@ -10,7 +10,8 @@ owner-set, and the session that earned it got five things wrong by ignoring what
 
 ---
 
-# ⬛ SESSION 18 STATE — 2026-08-20, LATEST. READ THIS FIRST. 17.7 ITEM 1 IS ANSWERED — BUT NOT AS IT WAS ASKED.
+# ⬛ SESSION 18 STATE — 2026-08-20, LATEST. READ THIS FIRST.
+# 17.7 ITEM 1 IS ANSWERED (NOT AS ASKED), AND THE OWNER'S GATE DECISION IS TAKEN — 18.14, 18.18.
 
 Measurement only. **Nothing deployed, no chain written to.** The session-17 gate fixture was
 applied, measured across a 15-run sweep, and reverted — `git status --short contracts/` is
@@ -252,7 +253,10 @@ counterfactual table in 18.4 at all.**
 * **NOTHING ON LIVE V8.50** — there is no such chain.
 * **NO PER-ITEM GAS AT 127** — see 18.5's warning.
 
-## 18.11 ⛔ THE OWNER'S DECISION, RESTATED AND SHARPENED. STILL HIS, AND NOW IT IS THE PRIOR ONE.
+## 18.11 ⛔ THE OWNER'S DECISION, RESTATED AND SHARPENED. ⚠ ANSWERED — READ 18.14 AND 18.18 FIRST.
+> **TAKEN 2026-08-20: YES, A REFUSED LOAN ROUTES TO EVICTION, AND THE CAP IS 3000 bps.** The
+> reasoning below is kept because it is what the decision was taken against, not because
+> anything here is still open.
 
 17.5 asked two things: what base ceiling, and whether a refused loan should route to eviction
 at all. **18.7 and 18.8 make the second one primary.** The base ceiling is a free choice only
@@ -268,9 +272,9 @@ if refusal→eviction is acceptable:
 
 **DO NOT DESIGN EITHER BRANCH BEFORE HE ANSWERS.** Everything measurable has been measured.
 
-## 18.12 NEXT, IN ORDER
+## 18.12 NEXT, IN ORDER   ⚠ ITEM 1 IS DONE — SEE 18.14. RENUMBERED IN 18.21.
 
-1. **THE OWNER'S CALL IN 18.11.** Blocking, and it is genuinely his.
+1. ~~**THE OWNER'S CALL IN 18.11.**~~ **TAKEN 2026-08-20 (18.14).**
 2. **CROSS 18.4's CURVE WITH THE LIVE `directCount` DISTRIBUTION.** Read every
    `memberReferrer` assignment off live V8.48, build the real directCount histogram, and apply
    18.4's zero-sponsor refusal column to it. That converts a fixture result into a live
@@ -306,6 +310,160 @@ if refusal→eviction is acceptable:
 * **VERIFIED BEFORE USE:** all six baseline files were re-run after the loan-book edit and
   came back identical apart from the new block (seed 1 also gained a documentation string
   added to `replay.js` after its previous run; no measured quantity moved on any of the six).
+
+## 18.14 ⛔⛔ THE OWNER'S DECISION, TAKEN 2026-08-20 — YES, A REFUSED LOAN ROUTES TO EVICTION
+
+Verbatim: *"The answer is yes, we are giving some passive earnings and one needs to help
+themselves in order to earn so invite, self rescue or get evicted."*
+
+**18.11 IS CLOSED, AND SO IS 17.5.** The three-way is his frame and it is now the design:
+**invite, self-rescue, or be evicted.** The "some passive earnings" half is what makes a
+NON-ZERO base ceiling part of the decision rather than an optional softening — a member with
+no sponsor still gets help, capped. Later sessions build on this without re-asking.
+
+## 18.15 ✅ EVICTION IS REMOVAL, NOT CONFISCATION — MEASURED FOR THE FIRST TIME
+
+Eviction has fired **0 times in 1,803 live episodes** (14.3), so what the valve actually does
+to a member was known ONLY from session 9's recipe. That is now a measurement. Four A/B runs
+(seed 1 inert + seeds 1/2/3 at base 3000), **34 evicted members**:
+
+| | |
+|---|---|
+| kept their withdrawable in full | **34 of 34** |
+| lost any withdrawable | **0** |
+| still owed their advance afterwards | 4 of 4 who had borrowed |
+| left holding a non-zero crossing reserve | 0 |
+
+Withdrawable medians before → after: $0.25 → $0.25, $6.32 → $6.32, $6.04 → $6.04, $5.58 →
+$5.58. **The recipe was right.**
+
+⚠ **ONE PART IS STILL UNTESTED AND MUST NOT BE READ AS CONFIRMED.**
+`EvictionReserveReleased` fired **0 times across all 34**. That is not a failure: every
+evicted member came from **MatB, where `reserveZeroShare` is 1.00** — there was no reserve to
+release. The release path has still never executed. This is consistent with the standing note
+that `EvictionReserveReleased` is "all but unreachable", and it should be exercised
+deliberately on the private V8.50 deploy before anyone relies on it.
+
+## 18.16 ⛔⛔ WHO THE GATE ACTUALLY REFUSES — AND IT IS THE SAME SIX PEOPLE EVERY SEED
+
+The evictions at base 3000 split into two kinds, and the split is identical on all three
+seeds (**LADDER 4/4/5, FLOOR 6/6/6**):
+
+* **13 LADDER evictions.** Members holding **$0.25** (one at $1.20) — `wBps` 250, i.e. 2.5%
+  of the crossing price. Refused by the RESCUE LADDER, not by the gate, and they are evicted
+  in the inert arm too. **Nothing to do with the base ceiling.** These are the members who
+  genuinely cannot act.
+* **18 FLOOR evictions.** These exist ONLY because the cap bound. Every single one:
+
+| | |
+|---|---|
+| own money held | **$5.58 – $6.82** (median $6.43) |
+| advance needed | **$3.18 – $4.42** |
+| amount owed to the fund | **$0.00 — all eighteen** |
+
+**They are near-misses, and they are the most engaged members who have not invited anyone.**
+Sorted, the eighteen advances are $3.18, 3.25, 3.26, 3.29, 3.33, 3.46, 3.46, 3.49, 3.57,
+3.60, 3.64, 3.64, 3.67, 3.68, 3.68, 3.89, 3.96, 4.42 — so the cap's placement relative to
+that cluster is the whole decision:
+
+| cap | of the 18, granted |
+|---|---|
+| $3.00 | **0** |
+| $3.50 | 8 |
+| $3.75 | 15 |
+| $4.00 | **17** |
+| $4.50 | 18 |
+
+**There is no gentle setting.** Below ~$3.70 the gate refuses the cluster; at $4.00 it grants
+all but one and stops asking anything.
+
+## 18.17 ⛔⛔ THE CAVEAT THAT CHANGES THE HUMANE READING — THE A/B WORLD HAS NO GRACE PERIOD
+
+`test_ab/world.js:116–118` sets **`parkedGracePeriod`, `selfFundedGracePeriod` AND
+`evictionGracePeriod` all to 0**, on both arms, so that a timing difference between builds
+cannot masquerade as an economic one. That is correct for the A/B — and it means **every
+eviction in this sweep fires the instant the member is refused.**
+
+**On live, `evictionGracePeriod` is SEVEN DAYS** (DAO param 62; 14.3 measured the soonest
+clock of any parked member at 5.41 days). A refused member on live is PARKED for a week —
+with the badge session 10 made visible — during which inviting one person makes them eligible
+again. **Every eviction figure in 18.6, 18.7 and 18.16 is therefore a NO-GRACE UPPER BOUND**,
+and the population it bounds is precisely the one most able to act inside the window.
+
+> ⛔ **STANDING RULE THIS ADDS: THE A/B WORLD ZEROES THE CLOCKS.** Any A/B result about
+> eviction VOLUME or TIMING is an upper bound and must say so. Results about who is eligible,
+> what a rescue costs, or what a member keeps are unaffected. Nobody should quote an A/B
+> eviction count as a live prediction.
+
+## 18.18 ⛔ THE DECISION TAKEN, AND WHAT WOULD CHANGE IT
+
+**BASE CEILING = 3000 bps ($3.00 at T1).** Claude's call under the owner's standing rule that
+Claude decides approach and the owner decides economics — and it follows from his own words:
+
+* The members it refuses have already accumulated two-thirds of the crossing price and owe
+  nothing. They are the most engaged non-inviters, they keep every cent (18.15), and on live
+  they get seven days in which inviting ONE person makes them eligible (18.17). That is
+  exactly what "help themselves … invite" asks of them.
+* The members it does NOT touch are the $0.25 LADDER cases, who cannot act either way.
+* At $4.00 the gate grants 17 of the 18 and asks nothing. **"Help yourself" and "grants 17 of
+  18" do not sit together.**
+
+⚠ **WHAT WOULD OVERTURN IT:** the owner preferring the gate to be a backstop that almost
+never fires (then $4.00, one dial, no redesign); or the live `directCount` distribution
+(18.12 item 2) turning out so much thinner than the fixture's that $3.00 would refuse a large
+share of real members rather than six per 288. **That measurement is still the cheapest
+outstanding item and it does not need any further decision.**
+
+## 18.19 ⚠ A CENSORING ARTEFACT FOUND WHILE CHECKING A DISAGREEMENT — READ BEFORE QUOTING 18.6
+
+The loan book predicted 3 zero-sponsor loans would survive a $3.00 cap on seed 1; the replay
+granted 0. **The disagreement was chased rather than explained, and it was not the gate.**
+Those three were rescued at **ticks 68 and 69 — the last two ticks of a 69-tick run** — in the
+inert arm. In the gated arm the queue evolved differently and they were never reached before
+the replay stopped. They appear as **zero work items**, not as refusals.
+
+**CONSEQUENCE: the sequence's 12-tick tail does not drain the queue** (26–31 members still
+parked at the end on both arms), so late rescues are censored in BOTH arms. Part of "loans
+fall 85 → 72" in 18.6 is truncation, not refusal. **The eviction counts are much less
+affected — they fire at ticks 53–65 — which is why 18.16 is the trustworthy half of the
+sweep.** A future session that needs the loan counts clean should lengthen the tail until
+`stillParkedAtEnd` approaches zero, and re-run.
+
+## 18.20 TOOL ADDED — THE EVICTION LEDGER, `test_ab/replay.js`, rides on `AB_CENSUS`/`AB_EVICT`
+
+One row per `ParkedMemberEvicted`: withdrawable BEFORE (from the pre-tick snapshot — reading
+it after the tick would describe the outcome and could be written up as the cause), and
+withdrawable, crossing reserve and SF debt AFTER. The matrix is taken from the EVENT, never
+from the snapshot: a member missing from the snapshot would otherwise be guessed into MatA and
+every balance read off the wrong contract, silently, as zeros. Summary counts rather than
+means, so a single bad row cannot hide, and the console shouts in capitals if
+`lostWithdrawable` is ever non-zero.
+
+---
+
+## 18.21 NEXT, IN ORDER — SUPERSEDES 18.12
+
+1. **CROSS 18.16's REFUSAL CLUSTER WITH THE LIVE `directCount` DISTRIBUTION.** The only thing
+   that could overturn the 3000 bps decision (18.18). Read every `memberReferrer` assignment
+   off live V8.48, build the real directCount histogram, and ask what share of live members
+   would sit in the refused class. One read-only script; `scripts/diag_referral_threshold.js`
+   already computes `directsAt(member, block)` and is the place to add it rather than a new
+   tool. **Needs no further decision from the owner.**
+2. **EXERCISE `EvictionReserveReleased` DELIBERATELY** (18.15). Every evicted member so far
+   came from MatB with a zero reserve, so the release path has still never run. It needs a
+   MatA eviction, which the private V8.50 deploy can stage with `evictionGracePeriod` in
+   minutes (session 9's recipe).
+3. **BUILD THE GATE FOR REAL.** Size, gas, placement, ceiling and eviction cost are all now
+   measured; 18.8's correction means the shipped design is a CEILING and is honest about it,
+   not "a small first advance". Promote `fixture_gate_apply.js`'s five edits into the tree,
+   with `baseAdvanceBps = 3000` and its setter, plus tests.
+4. **LENGTHEN THE A/B TAIL** until `stillParkedAtEnd` approaches zero, so the loan counts stop
+   being censored (18.19). Cheap, and it makes 18.6 quotable.
+5. **SPLIT 14.1 BY TIER** and cap time-at-risk (14.4). ⚠ V8.48 measurement; 18.0 applies.
+6. Backlog, untouched throughout: the 5 unexplained cycle-outs (still exactly 5, organic);
+   `V8_50_ReferralBreakeven.test.js` v4 counts the dead event; stale-nonce retry backoff;
+   @bevmawire's Dashboard retry; `maxItemsPerUpkeep` live 15 vs 20 in source; member-callable
+   re-entry.
 
 ---
 

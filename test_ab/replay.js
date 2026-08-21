@@ -521,6 +521,7 @@ async function main() {
    */
   // AB_EVICT needs the pre-tick queue snapshot for queue-position, so it implies the census.
   const doCensus = process.env.AB_CENSUS === "1" || doEvict;
+  const evictLedger = [];          // one row per ParkedMemberEvicted — see the block that fills it
   const episodes = new Map();      // member -> [{ parkTs, exitTs, how, wdAtPark, wdAtExit }]
   const openEp   = new Map();      // member -> the currently-open episode object
   const censusErr = [];
@@ -711,6 +712,49 @@ async function main() {
             new Set((tickEv[evName] || []).map((a2) => (a2[argName] !== undefined ? a2[argName] : a2[idx])));
           reconcile(await snapshot(), await nowTs(),
             namesOf("ParkedRescued", "member", 1), namesOf("ParkedMemberEvicted", "member", 0));
+
+          /**
+           * ⛔ THE EVICTION LEDGER (session 18) — DOES EVICTION *REMOVE* A MEMBER, OR TAKE
+           *    FROM THEM? Nobody has ever checked. Eviction has fired ZERO times in 1,803
+           *    live episodes (14.3), so the valve's behaviour is known only from the design
+           *    intent in session 9's recipe: the member keeps their withdrawable, the
+           *    crossing reserve is RELEASED, and the debt stays booked. That is an
+           *    ASSERTION FROM A RECIPE, and the owner's 2026-08-20 decision makes eviction
+           *    a routine outcome — so it has to become a measurement before it ever fires
+           *    at a real member.
+           *
+           * THE BEFORE READING IS THE PRE-TICK SNAPSHOT, not a fresh read: reading a
+           * member's balance after the tick that evicted them would describe the outcome
+           * and could be written up as the cause — the same rule the routing capture above
+           * already obeys.
+           *
+           * THE MATRIX COMES FROM THE EVENT, NOT THE SNAPSHOT. A member missing from the
+           * pre-tick snapshot would otherwise be guessed into MatA, and a wrong matrix
+           * reads every balance off the wrong contract — silently, as zeros.
+           */
+          for (const a2 of tickEv["ParkedMemberEvicted"] || []) {
+            const mem    = a2.member !== undefined ? a2.member : a2[1];
+            const mxAddr = a2.matrix !== undefined ? a2.matrix : a2[0];
+            const tw     = a2.totalWithdrawn !== undefined ? a2.totalWithdrawn : a2[2];
+            const isB = String(mxAddr).toLowerCase() === String(w.matBAddr).toLowerCase();
+            const mx = isB ? w.matB : w.matA;
+            const info = preSnap ? preSnap.get(mem) : null;
+            const rd = async (fn) => { try { return String(await fn()); } catch { return null; } };
+            const releasedForMe = (tickEv["EvictionReserveReleased"] || []).filter((r) => {
+              const rm = r.member !== undefined ? r.member : r[0];
+              return String(rm).toLowerCase() === String(mem).toLowerCase();
+            }).length;
+            evictLedger.push({
+              member: mem, tick: keeperTicks, matrix: isB ? "B" : "A",
+              inPreSnapshot: !!info,
+              wdBefore: info ? info.wd.toString() : null,
+              wdAfter: await rd(() => mx.withdrawableOf(mem)),
+              reserveAfter: await rd(() => mx.crossingReserveOf(mem)),
+              debtAfter: await rd(() => w.sf.memberDebtOf(mem)),
+              totalWithdrawnEvent: tw !== undefined && tw !== null ? String(tw) : null,
+              reserveReleasedEvents: releasedForMe,
+            });
+          }
         }
       } catch (e) {
         // ⛔ INTO THE RESULT FILE, NOT JUST THE CONSOLE. The first 127 run printed these and
@@ -1174,6 +1218,41 @@ async function main() {
     };
   })();
 
+  /**
+   * ══ THE EVICTION LEDGER BLOCK — removal or confiscation, answered per member.
+   * The three questions, and each is a COUNT so a single bad row cannot hide in a mean:
+   *   keptEverything   — withdrawable after >= withdrawable before. Removal, not taking.
+   *   lostWithdrawable — after < before. Every one of these is a finding on its own.
+   *   debtStillBooked  — the advance survives the eviction, as the recipe says it should.
+   * ⚠ `wdBefore` is null for a member who was not in the pre-tick snapshot (evicted in the
+   *   same tick they parked); those are counted separately rather than assumed either way.
+   */
+  const evictionLedgerBlock = doCensus ? (() => {
+    const rows = evictLedger;
+    const cmp = rows.filter((r) => r.wdBefore !== null && r.wdAfter !== null);
+    const lost = cmp.filter((r) => BigInt(r.wdAfter) < BigInt(r.wdBefore));
+    const usd = (v) => +(Number(v) / 1e6).toFixed(4);
+    return {
+      evicted: rows.length,
+      comparable: cmp.length,
+      notInPreSnapshot: rows.filter((r) => !r.inPreSnapshot).length,
+      keptEverything: cmp.length - lost.length,
+      lostWithdrawable: lost.length,
+      lostRows: lost.slice(0, 20),
+      debtStillBooked: rows.filter((r) => r.debtAfter !== null && BigInt(r.debtAfter) > 0n).length,
+      reserveNonZeroAfter: rows.filter((r) => r.reserveAfter !== null && BigInt(r.reserveAfter) > 0n).length,
+      reserveReleasedEventsSeen: rows.reduce((s, r) => s + r.reserveReleasedEvents, 0),
+      wdBeforeUSDmedian: cmp.length ? usd([...cmp].map((r) => BigInt(r.wdBefore))
+        .sort((x, y) => (x < y ? -1 : x > y ? 1 : 0))[Math.floor((cmp.length - 1) / 2)]) : null,
+      wdAfterUSDmedian: cmp.length ? usd([...cmp].map((r) => BigInt(r.wdAfter))
+        .sort((x, y) => (x < y ? -1 : x > y ? 1 : 0))[Math.floor((cmp.length - 1) / 2)]) : null,
+      note: "design intent (session 9 recipe step 4): eviction REMOVES the member, keeps " +
+            "their withdrawable, RELEASES the crossing reserve and leaves the debt booked. " +
+            "Any non-zero lostWithdrawable contradicts that and must be read before shipping.",
+      rows,
+    };
+  })() : null;
+
   const result = {
     arm, seed: seq.seed, members: seq.members, size: seq.size, equalize,
     ran: { registered, keeperTicks, keeperFailures, seconds: Math.round((Date.now() - t0) / 1000) },
@@ -1327,6 +1406,7 @@ async function main() {
     },
     lending,
     loanBook: loanBookBlock,
+    ...(evictionLedgerBlock ? { evictionLedger: evictionLedgerBlock } : {}),
     ...(censusBlock ? { census: censusBlock } : {}),
     ...(evictBlock ? { evictRouting: evictBlock } : {}),
   };
@@ -1343,6 +1423,9 @@ async function main() {
   const slim = JSON.parse(JSON.stringify(result));
   if (slim.loanBook) {
     slim.loanBook.loans_detail = `[${result.loanBook.loans_detail.length} rows — in the JSON file]`;
+  }
+  if (slim.evictionLedger) {
+    slim.evictionLedger.rows = `[${result.evictionLedger.rows.length} rows — in the JSON file]`;
   }
   if (slim.evictRouting) {
     for (const k of ["items", "queueCensus", "batches"]) {
@@ -1407,6 +1490,19 @@ async function main() {
           `${String(f[k].allLoansFitting).padStart(3)}/${B.loans} fit (${f[k].allShare})  ` +
           `zero-direct refused ${f[k].zeroDirectRefused}`);
       }
+    }
+  }
+  if (result.evictionLedger) {
+    const E = result.evictionLedger;
+    console.log(`\n  EVICTION LEDGER: ${E.evicted} evicted, ${E.comparable} with a before-reading` +
+      (E.notInPreSnapshot ? ` (${E.notInPreSnapshot} evicted in the tick they parked)` : ""));
+    console.log(`    kept everything ${E.keptEverything}   LOST withdrawable ${E.lostWithdrawable}` +
+      `   still owe after eviction ${E.debtStillBooked}   reserve non-zero after ${E.reserveNonZeroAfter}`);
+    console.log(`    withdrawable median  before $${E.wdBeforeUSDmedian}  ->  after $${E.wdAfterUSDmedian}` +
+      `   EvictionReserveReleased events ${E.reserveReleasedEventsSeen}`);
+    if (E.lostWithdrawable > 0) {
+      console.log(`    ⛔ ${E.lostWithdrawable} MEMBER(S) LOST WITHDRAWABLE ON EVICTION — this contradicts` +
+        ` the design intent. Read evictionLedger.lostRows before shipping any gate.`);
     }
   }
   if (doEvict) {
