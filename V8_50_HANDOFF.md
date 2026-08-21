@@ -1,7 +1,7 @@
 # V8.50 HANDOFF — the crossing redesign. READ THIS FIRST.
 
 Written 2026-08-16 at the end of the V8.49 private measurement run.
-Sessions 2-26 have appended to it since; read the NEWEST section first — each one
+Sessions 2-27 have appended to it since; read the NEWEST section first — each one
 corrects the ones below it, and says so explicitly where it does.
 Audience: **the next session of Claude, plus the owner. There is no third party — every
 line of this codebase was written by a previous session of Claude and executed by the
@@ -10,7 +10,115 @@ owner-set, and the session that earned it got five things wrong by ignoring what
 
 ---
 
-# ⬛ SESSION 26 STATE — 2026-08-21, LATEST. READ THIS FIRST.
+# ⬛ SESSION 27 STATE — 2026-08-21, LATEST. READ THIS FIRST.
+# ✅ THE DEPLOY GATE IS A RUNBOOK PHASE NOW — `GO_LIVE_RUNBOOK.md` PHASE G — AND THE ONE
+# TOOL IT WAS MISSING IS BUILT AND SELF-VALIDATED.
+
+Instrument + runbook. **Nothing deployed, no contract file touched.** One new read-only
+script, one new runbook phase, two stale numbers corrected in place.
+
+## 27.0 ⛔ THE GAP THAT WAS FOUND WHILE WRITING THE RUNBOOK: NOTHING MEASURED KEEPER GAS ON A CHAIN
+
+The gate's measurement 1 — *gas per SF-funded rescue at 127* — had **no tool**. Grepped
+every script: several read `gasUsed`, several decode `performData`, **none does both**.
+`V8_50_KeeperGas.test.js` measures per-item gas but is Hardhat at `MATRIX_SIZE` 7;
+`diag_floor_halt.js` decodes work items but is a static reachability check for the floor
+path. So the gate's single most important number had a threshold and no instrument.
+
+**`scripts/diag_keeper_gas_live.js`** — read-only, 12 self-test assertions passing.
+
+## 27.1 ⛔⛔ THE DESIGN CALL THAT MAKES MEASUREMENT 1 POSSIBLE: PIN THE BATCH TO ONE ITEM
+
+`gasUsed` is per **batch**. A mixed batch tells you what the batch cost and nothing about
+the parts, and a per-item number fitted from mixed batches is **a model, not a
+measurement** — which rule 1 exists to keep out of this record.
+
+So the runbook sets `maxItemsPerUpkeep = 1` for the measurement window. Every
+`performUpkeep` then runs exactly one item and its `gasUsed` IS that item's cost plus a
+fixed overhead — **and the overhead is measured too**, read off the cheapest work type in
+the same run (a reclaim is ~0.04M at size 7), never assumed. The tool enforces this: single-
+item batches are the only ones that enter a per-item figure, and mixed ones are **counted
+and reported rather than silently dropped**.
+
+⚠ **IT ALSO TRUNCATES AT A HALT.** When `BatchGasHalted(processed, total, …)` fires, the
+items after `processed` never ran, so the tool slices the decoded list to `processed`
+before pricing anything. Without that, a halted batch would attribute its gas across items
+that were never dispatched.
+
+✅ **AND IT REFUSES TO ANSWER RATHER THAN GUESS.** `gateVerdict` returns **null**, never a
+pass, when no single-item rescue was observed or when no cheap type was seen to measure the
+overhead with. The self-test pins both refusals, and pins that the same data **fails** a 3M
+guard while passing a 5M one — so the verdict is not a rubber stamp.
+
+## 27.2 ✅ THE FAILURE MODE, WRITTEN INTO THE RUNBOOK WHERE IT DECIDES SOMETHING
+
+`minGasPerItem` is checked **before** an item is dispatched (`MatrixKeeper.sol:798`). Below
+it, the batch emits `BatchGasHalted` and breaks — visible, clean, work rediscovered next
+tick. **That is the guard working, and defect 8 built it exactly so exhaustion would be
+distinguishable from refusal.**
+
+⛔ **THE HOLE IS THE OTHER DIRECTION.** Set `minGasPerItem` too LOW and the guard passes,
+the item starts, and it dies inside the `try/catch` as `WorkItemFailed` — an event carrying
+a work type and addresses and **no reason**. An out-of-gas rescue and a rescue that
+reverted for any other cause are **the same line in the log**. On a community chain that
+reads as "members are not being rescued", which is also what an ordinary refusal looks
+like. **That is the whole argument for a private chain, and it is now stated where the
+stop condition sits rather than three documents away.**
+
+So PHASE G's measurement 2 stop rule is: **any `WorkItemFailed` on `PARKED_RESCUE` must be
+explained before go-live**, and *"`BatchGasHalted` never fired"* is an unfinished
+measurement, not a pass.
+
+## 27.3 ⛔ TWO STALE NUMBERS CORRECTED IN PLACE
+
+* **`minGasPerItem` 3.5M → 5,000,000.** The deploy-gate section still tested against the
+  pre-decision value in both its risk list and its measurement table. 20.5 flagged it and
+  deliberately left it; PHASE G now carries the correct number and the old section has a
+  banner. **Do not carry 3.5M into the run.**
+* **Risk 2 of the original four is CLOSED** (20.4) and the gate section now says so.
+  Risks 1, 3 and 4 remain and are all the same question: nothing in V8.50 has ever run at
+  127 on a real chain.
+
+## 27.4 ✅ WHAT PHASE G IS, AND — MORE USEFULLY — WHAT IT IS NOT
+
+**It is a GAS test.** The economics are measured to exhaustion and are not the risk. And
+gas is the one thing a chain of scripts measures **honestly**: gas does not care whether an
+address belongs to a person or to bigfill. That is the cleanest justification for the
+private chain and it is now the phase's opening line.
+
+⛔ **IT CANNOT ANSWER ANYTHING MEMBER-SHAPED, AND THE PHASE SAYS SO IN ITS OWN CLOSING
+SECTION** — behaviour under refusal (nothing anywhere contains a member who invited someone
+*because* they were refused), the live V8.50 shortfall distribution (19.6: needs V8.50 live
+plus weeks), 14.1 re-measured honestly (18.0). **Those wait for the community and nothing
+should be held back for them.** The two are not alternatives: PHASE G asks whether the
+machine runs at real size; the community asks how people behave.
+
+## 27.5 NEXT, IN ORDER — SUPERSEDES 26.5.
+
+1. **RUN `GO_LIVE_RUNBOOK.md` PHASE G.** Owner's machine, private chain, `MATRIX_SIZE` 127,
+   hours not days. G.3 and G.6 are the two stop conditions.
+2. **SPLIT THE `shortfall == 0` BUCKET IN `diag_parked_experiment.js`** (26.4) — the only
+   thing that can close `:936`. One pass over logs it already fetches. ⛔ Needs an RPC;
+   **batch it with PHASE G** rather than making it its own trip.
+3. **PHASE 2 ONWARDS** — the community deploy — only after PHASE G passes.
+4. **POST-MIGRATION:** PHASE 7b — pre-flight, check the live histogram against 19.1, arm at
+   3000. Then re-run `diag_referral_threshold.js` section 4 + the loan book (19.6).
+5. Backlog: the 5 unexplained cycle-outs; `V8_50_ReferralBreakeven.test.js` v4 counts the
+   dead event; stale-nonce retry backoff; @bevmawire's Dashboard retry; `maxItemsPerUpkeep`
+   live 15 vs 20 in source (25.6); member-callable re-entry. Plus the three orphan
+   session-13 fragments 19.18c flagged.
+
+⚠ **ONE OPEN OPTION, PRICED NOWHERE YET.** If `WorkItemFailed` carried a reason or the
+remaining gas, an exhaustion failure would stop being indistinguishable from a refusal and
+the blast radius of a wrong `minGasPerItem` on live would drop sharply. **It would NOT tell
+anyone what a rescue costs at 127** — it makes the failure legible, it does not remove the
+unknown, so it is not a substitute for PHASE G. Cost in bytes is unmeasured; MatrixKeeper's
+headroom was never the tight one (TierRouter's 530 spare is), but that is not a measurement
+either. Raise it only if PHASE G comes back uncomfortable.
+
+---
+
+# ⬛ SESSION 26 STATE — 2026-08-21. READ AFTER SESSION 27.
 # ⛔ `:936` CLASSIFIED: IT IS A DOOR, A ONE-PAIR WORLD CANNOT REACH IT, AND THE TWO-PAIR
 # ROUTE IS BLOCKED BY THE SAME WEALTH BOUND THAT CAPS CASCADE DEPTH. UNREACHED ≠ UNREACHABLE.
 
@@ -129,6 +237,8 @@ would currently be hiding, counted and discarded. Add the split to that bucket r
 building a new tool.
 
 ## 26.5 NEXT, IN ORDER — SUPERSEDES 25.8. ⚠ ITEM 1 IS CLASSIFIED, NOT CLOSED.
+✅ **SUPERSEDED BY 27.5.** The deploy gate is now `GO_LIVE_RUNBOOK.md` PHASE G, and 26.4's
+`:936` log split should be batched into the same RPC trip.
 
 1. **SPLIT THE `shortfall == 0` BUCKET IN `diag_parked_experiment.js`** (26.4) and re-run
    with 24.3's command. Cheap — one pass over logs already fetched — and it is the only
@@ -5490,6 +5600,13 @@ outright.** On these numbers V8.50 is not an improvement, it is the fix.
    `2011eed`). Not rewritten; **this document is the record.** Use `git commit -F` — see 6g.
 
 ## ⛔ THE V8.50 DEPLOY GATE — DECIDED 2026-08-18
+> ✅ **THIS SECTION IS NOW A RUNBOOK PHASE — `GO_LIVE_RUNBOOK.md` PHASE G (session 27).**
+> Four measurements, exact commands, pass/stop conditions on each. Run that, not this.
+> ⛔ **AND TWO NUMBERS BELOW ARE STALE.** `minGasPerItem` has been **5,000,000** since the
+> owner decision of 2026-08-18 (`MatrixKeeper.sol:290`); the "3.5M" in the risk list and in
+> the measurement table's *against* column is the pre-decision value. **Do not carry 3.5M
+> into the run.** ✅ And **risk 2 is CLOSED** — defect 9's cascade-refill path got coverage
+> in `test/V8_50_EvictionReserve.test.js` (20.4). Risks 1, 3 and 4 remain.
 
 **The question asked:** ship V8.50 to the community and measure it live, simultaneously?
 **The answer: no — private chain first, but a SHORT one with a closed list.**

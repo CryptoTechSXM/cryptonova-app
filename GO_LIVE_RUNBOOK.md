@@ -108,6 +108,146 @@ V8.44 shipped with all unit tests green and still corrupted a live matrix within
 
 ---
 
+## PHASE G — THE PRIVATE GATE. ⛔ BEFORE PHASE 2, AND IT IS THE ONLY THING BETWEEN A GREEN SUITE AND THE COMMUNITY.
+
+**Private chain, closed list, `MATRIX_SIZE` 127, bigfill to force real rescues. Hours, not
+days. The community stays on the old build throughout — that IS the "simultaneous", with
+the risk on our side of the line.**
+
+⛔ **THIS IS A GAS TEST, NOT AN ECONOMICS TEST, AND THE DISTINCTION IS THE WHOLE POINT.**
+The economics are measured to exhaustion and are not the risk. What has never been measured
+is what a keeper item COSTS at 127 on a real chain — every gas figure V8.50 has is
+`MATRIX_SIZE` 7. Gas is also the one thing a chain of scripts measures HONESTLY: gas does
+not care whether an address belongs to a person or to bigfill. Anything member-shaped
+(behaviour under refusal, the live shortfall distribution, 14.1 re-measured) this chain
+CANNOT answer and is not being asked — those wait for the community, and nothing should be
+held back for them.
+
+⚠ **THE FAILURE MODE, so the stop conditions below make sense.** `minGasPerItem` is checked
+BEFORE an item is dispatched. If the remaining gas is under it, the batch emits
+`BatchGasHalted` and breaks — visible, clean, work rediscovered next tick. **That is the
+guard working.** Set it too LOW and the guard passes, the item starts, and it dies inside
+the `try/catch` as `WorkItemFailed` — an event carrying a work type and addresses and **no
+reason**. An out-of-gas rescue and a rescue that reverted for any other cause are the same
+line in the log. On a community chain that reads as "members are not being rescued", which
+is also what an ordinary refusal looks like. **That is why this cannot be watched live.**
+
+⚠ **`minGasPerItem` IS 5,000,000** (`MatrixKeeper.sol:290`, owner decision 2026-08-18). Any
+older note testing against 3.5M is stale — do not carry that number into this phase.
+
+**G.0** Deploy privately: PHASE 0 and PHASE 1 exactly as written, with `MATRIX_SIZE` 127
+and the frontend NOT repointed. Being off the frontend is what makes it private.
+*Why: PHASE 1.4's integrity gate applies here too — a corrupted matrix invalidates every
+gas number taken after it.*
+
+**G.1** Fill it. Bigfill until real rescues are happening — parked members with shortfalls,
+not just registrations.
+```powershell
+node scripts\bigfill_v8.js
+```
+🖥️PS. *Why: a keeper batch that only reclaims idle slots costs 0.04M and proves nothing.
+The dear item is an SF-funded rescue and the queue has to contain some.*
+
+**G.2 ⛔ PIN THE BATCH TO ONE ITEM. This step is what makes measurement 1 possible.**
+```powershell
+npx hardhat run scripts\set_max_items.js --network baseSepolia
+```
+Set it to **1**. *Why: `gasUsed` is per BATCH. A mixed batch tells you what the batch cost
+and nothing about the parts, and a number fitted from mixed batches is a model, not a
+measurement. At a cap of 1 every `performUpkeep` runs exactly one item and its `gasUsed`
+IS that item's cost plus a fixed overhead — the same trick `V8_50_KeeperGas.test.js` uses
+at size 7, which is what makes the two comparable at all.*
+
+**G.3** Let the keeper run through a few dozen upkeeps at cap 1, then measure:
+```powershell
+npx hardhat run scripts\diag_keeper_gas_live.js --network baseSepolia
+```
+🖥️PS. **Save the output** — `gate_size127.txt` is already gitignored.
+
+> **MEASUREMENT 1 — gas per SF-funded rescue at 127.**
+> The script prints its own verdict. It computes the marginal cost as *dearest single-rescue
+> batch − the fixed overhead*, where the overhead is read off the cheapest work type in the
+> same run rather than assumed.
+> **PASS:** marginal max **< 5,000,000** with visible headroom.
+> ⛔ **STOP:** marginal max ≥ 5,000,000. `minGasPerItem` is wrong and must move BEFORE the
+> community deploy. **This single number is the whole reason this phase exists.**
+> ⚠ **"NO VERDICT" IS NOT A PASS.** If no single-item rescue was observed, or no cheap type
+> was seen to measure the overhead with, the script refuses to answer. Fill more and re-run.
+
+**G.4** Restore the cap and let a deep queue build:
+```powershell
+npx hardhat run scripts\set_max_items.js --network baseSepolia
+```
+Set it back to **20**, then run the keeper against a queue deeper than one batch and
+re-run `diag_keeper_gas_live.js`.
+
+> **MEASUREMENT 2 — does `BatchGasHalted` fire, and at what batch size?**
+> **PASS:** it fires, `processed < total`, and `gasRemaining` sits just under 5,000,000 —
+> the guard stopping cleanly before an item it could not afford.
+> ⛔ **STOP:** any `WorkItemFailed` on `PARKED_RESCUE`. The event carries no reason, so an
+> out-of-gas item and an ordinary revert are indistinguishable — **every non-zero count
+> here must be explained before go-live, not waved through.**
+> ⚠ If `BatchGasHalted` never fires at all, the queue was never deep enough to reach the
+> guard. That is an unfinished measurement, not a pass.
+
+**G.5**
+```powershell
+npx hardhat run scripts\model_item_a.js --network baseSepolia
+```
+> **MEASUREMENT 3 — MatA parkers freed outright.** PHASE 2 of that script projects 67 of
+> 67, 100%. On the private chain this is `selfFundedRescues / rescues` on the V8.50 arm,
+> and it needs **no control**: `CoPayRescue` carries `sfShare` directly, so `sfShare == 0`
+> IS "the fund paid nothing".
+> **PASS:** the share is at or near the projection.
+> ⚠ A shortfall here is an ECONOMIC finding on a population of scripts. Read handoff 14.6
+> before treating it as a fact about members.
+
+**G.6**
+```powershell
+npx hardhat run scripts\diag_sf_debt_reconcile.js --network baseSepolia
+```
+> **MEASUREMENT 4 — E1 makes the aggregate and ledger bases coincide.** PHASE 6 claims this
+> "by construction"; this is the first time it runs anywhere.
+> **PASS:** the two bases agree.
+> ⛔ **STOP:** they do not. A conservation gap found on the community chain is found in
+> members' money.
+
+**G.7 THEN RE-CONFIRM THE TWO OWNER DECISIONS ON A RUNNING SYSTEM.** Re-run
+`model_item_a.js` PHASE 7/8 against the private chain and re-check PARAM 59 and the rescue
+ladder rung. Both are expected to hold — they held across three samples — **but "expected to
+hold" is a hypothesis and rule 2 applies.**
+⚠ Note the live V8.48 chain runs `insolvencyFloorBps` **3400** while source ships 5,000
+(handoff 25.6). The private V8.50 deploy will come up at **5,000**. They are not the same
+world; do not compare a private figure against a V8.48 one without saying so.
+
+**G.8 RUN THE FRONTEND ABI AUDIT BEFORE THE ADDRESSES CHANGE:**
+```powershell
+npx hardhat run scripts\audit_frontend_abi.js
+```
+Two failure modes it exists for: **MISSING** (the frontend calls something V8.50 does not
+have — breaks on deploy, loud) and **SHAPE DRIFT** (selector matches, OUTPUTS differ — the
+call succeeds and decodes to the WRONG VALUE, silent).
+
+---
+
+### ⛔ THE GATE'S OWN STOP RULE
+
+**If G.3 or G.6 stops, nothing proceeds to PHASE 2.** A private failure costs a redeploy
+nobody sees. A community failure costs the re-registration you only get to ask for once —
+V8.50 carries no proxy machinery, so migration means every member re-registering on new
+addresses, and that is a one-shot event.
+
+### ✅ WHAT THIS GATE DOES NOT COVER, STATED SO NOBODY READS IT AS "READY"
+
+* **No member behaviour.** Nothing here contains a member who invited someone *because*
+  they were refused. The seven-day grace window is untested by construction.
+* **No live shortfall distribution.** The only quantity left that could move the 3000 bps
+  ceiling needs V8.50 live plus weeks of accrual (handoff 19.6).
+* **Risk 2 of the original four is already closed** — defect 9's cascade-refill path got
+  coverage in `test/V8_50_EvictionReserve.test.js` (handoff 20.4). It is not re-tested here.
+
+---
+
 ## PHASE 2 — Community announcement 📢
 
 Post the announcement: what's improved (member-facing, code-verified claims ONLY),
