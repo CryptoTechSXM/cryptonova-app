@@ -1129,4 +1129,68 @@ contract StabilityFund is Ownable2Step {
         clawbackBpsByBand = bps;
         emit ClawbackBandsSet(bps[0], bps[1], bps[2], bps[3]);
     }
+
+    event ClawbackPresetSet(uint256 preset);
+
+    // ── V8.50: THE CLAWBACK PRESET — the DAO's path to the bands ─────────────
+    //
+    // WHY A PRESET AND NOT THE BANDS. setClawbackBands takes a whole uint256[4];
+    // a governance proposal carries ONE uint256. So the menu is a preset id that
+    // expands here — exactly the shape MatrixKeeper.setSfRescueLadderPreset uses
+    // for the rescue ladder, and for exactly the same reason. Without this the
+    // gate on setClawbackBands says "owner or governance" while governance has no
+    // way to propose it: the item-43 class, which is what V8.48 fixed for
+    // setCommunityOverflowBps (param 60). Owner decision 2026-08-21: anything the
+    // owner can change should be DAO-reachable wherever the mechanism allows it.
+    //
+    // ⛔ WHAT THIS DIAL IS. When a member owes the fund, a slice of EVERY earning
+    // is redirected to repay instead of reaching them; these are the slices, keyed
+    // to the tier that issued the debt (deeper tiers issue bigger advances, so they
+    // claw back harder). It is an ORDERING policy, NOT forgiveness — a lower rate
+    // lets the member keep more now and leaves the debt outstanding into the next
+    // cycle; a higher one clears the book faster and the member feels poorer while
+    // indebted. Nothing on this menu writes off a cent.
+    //
+    // ⚠ AND ITS EFFECT IS NOT MEASURED — DO NOT READ A PRESET'S PRESENCE AS
+    // EVIDENCE IT IS GOOD. Session 16 measured that this clawback collected $0.00
+    // inside a MatB occupancy across the whole V8.48 deployment: it collects in the
+    // MatA ledger, which is not the balance the forward hop is judged against. It
+    // recorded explicitly that how fast debt retires and how much a member can
+    // withdraw were NOT measured. Preset 2 is the shipped default and the only one
+    // with evidence behind it. The A/B harness can price the others the way it
+    // priced the base ceiling (one dial, three seeds) and that should happen before
+    // anyone RECOMMENDS a change — the menu exists to give the DAO a path, not to
+    // suggest the path is safe.
+    //
+    // ⚠ IN PRACTICE ONLY BAND 3 HAS A POPULATION. Bands 0-2 cover T4-T10, which are
+    // nearly empty; T1-T3 is where the members are. A preset's real-world effect is
+    // very close to "what does it do to band 3".
+    //
+    // ⛔ NO PRESET ID IS STORED, ON PURPOSE. clawbackBpsByBand is the single source
+    // of truth. Keeping an id beside it would be two models of one rule, free to
+    // drift the moment setClawbackBands is called directly — the same failure this
+    // file already warns about above loanHeadroom. Read the bands, not an id.
+    //
+    //   0 = OFF      [     0,    0,    0,    0 ]  escape hatch: earnings are never
+    //                                             redirected; debt then retires only
+    //                                             via the cycle-out sweep and the
+    //                                             upgrade fold.
+    //   1 = GENTLE   [  6000, 5000, 4000, 3000 ]
+    //   2 = CURRENT  [  9000, 8000, 7000, 6000 ]  <- the declared default
+    //   3 = HARD     [ 10000, 9500, 9000, 8000 ]
+    function setClawbackPreset(uint256 preset) external onlyOwnerOrGovernance {
+        require(preset <= 3, "SF: bad clawback preset");
+        if (preset == 0) {
+            clawbackBpsByBand = [uint256(0), 0, 0, 0];
+        } else if (preset == 1) {
+            clawbackBpsByBand = [uint256(6_000), 5_000, 4_000, 3_000];
+        } else if (preset == 2) {
+            clawbackBpsByBand = [uint256(9_000), 8_000, 7_000, 6_000];
+        } else {
+            clawbackBpsByBand = [uint256(10_000), 9_500, 9_000, 8_000];
+        }
+        emit ClawbackBandsSet(clawbackBpsByBand[0], clawbackBpsByBand[1],
+                              clawbackBpsByBand[2], clawbackBpsByBand[3]);
+        emit ClawbackPresetSet(preset);
+    }
 }

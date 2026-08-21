@@ -4,7 +4,7 @@ Read `V8_50_HANDOFF.md` section 19 first — 19.0 and 19.2 are the DECISION, 19.
 
 STATE
 Contracts `v8.1` — run `git log --oneline -3` and trust that, not a hash written here. Frontend `admin` = `preview` = `main` at `74a1588`. **NOTHING DEPLOYED, NO CHAIN WRITTEN TO.** Sessions 13–19 are measurement plus, in 19, the first code change since 18: THE SPONSORSHIP GATE IS NOW IN THE TREE, SHIPPING INERT.
-SUITE: **631 passing / 7 pending / 0 failing**, run 2026-08-21 with the gate in and GateCost un-skipped (`suite_session19b.txt`). The earlier `suite_session19.txt` reads 629/8/0 — that is the same tree BEFORE GateCost was un-skipped (+2 passing, −1 pending), not drift. Quote 631/7/0.
+SUITE: **638 passing / 7 pending / 0 failing**, run 2026-08-21 after the DAO sweep (`suite_session19c.txt`). Two earlier transcripts from the SAME day are not drift and should not be read as such: `suite_session19.txt` 629/8/0 is before `V8_50_GateCost.test.js` was un-skipped (+2 passing, −1 pending); `suite_session19b.txt` 631/7/0 is before the 7 DAO-param tests. **Quote 638/7/0.**
 
 THE RULES
 1. Do not hypothesise unless necessary. 2. Measure and test before implementing. When two numbers disagree, the disagreement IS the finding. A number you have not run is not a result. One sample is not a measurement. Build the instrument so it can contradict you.
@@ -24,6 +24,8 @@ AND BUILD THE SECOND INSTRUMENT — five sessions, five times it paid. Session 1
 * **18.21 ITEM 1 — THE LIVE `directCount` CROSS.** Live V8.48, blocks 45430468..45756873, 406 members, 405 referrer edges, all ranges clean. Zero-direct share of MEMBERS: live organic **56.1%** vs fixture 49.7% = 1.13x. Zero-direct share of ADVANCES at that block: live organic **59.2%** vs fixture 30.6% = **1.94x**. ⛔ THE TWO RATIOS DISAGREEING IS THE RESULT: in the fixture zero-direct members are UNDER-represented among borrowers, on live they are OVER-represented. The gate's target population is not rarer here — it borrows nearly twice as often for its size, which is the case FOR the gate.
 * Projection (LABELLED, not a run): base 3000 refuses ~31.9% of advances vs the fixture's 16.5%, ~11.6 FLOOR refusals per 288 members per run against 6. Double the bite, not an order of magnitude, and still a no-grace upper bound.
 * ✅ THE STRONGEST PRO-GATE NUMBER, live, no hindsight — repayment by directs held AT LOAN TIME: 0 directs **183 loans, 52.0% repaid**; 1 direct 60.0%; 2 directs **94.1%**; 3+ 100%.
+* **THE ITEM-43 DAO SWEEP (19.17), owner decision 2026-08-21: "anything owner can change should also be DAO governance where possible."** 55 gated setters, 47 already had a path, 8 did not. FIVE ADDED — 64 clawback preset, 65 `baseAdvanceBps`, 66 self-funded grace, 67 frozen-MatB timeout, 68 ghost entry. `PARAM_MAX_ID` 63 → 68. THREE LEFT OUT ON PURPOSE: `setTierGateThreshold` and `setTierWhaleGateActive` take two arguments (unreachable by construction; ids 52-57 already cover what matters), and `setUpkeepCaller` is authorization not economics — a compromised keeper key must be revocable in minutes, not by vote + 48h timelock.
+* ✅ **A SIDE EFFECT WORTH MORE THAN THE ITEM: THE DAO CAN NOW SWITCH THE GATE OFF IN ONE VOTE.** Param 65's menu includes 10000, and base >= floor is inert. Owner arms via PHASE 7b, DAO can reverse. No redeploy either way.
 * **18.21 ITEM 3 — THE GATE IS BUILT.** `TierRouter.directCount` (one write site, in `_bookkeepJoin`) + `StabilityFund.baseAdvanceBps`/`setBaseAdvanceBps`/the branch in `loanHeadroom`. 11 new tests, suite green.
 
 ⛔⛔ THE TWO THINGS A FUTURE SESSION MUST NOT UNDO
@@ -39,7 +41,7 @@ NEXT, IN ORDER (19.8)
 1. **EXERCISE `EvictionReserveReleased` DELIBERATELY** (18.15). Never executed anywhere; every evicted member measured came from MatB with a zero reserve. Needs a MatA eviction, which the private V8.50 deploy stages with `evictionGracePeriod` in minutes (session 9's recipe). It is the last untested path in the route the gate now feeds.
 2. **LENGTHEN THE A/B TAIL** until `stillParkedAtEnd` approaches zero, so loan counts stop being censored (18.19).
 3. **SPLIT 14.1 BY TIER** and cap time-at-risk (14.4). ⚠ V8.48 measurement; 18.0 applies.
-4. **ASK THE OWNER 19.15** — should `baseAdvanceBps` get a V8Governance parameter id so the DAO can propose changes to it? He can already set it as owner. Cheap to add (11,752 bytes spare) but it is a governance choice. **Ask, do not build.**
+4. **PRICE THE CLAWBACK PRESETS ON THE A/B HARNESS** before anyone recommends moving off preset 2. The menu now exists (19.17) but only preset 2 has evidence behind it — 16.x measured this clawback collecting $0.00 inside a MatB occupancy and recorded that its real effect is UNMEASURED. One dial, three seeds, same shape as the base-ceiling sweep.
 5. **POST-MIGRATION, NOT BEFORE:** PHASE 7b — pre-flight, check the live histogram against 19.1's 56.1%/49.7%, then arm at 3000. Then re-run section 4 + the loan book on live V8.50.
 6. Backlog, untouched throughout: the 5 unexplained cycle-outs (still exactly 5, organic); `V8_50_ReferralBreakeven.test.js` v4 counts the dead event; stale-nonce retry backoff; @bevmawire's Dashboard retry; `maxItemsPerUpkeep` live 15 vs 20 in source; member-callable re-entry.
 
@@ -47,6 +49,7 @@ TOOLS THAT NOW EXIST — use them, do not rebuild them
 * `scripts/diag_referral_threshold.js` **SECTION 4** — live directCount histogram by cohort, directs at the moment of the advance, the fixture's tree read off `ab_sequence_s*.json`, and the crossing with the live and fixture halves labelled separately. Aborts if no member has any direct (the address-case fault that would look like the strongest possible finding).
 * `scripts/set_base_advance.js` — READ-ONLY unless `ARM=1`. Rebuilds expected `directCount` from the registration log, reconciles against the chain, ABORTS on disagreement, prints the histogram. This is how the gate gets armed; never call `setBaseAdvanceBps` by hand.
 * `test/V8_50_GateBase.test.js` (11) and `test/V8_50_GateCost.test.js` (2, UN-SKIPPED in 19 and rewritten for the shipped short-circuit).
+* `test/V8_50_DaoParams.test.js` (7) — the clawback preset, and **DP-5, which feeds EVERY value of EVERY new governance menu to its real target setter.** A menu and a setter are two lists of one thing; when they drift, a proposal wins its vote, waits out the timelock and THEN reverts. Do not replace that test with an eyeball comparison.
 * `test_ab/replay.js` LOAN BOOK and EVICTION LEDGER; `AB_GATE_BPS` in `test_ab/world.js` (still works — it tests for the setter, which now ships).
 * ⛔ `scripts/fixture_gate_apply.js` is **SUPERSEDED — DO NOT RUN IT.** Its anchors no longer match. Kept only as the record of what 17.1/18.4/18.6 were measured on.
 * Sweep recipe, no fixture step any more: `npx hardhat compile`, then `$env:AB_CAP="5"`, `$env:AB_EVICT="1"`, `$env:AB_GATE_BPS="<n>"`, `$env:AB_SEQ="ab_sequence_s<n>.json"`, `npx hardhat run test_ab/replay.js`.

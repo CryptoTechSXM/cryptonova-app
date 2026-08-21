@@ -158,6 +158,17 @@ interface IGovernanceTarget {
     function setGenesisBps(uint256 v) external;
     function setDistributeRatio(uint256 v) external;
     function setDistributionDayOfMonth(uint8 v) external;   // V8.48: was setDistributeInterval(uint256)
+    // ── V8.50: the item-43 sweep (owner decision 2026-08-21). Five setters carried
+    //    an onlyOwnerOrGovernance gate with NO param id, so "DAO tunable" was
+    //    owner-only in practice — the same defect V8.48 fixed for
+    //    setCommunityOverflowBps. setUpkeepCaller is DELIBERATELY not among them:
+    //    it is authorization, not economics, and a compromised keeper key must be
+    //    revocable in minutes rather than through a vote plus timelock.
+    function setClawbackPreset(uint256 v) external;          // StabilityFund
+    function setBaseAdvanceBps(uint256 v) external;          // StabilityFund
+    function setSelfFundedGracePeriod(uint256 v) external;   // MatrixKeeper
+    function setFrozenMatBTimeout(uint256 v) external;       // MatrixKeeper
+    function setGhostEntryEnabled(bool v) external;          // MatrixKeeper
 }
 
 contract V8Governance is Ownable {
@@ -337,8 +348,44 @@ contract V8Governance is Ownable {
     ///         described above. See MatrixKeeper.minGasPerItem for the full measurement.
     uint8 public constant PARAM_MK_MIN_GAS_PER_ITEM        = 63;
 
+    /// @notice V8.50 (owner decision 2026-08-21): the item-43 sweep. Every setter
+    ///         gated onlyOwnerOrGovernance should have a governance path unless the
+    ///         mechanism forbids it. Five did not. Two more — setTierGateThreshold
+    ///         and setTierWhaleGateActive — take TWO arguments and a proposal carries
+    ///         one value, so they stay unreachable by construction; the per-tier whale
+    ///         gates already have ids 52-57, which is the coverage that matters.
+    ///         setUpkeepCaller stays owner-only ON PURPOSE (authorization, not
+    ///         economics: a compromised keeper key needs revoking in minutes).
+
+    /// @notice StabilityFund clawback bands, as a preset id. 0=off, 1=gentle,
+    ///         2=current default (90/80/70/60), 3=hard. Full basis and the warning
+    ///         that its effect is UNMEASURED are at the declaration in
+    ///         StabilityFund.setClawbackPreset.
+    uint8 public constant PARAM_SF_CLAWBACK_PRESET         = 64;
+
+    /// @notice StabilityFund sponsorship gate: the ceiling for members who have
+    ///         sponsored nobody. Menu IS the measured curve (handoff 18.4): 1500
+    ///         refuses every zero-sponsor borrower, 4000 grants all but one, and
+    ///         10000 is inert (>= insolvencyFloorBps, the ship-disabled default).
+    ///         Policy value 3000 — see StabilityFund.baseAdvanceBps.
+    uint8 public constant PARAM_SF_BASE_ADVANCE            = 65;
+
+    /// @notice MatrixKeeper self-funded grace — the third of three park clocks and
+    ///         the only one that had no governance path (parked is 19, eviction 62).
+    ///         MUST mirror setSelfFundedGracePeriod's require exactly.
+    uint8 public constant PARAM_MK_SELF_FUNDED_GRACE       = 66;
+
+    /// @notice MatrixKeeper frozen-MatB timeout. The setter takes a RANGE
+    ///         (0, or 5 minutes..30 days) rather than an enumeration, so this menu is
+    ///         a curated subset of it — house convention is menus, not free ranges.
+    uint8 public constant PARAM_MK_FROZEN_MATB             = 67;
+
+    /// @notice MatrixKeeper ghost-entry switch. Boolean, carried as 0/1 exactly the
+    ///         way PARAM_INACTIVITY_GUARD_ENABLED (18) already does it.
+    uint8 public constant PARAM_MK_GHOST_ENTRY             = 68;
+
     /// @dev Highest assigned param id -- update whenever a new param is added.
-    uint8 public constant PARAM_MAX_ID                     = PARAM_MK_MIN_GAS_PER_ITEM;
+    uint8 public constant PARAM_MAX_ID                     = PARAM_MK_GHOST_ENTRY;
 
     // ── Governance config (self-governable) ───────────────────────────────────
     uint256 public votingPeriod   = 72 hours;
@@ -534,6 +581,22 @@ contract V8Governance is Ownable {
         // Must mirror MatrixKeeper.setEvictionGracePeriod's require exactly.
         _allowedValues[PARAM_MK_EVICTION_GRACE] = [0, 86400, 172800, 259200, 345600, 432000, 604800];
         _allowedValues[PARAM_MK_MIN_GAS_PER_ITEM] = [2_500_000, 3_500_000, 5_000_000, 7_500_000];
+        // ── V8.50 item-43 sweep. EVERY menu below must be accepted by its target
+        //    setter — V8_50_DaoParams.test.js proves that by CALLING the setter with
+        //    each value rather than eyeballing the two lists.
+        // Clawback preset: 0 off / 1 gentle / 2 current default / 3 hard.
+        _allowedValues[PARAM_SF_CLAWBACK_PRESET]  = [0, 1, 2, 3];
+        // Base advance: the measured curve from handoff 18.4, plus 10000 = inert,
+        // which is BOTH the shipped default and the DAO's one-vote way to switch the
+        // gate back off without a redeploy.
+        _allowedValues[PARAM_SF_BASE_ADVANCE]     = [1500, 2000, 2500, 3000, 3500, 4000, 5000, 10000];
+        // Self-funded grace: mirrors setSelfFundedGracePeriod's require EXACTLY.
+        _allowedValues[PARAM_MK_SELF_FUNDED_GRACE] = [0, 60, 300, 900, 1800, 3600];
+        // Frozen-MatB timeout: curated subset of the setter's 0 | 5min..30d range.
+        // Both endpoints of the range are on the menu on purpose.
+        _allowedValues[PARAM_MK_FROZEN_MATB]      = [0, 300, 3600, 21600, 86400, 604800, 2592000];
+        // Ghost entry: boolean as 0/1.
+        _allowedValues[PARAM_MK_GHOST_ENTRY]      = [0, 1];
         // V8.33: extended idle timeout -- 0.5d/1d/2d/3d/4d/5d/6d/7d/14d
         _allowedValues[PARAM_EXTENDED_IDLE_TIMEOUT] = [43200, 86400, 172800, 259200, 345600, 432000, 518400, 604800, 1209600];
         // V8.35: per-tier whale gate thresholds (1–50 pioneers)
@@ -898,6 +961,18 @@ contract V8Governance is Ownable {
         // ── V8.50 defect 8: MatrixKeeper gas floor (default 5M, measured at size 127) ──
         } else if (paramId == PARAM_MK_MIN_GAS_PER_ITEM) {
             t.setMinGasPerItem(value);
+        // ── V8.50 item-43 sweep: five setters that were owner-only in practice ──
+        } else if (paramId == PARAM_SF_CLAWBACK_PRESET) {
+            t.setClawbackPreset(value);
+        } else if (paramId == PARAM_SF_BASE_ADVANCE) {
+            t.setBaseAdvanceBps(value);
+        } else if (paramId == PARAM_MK_SELF_FUNDED_GRACE) {
+            t.setSelfFundedGracePeriod(value);
+        } else if (paramId == PARAM_MK_FROZEN_MATB) {
+            t.setFrozenMatBTimeout(value);
+        } else if (paramId == PARAM_MK_GHOST_ENTRY) {
+            // Boolean carried as 0/1, same as PARAM_INACTIVITY_GUARD_ENABLED.
+            t.setGhostEntryEnabled(value != 0);
         // ── V8.33: MatrixKeeper extended idle timeout ──────────────────────────
         } else if (paramId == PARAM_EXTENDED_IDLE_TIMEOUT) {
             t.setExtendedIdleTimeout(value);

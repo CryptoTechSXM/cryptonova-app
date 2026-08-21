@@ -11,7 +11,7 @@ owner-set, and the session that earned it got five things wrong by ignoring what
 ---
 
 # ⬛ SESSION 19 STATE — 2026-08-21, LATEST. READ THIS FIRST.
-# 18.21 ITEM 1 IS CLOSED (3000 bps STANDS) AND ITEM 3 IS BUILT — THE GATE IS IN THE TREE, INERT.
+# 18.21 ITEMS 1 AND 3 CLOSED — THE GATE IS IN THE TREE, INERT. PLUS THE ITEM-43 DAO SWEEP (19.17).
 
 Measurement only. **Nothing deployed, no chain written to, no contract file touched.** One
 script extended — `scripts/diag_referral_threshold.js` gains a section 4; tables 1-3 are
@@ -178,8 +178,9 @@ V8.50 LIVE and weeks of accrual (18.0's reasoning, unchanged). Two consequences:
 2. **LENGTHEN THE A/B TAIL** until `stillParkedAtEnd` approaches zero, so the loan counts
    stop being censored (18.19). Cheap, and it makes 18.6 quotable.
 3. **SPLIT 14.1 BY TIER** and cap time-at-risk (14.4). ⚠ V8.48 measurement; 18.0 applies.
-4. **THE OWNER'S ONE QUESTION: a DAO parameter id for `baseAdvanceBps`?** (19.15) Ask, do
-   not build.
+4. ~~The owner's question on a DAO parameter id.~~ **ANSWERED AND BUILT 2026-08-21 (19.17)**
+   — five params added, three deliberately omitted. What remains is the MEASUREMENT: price
+   the clawback presets on the A/B harness before anyone recommends moving off preset 2.
 5. **POST-MIGRATION, NOT BEFORE:** run GO_LIVE_RUNBOOK PHASE 7b — pre-flight, check the live
    histogram against 19.1, then arm at 3000. Then re-run section 4 + the loan book against
    live V8.50 (19.6).
@@ -307,7 +308,7 @@ that figure is an upper bound on an armed run and simply does not describe an un
 * `scripts/fixture_gate_apply.js` — banner: SUPERSEDED, do not run, kept as the record of
   what 17.1/18.4/18.6 were measured on.
 
-## 19.15 ⛔ ONE QUESTION THAT IS GENUINELY THE OWNER'S — NOT DECIDED HERE
+## 19.15 ⛔ ONE QUESTION THAT IS GENUINELY THE OWNER'S. ✅ ANSWERED 2026-08-21 — SEE 19.17.
 
 `setBaseAdvanceBps` is `onlyOwnerOrGovernance`, so the owner can always move it. But
 **`baseAdvanceBps` has no V8Governance parameter id**, which means the DAO cannot PROPOSE a
@@ -323,6 +324,105 @@ promised. Ask before building.**
 Every earlier note on this said WHAT happened and that it was measured; none said WHY. It is
 not a bridge defect and it is not something to work around — it is one git setting behaving
 exactly as configured, and the correct response to the warning is to ignore it.
+
+## 19.17 ✅ THE ITEM-43 SWEEP — OWNER-CHANGEABLE NOW MEANS DAO-REACHABLE
+
+**OWNER DECISION 2026-08-21:** *"anything owner can change should also be DAO governance
+where possible."* That answers 19.15 and goes further than it asked. It is not a new policy
+— it is an unfinished one. V8.48 fixed exactly this for `setCommunityOverflowBps` (param
+60), and its comment named the defect class: a setter carrying an `onlyOwnerOrGovernance`
+gate but **no param id**, so "DAO tunable" is owner-only in practice because governance has
+no way to PROPOSE it. A sweep was run 2026-08-13 and clearly did not finish.
+
+**THE SWEEP, RE-RUN PROPERLY: 55 gated setters, 47 with a governance path, 8 without.**
+
+| id | setter | menu |
+|---|---|---|
+| **64** | `SF.setClawbackPreset` (new) | `0` off · `1` gentle · `2` current · `3` hard |
+| **65** | `SF.setBaseAdvanceBps` | 1500, 2000, 2500, 3000, 3500, 4000, 5000, **10000 = inert** |
+| **66** | `MK.setSelfFundedGracePeriod` | 0, 60, 300, 900, 1800, 3600 |
+| **67** | `MK.setFrozenMatBTimeout` | 0, 300, 3600, 21600, 86400, 604800, 2592000 |
+| **68** | `MK.setGhostEntryEnabled` | 0, 1 |
+
+`PARAM_MAX_ID` moves 63 → 68.
+
+⛔ **THREE ARE DELIBERATELY LEFT OUT, AND THE REASON IS IN THE SUITE (DP-7) NOT ONLY HERE.**
+`setTierGateThreshold(uint8,uint256)` and `setTierWhaleGateActive(uint8,bool)` take TWO
+arguments and a proposal carries one value — unreachable by construction, and the per-tier
+whale gates already hold ids 52-57, which is the coverage that matters.
+**`setUpkeepCaller(address,bool)` stays owner-only ON PURPOSE:** it is authorization, not
+economics, and a compromised keeper key must be revocable in minutes rather than through a
+vote plus a 48h timelock.
+
+### 19.17a ✅ A SIDE EFFECT WORTH MORE THAN THE ITEM: THE GATE NOW HAS A DAO OFF-SWITCH
+
+Param 65's menu includes **10000**, and `baseAdvanceBps >= insolvencyFloorBps` makes the
+sponsorship gate inert. So **the DAO can switch the gate off with a single vote**, no
+redeploy, no owner action. That did not exist when 19.10 shipped the gate. It also means
+the arming step (PHASE 7b) and the disarming path are now symmetric: owner arms, DAO can
+reverse.
+
+### 19.17b ⛔ THE CLAWBACK PRESET — AND THE WARNING THAT SHIPS INSIDE IT
+
+`setClawbackBands` takes a `uint256[4]`; a proposal carries one value. So the menu is a
+PRESET id that expands inside the SF — the same shape
+`MatrixKeeper.setSfRescueLadderPreset` already uses, for the same reason. Owner picked the
+conservative menu:
+
+```
+0 = OFF      [     0,    0,    0,    0 ]   earnings never redirected; debt then retires
+                                           only via the cycle-out sweep and upgrade fold
+1 = GENTLE   [  6000, 5000, 4000, 3000 ]
+2 = CURRENT  [  9000, 8000, 7000, 6000 ]   <- the declared default, always voteable back
+3 = HARD     [ 10000, 9500, 9000, 8000 ]
+```
+
+⚠ **ITS EFFECT IS NOT MEASURED AND THE CODE SAYS SO.** 16.x measured that this clawback
+collected **$0.00 inside a MatB occupancy** across the whole V8.48 deployment — it collects
+in the MatA ledger, which is not the balance the forward hop is judged against — and
+recorded that how fast debt retires and how much a member can withdraw were NOT measured.
+**Preset 2 is the only entry with evidence behind it.** The A/B harness can price the
+others exactly the way it priced the base ceiling (one dial, three seeds) and that should
+happen before anyone RECOMMENDS a change. **A preset's presence on the menu is not evidence
+it is safe**, and the declaration comment says that in the contract where a future session
+will actually read it.
+
+⛔ **NO PRESET ID IS STORED, ON PURPOSE.** `clawbackBpsByBand` is the single source of
+truth. An id kept beside it would be two models of one rule, free to drift the moment
+`setClawbackBands` is called directly — the same failure `loanHeadroom` already warns about
+in that file. **DP-4 pins its absence**, in the style of the existing "the StabilityFund
+still has no `activateLayer`" test.
+
+### 19.17c ⛔ THE TEST THAT EARNS ITS KEEP IS DP-5, AND IT IS THE SECOND INSTRUMENT AGAIN
+
+A governance menu and its target setter are two lists of the same thing, free to drift —
+and when they drift **the failure is silent in the worst possible direction: a proposal
+wins its vote, waits out the 48h timelock, and THEN reverts on execution.** So the menus
+are not eyeballed against the setters. `test/V8_50_DaoParams.test.js` **feeds every value
+of every new menu to the real setter on the real contract** and requires it to be accepted.
+It also fails on an EMPTY menu, because a param nobody can propose is the item-43 defect
+wearing a different hat. **7 passing**, and DP-5 was green on the first run that reached it.
+
+⚠ The first run of this file failed all 7 in the FIXTURE — `MatrixKeeper` needs
+`MatrixKeeperLib` linked and the fixture did not. Nothing about the contracts was exercised
+by that run; do not read the first transcript as a contract finding.
+
+### 19.17d SIZE AFTER THE SWEEP — run, not derived
+
+| contract | deployed | spare | delta |
+|---|---|---|---|
+| StabilityFund | 16,119 | 8,457 | +606 (the preset) |
+| V8Governance | 13,205 | 11,371 | +381 (five params) |
+| TierRouter | 24,046 | 530 | untouched |
+
+**The one contract with no room to spare was not touched by any of this.** MatrixKeeper
+gained nothing — its three setters already existed; only their governance path is new.
+
+**SUITE AFTER THE SWEEP: 638 passing / 7 pending / 0 failing** (`suite_session19c.txt`) —
+631 plus these 7, so no existing governance test pinned the old `PARAM_MAX_ID`. ⚠ THREE
+TRANSCRIPTS FROM ONE DAY AND NONE OF THEM IS DRIFT: 629/8/0 predates un-skipping GateCost,
+631/7/0 predates the DAO params, 638/7/0 is the tree as committed. 18.1 applies to this
+file's own outputs as much as to A/B results — check WHICH run before quoting a number.
 
 ---
 
