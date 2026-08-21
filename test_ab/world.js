@@ -133,6 +133,36 @@ async function deployWorld(hre, size) {
       () => sf.setInsolvencyFloorBps(Number(process.env.AB_FLOOR_BPS)));
   }
 
+  // ⛔ AB_GATE_BPS — THE SPONSORSHIP GATE'S BASE CEILING, AS A SWEEP DIAL (session 18).
+  //
+  // Only meaningful with `scripts/fixture_gate_apply.js` applied: that fixture adds
+  // `baseAdvanceBps` + its setter to the SF and the directCount branch to `loanHeadroom`.
+  // Setting it HERE rather than re-applying the fixture per value means ONE compile serves
+  // the whole sweep, so every row of the sweep runs identical bytecode and a difference
+  // between rows can only be the dial.
+  //
+  // ⛔ THIS ONE IS DELIBERATELY *NOT* `optional`. Everything else here tolerates a missing
+  //    setter because the two arms are different builds and one may genuinely lack a dial.
+  //    Here a missing setter means THE FIXTURE IS NOT APPLIED, and a run that continued
+  //    would produce a sweep row reading "the gate changed nothing" — indistinguishable
+  //    from a real null result, and it would be believed. Fail loudly instead. Same shape
+  //    as session 17's "a flag recording our INTENT is not evidence about the contract's
+  //    STATE", caught one step earlier.
+  if (process.env.AB_GATE_BPS) {
+    if (typeof sf.setBaseAdvanceBps !== "function") {
+      throw new Error(
+        "AB_GATE_BPS is set but StabilityFund has no setBaseAdvanceBps — the gate fixture is " +
+        "NOT applied. Run: node scripts/fixture_gate_apply.js  then npx hardhat compile. " +
+        "Refusing to run: the result would read as 'the gate did nothing'.");
+    }
+    await sf.setBaseAdvanceBps(Number(process.env.AB_GATE_BPS));
+    const back = Number(await sf.baseAdvanceBps());
+    if (back !== Number(process.env.AB_GATE_BPS)) {
+      throw new Error(`AB_GATE_BPS read back as ${back}, asked for ${process.env.AB_GATE_BPS}`);
+    }
+    wiring.applied.push(`setBaseAdvanceBps(${back})`);
+  }
+
   // keeperLib is RETURNED, not merely wired. It carries `rescueBpsFor` as an external pure
   // function on BOTH arms, which is the only way an off-chain instrument can ask the SF
   // rescue ladder the same question discovery asks WITHOUT re-implementing the ladder walk

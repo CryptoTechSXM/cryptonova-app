@@ -1,7 +1,7 @@
 # V8.50 HANDOFF — the crossing redesign. READ THIS FIRST.
 
 Written 2026-08-16 at the end of the V8.49 private measurement run.
-Sessions 2-17 have appended to it since; read the NEWEST section first — each one
+Sessions 2-18 have appended to it since; read the NEWEST section first — each one
 corrects the ones below it, and says so explicitly where it does.
 Audience: **the next session of Claude, plus the owner. There is no third party — every
 line of this codebase was written by a previous session of Claude and executed by the
@@ -10,7 +10,306 @@ owner-set, and the session that earned it got five things wrong by ignoring what
 
 ---
 
-# ⬛ SESSION 17 STATE — 2026-08-20, LATEST. READ THIS FIRST. 16.6 ITEM 1 IS CLOSED.
+# ⬛ SESSION 18 STATE — 2026-08-20, LATEST. READ THIS FIRST. 17.7 ITEM 1 IS ANSWERED — BUT NOT AS IT WAS ASKED.
+
+Measurement only. **Nothing deployed, no chain written to.** The session-17 gate fixture was
+applied, measured across a 15-run sweep, and reverted — `git status --short contracts/` is
+empty **on the owner's machine**, which is the authoritative reading (17.6's bridge trap).
+Two instruments added to the A/B harness, both additive, both kept: the LOAN BOOK in
+`test_ab/replay.js` and the `AB_GATE_BPS` sweep dial in `test_ab/world.js`.
+
+## 18.0 ⛔⛔ 17.7 ITEM 1 CANNOT BE RUN AS WRITTEN — AND IT DID NOT NEED TO BE
+
+"RE-MEASURE 14.1 AND 16.2 ON THE PRIVATE V8.50 DEPLOY" contains a contradiction that three
+sessions carried forward without noticing:
+
+* **14.1's two CLEAN columns are the member-specific ones.** 14.6 measured that exactly
+  those columns do NOT reproduce on a population of scripts — bigfill ends owing at 1.1%
+  against organic's 20.2%, and bigfill self-rescuers clear the hop at 1.6% against organic's
+  19.6%. Those are the columns 14.6 calls "worth spending".
+* **A private deploy is `owner + bigfill only`** — section 1's table, and being off the
+  frontend is *what makes it private*. So a private V8.50 deploy would re-measure 14.1 on
+  scripts and return the bigfill answer, which is already known not to be a fact about
+  members.
+
+**Re-measuring 14.1 honestly requires V8.50 LIVE, with real members, weeks after migration.
+It therefore cannot block the gate, and nothing should wait on it.** What the gate's ceiling
+actually needed was a MECHANISM quantity — how much loan does V8.50 create for the same
+arrivals — and the A/B harness has answered that since session 6: one recorded sequence,
+two arms, three seeds. ⚠ Do not read this as "the private deploy is worthless": it is still
+where eviction gets its end-to-end test (session 9's recipe) and where PARAM 59 gets
+confirmed in force rather than in source. It is just not the instrument for 14.1.
+
+## 18.1 ⛔ THE THREE SEEDS WERE NOT THREE SAMPLES OF ONE THING — CAUGHT BEFORE ANYTHING WAS QUOTED
+
+`ab_result_*_s1.json` was re-run **2026-08-19 22:41Z** on the current `replay.js`. `s2` and
+`s3` were from **2026-08-18 22:46Z**: an older instrument with no `lending` block, no
+park-event split, and — the one that matters — **no `insolvencyFloorBps` recorded at all**,
+written before the PARAM 59 = 5000 commit. Pooling them mixed two configurations, and the
+parameter that differed was the one the files did not record.
+
+Re-run on the current tree. **The v849b arm did not move on a single economic figure**
+(loans 84/85, loanUSD 96.23/108.19, evictions 1/0, all identical); park EVENTS moved 131→140
+and 133→142, which is session 7's `MemberParked` disambiguation counting, not behaviour.
+**Every change was in the v850 arm**, and it was large:
+
+| stale Aug-18 → current | parks | loans | evictions | loan $ |
+|---|---|---|---|---|
+| v850 s2 | 128 → **88** | 21 → **26** | **11 → 3** | 36.01 → **47.35** |
+| v850 s3 | 128 → **85** | 22 → **28** | **10 → 5** | 45.06 → **63.36** |
+
+> ⛔ **THE STANDING LESSON: A RESULT FILE IS NOT A RESULT.** It is a result *as of* an
+> instrument version and a dial set. A file that does not record the dial that changed
+> cannot be pooled with one that does — and the pooled table computed before this was caught
+> reported "evictions +1150%", against the true +500%. Session 8 already learned the
+> filename version of this ("every dial that changes the answer goes in the filename"); this
+> is the same rule pointed at files that are already on disk. **Check the mtimes and the
+> recorded dials of every result file before pooling it with a fresh one.**
+
+The stale files are kept as `ab_result_*_s{2,3}.stale_aug18.json`. Do not quote them.
+
+## 18.2 THE V8.50 NUMBERS — THREE VALID SEEDS, IDENTICAL SEQUENCES, `AB_CAP=5`, MATRIX_SIZE 127
+
+| pooled, 3 seeds | v849b (floor 3400, buffer on) | v850 (floor 5000, buffer 0) | |
+|---|---|---|---|
+| loans | 255 | **85** | **−66.7%** |
+| loan dollars | $311.33 | **$168.86** | **−45.8%** |
+| park events | 424 | 259 | −38.9% |
+| rescues | 258 | 154 | −40.3% |
+| rescues costing the fund NOTHING | 3 | **69** (45% of rescues) | |
+| evictions | 2 | **12** | |
+| SF balance at end, mean | $19.49 | **$83.21** | |
+
+**17.7 item 1's premise is confirmed on the half that was about volume**: V8.50 cuts the loan
+book by two-thirds in count and by nearly half in dollars, and the fund ends four times
+healthier. Three seeds, same direction every time.
+
+## 18.3 ⛔⛔ BUT V8.50 LOANS ARE **BIGGER**, NOT SMALLER — AND THAT HALF OF THE PREMISE IS WRONG
+
+17.7 item 1 says "less debt means less collection and **the whole table shrinks**". The table
+shrinks in COUNT. Each surviving loan grows:
+
+| | v849b | v850 |
+|---|---|---|
+| median loan | $1.27 | **$1.77** |
+| mean loan | $1.22 | **$1.99** |
+| largest loan | $2.26 (2,263 bps) | **$4.42 (4,421 bps)** |
+| share of loans to members with NO sponsor | 119/255 = 46.7% | **26/85 = 30.6%** |
+
+V8.50 does not make loans smaller. **It deletes the small buffer-manufactured ones and leaves
+the genuinely-short members borrowing nearly twice as much each** — which is what item A
+means: the reserve now covers the crossing outright for members who can be covered, so the
+loans that remain are the real shortfalls.
+
+⚠ **AND THE FLOOR IS NOW MUCH CLOSER TO BINDING THAN IT WAS.** On v849b the largest loan was
+2,263 bps against a 3,400 ceiling — 1,137 bps of slack. On v850 it is 4,421 against 5,000 —
+**579 bps.** PARAM 59 = 5000 is settled policy (17.0) and this does not re-open it, but a
+later session cutting the floor should know the headroom is roughly half what it was.
+
+## 18.4 THE BASE-CEILING CURVE — AND A FRAMING CORRECTION THAT MATTERS
+
+⛔ **THE GATE ONLY LOWERS THE CEILING FOR MEMBERS WITH ZERO DIRECTS.** A loan to a member who
+already has a sponsor is untouched at any base. So "how many of all loans fit under X" is NOT
+a policy reading and must not be quoted as one — the only predictive column is the
+zero-sponsor one. (This was mis-framed once inside this session and corrected before it
+reached the handoff; it is written down because the wrong column is the intuitive one.)
+
+`loanBook.fitsUnderBase`, pooled 3 seeds, V8.50, 85 loans of which 26 to zero-sponsor members:
+
+| base | = at T1 | loans small enough to fit at all | **zero-sponsor loans refused** |
+|---|---|---|---|
+| 1500 bps | $1.50 | 31/85 | **26 of 26 — all of them** |
+| 2000 | $2.00 | 43/85 | 22 of 26 |
+| 2500 | $2.50 | 57/85 | 18 of 26 |
+| 3000 | $3.00 | 66/85 | 14 of 26 |
+| 3500 | $3.50 | 76/85 | 7 of 26 |
+| 4000 | $4.00 | 82/85 | 1 of 26 |
+| 5000 | $5.00 | 85/85 | 0 — gate inert |
+
+**THIS EXPLAINS 17.2 RATHER THAN REPEATING IT.** Session 17's fixture used 1,500 bps and bound
+so hard the run was uninterpretable. That was not bad luck: **1,500 bps refuses literally
+every zero-sponsor borrower on the V8.50 distribution.** Any real policy lives between about
+2,500 and 3,500; below that the gate refuses nearly everyone, at 4,000 it does nothing.
+
+⛔ **AND THE SAME CURVE ON v849b IS THE ARGUMENT FOR WHY ITEM 1's INSTINCT WAS RIGHT.** On the
+old build a base of **2,500 bps grants 100% of loans** — the gate would have been an ornament.
+Sizing the ceiling on V8.48 numbers, which 13.11 and 16.5 were implicitly doing, would have
+shipped a gate that does nothing at all. **The method in item 1 was wrong; the instinct behind
+it was correct and this is the measurement that shows it.**
+
+## 18.5 ⛔ THE CONTROL HELD — THE FIXTURE IS ECONOMICALLY INERT, MEASURED NOT ASSUMED
+
+17.2's rule applied before the sweep: fixture applied, `AB_GATE_BPS=10000` (present, cannot
+bind), all three seeds. **Every economic quantity came back identical to the ungated run** —
+loans, parks, rescues, evictions, loan volume, final SF balance, per-member histograms.
+
+The only thing that moved is total gas:
+
+| seed | ungated | gate present, inert | delta |
+|---|---|---|---|
+| 1 | 1,047,458,608 | 1,051,767,276 | **+4,308,668 (+0.411%)** |
+| 2 | 1,050,993,684 | 1,055,201,064 | +4,207,380 (+0.400%) |
+| 3 | 1,060,177,280 | 1,064,235,044 | +4,057,764 (+0.383%) |
+
+**That is a THIRD independent reading of the gate's cost and it agrees with 17.1's 7,720 cold
+/ 1,220 warm** — and unlike session 17's end-to-end arm, **this one is at MATRIX_SIZE 127**,
+which is the arm 17.4 recorded as not run. ⚠ It is whole-run gas over 69 keeper ticks plus
+289 registrations, NOT a per-item figure, so it does not replace 17.4's item — it bounds it.
+Nobody should quote a per-item 127 number from this.
+
+## 18.6 ⛔⛔ THE SWEEP — THE GATE WORKS, AND HERE IS WHAT IT COSTS
+
+Same bytecode in every row; only `baseAdvanceBps` differs. Pooled 3 seeds, 288 members each.
+
+| base | loans | of those, to zero-sponsor members | evictions | still parked at end | SF at end |
+|---|---|---|---|---|---|
+| inert | 85 | 26 | **12** | 93 | $249.63 |
+| 3500 ($3.50) | 78 | 16 | **24** | 81 | $265.72 |
+| 3000 ($3.00) | 72 | 5 | **30** | 75 | $278.33 |
+| 2500 ($2.50) | 67 | 1 | **34** | 71 | $286.01 |
+| 2000 ($2.00) | 66 | 0 | **35** | 70 | $287.77 |
+
+Monotone on every seed individually (seed 1 4→7→9→9→9 evictions, seed 2 3→9→10→12→13, seed 3
+5→8→11→13→13). The gate does what it was designed to do and the fund ends stronger.
+
+✅ **AND ONE GENUINELY ENCOURAGING MECHANISM READING: LENDING SHIFTS TOWARD SPONSORS RATHER
+THAN JUST SHRINKING.** At base 3000 loans to zero-sponsor members fall 26 → 5, but loans to
+members with a sponsor RISE 59 → 67. Members refused early borrow later, once a direct has
+arrived beneath them. ⚠ That is TIMING, not persuasion: the referral tree is fixed by the
+sequence file, so nobody in this world recruits *because* they were refused. A live member
+might, which would make the real effect larger — but that is a hypothesis and it is marked as
+one.
+
+## 18.7 ⛔⛔ THE COST IS NOT THE ONE THE OWNER'S RULE INTENDED — THIS IS THE SESSION'S FINDING
+
+The owner's design, recorded in `replay.js`'s own note on 2026-08-19: *"one or two loans, then
+eviction if no invites."* **That is not what the gate produces.** Loans received BEFORE
+eviction, pooled:
+
+| base | members evicted | **never lent to at all** | evicted after borrowing |
+|---|---|---|---|
+| inert | 12 | 9 (75%) | 3 |
+| 3500 | 24 | 20 (83%) | 4 |
+| 3000 | 30 | **27 (90%)** | 3 |
+| 2500 | 34 | 31 (91%) | 3 |
+| 2000 | 35 | 32 (91%) | 3 |
+
+**The count evicted AFTER borrowing is flat at 3–4 in every row. The entire increase is
+members who were refused and then removed without ever having been lent to.** The gate does
+not implement "one or two loans, then eviction". It implements "refused, then eviction".
+
+## 18.8 ⛔⛔ WHY — AND IT CORRECTS 13.11's DESIGN SKETCH, WHICH 16.5 AND 17 BOTH CARRIED
+
+13.11's shape was: *"a member who has sponsored nobody gets a small first advance; the rest of
+the ceiling unlocks when they sponsor one person."* **A ceiling on `loanHeadroom` cannot
+produce that, and the reason is structural:**
+
+* The advance size is set by the MEMBER'S SHORTFALL, not by the ceiling — the keeper computes
+  `sfShare` from what the crossing costs minus what the member has.
+* `loanEligibleFor(member, tier, advance)` is a **boolean on the WHOLE advance**. There is no
+  partial-funding path. A member whose shortfall exceeds the base does not receive the base;
+  they receive nothing.
+* A refused rescue is already routed to eviction by `_triageParked` (reason 4).
+* And 18.3 is what makes it bite: **V8.50 shortfalls are BIGGER than V8.48's**, so most
+  zero-sponsor members need more than any base worth setting.
+
+**"A small first advance" and "a lower ceiling" are different mechanisms, and only the
+measurement separated them.** Nothing in 13.11, 16.5 or 17 was wrong about where the gate
+goes or what it costs — 17.4's placement finding stands — but the POLICY SHAPE all three
+described is not the policy shape the fixture implements.
+
+## 18.9 THE TWO INSTRUMENTS, AND WHERE THEY MEET
+
+**BUILD THE SECOND INSTRUMENT — fourth session running, fourth time it paid.** The loan book's
+counterfactual is arithmetic on a recorded run; the sweep replays with the gate installed and
+lets the population move. They are independent and they agree:
+
+| base | loan book predicts refused | sweep actually loses | gap |
+|---|---|---|---|
+| 3500 | 7 | **7** | 0 |
+| 3000 | 14 | **13** | −1 |
+| 2500 | 18 | **18** | 0 |
+| 2000 | 22 | **19** | −3 |
+
+The gaps are in the expected direction and grow with the tightness of the gate, which is the
+population moving — a refused member's later history changes, so a few loans the static count
+expected to refuse never get requested. **Agreement this close is what licenses quoting the
+counterfactual table in 18.4 at all.**
+
+## 18.10 ⚠ WHAT THIS SESSION DID NOT MEASURE — STATED SO NOBODY QUOTES IT WRONGLY
+
+* **THE REFERRAL DISTRIBUTION IS THE FIXTURE'S, NOT THE LIVE CHAIN'S.** `gen_sequence.js`
+  builds a real tree (every member picks a referrer already registered) — which is strictly
+  better than session 17's KeeperGas star, where everyone referred to W1 and the gate refused
+  essentially everybody. It is still not live. 13.11 measured the live shape (11.5% of members
+  still owing had sponsored anyone; 52.3% of those who cleared) and a session that wants the
+  live bite should cross the live directCount distribution with 18.4's curve.
+* **NO BEHAVIOURAL RESPONSE.** Nobody in this world recruits because they were refused.
+* **WHAT AN EVICTED MEMBER KEEPS WAS NOT MEASURED HERE.** The design intent (session 9's
+  recipe, step 4) is that eviction preserves withdrawable, RELEASES the crossing reserve, and
+  leaves the debt booked — removal, not confiscation. **Asserted from the recipe, not run.**
+  It should be, before eviction volume triples.
+* **NOTHING ON LIVE V8.50** — there is no such chain.
+* **NO PER-ITEM GAS AT 127** — see 18.5's warning.
+
+## 18.11 ⛔ THE OWNER'S DECISION, RESTATED AND SHARPENED. STILL HIS, AND NOW IT IS THE PRIOR ONE.
+
+17.5 asked two things: what base ceiling, and whether a refused loan should route to eviction
+at all. **18.7 and 18.8 make the second one primary.** The base ceiling is a free choice only
+if refusal→eviction is acceptable:
+
+* **IF refusal→eviction is acceptable:** a base of **3000 bps ($3.00 at T1)** is the coherent
+  point — it holds 72 of 85 loans, cuts zero-sponsor lending from 26 to 5, and costs roughly
+  **six extra evictions per 288 members per run**, of which about nine in ten are members who
+  never borrowed.
+* **IF it is not:** the gate needs a shape nobody has scoped — the fund topping a member up to
+  the base and leaving them PARKED rather than removing them. That is a contract change to the
+  funding path, not a dial, and it must not be designed before the owner takes this decision.
+
+**DO NOT DESIGN EITHER BRANCH BEFORE HE ANSWERS.** Everything measurable has been measured.
+
+## 18.12 NEXT, IN ORDER
+
+1. **THE OWNER'S CALL IN 18.11.** Blocking, and it is genuinely his.
+2. **CROSS 18.4's CURVE WITH THE LIVE `directCount` DISTRIBUTION.** Read every
+   `memberReferrer` assignment off live V8.48, build the real directCount histogram, and apply
+   18.4's zero-sponsor refusal column to it. That converts a fixture result into a live
+   estimate and costs one read-only script. **This is the cheapest remaining thing worth doing
+   and it does not need the owner's decision first.**
+3. **MEASURE WHAT AN EVICTED MEMBER KEEPS** (18.10). Before any gate ships.
+4. **SPLIT 14.1 BY TIER** and cap time-at-risk — 14.4's one real imbalance, still untouched
+   since session 14. ⚠ Note it is a V8.48 measurement and 18.0 applies: it describes the old
+   build.
+5. Backlog, untouched throughout: the 5 unexplained cycle-outs (still exactly 5, organic);
+   `V8_50_ReferralBreakeven.test.js` v4 counts the dead event; stale-nonce retry backoff;
+   @bevmawire's Dashboard retry; `maxItemsPerUpkeep` live 15 vs 20 in source; member-callable
+   re-entry.
+
+## 18.13 TOOLS BUILT — both additive, both in `test_ab/`, neither changes an existing number
+
+* **THE LOAN BOOK — `test_ab/replay.js`, always on, no extra chain read.** Every
+  `RescueLoanIssued` with its amount, its size in **bps of the ENTRY FEE** (the basis
+  `loanHeadroom` uses — the crossing cost is what the keeper SIZES against, the fee is what the
+  fund MEASURES against, and recording dollars alone would force a later session to guess),
+  and the borrower's `directCount` **at that moment**, derived from the sequence file's
+  referral tree rather than a chain read. Plus `fitsUnderBase` and `directsSanity`.
+  **It reconciles against `raw.loanVolume`, which is summed a different way; a disagreement
+  voids both and says so.** `directsSanity` exists because a single address-case mismatch would
+  make every `directsAtLoan` read 0 — which looks exactly like the strongest possible finding
+  and would never throw.
+* **`AB_GATE_BPS` — `test_ab/world.js`.** Sets `baseAdvanceBps` on the fixture's SF so ONE
+  compile serves a whole sweep and every row is identical bytecode. ⛔ **Deliberately NOT
+  wrapped in `optional()`**: if the fixture is not applied it ABORTS, because a run that
+  continued would emit a row reading "the gate changed nothing", which is indistinguishable
+  from a real null result. The value is read back off the contract, and the FILENAME tag comes
+  from the contract too — never from the env var.
+* **VERIFIED BEFORE USE:** all six baseline files were re-run after the loan-book edit and
+  came back identical apart from the new block (seed 1 also gained a documentation string
+  added to `replay.js` after its previous run; no measured quantity moved on any of the six).
+
+---
+
+# ⬛ SESSION 17 STATE — 2026-08-20. READ AFTER SESSION 18. 16.6 ITEM 1 IS CLOSED.
 
 Measurement only. **Nothing deployed, no chain written to.** Contract files were edited as a
 FIXTURE, measured, and reverted — `git diff contracts/` is empty for both. Two new

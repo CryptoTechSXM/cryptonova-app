@@ -10,6 +10,13 @@
  *
  * Optional: AB_EQUALIZE=1 pins maxItemsPerUpkeep to 15 on BOTH arms. See below.
  * Optional: AB_CAP=<n>   pins maxItemsPerUpkeep to n on BOTH arms (the valid 127 pairs use 5).
+ * Optional: AB_GATE_BPS=<n>  session 18. Sets the sponsorship gate's BASE ceiling for a
+ *                        member with ZERO directs. Requires `node scripts/fixture_gate_apply.js`
+ *                        + `npx hardhat compile` first; without the fixture the run ABORTS
+ *                        rather than quietly reporting that the gate did nothing. The value
+ *                        is read back off the contract and lands in the result FILENAME, so
+ *                        a sweep row can never be mistaken for a baseline. Use 10000 (or
+ *                        anything >= insolvencyFloorBps) for the inert control arm.
  * Optional: AB_CENSUS=1  adds the per-member queue census — episodes, exit mechanism,
  *                        time-to-re-park, withdrawable at rescue. Writes to
  *                        ab_result_<arm>_s<seed>_census.json so it cannot overwrite the
@@ -20,6 +27,15 @@
  *                        parked member in it, WHICH of _triageParked's four eviction
  *                        branches fired. Implies AB_CENSUS. Writes to
  *                        ab_result_<arm>_s<seed>_census_evict.json. See `doEvict`.
+ *
+ * ALWAYS ON (session 18): the LOAN BOOK — every RescueLoanIssued with its amount, its size
+ *                        in bps of the ENTRY FEE (the basis `loanHeadroom` uses), and the
+ *                        borrower's directCount AT THAT MOMENT, taken from the sequence
+ *                        file's referral tree. Plus `fitsUnderBase`, the counterfactual
+ *                        "how many of these loans would a base ceiling of X bps still
+ *                        grant". Reconciles against raw.loanVolume; a disagreement voids
+ *                        both. See the block above `const loanBook` and the one that
+ *                        builds `loanBookBlock`.
  *
  * ⛔ WHAT IS MEASURED, AND WHY THESE AND NOT TOTALS.
  *   Four of the defects between these builds change KEEPER THROUGHPUT, not economics
@@ -178,9 +194,12 @@ async function main() {
     // equalised pair came back byte-identical and nothing could tell "the dial did not
     // matter" from "the setter never fired".
     insolvencyFloorBps: await (async () => { try { return String(await w.sf.insolvencyFloorBps()); } catch { return "ABSENT"; } })(),
+    // ABSENT here is the honest reading of "the gate fixture is not applied", and it is the
+    // difference between a sweep row and a baseline row. Never infer it from the env var.
+    baseAdvanceBps: await (async () => { try { return String(await w.sf.baseAdvanceBps()); } catch { return "ABSENT"; } })(),
   };
   console.log(`  dials in force: maxItemsPerUpkeep=${dials.maxItemsPerUpkeep} minGasPerItem=${dials.minGasPerItem} ` +
-    `insolvencyFloorBps=${dials.insolvencyFloorBps}`);
+    `insolvencyFloorBps=${dials.insolvencyFloorBps} baseAdvanceBps=${dials.baseAdvanceBps}`);
 
   /**
    * ══ AB_EVICT=1 — THE ROUTING INSTRUMENT (session 8) ════════════════════════════════════
@@ -408,6 +427,61 @@ async function main() {
   const t0 = Date.now();
 
   /**
+   * ══ THE LOAN BOOK (session 18) — always on, costs nothing, needs no extra chain read ═══
+   *
+   * WHY. `raw.loanVolume` is a SUM, and the question the sponsorship gate asks is about the
+   * SHAPE: a base ceiling of X bps refuses the loans ABOVE it, so a total says nothing about
+   * how many members a given X would refuse. Session 17 measured that the gate FITS (size and
+   * gas); nothing has ever measured what it would BITE.
+   *
+   * ⛔ AND THE UNIT MATTERS. `loanHeadroom` is `fee * insolvencyFloorBps / 10_000 - debt`, so
+   *    the ceiling is a fraction OF THE ENTRY FEE, not of the crossing cost — the crossing
+   *    cost is what the keeper SIZES the advance against (V8.50 item A), the fee is what the
+   *    fund MEASURES it against. Recording dollars alone would force a later session to guess
+   *    which basis was meant. Both are written.
+   *
+   * DIRECTS AT LOAN TIME comes from the sequence file, not from a chain read: `gen_sequence`
+   * builds a REAL referral tree (every member picks a referrer already registered), and the
+   * actions replay in order, so counting them as they execute gives the sponsor's direct
+   * count AT THE MOMENT the loan fired. That is the exact quantity the gate would read.
+   * ⚠ It is the FIXTURE's referral distribution, not the live chain's. It prices the
+   *   mechanism on a real tree — which is strictly better than session 17's KeeperGas star,
+   *   where everyone referred to W1 and the gate refused essentially everybody — but it is
+   *   still not a live prediction. Say so wherever these numbers are quoted.
+   *
+   * ⛔ THE RECONCILE IS THE POINT. The per-loan amounts must sum to `raw.loanVolume`, which
+   *    is computed independently from the cumulative `ev` bucket. If they disagree the loan
+   *    book has missed a funding path and BOTH numbers are void — it is not a rounding note.
+   */
+  const directs = new Map();       // sponsor address -> directs registered so far
+  const loanBook = [];             // { member, amount(6dp string), bps, directsAtLoan, where }
+  // ⛔ KEY ON LOWERCASE. The sponsor key comes from a signer's `.address`, the borrower key
+  //    from a decoded event arg. Both are checksummed in ethers v6 TODAY — but a single
+  //    case mismatch would make every `directsAtLoan` read 0, which looks exactly like a
+  //    real finding ("the gate would refuse everyone") and would never throw.
+  const key = (a) => String(a).toLowerCase();
+  const bumpDirect = (addr) => {
+    if (!addr || addr === ethers.ZeroAddress) return;
+    directs.set(key(addr), (directs.get(key(addr)) || 0) + 1);
+  };
+  /** Append every RescueLoanIssued in ONE receipt, with the directs standing right now. */
+  const recordLoans = (rc, where) => {
+    const one = {};
+    collect(ifaces, rc, one);
+    for (const a of one["RescueLoanIssued"] || []) {
+      const member = a.member !== undefined ? a.member : a[0];
+      const amount = BigInt(a.loanAmount !== undefined ? a.loanAmount : a[1]);
+      loanBook.push({
+        member,
+        amount: amount.toString(),
+        bps: Number((amount * 10_000n) / FEE),
+        directsAtLoan: directs.get(key(member)) || 0,
+        where,
+      });
+    }
+  };
+
+  /**
    * ══ AB_CENSUS=1 — THE PER-MEMBER INSTRUMENT (session 7) ═══════════════════════════════
    *
    * WHY IT EXISTS. The session-6 A/B found the one result that contradicts the V8.50 scope:
@@ -517,6 +591,10 @@ async function main() {
       try {
         const rc = await (await w.tr.connect(sg).register(addrOf(a.ref), { gasLimit: REG_GAS })).wait();
         parseAll(rc); totalGas += rc.gasUsed; registered++;
+        // Bump BEFORE recording: the registration has landed, so on-chain the sponsor's
+        // directCount already includes this member for anything later in the same tx.
+        bumpDirect(addrOf(a.ref));
+        recordLoans(rc, "register");
       } catch (e) {
         // A registration that cannot complete is a finding about the BUILD, not noise —
         // and if it happens on one arm and not the other the sequence has stopped being
@@ -623,6 +701,7 @@ async function main() {
         }
         const rc = await (await w.keeper.performUpkeep(data, { gasLimit: REG_GAS })).wait();
         parseAll(rc); totalGas += rc.gasUsed;
+        recordLoans(rc, "keeper");
         if (doCensus) {
           // Parse THIS tick's logs separately: `ev` is cumulative, and attributing an exit
           // to a rescue that happened forty ticks ago would manufacture the finding.
@@ -1021,6 +1100,80 @@ async function main() {
     },
   };
 
+  /**
+   * ══ THE LOAN BOOK BLOCK — the shape of the lending, and what a base ceiling would refuse.
+   *
+   * `fitsUnderBase` answers the owner's open question from 17.5 directly: at base ceiling X
+   * bps, how many of THIS run's loans would still have been granted in full to a member with
+   * NO sponsor? A loan is refused/truncated when `amount > fee * X / 10_000`.
+   *
+   * ⚠ IT IS A COUNTERFACTUAL ON A RECORDED RUN, NOT A REPLAY WITH THE GATE INSTALLED.
+   *   Refusing a loan changes what happens next (17.2: the population moves), so these
+   *   counts are an UPPER BOUND on how many loans survive, and the eviction consequence is
+   *   not in them at all. The binding-fixture sweep is the second instrument and the two
+   *   must be compared, not substituted.
+   */
+  const loanBookBlock = (() => {
+    const amts = loanBook.map((l) => BigInt(l.amount)).sort((x, y) => (x < y ? -1 : x > y ? 1 : 0));
+    const bpsArr = loanBook.map((l) => l.bps).sort((x, y) => x - y);
+    const pct = (arr, p) => (arr.length ? arr[Math.min(arr.length - 1, Math.floor((arr.length - 1) * p))] : null);
+    const usd = (v) => (v === null ? null : +(Number(v) / 1e6).toFixed(4));
+    const bookSum = amts.reduce((s, v) => s + v, 0n);
+    const rawSum = sum("RescueLoanIssued", "loanAmount", 1);
+    const dHist = {};
+    for (const l of loanBook) dHist[l.directsAtLoan] = (dHist[l.directsAtLoan] || 0) + 1;
+    const zero = loanBook.filter((l) => l.directsAtLoan === 0);
+    const some = loanBook.filter((l) => l.directsAtLoan >= 1);
+    const fits = {};
+    for (const base of [500, 1000, 1500, 2000, 2500, 3000, 3500, 4000, 5000]) {
+      const cap = (FEE * BigInt(base)) / 10_000n;
+      const f = (set) => set.filter((l) => BigInt(l.amount) <= cap).length;
+      fits[base] = {
+        capUSD: usd(cap),
+        allLoansFitting: f(loanBook),
+        allShare: loanBook.length ? +(f(loanBook) / loanBook.length).toFixed(4) : null,
+        zeroDirectFitting: f(zero),
+        zeroDirectRefused: zero.length - f(zero),
+      };
+    }
+    return {
+      loans: loanBook.length,
+      totalUSD: usd(bookSum),
+      // ⛔ THE CROSS-CHECK. Two independent tallies of the same event stream.
+      reconcile: {
+        loanBookSum: bookSum.toString(),
+        rawLoanVolume: rawSum.toString(),
+        agree: bookSum === rawSum,
+        note: "the per-loan book is built per receipt; raw.loanVolume is summed from the " +
+              "cumulative event bucket. Disagreement means a funding path was missed and " +
+              "BOTH figures are void.",
+      },
+      amountUSD: { min: usd(pct(amts, 0)), p25: usd(pct(amts, 0.25)), median: usd(pct(amts, 0.5)),
+                   p75: usd(pct(amts, 0.75)), p90: usd(pct(amts, 0.9)), max: usd(amts[amts.length - 1] ?? null),
+                   mean: amts.length ? +(Number(bookSum) / 1e6 / amts.length).toFixed(4) : null },
+      bpsOfFee: { min: pct(bpsArr, 0), p25: pct(bpsArr, 0.25), median: pct(bpsArr, 0.5),
+                  p75: pct(bpsArr, 0.75), p90: pct(bpsArr, 0.9), max: bpsArr[bpsArr.length - 1] ?? null },
+      directsAtLoanHistogram: dHist,
+      zeroDirectLoans: zero.length,
+      zeroDirectShare: loanBook.length ? +(zero.length / loanBook.length).toFixed(4) : null,
+      oneOrMoreDirectLoans: some.length,
+      byWhere: loanBook.reduce((o, l) => { o[l.where] = (o[l.where] || 0) + 1; return o; }, {}),
+      // ⛔ THE INSTRUMENT MUST BE ABLE TO CONTRADICT ITSELF. If the address keys ever stop
+      //    matching, every directsAtLoan silently reads 0 and the result looks like the
+      //    strongest possible finding rather than a broken join. These three numbers make
+      //    that visible: directs must sum to the registrations that carried a referrer.
+      directsSanity: {
+        sponsorsWithAtLeastOne: directs.size,
+        totalDirectsCounted: [...directs.values()].reduce((s, v) => s + v, 0),
+        registrationsWithReferrer: seq.actions.filter((a) => a.op === "register" && a.ref !== -2).length,
+        note: "totalDirectsCounted counts landed registrations; registrationsWithReferrer " +
+              "counts attempted ones, so they differ only by failed registrations.",
+      },
+      fitsUnderBase: fits,
+      loans_detail: loanBook,
+    };
+  })();
+
   const result = {
     arm, seed: seq.seed, members: seq.members, size: seq.size, equalize,
     ran: { registered, keeperTicks, keeperFailures, seconds: Math.round((Date.now() - t0) / 1000) },
@@ -1173,6 +1326,7 @@ async function main() {
       parkedB: await (async () => { try { return String(await w.matB.getParkedCount()); } catch (e) { return `ERR ${(e.shortMessage || "").slice(0, 40)}`; } })(),
     },
     lending,
+    loanBook: loanBookBlock,
     ...(censusBlock ? { census: censusBlock } : {}),
     ...(evictBlock ? { evictRouting: evictBlock } : {}),
   };
@@ -1187,6 +1341,9 @@ async function main() {
    * in the other direction: the file must be complete, the console must be legible.
    */
   const slim = JSON.parse(JSON.stringify(result));
+  if (slim.loanBook) {
+    slim.loanBook.loans_detail = `[${result.loanBook.loans_detail.length} rows — in the JSON file]`;
+  }
   if (slim.evictRouting) {
     for (const k of ["items", "queueCensus", "batches"]) {
       slim.evictRouting[k] = `[${(result.evictRouting[k] || []).length} rows — in the JSON file]`;
@@ -1201,9 +1358,12 @@ async function main() {
   //    destroyed one seed's population block, because the two runs shared a name. A sweep
   //    row must never be able to land on top of the canonical pair.
   const floorTag = process.env.AB_FLOOR_BPS ? `_floor${process.env.AB_FLOOR_BPS}` : "";
+  // ⛔ TAG FROM THE CONTRACT, NOT THE ENV VAR. Same rule as the dials: if the fixture were
+  //    missing the env var would still name a file `_gate3000` that contains an ungated run.
+  const gateTag = dials.baseAdvanceBps !== "ABSENT" ? `_gate${dials.baseAdvanceBps}` : "";
   const popTag   = doEvict && !queueEvery ? "_nopop" : "";
   const out = path.join(hre.config.paths.root,
-    `ab_result_${arm}_s${seq.seed}${equalize ? "_eq" : ""}${doCensus ? "_census" : ""}${doEvict ? "_evict" : ""}${popTag}${floorTag}.json`);
+    `ab_result_${arm}_s${seq.seed}${equalize ? "_eq" : ""}${doCensus ? "_census" : ""}${doEvict ? "_evict" : ""}${popTag}${floorTag}${gateTag}.json`);
   fs.writeFileSync(out, JSON.stringify(result, null, 2) + "\n");
   console.log(`\n  written: ${path.basename(out)}`);
   {
@@ -1219,6 +1379,34 @@ async function main() {
     if (!L.reconcile.borrowerSetsAgree) {
       console.log(`  ⛔ LOAN/DEBT BORROWER SETS DISAGREE (${L.reconcile.distinctByLoanEvent} vs ` +
         `${L.reconcile.distinctByDebtEvent}) — both counts are void.`);
+    }
+  }
+  {
+    const B = result.loanBook;
+    if (!B.reconcile.agree) {
+      console.log(`\n  ⛔ LOAN BOOK DOES NOT RECONCILE: book ${B.reconcile.loanBookSum} vs ` +
+        `raw.loanVolume ${B.reconcile.rawLoanVolume} — a funding path was missed, BOTH are void.`);
+    } else {
+      console.log(`\n  LOAN BOOK: ${B.loans} loans, $${B.totalUSD} total, reconciles to raw.loanVolume`);
+      console.log(`    size USD  min ${B.amountUSD.min}  p25 ${B.amountUSD.p25}  med ${B.amountUSD.median}  ` +
+        `p75 ${B.amountUSD.p75}  p90 ${B.amountUSD.p90}  max ${B.amountUSD.max}  mean ${B.amountUSD.mean}`);
+      console.log(`    bps of fee  med ${B.bpsOfFee.median}  p90 ${B.bpsOfFee.p90}  max ${B.bpsOfFee.max}`);
+      console.log(`    directs at loan ${JSON.stringify(B.directsAtLoanHistogram)}  ` +
+        `zero-direct loans ${B.zeroDirectLoans} (${B.zeroDirectShare})`);
+      const S = B.directsSanity;
+      console.log(`    directs join: ${S.sponsorsWithAtLeastOne} sponsors, ${S.totalDirectsCounted} directs ` +
+        `counted vs ${S.registrationsWithReferrer} referred registrations`);
+      if (B.loans > 0 && B.zeroDirectLoans === B.loans && S.totalDirectsCounted > 0) {
+        console.log(`    ⚠ EVERY loan reads zero directs while ${S.totalDirectsCounted} directs exist — ` +
+          `check the address join before believing this.`);
+      }
+      const f = B.fitsUnderBase;
+      console.log(`    would fit under a base ceiling (all loans / zero-direct refused):`);
+      for (const k of Object.keys(f)) {
+        console.log(`      ${String(k).padStart(4)} bps = $${f[k].capUSD}  ->  ` +
+          `${String(f[k].allLoansFitting).padStart(3)}/${B.loans} fit (${f[k].allShare})  ` +
+          `zero-direct refused ${f[k].zeroDirectRefused}`);
+      }
     }
   }
   if (doEvict) {
