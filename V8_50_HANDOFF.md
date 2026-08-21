@@ -1,7 +1,7 @@
 # V8.50 HANDOFF — the crossing redesign. READ THIS FIRST.
 
 Written 2026-08-16 at the end of the V8.49 private measurement run.
-Sessions 2-23 have appended to it since; read the NEWEST section first — each one
+Sessions 2-24 have appended to it since; read the NEWEST section first — each one
 corrects the ones below it, and says so explicitly where it does.
 Audience: **the next session of Claude, plus the owner. There is no third party — every
 line of this codebase was written by a previous session of Claude and executed by the
@@ -10,7 +10,125 @@ owner-set, and the session that earned it got five things wrong by ignoring what
 
 ---
 
-# ⬛ SESSION 23 STATE — 2026-08-21, LATEST. READ THIS FIRST.
+# ⬛ SESSION 24 STATE — 2026-08-21, LATEST. READ THIS FIRST.
+# ⚠ 23.7 ITEM 1 IS PREPARED, NOT DONE. THE INSTRUMENT IS BUILT AND SELF-VALIDATED; THE
+# MEASUREMENT NEEDS A LIVE V8.48 READ AND THIS SESSION HAD NO RPC.
+
+Instrument only. **Nothing deployed, no contract file touched, no chain read.** One script
+extended — `scripts/diag_parked_experiment.js` gains sections 5 and 6 plus a `SELFTEST`
+mode. Sections 1-4 are untouched: they are the code that produced 14.1 and were not edited.
+
+## 24.0 ⛔ THE HONEST STATUS: BLOCKED ON ACCESS, NOT ON WORK
+
+23.7 item 1 is 14.4's open item — *"a per-tier split has not been run and should be before
+this table is used to set anything"*, plus its companion *"no time-at-risk adjustment"*.
+Both are corrections to **14.1's live V8.48 table**, so both need a Base Sepolia read.
+
+**This session could not make one.** The container's egress allowlist does not include any
+Base Sepolia RPC (`sepolia.base.org` and `base-sepolia-rpc.publicnode.com` both refuse),
+and the device bridge has no network at all. There is no cached episode dump to fall back
+on — `diag_parked_experiment.js` prints and does not persist, so 14.1's 1,803 episodes exist
+only in a console transcript.
+
+⛔ **SO THE NUMBERS IN 14.1 STILL CARRY 14.4's WARNING UNCHANGED. Nothing in this session
+changes a single figure in that table, and it must not be read as if it had.**
+
+## 24.1 ✅ WHAT WAS DONE INSTEAD: THE INSTRUMENT, BUILT AND ACTUALLY EXERCISED
+
+Sections 5 and 6 are written as **pure functions over the episode array** — `tierSplit`,
+`cappedWindow`, `med`, `p25` — with the chain-dependent half untouched above them. That is
+not tidiness: it is what let them be validated on a machine with no RPC.
+
+**`SELFTEST=1 node scripts/diag_parked_experiment.js` — 15 assertions, all passing.** It
+runs **before any `require` of hardhat or the address book**, so it needs neither a chain
+nor a deployment artifact. The synthetic fixture is deliberately lopsided in exactly the
+way 14.4 suspected — the rescued arms all in T1, STILL-PARKED all in T2 — so a `tierSplit`
+that could not surface a skew would fail rather than pass quietly. It also pins the two
+window behaviours that are easy to get wrong: a cycle **outside** the window must not
+count, and a censored episode must be reported as **censored, not as a zero**.
+
+⚠ **WHAT THE SELF-TEST DOES NOT COVER: the chain half.** Log scanning, episode
+construction, arm assignment and the covariates are unchanged and unexercised by it. They
+are the same code that produced 14.1 — which is the argument for not having touched them.
+
+## 24.2 ⛔ TWO DESIGN CALLS THE NEXT SESSION SHOULD NOT RE-LITIGATE
+
+**(a) A FIXED WINDOW, NOT A RATE.** The obvious adjustment — cycles ÷ exposure — hands
+every recently-exited episode a tiny denominator on one or two events and reads as noise.
+Instead: pick `W` blocks, keep only episodes with **at least `W` blocks of exposure**, and
+count only cycles landing inside `(t0, t0+W]`. Every surviving episode is then observed for
+exactly the same length of time. `W` defaults to the **p25 of organic exposure** so three
+quarters survive the cap, and is overridable with `WINDOW_BLOCKS`.
+
+**(b) ⛔ CAPPING HAS ITS OWN SELECTION AND THE OUTPUT SAYS SO ON ITS FACE.** Requiring `W`
+blocks of exposure keeps only OLDER episodes, so the capped table describes the early
+population. `censored` is printed per arm beside `eligible` for exactly that reason — **an
+arm that loses most of itself to the cap has not been adjusted, it has been replaced.** The
+section prints the uncapped `medExposure` too, because if the arms differ there then 14.1's
+cycle columns were comparing different observation lengths, which is the whole point.
+
+⚠ **AND 14.4's RANKING SURVIVES THE FIX.** `2+ cycles` is still PARTLY MECHANICAL — a
+rescued member is seated and a seated member cycles. The window removes the exposure bias;
+it does nothing about that one, and section 6 says so in its own footer.
+
+**ORGANIC ONLY.** 14.6 measured that the member-specific columns do not reproduce on a
+population of scripts (bigfill ends owing at 1.1% against organic's 20.2%), so a per-tier
+split of bigfill would be a split of the wrong thing.
+
+## 24.3 ▶ WHAT TO RUN — ONE COMMAND, ON A MACHINE WITH AN RPC
+
+```
+npx hardhat run scripts/diag_parked_experiment.js --network baseSepolia
+```
+
+Read-only, nothing written to chain. Optional: `WINDOW_BLOCKS=<n>` to pin the window
+instead of taking p25; `TIERS=1,2,3` as before. **Save the transcript** —
+`parked_experiment.txt` is already in `.gitignore` and 14.1's own episodes were lost to a
+console because nobody did.
+
+## 24.4 ⛔ WHAT THE RESULT DECIDES, STATED BEFORE IT IS SEEN
+
+**Section 5A is the table that matters, and its two outcomes are not equal:**
+
+* **If the arms' tier shares are close** — 14.4's suspicion is refuted, 14.1's balance
+  claim survives, and the per-tier cells in 5B are a bonus rather than a correction.
+* **If STILL-PARKED skews to higher tiers as 14.4 suspected** — then 14.1's arms are NOT
+  balanced on tier, and **every outcome difference in that table is part treatment and part
+  tier, in unknown proportion.** 14.2's priced trade-off (20.2% vs 10.0% ending in debt)
+  would then have to be re-read from 5B's within-tier cells, not from 14.1.
+
+⚠ **STATING BOTH BRANCHES NOW IS DELIBERATE** — 7a rule 1. Whichever way it lands, nobody
+gets to decide afterwards which reading the table was always going to support.
+
+⚠ **AND `n` GOVERNS.** 14.1's arms were 238 / 219 / 192; splitting them three ways does not
+add data. Section 5B prints `n` on every row and the footer says a handful of episodes is
+not a rate.
+
+## 24.5 NEXT, IN ORDER — SUPERSEDES 23.7.
+
+1. **RUN 24.3** on a machine with an RPC, then read 24.4. ⚠ V8.48 measurement; 18.0's
+   caveat about re-measuring 14.1 on a private deploy still applies and this is not that.
+2. **CLASSIFY `:936`** (20.3a). Until it is settled nobody may write "exactly one door".
+   ✅ Doable with no chain — it is a Hardhat question.
+3. **THE PRIVATE V8.50 DEPLOY GATE** — risks 1, 3 and 4. Risk 2 is closed by 20.4. Read
+   20.5 first: the gate's own text still tests against `minGasPerItem` 3.5M and the source
+   has been 5,000,000 since 2026-08-18.
+4. **POST-MIGRATION, NOT BEFORE:** GO_LIVE_RUNBOOK PHASE 7b — pre-flight, check the live
+   histogram against 19.1, then arm at 3000. Then re-run `diag_referral_threshold.js`
+   section 4 + the loan book against live V8.50 (19.6).
+5. Backlog, untouched: the 5 unexplained cycle-outs; `V8_50_ReferralBreakeven.test.js` v4
+   counts the dead event; stale-nonce retry backoff; @bevmawire's Dashboard retry;
+   `maxItemsPerUpkeep` live 15 vs 20 in source; member-callable re-entry. Plus the three
+   orphan session-13 fragments 19.18c flagged.
+
+⚠ **A STANDING NOTE ON WHAT A CLOUD SESSION CAN AND CANNOT DO.** Hardhat unit tests, the
+A/B harness and any pure-computation instrument all run here fine (the compiler is seeded
+per 20.9b). **Anything that reads Base Sepolia does not.** Items that need the live chain
+should be batched for a session on the owner's machine rather than discovered one at a time.
+
+---
+
+# ⬛ SESSION 23 STATE — 2026-08-21. READ AFTER SESSION 24.
 # ✅ THE CLAWBACK PRESETS ARE PRICED. 19.17b's OPEN HALF IS CLOSED — AS A UNIT TEST.
 
 Test-only session. **Nothing deployed, no contract file touched.** One new test file.
@@ -121,6 +239,8 @@ reproduces the owner's machine to the unit, but 20.7's rule still holds — **no
 from a container run.**
 
 ## 23.7 NEXT, IN ORDER — SUPERSEDES 22.7. ⚠ ITEM 1 IS DONE.
+⚠ **SUPERSEDED BY 24.5. ITEM 1 BELOW IS PREPARED, NOT DONE — the instrument is built and
+self-validated but the measurement needs a live V8.48 read (24.0).**
 
 1. **SPLIT 14.1 BY TIER** and cap time-at-risk (14.4). ⚠ V8.48 measurement; 18.0 applies.
 2. **CLASSIFY `:936`** (20.3a). Until it is settled nobody may write "exactly one door".

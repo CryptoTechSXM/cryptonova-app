@@ -62,6 +62,15 @@
 //
 // Run: npx hardhat run scripts/diag_parked_experiment.js --network baseSepolia
 // Env: TIERS=1,2,3  CHUNK=4000  COHORT_MAX=1200  RD_WINDOW=1500  ADDRESSES_FILE=...
+// ⛔ SELFTEST RUNS BEFORE ANY require OF hardhat OR THE ADDRESS BOOK, ON PURPOSE.
+//    Sections 5 and 6 are pure aggregation and need neither a chain nor a deployment
+//    artifact; gating them here is what lets them be exercised on a machine that has
+//    neither. Function declarations hoist, so `selftest` is defined by the time this runs.
+if (process.env.SELFTEST === "1") {
+  console.log("\n  SELFTEST — sections 5/6 aggregation (no chain, no address book)\n");
+  selftest();
+}
+
 const { ethers } = require("hardhat");
 const path = require("path");
 const fs = require("fs");
@@ -183,6 +192,179 @@ function quantiles(xs) {
 }
 
 const ARMS = ["SF-LOAN", "ASSIST-NOLOAN", "SELF-RESCUE", "EVICTED", "STILL-PARKED", "GHOST"];
+
+/* ═══════════════════════════════════════════════════════════════════════════════
+ * SECTION 5 + 6 (session 24) — THE TWO CORRECTIONS 14.4 ASKED FOR, AS PURE FUNCTIONS
+ *
+ * 14.4 named two defects in 14.1's table and said a per-tier split "should be run before
+ * this table is used to set anything":
+ *
+ *   (a) ONE REAL IMBALANCE, IN DOLLARS NOT RATIOS. Median shortfall was $2.65 for
+ *       STILL-PARKED against $1.58 / $1.60 for the rescued arms while contribBps was the
+ *       same across all three. Same ratio, bigger dollars means the never-rescued arm
+ *       SKEWS TO HIGHER TIERS — and if it does, 14.1's arms are not balanced after all
+ *       and every outcome difference is part treatment and part tier.
+ *   (b) NO TIME-AT-RISK ADJUSTMENT. Outcomes run to the head block, so an episode that
+ *       exited in week one has had longer to produce cycles than one that exited
+ *       yesterday. `cycled again` and `2+ cycles` inherit that directly.
+ *
+ * ⛔ THESE ARE PURE FUNCTIONS ON PURPOSE. Everything above them needs a live chain; this
+ *    does not. It means the aggregation can be exercised against synthetic episodes with
+ *    known answers (`SELFTEST=1`) on a machine with no RPC at all — which is how the
+ *    version you are reading was validated, since the session that wrote it could not
+ *    reach Base Sepolia. The chain-dependent half is unchanged and unvalidated by that
+ *    self-test; it is the same code that produced 14.1.
+ * ═══════════════════════════════════════════════════════════════════════════════ */
+
+/** Median of a bigint/number array, or null. Lower median on even counts — same
+ *  convention as `quantiles` above, so the two never disagree by half a step. */
+function med(xs) {
+  if (!xs.length) return null;
+  const a = [...xs].sort((x, y) => (x < y ? -1 : x > y ? 1 : 0));
+  return a[Math.floor((a.length - 1) / 2)];
+}
+
+/**
+ * SECTION 5 — the per-tier split, and the composition check that motivates it.
+ *
+ * Returns { comp, cells } where
+ *   comp[arm][tier]  = how many of that arm's episodes sat in that tier  (the imbalance)
+ *   cells[arm][tier] = { n, twoPlus, owing, medContribBps, medShortUsd }  (the split)
+ *
+ * ⚠ The COMPOSITION table is the one that decides whether 14.1 can be quoted at all. The
+ *   per-tier cells are what you fall back to if it cannot.
+ */
+function tierSplit(episodes, arms, tiers) {
+  const comp = {}, cells = {};
+  for (const a of arms) {
+    comp[a] = {}; cells[a] = {};
+    for (const t of tiers) {
+      comp[a][t] = 0;
+      cells[a][t] = { n: 0, twoPlus: 0, owing: 0, contribs: [], shorts: [] };
+    }
+  }
+  for (const ep of episodes) {
+    const a = ep.arm, t = ep.mat && ep.mat.tier;
+    if (!comp[a] || !comp[a][t] === undefined || comp[a][t] === undefined) continue;
+    comp[a][t]++;
+    const c = cells[a][t];
+    c.n++;
+    if (ep.cyclesAfter >= 2) c.twoPlus++;
+    if (ep.owingNow) c.owing++;
+    c.contribs.push(ep.contribBps);
+    c.shorts.push(ep.shortUsd);
+  }
+  for (const a of arms) for (const t of tiers) {
+    const c = cells[a][t];
+    c.medContribBps = med(c.contribs);
+    c.medShortUsd   = med(c.shorts);
+    delete c.contribs; delete c.shorts;
+  }
+  return { comp, cells };
+}
+
+/**
+ * SECTION 6 — outcomes over an EQUAL observation window.
+ *
+ * ⛔ THE FIX IS A FIXED WINDOW, NOT A RATE. Dividing cycles by exposure would hand every
+ *    recently-exited episode a huge denominator on one or two events and read as noise.
+ *    Instead: pick a window W in blocks, KEEP only episodes with at least W blocks of
+ *    exposure, and count only the cycles that landed inside (t0, t0+W]. Every surviving
+ *    episode is then observed for exactly the same length of time.
+ *
+ * ⚠ AND CAPPING HAS ITS OWN SELECTION, WHICH IS NOT OPTIONAL TO STATE. Requiring W blocks
+ *   of exposure keeps only OLDER episodes. If the population changed over the deployment,
+ *   the capped table describes the early population. `censored` is returned per arm so the
+ *   size of that filter is always visible next to the result — an arm that loses most of
+ *   itself to the cap has not been adjusted, it has been replaced.
+ *
+ * @param cyclesOf (member) -> array of block numbers at which that member cycled
+ */
+function cappedWindow(episodes, cyclesOf, head, W, arms) {
+  const out = {};
+  for (const a of arms) out[a] = { eligible: 0, censored: 0, twoPlus: 0, cycledAgain: 0, exposures: [] };
+  for (const ep of episodes) {
+    const row = out[ep.arm];
+    if (!row) continue;
+    const t0 = ep.exitB ?? ep.parkB;
+    const exposure = head - t0;
+    row.exposures.push(exposure);
+    if (exposure < W) { row.censored++; continue; }
+    row.eligible++;
+    const n = (cyclesOf(ep.member) || []).filter((b) => b > t0 && b <= t0 + W).length;
+    if (n >= 1) row.cycledAgain++;
+    if (n >= 2) row.twoPlus++;
+  }
+  for (const a of arms) {
+    out[a].medExposure = med(out[a].exposures);
+    delete out[a].exposures;
+  }
+  return out;
+}
+
+/** p25 of a numeric array — the default window, chosen so three quarters of the
+ *  episodes survive the cap rather than a number picked to look good. */
+function p25(xs) {
+  if (!xs.length) return 0;
+  const a = [...xs].sort((x, y) => x - y);
+  return a[Math.floor((a.length - 1) * 0.25)];
+}
+
+/* ── SELFTEST — synthetic episodes, known answers, no chain ──────────────────── */
+function selftest() {
+  const arms = ["SF-LOAN", "SELF-RESCUE", "STILL-PARKED"];
+  const tiers = ["T1", "T2"];
+  const T = (t) => ({ tier: t });
+  let fails = 0;
+  const eq = (got, want, what) => {
+    const ok = JSON.stringify(got) === JSON.stringify(want);
+    if (!ok) { fails++; console.log(`  FAIL ${what}: got ${JSON.stringify(got)} want ${JSON.stringify(want)}`); }
+    else console.log(`  ok   ${what}`);
+  };
+
+  // Deliberately lopsided: STILL-PARKED sits in T2, the rescued arms in T1 — exactly the
+  // skew 14.4 suspected. If tierSplit cannot show that, it cannot do its job.
+  const eps = [
+    { arm: "SF-LOAN",      mat: T("T1"), cyclesAfter: 3, owingNow: true,  contribBps: 7900, shortUsd: 1.5, parkB: 10, exitB: 20 },
+    { arm: "SF-LOAN",      mat: T("T1"), cyclesAfter: 0, owingNow: false, contribBps: 8100, shortUsd: 1.7, parkB: 10, exitB: 90 },
+    { arm: "SELF-RESCUE",  mat: T("T1"), cyclesAfter: 2, owingNow: false, contribBps: 7800, shortUsd: 1.6, parkB: 10, exitB: 20 },
+    { arm: "STILL-PARKED", mat: T("T2"), cyclesAfter: 0, owingNow: false, contribBps: 7815, shortUsd: 2.6, parkB: 20, exitB: null },
+    { arm: "STILL-PARKED", mat: T("T2"), cyclesAfter: 1, owingNow: true,  contribBps: 7820, shortUsd: 2.7, parkB: 30, exitB: null },
+  ];
+
+  const { comp, cells } = tierSplit(eps, arms, tiers);
+  eq(comp["SF-LOAN"], { T1: 2, T2: 0 }, "composition: SF-LOAN is entirely T1");
+  eq(comp["STILL-PARKED"], { T1: 0, T2: 2 }, "composition: STILL-PARKED is entirely T2 (the skew)");
+  eq(cells["SF-LOAN"]["T1"].n, 2, "cells: SF-LOAN T1 count");
+  eq(cells["SF-LOAN"]["T1"].twoPlus, 1, "cells: SF-LOAN T1 reaches 2+ cycles once");
+  eq(cells["SF-LOAN"]["T1"].owing, 1, "cells: SF-LOAN T1 owing count");
+  eq(cells["SF-LOAN"]["T1"].medShortUsd, 1.5, "cells: lower median on an even count");
+  eq(cells["STILL-PARKED"]["T1"].n, 0, "cells: an empty tier reports 0, not undefined");
+
+  // Window. head = 100, W = 50.
+  //   SF-LOAN #1  t0=20 exposure 80 >= 50 -> counts cycles in (20,70]
+  //   SF-LOAN #2  t0=90 exposure 10 <  50 -> CENSORED, and this is the bias 14.4 named
+  //   SELF-RESC   t0=20 exposure 80 -> eligible
+  //   STILL #1    t0=20 exposure 80 -> eligible   (STILL-PARKED uses parkB)
+  //   STILL #2    t0=30 exposure 70 -> eligible
+  const cyc = new Map([
+    ["m1", [25, 40, 95]],   // two inside (20,70], one outside -> twoPlus
+    ["m3", [60]],           // one inside -> cycledAgain but not twoPlus
+  ]);
+  const eps2 = eps.map((e, i) => ({ ...e, member: ["m1", "m2", "m3", "m4", "m5"][i] }));
+  const w = cappedWindow(eps2, (m) => cyc.get(m), 100, 50, arms);
+  eq(w["SF-LOAN"].eligible, 1, "window: one SF-LOAN episode survives the cap");
+  eq(w["SF-LOAN"].censored, 1, "window: the recent one is censored, not counted as a zero");
+  eq(w["SF-LOAN"].twoPlus, 1, "window: cycles OUTSIDE the window do not count");
+  eq(w["SELF-RESCUE"].cycledAgain, 1, "window: one cycle inside the window");
+  eq(w["SELF-RESCUE"].twoPlus, 0, "window: one cycle is not two");
+  eq(w["STILL-PARKED"].eligible, 2, "window: STILL-PARKED measured from parkB");
+  eq(w["STILL-PARKED"].twoPlus, 0, "window: no cycles recorded for those members");
+  eq(p25([10, 20, 30, 40, 50]), 20, "p25 of a five-element array");
+
+  console.log(fails ? `\n  ⛔ SELFTEST FAILED (${fails})` : `\n  ✅ SELFTEST PASSED — the aggregation is exercised; the CHAIN half is not.`);
+  process.exit(fails ? 1 : 0);
+}
 
 async function main() {
   buildBigfill();
@@ -488,6 +670,68 @@ async function main() {
   panel("organic");
   panel("bigfill");
 
+  /* ── SECTION 5 + 6 — 14.4's TWO CORRECTIONS (session 24) ──────────────────── *
+   * ORGANIC ONLY. 14.6 measured that the member-specific columns do NOT reproduce on a
+   * population of scripts (bigfill ends owing at 1.1% against organic's 20.2%), so a
+   * per-tier split of bigfill would be a split of the wrong thing. 14.1's table is the
+   * organic one and these are corrections to it. */
+  {
+    const org = episodes.filter((e) => e.cohort === "organic");
+    const armsHere = ARMS.filter((a) => org.some((e) => e.arm === a));
+
+    console.log(`\n  ${"=".repeat(100)}`);
+    console.log(`  5. PER-TIER SPLIT — 14.4's open item. ORGANIC ONLY (14.6: bigfill's member columns are not member facts).`);
+    console.log(`  ${"=".repeat(100)}`);
+    const { comp, cells } = tierSplit(org, armsHere, TIERS);
+
+    console.log(`\n  5A. ARM COMPOSITION BY TIER — ⛔ THIS IS THE TABLE THAT DECIDES WHETHER 14.1 CAN BE QUOTED.`);
+    console.log(`      14.4 suspected the never-rescued arm skews to higher tiers (same contribBps, bigger`);
+    console.log(`      dollars). If these rows differ, 14.1's arms are NOT balanced and every outcome`);
+    console.log(`      difference in it is part treatment and part tier.`);
+    console.log(`\n      ${"arm".padEnd(16)}${TIERS.map((t) => pad(t, 9)).join("")}${pad("n", 8)}   share by tier`);
+    for (const a of armsHere) {
+      const n = TIERS.reduce((x, t) => x + comp[a][t], 0);
+      const shares = TIERS.map((t) => n ? `${(comp[a][t] * 100 / n).toFixed(0)}%` : "n/a");
+      console.log(`      ${a.padEnd(16)}${TIERS.map((t) => pad(comp[a][t], 9)).join("")}${pad(n, 8)}   ${shares.join(" / ")}`);
+    }
+    console.log(`\n      ⚠ Read the SHARES, not the counts — the arms are different sizes by construction.`);
+
+    console.log(`\n  5B. OUTCOMES WITHIN EACH TIER — the fallback if 5A shows a skew.`);
+    console.log(`      ${"arm".padEnd(16)}${"tier".padEnd(6)}${pad("n", 6)}${pad("2+ cyc", 9)}${pad("owing", 9)}${pad("medContrib", 12)}${pad("medShort$", 11)}`);
+    for (const a of armsHere) for (const t of TIERS) {
+      const c = cells[a][t];
+      if (!c.n) continue;
+      console.log(`      ${a.padEnd(16)}${t.padEnd(6)}${pad(c.n, 6)}${pad(pct(c.twoPlus, c.n), 9)}${pad(pct(c.owing, c.n), 9)}` +
+                  `${pad(c.medContribBps ?? "n/a", 12)}${pad(c.medShortUsd === null ? "n/a" : c.medShortUsd.toFixed(2), 11)}`);
+    }
+    console.log(`\n      ⛔ A CELL WITH A HANDFUL OF EPISODES IS NOT A RATE. Read n before every percentage;`);
+    console.log(`         14.1's arms were 238 / 219 / 192 and splitting them three ways does not add data.`);
+
+    /* ── 6 — EQUAL TIME AT RISK ── */
+    const exposures = org.map((e) => head - (e.exitB ?? e.parkB));
+    const W = Number(process.env.WINDOW_BLOCKS || p25(exposures));
+    console.log(`\n  ${"=".repeat(100)}`);
+    console.log(`  6. OUTCOMES OVER AN EQUAL WINDOW — 14.4's other open item ("no time-at-risk adjustment")`);
+    console.log(`  ${"=".repeat(100)}`);
+    console.log(`      window W = ${W} blocks${process.env.WINDOW_BLOCKS ? " (WINDOW_BLOCKS)" : " (p25 of organic exposure — three quarters of episodes survive the cap)"}`);
+    console.log(`      Only episodes with >= W blocks of exposure are kept, and only cycles inside (t0, t0+W].`);
+    const win = cappedWindow(org, (m) => cycleBlocks.get(lc(m)), head, W, armsHere);
+    console.log(`\n      ${"arm".padEnd(16)}${pad("eligible", 10)}${pad("censored", 10)}${pad("medExposure", 13)}${pad("cycled", 9)}${pad("2+ cyc", 9)}`);
+    for (const a of armsHere) {
+      const r = win[a];
+      console.log(`      ${a.padEnd(16)}${pad(r.eligible, 10)}${pad(r.censored, 10)}${pad(r.medExposure ?? "n/a", 13)}` +
+                  `${pad(pct(r.cycledAgain, r.eligible), 9)}${pad(pct(r.twoPlus, r.eligible), 9)}`);
+    }
+    console.log(`\n      ⚠ medExposure is the UNCAPPED median and it is why this section exists — if the arms`);
+    console.log(`        differ there, 14.1's cycle columns were comparing different observation lengths.`);
+    console.log(`      ⛔ CAPPING HAS ITS OWN SELECTION. Requiring W blocks of exposure keeps only OLDER`);
+    console.log(`         episodes, so this table describes the early population. An arm that loses most of`);
+    console.log(`         itself to \`censored\` has not been adjusted — it has been replaced. Read the two`);
+    console.log(`         columns together, and quote section 3's numbers beside these, never instead of them.`);
+    console.log(`      ⚠ 14.4's ranking still applies: \`2+ cyc\` is PARTLY MECHANICAL (a rescued member is`);
+    console.log(`        seated and a seated member cycles). The window fixes the exposure bias, not that one.`);
+  }
+
   /* ── what this run cannot see ────────────────────────────────────────────── */
   console.log(`\n  ${"=".repeat(100)}`);
   console.log(`  WHAT THIS INSTRUMENT CANNOT SEE — carry these forward with every number above`);
@@ -497,8 +741,9 @@ async function main() {
   console.log(`    both sides of the rung are populated.`);
   console.log(`  · Members below the rung are evicted, so "EVICTED" is not a counterfactual for`);
   console.log(`    "SF-LOAN" — it is a poorer population by construction.`);
-  console.log(`  · Outcomes are measured to the head block. A member rescued yesterday has had less`);
-  console.log(`    time to cycle than one rescued in week one. No time-at-risk adjustment is applied.`);
+  console.log(`  · Outcomes in sections 2-4 are measured to the head block, so a member rescued`);
+  console.log(`    yesterday has had less time to cycle than one rescued in week one. SECTION 6 now`);
+  console.log(`    applies an equal-window adjustment; sections 2-4 still do not. Quote both.`);
   console.log(`  · ${bufBps >= 0 ? `crossingBufferBps is ${bufBps} ON CHAIN` : "crossingBufferBps unreadable"} — V8.48 manufactured debt with the buffer that V8.50 removes.`);
   console.log(`    Every debt figure here is on the OLD build (13.11). Re-run on the V8.50 private deploy.`);
   console.log(`  · Loans are not tracked individually; "owing now" is the member's balance at head.`);
