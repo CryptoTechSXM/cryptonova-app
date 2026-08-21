@@ -1,7 +1,7 @@
 # V8.50 HANDOFF — the crossing redesign. READ THIS FIRST.
 
 Written 2026-08-16 at the end of the V8.49 private measurement run.
-Sessions 2-24 have appended to it since; read the NEWEST section first — each one
+Sessions 2-25 have appended to it since; read the NEWEST section first — each one
 corrects the ones below it, and says so explicitly where it does.
 Audience: **the next session of Claude, plus the owner. There is no third party — every
 line of this codebase was written by a previous session of Claude and executed by the
@@ -10,7 +10,168 @@ owner-set, and the session that earned it got five things wrong by ignoring what
 
 ---
 
-# ⬛ SESSION 24 STATE — 2026-08-21, LATEST. READ THIS FIRST.
+# ⬛ SESSION 25 STATE — 2026-08-21, LATEST. READ THIS FIRST.
+# ⛔⛔ 14.4's TIER SUSPICION IS REFUTED. ITS TIME-AT-RISK ONE IS CONFIRMED AND IT INVERTS
+# 14.1's HEADLINE: ON EQUAL EXPOSURE, SELF-RESCUE BEATS THE LOAN 27.3% TO 15.1%.
+
+24.3 was run on the owner's machine, live V8.48, blocks 45430468..45779757, **every block
+range read cleanly**. **3,106 episodes** (14.1 had 1,803), 875 organic. Transcript saved to
+`parked_experiment.txt` — the first time this instrument's output has been kept.
+
+## 25.0 ⛔⛔ THE HEADLINE: 14.1's CENTRAL CLAIM DOES NOT SURVIVE AN EQUAL OBSERVATION WINDOW
+
+14.1 closed with **"THE OWNER'S TWO-CYCLE BAR IS MET, AND IT IS THE LOAN THAT MEETS IT."**
+That rested on 83.2% (SF-LOAN) vs 64.4% (SELF-RESCUE) reaching 2+ cycles, measured to the
+head block. Tonight, uncapped, the same comparison is 73.0% vs 69.1% — already nearly gone.
+**Capped to an equal window it reverses:**
+
+| organic arm | n | 2+ cycles, **uncapped** | eligible | 2+ cycles, **equal window** | median exposure |
+|---|---|---|---|---|---|
+| **SF-LOAN** | 366 | 73.0% | 305 | **15.1%** | **76,570 blocks** |
+| **SELF-RESCUE** | 369 | 69.1% | 293 | **27.3%** | **44,683 blocks** |
+
+**The loan arm's episodes are 1.71x older.** Section 3's advantage for the loan was
+substantially the loan arm having had longer to accumulate cycles. Held to the same 22,640
+blocks each, **a member who paid their own way out reaches two cycles 1.81x as often as one
+who was lent to.**
+
+⚠ **THE CAP IS USABLE HERE AND ONLY HERE.** SF-LOAN loses 16.7% of its episodes to
+censoring and SELF-RESCUE 20.6% — comparable, so the two are still comparing like with
+like. **STILL-PARKED loses 62.9%**, which is my own standing warning firing: that arm has
+not been adjusted, it has been replaced, and its 2.2% must not be quoted.
+
+## 25.1 ✅ 14.4's TIER SUSPICION IS REFUTED — AND IN THE OPPOSITE DIRECTION
+
+14.4 suspected *"the never-rescued arm skews to higher tiers"*. It does not:
+
+| arm | T1 | T2 | T3 | n |
+|---|---|---|---|---|
+| SF-LOAN | 77% | 17% | **6%** | 366 |
+| SELF-RESCUE | 73% | 22% | **5%** | 369 |
+| STILL-PARKED | 76% | 23% | **1%** | 124 |
+
+T1 shares agree within 4 points. If anything **STILL-PARKED skews slightly LOW on T3** — 1
+episode of 124 — the reverse of what was feared. **So 14.1's arms ARE balanced on tier and
+that table does not have to be thrown out on those grounds.** 24.4 said both branches would
+be stated before the result was seen; this is the branch where the balance claim survives.
+
+## 25.2 ⛔ BUT THE DOLLAR IMBALANCE IS REAL, IT REPRODUCED, AND TIER IS NOT THE EXPLANATION
+
+14.4's evidence was median shortfall $2.65 for STILL-PARKED against $1.58/$1.60. **It
+reproduces exactly: $2.46 against $1.60/$1.60.** Since composition is balanced, the cause is
+not tier — it is **within-tier**. In T1 alone, STILL-PARKED sits at medContrib **6885** and
+medShort **$2.21**, against SELF-RESCUE's 7800 / $1.57 and SF-LOAN's 7153 / $1.56.
+
+⛔ **AND SECTION 2's BALANCE HAS DEGRADED SINCE 14.1.** Median contribBps was
+7939 / 7800 / 7815 in 14.1 — indistinguishable, which was the whole basis for calling the
+arms balanced. Tonight it is **7829 / 7800 / 7040**: STILL-PARKED has dropped ~775 bps
+away from the other two.
+
+⚠ **AN EXPLANATION, MARKED UNVERIFIED (rule 6).** STILL-PARKED shrank from 192 to 124
+episodes while the population grew 657 → 875. An episode's arm is decided by its exit, so a
+still-parked episode that is later rescued **leaves** that arm. The ones remaining are the
+ones nobody could rescue — so the arm gets poorer over time by construction. That would
+explain both the drop and the persistent dollar gap. **Nobody has measured it; it is a
+hypothesis about a selection process, not a finding.**
+
+**CONSEQUENCE EITHER WAY: STILL-PARKED IS NO LONGER A BALANCED CONTROL FOR THE OTHER TWO.**
+SF-LOAN vs SELF-RESCUE remains balanced (7829 vs 7800) and is the comparison to use.
+
+## 25.3 ⛔⛔ THE OWING SIDE MOVED AGAIN, EXACTLY AS 19.5 WARNED — AND ONLY FOR THE LOAN ARM
+
+| organic | 14.1, 2026-08-20 | tonight, 2026-08-21 |
+|---|---|---|
+| SF-LOAN still owing | 20.2% | **56.0%** |
+| SELF-RESCUE still owing | 10.0% | **11.9%** |
+| STILL-PARKED still owing | 7.3% | 33.9% |
+
+**SELF-RESCUE barely moved (1.19x). SF-LOAN nearly tripled (2.77x).** This is 19.5's
+standing correction repeating on a different table: *"the clean side is stable; the owing
+side moved… quote the direction, not the multiple."*
+
+⛔ **SO 14.2's PRICED TRADE-OFF MUST BE RESTATED, NOT REQUOTED.** It read *"the loan doubles
+the odds of ending in debt and buys 19 percentage points of two-cycle attainment"*. On
+tonight's data the loan **quintuples** the odds of ending in debt (56.0% vs 11.9%) and, at
+equal exposure, buys **NEGATIVE twelve** points of two-cycle attainment (15.1% vs 27.3%).
+**Both halves of that sentence have changed, one of them in sign. Do not quote 14.2.**
+
+## 25.4 ⛔ WHAT THE TIER SPLIT DID EARN: A STEEP GRADIENT THAT THE POOLED NUMBER HIDES, AND IT IS THE LOAN ARM'S ALONE
+
+| still owing, organic | T1 | T2 | T3 |
+|---|---|---|---|
+| **SF-LOAN** | 49.3% (n282) | 72.6% (n62) | **95.5% (21 of 22)** |
+| **SELF-RESCUE** | 14.1% (n270) | 5.0% (n80) | 10.5% (n19) |
+
+**Self-rescue is flat across tiers. The loan arm climbs from half to nearly all.** The
+pooled 56.0% is an average over a gradient, and at T3 a loan is very nearly a permanent
+debt. ⚠ **n=22 at T3 — report it as 21 of 22, not as 95.5%**, and the same for T2's 62. The
+direction is what is safe here; the levels are thin.
+
+Same pattern on 2+ cycles: SF-LOAN 80.1% / 64.5% / **4.5%** by tier against SELF-RESCUE's
+73.3% / 51.3% / 84.2%.
+
+## 25.5 ✅ WHAT HELD, ACROSS A POPULATION 1.7x BIGGER
+
+* **EVICTED = 0 of 3,106.** Eviction has still never fired on live V8.48. 14.3 said this at
+  1,803 episodes; it survives the population nearly doubling.
+* **THE BELOW-RUNG SIDE IS STILL EMPTY** (0 episodes in 2500..3999, both cohorts), so
+  section 4 still has no causal reading and the ladder has still never rejected anybody.
+  99.8% of organic and 100% of bigfill episodes sit at or above the 4000 bps rung.
+* **14.6's ORGANIC/BIGFILL SPLIT HOLDS AND WIDENS.** Bigfill SF-LOAN ends owing at **1.7%**
+  against organic's 56.0%; bigfill self-rescuers at 0.0% against 11.9%. Scripts are still
+  not members and their member-specific columns are still not facts about members.
+
+## 25.6 ⛔ THE LIVE DIALS DISAGREE WITH THE SOURCE, AND THE RUN PRINTED IT
+
+The header reads the chain, not the repo:
+
+| dial | live V8.48 | source / decision |
+|---|---|---|
+| `insolvencyFloorBps` | **3400** | **5_000** in `StabilityFund.sol:915` since the owner decision of 2026-08-19 |
+| `maxItemsPerUpkeep` | **15** | 20 in source (already on the backlog) |
+| `sfRescueLadderPreset` | 1 | preset 1 — matches the decision to keep it |
+
+⚠ **THE FLOOR ONE IS EXPECTED AND MUST STILL BE STATED WITH EVERY DEBT FIGURE ABOVE.**
+V8.48 was deployed 2026-08-13, six days before PARAM 59 moved; nobody set it on the live
+chain, and the A/B runs 5000. **So every "owing now" number in this section was produced
+under a 3400 floor, and the A/B's under 5000.** They are not the same world. 13.11 already
+said tonight's chain is the wrong basis for setting the floor; this is why.
+
+## 25.7 ⚠ WHAT THIS DOES AND DOES NOT DO TO THE GATE DECISION
+
+**It does not reopen it.** 18.18/19.0 set the base ceiling at 3000 bps on live *crossing*
+data (19.2, 19.4) and on the A/B, neither of which this touches. 19.4's at-loan-time table —
+zero-direct borrowers repaying 52.0% of the time against 94.1% at two directs — is a
+different instrument and is unaffected.
+
+**It points the same way, and that is worth one line:** an arm that at equal exposure
+under-performs self-rescue on cycles and ends owing five times as often is not an argument
+for lending more freely. ⛔ **But it is DESCRIPTIVE and the assignment is not random** —
+self-rescuers chose to spend their own money and may simply be more engaged. **No causal
+claim is made and none should be quoted.**
+
+## 25.8 NEXT, IN ORDER — SUPERSEDES 24.5. ⚠ ITEM 1 IS DONE.
+
+1. **CLASSIFY `:936`** (20.3a). Until it is settled nobody may write "exactly one door".
+   ✅ Needs no chain.
+2. ⚠ **DECIDE WHETHER 14.1/14.2 GET A CORRECTION BANNER OR A REPLACEMENT.** 25.0-25.4
+   change one figure's sign and triple another. The banner is written; whether those
+   sections should now be struck through rather than annotated is a judgement about the
+   document, and the next session should make it deliberately rather than by accretion.
+3. **THE PRIVATE V8.50 DEPLOY GATE** — risks 1, 3 and 4. Risk 2 is closed by 20.4. Read
+   20.5 first: the gate's own text still tests against `minGasPerItem` 3.5M and the source
+   has been 5,000,000 since 2026-08-18.
+4. **POST-MIGRATION, NOT BEFORE:** GO_LIVE_RUNBOOK PHASE 7b — pre-flight, check the live
+   histogram against 19.1, then arm at 3000. Then re-run `diag_referral_threshold.js`
+   section 4 + the loan book against live V8.50 (19.6).
+5. Backlog: the 5 unexplained cycle-outs; `V8_50_ReferralBreakeven.test.js` v4 counts the
+   dead event; stale-nonce retry backoff; @bevmawire's Dashboard retry; **`maxItemsPerUpkeep`
+   live 15 vs 20 in source — re-confirmed on chain tonight (25.6)**; member-callable
+   re-entry. Plus the three orphan session-13 fragments 19.18c flagged.
+
+---
+
+# ⬛ SESSION 24 STATE — 2026-08-21. READ AFTER SESSION 25.
 # ⚠ 23.7 ITEM 1 IS PREPARED, NOT DONE. THE INSTRUMENT IS BUILT AND SELF-VALIDATED; THE
 # MEASUREMENT NEEDS A LIVE V8.48 READ AND THIS SESSION HAD NO RPC.
 
@@ -105,6 +266,7 @@ add data. Section 5B prints `n` on every row and the footer says a handful of ep
 not a rate.
 
 ## 24.5 NEXT, IN ORDER — SUPERSEDES 23.7.
+✅ **SUPERSEDED BY 25.8. ITEM 1 BELOW WAS RUN 2026-08-21 — see 25.0.**
 
 1. **RUN 24.3** on a machine with an RPC, then read 24.4. ⚠ V8.48 measurement; 18.0's
    caveat about re-measuring 14.1 on a private deploy still applies and this is not that.
@@ -2239,6 +2401,14 @@ read-only diagnostic, `scripts/diag_parked_experiment.js`. Live V8.48, blocks
 45430468..45743290, tiers T1-T3, 12 matrices, ✅ no unreadable block ranges.
 
 ## 14.1 ⛔⛔ THE NEAR-EXPERIMENT RAN, THE ARMS CAME OUT BALANCED, AND 13.5's HEADLINE IS REFUTED
+> ⛔⛔ **ITS HEADLINE IS OVERTURNED BY 25.0 — READ THAT FIRST.** "The loan meets the
+> two-cycle bar" rested on outcomes measured to the head block. The loan arm's episodes are
+> **1.71x older** than the self-rescue arm's, and on an EQUAL observation window the
+> ordering reverses: **15.1% for the loan against 27.3% for self-rescue.** ✅ The arms ARE
+> balanced on TIER (25.1, 14.4's suspicion refuted) — but 25.2 shows STILL-PARKED has since
+> drifted 775 bps poorer and is no longer a balanced control. **The n's and the balance
+> table below still stand as of 2026-08-20; the outcome columns must not be quoted without
+> 25.0 beside them.**
 
 13.9 item 1 asked for co-pay-rescued vs self-rescued vs never-rescued, all measured from the
 same parked-with-shortfall state. **It exists now. 1,803 episodes, arms reconcile to 0
@@ -2271,6 +2441,11 @@ for nothing.** Do not quote 13.5's table again without this one beside it.
 **THE OWNER'S TWO-CYCLE BAR IS MET, AND IT IS THE LOAN THAT MEETS IT.**
 
 ## 14.2 ⚠ AND THE COST IS IN THE SAME TABLE — THIS IS RULE 1's TRADE-OFF, PRICED
+> ⛔⛔ **DO NOT QUOTE THIS SECTION. BOTH ITS NUMBERS HAVE CHANGED AND ONE CHANGED SIGN
+> (25.3).** "Doubles the odds of ending in debt" is now **quintuples** (56.0% vs 11.9%), and
+> "buys 19 percentage points of two-cycle attainment" is now **NEGATIVE 12 points** at equal
+> exposure. The DIRECTION of the debt cost survives and is stronger; the attainment benefit
+> does not survive at all.
 
 **20.2% of loan-rescued episodes end with the member still owing, against 10.0% for the
 members who paid their own way out of the identical position.** Same starting state, so this
