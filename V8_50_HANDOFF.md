@@ -1,7 +1,7 @@
 # V8.50 HANDOFF — the crossing redesign. READ THIS FIRST.
 
 Written 2026-08-16 at the end of the V8.49 private measurement run.
-Sessions 2-25 have appended to it since; read the NEWEST section first — each one
+Sessions 2-26 have appended to it since; read the NEWEST section first — each one
 corrects the ones below it, and says so explicitly where it does.
 Audience: **the next session of Claude, plus the owner. There is no third party — every
 line of this codebase was written by a previous session of Claude and executed by the
@@ -10,7 +10,143 @@ owner-set, and the session that earned it got five things wrong by ignoring what
 
 ---
 
-# ⬛ SESSION 25 STATE — 2026-08-21, LATEST. READ THIS FIRST.
+# ⬛ SESSION 26 STATE — 2026-08-21, LATEST. READ THIS FIRST.
+# ⛔ `:936` CLASSIFIED: IT IS A DOOR, A ONE-PAIR WORLD CANNOT REACH IT, AND THE TWO-PAIR
+# ROUTE IS BLOCKED BY THE SAME WEALTH BOUND THAT CAPS CASCADE DEPTH. UNREACHED ≠ UNREACHABLE.
+
+Source reading plus one throwaway probe. **Nothing deployed, no contract file touched, no
+test added.** Also: the owner's decision on 25.8 item 2 applied — **14.1 keeps its banner,
+14.2 is struck in place** (session 7's convention, so the failure mode stays legible).
+
+## 26.0 ✅ FIRST, THE PART THAT IS SETTLED: IF `:936` FIRES, IT IS A DOOR
+
+`_crossToPartner` parks at `:936` **before** it reaches the funding arithmetic at `:977` and
+before `_finalizeCrossing`. So the member it parks is:
+
+* a root **`_cycleOutRoot` has already removed from this matrix's seat map** — not seated here,
+* **never seated in the partner** — the crossing is exactly what was refused,
+* **holding an unspent crossing reserve** — nothing has drawn it down yet,
+* and **the branch contains no ghost test at all**, unlike `:906`.
+
+That is `evictParked`'s EVICTION branch on all three conditions. **`:936` is a second door to
+`EvictionReserveReleased`, not a ghost.** 20.3a suspected this; it is now read off the source
+rather than suspected.
+
+## 26.1 ✅ AND THE PART THAT IS NOW AN ARGUMENT INSTEAD OF A GUESS: A ONE-PAIR WORLD CANNOT REACH IT
+
+22's "0 firings in 45 registrations" was a count with a marked-UNVERIFIED story attached.
+The story is now checkable and it turns on one fact worth stating loudly:
+
+> ⛔ **`_crossToPartner` HAS EXACTLY ONE CALLER — `_cycleOutRoot`.** Not the rescue paths,
+> not `forceCross`, not `coPayRescue`. Verified by grep across `MatrixLogicLib`: two hits,
+> the definition and the single call at `:911`.
+
+Everything follows from that. `crossingInProgress` on a matrix is true **only** while a root
+it has just cycled out is entering the partner — and at that instant the matrix has been
+compacted and holds **exactly one free slot**. So `:936` needs a **second** entry into that
+same matrix, while full, inside the nested cascade. In one pair there is exactly one:
+
+| candidate entry | where it lands | reaches MatA₁ again? |
+|---|---|---|
+| re-entry (`_sameTierTarget`) | *"Re-entry ALWAYS returns to the member's own MatA"* | **yes — and it fills the one free slot exactly** |
+| double (`freePairFor(member, ownPair)`) | a **different** pair, by construction | no |
+| upgrade | tier + 1 | no — tiers only go up, nothing comes back down |
+
+✅ **AND THE SUITE ALREADY PINS THE LOAD-BEARING STEP.** `V8_50_EvictionReserve.test.js`
+ER-1 asserts `occupancy == SIZE` at the `:523` park: the nested cascade refilled the freed
+slot **exactly**, no second entry arrived, no nested MatA cycle-out ran. That assertion was
+written for another purpose and happens to be the one-pair proof.
+
+## 26.2 ⛔ THE TWO-PAIR ROUTE EXISTS ON PAPER — AND THE PROBE COULD NOT OPEN IT
+
+The missing second entry can only come from another pair's double landing back on pair 1:
+
+```
+MatA₁ cycles out R1 -> crossingInProgress = true -> MatB₁._enterMatrix(R1)
+  MatB₁ full -> cycles out R2 -> handleCycleOut(R2)
+    re-entry -> R2 into MatA₁                (fills the one free slot)
+    double   -> R2 into pair 2               (freePairFor avoids pair 1)
+      pair 2 full -> cycles out R3 -> handleCycleOut(R3)
+        double -> freePairFor(R3, pair2) MAY RETURN PAIR 1
+          -> entry into MatA₁, NOW FULL -> _cycleOutRoot -> _crossToPartner
+          -> crossingInProgress STILL TRUE -> :936
+```
+
+**Probe: two pairs at T1, `MATRIX_SIZE` 7, 55 registrations, `setMemberOptions(false, true,
+true)` on every member so re-entry AND double are both on, `reentryMinCycles` at 1 — the
+lowest its setter accepts (1/2/3/5 only, so 0 is not available).**
+
+| | |
+|---|---|
+| crossings | 48 |
+| re-entries | **2** |
+| doubles fired | **0** |
+| pair 2 occupancy after 55 registrations | **0 / 0 — it never received a single member** |
+| `:936` candidates | 0 |
+
+⛔ **THE ROUTE WAS NEVER AVAILABLE, SO THIS RUN DOES NOT REFUTE ANYTHING.** `_executeAdditive`
+only seats when `escrow + withdrawable >= curFee`, and **item A leaves a MatB cycle-out with
+escrow 0**, so each link now demands the full fee from EARNINGS. Fresh members do not have
+it: 48 crossings produced 2 re-entries and no doubles at all. **This is the same wall
+V8.46-B already documented** — *"depth is bounded by WEALTH… fresh fixtures stop at two
+tiers; production reaches six because members accrue"* — and 18.8 noted item A tightened it
+from 50% to 100%.
+
+## 26.3 ⛔ THE VERDICT, AND IT IS NOT "UNREACHABLE"
+
+**`:936` IS UNREACHED, NOT PROVEN UNREACHABLE.** Three statements, ranked by how well they
+are supported:
+
+1. **MEASURED + ARGUED:** a one-pair fixture cannot produce it. 22's 0/45 now has a
+   mechanism behind it and ER-1 pins the load-bearing step.
+2. **MEASURED:** a two-pair fixture with every flag set the right way still cannot produce
+   it, because the wealth bound stops the cascade two links short. 0 doubles in 55
+   registrations.
+3. **DERIVED, UNVERIFIED:** the route above would produce it in a world where members are
+   rich enough for doubles to fire — **which is production, not a fixture.** Live V8.48
+   already runs 2 pairs at T1 and 5 at T2 (25's run header), and V8.46-B measured real
+   members cascading six tiers deep. **Nobody has looked for `:936` on live.**
+
+⛔ **SO THE STANDING RULE STANDS: DO NOT WRITE "EXACTLY ONE DOOR."** What changed is that
+the second door now has a named route, a named blocker, and a named place to look.
+
+✅ **AND IT DOES NOT THREATEN ANYTHING SHIPPED.** ER-1 already proved the release path works
+when it is entered; `:936` would be a second way in, not a different behaviour. This is a
+POPULATION question, not a safety one — 19.18a's distinction, holding again.
+
+## 26.4 ▶ THE CHEAP WAY TO CLOSE IT, FOR A SESSION WITH AN RPC
+
+A `:936` park on live has a signature no other site shares — the same one the probe used:
+
+> `MemberParked(m, 0)` from a **MatA**, plus `MemberCycledOut(m)` from that **same** matrix
+> in the **same tx**, and **no** `CycleOutFailed(m)`.
+
+`:529` parks the tx's entrant and emits no `MemberCycledOut` for them; `:881` and `:908`
+park the root but always emit `CycleOutFailed`. **One pass over the matrix logs
+`diag_parked_experiment.js` already pulls would answer it** — the events are all in the
+sweep it does today, and its 122 "parks with shortfall == 0" bucket is where any `:936`
+would currently be hiding, counted and discarded. Add the split to that bucket rather than
+building a new tool.
+
+## 26.5 NEXT, IN ORDER — SUPERSEDES 25.8. ⚠ ITEM 1 IS CLASSIFIED, NOT CLOSED.
+
+1. **SPLIT THE `shortfall == 0` BUCKET IN `diag_parked_experiment.js`** (26.4) and re-run
+   with 24.3's command. Cheap — one pass over logs already fetched — and it is the only
+   thing that can close `:936`. ⛔ Needs an RPC; batch it with anything else live.
+2. **THE PRIVATE V8.50 DEPLOY GATE** — risks 1, 3 and 4. Risk 2 is closed by 20.4. Read
+   20.5 first: the gate's own text still tests against `minGasPerItem` 3.5M and the source
+   has been 5,000,000 since 2026-08-18.
+3. **POST-MIGRATION, NOT BEFORE:** GO_LIVE_RUNBOOK PHASE 7b — pre-flight, check the live
+   histogram against 19.1, then arm at 3000. Then re-run `diag_referral_threshold.js`
+   section 4 + the loan book against live V8.50 (19.6).
+4. Backlog: the 5 unexplained cycle-outs; `V8_50_ReferralBreakeven.test.js` v4 counts the
+   dead event; stale-nonce retry backoff; @bevmawire's Dashboard retry; `maxItemsPerUpkeep`
+   live 15 vs 20 in source (re-confirmed on chain, 25.6); member-callable re-entry. Plus
+   the three orphan session-13 fragments 19.18c flagged.
+
+---
+
+# ⬛ SESSION 25 STATE — 2026-08-21. READ AFTER SESSION 26.
 # ⛔⛔ 14.4's TIER SUSPICION IS REFUTED. ITS TIME-AT-RISK ONE IS CONFIRMED AND IT INVERTS
 # 14.1's HEADLINE: ON EQUAL EXPOSURE, SELF-RESCUE BEATS THE LOAN 27.3% TO 15.1%.
 
@@ -151,13 +287,16 @@ self-rescuers chose to spend their own money and may simply be more engaged. **N
 claim is made and none should be quoted.**
 
 ## 25.8 NEXT, IN ORDER — SUPERSEDES 24.5. ⚠ ITEM 1 IS DONE.
+✅ **SUPERSEDED BY 26.5. ITEM 1 IS CLASSIFIED (26.0-26.3) AND ITEM 2 IS DECIDED.**
 
 1. **CLASSIFY `:936`** (20.3a). Until it is settled nobody may write "exactly one door".
    ✅ Needs no chain.
-2. ⚠ **DECIDE WHETHER 14.1/14.2 GET A CORRECTION BANNER OR A REPLACEMENT.** 25.0-25.4
-   change one figure's sign and triple another. The banner is written; whether those
-   sections should now be struck through rather than annotated is a judgement about the
-   document, and the next session should make it deliberately rather than by accretion.
+2. ~~DECIDE WHETHER 14.1/14.2 GET A CORRECTION BANNER OR A REPLACEMENT.~~ ✅ **DECIDED
+   2026-08-21: 14.1 KEEPS ITS BANNER, 14.2 IS STRUCK.** 14.1 still carries the balance
+   table nobody else has and half of it survived the equal-window correction; 14.2 was one
+   sentence pricing a trade-off and both halves of it are now wrong. 14.2 is struck in
+   place rather than deleted — session 7's convention on session 6's park table — so the
+   failure mode stays legible. **25.3 is the replacement.**
 3. **THE PRIVATE V8.50 DEPLOY GATE** — risks 1, 3 and 4. Risk 2 is closed by 20.4. Read
    20.5 first: the gate's own text still tests against `minGasPerItem` 3.5M and the source
    has been 5,000,000 since 2026-08-18.
@@ -853,6 +992,12 @@ conclusion.
 
 ⛔ **SO: DO NOT WRITE "THERE IS EXACTLY ONE DOOR" ANYWHERE.** `:523` is a door and is
 now exercised. `:906` is a ghost and is now pinned as one. `:936` is unclassified.
+
+✅ **CLASSIFIED 2026-08-21 — SEE 26.0-26.3.** `:936` IS a door if it fires (parked root,
+seated in neither half, reserve unspent, no ghost test in the branch). A one-pair world
+cannot reach it and that is now an argument rather than a count; the two-pair route is real
+but blocked by the wealth bound that caps cascade depth (0 doubles in 55 registrations).
+**Unreached, not unreachable — and the rule above still stands.**
 
 ## 20.4 ✅ THIS ALSO CLOSES RISK 2 OF THE V8.50 PRIVATE DEPLOY GATE
 
@@ -2440,19 +2585,32 @@ for nothing.** Do not quote 13.5's table again without this one beside it.
 
 **THE OWNER'S TWO-CYCLE BAR IS MET, AND IT IS THE LOAN THAT MEETS IT.**
 
-## 14.2 ⚠ AND THE COST IS IN THE SAME TABLE — THIS IS RULE 1's TRADE-OFF, PRICED
-> ⛔⛔ **DO NOT QUOTE THIS SECTION. BOTH ITS NUMBERS HAVE CHANGED AND ONE CHANGED SIGN
-> (25.3).** "Doubles the odds of ending in debt" is now **quintuples** (56.0% vs 11.9%), and
-> "buys 19 percentage points of two-cycle attainment" is now **NEGATIVE 12 points** at equal
-> exposure. The DIRECTION of the debt cost survives and is stronger; the attainment benefit
-> does not survive at all.
+## ~~14.2 AND THE COST IS IN THE SAME TABLE — THIS IS RULE 1's TRADE-OFF, PRICED~~
+# ⛔⛔ WITHDRAWN 2026-08-21 BY 25.3. EVERY NUMBER IN THIS SECTION IS SUPERSEDED AND ONE OF
+# THEM CHANGED SIGN. THE REPLACEMENT IS 25.3 — GO THERE.
+#
+# Owner decision, taken after 25.8 item 2 was put to him: **14.1 keeps its banner, 14.2 is
+# struck.** 14.1 still carries a balance table nobody else has and half of it survived;
+# 14.2 was one sentence pricing a trade-off, and both halves of that sentence are now wrong.
+#
+#   "doubles the odds of ending in debt"            -> QUINTUPLES   (56.0% vs 11.9%)
+#   "buys 19 percentage points of two-cycle gain"   -> NEGATIVE 12  (15.1% vs 27.3%)
+#
+# The DIRECTION of the debt cost survives and is stronger than stated. The attainment
+# benefit does not survive at all: it was an artefact of the loan arm's episodes being
+# 1.71x older than the self-rescue arm's, and it disappears on an equal window.
 
-**20.2% of loan-rescued episodes end with the member still owing, against 10.0% for the
+~~**20.2% of loan-rescued episodes end with the member still owing, against 10.0% for the
 members who paid their own way out of the identical position.** Same starting state, so this
 one is not selection either. The loan doubles the odds of ending in debt and it buys 19
 percentage points of two-cycle attainment. That is the whole of rule 1 — *"members need loans
 and that is good, but not at the expense of the ecosystem"* — in two numbers, and it is the
-first time the trade has been priced from a balanced comparison rather than asserted.
+first time the trade has been priced from a balanced comparison rather than asserted.~~
+
+⚠ **KEPT STRUCK RATHER THAN DELETED**, the same convention session 7 used on session 6's
+park table: the reasoning is the record of how it went wrong, and the failure mode —
+comparing outcome columns across arms with unequal observation lengths — is the one worth
+recognising next time. **Nothing above this line is a live number.**
 
 ## 14.3 ⛔⛔ TWO GATES AND ONE WHOLE ARM DO NOT EXIST ON LIVE — AND I CALLED THIS WRONG FIRST
 
