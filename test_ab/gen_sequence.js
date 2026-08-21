@@ -17,9 +17,23 @@
  *   INDEPENDENT populations rather than three coin flips. Vary the seed across replicates;
  *   never vary it between arms of the same replicate.
  *
- * Run:  node test_ab/gen_sequence.js [seed] [members] [size]
+ * Run:  node test_ab/gen_sequence.js [seed] [members] [size] [tail]
  *   e.g. node test_ab/gen_sequence.js 1 25 7
  *        node test_ab/gen_sequence.js 1 288 127
+ *        node test_ab/gen_sequence.js 1 288 127 200     -> ab_sequence_s1_tail200.json
+ *
+ * ⛔ `tail` DEFAULTS TO 12 AND WRITES THE CANONICAL FILENAME. Any other value writes
+ *    `ab_sequence_s<seed>_tail<n>.json` instead, so the three files sessions 18 and 19
+ *    measured on — and that `diag_referral_threshold.js` section 4C reads to build the
+ *    fixture's referral tree — CANNOT be overwritten by a tail experiment. 18.1's lesson
+ *    ("the three seeds were not three samples of one thing") applies to a regenerated
+ *    file just as much as to a different seed.
+ *
+ * ⚠ AND THE TAIL ADDS KEEPER TICKS ONLY, NEVER ARRIVALS — so no amount of tail changes
+ *    the referral tree, the member count, or anything 19.1/19.2 rests on. That is what
+ *    makes it a safe dial. It also means the tail cannot introduce NEW money into the
+ *    pair, which is exactly why "lengthen it until the queue drains" is a hypothesis to
+ *    be measured rather than a step to be followed. See handoff 21.
  */
 const fs = require("fs");
 const path = require("path");
@@ -35,6 +49,8 @@ function main() {
   const seed = Number(process.argv[2] || 1);
   const members = Number(process.argv[3] || 25);
   const size = Number(process.argv[4] || 7);
+  const TAIL_DEFAULT = 12;
+  const tail = Number(process.argv[5] || TAIL_DEFAULT);
   const rnd = lcg(seed);
 
   const actions = [];
@@ -65,7 +81,10 @@ function main() {
   // A long tail of keeper ticks with no new arrivals. The fund's trajectory is a claim
   // about what happens to a queue over TIME, and a run that stops the moment registration
   // stops never lets the queue drain or fail to drain.
-  for (let k = 0; k < 12; k++) {
+  // ⚠ The LCG is consumed only by the arrival loop above, so the arrivals and their
+  // interleaving are byte-identical for every `tail`. A tail sweep therefore varies one
+  // thing and one thing only — which is the same discipline the arms themselves follow.
+  for (let k = 0; k < tail; k++) {
     t += 1;
     actions.push({ t, op: "advance", secs: 86_400 });
     actions.push({ t, op: "keeper" });
@@ -73,15 +92,17 @@ function main() {
 
   const seq = {
     version: 1,
-    seed, members, size,
+    seed, members, size, tail,
     generated: "deterministic — no wall-clock, no Math.random",
     note: "Replay this file on BOTH arms. Never regenerate it between arms of one replicate.",
     actions,
   };
-  const out = path.join(__dirname, "..", `ab_sequence_s${seed}.json`);
+  const suffix = tail === TAIL_DEFAULT ? "" : `_tail${tail}`;
+  const out = path.join(__dirname, "..", `ab_sequence_s${seed}${suffix}.json`);
   fs.writeFileSync(out, JSON.stringify(seq, null, 1) + "\n");
   console.log(`wrote ${path.basename(out)}: seed ${seed}, ${members} members, MATRIX_SIZE ${size}, ` +
-    `${actions.length} actions, ${actions.filter((a) => a.op === "keeper").length} keeper ticks`);
+    `tail ${tail}, ${actions.length} actions, ` +
+    `${actions.filter((a) => a.op === "keeper").length} keeper ticks`);
 }
 
 main();

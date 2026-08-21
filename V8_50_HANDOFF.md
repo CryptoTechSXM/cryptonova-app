@@ -1,7 +1,7 @@
 # V8.50 HANDOFF — the crossing redesign. READ THIS FIRST.
 
 Written 2026-08-16 at the end of the V8.49 private measurement run.
-Sessions 2-20 have appended to it since; read the NEWEST section first — each one
+Sessions 2-21 have appended to it since; read the NEWEST section first — each one
 corrects the ones below it, and says so explicitly where it does.
 Audience: **the next session of Claude, plus the owner. There is no third party — every
 line of this codebase was written by a previous session of Claude and executed by the
@@ -10,7 +10,150 @@ owner-set, and the session that earned it got five things wrong by ignoring what
 
 ---
 
-# ⬛ SESSION 20 STATE — 2026-08-21, LATEST. READ THIS FIRST.
+# ⬛ SESSION 21 STATE — 2026-08-21, LATEST. READ THIS FIRST.
+# ⛔⛔ 20.8 ITEM 1 IS ANSWERED BY REFUTING IT. THE A/B TAIL CANNOT DRAIN THE QUEUE.
+
+Measurement only. **Nothing deployed, no contract file touched.** One additive change to
+`test_ab/gen_sequence.js` (the tail becomes a parameter, default unchanged). Transcript:
+`ab_rerun_tailsweep.txt`.
+
+## 21.0 ⛔⛔ THE FINDING: "LENGTHEN THE TAIL UNTIL `stillParkedAtEnd` APPROACHES ZERO" IS NOT ACHIEVABLE, AND CHASING IT PRODUCES A DIFFERENT WORLD
+
+18.19 prescribed it, 18.21 and 19.8 and 20.8 all carried it forward as a cheap item. **It
+was never measured, and it does not work.** V8.50 arm, gate inert, `AB_CAP=5`, 288 members,
+`MATRIX_SIZE` 127, tails 12 / 60 / 200 / 600, **two independent seeds**:
+
+| seed | tail | stillParked | parkEvents | **of which idle-slot** | distinctParkers | evictions | loans |
+|---|---|---|---|---|---|---|---|
+| 1 | **12** | **31** | 86 | **0** | 72 | 4 | 31 |
+| 1 | 60 | 24 | 183 | 17 | 137 | 23 | 83 |
+| 1 | 200 | **79** | 423 | 144 | 287 | 43 | 121 |
+| 1 | 600 | 58 | 766 | **415** | **289** | **231** | 172 |
+| 2 | 60 | 18 | 185 | 13 | 135 | 27 | 83 |
+| 2 | 200 | **76** | 417 | 137 | **289** | 44 | 118 |
+| 2 | 600 | 56 | 775 | **419** | **289** | **233** | 174 |
+
+**The queue never approaches zero. It does not even decrease monotonically** — 31 → 24 →
+79 → 58, and seed 2 traces the same path (18 → 76 → 56). The two seeds agree to within a
+handful on every column, so this is structure, not noise (rule 5 satisfied: two independent
+populations, same answer).
+
+## 21.1 ⛔⛔ WHY, AND IT IS TWO MECHANISMS — ONE OF THEM DOES NOT EXIST AT TAIL 12
+
+**(1) THE TAIL ADDS TIME BUT NO MONEY.** The tail is keeper ticks with zero arrivals. No
+arrivals means no entry fees, so no pool distribution and no referral income — the only two
+things that move a parked member's balance toward the crossing price. A member short at
+tick 69 is short forever. The only exits left are a LOAN (which the insolvency floor
+eventually refuses, because debt only accumulates) and EVICTION. **The queue cannot drain;
+it can only be evicted.** By tail 600, **231 of 288 members have been evicted** and
+`distinctParkers` is **289 — every member plus W1.**
+
+**(2) THE KEEPER STARTS DISMANTLING THE MATRIX. READ THE `idleSlotParks` COLUMN.**
+`_doReclaimSlot` reclaims a seat after 7 days idle; the tail advances **86,400s — one day —
+per tick**. So once arrivals stop, nothing rotates, every seat ages past the gate, and the
+keeper begins parking **SEATED** members. That mechanism contributes **0** park events at
+tail 12 and **415 / 419** at tail 600. It is more than half of all park events by tail 200.
+
+⛔ **CONSEQUENCE: A LONG-TAIL RUN IS NOT "THE SAME RUN, FURTHER ALONG". IT IS THE TEARDOWN
+OF A STOPPED SYSTEM,** driven by a keeper mechanism that never fires in the measured world.
+The 172 loans at tail 600 are not the uncensored version of the 31 at tail 12; they are
+loans from a regime the live chain will never be in while it has arrivals.
+
+## 21.2 ✅ SO WHAT TO DO ABOUT 18.19's REAL CONCERN, WHICH IS STILL VALID
+
+The concern stands: 18.6's "loans fall 85 → 72" is part refusal and part truncation, and
+18.19 was right that nobody should quote it as pure refusal. Three ways out, and the
+recommendation is the first two together:
+
+1. **COMPARE ONLY AT EQUAL TAIL, AND QUOTE `stillParkedAtEnd` BESIDE EVERY LOAN COUNT.**
+   The censoring is shared by both arms of a comparison at the same tail, so a
+   *difference* is far more trustworthy than either *level*. This costs nothing and it is
+   what 18.19 itself observed before prescribing the tail.
+2. **BUY COVERAGE WITH ARRIVALS, NOT TICKS.** More members keeps the system in the
+   arrival-driven regime while late rescues get reached; more ticks leaves the regime
+   entirely. `gen_sequence.js` already takes a member count. ⚠ Not free — 288 members is
+   already ~2 minutes a run and it scales worse than linearly.
+3. ⚠ **IF THE UNDERLYING QUESTION IS EVER "DOES THE QUEUE DRAIN?", THE HONEST EXPERIMENT
+   RAISES `extendedIdleTimeout` FOR THE TAIL** so mechanism (2) is off and only mechanism
+   (1) is being measured. **NOT DONE HERE**, and it would answer a question nobody has
+   asked yet. Recorded so nobody re-derives it.
+
+⛔ **DO NOT PUT "LENGTHEN THE TAIL" BACK ON A NEXT-LIST.** It is refuted, and the reason is
+mechanical rather than a matter of degree.
+
+## 21.3 ✅ AND IT CLEARS THE ROAD FOR THE CLAWBACK SWEEP, WHICH WAS BLOCKED BEHIND IT
+
+20.8 ordered the tail work BEFORE pricing the clawback presets, on the reasoning that a
+sweep on a censoring harness inherits the artefact. **That ordering is now void** — there is
+no cleaner harness to wait for. The clawback sweep should run on the 12-tick tail like every
+other sweep, at equal tail across rows, quoting `stillParkedAtEnd` with each row. It is now
+the next item.
+
+## 21.4 ✅ THE TAIL IS A PARAMETER NOW, AND THE CANONICAL FILES CANNOT BE OVERWRITTEN
+
+`node test_ab/gen_sequence.js <seed> <members> <size> [tail]`. The default is **12**, and at
+the default it writes the canonical `ab_sequence_s<seed>.json` exactly as before — verified
+by regenerating seed 1 and diffing: **the only change is one added `"tail": 12` line**, 427
+actions and 69 keeper ticks identical. Any other value writes
+`ab_sequence_s<seed>_tail<n>.json`, so a tail experiment cannot silently replace the three
+files sessions 18 and 19 measured on and that `diag_referral_threshold.js` section 4C reads
+to build the fixture's referral tree (19.2/19.9). The LCG is consumed only by the arrival
+loop, so **arrivals are byte-identical across tails** — the sweep varies exactly one thing.
+
+## 21.5 ✅ A CAVEAT RETIRED: THE CONTAINER REPRODUCES THE OWNER'S MACHINE EXACTLY
+
+20.7 flagged that this session's runs use `solcjs` rather than native `solc` and that
+bytecode equivalence was **an inference, not a check**. It is now a check. Replaying seed 1
+at the default tail in the container reproduces
+`ab_result_v850_s1_census_evict_gate10000.json` — the owner-machine run of 2026-08-21 00:26
+— **to the unit on every counter**: `stillParkedAtEnd` 31, rescued 37, evicted 4, episodes
+72, loans 31, rescues 51, `batchGasHalted` 1, `loanVolume` 58,151,716.
+
+✅ **AND A SECOND THING FELL OUT OF THE SAME RUN: THE GATE IS INERT IN EFFECT, NOT MERELY
+IN GAS.** 19.13's GATE-2 measured a zero GAS delta on `loanHeadroom` alone; it said nothing
+about the `directCount` SSTORE the router now does on every join, in a keeper world that is
+gas-bounded. Checked directly by replaying the identical sequence against the **pre-gate
+tree** (`c0b2913`, no `baseAdvanceBps` in the SF at all): **every economic counter is
+identical** — 31 / 31 / 51 / 4 / 58,151,716. Only `totalGas` moves, +0.4%
+(1,047,458,608 → 1,051,622,313), and it changes no outcome. The gate can be shipped inert
+without re-baselining anything.
+
+## 21.6 ⛔ THE TRAP THAT COST THIS SESSION AN HOUR: THE CANONICALLY-NAMED RESULT IS THE STALE ONE
+
+`ab_result_v850_s1_census.json` — the obvious name, the one a session reaches for — is dated
+**08-19 00:25** and predates the gate work entirely. The CURRENT inert-arm result lives under
+the suffixed name `ab_result_v850_s1_census_evict_gate10000.json` (08-21 00:26), because
+`AB_GATE_BPS` and `AB_EVICT` both push their values into the filename. Comparing a fresh run
+against the plain name produced a confident, wrong "the tree has diverged since session 18",
+and it took a full pre-gate replay to disprove.
+
+⛔ **THE DEVICE VM CANNOT DELETE FILES, SO STALE RESULTS NEVER GO AWAY — THEY JUST STOP
+BEING THE NEWEST.** Rule: **read `dials` and the file's date before quoting any
+`ab_result_*.json`.** A result whose `dials` block lacks `baseAdvanceBps` was produced
+before session 19 and is not comparable to anything produced now. Same family as 19.17d's
+three suite transcripts in one day.
+
+## 21.7 NEXT, IN ORDER — SUPERSEDES 20.8. ⚠ ITEM 1 IS REFUTED, NOT DONE.
+
+1. **PRICE THE CLAWBACK PRESETS** (19.17b). Presets 0/1/3 shipped with no evidence and are
+   one DAO vote from live; only preset 2 has any. One dial, three seeds, 12-tick tail,
+   `stillParkedAtEnd` quoted on every row. **No longer blocked — see 21.3.**
+2. **SPLIT 14.1 BY TIER** and cap time-at-risk (14.4). ⚠ V8.48 measurement; 18.0 applies.
+3. **CLASSIFY `:936`** (20.3a). Until it is settled nobody may write "exactly one door".
+4. **THE PRIVATE V8.50 DEPLOY GATE** — risks 1, 3 and 4. Risk 2 is closed by 20.4. Read
+   20.5 first: the gate's own text still tests against `minGasPerItem` 3.5M and the source
+   has been 5,000,000 since 2026-08-18.
+5. **POST-MIGRATION, NOT BEFORE:** GO_LIVE_RUNBOOK PHASE 7b — pre-flight, check the live
+   histogram against 19.1, then arm at 3000. Then re-run `diag_referral_threshold.js`
+   section 4 + the loan book against live V8.50 (19.6).
+6. Backlog, untouched: the 5 unexplained cycle-outs; `V8_50_ReferralBreakeven.test.js` v4
+   counts the dead event; stale-nonce retry backoff; @bevmawire's Dashboard retry;
+   `maxItemsPerUpkeep` live 15 vs 20 in source; member-callable re-entry. Plus the three
+   orphan session-13 fragments 19.18c flagged.
+
+---
+
+# ⬛ SESSION 20 STATE — 2026-08-21. READ AFTER SESSION 21.
 # 19.8 ITEM 1 IS CLOSED. `EvictionReserveReleased` HAS NOW EXECUTED — AND IT NEEDED NO DEPLOY.
 
 Test-only session. **Nothing deployed, no chain written to, no contract file touched.**
@@ -204,6 +347,9 @@ quoting any number from such a run** — it is a different compiler backend from
 owner's.
 
 ## 20.8 NEXT, IN ORDER — SUPERSEDES 19.8. ⚠ ITEM 1 IS DONE.
+⛔ **SUPERSEDED BY 21.7. ITEM 1 BELOW ("lengthen the A/B tail") IS REFUTED — READ 21.0
+BEFORE ACTING ON THIS LIST.** The ordering note that item 1 must precede the clawback
+sweep is void; 21.3 explains why.
 
 1. **LENGTHEN THE A/B TAIL** until `stillParkedAtEnd` approaches zero, so the loan
    counts stop being censored (18.19). Cheap, and it makes 18.6 quotable. **Do this
