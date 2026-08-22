@@ -375,15 +375,63 @@ ticks - 27.5a's "defect 6 puts parked work first" assumption is REFUTED on this 
 once (1.79M) and never returned. It repeated 60 times only because nothing was ever
 dispatched.
 
+## 29.15 ⛔⛔ THE TRAP IS SHIPPED **BY V8.50 ITSELF**. THE COMMUNITY IS SAFE TODAY AND WILL NOT BE ON MIGRATION DAY.
+
+29.13's question - "do the live keepers size performUpkeep from eth_estimateGas?" - is
+answered, and the answer needed one chain read rather than an argument.
+`scripts/check_keeper_gas_dials.js` (new, reads the dials off a named deployment and
+DELIBERATELY IGNORES `$env:ADDRESSES_FILE` so a stale session variable cannot aim it at the
+wrong chain - 29.3c):
+
+| | live V8.48 `0x9Ade59F9…` | private V8.50 `0xAbEBD2C8…` |
+|---|---|---|
+| `minGasPerItem` | **NOT PRESENT** (selector `0xf8b10a2d` reverts) | **5,000,000** |
+| `maxItemsPerUpkeep` | **15** | **20** |
+
+✅ **THE COMMUNITY IS NOT AT RISK TODAY.** `minGasPerItem` arrived with DEFECT 8 on
+2026-08-17, AFTER V8.48 shipped. With no floor there is no `BatchGasHalted` path, so
+`eth_estimateGas` converges on the ITEM's real cost and `direct_keeper.js`'s ladder is sound
+as written. That is also WHY members are being rescued - previously assumed, now explained.
+
+⛔ **AND THAT IS EXACTLY WHY IT IS DANGEROUS.** The guard that makes the trap possible is
+shipped BY V8.50. On migration day `direct_keeper.js` starts pricing the HALT (~0.09M)
+instead of the item (~4.4M), the transaction SUCCEEDS, `receipt.status === 1`, it logs
+`Confirmed -- status=OK`, and NOBODY IS RESCUED. No revert. No `WorkItemFailed`. Nothing
+anywhere to notice. **A fix cannot wait until the symptom appears, because the symptom is
+silence.**
+
+**THE TWO LINES, NAMED:**
+
+* `direct_keeper.js:175` - `est = await keeper.performUpkeep.estimateGas(performData)`, then
+  a `[est*1.15, est*1.05, est]` ladder with **NO FLOOR**. Needs
+  `if (est < minGasPerItem) est = <a real limit>` - and it must READ `minGasPerItem` off the
+  chain, not hardcode 5M, because 29.12 may move it.
+* `system_keeper.js:579` - `gasLimit = isOverflow ? 15_000_000 : 800_000`. **800,000 is below
+  a 5M floor**, so its normal path cannot dispatch an item at all on V8.50.
+  ⚠ On V8.48 (no floor) that same line fails LOUDLY - it runs out of gas, `status === 0`, and
+  its own `if (rcp.status === 1)` will not count it. V8.50 converts that loud failure into a
+  silent success. **The upgrade makes a bug quieter; that is the whole hazard in one line.**
+
+⚠ **ALSO SETTLED IN PASSING: 25.6's open item.** Live `maxItemsPerUpkeep` IS 15 while source
+ships 20 - confirmed on both chains rather than inferred from one.
+
+⛔ **AND A MISTAKE I MADE WRITING THE INSTRUMENT, RECORDED BECAUSE IT IS THE SAME ONE AS 29.4.**
+The first version of `check_keeper_gas_dials.js` CRASHED on the reverting getter instead of
+reporting it. **A getter that reverts is an ANSWER - "this deployment does not have it" - and
+it was the exact answer the script existed to find.** I repeated the empty-catch mistake
+inside the hour of writing 29.4 up. Fixed: each dial is probed independently and a revert
+prints `NOT PRESENT on this deployment`.
+
 ## 29.14 NEXT, IN ORDER - SUPERSEDES 28.5.
 
 1. **RESTORE THE VPS CRONTAB** if PHASE G is not resumed immediately:
    `ssh ... "crontab /root/crontab.backup.phaseG; crontab -l | grep -v '^#'"` -> expect 11 lines.
-2. ⛔⛔ **READ `direct_keeper.js`, `copay_rescue.js`, `fastlane_rescue.js` AND THE CHAINLINK
-   UPKEEP CONFIG AND ANSWER ONE QUESTION: do any of them size `performUpkeep` gas from
-   `eth_estimateGas`?** 29.13 measured that doing so buys a transaction which succeeds and
-   rescues nobody, silently. This is four file reads, it needs no chain, and it gates the
-   community deploy. Do it FIRST.
+2. ✅ **DONE (29.15): the live keepers DO size from estimateGas, and V8.48 has NO floor, so
+   the community is safe today.** What replaces it: **PUT A GAS FLOOR IN THE KEEPERS BEFORE
+   PHASE 2** - `direct_keeper.js:175` and `system_keeper.js:579`, reading `minGasPerItem`
+   off the chain rather than hardcoding it. This is a BLOCKER for the community deploy and
+   it cannot be validated after the fact, because the failure mode is silence.
+   ⚠ Chainlink Automation's own gas sizing has NOT been checked and is the same question.
 3. **CLOSE MEASUREMENT 1** - price ONE cheap item so the fixed overhead is measured and
    `diag_keeper_gas_live.js` can return a real verdict instead of `NO VERDICT`:
    `$env:ONE_ITEM_TYPE="RECLAIM"` (or GHOST / EVICT_PARKED) with `GAS_LIMIT=15000000`.
