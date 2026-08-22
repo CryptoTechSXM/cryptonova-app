@@ -47,6 +47,8 @@ if (process.env.SELFTEST === "1") {
 const { ethers } = require("ethers");
 const path = require("path");
 require("dotenv").config({ path: path.join(__dirname, "..", ".env") });
+require("./rpc_resilience");   // 29.2: Base Sepolia sheds state reads; retry + endpoint fail-over
+require("./run_log");   // G.3 measurement transcript -> logs/runs/diag_keeper_gas_live/
 
 const RPC = process.env.RPC || process.env.BASE_SEPOLIA_RPC_URL || process.env.BASE_SEPOLIA_RPC;
 const A   = require(path.join(__dirname, process.env.ADDRESSES_FILE || "deployed_addresses_v8_48.json"));
@@ -216,9 +218,15 @@ async function main() {
   console.log(`  blocks ${from}..${to}   minGasPerItem ${usdGas(minGas)}   maxItemsPerUpkeep ${cap}`);
   console.log(`  ${"=".repeat(96)}`);
   if (cap !== 1) {
-    console.log(`  ⚠ maxItemsPerUpkeep is ${cap}, not 1. Batches with more than one item CANNOT price`);
-    console.log(`    an item and are reported separately. For measurement 1 set the cap to 1 first`);
-    console.log(`    (scripts/set_max_items.js) and run a fresh window — see GO_LIVE_RUNBOOK PHASE G.`);
+    console.log(`  ⚠ maxItemsPerUpkeep is ${cap}. Batches with more than one item CANNOT price an`);
+    console.log(`    item and are reported separately.`);
+    console.log(`    ⛔ DO NOT try to "set the cap to 1" — setMaxItemsPerUpkeep accepts 5|10|15|20|30|40`);
+    console.log(`    and reverts on anything else (handoff 27.5). This message used to say otherwise.`);
+    console.log(`    Drive ONE ITEM PER TRANSACTION instead:`);
+    console.log(`      $env:ONE_ITEM="1"; $env:ONE_ITEM_TYPE="PARKED_RESCUE"; $env:GAS_LIMIT="15000000"`);
+    console.log(`      npx hardhat run scripts\\testchain_keeper.js --network baseSepolia`);
+    console.log(`    ⚠ GAS_LIMIT is NOT optional: eth_estimateGas prices the BatchGasHalted path`);
+    console.log(`    (~0.09M), not the item (~2.4M), because halting SUCCEEDS. Measured 2026-08-22.`);
   }
 
   // Collect the keeper's own logs to find the transactions, then read each receipt once.
@@ -296,7 +304,7 @@ async function main() {
   console.log(`\n  3. GATE MEASUREMENT 1 — VERDICT`);
   if (v.ok === null) {
     console.log(`     ⚠ NO VERDICT: ${v.why}`);
-    console.log(`       This is not a pass. Re-run with maxItemsPerUpkeep = 1 and a live queue.`);
+    console.log(`       This is not a pass. Price ONE cheap item (reclaim/ghost/evict) with ONE_ITEM_TYPE + GAS_LIMIT.`);
   } else {
     console.log(`     dearest single-rescue batch  ${usdGas(v.rescueMaxBatch)}`);
     console.log(`     fixed performUpkeep overhead ${usdGas(v.overhead)}   (cheapest observed work type)`);

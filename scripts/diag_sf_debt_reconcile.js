@@ -33,6 +33,7 @@ const { ethers } = require("ethers");
 const path = require("path");
 require("dotenv").config({ path: path.join(__dirname, "..", ".env") });
 
+require("./rpc_resilience");   // 29.2: Base Sepolia sheds state reads; retry + endpoint fail-over
 const RPC = process.env.RPC || process.env.BASE_SEPOLIA_RPC_URL || process.env.BASE_SEPOLIA_RPC;
 // ⛔ NO v8_47 DEFAULT HERE, ON PURPOSE. diag_parked_growth.js defaults to
 // deployed_addresses_v8_47.json and reads the LIVE v8_48 chain only because .env line 69

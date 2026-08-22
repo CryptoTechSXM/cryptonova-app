@@ -58,6 +58,7 @@
  * Run: npx hardhat run scripts/deploy_v8.js --network baseSepolia
  */
 
+require("./run_log");   // tee this whole run to logs/runs/deploy_v8/ (owner request, 29.x)
 const { ethers }      = require("hardhat");
 const { NonceManager } = require("ethers"); // v6 local nonce tracking
 const fs              = require("fs");
@@ -71,6 +72,60 @@ const ADDRESSES_FILE = path.join(
   // OVERWRITTEN the live V8.47 address record on deploy day.
   process.env.ADDRESSES_FILE || "deployed_addresses_v8_48.json"
 );
+
+// ── ⛔ OVERWRITE GUARD (session 29) ───────────────────────────────────────────
+// A deploy WRITES this file at the very end. If it already exists, this run is
+// about to destroy the record of a deployment that exists on chain — and for a
+// PRIVATE deploy that is one lost PowerShell variable away at all times:
+// 28.2(b) requires ADDRESSES_FILE to be named in the SESSION only, and if that
+// window is lost, hardhat.config.js:2 `dotenv.config()` quietly refills it from
+// .env, which by definition names the LIVE chain. testchain_keeper.js already
+// documents that trap (its own guard header, 2026-08-16) — this is the same
+// reasoning applied to the script that WRITES rather than reads.
+//
+// The test is deliberately "does the file exist" and not "does it look live":
+// it is version-agnostic, it needs no literal that can go stale, and it catches
+// the lost variable, the stale hardcoded default and a mistyped version alike.
+// A legitimate redeploy over an existing record opts in explicitly.
+function dotenvAddressesFile() {
+  try {
+    const txt = fs.readFileSync(path.join(__dirname, "..", ".env"), "utf8");
+    const m = txt.match(/^\s*ADDRESSES_FILE\s*=\s*(.+?)\s*$/m);
+    return m ? m[1].trim() : null;
+  } catch { return null; }
+}
+
+(function guardAddressesFile() {
+  const requested = process.env.ADDRESSES_FILE || null;
+  const fromEnv   = dotenvAddressesFile();
+  const allow     = process.env.ALLOW_ADDRESSES_OVERWRITE === "1";
+
+  if (requested && fromEnv && requested === fromEnv) {
+    console.log("");
+    console.log("  ⚠️  ADDRESSES_FILE matches what .env names — so nothing in THIS session chose it.");
+    console.log("     For a PRIVATE deploy that means the session variable was lost. See 28.2(b).");
+  }
+  if (!requested) {
+    console.log("");
+    console.log("  ⚠️  ADDRESSES_FILE is not set anywhere — falling back to the hardcoded default.");
+  }
+
+  if (fs.existsSync(ADDRESSES_FILE) && !allow) {
+    console.error("");
+    console.error("  ⛔  REFUSING TO DEPLOY.");
+    console.error(`  ${path.basename(ADDRESSES_FILE)} ALREADY EXISTS.`);
+    console.error("  This script writes that file at the end of a successful run, so continuing");
+    console.error("  would overwrite the address record of a deployment that is live on chain.");
+    console.error("");
+    console.error("  If this is a PRIVATE gate deploy, the session variable is probably missing:");
+    console.error('    $env:ADDRESSES_FILE="deployed_addresses_v8_50_private.json"');
+    console.error("  If you really do mean to overwrite this record, say so explicitly:");
+    console.error('    $env:ALLOW_ADDRESSES_OVERWRITE="1"');
+    console.error("");
+    process.exit(1);
+  }
+  console.log(`  ✓  addresses file target: ${path.basename(ADDRESSES_FILE)} (does not exist yet)`);
+})();
 
 // ── Config ────────────────────────────────────────────────────────────────────
 const MATRIX_SIZE    = BigInt(process.env.MATRIX_SIZE || "127");
@@ -118,11 +173,183 @@ function sep(label = "") {
   else        console.log("  " + "─".repeat(60));
 }
 
+// ── V8.50 session 29: STALE-NODE GUARD ──────────────────────────────
+// Session 28 lost four deploys to `gasUsed == gasLimit` at ~22k on the FIRST call
+// to a freshly deployed contract. Cause (28.1): eth_estimateGas was answered from
+// a block that did not yet contain the deployment, so the node saw an address with
+// NO CODE and priced a bare transfer.
+//
+// ⛔ 28.1 proposed `gasMultiplier` on the baseSepolia network in hardhat.config.js.
+// VERIFIED 2026-08-21 AGAINST THE INSTALLED PACKAGES TO BE A NO-OP:
+//   * node_modules/@nomicfoundation/hardhat-ethers/signers.js `_sendUncheckedTransaction`
+//     sets `gasLimit` ITSELF (`this.provider.estimateGas(...)`) before it calls
+//     eth_sendTransaction;
+//   * node_modules/hardhat/internal/core/providers/gas-providers.js AutomaticGasProvider
+//     applies gasMultiplier only `if (tx.gas === undefined)` — it never is;
+//   * a fixed `gas: <number>` in the network config is read by signers.js `create`
+//     ONLY for the `hardhat` and `localhost` networks, never for baseSepolia.
+// So the guard has to live HERE, where the transaction is actually built.
+const GAS_MULTIPLIER   = Number(process.env.GAS_MULTIPLIER || 2);  // headroom on OUR estimate
+const GAS_FLOOR_CALL   = 300000n;   // last-resort limit for a contract call
+// CALIBRATED 2026-08-21 FROM A FALSE POSITIVE, not from reasoning. At 30000 this fired
+// six times on `setSelfFundedGracePeriod`, whose true estimate is 29,438 - 21,000 base +
+// a non-zero -> non-zero SSTORE + an event. That is a REAL price, and a detector that
+// cries wolf on good data is one you stop reading. 24000 still catches the two figures
+// this exists for (28.1's 22,414 and 22,056) with room to spare, and clears a genuine
+// single-slot setter. Move it only against a measured estimate, never a guessed one.
+const IMPLAUSIBLE_CALL = 24000n;
+const CODE_WAIT_TRIES  = 20;
+const CODE_WAIT_MS     = 3000;
+
+// ── SECOND OPINION, STRAIGHT TO THE NODE ─────────────────────────────────────
+// MEASURED 2026-08-21, session 29, and it corrects 28.1. A PHASE G deploy died
+// with "no code" at MatrixPairFactory 60s AFTER that contract had been deployed,
+// byte-verified AND transacted with four times, configureTier() one line earlier.
+// probe_addr_consistency.js then asked four endpoints at three block tags: ALL
+// FOUR reported the code present at latest and at safe, same byte count, same
+// height. So the chain was fine and every node could see it — the 0x came from
+// the ethers/hardhat provider's own view, not from a chain that was behind.
+//
+// 28.1 read this family of failures as "the node has not caught up". That is not
+// what the measurement says. Rather than guess at the client stack, ask the node
+// DIRECTLY with a plain fetch whenever the provider claims no code, and print
+// both answers. The next occurrence becomes a reading instead of a dead end.
+function rpcHost() {
+  try { return new URL(require("hardhat").network.config.url).host.split(".")[0]; }
+  catch { return "unknown"; }
+}
+async function rawRpc(method, params) {
+  try {
+    const url = require("hardhat").network.config.url;   // never printed — it carries the API key
+    const r = await fetch(url, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }),
+      signal: AbortSignal.timeout(15000),
+    });
+    if (r.status !== 200) return null;
+    const j = await r.json();
+    return j.error ? null : j.result;
+  } catch { return null; }
+}
+const sizeOf = (hex) => (!hex || hex === "0x") ? "0x NO CODE" : (((hex.length - 2) / 2) + " bytes");
+
+async function waitForCode(addr, label = "") {
+  let reported = false;
+  let threwCount = 0, saidEmptyCount = 0, lastThrow = null;
+  for (let i = 1; i <= CODE_WAIT_TRIES; i++) {
+    // ⛔ AN EXCEPTION IS NOT AN ANSWER. The first version of this loop wrote
+    // `catch { code = "0x" }`, which turned "the node failed to reply" into a
+    // confident "this address has no code" — and produced a wrong diagnosis
+    // within the hour (session 29). HH110 / 503 / TIMEOUT are the endpoint
+    // refusing to answer; only a returned "0x" means the address is empty.
+    // Same family as the empty-catch trap in CLAUDE.md.
+    let code = null;
+    try { code = await ethers.provider.getCode(addr); }
+    catch (e) { threwCount++; lastThrow = e; }
+
+    if (code && code !== "0x") {
+      if (i > 1) console.log(`  ⏳  node saw code at ${fmt(addr)} ${label} after ${i} probes`);
+      return (code.length - 2) / 2;
+    }
+    if (code === "0x") saidEmptyCount++;
+
+    if (!reported) {
+      reported = true;
+      if (threwCount > 0) {
+        console.log(`  ⚠️  provider.getCode(${fmt(addr)}) ${label} THREW — the endpoint did not answer:`);
+        console.log(`        ${String(lastThrow && lastThrow.message).slice(0, 120)}`);
+      } else {
+        console.log(`  ⚠️  provider.getCode(${fmt(addr)}) ${label} returned 0x.`);
+      }
+      console.log(`      asking ${rpcHost()} directly:`);
+    }
+
+    // Ask the node itself, so a refusal to answer is never mistaken for an answer.
+    const [rawLatest, rawSafe, bn] = await Promise.all([
+      rawRpc("eth_getCode", [addr, "latest"]),
+      rawRpc("eth_getCode", [addr, "safe"]),
+      rawRpc("eth_blockNumber", []),
+    ]);
+    if (i === 1) {
+      console.log(`        raw eth_getCode latest : ${sizeOf(rawLatest)}`);
+      console.log(`        raw eth_getCode safe   : ${sizeOf(rawSafe)}`);
+      console.log(`        node block             : ${bn ? parseInt(bn, 16) : "NO ANSWER (endpoint is not replying)"}`);
+    }
+    if (rawLatest && rawLatest !== "0x") {
+      console.log(`  ->  THE NODE HAS THE CODE. The hardhat/ethers provider ${threwCount > 0 ? "could not get an answer" : "reported 0x"}.`);
+      console.log(`      Continuing on the node's own reply; the gas estimate below is floored in case it is wrong too.`);
+      return (rawLatest.length - 2) / 2;
+    }
+
+    // ⛔ GAP FOUND MID-RUN, 2026-08-21: the second opinion only ever asked the PRIMARY
+    // endpoint. When the primary is simply BEHIND — it answers cleanly, it just has not
+    // seen the deployment yet — asking it again is asking the one node that cannot know.
+    // The fail-over pool is right there and 29.2 measured that a healthy endpoint usually
+    // exists. Ask them all before concluding anything.
+    for (const u of fallbackUrls()) {
+      const alt = await rawRpcAt(u, "eth_getCode", [addr, "latest"]);
+      if (alt.ok && alt.val && alt.val !== "0x") {
+        console.log(`  ->  ${hostOf(u)} HAS the code (${sizeOf(alt.val)}) while the primary does not.`);
+        console.log(`      The primary is behind, not the chain. Continuing on that answer.`);
+        return (alt.val.length - 2) / 2;
+      }
+    }
+    await sleep(CODE_WAIT_MS);
+  }
+  // Say WHICH it was. "No code" and "no answer" need different responses from a
+  // human, and last session lost four deploys partly to conflating them.
+  if (saidEmptyCount === 0) {
+    throw new Error(
+      `ENDPOINT NOT ANSWERING for ${addr} ${label}: ${CODE_WAIT_TRIES} probes, ` +
+      `${threwCount} threw, 0 returned a value, and a direct fetch to the node got nothing either. ` +
+      `This is the endpoint being unavailable, NOT evidence about the contract. ` +
+      `Last error: ${String(lastThrow && lastThrow.message).slice(0, 160)}`
+    );
+  }
+  throw new Error(
+    `NO CODE at ${addr} ${label} after ${(CODE_WAIT_TRIES * CODE_WAIT_MS) / 1000}s. ` +
+    `The provider returned 0x ${saidEmptyCount} time(s) and a direct fetch to the node agreed. ` +
+    `Aborting rather than sending a 21k gas limit.`
+  );
+}
+
+// -- TRANSPORT RETRY — MEASURED CAUSE, NOT A GUESS (session 29) ---------------
+// 2026-08-21: fluent-neat-moon scored eth_blockNumber 20/20 while eth_getCode and
+// eth_call returned HTTP 503 on all 20 — 28.4's exact signature — forty minutes
+// after the same endpoint scored 20/20 on everything. The account degrades
+// endpoint by endpoint, mid-session. A deploy is hundreds of sequential calls
+// over 15-30 minutes, so a single blip killed the whole run twice today
+// (once as HH110 at the first state call, once as a bogus "no code").
+//
+// So: retry TRANSPORT failures on READ calls. Deliberately NOT on sends —
+// eth_sendRawTransaction may have landed before the transport failed, and
+// re-sending it is how you get a duplicate transaction and a wrecked nonce.
+// A failed send still aborts the run, loudly, which is the correct outcome.
+const RPC_RETRIES = 5;
+const RETRYABLE = new Set([
+  "eth_call", "eth_getCode", "eth_estimateGas", "eth_blockNumber", "eth_chainId",
+  "eth_getBalance", "eth_getTransactionCount", "eth_getTransactionReceipt",
+  "eth_getBlockByNumber", "eth_getBlockByHash", "eth_gasPrice", "eth_feeHistory",
+  "eth_maxPriorityFeePerGas", "eth_getLogs", "eth_getStorageAt", "net_version",
+  "eth_getTransactionByHash", "eth_blockNumber", "eth_accounts", "eth_syncing",
+]);
+function looksTransient(msg) {
+  const m = String(msg || "");
+  return /HH110|Invalid JSON-RPC|503|502|504|429|ETIMEDOUT|ECONNRESET|ECONNREFUSED|socket hang up|network socket|timeout|fetch failed/i.test(m);
+}
+// Transport retry + endpoint fail-over now live in ONE place — scripts/rpc_resilience.js.
+// This script carried a private copy while bigfill_v8.js had none, and bigfill duly died
+// on an HH110 during a read that the copy would have absorbed. Duplicated resilience is
+// resilience that protects whichever script you happened to edit last.
+const { rawRpcAt, fallbackUrls, hostOf } = require("./rpc_resilience");
+
+
 async function deploy(factory, args = [], label = "") {
   const c = await factory.deploy(...args);
   await c.waitForDeployment();
   const addr = await c.getAddress();
-  if (label) console.log(`  ✓  ${label.padEnd(28)} ${addr}`);
+  const size = await waitForCode(addr, label);   // ⛔ 28.1: prove the node sees it BEFORE anything calls it
+  if (label) console.log(`  ✓  ${label.padEnd(28)} ${addr}  (${size} bytes)`);
   return c;
 }
 
@@ -154,6 +381,66 @@ async function main() {
   const _origSend = nonceMgr.sendTransaction.bind(nonceMgr);
   nonceMgr.sendTransaction = async (tx) => {
     await sleep(8000);
+
+    // ⛔ 28.1 guard: only for CONTRACT CALLS (a deployment has no `to`, and those
+    // never failed). Deployments keep ethers' own estimate untouched.
+    const to      = typeof tx.to === "string" ? tx.to : null;
+    const isCall  = to !== null && tx.data && tx.data !== "0x";
+    const noLimit = tx.gasLimit === undefined || tx.gasLimit === null;
+
+    if (isCall && noLimit) {
+      await waitForCode(to, "(callee)");
+
+      let est = null, lastErr = null, lowSeen = null;
+      for (let i = 1; i <= 6; i++) {
+        let e = null;
+        try { e = await ethers.provider.estimateGas({ ...tx, from: rawSigner.address }); lastErr = null; }
+        catch (err) { lastErr = err; }
+        if (e !== null && e >= IMPLAUSIBLE_CALL) { est = e; break; }
+        if (e !== null) {
+          lowSeen = e;
+          console.log(`  ⚠️  estimateGas says ${e} for a call WITH calldata — that is a bare-transfer ` +
+                      `price, i.e. a node that cannot price the code. Re-estimating (${i}/6)…`);
+        }
+        await sleep(4000);
+      }
+
+      // Same treatment for the estimate: if the provider will not give a plausible
+      // one, ask the node directly before falling back to the floor.
+      if (est === null) {
+        const rawEst = await rawRpc("eth_estimateGas", [{
+          from: rawSigner.address, to,
+          data: typeof tx.data === "string" ? tx.data : undefined,
+          value: tx.value ? "0x" + BigInt(tx.value).toString(16) : undefined,
+        }]);
+        if (rawEst) {
+          const r = BigInt(rawEst);
+          if (r >= IMPLAUSIBLE_CALL) {
+            console.log(`  ⛔  the node estimates ${r} directly while the provider would not — using the node's figure.`);
+            est = r; lastErr = null;
+          }
+        }
+      }
+
+      let want;
+      if (est !== null) {
+        want = (est * BigInt(Math.round(GAS_MULTIPLIER * 100))) / 100n;
+        if (want < GAS_FLOOR_CALL) want = GAS_FLOOR_CALL;
+      } else if (lastErr !== null) {
+        throw lastErr;                       // the node could not estimate at all — stop, do not guess
+      } else {
+        console.log(`  ⚠️  estimate stayed at ${lowSeen} after 6 tries (code IS present) — ` +
+                    `falling back to the ${GAS_FLOOR_CALL} floor rather than sending ${lowSeen}.`);
+        want = GAS_FLOOR_CALL;
+      }
+
+      const blk = await ethers.provider.getBlock("latest");
+      const cap = (blk.gasLimit * 9n) / 10n;
+      if (want > cap) want = cap;
+
+      return _origSend({ ...tx, gasLimit: want });
+    }
+
     return _origSend(tx);
   };
   const deployer    = nonceMgr;
@@ -171,8 +458,11 @@ async function main() {
   const admin            = process.env.ADMIN_WALLET_ADDRESS      || deployerAddr;
   const liquidityReserve = process.env.LIQUIDITY_RESERVE_ADDRESS || opsWallet;
 
-  console.log("\n  V8.41 Deploy — FIFO pair routing (external→pair 0, graduates→pairIndex+1)");
-  console.log("  Remember: ADDRESSES_FILE=deployed_addresses_v8_47.json must be set in .env BEFORE this deploy (script writes there).");
+  console.log("\n  V8.50 Deploy — FIFO pair routing (external->pair 0, graduates->pairIndex+1)");
+  // 29.7: the old line here told the reader to set ADDRESSES_FILE in .env and named
+  // v8_47. Both are wrong now — 28.2(b) requires the SESSION variable and .env left
+  // alone for a private deploy, and the overwrite guard above enforces it.
+  console.log(`  ADDRESSES_FILE is taken from the SESSION, not .env (28.2b). Target: ${path.basename(ADDRESSES_FILE)}`);
   sep();
   console.log(`  Deployer        : ${deployerAddr}`);
   console.log(`  AccountOne      : ${accountOne}`);
@@ -738,7 +1028,7 @@ async function main() {
   }
   sep();
   console.log(`  Addresses file: ${require("path").basename(ADDRESSES_FILE)}`);
-  console.log("  V8.41 Deploy complete.\n");
+  console.log("  V8.50 Deploy complete.\n");
   console.log("  NEXT STEP: run scripts/seed_w1.js then scripts/bigfill_v8.js\n");
   sep();
 }

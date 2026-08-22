@@ -150,9 +150,30 @@ silently report on a different endpoint than hardhat is using. ⚠ Never judge a
 with block height still moving means **check the QuickNode invoice before the code.**
 
 ⚠ **IF A TRANSACTION FAILS WITH `gasUsed == gasLimit` AT ~22k RIGHT AFTER A CONTRACT
-DEPLOY**, that is out-of-gas from an `estimateGas` answered against a block that did not yet
-contain the deployment — not a revert. Set **`gasMultiplier`** on the `baseSepolia` network
-in `hardhat.config.js` before hunting for a healthier endpoint. Handoff 28.1.
+DEPLOY**, that is out-of-gas from an `estimateGas` priced against an address the node could
+not see — not a revert.
+
+⛔ **DO NOT REACH FOR `gasMultiplier`. IT IS A NO-OP AND THIS IS MEASURED (handoff 29.1).**
+`hardhat-ethers` sets `gasLimit` itself before sending, so hardhat's `AutomaticGasProvider` —
+the only thing `gasMultiplier` configures — never fires. A fixed `gas:` number in the network
+config is ignored for baseSepolia too. **`deploy_v8.js` now carries the guard instead**: it
+waits for `eth_getCode` to actually return bytecode after each deploy, rejects any estimate
+under 30,000 gas for a call that has calldata, asks the node directly when the provider
+disagrees, and floors the limit at 300,000. Nothing needs setting for this — it is on.
+
+⛔ **AND THE 503s ROTATE BETWEEN PROVIDERS — CHECK FOR A HEALTHY ENDPOINT, NOT A CULPRIT.**
+Measured 2026-08-21 across three runs eight minutes apart: each of three QuickNode endpoints
+was healthy at one sample and serving `HTTP 503` on every state call at another, while
+`eth_blockNumber` answered 20/20 on all of them throughout, and Coinbase's public endpoint
+503'd alongside them. This is Base Sepolia shedding STATE reads across providers, not one
+bad node and not a stopped chain. `deploy_v8.js` now fails read calls over to the other
+endpoints automatically (sends never move). Widen the pool for a long run:
+```powershell
+$env:FALLBACK_RPCS="https://<endpoint-a>/,https://<endpoint-b>/"
+```
+⚠ **Do not start a 15-30 minute deploy while the endpoint hardhat uses is 0/20 on
+`eth_getCode` / `eth_call`.** Wait for two clean `check_deploy_rpc.js 20` runs minutes apart —
+one clean sample is not a measurement.
 
 ---
 
@@ -190,8 +211,21 @@ gas number taken after it.*
 
 **G.1 ⛔ FILL IT WITH SELF-RESCUE TURNED DOWN — OR MEASUREMENT 1 IS IMPOSSIBLE.**
 ```powershell
-powershell -ExecutionPolicy Bypass -File C:\CryptoNite-Smart-Contracts\CryptoNova\run_bigfill_rr.ps1 -Count 300 -Offset 0 -SelfRescueRate 0.1 -UpgradeRate 0.75
+powershell -ExecutionPolicy Bypass -File C:\CryptoNite-Smart-Contracts\CryptoNova\run_bigfill_rr.ps1 -Count 300 -Offset 0 -SelfRescueRate 0.1 -UpgradeRate 0.75 -AddressesFile deployed_addresses_v8_50_private.json -BatchSize 5 -BatchDelay 8
 ```
+
+⛔ **TWO CORRECTIONS, 2026-08-21 — THE ORIGINAL LINE COULD NOT HAVE RUN (handoff 29.9).**
+* **`-AddressesFile` IS MANDATORY HERE.** The wrapper refuses any `-SelfRescueRate` other
+  than 1.0 unless the chain is named explicitly: a cohort that cannot self-fund parks,
+  accrues debt and is evicted, which must never touch the community chain. Without it the
+  run prints `REFUSING TO RUN` and exits 1.
+* **`-BatchSize 5 -BatchDelay 8` OR THIS TAKES A DAY.** The wrapper defaults to
+  `-BatchSize 1 -BatchDelay 300` — one registration every five minutes (owner rule
+  2026-08-19, so the fund is fed by sweeps rather than bulk registration). At `-Count 300`
+  that is ~25 hours, and PHASE G is explicitly "hours, not days". Burst mode is the
+  wrapper's own documented alternative for exactly this case.
+⚠ Also automatic and correct: `-SelfRescueRate 0.1` pins `-ScanFrom` to the offset, so this
+cohort cannot reach back and apply its own self-rescue rate to earlier wallets.
 🖥️PS — always through the wrapper, never `npx hardhat run scripts\bigfill_v8.js` directly
 (BIGFILL_RULES.md: the raw defaults switch on CNOVA buy/sell and the burn sweep, which the
 owner rule forbids).

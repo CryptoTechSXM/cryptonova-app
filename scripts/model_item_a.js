@@ -68,6 +68,7 @@ const { ethers } = require("ethers");
 const path = require("path");
 require("dotenv").config({ path: path.join(__dirname, "..", ".env") });
 
+require("./rpc_resilience");   // 29.2: Base Sepolia sheds state reads; retry + endpoint fail-over
 const RPC = process.env.RPC || process.env.BASE_SEPOLIA_RPC_URL || process.env.BASE_SEPOLIA_RPC;
 const ADDRFILE = process.env.ADDRESSES_FILE || "deployed_addresses_v8_48.json";
 const A = require(path.join(__dirname, ADDRFILE));

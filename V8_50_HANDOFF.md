@@ -10,7 +10,398 @@ owner-set, and the session that earned it got five things wrong by ignoring what
 
 ---
 
-# ⬛ SESSION 28 STATE — 2026-08-21, LATEST. READ THIS FIRST.
+# ⬛ SESSION 29 STATE — 2026-08-21, LATEST. READ THIS FIRST.
+# ⛔ PHASE G ATTEMPTED AGAIN. TWO MORE FAILED DEPLOYS, ZERO CONTRACT FAULTS, AND THE
+# CAUSE IS NOW MEASURED RATHER THAN GUESSED: BASE SEPOLIA SHEDS **STATE READS**
+# ACROSS PROVIDERS WHILE BLOCK HEIGHT KEEPS ANSWERING. 28.1's PROPOSED FIX IS A NO-OP.
+
+Driven step-by-step with the owner at the console. **No deploy completed, no addresses file
+was created, `.env` was never modified.** Every failure this session was diagnosed with a
+reading, not a theory — and one of my own diagnoses was wrong and is recorded as such (29.4).
+
+## 29.0 STATE - THE PRIVATE CHAIN EXISTS. READ 29.10 FOR WHERE PHASE G ACTUALLY GOT TO.
+
+* **THE PRIVATE V8.50 CHAIN IS DEPLOYED AND FILLED.** `deployed_addresses_v8_50_private.json`
+  is written AND COMMITTED (`6682146`). MATRIX_SIZE 127, T1-T3, W1 seeded at T1 MatA root.
+  Deploy transcript: `logs/runs/deploy_v8/2026-08-21T22-24-09-712Z_*.log`.
+* The bullet below describes the state DURING the failed attempts; kept because 29.1-29.4
+  refer to it.
+* **TWO MORE ORPHANED CONTRACT SETS** on Base Sepolia (sets 5 and 6). Set 5 reached T1 fully
+  wired - CNOVAToken `0x7627C950...`, Treasury `0x38158bE0...`, StabilityFund `0xa428277C...`,
+  TierRouter `0xAa67b636...`, MatrixPairFactory `0x52d4e8E1...`, MatA T1 `0xd0fcC51E...`.
+  Harmless, unreferenced, testnet gas only. **Do not reuse them.**
+* CRITICAL: **THE VPS CRONTAB IS STILL MODIFIED - THREE LINES ARE PAUSED.** Backup at
+  `/root/crontab.backup.phaseG` (34 lines). `copay_rescue`, `fastlane_rescue` and
+  `system_keeper` are commented; the other 8 including `direct_keeper` run normally.
+  **RESTORE IT: `crontab /root/crontab.backup.phaseG`** - this is member-facing service.
+* OK: **`.env` IS UNTOUCHED.** Everything was driven through PowerShell session variables.
+* OK: 28.0's throwaway `check_sf.js` at the repo root is already gone. Nothing to delete.
+
+## 29.1 28.1's FIX CANNOT WORK, AND IT WAS VERIFIED IN THE INSTALLED PACKAGES BEFORE ATTEMPT FIVE
+
+28.1 said: *"THE FIX TO TRY FIRST NEXT TIME - set `gasMultiplier` on the `baseSepolia`
+network in `hardhat.config.js`."* **`gasMultiplier` never applies to anything this repo
+sends.** Read, not assumed:
+
+* `node_modules/@nomicfoundation/hardhat-ethers/signers.js` -> `_sendUncheckedTransaction`
+  calls `this.provider.estimateGas(...)` itself and puts `gasLimit` into the request
+  **before** `eth_sendTransaction`.
+* `node_modules/hardhat/internal/core/providers/gas-providers.js` -> `AutomaticGasProvider`
+  applies the multiplier only `if (tx.gas === undefined)`. It never is.
+* A fixed `gas: <number>` in the network config is read by signers.js `create()` **only for
+  the `hardhat` and `localhost` networks** - never for baseSepolia.
+
+**A fifth attempt with the multiplier set would have failed identically and looked like the
+endpoint again.** The guard has to live in `deploy_v8.js`, where the transaction is built.
+This is 27.5's lesson repeating: a handoff instruction is a claim about a package, and it
+needs reading before it is followed.
+
+## 29.2 THE REAL CAUSE, MEASURED ACROSS THREE RUNS EIGHT MINUTES APART
+
+`check_deploy_rpc.js 20`, three times:
+
+| time (UTC) | cosmopolitan-still-fire | frequent-misty-meme | fluent-neat-moon |
+|---|---|---|---|
+| 21:23 | OK 20/20 | OK 20/20 | DOWN getCode 0/20, eth_call 0/20 |
+| 21:27 | OK 20/20 | OK 20/20 | OK 20/20 |
+| 21:31 | DOWN 0/20 | DOWN 0/20 | OK 20/20 |
+
+**`eth_blockNumber` answered 20/20 on every endpoint at every sample.** Blocks keep being
+produced; only STATE reads (`eth_getCode`, `eth_call`) 503. And `watch_base_sepolia.mjs`
+caught **Coinbase's public endpoint 503-ing at the same moment as QuickNode's** -
+an independent provider, so this is not a QuickNode account problem.
+
+**AND IT ROTATES.** At 21:31 a fully healthy endpoint existed the whole time. That is the
+single most useful fact in this section, because it makes the failure survivable.
+
+WARNING: **28.4's billing explanation does not cover this.** The 503-on-state-with-block-height-fine
+signature is the same, but it spans providers and rotates, so "check the invoice first" is no
+longer the right first move. Check whether a HEALTHY endpoint exists right now instead.
+
+## 29.3 WHAT WAS BUILT, ALL IN `deploy_v8.js` UNLESS SAID OTHERWISE
+
+1. **OVERWRITE GUARD.** Refuses to deploy if the addresses file it would write already
+   exists; `ALLOW_ADDRESSES_OVERWRITE=1` opts out. Version-agnostic, no literal to go stale.
+   **This closes 28.2(b)'s catastrophic case** - a lost PowerShell window letting `dotenv`
+   refill `ADDRESSES_FILE` from `.env` and overwriting the LIVE record. **Self-tested by
+   pointing it at `deployed_addresses_v8_49.json` with no `--network`: it refused.**
+2. **`waitForCode()`** - after each deploy, and before each contract CALL, the node must
+   actually return bytecode. Distinguishes "returned 0x" from "refused to answer" and says
+   which; asks the node directly by `fetch` when the provider disagrees.
+3. **IMPLAUSIBLE-ESTIMATE DETECTOR.** A call WITH calldata cannot truly cost < 30,000 gas.
+   Below that it re-estimates 6x, then asks the node directly, then falls back to a 300,000
+   floor. `GAS_MULTIPLIER` (default 2) and the floor are capped at 90% of the block limit.
+   **This is what would actually have caught 28.1's `gasUsed == gasLimit` at 22,414.**
+4. **TRANSPORT RETRY + ENDPOINT FAIL-OVER.** Read calls retry 5x with backoff and, on each
+   failure, are re-issued against the other endpoints (`FALLBACK_RPCS`, then
+   `BASE_SEPOLIA_RPC`, then `https://sepolia.base.org`). **Sends are deliberately excluded
+   - `eth_sendRawTransaction` may have landed before the transport failed, and re-sending it
+   is how you get a duplicate and a wrecked nonce.** Prints a retry/fail-over total at exit.
+5. **`scripts/probe_addr_consistency.js`** (new) - asks every endpoint whether an address has
+   code, at `latest` / `safe` / `finalized`, and prints them side by side. It is what
+   separated "reorg" from "sick endpoint" in minutes. NOTE: `0x` at `finalized` with code at
+   `latest` and `safe` is NORMAL L2 lag, not a fault.
+6. **`scripts/check_deploy_rpc.js`** - now reads the endpoint the way hardhat does (29.5).
+
+## 29.3b THE RETRY TOOK THREE ATTEMPTS TO LAND, AND THE TWO FAILURES ARE THE USEFUL PART
+
+The failing line never changed:
+
+    HH110 ... at AutomaticGasPriceProvider._getGasPrice (gas-providers.ts:221)
+                at HttpProvider.request (http.ts:104)
+
+**Hardhat's own wrapper providers call `this._wrappedProvider.request(...)` DIRECTLY.** A
+patch on the provider hardhat hands you never sees them, so every internal `eth_gasPrice`
+went around the retry and around a fully-populated fail-over pool.
+
+| attempt | what was patched | what happened |
+|---|---|---|
+| 1 | `hre.network.provider` | bypassed entirely; deploy died at `_getGasPrice` |
+| 2 | walked `_wrappedProvider` at load time | printed `innermost, depth 0` — the object is a `LazyInitializationProviderAdapter` and the real chain **does not exist yet** |
+| 3 | walked after the first call | never attached at all; the `retry installed on` line never printed |
+| 4 | **`HttpProvider.prototype.request` — the CLASS** | covers every instance, no walking, no timing, no lazy anything |
+
+> **STANDING LESSON: to intercept every call in a wrapped provider chain, patch the CLASS,
+> not the instance you were handed.** And make the patch ANNOUNCE where it installed —
+> attempts 2 and 3 were only caught because the line printed `depth 0`, and then failed to
+> print at all. A guard that cannot be seen to be working is a guard you will trust wrongly.
+
+## 29.3c ⚠ A STALE SESSION VARIABLE MEANT WE HEALTH-CHECKED ONE ENDPOINT AND DEPLOYED ON ANOTHER
+
+`.env` had been corrected so both RPC names pointed at `fluent-neat-moon` — but the deploy
+window still carried a `$env:BASE_SEPOLIA_RPC_URL` pointing at `cosmopolitan-still-fire`, and
+**a PowerShell session variable beats `.env`, because dotenv never overwrites an already-set
+value.** The health checks were being run from a *different* window, which had no override.
+
+⛔ **It was caught from the program's own output, not from a hunch:** the printed
+`read fail-over endpoints:` list contained `fluent-neat-moon`, and that list is built by
+deduplicating against the primary — so the primary could not be fluent. **Print your inputs
+and the contradiction finds itself.** Cleared with `Remove-Item Env:\BASE_SEPOLIA_RPC_URL`.
+
+## 29.3d ✅ EVERY RUN IS NOW SAVED TO DISK — `scripts/run_log.js` (owner request)
+
+*"have these deploys saved to disk with names in a folder so we don't need to copy paste and
+we can have every deploy from now on as reference in the future."*
+
+    logs/runs/<script>/<utc-timestamp>_<label>.log    full transcript
+    logs/runs/INDEX.md                                one row per run: time, script, label, secs, OK/FAILED
+
+One line — `require("./run_log");` — at the top of a script. Already wired into
+**`deploy_v8.js`**, **`testchain_keeper.js`** (G.2) and **`diag_keeper_gas_live.js`** (G.3);
+the last of those replaces the runbook's "save the output manually" instruction.
+
+* **Synchronous writes**, so a crash still leaves a complete file *including the error*.
+* **Header block**: UTC, node version, git branch/commit + dirty flag, RPC endpoints, and the
+  whitelisted session variables. ⛔ That header alone would have exposed 29.3c at a glance.
+* **Env is whitelisted, never dumped**, and endpoints are recorded as **hostnames only** —
+  those URLs carry API keys and this is a plain text file.
+* **Failed runs are captured too.** 28.0 records four orphaned contract sets that cannot be
+  identified because no run recorded its addresses; this session added three more. That
+  cannot happen again.
+* `logs/` is gitignored — local history, no repo bloat.
+
+## 29.4 A DIAGNOSIS I GOT WRONG, AND THE ONE-LINE BUG THAT CAUSED IT
+
+`waitForCode`'s first version was `try { code = await ethers.provider.getCode(addr); }
+catch { code = "0x"; }`. **That turns "the node failed to answer" into a confident "this
+address has no code."** On the strength of it I told the owner the node had the code while
+the ethers provider did not - *"a client-side view problem"*. It was not. The provider was
+throwing HH110/503 and my catch was discarding the evidence.
+
+**This is the empty-catch trap CLAUDE.md already documents, written into a guard whose whole
+purpose was to stop a wrong diagnosis.** Fixed: exceptions are counted and printed separately
+from `0x` answers, and the final error says which of the two happened, because they need
+opposite responses from a human.
+
+> **STANDING LESSON: an exception is not an answer.** Any `catch` that substitutes a
+> plausible value is manufacturing data. If it cannot be answered, say so.
+
+## 29.5 `.env` NAMES TWO DIFFERENT ENDPOINTS UNDER TWO NAMES - AND IT HAS BEEN MIS-GRADING EVERY HEALTH CHECK
+
+    BASE_SEPOLIA_RPC_URL -> cosmopolitan-still-fire   <- hardhat.config.js reads THIS, and only this
+    BASE_SEPOLIA_RPC     -> fluent-neat-moon          <- check_deploy_rpc.js preferred THIS
+
+So every *"the endpoint is healthy"* verdict during session 28's four failed deploys was
+graded on an endpoint hardhat was not using. 28.3 caught the session-override version of this
+trap; this is the same trap sitting permanently in `.env` and it is worse, because it is
+silent and always on. `check_deploy_rpc.js` now takes hardhat's precedence, prints a `!!`
+banner when the two names disagree, and probes BOTH plus the public endpoint.
+**Still open: `.env` was deliberately left alone (28.2b). Put one healthy endpoint under
+both names when the network is calm.**
+
+## 29.6 HOW TO IDENTIFY THE DEPLOYER-KEY CRON LINES - 28.2(a)'s GREP IS NOT ENOUGH ON ITS OWN
+
+`grep -l DEPLOYER_PRIVATE_KEY *.js` returns **28 files**, not 3. 28.2(a)'s conclusion is
+right but its method under-specifies: the question is which **active cron lines invoke** one
+of those scripts. Cross-referencing the two lists gives exactly `copay_rescue`,
+`fastlane_rescue`, `system_keeper` - re-measured and confirmed 2026-08-21. The other 8 active
+lines (`direct_keeper`, `dupe_watch`, `growth_snapshot`, `onramp_keeper`, `monitor_v8`,
+`channel_pulse`, `integrity_check`, `sf_invariant_check`) sign with other keys or are
+read-only. Comment them with `sed` matching the script name rather than by hand in
+`crontab -e` - the exact command is in PHASE G.PRE.
+Note the VPS cron lines pin their OWN endpoints (`fabled-delicate-leaf`,
+`summer-silent-crater`), so the community engine never shares a node with a deploy.
+
+## 29.7 THREE STALE THINGS FOUND WHILE CHECKING, NONE OF THEM BLOCKING
+
+* **The deployer is NO LONGER EIP-7702 DELEGATED.** `whoami.js` reports `clean EOA (no
+  delegation)`. `deploy_v8.js`'s header comment, `whoami.js`'s header and the runbook all
+  still describe it as delegated to MetaMask's stateless delegator "accepted risk". The chain
+  says otherwise. HARD-WON LESSON 8 says verify against the chain - it was, and the docs lost.
+* **`deploy_v8.js` prints `Remember: ADDRESSES_FILE=deployed_addresses_v8_47.json must be set
+  in .env BEFORE this deploy`** - which now directly contradicts 28.2(b). Delete that line.
+* **Its banner still says `V8.41 Deploy - FIFO pair routing`.**
+
+## 29.9 PHASE G.0 AND G.1 ARE DONE. THE CHAIN IS REAL AND FILLED.
+
+**G.0 - deployed** on the 4th attempt of the session (7 orphan sets exist on Base Sepolia in
+total; sets 5-7 are this session's, all identifiable from the run logs).
+
+    CNOVAToken      0x7A6aD067Ca7876Fe421f0881041D08Ee9Dcbecbb
+    Treasury        0x5974Ec0b28a668b84fa5d623DcE9Aa3348C63Cf5
+    StabilityFund   0xAf8184727c64B5be744A124c7cd49101495B2B69
+    BuybackReserve  0xE71E5aC264C21255C3E4734608F57eF59345A201
+    TierRouter      0xAb8281a55C8fe4f284C4C85785B21D2df5f9c9D5
+    MatrixFactory   0xfFfC9fD028Efd9F0CA70c148339BC9c6e42a5F33
+    PairFactory     0x07c036D3f21a3968771370821F66C2df830c5D41
+    MatrixKeeper    0xAbEBD2C8A8c275e16b0161Ec22419E0fF4f910cD
+    V8Governance    0xA3F1F1bb482faa90515aB88aF09579bCF16503fE
+    CommunityWallet 0xcFB9E7e49D951d19d9785e232d8CF3c1204C4211
+    MockUSDC        0x2D8B7b5eDec96bE441b6fb0D45D74a2BcE2C639a  (reused)
+
+**`set_upkeep_caller.js` (runbook 1.3c) WAS DELIBERATELY SKIPPED.** `testchain_keeper.js`
+signs as the DEPLOYER, who is always allowlisted (27.5a), so the private chain needs no
+authorized keeper EOA - and not authorizing one keeps the VPS keeper wallet away from this
+deployment entirely. `diag_keeper_work.js` therefore prints
+`FULL BATCH: REVERTS -> MK: not authorized keeper` for its keeper-wallet simulation. **That
+is expected on this chain and is NOT a fault.**
+
+**RUNBOOK 1.4's INTEGRITY GATE NEEDS A PRIVATE-DEPLOY VARIANT AND HAS NOT RUN.** As written
+it has you set `ADDRESSES_FILE` in `/root/keeper/.env`, which would point the LIVE VPS
+keepers at the gate chain. Use a per-command override instead -
+`cd /root/keeper && ADDRESSES_FILE=deployed_addresses_v8_50_private.json node integrity_check.js`
+- or run `C:\CryptoNova-Keepers\integrity_check.js` locally. **Neither has been done.**
+
+**G.1 - filled.** The run needed **8,609 transport retries, 8,583 of them served by a
+FALLBACK endpoint.** That is the honest measure of the network on 2026-08-21, and the run
+completed only because of 29.3/29.3b.
+
+## 29.10 THE BLOCKER, AND IT IS A DESIGN RESULT RATHER THAN A FAULT: **NOTHING PARKS AT T1**
+
+After the first 300-wallet wave, `check_state.js`:
+
+| matrix | occupancy | rot | parked |
+|---|---|---|---|
+| T1 MatA | **127/127** | **124** | **0** |
+| T1 MatB | 124/127 | 0 | 0 |
+| T2 MatA | 119/127 | 0 | 0 |
+| T2 MatB / T3 | 0 | 0 | 0 |
+
+SF $201.75, Treasury $336.25.
+
+**124 CROSSINGS, ZERO PARKED.** `diag_keeper_work.js` finds exactly ONE work item and it is
+`VELOCITY`. There is no `PARKED_RESCUE`, so **G.2 must not be run yet** - the runbook's own
+stop rule - and G.3 would return "NO VERDICT" and read as a broken tool.
+
+**THIS IS THE FIRST ON-CHAIN EVIDENCE AT SIZE 127 THAT ITEM A DOES WHAT IT CLAIMS.** The
+crossing is paid by the reserve, so a T1 member does not park. Section 3's projection now has
+a real-chain observation behind it. It is ONE population of scripts on ONE chain - not a
+claim about members (14.6).
+
+**BUT MEASUREMENT 1's ITEM CANNOT COME FROM T1.** An SF-funded rescue needs a crossing the
+reserve CANNOT cover. T1 MatB (124/127, rot 0) and T2 MatA (119/127, rot 0) are both just
+short of the threshold where cycle-outs begin, and a T2 crossing is priced against a $25
+tier rather than $10.
+
+**NEXT ACTION, ALREADY DECIDED:** a second wave to push both past 127 -
+
+    run_bigfill_rr.ps1 -Count 300 -Offset 300 -ScanFrom 0 -SelfRescueRate 0.1 -UpgradeRate 0.75 -AddressesFile deployed_addresses_v8_50_private.json -BatchSize 5 -BatchDelay 8
+
+**`-ScanFrom 0` IS DELIBERATE AND MUST NOT BE COPIED INTO AN ECONOMICS RUN.** The wrapper
+would otherwise pin the sweep to offset 300 to stop one cohort applying its self-rescue rate
+to another's wallets - correct for the V8.49 split-cohort experiment that rule was written
+for, wrong here, where there is ONE population and the sweeps are what generate work items.
+
+**IF A SECOND WAVE STILL PARKS NOBODY, DO NOT KEEP ADDING WAVES.** That would itself be the
+finding - that on a script population at these fee levels the reserve always covers the
+crossing - and the next lever is a lower `FUND_AMOUNT` (wave 1 ran $11.00 against T1+T2+T3
+fees of $85.00) or a deeper tier, not more volume. Say so out loud before spending another hour.
+
+## 29.11 OPEN, SMALL, AND PARKED ON PURPOSE
+
+* **50 of 300 registrations failed in wave 1** (`replacement transaction underpriced`,
+  `nonce too low`). Send-side nonce races, made worse by `FILL_FUNDER_KEY not set` so the
+  deployer signs both funding and registration. Deliberately never retried (a send may have
+  landed). Does not affect a GAS measurement; would matter for an economics one.
+* **4 addresses were unfundable** ("contract collision") in wave 1.
+* `FUND_AMOUNT $11.00 < T1+T2+T3 fees $85.00` - wallets cannot self-fund a full climb. Fine
+  for this test, and arguably the point.
+* **THE VPS CRONTAB IS STILL REDUCED TO 8 LINES.** `copay_rescue`, `fastlane_rescue` and
+  `system_keeper` stay paused for the WHOLE of PHASE G, because bigfill signs with the
+  deployer key too - not just the deploy. Restore with `crontab /root/crontab.backup.phaseG`
+  when PHASE G ends, and verify 11 active lines.
+
+## 29.12 MEASUREMENT 1 - TAKEN. 61 SINGLE-ITEM SF-FUNDED RESCUES AT MATRIX_SIZE 127.
+
+**THE FIRST REAL PER-ITEM KEEPER GAS FIGURE THIS PROJECT HAS EVER HAD.** Every previous
+number was `MATRIX_SIZE` 7 (V8_50_KeeperGas.test.js) or a FITTED average from mixed batches.
+
+| work type | n | min | median | max |
+|---|---|---|---|---|
+| PARKED_RESCUE | **61** | 2.32M | 4.34M | **4.58M** |
+| VELOCITY | 1 | 1.79M | - | - |
+
+`WorkItemFailed`: **none**, across 130 keeper-touching transactions. `REVERTS 0`,
+`skipped 0`. **The machine works at 127.** Chain state at measurement: T1 A+B and T2 MatA
+full at 127, T3 MatA 110, ~600 wallets, SF $500.
+
+**THE SHAPE MATTERS MORE THAN THE MAXIMUM.** The cost ROSE from 2.32M to ~4.4M as the chain
+filled, then PLATEAUED - 25 consecutive rescues inside a 2.5% band (4.32M-4.44M). So the
+climb was the system deepening, not a runaway. **But it is a plateau FOR THIS POPULATION**:
+3 tiers, ~600 members. The community chain is 10 tiers with more pairs and deeper cascades.
+We measured where it settles here, NOT the ceiling.
+
+⛔ **FORMAL VERDICT: `NO VERDICT`, AND THAT IS NOT A PASS.** `diag_keeper_gas_live.js`
+computes marginal cost as *dearest single-rescue batch minus the fixed overhead*, and the
+overhead must be read off a CHEAP work type in the same run (reclaim / ghost / evict).
+Every item priced was a rescue, so it refused to answer rather than subtract a number it had
+not seen. Exactly as 27.1 designed it. **To close measurement 1, price one cheap item:**
+
+    $env:ONE_ITEM="1"; $env:ONE_ITEM_TYPE="RECLAIM"; $env:GAS_LIMIT="15000000"
+
+⚠ **MY ASSESSMENT, AND THE OWNER DECISION IT IMPLIES.** 4.58M against a `minGasPerItem` of
+5,000,000 is **8.5% headroom**. The runbook's criterion is "< 5,000,000 WITH VISIBLE
+HEADROOM"; 8.5% is not visible headroom. And `minGasPerItem` does NOT cap an item - it is a
+pre-dispatch check on `gasleft()`. If a rescue ever costs MORE than 5M the guard passes, the
+item starts, and it dies inside the try/catch as a reason-less `WorkItemFailed`, which on a
+community chain is indistinguishable from an ordinary refusal (27.2's hole). The options are
+raise `minGasPerItem`, lower `maxItemsPerUpkeep`, or accept the margin knowingly - **that is
+an owner call, and it should be made before PHASE 2, not during it.**
+
+## 29.13 ⛔⛔ THE BIGGEST FINDING OF THE SESSION: `eth_estimateGas` PRICES THE **HALT**, NOT THE ITEM
+
+`performUpkeep` checks `gasleft() >= minGasPerItem` (5M) BEFORE dispatching an item. Below
+that it emits `BatchGasHalted` and breaks - **cleanly, SUCCESSFULLY and cheaply**. 27.2 calls
+that "the guard working", and alone it is. But `eth_estimateGas` binary-searches for the
+SMALLEST gas at which a call does not revert, **and the halt path does not revert.** So the
+estimate converges on the price of HALTING.
+
+**MEASURED, TWICE, BY TWO INDEPENDENT INSTRUMENTS:**
+
+| | |
+|---|---|
+| estimate returned | **~0.09M** (91,476 / 90,000 / 91,404) |
+| the item's real cost | **2.32M - 4.58M** |
+| under-priced by | **~27x to 50x** |
+
+Driven from that estimate, `testchain_keeper` sent 60 transactions that **SUCCEEDED**
+(status 1), used 30,000 gas, rescued NOBODY, emitted NO `WorkItemFailed`, and left the queue
+exactly as they found it. `diag_keeper_gas_live.js` then found them independently in the
+event log: **60 `BatchGasHalted`, `processed 0 of 1`, `gasRemaining 0.08M`.**
+
+⛔ **THE LIVE IMPLICATION, AND IT IS UNVERIFIED AND URGENT.** ANY keeper that sizes
+`performUpkeep` from `eth_estimateGas` will do this on the community chain: succeed, spend
+gas, rescue nobody, report success, and leave no failure signal anywhere. **Nobody has
+checked whether `direct_keeper.js`, `copay_rescue.js`, `fastlane_rescue.js` or Chainlink
+Automation size their gas this way. THAT CHECK IS THE FIRST THING THE NEXT SESSION DOES** -
+it is a read of four files and it gates the community deploy.
+
+✅ **THE FIX IN THE DRIVER:** `testchain_keeper.js` gained `GAS_LIMIT` (bypasses the ladder)
+and warns whenever an estimate under 1M is seen, naming it as the halt price. It also gained
+`ONE_ITEM_TYPE`, because `ONE_ITEM` took `items[0]` and item 0 was `WORK_VELOCITY` on all 60
+ticks - 27.5a's "defect 6 puts parked work first" assumption is REFUTED on this chain.
+
+✅ **AND A QUESTION CLOSED:** `WORK_VELOCITY` is NOT self-renewing. Given enough gas it ran
+once (1.79M) and never returned. It repeated 60 times only because nothing was ever
+dispatched.
+
+## 29.14 NEXT, IN ORDER - SUPERSEDES 28.5.
+
+1. **RESTORE THE VPS CRONTAB** if PHASE G is not resumed immediately:
+   `ssh ... "crontab /root/crontab.backup.phaseG; crontab -l | grep -v '^#'"` -> expect 11 lines.
+2. ⛔⛔ **READ `direct_keeper.js`, `copay_rescue.js`, `fastlane_rescue.js` AND THE CHAINLINK
+   UPKEEP CONFIG AND ANSWER ONE QUESTION: do any of them size `performUpkeep` gas from
+   `eth_estimateGas`?** 29.13 measured that doing so buys a transaction which succeeds and
+   rescues nobody, silently. This is four file reads, it needs no chain, and it gates the
+   community deploy. Do it FIRST.
+3. **CLOSE MEASUREMENT 1** - price ONE cheap item so the fixed overhead is measured and
+   `diag_keeper_gas_live.js` can return a real verdict instead of `NO VERDICT`:
+   `$env:ONE_ITEM_TYPE="RECLAIM"` (or GHOST / EVICT_PARKED) with `GAS_LIMIT=15000000`.
+   If no cheap type is ever discoverable on this chain, SAY SO and price the overhead another
+   way rather than quoting the raw 4.58M as if it were marginal.
+4. **THEN G.4 (measurement 2) -> G.5 -> G.6.** G.4 drops ONE_ITEM and needs a deep queue;
+   note that `maxItemsPerUpkeep` here is **20**, and at ~4.4M/item the 5M floor will halt a
+   batch after ~3 items. That interaction IS measurement 2.
+5. **OWNER DECISION (29.12):** `minGasPerItem` 5,000,000 vs a measured 4.58M max. Raise it,
+   lower `maxItemsPerUpkeep`, or accept 8.5% knowingly - before PHASE 2.
+6. **RUN THE 1.4 INTEGRITY GATE** in its private-deploy form (29.9) - it has not run.
+5. **BATCH THE `:936` LOG SPLIT** (26.4) into the same RPC session.
+6. **PHASE 2 ONWARDS** - community deploy - only after PHASE G passes.
+7. Backlog unchanged from 27.6.
+
+---
+
+# ⬛ SESSION 28 STATE — 2026-08-21. READ AFTER SESSION 29.
 # ⛔ PHASE G ATTEMPTED AND NOT COMPLETED. FOUR DEPLOYS, FOUR DIFFERENT INFRASTRUCTURE
 # FAILURES, ZERO CONTRACT FAULTS. NOTHING WAS WRITTEN — THE CHAIN DOES NOT EXIST YET.
 

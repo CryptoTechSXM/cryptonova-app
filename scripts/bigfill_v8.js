@@ -24,6 +24,8 @@
  * Run: npx hardhat run scripts/bigfill_v8.js --network baseSepolia
  * ─────────────────────────────────────────────────────────────────────────────
  */
+require("./run_log");
+require("./rpc_resilience");   // 29.2: Base Sepolia sheds state reads; retry + endpoint fail-over   // G.1 transcript -> logs/runs/bigfill_v8/
 const { ethers }       = require("hardhat");
 const { NonceManager } = require("ethers");
 const fs               = require("fs");

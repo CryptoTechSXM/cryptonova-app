@@ -44,6 +44,8 @@
  *
  * Optional: INTERVAL_SECS (default 60), MAX_TICKS (default 0 = run until Ctrl+C).
  */
+require("./run_log");
+require("./rpc_resilience");   // 29.2: Base Sepolia sheds state reads; retry + endpoint fail-over   // G.2 transcript -> logs/runs/testchain_keeper/
 const { ethers } = require("hardhat");
 const fs   = require("fs");
 const path = require("path");
@@ -238,14 +240,35 @@ async function main() {
         console.log(`[${stamp()}] tick ${tick}  ONE_ITEM: performData did not decode — sending the batch WHOLE.`);
         console.log(`            ⚠ THIS TICK CANNOT PRICE AN ITEM. Do not read its gas as a per-item cost.`);
       } else {
-        const first = items[0];
+        // ⛔ MEASURED 2026-08-22, AND IT INVALIDATED A WHOLE 60-TICK RUN. The comment
+        //    above says "defect 6 orders discovery to take parked work FIRST, so the
+        //    first item is usually the dear one". ON THIS CHAIN IT IS NOT: item 0 was
+        //    WORK_VELOCITY on all 60 ticks, with 19 PARKED_RESCUE items behind it that
+        //    were never reached. Taking items[0] priced the wrong thing 60 times.
+        //    ⚠ WHY that item never cleared is NOT the reason to distrust items[0] — on
+        //    that run NOTHING was dispatched at all (see the GAS_LIMIT note below), so
+        //    no item could clear. Whether WORK_VELOCITY is independently self-renewing
+        //    is UNVERIFIED and worth its own measurement; do not assume it here.
+        //    Either way the ordering assumption is refuted, so ONE_ITEM_TYPE names the
+        //    work type to price instead of trusting the order.
+        const want = (process.env.ONE_ITEM_TYPE || "").trim().toUpperCase();
+        let pick = items[0], pickIdx = 0;
+        if (want) {
+          const idx = items.findIndex(i => (WORK_NAMES[Number(i.workType)] || "").toUpperCase() === want);
+          if (idx < 0) {
+            console.log(`[${stamp()}] tick ${tick}  ONE_ITEM_TYPE=${want}: none in this batch (${items.map(i => WORK_NAMES[Number(i.workType)]).join(",")}) — skipping tick rather than pricing the wrong item.`);
+            await sleep(INTERVAL_SECS);
+            continue;
+          }
+          pick = items[idx]; pickIdx = idx;
+        }
         performData = ethers.AbiCoder.defaultAbiCoder().encode(
           ["(uint8 workType,uint8 tierIdx,address addr1,address addr2)[]"],
-          [[[first.workType, first.tierIdx, first.addr1, first.addr2]]]);
+          [[[pick.workType, pick.tierIdx, pick.addr1, pick.addr2]]]);
         const dropped = items.length - 1;
-        items = [first];
+        items = [pick];
         if (dropped > 0) {
-          console.log(`[${stamp()}] tick ${tick}  ONE_ITEM: 1 of ${dropped + 1} sent; ${dropped} left for the next tick.`);
+          console.log(`[${stamp()}] tick ${tick}  ONE_ITEM: item ${pickIdx} of ${dropped + 1} sent; ${dropped} left for the next tick.`);
         }
       }
     }
@@ -272,7 +295,24 @@ async function main() {
       continue;
     }
 
-    const ladder = [ (est * 115n) / 100n, (est * 105n) / 100n, est ];
+    // ⛔⛔ WHY GAS_LIMIT EXISTS, MEASURED 2026-08-22 — READ BEFORE TRUSTING ANY
+    //     estimateGas-SIZED performUpkeep ANYWHERE IN THIS SYSTEM.
+    //     performUpkeep checks `gasleft() >= minGasPerItem` (5,000,000) BEFORE it
+    //     dispatches an item; below that it emits BatchGasHalted and breaks — cleanly,
+    //     SUCCESSFULLY and cheaply. eth_estimateGas binary-searches for the SMALLEST gas
+    //     at which a call does not revert, and the halt path does not revert. So the
+    //     estimate converges on the price of HALTING (~26k), the ladder rounds it to
+    //     30,000, and the transaction is sent with far too little gas to do any work.
+    //     It then SUCCEEDS, processes nothing, emits no WorkItemFailed, and leaves the
+    //     queue exactly as it found it. Observed: 60 consecutive ticks, gasUsed 30000
+    //     every time, status 1, rescued 0.
+    //     Set GAS_LIMIT to something above minGasPerItem to price a real item.
+    const FORCED = process.env.GAS_LIMIT ? BigInt(process.env.GAS_LIMIT) : null;
+    if (FORCED && est < 1_000_000n) {
+      console.log(`            ⚠ estimate ${est} is below 1M — that is the BatchGasHalted price, not the item's.`);
+      console.log(`              Sending GAS_LIMIT=${FORCED} instead so the batch can actually dispatch.`);
+    }
+    const ladder = FORCED ? [ FORCED ] : [ (est * 115n) / 100n, (est * 105n) / 100n, est ];
     let receipt = null, lastErr = null;
     for (const gasLimit of ladder) {
       try {

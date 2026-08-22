@@ -30,8 +30,21 @@ const path = require("path");
 require("dotenv").config({ path: path.join(__dirname, "..", ".env") });
 
 const ROUNDS = Number(process.argv[2] || 5);
-const DEPLOY_RPC = process.env.BASE_SEPOLIA_RPC || process.env.BASE_SEPOLIA_RPC_URL;
-if (!DEPLOY_RPC) { console.error("\n  BASE_SEPOLIA_RPC is not set in .env — nothing to check.\n"); process.exit(1); }
+
+// ⛔ MEASURED 2026-08-21 (session 29), AND IT IS THE SAME TRAP THIS FILE'S HEADER DESCRIBES.
+// This script used to prefer BASE_SEPOLIA_RPC. hardhat.config.js reads BASE_SEPOLIA_RPC_URL
+// and ONLY that. On the owner's machine the two names hold DIFFERENT endpoints:
+//     BASE_SEPOLIA_RPC      -> fluent-neat-moon
+//     BASE_SEPOLIA_RPC_URL  -> cosmopolitan-still-fire   <- what deploys actually ran on
+// So every "the endpoint is healthy" verdict this script gave during the four failed
+// session-28 deploys was graded on an endpoint hardhat was not using. Precedence is now
+// hardhat's, and when both names are set and differ, BOTH are probed and the mismatch is
+// printed at the top where it cannot be missed.
+const HARDHAT_RPC = process.env.BASE_SEPOLIA_RPC_URL;
+const LEGACY_RPC  = process.env.BASE_SEPOLIA_RPC;
+const DEPLOY_RPC  = HARDHAT_RPC || LEGACY_RPC;
+if (!DEPLOY_RPC) { console.error("\n  Neither BASE_SEPOLIA_RPC_URL nor BASE_SEPOLIA_RPC is set in .env — nothing to check.\n"); process.exit(1); }
+const SPLIT_BRAIN = Boolean(HARDHAT_RPC && LEGACY_RPC && HARDHAT_RPC !== LEGACY_RPC);
 
 // A control the site is known to use. If the deploy endpoint fails while this one passes,
 // the fault is the endpoint, not Base Sepolia.
@@ -65,14 +78,27 @@ async function probe(url, method, params) {
 (async () => {
   console.log("");
   console.log("DEPLOY-ENDPOINT HEALTH — " + new Date().toISOString());
-  console.log(`  bigfill / hardhat uses : ${host(DEPLOY_RPC)}   <- from .env BASE_SEPOLIA_RPC`);
+  console.log(`  bigfill / hardhat uses : ${host(DEPLOY_RPC)}   <- .env ${HARDHAT_RPC ? "BASE_SEPOLIA_RPC_URL" : "BASE_SEPOLIA_RPC"} (hardhat.config.js reads BASE_SEPOLIA_RPC_URL)`);
   console.log(`  control                : ${host(CONTROL)}   <- known-good, site read pool`);
+  if (SPLIT_BRAIN) {
+    console.log("");
+    console.log("  " + "!".repeat(78));
+    console.log(`  !! .env HOLDS TWO DIFFERENT ENDPOINTS UNDER TWO NAMES.`);
+    console.log(`  !!   BASE_SEPOLIA_RPC_URL -> ${host(HARDHAT_RPC)}   (hardhat / deploy / bigfill / testchain_keeper)`);
+    console.log(`  !!   BASE_SEPOLIA_RPC     -> ${host(LEGACY_RPC)}   (some plain-node diag scripts)`);
+    console.log(`  !! Both are probed below. Until they name the SAME healthy endpoint, a health`);
+    console.log(`  !! verdict here can be about a node the run under test never touches.`);
+    console.log("  " + "!".repeat(78));
+  }
   console.log(`  ${ROUNDS} rounds, each: eth_blockNumber + eth_getCode + eth_call\n`);
   console.log(`  ${pad("endpoint", 26)} ${pad("blockNumber", 16)} ${pad("getCode", 16)} eth_call`);
   console.log("  " + "-".repeat(78));
 
   const score = {};
-  for (const [name, url] of [["DEPLOY (" + host(DEPLOY_RPC).split(".")[0] + ")", DEPLOY_RPC], ["CONTROL (frequent-misty)", CONTROL]]) {
+  // ⚠ DEPLOY must stay index 0 and CONTROL index 1 — the verdict below reads them by position.
+  const targets = [["DEPLOY (" + host(DEPLOY_RPC).split(".")[0] + ")", DEPLOY_RPC], ["CONTROL (frequent-misty)", CONTROL]];
+  if (SPLIT_BRAIN) targets.push(["OTHER (" + host(LEGACY_RPC).split(".")[0] + ")", LEGACY_RPC]);
+  for (const [name, url] of targets) {
     score[name] = { bn: 0, gc: 0, ec: 0 };
     for (let i = 0; i < ROUNDS; i++) {
       const bn = await probe(url, "eth_blockNumber", []);
@@ -97,7 +123,8 @@ async function probe(url, method, params) {
   if (dBad && !cBad) {
     console.log("  THE DEPLOY ENDPOINT IS THE PROBLEM, NOT BASE SEPOLIA.");
     console.log("  The control answered every call while the endpoint bigfill uses did not.");
-    console.log("  FIX: point BASE_SEPOLIA_RPC in .env at a healthy endpoint and re-run. The");
+    console.log("  FIX: point BASE_SEPOLIA_RPC_URL in .env (the one hardhat reads) at a healthy");
+    console.log("  endpoint — and set BASE_SEPOLIA_RPC to the SAME value — then re-run. The");
     console.log("  HH110 wall, the 'top-up DID NOT LAND' lines and the nonce errors are all");
     console.log("  downstream of this — none of them are contract faults.");
   } else if (dBad && cBad) {
@@ -111,6 +138,12 @@ async function probe(url, method, params) {
     console.log("  Both endpoints healthy right now. If a run just failed, the fault was");
     console.log("  INTERMITTENT — re-run this with more rounds (e.g. 20) before concluding.");
     console.log("  One clean sample is not a measurement.");
+  }
+  if (SPLIT_BRAIN) {
+    const o = score[Object.keys(score)[2]];
+    console.log("");
+    console.log(`  OTHER endpoint (BASE_SEPOLIA_RPC, ${host(LEGACY_RPC).split(".")[0]}): blockNumber ${o.bn}/${ROUNDS}  getCode ${o.gc}/${ROUNDS}  eth_call ${o.ec}/${ROUNDS}`);
+    console.log("  Pick whichever of the two scored clean and put it under BOTH names in .env.");
   }
   console.log("=".repeat(82) + "\n");
 })();
