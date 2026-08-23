@@ -10,7 +10,242 @@ owner-set, and the session that earned it got five things wrong by ignoring what
 
 ---
 
-# ⬛ SESSION 32 STATE — 2026-08-23, LATEST. READ THIS FIRST.
+# ⬛ SESSION 33 STATE — 2026-08-23, LATEST. READ THIS FIRST.
+# ✅✅ **32.6 ITEMS 2, 7 AND 10 ARE CLOSED.** Three commits, two repos, all pushed.
+# ⛔⛔ **BOTH ITEM 2 AND ITEM 10 WERE MISDESCRIBED — THE FOURTH AND FIFTH STALE
+#     "OUTSTANDING" LINES IN FOUR SESSIONS. Item 2 named a file that was already
+#     committed while the real uncommitted work sat beside it. Item 10 said "scp it",
+#     and the file was already there — DIVERGENT.**
+# ⛔⛔ `diag_failed_item_reason.js` NAMED FOUR OF TEN WORK TYPES WRONG AND PRINTED THE
+#     MATRIX AS THE MEMBER. That is 32.4's open question, answered from source (33.4).
+# ✅ **PHASE G's CRONTAB IS RESTORED — 11 LINES, VERIFIED IDENTICAL TO THE BACKUP.**
+#     32.6 item 9's blocking EVENT has happened and no session recorded it (33.5).
+# ⛔ 31.2's "24/24 PASS" IS **25**. Derived from the file, not observed once (33.3).
+
+## ▶ SESSION 34 — READ IN THIS ORDER.
+
+**1. 33.4 — item 7, and it is the transferable one.** `WorkItemFailed` carries two BARE
+addresses and `performUpkeep` passes them POSITIONALLY into handlers with different
+signatures. On a `PARKED_RESCUE`, `addr1` is the MATRIX. The tool printed it as `member`
+and sent 31.4 hunting a MetaMask smart account that was our own `tiers.T1.matB`.
+
+**2. 33.1 / 33.2 — the two stale items, because the pattern is now the rule.** Four
+sessions, five instances. **Verify an "outstanding" line before spending a step on it**,
+and verify what it POINTS AT, not just whether it is done.
+
+**3. 33.5 — the crontab is restored.** Tier 1 of the naming table is unblocked.
+
+**4. 33.6 — what is next.** The de-censoring re-run (32.6 item 4) is still the only dated
+item and is still 3-10 days out from 2026-08-23. Nothing this session moved that clock.
+
+## 33.0 STATE
+
+* ✅ **THREE COMMITS, ALL PUSHED.** Keepers repo (`origin/main`): **`fd42ebc`** — the
+  V8.50 defect-8 gas-floor guard, 7 files, 676 insertions; **`5ef392b`** — `.gitattributes`
+  pins `*.js text eol=lf`. Contracts repo (`origin/v8.1`): **`ce3a0ec`** —
+  `diag_failed_item_reason.js`, 48 insertions.
+* ✅ **DROPLET PARITY MEASURED BOTH ENDS, 2026-08-23.** `C:\CryptoNova-Keepers` vs
+  `/root/keeper`: `direct_keeper.js` `de4c529f…`, `manual_rescue.js` `7c880637…`,
+  `system_keeper.js` `eb19fe2f…`, `keeper_gas_floor.js` `3bea9f93…`, `integrity_check.js`
+  `b5e738e2…`, `gas_sample_census.sh` `cf503d3e…` — **all identical. The guarded keepers
+  are what is actually running.** Every md5 in this section was RUN (32.5's lesson).
+* ✅ **DROPLET ACCESS, WRITTEN DOWN BECAUSE IT COST A ROUND TRIP:**
+  `ssh -i C:\Users\CryptoTech\.ssh\do_keeper root@167.99.0.250`. The hostname
+  `cryptonova-keeper` **does not resolve from Windows** — scp and ssh need the IP.
+* ⚠ **THE TWO CRLF PHANTOMS WERE NOT PRESENT TODAY.** 32.0 recorded
+  `archive/windows_keeper/corescue.bat` and `contracts/test/CryptoNovaCommunityWallet.sol`
+  as back; `git status --porcelain` before this session's commit showed **only** the file
+  being committed. Recorded as a MEASUREMENT, not an explanation — nothing this session
+  touched either file, and what re-flips them is still unknown.
+* ▶ **PARKED DELIBERATELY: a `.gitattributes` LF pin for the CONTRACTS repo.** It is the
+  permanent fix for those phantoms, and it is exactly what `5ef392b` did for Keepers. It
+  was NOT done here because this repo has hundreds of `.js` files and 31.0's warning about
+  renormalisation churn applies directly — **a 948-line no-op diff is where a real change
+  goes to hide.** Its own step, with its own verification.
+* ⚠ Still to delete when convenient: `C:\CryptoNova-Keepers\_to_delete\.env.backup.test`
+  (empty check-ignore probe from session 32; the folder is gitignored, so it is cosmetic).
+
+## 33.1 ⛔ ITEM 2 WAS STALE, AND IT POINTED AT THE WRONG FILE
+
+32.0 and 32.6 item 2 both say `integrity_check.js` is *"edited and scp'd but NOT
+COMMITTED."* It was committed **and** pushed before this session started — `b8962c0`,
+`2459eb5`, `455a496`, with `main` level with `origin/main`.
+
+⛔⛔ **AND THE REAL UNCOMMITTED WORK WAS SITTING BESIDE IT, UNNAMED.** The three modified
+and four untracked files 32.0 dismissed as *"already modified before this session touched
+anything"* were the **entire defect-8 gas-floor guard** — sessions 29/30/31 work, ~170
+changed lines plus the module itself, never versioned:
+
+* `direct_keeper.js` — GAS_LIMIT 15M→16.5M (30.10), floor-aware batch sizing,
+  `BatchGasHalted` parsed so a halt stops reading as a healthy heartbeat, and 30.11's
+  pre-flight cap-halving REMOVED (a pre-flight failure cannot be out of gas — nothing ran).
+* `system_keeper.js` — its normal-path `gasLimit` was **800,000, BELOW V8.50's 5M
+  `minGasPerItem`**: it could not dispatch a single item and the transaction would still
+  SUCCEED.
+* `manual_rescue.js` — same guard, plus cooldown written only for members actually reached
+  on a partial halt.
+
+⛔⛔ **`keeper_gas_floor.js` WAS UNTRACKED WHILE THREE DRIVERS `require()` IT — and the
+require is deliberately not in try/catch.** A clone of that repo, or a restore from it,
+produced three keepers that die on startup. **That, not tidiness, is why `fd42ebc` exists.**
+
+✅ Secret-scanned all seven before staging (31.3 applied forward): no key-shaped strings —
+the `0x…64` hits are a tx hash and Chainlink `topic0` constants.
+
+> **STANDING LESSON, AND IT IS THE FOURTH SITTING: VERIFY WHAT AN "OUTSTANDING" LINE POINTS
+> AT, NOT JUST WHETHER IT IS DONE.** 30.9 item 2, 31.8 item 10, 32.6 item 2, 32.6 item 10.
+> A handoff item is a claim like any other, and the ones that go stale quietly are the ones
+> written about work someone else was mid-way through.
+
+## 33.2 ⛔ ITEM 10 WAS WORSE THAN STALE — A DIVERGENT INSTRUMENT IS NOT A MISSING ONE
+
+31.8 / 32.6 item 10 say to `scp keeper_gas_floor.selftest.js` to the droplet, implying it
+is not there. **It was there, and it was a different file:**
+
+    droplet   831c9c05…   3,735 bytes    61 lines   2026-08-22 22:31Z
+    master    b28c0b1e…   8,216 bytes   117 lines   2026-08-23 02:41Z
+
+⛔ **THE DROPLET COPY IS PROVABLY THE PRE-31.2 VERSION, AND THE PROOF NEEDS NO DIFF.**
+31.2's `THE SHIPPED CONFIGURATION` block begins at master **line 73**. A 61-line file cannot
+contain it. So the droplet held exactly the selftest 31.2 condemns — the one that printed
+ALL PASS about `5M floor / cap 20 / 15M budget`, **the configuration G.4 measured FAILING on
+a real chain**, while the shipped `7.5M / cap 1 / 16.5M` had no scenario at all.
+
+✅ **RESOLVED NON-DESTRUCTIVELY.** The old copy was preserved as
+`/root/keeper/keeper_gas_floor.selftest.pre31_2.bak` BEFORE the overwrite, the committed
+master was scp'd, its md5 re-read on the droplet (`b28c0b1e…`, matching), and it RAN there:
+**ALL PASS**, including `V8.48 live >=14.67M: ONE item fits the 16.5M budget (needs 14.97M)`,
+`V8.50 G.4 13.03M … (needs 13.33M)`, both affording exactly one item, and
+`at the live p50 3.94M the same budget would afford 3 — cap 1 is a TAIL decision`.
+
+> **STANDING LESSON: "NOT COPIED YET" AND "COPIED, BUT STALE" LOOK THE SAME FROM A HANDOFF
+> AND ARE OPPOSITE PROBLEMS.** A missing instrument is silent. A divergent one ANSWERS, and
+> the answer is about a different world. **Check parity before assuming absence.**
+
+## 33.3 ⛔ 31.2's "24/24 PASS" IS 25 — AND THE MISSING ONE IS NOT RECOVERABLE
+
+The droplet run printed **25** PASS lines. 25 is also what the file produces BY
+CONSTRUCTION, which is the part that matters: **19 `ok()` call sites**, two pairs of which
+sit inside loops — lines 38/39 over the three measured estimates (×3) and lines 86/90 over
+the two real worst items (×2). **15 static + 6 + 4 = 25.**
+
+⚠ **WHETHER 31.2 MISCOUNTED OR AN ASSERTION LANDED AFTER IT WROTE THE NUMBER CANNOT BE
+DETERMINED.** The file was untracked until `fd42ebc`, so there is no history before today.
+**Do not invent a story for the missing one.** Quote 25, and quote the derivation with it.
+
+## 33.4 ⛔⛔ ITEM 7 SETTLED FROM SOURCE — `addr1` IS THE MATRIX, AND THE WORK TABLE WAS WRONG FROM 5 UP
+
+32.4 left this open: does `diag_keeper_gas_live.js` mislabel the `member` field, or is a
+matrix contract genuinely parked as a member? **It is the mislabel. No chain read was
+needed — the contract answers it.**
+
+    MatrixKeeper.sol:926   try this._doParkedRescueExternal(item.addr1, item.addr2, item.tierIndex)
+    MatrixKeeper.sol:969   function _doParkedRescueExternal(address matrix, address member, uint8 t)
+
+⛔ **`WorkItemFailed` CARRIES TWO BARE ADDRESSES AND `performUpkeep` PASSES THEM
+POSITIONALLY.** What they mean depends entirely on the workType:
+
+    PARKED_RESCUE  _doParkedRescueExternal(matrix, member, t)   addr1 MATRIX   addr2 MEMBER
+    EVICT_PARKED   _doEvictParkedExternal(matrix, member)       addr1 MATRIX   addr2 MEMBER
+    RECLAIM        _doReclaimSlotExternal(member, matB, t)      addr1 MEMBER   addr2 matB
+    GHOST          _doGhostEntryExternal(member, t)             addr1 MEMBER   addr2 unread
+    CHAIN_LINK     _doChainLinkExternal(a, b, idx)              a PAIR of matrices
+    FORCE_ROTATE   _doForceRotateExternal(matB)                 addr1 matB     addr2 unread
+    DISTRIBUTE_CW / ADVANCE_EPOCH                               addr1 CommunityWallet
+    VELOCITY / VELOCITY_GATE                                    neither is read
+
+**RECLAIM and GHOST put the member in `addr1`, which is why one fixed label looked right for
+so long.** `0xf63aDAA4…` resolving to `tiers.T1.matB` is not an anomaly — **it is the matrix,
+in the slot the tool called `member`.**
+
+⛔ **32.4 ALSO BLAMED THE WRONG TOOL.** `diag_keeper_gas_live.js` never prints the word
+`member` at all; it records only `Number(p.args[0])`, the workType. The label was
+`diag_failed_item_reason.js:101` — the tool session 31 built to settle G.4.
+
+✅ **31.4's VERDICT IS UNTOUCHED, AND THE REASON IS PRECISE.** Probe 2's replay encodes
+`(addr1, addr2, tierIndex)` in the contract's own order, so it was never affected. **The
+DISPLAY was the entire defect.**
+
+⛔⛔ **AND THE SAME FILE'S `WORK` TABLE NAMED FOUR OF TEN IDS WRONG.** Authoritative source
+`MatrixKeeper.sol:169-186`:
+
+    was   5 EVICT_PARKED · 6 VELOCITY_GATE · 7 FORCE_ROTATE · 8 ADVANCE_EPOCH · (no 9)
+    is    5 VELOCITY_GATE · 6 EVICT_PARKED · 7 DISTRIBUTE_CW · 8 FORCE_ROTATE · 9 ADVANCE_EPOCH
+
+**G.4's item was type 4, which reads the same in both tables. 31.4's type survived by LUCK,
+not because the table was right.**
+
+✅ **SWEPT RATHER THAN ASSUMED — IT WAS THE ONLY WRONG ONE.** `diag_keeper_discovery.js`,
+`testchain_keeper.js`, `test/V8_48_KeeperScan.test.js` and `test/V8_50_KeeperGas.test.js`
+all already agree with the contract. `diag_keeper_gas_live.js` stops at 6 and prints the raw
+number above that, which is honest. The Keepers repo carries no name map at all
+(`direct_keeper.js:270` logs `workType=N`). `run_keeper.js:90` has a stub with `3:"?"` —
+visibly untrustworthy rather than quietly wrong, and left alone.
+
+✅ **FIXED IN `ce3a0ec`:** corrected `WORK`, plus a new `ADDR_ROLES` table that names both
+slots per workType from the dispatch sites. `node --check` passes and the rendered table was
+printed and read back before committing.
+
+> **STANDING LESSON, AND IT IS 31.1 AGAIN: A CONSTANT'S NAME IS A CLAIM.** 30.5d taught it
+> for a selector row, 30.11 for a log line reading `OOG`, 31.1 for
+> `LIVE_WORST_COLD_RESCUE`. **This is the same failure inside the tool built to settle the
+> question the last one got wrong.**
+
+## 33.5 ✅ PHASE G's CRONTAB IS RESTORED — AND NOBODY WROTE IT DOWN
+
+    crontab -l | grep -c "^[^#]"            -> 11
+    diff <(crontab -l) /root/crontab.backup.phaseG   -> IDENTICAL
+
+29.11 recorded the live crontab **cut to 8 lines for PHASE G**, with `copay_rescue`,
+`fastlane_rescue` and `system_keeper` paused. **That state is over.** Verified against the
+backup rather than inferred from the count, because 11 could be a coincidence and IDENTICAL
+cannot.
+
+▶ **THIS CLEARS LANDMINE L4 IN `V8_50_NAMING_TABLE.md` AND THE PREREQUISITE EVENT FOR 32.6
+ITEM 9.** The Tier 1 lockfile and cron-comment renames — the free tier, zero blast radius —
+were blocked on exactly this and are now unblocked. The table's verification line already
+says what to check afterwards: **11 active lines**.
+
+⚠ **NO SESSION RECORDED THE RESTORE HAPPENING.** Three keeper jobs resumed and the handoff
+still described them as paused. When a documented pause ends, the ending is the thing to
+write down — the pause was already written.
+
+## 33.6 NEXT, IN ORDER — SUPERSEDES 32.6.
+
+1. ✅ **DONE — 32.6 ITEM 2 (33.1).** `fd42ebc` + `5ef392b`. The guard is versioned and the
+   droplet matches the master on every file.
+2. ✅ **DONE — 32.6 ITEM 10 (33.2).** Selftest replaced on the droplet, ALL PASS, old copy
+   kept as `keeper_gas_floor.selftest.pre31_2.bak`. The other half of item 10 —
+   `diag_failed_item_reason.js` being committed — was already true in `55520ac`.
+3. ✅ **DONE — 32.6 ITEM 7 (33.4).** `ce3a0ec`. **The bullet 32.4 flagged as wrong in this
+   file is now corrected at its source.**
+4. ⏳ **OPEN, DATED, AND UNMOVED: re-run the de-censoring check at ~100 unique post-16.5M
+   samples (31.6 / 32.6 item 4).** Still the only thing that could move the floor. The
+   instrument is built, tested and on the droplet: `sh /root/keeper/gas_sample_census.sh`,
+   read-only, prints its own caveat. **3 unique as of 2026-08-23, so 3-10 days out.**
+   ⚠ 32.7 corrected 31.6's count from 4 to 2 — do not restart that clock from 4.
+   ⚠ **Nothing in session 33 advanced this.** It is a waiting item, not a doing item.
+5. **STOP `keeper.log` DOUBLE-WRITING (cause found 32.7; fix still NOT applied).** `log()`
+   appends to `keeper.log` and the cron redirects stdout to the same file. Pick one — the
+   trade-off is written out in 32.7 — change it ALONE, and verify with a before/after
+   duplicate count from `gas_sample_census.sh`. ⚠ Every historical count in this document
+   was taken against the doubled log, so **date the change here when it lands.**
+   ⚠ **Do this AFTER item 4's re-run, not before** — item 4 reads the same log, and changing
+   what a line means mid-measurement is how 160 / 268 / 135 happened in the first place.
+6. **BATCH THE `:936` LOG SPLIT** (26.4) into the next RPC session.
+7. **THE NAMING CLEANUP — TIER 1 IS NOW UNBLOCKED (33.5).** `V8_50_NAMING_TABLE.md` §1:
+   lockfiles and cron comment labels, zero blast radius, and L4's blocking event has
+   happened. **Still its own session.** ⛔ Tier 2 (log filenames) remains the table's only
+   outright "do not", and item 4 above is precisely why — it reads `keeper.log` by name.
+8. **THE CONTRACTS-REPO `.gitattributes` LF PIN** (33.0). The permanent fix for the CRLF
+   phantoms, deliberately not bundled into `ce3a0ec`. Needs a controlled renormalisation and
+   its own verification pass.
+9. **PHASE 2 ONWARDS** — community deploy — only after PHASE G passes.
+10. Backlog otherwise unchanged from 27.6.
+
+---
+
+# ⬛ SESSION 32 STATE — 2026-08-23. READ AFTER SESSION 33.
 # ✅✅ **31.8 ITEM 6 IS CLOSED. THE 1.4 INTEGRITY GATE HAS RUN ON THE PRIVATE CHAIN AND PASSED**
 #     — and it passed on all three things that had to be true: it ran, it covered the whole
 #     chain, and it was shown able to FAIL on a planted positive minutes later.
@@ -6263,7 +6498,7 @@ conclusion."* Honour that — the decision in 11.4 is his and is still open.
 
 ---
 
-# ⬛ SESSION 10 STATE — 2026-08-19/20, LATEST. READ THIS FIRST, BEFORE SESSION 9.
+# ⬛ SESSION 10 STATE — 2026-08-19/20. HISTORICAL. Read after session 11; before session 9.
 
 **THE HEADLINE: THE PARKED-MEMBER BADGE WAS REACHING NOBODY — 0 OF 107 PARKED MEMBERS COULD
 SEE IT — AND ITS V8.48 FALLBACK DISAGREED WITH THE CONTRACT ON TWO OF FIVE CASES. Both fixed,
@@ -6679,7 +6914,7 @@ that checks out local `preview` and merges will make a mess.** Fix them or delet
 
 ---
 
-# ⬛ SESSION 9 STATE — 2026-08-19, LATEST. READ THIS FIRST, BEFORE SESSION 8.
+# ⬛ SESSION 9 STATE — 2026-08-19. HISTORICAL. Read after session 10; before session 8.
 
 **THE HEADLINE: PARAM 59 IS DECIDED AND LANDED (3_400 -> 5_000). THE SUITE HAS NOT BEEN RUN
 YET — that is the first thing to do. Most of this session was spent on a LIVE CUSTOMER-FACING
