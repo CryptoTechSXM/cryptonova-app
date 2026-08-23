@@ -49,8 +49,51 @@ const { ethers } = require("ethers");
 require("dotenv").config();
 
 const M = (n) => (Number(n) / 1e6).toFixed(2) + "M";
+// ⛔⛔ 2026-08-23 (session 33). THIS TABLE WAS WRONG FROM ID 5 UP AND HAD NO ID 9.
+//    Authoritative source, re-read rather than remembered: MatrixKeeper.sol:169-186.
+//        was   5 EVICT_PARKED · 6 VELOCITY_GATE · 7 FORCE_ROTATE · 8 ADVANCE_EPOCH · (no 9)
+//        is    5 VELOCITY_GATE · 6 EVICT_PARKED · 7 DISTRIBUTE_CW · 8 FORCE_ROTATE · 9 ADVANCE_EPOCH
+//    Four of the ten ids named the wrong job. G.4's item was type 4, which reads the same
+//    in both tables, so 31.4's type survived by LUCK — not because the table was right.
+//    Cross-checked against every other WORK map in the repo: diag_keeper_discovery.js,
+//    testchain_keeper.js, V8_48_KeeperScan and V8_50_KeeperGas all already agree with the
+//    contract; diag_keeper_gas_live.js stops at 6 and prints the raw number above that,
+//    which is honest. THIS FILE WAS THE ONLY ONE THAT NAMED THEM WRONG.
 const WORK = { 0: "VELOCITY", 1: "GHOST", 2: "RECLAIM", 3: "CHAIN_LINK", 4: "PARKED_RESCUE",
-               5: "EVICT_PARKED", 6: "VELOCITY_GATE", 7: "FORCE_ROTATE", 8: "ADVANCE_EPOCH" };
+               5: "VELOCITY_GATE", 6: "EVICT_PARKED", 7: "DISTRIBUTE_CW", 8: "FORCE_ROTATE",
+               9: "ADVANCE_EPOCH" };
+
+// ⛔⛔ `addr1` IS NOT ALWAYS THE MEMBER, AND PRINTING IT AS ONE COST A SESSION.
+//    WorkItemFailed carries two bare addresses; what they MEAN depends on the workType,
+//    because performUpkeep passes them POSITIONALLY into handlers whose signatures differ
+//    (dispatch MatrixKeeper.sol:891-954, signatures :965-972):
+//
+//        PARKED_RESCUE  _doParkedRescueExternal(matrix, member, t)  -> addr1 MATRIX, addr2 MEMBER
+//        EVICT_PARKED   _doEvictParkedExternal(matrix, member)      -> addr1 MATRIX, addr2 MEMBER
+//        RECLAIM        _doReclaimSlotExternal(member, matB, t)     -> addr1 MEMBER,  addr2 matB
+//        GHOST          _doGhostEntryExternal(member, t)            -> addr1 MEMBER,  addr2 unread
+//        CHAIN_LINK     _doChainLinkExternal(a, b, idx)             -> a PAIR of matrices
+//        FORCE_ROTATE   _doForceRotateExternal(matB)                -> addr1 matB,    addr2 unread
+//        DISTRIBUTE_CW / ADVANCE_EPOCH                              -> addr1 CommunityWallet
+//        VELOCITY / VELOCITY_GATE                                   -> neither address is read
+//
+//    This file printed a fixed `member = addr1`. On a PARKED_RESCUE that is the MATRIX,
+//    and it sent handoff 31.4 looking for a MetaMask smart account behind an address that
+//    is our own `tiers.T1.matB` (32.4 caught the address; this is the cause). ⚠ The replay
+//    in probe 2 was NEVER affected — it passes (addr1, addr2) straight through in the same
+//    order the contract does, so it was always correct. The DISPLAY was the whole defect.
+const ADDR_ROLES = {
+  0: ["addr1 (unread)",  "addr2 (unread)"],
+  1: ["member",          "addr2 (unread)"],
+  2: ["member",          "matB"],
+  3: ["matrix a",        "matrix b"],
+  4: ["MATRIX",          "MEMBER"],
+  5: ["addr1 (unread)",  "addr2 (unread)"],
+  6: ["MATRIX",          "MEMBER"],
+  7: ["communityWallet", "addr2 (unread)"],
+  8: ["matB",            "addr2 (unread)"],
+  9: ["communityWallet", "addr2 (unread)"],
+};
 
 // The six reasons MatrixKeeper.sol:912-923 treats as a SKIP. Anything else with a reason
 // string re-reverts the whole batch, so a SUCCESSFUL transaction cannot contain one.
@@ -98,8 +141,10 @@ async function main() {
 
   console.log(`  THE FAILED ITEM`);
   console.log(`    type      ${WORK[failed.workType] || failed.workType}   tier ${failed.tierIndex}`);
-  console.log(`    member    ${failed.addr1}`);
-  console.log(`    counter   ${failed.addr2}`);
+  // Named by what the CONTRACT does with each slot for THIS workType — see ADDR_ROLES.
+  const roles = ADDR_ROLES[failed.workType] || ["addr1", "addr2"];
+  console.log(`    ${roles[0].padEnd(9)} ${failed.addr1}`);
+  console.log(`    ${roles[1].padEnd(9)} ${failed.addr2}`);
   console.log(`    tx status ${rc.status === 1 ? "SUCCESS" : "REVERTED"}   gasUsed ${M(rc.gasUsed)}   gasLimit ${M(tx.gasLimit)}`);
   if (halted) console.log(`    halt      processed ${halted.processed} of ${halted.total}, ${M(halted.gasRemaining)} remaining`);
 
