@@ -21,6 +21,11 @@ owner-set, and the session that earned it got five things wrong by ignoring what
 # ✅ **PHASE G's CRONTAB IS RESTORED — 11 LINES, VERIFIED IDENTICAL TO THE BACKUP.**
 #     32.6 item 9's blocking EVENT has happened and no session recorded it (33.5).
 # ⛔ 31.2's "24/24 PASS" IS **25**. Derived from the file, not observed once (33.3).
+# ⛔⛔ **THE VELOCITY GATE BINDS MEMBERS AND NOT BIGFILL (33.8)** — 78 wallets entered T4 in 24h
+#     while T4 read AUTO-PAUSED. Today it throttles ~12 organic leaders; at the community
+#     deploy it binds everyone. **Settle `velocityThreshold` BEFORE PHASE 2.**
+# ⛔ I CORRECTED MYSELF INSIDE THIS SESSION: a 1-hour window cannot answer "did anybody climb
+#     today", and I read it as if it could (33.8, last block). The 24h window overturned it.
 
 ## ▶ SESSION 34 — READ IN THIS ORDER.
 
@@ -35,8 +40,14 @@ and verify what it POINTS AT, not just whether it is done.
 
 **3. 33.5 — the crontab is restored.** Tier 1 of the naming table is unblocked.
 
-**4. 33.6 — what is next.** The de-censoring re-run (32.6 item 4) is still the only dated
-item and is still 3-10 days out from 2026-08-23. Nothing this session moved that clock.
+**4. 33.8 — THE VELOCITY GATE, and it is the one with real consequences.** It binds ONLY the
+automatic upgrade at cycle-out, so it throttles the ~12 organic leaders while bigfill's
+`manualUpgrade` sails past. **At the community deploy the population turns all-organic and it
+binds everyone — and no PHASE G step would catch it.** 33.7 is the live-chain reality it sits
+in, including a 🚨 flag that is not a stall.
+
+**5. 33.6 — what is next.** The de-censoring re-run (32.6 item 4) is still the only DATED item
+and is still 3-10 days out from 2026-08-23. Nothing this session moved that clock.
 
 ## 33.0 STATE
 
@@ -210,6 +221,98 @@ says what to check afterwards: **11 active lines**.
 still described them as paused. When a documented pause ends, the ending is the thing to
 write down — the pause was already written.
 
+## 33.7 ⛔ LIVE V8.48, LOOKED AT PROPERLY — THE QUEUE GROWS WHILE THE FUND FILLS
+
+Owner reported wallets frozen 3+ days and the higher tiers not growing. Measured rather than
+explained, 2026-08-23 20:00-21:15Z.
+
+✅ **NOT A KEEPER OUTAGE.** `copay_rescue` and `fastlane_rescue` both ran within two minutes
+of being asked; the restored 11-line crontab has both on `*/10`.
+
+    copay:    3 rescued ($8.52 advanced), 20 failed, 286 still in grace | SF $1674.96 -> $1671.70
+    fastlane: 0 fast-laned, 275 need SF help, 306 parked scanned
+    failures: execution reverted: "SF: insolvency floor"
+
+⛔ **THE FUND IS REFUSING ON POLICY, NOT ON MONEY.** One day's `copay.log` carries **2,389**
+`SF: insolvency floor` refusals — about 20 per ten-minute run — while SF spendable went
+**$866.03 -> $1,671.70 (+$806)** and parked went **223 -> 306 (+83)**. Liquidity is not the
+constraint. **Live runs `insolvencyFloorBps` at 3400 while source ships 5000**, and V8.49's
+stricter Policy B is not deployed — so the floor doing this is the LOOSER one.
+
+⚠ **"FROZEN FOR 3+ DAYS" IS THE GRACE CLOCK, NOT A STUCK JOB.** A refused member sits parked
+and visible for the full `evictionGracePeriod`. That is the owner's own three-way — invite,
+self-rescue, or be evicted — working as decided (18.x, owner 2026-08-20).
+
+⛔⛔ **AND A TOOL NEARLY FOOLED ME: `diag_frozen_matb.js`'s 🚨 FROZEN FLAG IS NOT A STALL.**
+It flagged T1.1 and T2.1 MatB as *"full and stuck (nextSlot 128 > 127)"* at 20:34Z. But
+`integrity.log` had T1.1 MatB at **rot=2302** at 20:00Z and the flagged read shows **2332** —
+**+30 rotations in 34 minutes.** It is cycling hard and merely sitting full between
+rotations. **The flag tests occupancy at an instant; only the rotation COUNTER over time
+separates full from stuck.** A healthy fast-churning MatB and a genuinely wedged one print
+the identical 🚨 line — 32.2's question, asked of a different tool, with the same answer.
+⚠ Its `F8V8: not keeper` revert is the script calling from the DEPLOYER, not the authorised
+matrixKeeper. That says the script is unauthorised; it says nothing about force-rotation.
+
+⚠ **`frozen_matb_keeper` HAS NOT RUN SINCE 2026-08-13 AND HAS NO CRON LINE** — absent from
+the restored crontab, so absent from `crontab.backup.phaseG` too. Not a PHASE G pause; simply
+off for ten days. **And nothing broke**: rotation continues without it. That is evidence FOR
+AUTOMATION_AUDIT open item 1's suspicion that it is redundant with on-chain
+`WORK_FORCE_ROTATE`, and that **the right answer is DELETION rather than renaming.** Settle it
+on the rotation counter, never on the 🚨 flag.
+
+## 33.8 ⛔⛔ THE VELOCITY GATE — A FEEDBACK LOOP THAT BINDS MEMBERS AND NOT BIGFILL
+
+The frontend showed T4/T5/T6+ as **Auto-Paused**. That pill is NOT the Whale Gate.
+`index.html` (~:4160-4193) renders it from `TierRouter.getVelocityGates()` =
+`tierVelocityGreen[]`, which **MatrixKeeper writes**.
+
+    MatrixKeeper._doVelocityCheck():  green = getTierEntryCount(t, now - velocityWindow) >= velocityThreshold
+    shipped defaults:                 velocityWindow 3600s   velocityThreshold 3
+    TierRouter:1398:                  the AUTO upgrade at cycle-out requires tierVelocityGreen[nextIndex]
+
+⛔ **THE LOOP: few entries -> gate closes -> auto-upgrades INTO the tier are blocked -> fewer
+entries -> gate stays closed.** A slow tier is made slower by the thing that measured it as
+slow. The check draws **no distinction between "this tier is slowing down" and "this tier has
+never been reached"** — T6-T10 have zero members ever and are auto-paused on that basis, which
+is how `highestOpenTier` reads 2 or 3.
+
+✅ **THE ESCAPE HATCH FIRES — OBSERVED, NOT INFERRED.** `TierRouter:1180` force-opens the next
+tier's gate on a MatB crossing (V8.15, *"MatB crossing IS the gate-open signal"*). At 21:13Z
+**T3 read OPEN with 1 entry against a threshold of 3** — `_doVelocityCheck` cannot produce
+that, so the crossing-triggered open HAD fired and the check (18m earlier) had not yet
+re-closed it. `highestOpenTier` moved **2 -> 3 in the 16 minutes between two runs.**
+**The hatch works; the gate flaps.**
+
+⛔⛔ **THE GATE BINDS ONLY THE PATH REAL MEMBERS USE.** `TierRouter._manualUpgrade` never reads
+`tierVelocityGreen`; its only test is `_upgradeEligible` = *(a completed cycle in the tier
+below) OR (the Whale Gate) OR (a seat in the tier-below MatB)*. bigfill upgrades through
+`manualUpgrade`. **So 78 members entered T4 in 24h while T4 read AUTO-PAUSED.**
+▶ **Owner, 2026-08-23: roughly 10-12 of the live wallets are organic leaders.** Those dozen
+are the only ones the gate is currently throttling — which is exactly why nothing looked
+broken. **At community launch the population becomes all-organic and the gate goes from
+binding ~12 wallets to binding everyone.** ⛔ **This is a PHASE 2 / V8.50-migration risk, and
+nothing in G.0-G.8 would catch it: the private chain is bigfill-driven too and sails past the
+gate identically.** Settle `velocityThreshold` / `velocityWindow`
+(`MatrixKeeper.setVelocityThreshold` / `setVelocityWindow`, both `onlyOwnerOrGovernance`)
+BEFORE the community deploy. The trade — against the deflation throttle the gate exists for —
+is the owner's.
+
+⛔ **A CORRECTION I MADE TO MYSELF INSIDE ONE SESSION, RECORDED BECAUSE THE MISTAKE IS THE
+LESSON.** From a 1-hour window plus a MatB occupancy snapshot I concluded T4/T5 were "starved
+at both ends". The 24h window refutes it: **T1 132 · T2 126 · T3 61 · T4 78 · T5 15 · T6-T10
+zero.** T4 took MORE entries than T3, and T5's 15 entries against a MatA occupancy of 14 mean
+**T5 is brand new, not stalled.** **A one-hour window cannot answer "did anybody climb today",
+and I read it as if it could.** Where the ladder genuinely stops is **T6, and the gate is
+irrelevant there** — T6 draws from T5's MatB, which has 0 rotations because T5.1 MatA is
+~14/127 and must fill before anyone cycles out. Opening that gate would promote nobody.
+
+✅ **NEW INSTRUMENT, COMMITTED: `scripts/diag_velocity_gate.js`** — read-only, no signer,
+refuses to guess a deployment. Per tier: deployed, gate state, entries-in-window vs threshold,
+and whether the tier below has ever crossed. `WINDOW_SECS=86400` adds the WIDE window that
+answers "where did the ladder stop today", **because the gate's own window provably cannot.**
+Self-tested against a stubbed planted positive before it touched the chain — 11/11, and the
+self-test caught an error in one of its own regexes.
+
 ## 33.6 NEXT, IN ORDER — SUPERSEDES 32.6.
 
 1. ✅ **DONE — 32.6 ITEM 2 (33.1).** `fd42ebc` + `5ef392b`. The guard is versioned and the
@@ -219,29 +322,40 @@ write down — the pause was already written.
    `diag_failed_item_reason.js` being committed — was already true in `55520ac`.
 3. ✅ **DONE — 32.6 ITEM 7 (33.4).** `ce3a0ec`. **The bullet 32.4 flagged as wrong in this
    file is now corrected at its source.**
-4. ⏳ **OPEN, DATED, AND UNMOVED: re-run the de-censoring check at ~100 unique post-16.5M
+4. ⛔⛔ **NEW, AND THE DEADLINE IS AN EVENT NOT A DATE: SETTLE `velocityThreshold` BEFORE THE
+   COMMUNITY DEPLOY (33.8).** The velocity gate binds only the AUTOMATIC upgrade at cycle-out,
+   so today it throttles ~12 organic leaders while bigfill's `manualUpgrade` sails past it.
+   **At migration the population becomes all-organic and it binds everyone.** No PHASE G step
+   would catch this — the private chain is bigfill-driven too and sails past it identically.
+   Owner decides the dial (it trades against the deflation throttle); then pin it with a test.
+5. **MEASURE WHETHER THE FLOOR IS STARVING T4's MatB (33.7 + 33.8). ⚠ UNVERIFIED HYPOTHESIS.**
+   T4.1 MatA is full at 127/127 with **33 parked**; rescued, those would populate T4's MatB —
+   the source pool T5 draws from (17). But the refusals actually observed in `copay.log` were
+   **T2**, not T4. **One grep of `copay.log` by tier settles it. Do not quote the chain
+   T4-floor -> T4 MatB -> T5 until that grep exists.**
+6. ⏳ **OPEN, DATED, AND UNMOVED: re-run the de-censoring check at ~100 unique post-16.5M
    samples (31.6 / 32.6 item 4).** Still the only thing that could move the floor. The
    instrument is built, tested and on the droplet: `sh /root/keeper/gas_sample_census.sh`,
    read-only, prints its own caveat. **3 unique as of 2026-08-23, so 3-10 days out.**
    ⚠ 32.7 corrected 31.6's count from 4 to 2 — do not restart that clock from 4.
    ⚠ **Nothing in session 33 advanced this.** It is a waiting item, not a doing item.
-5. **STOP `keeper.log` DOUBLE-WRITING (cause found 32.7; fix still NOT applied).** `log()`
+7. **STOP `keeper.log` DOUBLE-WRITING (cause found 32.7; fix still NOT applied).** `log()`
    appends to `keeper.log` and the cron redirects stdout to the same file. Pick one — the
    trade-off is written out in 32.7 — change it ALONE, and verify with a before/after
    duplicate count from `gas_sample_census.sh`. ⚠ Every historical count in this document
    was taken against the doubled log, so **date the change here when it lands.**
    ⚠ **Do this AFTER item 4's re-run, not before** — item 4 reads the same log, and changing
    what a line means mid-measurement is how 160 / 268 / 135 happened in the first place.
-6. **BATCH THE `:936` LOG SPLIT** (26.4) into the next RPC session.
-7. **THE NAMING CLEANUP — TIER 1 IS NOW UNBLOCKED (33.5).** `V8_50_NAMING_TABLE.md` §1:
+8. **BATCH THE `:936` LOG SPLIT** (26.4) into the next RPC session.
+9. **THE NAMING CLEANUP — TIER 1 IS NOW UNBLOCKED (33.5).** `V8_50_NAMING_TABLE.md` §1:
    lockfiles and cron comment labels, zero blast radius, and L4's blocking event has
    happened. **Still its own session.** ⛔ Tier 2 (log filenames) remains the table's only
    outright "do not", and item 4 above is precisely why — it reads `keeper.log` by name.
-8. **THE CONTRACTS-REPO `.gitattributes` LF PIN** (33.0). The permanent fix for the CRLF
+10. **THE CONTRACTS-REPO `.gitattributes` LF PIN** (33.0). The permanent fix for the CRLF
    phantoms, deliberately not bundled into `ce3a0ec`. Needs a controlled renormalisation and
    its own verification pass.
-9. **PHASE 2 ONWARDS** — community deploy — only after PHASE G passes.
-10. Backlog otherwise unchanged from 27.6.
+11. **PHASE 2 ONWARDS** — community deploy — only after PHASE G passes.
+12. Backlog otherwise unchanged from 27.6.
 
 ---
 
