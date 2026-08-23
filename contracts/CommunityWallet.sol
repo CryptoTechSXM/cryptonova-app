@@ -35,7 +35,7 @@ pragma solidity ^0.8.24;
  *  TierRouter.register()       → if globalJoined count <= 1000: enroll(member)
  *  FigureEightMatrixV8         → deposit(amount) from _forwardToCommunityPool
  *  StabilityFund.receiveLayer  → deposit(amount) from 1% L1 carve
- *  MatrixKeeper.checkUpkeep    → add distributeReady() check for Chainlink
+ *  MatrixKeeper.checkUpkeep    → add distributeReady() to the keeper work queue
  */
 
 import "@openzeppelin/contracts/access/Ownable2Step.sol";
@@ -269,7 +269,7 @@ contract CommunityWallet is Ownable2Step, AccessControl {
      * @notice Execute a monthly distribution.
      *
      *         Callable by anyone on or after distributionDayOfMonth, once per month.
-     *         Designed to be called by Chainlink Automation — add
+     *         Designed to be driven by our own keeper's work queue — add
      *         `distributeReady()` to MatrixKeeper's checkUpkeep condition.
      *
      *         Steps:
@@ -400,7 +400,7 @@ contract CommunityWallet is Ownable2Step, AccessControl {
     }
 
     // =========================================================================
-    // Chainlink Automation helper
+    // Keeper work-queue helper
     // =========================================================================
 
     /// @notice Returns true when distribute() is ready to fire.

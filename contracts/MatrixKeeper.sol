@@ -6,7 +6,11 @@ import "./MatrixKeeperLib.sol";
 
 /**
  * @title  MatrixKeeper
- * @notice Chainlink Automation-compatible keeper for the V8.1 Elevator system.
+ * @notice Work-queue keeper for the V8.1 Elevator system. It implements the
+ *         AutomationCompatibleInterface convention (checkUpkeep / performUpkeep),
+ *         but NOTHING FROM AN AUTOMATION VENDOR CALLS IT. Our own DigitalOcean
+ *         cron driver does — see the DRIVER note below. (Corrected 2026-08-23;
+ *         handoff 30.5e settled that no vendor upkeep has ever driven this.)
  *
  *         RESPONSIBILITIES
  *         ----------------
@@ -43,8 +47,12 @@ import "./MatrixKeeperLib.sol";
  *
  *         AUTOMATION MODEL
  *         ----------------
- *         Chainlink Automation calls checkUpkeep() each block. If it returns
- *         true, Automation calls performUpkeep(performData) in the same block.
+ *         THE DRIVER IS OURS. `direct_keeper.js` on the DigitalOcean droplet runs
+ *         every 10 minutes (crontab :05), calls checkUpkeep() off-chain, and if it
+ *         returns true sends performUpkeep(performData) itself. NOT each block, and
+ *         not by any vendor. The function NAMES follow the AutomationCompatible
+ *         convention and are ABI our driver and frontend speak — do not rename
+ *         them without a redeploy plus a coordinated keeper/frontend update.
  *
  *         checkUpkeep encodes a WorkItem[] array in performData:
  *           - Each item has a type (VELOCITY_CHECK, GHOST_ENTRY, RECLAIM_SLOT)
@@ -54,8 +62,14 @@ import "./MatrixKeeperLib.sol";
  *
  *         GAS LIMIT
  *         ---------
- *         Set Chainlink upkeep gas limit to 3,000,000. Each ghost entry costs
- *         ~150k gas; each velocity check is ~30k; each reclaim is ~50k.
+ *         THE 3,000,000 FIGURE THAT STOOD HERE UNTIL 2026-08-23 WAS DANGEROUSLY
+ *         STALE. The keeper's shipped budget is GAS_LIMIT 16,500,000 with
+ *         minGasPerItem 7,500,000 and maxItemsPerUpkeep 1 (handoff 30.10a/30.10b).
+ *         A single PARKED_RESCUE has been measured at 13.03M on the private chain
+ *         and >=14.67M on live. The figures below are the CHEAP items only: each
+ *         ghost entry ~150k gas; each velocity check ~30k; each reclaim ~50k.
+ *         Never size a budget from those three — handoff 30.12 proved no cheap
+ *         item can exist on this chain in the rescue path.
  *         The keeper batches at most MAX_ITEMS_PER_UPKEEP items to avoid
  *         exceeding the gas limit.
  */
@@ -451,7 +465,8 @@ contract MatrixKeeper is Ownable {
     address public governance;
 
     /// @notice V8.46 item 1: allowlist of EOAs permitted to drive performUpkeep
-    ///         (the DigitalOcean keeper wallets; Chainlink forwarder if kept).
+    ///         (the DigitalOcean keeper wallets. An automation-vendor forwarder was
+    ///         once contemplated here; none has ever been registered — 30.5e.)
     ///         owner() and governance are always allowed. Closes the open-door hole
     ///         where anyone could hand-craft a WorkItem[] and drive the whole queue.
     mapping(address => bool) public upkeepCaller;
@@ -799,7 +814,7 @@ contract MatrixKeeper is Ownable {
      *
      *         This function's only job now is to snapshot the storage the scan
      *         reads and hand it over. That snapshot is not free, but checkUpkeep is
-     *         simulated OFF-CHAIN by Chainlink — no member ever pays for it — and
+     *         simulated OFF-CHAIN by our own driver — no member ever pays for it — and
      *         it buys back the headroom item 12 needs.
      *
      *         lastGhostTime crosses as a storage reference rather than a copy: it is

@@ -282,6 +282,54 @@ it returned 14 raw / 7 unique, the correct percentiles, and the `>= 15.00M` dete
 > quoted as a basis anywhere in this document, the thing that produces it belongs in the
 > repo, not in a code fence.**
 
+## 32.8 ▶ THE NAMING CLEANUP (30.9) IS SCOPED INTO A TABLE — `V8_50_NAMING_TABLE.md`
+
+Owner asked for it by its purpose: *"naming them to reflect what we do — or what they do!"*
+30.9 said a table must be agreed BEFORE a file is touched. **That table now exists** in the
+contracts repo, five tiers ordered by risk, built on `AUTOMATION_AUDIT.md`'s own A/B/C/D
+verdicts — because the verdict IS the action. Convention proposed: **`verb_object`**
+(`rescue_parked_copay`, not `copay_rescue`). "Keeper" names a ROLE, not an action, and that is
+what let a vendor's name sit unexamined for months.
+
+⛔ **FOUR LANDMINES ARE AT THE TOP OF THAT FILE AND MUST BE READ BEFORE RENAMING ANYTHING.**
+Two are new to it: **an event's name IS its topic0** (`ChainLinked` — any log scanner keyed to
+it goes silent QUIETLY, returning zero rather than erroring), and **the LIVE crontab is cut to
+8 lines for PHASE G** (29.11), so a cron rename applied now is UNDONE by the
+`/root/crontab.backup.phaseG` restore.
+
+⛔ **I RECOMMEND NOT RENAMING THE LOG FILES AT ALL, AND THAT IS THE TABLE'S ONLY "DO NOT".**
+`keeper.log` is quoted by name in every gas figure in this document, in
+`gas_sample_census.sh`, and in the droplet's logrotate config — and 31.5's planted positive
+depended on that rotation. 31.6's dated re-run reads it in days. The naming win is small;
+quietly breaking the historical record is not.
+
+## 32.8a ✅ DONE THIS SESSION — TIER 4, AND ONE ITEM THAT WAS ALREADY CLOSED
+
+✅ **30.9 ITEM 2 IS ALREADY DONE. CHECKED, NOT ASSUMED.** CLAUDE.md's selector row was
+corrected on **2026-08-22** — `0xcef6d209` reads `redeemDelegations` on MetaMask's
+DelegationManager, with the old label kept beside it as the record of the error. 30.9's "fix
+this FIRST" is stale. **That is the third stale "still outstanding" line found in two
+sessions** (31.8 item 10, 30.9 item 2): when a handoff says something is outstanding, verify
+it before spending a step on it.
+
+✅ **THE CONTRACT COMMENTS ARE CORRECTED — COMMENT LINES ONLY, MECHANICALLY VERIFIED.**
+`MatrixKeeper.sol` :9 :46 :57 :454 :802 and `CommunityWallet.sol` :38 :272 :403.
+`git diff -U0 | grep` for any changed line that is not a comment returns **EMPTY**.
+
+⛔⛔ **THE ONE THAT MATTERED WAS NOT A NAMING PROBLEM.** `MatrixKeeper.sol:57` read *"Set
+Chainlink upkeep gas limit to 3,000,000"* in a contract whose measured worst single item is
+**13.03M** private and **>=14.67M** live, against a shipped budget of 16.5M. **A stale number
+in a comment is a trap for whoever sizes from it next** — and it sat one line above three
+per-item figures (~150k / ~30k / ~50k) that make 3M look reasonable. The replacement states
+the shipped configuration, both measured worst items, and that 30.12 proved no cheap item
+exists in the rescue path.
+
+⚠ **NOT DONE, DELIBERATELY:** every cron/lockfile/script rename (blocked on the PHASE G
+crontab restore), the `frozen_matb_keeper` redundancy question (it may want DELETING rather
+than renaming — audit open item 1), and all `ChainLink` identifiers. **V8.50 is a fresh deploy
+with no proxy machinery, so the ABI subset of Tier 5 has its cheapest moment at the V8.50
+migration and never again.**
+
 ## 32.6 NEXT, IN ORDER — SUPERSEDES 31.8.
 
 1. ✅ **DONE — 31.8 ITEM 6, THE 1.4 INTEGRITY GATE, IS CLOSED (32.1/32.2/32.3).** It ran, its
@@ -310,7 +358,10 @@ it returned 14 raw / 7 unique, the correct percentiles, and the `>= 15.00M` dete
    matrix contract is genuinely parked as a member. Cheap, and it corrects a bullet that is
    currently wrong in this file.
 8. **PHASE 2 ONWARDS** — community deploy — only after PHASE G passes.
-9. **THE NAMING CLEANUP (30.9)** is still owed its own session.
+9. **THE NAMING CLEANUP — NOW SCOPED: `V8_50_NAMING_TABLE.md` (32.8).** Tier 4 is DONE
+   (32.8a). The rest wants its own session, and its first prerequisite is not a decision
+   but an EVENT: **PHASE G's crontab must be restored and verified at 11 lines before any
+   cron rename is worth typing.**
 10. ⚠ **31.8 ITEM 10 IS HALF STALE — CHECKED, NOT ASSUMED.**
    `scripts/diag_failed_item_reason.js` **IS COMMITTED** (`55520ac`, "Session 31: G.4's
    WorkItemFailed WAS out of gas"); 31.8 was written before that commit landed and never
