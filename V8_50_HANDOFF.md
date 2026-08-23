@@ -17,6 +17,8 @@ owner-set, and the session that earned it got five things wrong by ignoring what
 # ⛔⛔ THE GATE COULD HAVE PASSED WHILE CHECKING A FRACTION OF THE CHAIN. IT HAD A SILENT
 #     COVERAGE HOLE, AND ON THE **LIVE** DEPLOYMENT THAT HOLE COVERED FOUR POPULATED PAIRS.
 # ⛔ 31.4's CLOSING BULLET IS WRONG: THE `member` IN G.4's FAILED ITEM IS `tiers.T1.matB`.
+# ✅ 31.7 IS SETTLED (32.7): THE SAMPLE COUNT IS **135**, NOT 160 AND NOT 268 — EVERY LOG
+#     LINE IS WRITTEN TWICE, AND 30.10's TAIL NUMERATOR OF 5 MATCHES EXACTLY. `MAX` STILL 14.67M.
 # ⛔ I PUBLISHED A CHECKSUM I NEVER RAN (32.5). ON THE FIRST STEP. SEE IT BEFORE YOU TRUST A
 #     NUMBER IN THIS SECTION.
 
@@ -33,7 +35,12 @@ V8.44 deployment, fired three detectors at once. That is what made 32.1's OK rea
 **3. 32.4 — a correction to 31.4.** The `member` address in G.4's `WorkItemFailed` is our own
 T1 MatB matrix contract. 31.4's MetaMask smart-account reading of it is unsupported.
 
-**4. 32.6 — what is next.** 31.8 items 4, 5, 7, 9, 10 remain, plus one new item from 32.4.
+**4. 32.7 — the sample count is 135, and 30.10's tail numerator was right all along.**
+Quote 135 and a 3.7% tail rate. It also halves 31.6's sample count from 4 to 2, so do not
+restart the de-censoring clock from 4.
+
+**5. 32.6 — what is next.** The de-censoring re-run is dated and now has a tested
+instrument; two new items come from 32.4 and 32.7.
 
 ## 32.0 STATE
 
@@ -198,6 +205,83 @@ CHASING A MISMATCH THAT MEANT NOTHING** — or, worse, a coincidental match woul
 "confirmed" a bad file. Every other number in this section was run; this one is flagged
 because the difference is not visible from the outside.
 
+## 32.7 ✅ 31.7 IS SETTLED, AND IT IS A DENOMINATOR ERROR — THE TRUE COUNT IS **135**
+
+**EVERY `actual=` LINE IN `keeper.log` IS WRITTEN TWICE.** Measured across all eight files,
+2026-08-23, and it is universal rather than selective:
+
+    raw 270 / unique 135      every file exactly 2.0x
+    135 distinct line(s) appear 2 time(s)      <- the whole histogram, one row
+    n 135   min 1.07   p50 4.15   p90 7.06   MAX 14.67
+
+✅ **THE LOAD-BEARING NUMBER SURVIVES THE RECOUNT: `MAX` IS STILL 14.67M.** Every gas
+decision resting on it stands.
+
+✅✅ **AND THE RECONCILIATION IS BETTER THAN "ONE OF THEM DE-DUPLICATES".** 30.10 reported
+*"~3% of rescues land above 14.4M (5 of 160)"*. This census returns **exactly 5** above
+14.4M on the deduplicated population. **The NUMERATOR matches to the event; only the
+DENOMINATOR disagrees.** So 30.10 was reading the same events and counted the population
+wrong — it is one error, not two populations.
+
+⛔ **CONSEQUENCE: EVERY RATE DERIVED FROM 160 IS UNDERSTATED BY ~19% (160/135 = 1.185).**
+The tail rate is **3.7% (5 of 135)**, not 3%.
+
+⛔⛔ **AND IT CORRECTS 31.6 TWICE OVER.** That section reports today's dearest as
+`4.31 · 4.31 · 7.06 · 7.06` and reads it as **four samples**. Those are two distinct values
+each written twice — **it was 2 samples, not 4** (3 as of 12:37Z). At the corrected 3.7%
+tail rate the expected number of tail events in 2 draws is **0.07**. 31.6 called itself
+unanswerable at 0.12 expected; the true figure is nearly half that. **The de-censoring check
+is emptier than the section admitting it was empty.** The ~100-sample target now implies
+~3.7 expected tail events, which IS readable — the target stands, the timeline stands.
+
+⚠ **WHERE 30.10's 160 CAME FROM IS STILL UNKNOWN, AND IT IS LEFT OPEN.** 135 distinct lines
+cannot be filtered UP to 160. A different pattern, a different file set, or a count of
+rescues rather than log lines are all possible and none was measured. **135 has an
+instrument behind it and 160 does not** — that asymmetry, not a story about where 160 came
+from, is the finding.
+
+✅✅ **THE DUPLICATION IS EXPLAINED, AND IT IS THE HARMLESS ONE OF THE TWO POSSIBILITIES.**
+There is exactly ONE `Gas/item:` call site (`direct_keeper.js:308`). The doubling is in the
+plumbing, not the work:
+
+    direct_keeper.js:38   const LOG_FILE = path.join(__dirname, "keeper.log");
+    direct_keeper.js:79   console.log(line);
+    direct_keeper.js:80   fs.appendFileSync(LOG_FILE, line + "\n");
+    crontab:29            node direct_keeper.js >> /root/keeper/keeper.log 2>&1
+
+**`log()` writes the line to `keeper.log` itself, and the cron redirects stdout to the SAME
+file.** Every line lands twice, universally, exactly 2.0x — which is precisely the histogram.
+✅ **NO WORK IS BEING DONE TWICE.** The question worth asking (a second call site would have
+meant double rescues) has the reassuring answer. It is a logging artefact that corrupted
+three sessions' worth of counts — which is its own argument for fixing it.
+
+⚠ **THE FIX IS A CHOICE, NOT A ONE-LINER, AND IT IS DELIBERATELY NOT MADE HERE.** Dropping
+`appendFileSync` leaves the cron redirect, which is strictly MORE coverage (it also captures
+stderr and crash output that `log()` never sees) but means a manual `node direct_keeper.js`
+no longer writes to the log — arguably correct. Dropping the redirect keeps manual runs
+logging but loses crash capture. **This is a live member-facing engine; make the change on
+its own, with a before/after duplicate count as the check.**
+
+✅ **BLAST RADIUS CHECKED, AND IT IS ONE FILE.** Every script that `appendFileSync`s a log
+was cross-referenced against the cron redirects: `direct_keeper.js` is the ONLY one whose
+own log file and cron redirect target the same path. Two near-misses worth knowing:
+`frozen_matb_keeper.js` writes to `/root/frozen_matb.log` (one level UP, outside
+`/root/keeper`) while its cron redirects to `/root/keeper/frozen_matb.log` — two different
+files, one of which nobody reads; `system_keeper.js` defaults to `/root/logs/keeper.log`
+against a cron redirect to `health.log`, same shape. Neither duplicates; both mean a log
+somebody may have looked for is not where they looked.
+
+✅ **THE INSTRUMENT IS NOW A COMMITTED FILE: `gas_sample_census.sh`** (Keepers repo, scp'd to
+`/root/keeper`). It was **self-tested against a planted positive before it touched real
+data** — a 7-line fixture, each line written twice, carrying a deliberate 15.20M tail event;
+it returned 14 raw / 7 unique, the correct percentiles, and the `>= 15.00M` detector fired.
+
+> **STANDING LESSON: A ONE-LINER RETYPED FROM A HANDOFF IS NOT AN INSTRUMENT.** This
+> extraction gave three different answers in three sessions (160, 268, 270/135) and broke
+> twice in session 32 alone on shell quoting before it was made a file. **If a figure is
+> quoted as a basis anywhere in this document, the thing that produces it belongs in the
+> repo, not in a code fence.**
+
 ## 32.6 NEXT, IN ORDER — SUPERSEDES 31.8.
 
 1. ✅ **DONE — 31.8 ITEM 6, THE 1.4 INTEGRITY GATE, IS CLOSED (32.1/32.2/32.3).** It ran, its
@@ -207,22 +291,32 @@ because the difference is not visible from the outside.
    in a repo that already had three modified and four untracked files before this session.
    **Name the paths explicitly — 31.3's `.gitignore` lesson applies to `C:\CryptoNova-Keepers`
    too, and that repo has NOT been audited for the same hole.** Check `.env*` there first.
-3. ⏳ **OPEN, DATED: re-run the de-censoring check at ~100 post-16.5M samples (31.6).** Still
-   the only thing that could still move the floor. Roughly 3-10 days from 2026-08-23.
-4. ⏳ **OPEN, CHEAP: settle the 160-vs-268 sample count (31.7)** before quoting either figure.
-5. **BATCH THE `:936` LOG SPLIT** (26.4) into the next RPC session.
-6. **NEW — SETTLE WHAT THE `member` FIELD HOLDS (32.4).** Read the work item behind
+3. ✅ **DONE — 31.8 ITEM 5 / 31.7 IS SETTLED (32.7). THE COUNT IS 135, AND IT IS A
+   DENOMINATOR ERROR.** Quote **135**, and the tail rate **3.7%**, never 160 or 268.
+4. ⏳ **OPEN, DATED: re-run the de-censoring check at ~100 post-16.5M samples (31.6).** Still
+   the only thing that could still move the floor. **The instrument is built and tested —
+   `sh /root/keeper/gas_sample_census.sh`, read-only, and it prints its own caveat.** Today
+   stands at **3 unique** post-16.5M samples, so roughly 3-10 days from 2026-08-23.
+   ⚠ 32.7 corrected 31.6's sample count from 4 to 2 — do not restart that clock from 4.
+5. **NEW — STOP `keeper.log` DOUBLE-WRITING (cause found, 32.7; fix NOT applied).**
+   `log()` appends to `keeper.log` and the cron redirects stdout to the same file. Pick one
+   — the trade-off is written out in 32.7 — change it alone, and verify with a before/after
+   duplicate count from `gas_sample_census.sh`. ⚠ **Every historical count in this document
+   was taken against the doubled log**; the fix changes what future counts mean, so date the
+   change in this file when it lands.
+6. **BATCH THE `:936` LOG SPLIT** (26.4) into the next RPC session.
+7. **SETTLE WHAT THE `member` FIELD HOLDS (32.4).** Read the work item behind
    `0x484727ca…` and determine whether `diag_keeper_gas_live.js` mislabels the field or a
    matrix contract is genuinely parked as a member. Cheap, and it corrects a bullet that is
    currently wrong in this file.
-7. **PHASE 2 ONWARDS** — community deploy — only after PHASE G passes.
-8. **THE NAMING CLEANUP (30.9)** is still owed its own session.
-9. ⚠ **31.8 ITEM 10 IS HALF STALE — CHECKED, NOT ASSUMED.**
+8. **PHASE 2 ONWARDS** — community deploy — only after PHASE G passes.
+9. **THE NAMING CLEANUP (30.9)** is still owed its own session.
+10. ⚠ **31.8 ITEM 10 IS HALF STALE — CHECKED, NOT ASSUMED.**
    `scripts/diag_failed_item_reason.js` **IS COMMITTED** (`55520ac`, "Session 31: G.4's
    WorkItemFailed WAS out of gas"); 31.8 was written before that commit landed and never
    updated. Only the other half stands: **`scp keeper_gas_floor.selftest.js` to the
    droplet** (31.2). A "not yet committed" line in a handoff is a claim like any other.
-10. Backlog otherwise unchanged from 27.6.
+11. Backlog otherwise unchanged from 27.6.
 
 ---
 
