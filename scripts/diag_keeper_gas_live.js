@@ -5,7 +5,9 @@
 // Every gas figure V8.50 has is MATRIX_SIZE 7 (V8_50_KeeperGas.test.js: SF-funded rescue
 // 1.49M median, 1.76M max). LIVE IS 127. The ~2.6M-per-item figure the deploy gate tests
 // against is an ESTIMATE carried forward from V8.49, taken before items A and E1 existed,
-// so it describes a population that no longer exists. `minGasPerItem` is 5,000,000.
+// so it describes a population that no longer exists. `minGasPerItem` is read OFF THE
+// CHAIN at :213 and is never assumed here — it shipped at 5,000,000 and moved to
+// 7,500,000 on 2026-08-22 after this tool's own measurement (61 rescues, max 4.58M).
 // Nothing in V8.50 has ever run at 127 on a real chain, and no tool measured this.
 //
 // ⛔ THE FAILURE MODE THIS IS AGAINST, AND WHY IT NEEDS MEASURING RATHER THAN WATCHING.

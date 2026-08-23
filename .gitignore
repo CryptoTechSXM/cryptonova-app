@@ -53,3 +53,13 @@ parked_experiment.txt
 # device-VM cannot delete, so backup snapshots accumulate in place
 *.bak_*
 archive/captures/
+
+# ⛔⛔ EVERY .env VARIANT, NOT JUST THE THREE THAT WERE LISTED — 2026-08-23, session 31.
+# `.env`, `.env.bak` and `.env.*.bak` were ignored. `.env.backup.phaseG` — written during
+# PHASE G and holding 8 lines of KEYS — matched NONE of them, sat untracked for two days,
+# and a `git add -A` while landing a session's work would have committed live private keys
+# and pushed them admin -> preview -> main. The pattern below covers any suffix a future
+# session invents. `.env.example` is already TRACKED and an ignore rule cannot untrack it,
+# but the negation is here so the intent is readable.
+.env.*
+!.env.example

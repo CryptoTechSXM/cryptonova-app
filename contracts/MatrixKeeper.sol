@@ -215,7 +215,13 @@ contract MatrixKeeper is Ownable {
     ///         the cap binds. 20 is the largest DAO menu value that keeps both modest.
     ///
     ///         DAO param 60; menu 5 / 10 / 15 / 20, setter additionally accepts 30 / 40.
-    uint256 public maxItemsPerUpkeep   = 20;
+    /// ⛔ 2026-08-22: DEFAULT 20 -> 1. At a MEASURED worst-case item of >=14.67M (live
+    ///    V8.48, 160 samples, handoff 30.10) against a ~17M transaction ceiling, ONE ITEM
+    ///    PER TRANSACTION is the only configuration where "an item that starts can finish"
+    ///    holds without the floor eating the budget (30.10a). 1 was not on this menu until
+    ///    the same day; it is now. Raise it again only on a G.4 measurement showing V8.50
+    ///    items are materially cheaper at depth than V8.48's.
+    uint256 public maxItemsPerUpkeep   = 1;
 
     /// @notice V8.50 defect 8 — THE GAS FLOOR. performUpkeep stops starting new work
     ///         once fewer than this many gas units remain.
@@ -273,10 +279,36 @@ contract MatrixKeeper is Ownable {
     ///         the smallest DAO menu value clearing the measured 4.37M and it holds
     ///         however many tiers exist.
     ///
-    ///         WHY NOT 7.5M: throughput. Projected from the measured curve (4.36M cold +
-    ///         1.43M marginal) against the 15M budget system_keeper.js:582 uses —
-    ///         3.5M ~6 rescues/tick, 5M ~4, 7.5M ~3. Deferred work is not lost; the next
-    ///         tick takes it. 5M buys the invariant for about two rescues a tick.
+    ///         ⛔ THE DEFAULT MOVED 5_000_000 -> 7_500_000 ON 2026-08-22 (owner decision,
+    ///         handoff 29.12/29.14 item 5). WHY, and it is a measurement rather than an
+    ///         argument: PHASE G took the first per-item keeper gas figure this project
+    ///         has ever had ON A REAL CHAIN — 61 single-item SF-funded rescues at
+    ///         MATRIX_SIZE 127, min 2.32M, median 4.34M, MAX 4.58M, with 25 consecutive
+    ///         rescues inside a 2.5% band at 4.32M-4.44M. Every prior number here came
+    ///         from the harness or from a fitted batch average.
+    ///
+    ///         4.58M against a 5M floor is 8.5% headroom, and 8.5% is not headroom. Worse,
+    ///         THAT MEASUREMENT IS A LOWER BOUND ON THE WORST CASE, NOT THE WORST CASE:
+    ///         it was taken on 3 tiers and ~600 members, where the cost had plateaued for
+    ///         THAT population. The community chain is 10 tiers with more pairs and deeper
+    ///         cascades, and cost is ~linear in the position tree the chain-pay walk
+    ///         covers. The harness's 4.37M cold price and the chain's 4.58M agree well
+    ///         enough to trust the shape; neither says where 10 tiers lands.
+    ///
+    ///         WHAT IT COSTS, AND THE TWO MODELS DISAGREE — SAY SO RATHER THAN PICK ONE.
+    ///         Against the 15M budget system_keeper.js uses:
+    ///           - if in-batch warming holds (4.37M cold then 1.43M marginal, the harness
+    ///             curve this comment used to project from): 5M ~4 rescues/tick, 7.5M ~3.
+    ///           - if every item costs ~4.4M (what the chain actually showed): 5M gives 3,
+    ///             7.5M gives 2.
+    ///         PHASE G's 61 rescues were SINGLE-ITEM batches, so they never observed
+    ///         warming WITHIN a batch and cannot arbitrate. G.4 (measurement 2) is exactly
+    ///         that experiment and it should settle this line. Until then the honest
+    ///         statement is: 7.5M costs somewhere between zero and one rescue per tick.
+    ///
+    ///         Deferred work is not lost; the next tick takes it. A silently unstarted
+    ///         item is lost, and it is lost without a signal — which is why the trade goes
+    ///         this way round.
     ///
     ///         WHY THIS AND NOT A SMALLER maxItemsPerUpkeep: an item count is the wrong
     ///         unit. An eviction costs 0.09M and a reclaim 0.04M against a rescue's
@@ -287,7 +319,31 @@ contract MatrixKeeper is Ownable {
     ///         either being told in advance which it is.
     ///
     ///         DAO param 63. Menu 2.5M / 3.5M / 5M / 7.5M.
-    uint256 public minGasPerItem = 5_000_000;
+    /// ⛔⛔ 2026-08-22, SECOND REVISION THE SAME DAY: 15_000_000 WAS TRIED AND REVERTED TO
+    ///    7_500_000 BY MEASUREMENT. GAS-8 under a 15M floor: at a 16M budget the batch
+    ///    processed **3 of 20 items and halted with 14.71M UNSPENT**; below 15M it did
+    ///    nothing at all. The floor does NOT reserve gas for the next item — it refuses to
+    ///    continue while gasleft < floor, so **usable work per transaction is
+    ///    (budget - floor)**. At 16.5M budget / 15M floor that is 1.5M, and cheap
+    ///    housekeeping (0.04M reclaim, 0.11M evict) is throttled from 20 items to ~3 —
+    ///    line 281's own warning, delivered by the floor instead of by an item count.
+    ///    ✅ THE SAFETY BELONGS ON maxItemsPerUpkeep = 1 INSTEAD, newly expressible because
+    ///    that menu was widened the same day. One item per transaction gets the FULL
+    ///    budget, so a 14.67M rescue fits and nothing is wasted; the floor goes back to
+    ///    being a backstop. The 12.5M/15M menu entries STAY — they cost nothing and G.4
+    ///    may yet want them.
+    ///
+    /// (superseded, kept for the reasoning) DEFAULT RAISED 7_500_000 -> 15_000_000 as a
+    ///    SHIP-SAFE default rather than a throughput choice. 160 live samples put 8.1% of rescues
+    ///    above 7.5M and the worst at >=14.67M (censored by the 15M budget that produced
+    ///    it — see 30.10). At 15M against the drivers' new 16.5M budget the batch runs
+    ///    exactly ONE item and that item is guaranteed the gas to finish.
+    ///    ⚠ THIS MAY BE TOO CONSERVATIVE FOR V8.50 AND THAT IS DELIBERATE. The 14.67M is a
+    ///    V8.48 measurement; item A reworked the crossing and V8.50 may be far cheaper at
+    ///    depth. G.4 is the measurement. **Lowering this later is a governance vote on a
+    ///    menu value; shipping too low and discovering it in production is a silent
+    ///    WorkItemFailed cascade nobody sees.** Ship safe, relax on evidence.
+    uint256 public minGasPerItem = 7_500_000;
     uint256 public parkedGracePeriod   = 6 hours;
 
     /// @notice V8.48 item 12 — floor for a rescue that costs the Stability Fund NOTHING
@@ -546,19 +602,36 @@ contract MatrixKeeper is Ownable {
     }
     /// @notice V8.50 defect 8. Enumerated like every other keeper setter. The floor
     ///         must stay ABOVE the worst single item's cost or it stops protecting
-    ///         anything — 2_500_000 is the lowest value offered and it is already close
-    ///         to the ~2.6M a live-size rescue measured, so treat it as the floor of the
-    ///         floor rather than a normal choice.
+    ///         anything. 2_500_000 is the lowest value offered and it is BELOW every
+    ///         live-size rescue ever measured (2.32M was the cheapest of 61 on chain;
+    ///         the median was 4.34M and the max 4.58M), so it does not protect anything
+    ///         at MATRIX_SIZE 127 and is not a normal choice.
+    ///         ⚠ The "~2.6M a live-size rescue measured" this comment used to cite was
+    ///         never an item cost — it was a batch per-item average (12.9M over 5 items).
+    ///         See minGasPerItem above.
     function setMinGasPerItem(uint256 v) external onlyOwnerOrGovernance {
-        require(v == 2_500_000 || v == 3_500_000 || v == 5_000_000 || v == 7_500_000,
-            "MK: invalid min gas (2.5M/3.5M/5M/7.5M)");
+        // ⛔ 2026-08-22 — MENU WIDENED TO 12.5M AND 15M (handoff 30.10). The old ceiling of
+        // 7.5M could NOT express a safe configuration: 160 live per-item samples from
+        // direct_keeper over 8 days give p50 3.94M, p90 7.00M and a MAX of 14.67M, with
+        // 8.1% of rescues above 7.5M. A floor below the worst item lets that item START and
+        // not FINISH, which is the reason-less WorkItemFailed this floor exists to prevent.
+        // The menu is a require(), so it can only be widened BEFORE deployment — after
+        // ship, no governance vote can reach a value that is not listed here.
+        require(v == 2_500_000 || v == 3_500_000 || v == 5_000_000 || v == 7_500_000
+             || v == 12_500_000 || v == 15_000_000,
+            "MK: invalid min gas (2.5M/3.5M/5M/7.5M/12.5M/15M)");
         minGasPerItem = v;
         emit ConfigUpdated("minGasPerItem", v);
     }
 
     function setMaxItemsPerUpkeep(uint256 v) external onlyOwnerOrGovernance {
-        // V8.31: ceiling raised to 40 to handle 10 tiers × 2 matrices at scale
-        require(v == 5 || v == 10 || v == 15 || v == 20 || v == 30 || v == 40, "MK: invalid max items");
+        // V8.31: ceiling raised to 40 to handle 10 tiers × 2 matrices at scale.
+        // ⛔ 2026-08-22: 1 and 2 ADDED (handoff 30.10). The old FLOOR of this menu was 5,
+        // so "cap the batch at one item" — the only configuration that is provably safe
+        // against a 14.67M worst-case item on a ~16.5M budget — was not expressible at all.
+        // A menu whose minimum is above the safe value is not a dial, it is a constraint.
+        require(v == 1 || v == 2 || v == 5 || v == 10 || v == 15 || v == 20 || v == 30 || v == 40,
+            "MK: invalid max items");
         maxItemsPerUpkeep = v;
     }
     /// @notice V8.20: DAO-governable.

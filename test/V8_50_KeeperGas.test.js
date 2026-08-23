@@ -142,14 +142,16 @@ const isCapError = (e) => /exceeds transaction gas cap|exceeds block gas limit/i
   (e && (e.message || e.shortMessage)) || "");
 
 /**
- * The worst SINGLE SF-funded rescue MEASURED at the live MATRIX_SIZE 127, 2026-08-18, on
- * V8.50 at HEAD — item #1 of a batch, every storage slot cold. Confirmed two independent
- * ways agreeing to 0.1%: GAS-2's isolated single-item run (4,366,374) and GAS-7's per-kind
+ * The worst SINGLE SF-funded rescue MEASURED at MATRIX_SIZE 127, 2026-08-18, on V8.50 at
+ * HEAD — item #1 of a batch, every storage slot cold. Confirmed two independent ways
+ * agreeing to 0.1%: GAS-2's isolated single-item run (4,366,374) and GAS-7's per-kind
  * curve at k=1 (4.36M).
  *
- * ⛔ THIS IS WHAT minGasPerItem IS SIZED AGAINST, and it is why the floor moved 3.5M -> 5M.
- *    A floor below it lets the batch enter an item it cannot finish, which per defect 8
- *    does NOT revert — it cascades WorkItemFailed and reads as a floor refusal.
+ * ⛔⛔ RENAMED 2026-08-23 (handoff 30.10 / 30.13). THIS WAS CALLED `LIVE_WORST_COLD_RESCUE`
+ *    AND IT IS NOT A LIVE FIGURE. It is the IN-PROCESS HARNESS at matrix size 127, one
+ *    tier, in a world this file builds itself. The real chains price the same item at
+ *    3x that, and the old name is why a value 3.4x too small sat inside a passing
+ *    assertion for two sessions. **A constant's NAME is a claim too.**
  *
  * It replaces a ~2.6M figure that was never an item cost at all: that was a BATCH PER-ITEM
  * AVERAGE from the V8.49 chain (12.9M over 5 items, testchain_keeper.js:285), carried in
@@ -157,7 +159,26 @@ const isCapError = (e) => /exceeds transaction gas cap|exceeds block gas limit/i
  *
  * Re-derive: $env:GAS_MATRIX_SIZE=127; npx hardhat test test/V8_50_KeeperGas.test.js
  */
-const LIVE_WORST_COLD_RESCUE = 4_366_374n;
+const HARNESS_WORST_COLD_RESCUE_127 = 4_366_374n;
+
+/**
+ * ⛔⛔ THE TWO FIGURES FROM REAL CHAINS, AND THEY ARE THE ONES THE CONFIGURATION IS SIZED
+ * AGAINST. Neither came from this harness; both are here so no future session sizes a
+ * guard against the harness number again (handoff 30.10, 30.13).
+ *
+ *   V8.48 LIVE, 160 per-item samples from direct_keeper's own keeper.log over 8 days to
+ *   2026-08-22: min 1.07M · p50 3.94M · p90 7.00M · p99 14.65M · MAX 14.67M.
+ *   ⚠ CENSORED: the driver's budget was 15,000,000 at the time, so an item costing more
+ *   could not produce a sample at all. **14.67M is a LOWER BOUND, not the worst case.**
+ *
+ *   PRIVATE V8.50 CHAIN, G.4 on 2026-08-23: 62 PARKED_RESCUE samples, max 13.03M, and
+ *   one REAL `WorkItemFailed` — a 5M floor meeting a 13.03M item, defect 8 reproduced.
+ *
+ * These two agreeing is the result that settled the configuration. 29.12's 4.58M "max"
+ * was 61 single-item runs, i.e. a median wearing a maximum's name.
+ */
+const CHAIN_WORST_RESCUE_V848 = 14_670_000n;   // censored lower bound, live, 160 samples
+const CHAIN_WORST_RESCUE_V850 = 13_030_000n;   // private V8.50 chain, G.4, 62 samples
 
 function decodeItems(performData) {
   if (!performData || performData === "0x") return [];
@@ -622,10 +643,13 @@ describe("V8.50 defect 5 — the cost of a batch, measured", function () {
       console.log(`         THIS IS LIVE MATRIX SIZE. No downward scaling is owed on size —`);
       console.log(`         but this is still a FIXTURE state shape, not the community chain's.`);
     } else {
-      console.log(`         Live tiers run MATRIX_SIZE 127, where a cold SF-funded rescue MEASURES`);
-      console.log(`         ${M(LIVE_WORST_COLD_RESCUE)} against ${M(worstRescue)} here — so scale this DOWN. It is an upper`);
+      console.log(`         This harness at MATRIX_SIZE 127 prices a cold SF-funded rescue at`);
+      console.log(`         ${M(HARNESS_WORST_COLD_RESCUE_127)} against ${M(worstRescue)} here — so scale this DOWN. It is an upper`);
       console.log(`         bound on the cap, never a target. (The ~2.6M this line used to cite was`);
-      console.log(`         a BATCH AVERAGE, not an item cost — see LIVE_WORST_COLD_RESCUE above.)`);
+      console.log(`         a BATCH AVERAGE, not an item cost.)`);
+      console.log(`      ⛔ AND EVEN 127 UNDERSTATES THE REAL CHAINS BY ~3x: live V8.48 measured`);
+      console.log(`         ${M(CHAIN_WORST_RESCUE_V848)} (censored) over 160 samples and the private V8.50 chain`);
+      console.log(`         ${M(CHAIN_WORST_RESCUE_V850)} in G.4. EVERY cap in this table is a shape, not a verdict.`);
     }
 
     // The finding is REPORTED, not asserted into a particular value: the day a future
@@ -895,8 +919,13 @@ describe("V8.50 defect 5 — the cost of a batch, measured", function () {
       console.log(`      ⚠ SINGLE TIER ONLY, AND THAT IS THE LIMIT OF THIS RESULT. The cold premium is`);
       console.log(`        paid by whichever item touches a given tier's storage FIRST. This world has`);
       console.log(`        ONE tier, so that is always item #1, when gas is plentiful. A second tier`);
-      console.log(`        arriving mid-batch would pay it LATE — UNVERIFIED here, and the one thing`);
-      console.log(`        that could still overturn the ${M(BigInt(shippedFloor))} value.`);
+      console.log(`        arriving mid-batch would pay it LATE.`);
+      console.log(`      ⛔⛔ THAT IS NO LONGER UNVERIFIED — G.4 MEASURED IT ON CHAIN, 2026-08-23.`);
+      console.log(`        A 3-tier private V8.50 chain priced a PARKED_RESCUE at 13.03M against a 5M`);
+      console.log(`        floor and fired a REAL WorkItemFailed. The coupling this note hoped for`);
+      console.log(`        (burning gas warms the path) BREAKS the moment a second tier is in play.`);
+      console.log(`        So a clean sweep HERE does not clear the floor — it only says a one-tier`);
+      console.log(`        world cannot reach the failure. The guard is maxItemsPerUpkeep = 1.`);
     }
 
     expect(anyFailed.length, `⛔ THE CASCADE IS BACK. At ${anyFailed.map((r) => M(BigInt(r.limit))).join(", ")} ` +
@@ -984,7 +1013,7 @@ describe("V8.50 defect 5 — the cost of a batch, measured", function () {
     console.log(`         shipped floor ${M(floor)} — ${floor > worstArrival ? "CLEARS" : "⛔ DOES NOT CLEAR"} it` +
       `${floor > worstArrival ? ` with ${(Number(floor - worstArrival) / Number(worstArrival) * 100).toFixed(0)}% headroom` : ""}.`);
     const smallest = [2_500_000n, 3_500_000n, 5_000_000n, 7_500_000n].find((v) => v > worstArrival);
-    console.log(`         DAO menu: 2.5M / 3.5M / 5M / 7.5M — the smallest that clears is ` +
+    console.log(`         DAO menu: 2.5M / 3.5M / 5M / 7.5M / 12.5M / 15M (widened 2026-08-22) — the smallest that clears is ` +
       `${smallest ? M(smallest) : "NONE ON THE MENU"}.`);
     console.log(`\n      ⚠ A VIOLATED INVARIANT IS NOT THE SAME AS A REACHABLE FAILURE. THIS IS WHY`);
     console.log(`        3.5M SURVIVED AS LONG AS IT DID, AND WHY IT WAS STILL MOVED TO ${M(floor)}:`);
@@ -995,10 +1024,13 @@ describe("V8.50 defect 5 — the cost of a batch, measured", function () {
     console.log(`        batch of nothing but evictions burns ~2.4M — it can never walk gas down`);
     console.log(`        to the floor while leaving anything cold. GAS-8 measured exactly that:`);
     console.log(`        zero failures at every budget.`);
-    console.log(`      ⛔ A SECOND TIER BREAKS THAT COUPLING, WHICH IS NOW THE WHOLE QUESTION.`);
+    console.log(`      ⛔ A SECOND TIER BREAKS THAT COUPLING — MEASURED ON CHAIN, G.4, 2026-08-23.`);
     console.log(`        Tier-1 rescues burn gas while tier-2 storage stays COLD. That is the one`);
     console.log(`        shape where a cold ${M(worstArrival)} item can arrive with ~${M(floor)} left.`);
-    console.log(`        UNMEASURED. Do not settle minGasPerItem until it is.`);
+    console.log(`        NO LONGER UNMEASURED: a 3-tier chain priced the item at 13.03M against a`);
+    console.log(`        5M floor and fired a real WorkItemFailed. minGasPerItem is SETTLED at`);
+    console.log(`        7.5M — not because it clears the worst item (nothing on the menu does)`);
+    console.log(`        but because maxItemsPerUpkeep = 1 makes the floor a backstop. GAS-6.`);
 
     ctx.worstArrival = worstArrival;
     expect(worstArrival, "no arrival context produced a cost, so nothing was measured").to.be.gt(0n);
@@ -1126,7 +1158,12 @@ describe("V8.50 defect 5 — the cost of a batch, measured", function () {
       console.log(`         never actually put under test — PairManagerV8.rescueReentry returns a`);
       console.log(`         rescued member to their OWN pair (destPair = fromPairIndex), so a new`);
       console.log(`         pair can never attract one. Only a second TIER reaches cold storage.`);
-      console.log(`         Treat ${M(shippedFloor10)} as UNVERIFIED against this failure mode.`);
+      console.log(`      ⛔⛔ AND A 3-TIER CHAIN DID REACH IT — G.4, 2026-08-23, TWENTY MINUTES.`);
+      console.log(`         13.03M item against a 5M floor, one REAL WorkItemFailed. This test was`);
+      console.log(`         right that it was the one thing able to overturn a floor value, and it`);
+      console.log(`         overturned it: NO menu value clears the real worst item. The answer is`);
+      console.log(`         maxItemsPerUpkeep = 1 (GAS-6), not a bigger floor. This harness stays`);
+      console.log(`         INCONCLUSIVE on the coupling by construction — do not re-open it here.`);
     } else if (cascade === 0) {
       console.log(`      -> NO CASCADE across ${rowsWithWork} rows that had real work, with cold pair-2`);
       console.log(`         storage reachable mid-batch. The coupling held.`);
@@ -1225,7 +1262,11 @@ describe("V8.50 defect 5 — the cost of a batch, measured", function () {
     expect(decodeItems(data2).length, "next tick found no work at all after a partial batch").to.be.gt(0);
   });
 
-  it("GAS-6: the floor is above the worst item, and the menu cannot vote it below one", async function () {
+  // ⛔ RENAMED 2026-08-23. This test was called "the floor is above the worst item, and the
+  //    menu cannot vote it below one". BOTH HALVES ARE NOW FALSE: the floor (7.5M) is far
+  //    BELOW the worst real item (13.03M / >=14.67M), and no menu value can reach above it.
+  //    A test title is a claim like any other — see the retired assertion below.
+  it("GAS-6: the floor is a BACKSTOP below the worst real item — maxItemsPerUpkeep = 1 is the guard", async function () {
     // A floor BELOW the cost of a single item lets the batch enter work it cannot finish,
     // which buys nothing at all — the cascade happens anyway, one item later. This is the
     // invariant that makes the whole guard worth having, so it is asserted against the
@@ -1253,7 +1294,9 @@ describe("V8.50 defect 5 — the cost of a batch, measured", function () {
     await snap.restore();
     const floor = await ctx.keeper.minGasPerItem();
     console.log(`\n      minGasPerItem ${M(floor)} vs worst measured item ${M(worst)} ` +
-      `(MATRIX_SIZE ${SIZE}${SIZE === 127 ? " — LIVE SIZE" : `; live 127 MEASURED ${M(LIVE_WORST_COLD_RESCUE)}`})`);
+      `(MATRIX_SIZE ${SIZE}${SIZE === 127 ? " — LIVE SIZE" : `; this harness at 127 MEASURED ` +
+        `${M(HARNESS_WORST_COLD_RESCUE_127)}; REAL CHAINS ${M(CHAIN_WORST_RESCUE_V850)} / ` +
+        `${M(CHAIN_WORST_RESCUE_V848)}+`})`);
 
     // ⛔ AT MATRIX_SIZE 127 THIS ASSERTION IS THE V8.50 DEPLOY GATE'S MEASUREMENT 1.
     //    Failing here is not a broken test — it is the finding the gate exists to
@@ -1271,23 +1314,59 @@ describe("V8.50 defect 5 — the cost of a batch, measured", function () {
       `(${M(worst)} at MATRIX_SIZE ${SIZE}). A floor under one item's cost lets the batch ` +
       `start work it cannot finish and the WorkItemFailed cascade returns.`).to.be.gt(worst);
 
-    // ⚠ AT THE DEFAULT SIZE THE LOCAL WORST IS NOT THE LIVE WORST — 1.76M here against
-    //   4.37M at 127. The assertion above cannot see that, so the live figure gets its own
-    //   check. This used to compare against ~2.6M, which was a BATCH AVERAGE and not a
-    //   single item at all; it is now the MEASURED cold cost at live matrix size.
-    expect(floor, `the floor must clear the ${M(LIVE_WORST_COLD_RESCUE)} a cold SF-funded ` +
-      `rescue MEASURED at the live MATRIX_SIZE 127, not merely the cheaper item a small ` +
-      `world produces. Below this the batch can start an item it cannot finish and defect ` +
-      `8's WorkItemFailed cascade returns — silently.`).to.be.gt(LIVE_WORST_COLD_RESCUE);
+    // ⛔⛔ THE ASSERTION THAT USED TO SIT HERE IS RETIRED, 2026-08-23, AND HOW IT SURVIVED
+    //    IS THE POINT. It read `expect(floor).to.be.gt(LIVE_WORST_COLD_RESCUE)` — "the
+    //    floor must clear the worst live item" — and it PASSED, because the constant it
+    //    compared against was 4.37M: this harness's own number wearing the word LIVE.
+    //    The real worst item is 13.03M (private V8.50, G.4) and >=14.67M (live V8.48, 160
+    //    samples). Correct the constant honestly and the old assertion FAILS, and its
+    //    failure message tells you to raise the floor — which is precisely the move that
+    //    was shipped for an hour on 2026-08-22 and reverted by GAS-8 within it.
+    //
+    //    WHY THE PREMISE IS WRONG (handoff 30.10b): `minGasPerItem` does NOT reserve gas
+    //    for the next item. The check is `if (gasleft() < minGasPerItem) halt`, so usable
+    //    work per transaction is `budget - floor`. A floor big enough to clear a 14.67M
+    //    item leaves ~1.5M of a 16.5M budget to work in — GAS-8 measured it processing
+    //    3 of 20 items with 14.71M unspent. **A floor above the worst item is not safety,
+    //    it is a budget thrown away.**
+    //
+    // ✅ THE INVARIANT THAT REPLACES IT, AND IT IS THE ONE ACTUALLY IN FORCE:
+    //    the floor is KNOWINGLY below the worst real item, so the guard is the ITEM COUNT.
+    //    At maxItemsPerUpkeep = 1 the single item receives the WHOLE budget and the
+    //    5M-to-13M dispatch window that fired G.4's real WorkItemFailed cannot exist.
+    //    Cap 2 does NOT close it: item 1 costs 8M, gasleft 8.4M clears a 7.5M floor,
+    //    item 2 dispatches with 8.4M, and a 14.67M item dies silently.
+    //    ⛔ SO: IF THE SHIPPED FLOOR IS BELOW THE WORST KNOWN CHAIN ITEM, THE SHIPPED CAP
+    //    MUST BE 1. Raising the cap is a governance vote that G.4 evidence has to earn.
+    const shippedFloor6 = await ctx.keeper.minGasPerItem();
+    const shippedCap6   = await ctx.keeper.maxItemsPerUpkeep();
+    const worstKnown    = CHAIN_WORST_RESCUE_V850 < CHAIN_WORST_RESCUE_V848
+      ? CHAIN_WORST_RESCUE_V850 : CHAIN_WORST_RESCUE_V848;
+    console.log(`      SHIPPED DEFAULTS: floor ${M(shippedFloor6)} · cap ${shippedCap6} · ` +
+      `worst known chain item ${M(worstKnown)} (${shippedFloor6 > worstKnown ? "floor clears it" : "floor is BELOW it — the cap is the guard"})`);
+    if (shippedFloor6 <= worstKnown) {
+      expect(shippedCap6, `the shipped floor ${M(shippedFloor6)} is BELOW the worst item ` +
+        `measured on a real chain (${M(worstKnown)}), so a batch carrying a SECOND item can ` +
+        `dispatch it with less gas than it needs and kill it as a reason-less ` +
+        `WorkItemFailed — G.4 did exactly this on 2026-08-23. The only configuration that ` +
+        `closes the window is maxItemsPerUpkeep = 1, which gives the single item the whole ` +
+        `budget. Either set the cap back to 1, or raise the floor above ${M(worstKnown)} ` +
+        `AND re-run GAS-8 to show the budget is not being thrown away (it was, at 15M).`)
+        .to.equal(1n);
+    }
 
-    // Every value the DAO can vote for must still be settable, and the lowest of them
-    // must still clear the live figure — a menu entry that breaks the invariant is a
-    // proposal waiting to disarm the guard.
-    for (const v of [2_500_000, 3_500_000, 5_000_000, 7_500_000]) {
+    // Every value the DAO can vote for must still be settable. ⛔ NOTE WHAT THIS CAN AND
+    // CANNOT PROMISE, 2026-08-23: NO value on this menu clears the 13.03M/14.67M real
+    // worst item — the menu tops out at 15M and a 15M floor throws the budget away
+    // (GAS-8). So the menu is not the guard and cannot be made into one. It is checked
+    // here only so a widened menu stays settable end to end; the guard is the cap
+    // assertion above.
+    for (const v of [2_500_000, 3_500_000, 5_000_000, 7_500_000, 12_500_000, 15_000_000]) {
       await ctx.keeper.setMinGasPerItem(v);
       expect(await ctx.keeper.minGasPerItem(), `menu value ${v} must be settable`).to.equal(BigInt(v));
     }
-    await ctx.keeper.setMinGasPerItem(5_000_000);   // the shipped default, restored
+    await ctx.keeper.setMinGasPerItem(7_500_000);   // the shipped default, restored. 5M -> 7.5M -> 15M -> 7.5M, all 2026-08-22:
+    // GAS-8 showed a 15M floor halts with the budget unspent, so the safety moved to maxItemsPerUpkeep = 1 (30.10a).
     await expect(ctx.keeper.setMinGasPerItem(1_000_000),
       "a value below the menu must be refused").to.be.reverted;
   });

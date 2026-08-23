@@ -344,8 +344,17 @@ contract V8Governance is Ownable {
     ///         item and the invariant above was violated. The ~2.6M this comment used to
     ///         cite was never an item cost — it was a BATCH PER-ITEM AVERAGE (12.9M over
     ///         5 items, testchain_keeper.js:285), so the "35% margin" never existed.
-    ///         Voting this back down to 3.5M or 2.5M re-arms exactly the silent cascade
-    ///         described above. See MatrixKeeper.minGasPerItem for the full measurement.
+    ///         ⛔ AND IT MOVED AGAIN, 5_000_000 -> 7_500_000 ON 2026-08-22, on the first
+    ///         PER-ITEM MEASUREMENT TAKEN ON A REAL CHAIN rather than in the harness:
+    ///         61 single-item SF-funded rescues at MATRIX_SIZE 127 returned a MAX of
+    ///         4.58M, leaving 5M with 8.5% headroom — and that run was 3 tiers deep,
+    ///         so it is a lower bound on the community chain's worst case, not the
+    ///         worst case.
+    ///
+    ///         Voting this back down to 5M, 3.5M or 2.5M re-arms exactly the silent
+    ///         cascade described above. See MatrixKeeper.minGasPerItem for the full
+    ///         measurement and for the throughput cost, which is between zero and one
+    ///         rescue per tick depending on a question G.4 has not yet answered.
     uint8 public constant PARAM_MK_MIN_GAS_PER_ITEM        = 63;
 
     /// @notice V8.50 (owner decision 2026-08-21): the item-43 sweep. Every setter
@@ -499,7 +508,11 @@ contract V8Governance is Ownable {
         _allowedValues[PARAM_VELOCITY_THRESHOLD]      = [1, 2, 3, 5];
         _allowedValues[PARAM_DEFLATION_THRESHOLD]     = [5, 10, 15, 20];
         _allowedValues[PARAM_IDLE_SLOT_TIMEOUT]       = [21600, 43200, 86400];
-        _allowedValues[PARAM_MAX_ITEMS_PER_UPKEEP]    = [5, 10, 15, 20];
+        // ⚠ 2026-08-22: 1 and 2 added (30.10). ALSO CLOSES A PRE-EXISTING MISMATCH found
+        // while doing it — this list was [5,10,15,20] while MatrixKeeper's own require()
+        // accepts 30 and 40, so a governance proposal for 30 or 40 was rejected HERE while
+        // the setter would have accepted it. Two menus for one dial, silently unequal.
+        _allowedValues[PARAM_MAX_ITEMS_PER_UPKEEP]    = [1, 2, 5, 10, 15, 20, 30, 40];
         // Matrix fee params
         _allowedValues[PARAM_WITHDRAWAL_FEE_BPS]      = [50, 100, 150, 200, 250];
         // V8.21: PARAM_EARLY_EXIT_PENALTY_BPS intentionally has no allowed-values
@@ -580,7 +593,9 @@ contract V8Governance is Ownable {
         // value the frozen-keeper equivalence harness pins to. Default 604800 = 7 days.
         // Must mirror MatrixKeeper.setEvictionGracePeriod's require exactly.
         _allowedValues[PARAM_MK_EVICTION_GRACE] = [0, 86400, 172800, 259200, 345600, 432000, 604800];
-        _allowedValues[PARAM_MK_MIN_GAS_PER_ITEM] = [2_500_000, 3_500_000, 5_000_000, 7_500_000];
+        // 2026-08-22: 12.5M / 15M added — see MatrixKeeper.setMinGasPerItem. MUST stay in
+        // step with that require(), or a proposal passes here and reverts on execution.
+        _allowedValues[PARAM_MK_MIN_GAS_PER_ITEM] = [2_500_000, 3_500_000, 5_000_000, 7_500_000, 12_500_000, 15_000_000];
         // ── V8.50 item-43 sweep. EVERY menu below must be accepted by its target
         //    setter — V8_50_DaoParams.test.js proves that by CALLING the setter with
         //    each value rather than eyeballing the two lists.
