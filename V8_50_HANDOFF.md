@@ -1,7 +1,7 @@
 # V8.50 HANDOFF — the crossing redesign. READ THIS FIRST.
 
 Written 2026-08-16 at the end of the V8.49 private measurement run.
-Sessions 2-28 have appended to it since; read the NEWEST section first — each one
+Sessions 2-31 have appended to it since; read the NEWEST section first — each one
 corrects the ones below it, and says so explicitly where it does.
 Audience: **the next session of Claude, plus the owner. There is no third party — every
 line of this codebase was written by a previous session of Claude and executed by the
@@ -10,7 +10,310 @@ owner-set, and the session that earned it got five things wrong by ignoring what
 
 ---
 
-# ⬛ SESSION 30 STATE — 2026-08-22/23, LATEST. READ THIS FIRST.
+# ⬛ SESSION 31 STATE — 2026-08-23, LATEST. READ THIS FIRST.
+# ✅ SESSION 30's WORK IS COMMITTED AND PUSHED — `5a07cab`, six files, on `origin/v8.1`.
+# ⛔⛔ THE KEEPER-GAS SUITE WAS PASSING AGAINST A RETIRED RULE AND A CONSTANT 3.4x TOO SMALL.
+# ⛔⛔ `.env.backup.phaseG` HELD 8 LINES OF KEYS AND MATCHED NO `.gitignore` PATTERN.
+# ✅ 30.11 IS CLOSED ON A PLANTED POSITIVE: 38 cap-halvings the day before, **0** in 118 ticks since.
+# ⛔⛔ G.4's `WorkItemFailed` **WAS** OUT OF GAS. 30.13 WAS RIGHT. I ARGUED AGAINST IT WITH
+#     ARITHMETIC AND THE ARITHMETIC WAS WRONG — 31.4 IS THE MOST IMPORTANT SECTION HERE.
+
+## ▶ SESSION 32 — READ IN THIS ORDER.
+
+**1. 31.4 — how a plausible gas argument beat a correct measurement for half an hour.**
+The 63/64 retention COMPOUNDS WITH DEPTH. A single-level model said "this cannot be out of
+gas"; the trace said it was, seven frames down. **Read this before trusting any gas
+arithmetic in this file, mine included.**
+
+**2. 31.1 / 31.2 — two green lights that were not measuring what they looked like.**
+`GAS-6` asserted the floor clears the worst live item, against a constant named
+`LIVE_WORST_COLD_RESCUE` that was the harness's own 4.37M. Correct the constant honestly
+and the test FAILS and tells you to raise the floor — the move GAS-8 reverted in an hour.
+
+**3. 31.5 and 31.6 — the two free checks. One closed, one not answerable yet.**
+30.11 is closed. The de-censoring check has **4 post-16.5M samples** and needs ~100.
+
+**4. 31.8 — what is next.** 30.7 items 6, 7, 8 are still the open ones.
+
+⚠ **31.7 IS A DISAGREEMENT LEFT OPEN ON PURPOSE** — 30.10 counted 160 samples from the
+same logs where this session's extraction counts 268. Both cannot be the same population.
+
+## 31.0 STATE
+
+* ✅ **COMMITTED AND PUSHED — `5a07cab` on `origin/v8.1`.** `.gitignore`, `MatrixKeeper.sol`,
+  `V8Governance.sol`, `test/V8_50_KeeperGas.test.js`, `scripts/diag_keeper_gas_live.js`,
+  `V8_50_HANDOFF.md`. Session 30's contract work is no longer sitting uncommitted.
+* ✅ **VERIFIED ON THE OWNER'S MACHINE BEFORE THE COMMIT:** `npx hardhat compile` ->
+  `Nothing to compile` (30.10a's "contracts have NOT been compiled" was stale — the
+  artifacts were written at 23:57Z, one minute after the last source edit).
+  `npx hardhat test test/V8_50_KeeperGas.test.js` -> **10 passing**, twice: once before the
+  changes below and once after. `node scripts/sizes.js` -> all fit, **MatrixKeeper 21,435
+  bytes, 3,141 headroom**; the menu widening cost nothing that matters.
+* ✅ **NEW TOOL:** `scripts/diag_failed_item_reason.js` — classifies a `WorkItemFailed` as
+  out-of-gas or ordinary revert. Three probes, and it states which one answered. NOT yet
+  committed at the time of writing.
+* ⚠ **TWO FILES SHOWED AS MODIFIED AND WERE NOT.** `archive/windows_keeper/corescue.bat`
+  and `contracts/test/CryptoNovaCommunityWallet.sol` were pure CRLF flips —
+  `git diff --ignore-cr-at-eol` on both is EMPTY. The Solidity one renders as 948 changed
+  lines. **Reverted, not committed.** Check this before every commit in this repo: a
+  948-line no-op diff is where a real change goes to hide.
+* ⚠ **STILL UNTRACKED, SEVENTEEN SESSIONS ON:** `handover_session13.md` and
+  `archive/_session13_{addendum,insert}.md`. Cosmetic. Fold into `archive/` next time the
+  repo is open.
+
+## 31.1 ⛔⛔ `GAS-6` WAS A GREEN LIGHT GUARDING A RULE THAT 30.10b HAD ALREADY RETIRED
+
+The suite passed 10/10 before this session touched it. One of those passes was worthless.
+
+    expect(floor).to.be.gt(LIVE_WORST_COLD_RESCUE)      // LIVE_WORST_COLD_RESCUE = 4_366_374n
+
+⛔ **THE CONSTANT IS NOT A LIVE FIGURE.** It is this harness's own measurement at
+MATRIX_SIZE 127, one tier, in a world the test file builds itself. The real worst item is
+**13.03M** (private V8.50, G.4) and **>=14.67M** (live V8.48, 160 samples). The word LIVE in
+the name is the entire reason it went unexamined for two sessions.
+
+⛔⛔ **AND CORRECTING IT HONESTLY MAKES THE TEST FAIL — WITH A FAILURE MESSAGE THAT TELLS
+THE NEXT SESSION TO RAISE THE FLOOR.** That is the exact move shipped for an hour on
+2026-08-22 and reverted by GAS-8 within it (30.10b). **A test that steers you back into the
+mistake the section above it just corrected is worse than no test.**
+
+✅ **THE PREMISE IS RETIRED ANYWAY, AND 30.10b IS WHY.** `minGasPerItem` does not reserve
+gas for the next item; usable work is `budget - floor`. A floor above the worst item throws
+the budget away — GAS-8 measured 3 of 20 items with 14.71M unspent.
+
+✅ **WHAT REPLACED IT — the invariant actually in force:**
+
+    const shippedFloor6 = await ctx.keeper.minGasPerItem();
+    const shippedCap6   = await ctx.keeper.maxItemsPerUpkeep();
+    if (shippedFloor6 <= worstKnown) expect(shippedCap6).to.equal(1n);
+
+**If the shipped floor is below the worst item measured on a real chain, the shipped cap
+must be 1.** The failure message spells out the cap-2 near-miss (item 1 costs 8M, gasleft
+8.4M clears a 7.5M floor, item 2 dispatches with 8.4M, a 14.67M item dies silently) and
+says what evidence would be needed to raise the cap instead. It reads the SHIPPED defaults
+from a restored snapshot, so it tests what deploys rather than what a previous test set.
+
+Also done in the same file, all cosmetic-but-load-bearing:
+* `LIVE_WORST_COLD_RESCUE` -> **`HARNESS_WORST_COLD_RESCUE_127`**, with the old name and
+  why it misled kept in the header. Two new constants carry the real chains'
+  figures with their provenance: `CHAIN_WORST_RESCUE_V848` (14.67M, marked CENSORED) and
+  `CHAIN_WORST_RESCUE_V850` (13.03M).
+* `GAS-9`'s *"UNVERIFIED here, and the one thing that could still overturn the 7.50M value"*
+  and `GAS-10`'s *"UNMEASURED. Do not settle minGasPerItem until it is"* — **G.4 measured
+  both.** They now record that a second tier breaks the coupling, that it produced a real
+  `WorkItemFailed`, and that the answer is the cap rather than a bigger floor.
+* **The test's own TITLE** read *"the floor is above the worst item, and the menu cannot
+  vote it below one"*. Both halves are now false. Renamed.
+
+> **STANDING LESSON: A CONSTANT'S NAME IS A CLAIM, AND SO IS A TEST'S TITLE.** 30.5d taught
+> it for a selector row in CLAUDE.md and 30.11 for a log line reading `OOG`. This is the
+> same failure inside the test suite that is supposed to catch it.
+
+## 31.2 ⛔ `keeper_gas_floor.selftest.js` REPORTED ALL PASS ABOUT A CONFIGURATION THAT DOES NOT SHIP
+
+Its scenarios were `minGasPerItem 5M`, `maxItemsPerUpkeep 20`, `BUDGET 15M` — and **G.4
+measured exactly that configuration failing on a real chain**, a 13.03M item against a 5M
+floor. The shipped configuration (7.5M / cap 1 / 16.5M) had **no scenario at all**. The
+guard's live settings were untested by the guard's own selftest, and it printed ALL PASS.
+
+✅ **FIXED, AND THE OLD SCENARIOS ARE KEPT** — the maths they check is still the maths; they
+are relabelled as not-what-ships. A new block plants the shipped configuration against both
+real worst items. **24/24 PASS.** What it establishes, all measured rather than asserted:
+
+    >=14.67M item, floor 7.5M, budget 16.5M -> requiredGasLimit 14.97M, FITS
+    13.03M item,   floor 7.5M, budget 16.5M -> requiredGasLimit 13.33M, FITS
+    both -> affordableItems == 1     <- the driver's arithmetic reaches cap 1 independently
+    live p50 3.94M                   -> affordableItems == 3
+    4.4M item under the reverted 15M floor -> requiredGasLimit 15.30M of a 16.5M budget
+
+⚠ **THE p50 LINE IS THERE ON PURPOSE AND IT CUTS AGAINST US.** At the MEDIAN cost the same
+budget carries three items. **Cap 1 is sized against the TAIL, not the typical item, and it
+costs real throughput** (housekeeping ~144/day instead of thousands, 30.10b). Nobody should
+read cap 1 as "the maths demands it" in every case. It does not; the tail does.
+
+⚠ **THE DROPLET'S COPY IS BEHIND THE WINDOWS MASTER.** `scp` it on the next visit to
+`/root/keeper`.
+
+## 31.3 ⛔⛔ A `.gitignore` HOLE THAT WOULD HAVE COMMITTED LIVE PRIVATE KEYS
+
+`.env.backup.phaseG` — written during PHASE G, **8 lines matching `PRIVATE_KEY|MNEMONIC|
+SECRET`** — sat untracked in the contracts repo for two days and matched **none** of the
+three env patterns in `.gitignore` (`.env`, `.env.bak`, `.env.*.bak`). It is a suffix, not a
+`.bak`. **A `git add -A` while landing a session's work would have committed it and pushed
+it to `origin`.** That is the single most natural command to type at the end of a session.
+
+✅ Fixed: `.env.*` with `!.env.example`, verified both ways — `git check-ignore` now names
+the file, and `.env.example` (which is TRACKED, and an ignore rule cannot untrack it) is
+unaffected. **Commits in this repo should name their paths explicitly regardless.**
+
+## 31.4 ⛔⛔ G.4's `WorkItemFailed` **WAS** OUT OF GAS. 30.13 WAS RIGHT AND I ARGUED WITH IT.
+
+`scripts/diag_keeper_gas_live.js` was patched first, because 30.13 said *"the tx is in
+`logs/runs/diag_keeper_gas_live/`"* and **it was not** — the tool printed a COUNT of
+`WorkItemFailed` and never the transaction. A detector that says "1" without saying WHERE
+sends the next session hunting 200,000 blocks by hand. It now prints the tx, its `gasUsed`,
+the batch size and whether that tx also halted.
+
+    PARKED_RESCUE  0x484727ca3961ae63e4480c6c5f31317b19385bf0e9b5e862bc32c4780ae23b93
+      gasUsed 13.41M · 4 item(s) in the batch · ALSO HALTED at 4/20, 0.69M left
+      gasLimit 15.00M · member 0xf63aDAA474d4B338eb7d0d7AF2a0D1dAC348e64B · tier 0
+
+⛔⛔ **THE ARGUMENT I MADE, WHICH WAS WRONG.** The dispatch is `try this._doParkedRescue
+External()` with no gas cap (MatrixKeeper.sol:911), so EIP-150 applies: the inner call gets
+63/64 and the caller keeps 1/64. I reasoned that an out-of-gas item therefore returns at
+most `gasLimit/64` = 0.23M, that 0.69M came back, and that **"0.69M is 2.9x more than an
+out-of-gas call can leave — it reverted for its own reasons."** I also offered a second
+argument: 4 items were dispatched and each dispatch needs a full floor free.
+
+⛔⛔ **BOTH ARE WRONG, AND THE FIRST ONE IS WRONG IN AN INTERESTING WAY. THE 1/64 RETENTION
+COMPOUNDS WITH DEPTH.** Each nested full-forwarding call keeps its own 1/64, so an
+out-of-gas N levels down returns `1-(63/64)^N` of the top allotment:
+
+    depth  1 ->  1.6%      depth  6 ->  9.0%      depth 13 -> 18.5%
+
+`debug_traceTransaction` shows the rescue reverting **seven frames deep**. The item's own
+frame was given 6.61M and returned 0.58M — **8.8%, which is what a depth-6 out-of-gas
+leaves, to within a rounding error.** My single-level model was applied to a deep call tree.
+The second argument fails too: it only bites if the failure was not the last item, and the
+event carries no index — **here it WAS the last**, dispatched at ~6.71M gasleft with the
+halt firing immediately after at 0.69M.
+
+✅ **WHAT THE TRACE ACTUALLY SHOWS, AND IT IS BETTER EVIDENCE THAN ANYONE HAD:**
+
+    depth  7  0x6136bcc2…   error "out of gas"    gas given 5.84M  used 5.84M   <- ALL OF IT
+    depth 10  0xAb8281a5…   revert "PM8: no seat available for duplicate"  4.58M given, returned
+    depth 11  0x9b031182…   revert "PM8: no seat available for duplicate"  4.43M given, returned
+    depth 12/13/8           further out-of-gas frames as the tree unwound
+
+* The item was dispatched with **~6.71M** — above the 5M floor, nowhere near the ~13M this
+  rescue needed. **That is defect 8's window, measured to the gas.**
+* **The `eth_call` replay SUCCEEDS.** With unlimited gas that exact rescue completes, so
+  this was legitimate, performable work — not a stale queue entry and not a benign skip.
+  My "already rescued member" story was wrong as well.
+* The two `PM8: no seat available for duplicate` reverts mid-tree **never reached the top**:
+  an out-of-gas frame above them destroyed the reason data. **That is precisely why
+  `WorkItemFailed` arrived reason-less**, and it is defect 8's mechanism made visible.
+* The member is itself called at depth 2, i.e. it is a CONTRACT — consistent with 30.5f:
+  members enter through MetaMask smart accounts.
+
+✅ **THIS STRENGTHENS THE CONFIGURATION.** At `maxItemsPerUpkeep = 1` that item would have
+received the full 16.5M instead of the 6.71M left over from three earlier rescues, and on
+the replay evidence it would have finished. G.4's alarm is now a direct measurement in
+favour of cap 1, not merely an argument from the 13.03M item's existence.
+
+⛔ **THE INSTRUMENT I BROKE, AND THE FIX.** `diag_failed_item_reason.js` shipped with that
+wrong probe for one run. It now computes the returned PERCENTAGE, reports the call depth it
+implies, and returns **INCONCLUSIVE below ~30%** instead of a false verdict. The wrong
+version is in its header with the reason it was wrong.
+
+> **STANDING LESSON, AND IT IS THE HOUSE RULE IN A NEW COSTUME: I HAD A TRACE AVAILABLE AND
+> REACHED FOR ARITHMETIC, THEN PRESENTED THE ARITHMETIC AS A MEASUREMENT.** Rule 2 says
+> measure before implementing. This is the subtler failure — reasoning that FEELS like a
+> measurement because it has numbers in it. Where a derivation and a chain read disagree,
+> the chain read wins, and the derivation is the thing that needs explaining.
+
+## 31.5 ✅ 30.11 IS CLOSED — AND ON A PLANTED POSITIVE, NOT ON AN ABSENCE
+
+The check 30.10a specified, run 2026-08-23 09:45Z, ~10 hours after the fix went in:
+
+| | |
+|---|---|
+| `cap halved` in `keeper.log` (00:05Z–09:45Z, **118 confirmed sends**) | **0** |
+| `cap halved` in `keeper.log.1.gz` (Aug 22, pre-fix, same-length window) | **38** |
+| `SEND FAILED` | 0 |
+| `currentCap` | **2** — off 1 |
+| `gasPerItem` (EMA) | **6,348,618** |
+
+⛔ **THE ZERO NEEDED QUALIFYING BEFORE IT COULD BE BELIEVED, AND THIS IS THE PART WORTH
+COPYING.** `keeper.log` rotates daily at 23:55, so a raw `grep -c` returning 0 could mean
+"fixed" or "new file". The rotated `.1.gz` from the day before holds **38** halvings — the
+same detector, the same-length window, 38 -> 0. **That is a planted positive (22.2), and
+without it the 0 would have been unreadable.**
+
+✅ **AND THE EMA ARITHMETIC CONFIRMS THE MECHANISM RATHER THAN THE OUTCOME.**
+`0.7 x 7.29M + 0.3 x a = 6.35M` gives `a ~ 4.16M` — one successful rescue near the live p50
+of 3.94M. `GAS_SAFE 15.5M / 6.35M = 2.4`, floored to **2**. The cap rose because the gas
+figure moved, which is exactly the path 30.11 said was being drowned out by nonce noise.
+
+⚠ **`sendFailures` / `sendFailuresTransport` read `undefined`** — the fix only writes them
+when a failure occurs, and there have been none. Not a defect. The counter exists in the
+running source (`direct_keeper.js:412`).
+
+⚠ **AND THE md5 ON THE BOX IS NOT 30.11's.** 30.11 recorded `a30ad4cf` / 422 lines; the
+droplet has **`de4c529f` / 429 lines**. That is the second md5 in 30.10a's verified set —
+the 23:5xZ deploy that raised `GAS_LIMIT` to 16.5M **on top of** the 30.11 fix. Same file,
+one revision newer. **Checked rather than assumed, because an unexplained md5 is exactly
+the shape of a deploy that did not land.**
+
+## 31.6 ⚠ THE DE-CENSORING CHECK IS NOT ANSWERABLE YET — 4 SAMPLES, AND IT NEEDS ~100
+
+30.10a's second free check: with the budget at 16.5M, items between 15M and 16.5M can be
+RECORDED for the first time, so their appearance would prove 14.67M was censorship.
+
+    ALL LOGS  samples 268  min 1.07M  p50 4.15M  p90 7.10M  MAX 14.67M
+      above 14.70M: 0
+      above 15.00M: 0
+    today's dearest (the only samples taken under the 16.5M budget): 4.31 · 4.31 · 7.06 · 7.06
+
+⛔ **FOUR SAMPLES. THE CHECK CANNOT ANSWER ANYTHING AND MUST NOT BE READ AS A PASS.**
+Historically ~3% of rescues land above 14.4M (5 of 160). The expected number of tail events
+in 4 draws is **0.12**. Observing zero is exactly what a censored world and an uncensored
+one both predict. **A detector that has not had a chance to fire has not reported anything**
+— the same shape as 31.5's zero, but this time the planted positive is missing.
+
+▶ **RE-RUN IT AT ~100 POST-16.5M SAMPLES.** Today's rate was 4 rescues in 9h40m; at 10-40
+a day that is roughly 3-10 days. The one-liner is free:
+
+    cd /root/keeper
+    grep -o "actual=[0-9.]*M" keeper.log | sed 's/actual=//;s/M//' | sort -n | tail -5
+
+**If anything at or above 15.00M appears, 14.67M was censorship, the real tail is higher
+than anything we have sized against, and the configuration needs revisiting.** If ~100
+samples land with nothing above ~14.7M, 14.67M was real and the configuration is right.
+
+## 31.7 ⚠ A SAMPLE-COUNT DISAGREEMENT, LEFT OPEN RATHER THAN EXPLAINED AWAY
+
+30.10 reports **160 samples over 8 days** from `keeper.log` plus the rotated `.gz` files.
+This session's extraction over the same files reports **268**, with p50 4.15M against
+30.10's 3.94M and p90 7.10M against 7.00M.
+
+One extra day of running cannot account for +108 at ~10-40 rescues/day. **So the two
+extractions are not reading the same population** — most likely 30.10's one-liner filtered
+to rescue ticks while this one takes every `actual=` line, or one of them de-duplicates.
+
+⚠ **THE CONCLUSIONS ARE UNAFFECTED — `MAX` is 14.67M in both, and that is the load-bearing
+number.** But the disagreement IS the finding (rule 1), and 30.10's "160 samples" is quoted
+as a basis in several places. Settle it before quoting either figure again:
+
+    cd /root/keeper
+    for f in keeper.log keeper.log.*.gz; do
+      n=$(zcat -f "$f" | grep -c "actual="); echo "$n  $f"; done
+
+## 31.8 NEXT, IN ORDER — SUPERSEDES 30.7.
+
+1. ✅ **DONE — session 30's work is committed and pushed (`5a07cab`).** Items 1-5 of 30.7
+   were already done; this landed them.
+2. ✅ **DONE — 30.11 CLOSED (31.5).** No further action.
+3. ✅ **DONE — G.4's `WorkItemFailed` classified (31.4): OUT OF GAS, defect 8, confirmed by
+   trace.** 30.13's last open thread is closed and its reading was correct.
+4. ⏳ **OPEN, DATED: re-run the de-censoring check at ~100 post-16.5M samples (31.6).**
+   Roughly 3-10 days out. Free. **It is the only thing that could still move the floor.**
+5. ⏳ **OPEN, CHEAP: settle the 160-vs-268 sample count (31.7)** before quoting either.
+6. **RUN THE 1.4 INTEGRITY GATE** in its private-deploy form (29.9) — still has not run.
+   **This is now the largest thing standing between here and PHASE 2.**
+7. **BATCH THE `:936` LOG SPLIT** (26.4) into the same RPC session.
+8. **PHASE 2 ONWARDS** — community deploy — only after PHASE G passes.
+9. **THE NAMING CLEANUP (30.9)** is still owed its own session. `WORK_CHAIN_LINK` is
+   pair-linking, not the vendor, and it is an on-chain work-type id. ⚠ Note that
+   `identify_driver.js`'s question is ANSWERED now (30.5f), so the naming table does not
+   need an entry for `0xdb9B1e94…` beyond "MetaMask DelegationManager, external, not ours".
+10. **Commit `scripts/diag_failed_item_reason.js`** — written this session, not yet
+    committed, and `keeper_gas_floor.selftest.js` needs `scp`ing to the droplet.
+11. Backlog otherwise unchanged from 27.6.
+
+---
+
+# ⬛ SESSION 30 STATE — 2026-08-22/23. READ AFTER SESSION 31.
 # ✅ 29.14 ITEM 2 — THE COMMUNITY-DEPLOY BLOCKER — IS CLOSED, DEPLOYED AND PROVEN IN PRODUCTION.
 # ✅ THE GAS CONFIGURATION IS SETTLED: floor **7.5M**, **maxItemsPerUpkeep = 1**, budget **16.5M**.
 # ⛔⛔ G.4 FIRED A REAL `WorkItemFailed` — DEFECT 8 REPRODUCED ON CHAIN, NOT ARGUED ABOUT.

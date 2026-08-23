@@ -96,16 +96,27 @@ function foldUpkeeps(rows) {
   let mixed = 0, empty = 0;
   const halts = [];
   const failures = {};
+  // ⛔ ADDED 2026-08-23 (session 31). The count alone was not actionable: G.4 reported
+  //    `PARKED_RESCUE = 1` and the handoff then said "the tx is in logs/runs/" — IT WAS
+  //    NOT. Nothing in this file printed WHICH transaction failed, so the one item the
+  //    whole run existed to catch could not be looked up afterwards. A detector that
+  //    says "1" without saying WHERE sends the next session hunting through 200,000
+  //    blocks by hand. Keep the tx, the gas it burned, and whether it also halted.
+  const failedTxs = [];
   for (const r of rows) {
     if (r.halted) halts.push(r.halted);
-    for (const f of r.failed || []) failures[f] = (failures[f] || 0) + 1;
+    for (const f of r.failed || []) {
+      failures[f] = (failures[f] || 0) + 1;
+      failedTxs.push({ tx: r.tx, type: f, gasUsed: r.gasUsed,
+                       items: (r.types || []).length, halted: r.halted });
+    }
     const n = (r.types || []).length;
     if (n === 0) { empty++; continue; }
     if (n > 1)   { mixed++;  continue; }
     const t = r.types[0];
     (perType[t] ||= []).push(r.gasUsed);
   }
-  const out = { perType: {}, mixedBatches: mixed, emptyBatches: empty, halts, failures };
+  const out = { perType: {}, mixedBatches: mixed, emptyBatches: empty, halts, failures, failedTxs };
   for (const [t, xs] of Object.entries(perType)) {
     out.perType[t] = {
       n: xs.length,
@@ -222,13 +233,25 @@ async function main() {
   if (cap !== 1) {
     console.log(`  ⚠ maxItemsPerUpkeep is ${cap}. Batches with more than one item CANNOT price an`);
     console.log(`    item and are reported separately.`);
-    console.log(`    ⛔ DO NOT try to "set the cap to 1" — setMaxItemsPerUpkeep accepts 5|10|15|20|30|40`);
-    console.log(`    and reverts on anything else (handoff 27.5). This message used to say otherwise.`);
-    console.log(`    Drive ONE ITEM PER TRANSACTION instead:`);
-    console.log(`      $env:ONE_ITEM="1"; $env:ONE_ITEM_TYPE="PARKED_RESCUE"; $env:GAS_LIMIT="15000000"`);
+    // ⛔⛔ CORRECTED 2026-08-23 (session 31). This block used to read "DO NOT try to set
+    //    the cap to 1 — setMaxItemsPerUpkeep accepts 5|10|15|20|30|40 and reverts on
+    //    anything else (handoff 27.5)". THAT IS NO LONGER TRUE and it now points the
+    //    wrong way: 1 and 2 were ADDED to the menu on 2026-08-22 (30.10a), and cap 1 is
+    //    the SHIPPED configuration and the guard the whole gas design rests on (30.10b).
+    //    A warning that survived the change it was warning about would have told the next
+    //    session the shipped default is impossible.
+    console.log(`    ▶ ON A V8.50 DEPLOYMENT, SET THE CAP TO 1 — it is on the menu as of`);
+    console.log(`      2026-08-22 (1|2|5|10|15|20|30|40) and it is the SHIPPED default. At cap 1`);
+    console.log(`      every batch prices its item by construction and nothing goes unpriced.`);
+    console.log(`      ⚠ This chain was deployed BEFORE the menu widened, so its setter may still`);
+    console.log(`      refuse 1. Check the revert before concluding anything about the code.`);
+    console.log(`    Otherwise drive ONE ITEM PER TRANSACTION from the driver side:`);
+    console.log(`      $env:ONE_ITEM="1"; $env:ONE_ITEM_TYPE="PARKED_RESCUE"; $env:GAS_LIMIT="16500000"`);
     console.log(`      npx hardhat run scripts\\testchain_keeper.js --network baseSepolia`);
     console.log(`    ⚠ GAS_LIMIT is NOT optional: eth_estimateGas prices the BatchGasHalted path`);
     console.log(`    (~0.09M), not the item (~2.4M), because halting SUCCEEDS. Measured 2026-08-22.`);
+    console.log(`    ⚠ AND 15,000,000 IS NO LONGER THE RIGHT VALUE — the drivers moved to 16.5M`);
+    console.log(`    on 2026-08-22, and a 15M limit CENSORS any item above it (30.10).`);
   }
 
   // Collect the keeper's own logs to find the transactions, then read each receipt once.
@@ -301,6 +324,20 @@ async function main() {
   console.log(`     ⛔ A WorkItemFailed ON PARKED_RESCUE IS THE SIGNAL THIS RUN EXISTS TO CATCH.`);
   console.log(`        The event carries no reason, so an out-of-gas item and an ordinary revert`);
   console.log(`        look identical. Any non-zero count here must be explained before go-live.`);
+  // ⛔ AND NAME THE TRANSACTION, 2026-08-23. Without this the count is a dead end.
+  if (f.failedTxs && f.failedTxs.length) {
+    console.log(`     ▶ THE FAILING TRANSACTIONS — trace these, do not re-derive them:`);
+    for (const x of f.failedTxs.slice(0, 10)) {
+      console.log(`       ${WORK[x.type] || x.type}  ${x.tx}`);
+      console.log(`         gasUsed ${usdGas(x.gasUsed)} · ${x.items} item(s) in the batch` +
+        `${x.halted ? ` · ALSO HALTED at ${x.halted.processed}/${x.halted.total}, ${usdGas(x.halted.gasRemaining)} left` : ` · no halt in this tx`}`);
+    }
+    if (f.failedTxs.length > 10) console.log(`       … ${f.failedTxs.length - 10} more`);
+    console.log(`     ⚠ READ THE TWO NUMBERS TOGETHER. A single-item batch that burned close to`);
+    console.log(`       its whole gas limit is an OUT-OF-GAS item. One that failed cheaply, with`);
+    console.log(`       gas to spare, reverted for its OWN reasons and is not a floor problem.`);
+    console.log(`       That is the distinction defect 8 destroys and this line restores.`);
+  }
 
   const v = gateVerdict(f, minGas);
   console.log(`\n  3. GATE MEASUREMENT 1 — VERDICT`);
