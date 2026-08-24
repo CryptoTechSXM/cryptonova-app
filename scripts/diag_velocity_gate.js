@@ -176,7 +176,14 @@ async function main() {
   } else {
     for (const r of stuck) {
       const below = r.i > 0 ? rows[r.i - 1] : null;
-      const belowMoving = below && below.belowRot !== null;
+      // ⛔ FIXED session 36, 2026-08-24. This read `belowRot !== null`, which is TRUE for a
+      // tier-below with ZERO rotations — so the run printed "T5 HAS crossed members into
+      // MatB (0 rotations lifetime)", a claim contradicted by the number inside its own
+      // sentence. `null` means UNREADABLE; `0n` means NEVER CROSSED. They are opposite
+      // facts and the gate advice inverts between them: if the tier below has never
+      // crossed, opening this gate promotes NOBODY, and there is nothing to investigate.
+      const belowMoving = below && below.belowRot !== null && below.belowRot > 0n;
+      const belowNeverCrossed = below && below.belowRot === 0n;
       console.log(`  ⛔ T${r.i + 1} is AUTO-PAUSED with ${r.cnt === null ? "?" : r.cnt} entr` +
                   `${r.cnt === 1n ? "y" : "ies"} in the window (needs ${threshold}).`);
       console.log(`     Auto-upgrades INTO T${r.i + 1} at cycle-out are blocked while this is false ` +
@@ -187,6 +194,11 @@ async function main() {
                     `that is STILL closed means either no crossing has happened recently, or the ` +
                     `velocity check re-closed it afterwards. Those are different faults — separate ` +
                     `them with VelocityUpdated / VelocityGateSet event timestamps before acting.`);
+      } else if (r.i > 0 && belowNeverCrossed) {
+        console.log(`     ✅ NOT A FAULT — T${r.i} has NEVER had a MatB crossing (0 rotations ` +
+                    `lifetime), so no member is eligible to be auto-upgraded into T${r.i + 1} ` +
+                    `yet. This gate is closed because the ladder has not reached it, not ` +
+                    `because anyone is being throttled. OPENING IT WOULD PROMOTE NOBODY.`);
       }
     }
     console.log("");

@@ -21,6 +21,14 @@ owner-set, and the session that earned it got five things wrong by ignoring what
 # ⛔ **`forceCrossKeeper` BOOKS DEBT TOO, AND 35.6/35.7 COUNTED ONLY RESCUES (36.3).**
 #     The 35.6 probe wallet shows **12 bookings = 10 coPayRescue + 2 forceCrossKeeper**,
 #     not the 8 that 35.6 recorded. Rescues are not the only path that mints debt.
+# ✅✅ **THE VELOCITY GATE IS SETTLED (36.7) — THE LAST OPEN OWNER DECISION IS CLOSED.**
+#     `velocityWindow` 3600 -> **14400**, `velocityThreshold` 3 -> **2** (6.0x looser),
+#     applied and verified on chain. Both setters are ENUMERATED and Claude recommended an
+#     impossible value first — read the require() before naming a dial. **What is left
+#     before the community deploy is the `main` deploy of the testnet app, and that is all.**
+# ⛔ **TWO FUNDING LISTS HAD DIVERGED AND THE BUG REPORTERS WERE THE ONES MISSING (36.4).**
+#     Fixed: ONE canonical `fund_list.txt` (110 wallets), no hardcoded arrays, and
+#     `api/submit-bug.js` now adds a reporter's wallet automatically.
 # ⛔⛔ **OWNER DIRECTIVE, 2026-08-24 — THE V8.48 ECONOMIC THREAD IS CLOSED (36.5, 36.6).**
 #     "V8.50 deploy changes the economics, mathematics, the crossing — wrap up the V8.48
 #     rabbit holes and work on deploying to the community so we can do real tests on that
@@ -266,6 +274,72 @@ laps — early entrants with outsized pool shares. Do not quote it.
 the comment was not updated when V8.32 halved `DIRECT_EARN_BPS` from 500 to 250. The
 adjacent sum check at :957 is correct, which is why this survived.
 
+## 36.7 ✅✅ THE VELOCITY GATE IS SETTLED — 14400 / 2, APPLIED AND VERIFIED ON CHAIN
+
+**THE LAST OPEN OWNER DECISION (33.8 / 34.7 item 3 / 35.10 item 6) IS CLOSED.** Untouched
+by sessions 34 and 35; decided and applied 2026-08-24.
+
+    BEFORE  velocityWindow 3600s  velocityThreshold 3   = 3.00 entries/hour required
+    AFTER   velocityWindow 14400s velocityThreshold 2   = 0.50 entries/hour  (6.0x looser)
+    setVelocityWindow(14400)     0x089eab362f4e4ccfac45827c0687e1d992b9d9026add879b3348cfb7f7476334
+    setVelocityThreshold(2)      0x78bb337a544f34a7837c6ec160c087b10e712097e580e94d1f7c6ee22616b47a
+    VERIFIED FROM CHAIN 2026-08-24: window 14400s, threshold 2.
+
+⛔ **BOTH SETTERS ARE ENUMERATED, AND CLAUDE RECOMMENDED AN IMPOSSIBLE VALUE FIRST.**
+`MatrixKeeper:271-278` — window must be 1800/3600/7200/14400, threshold 1/2/3/5. The first
+recommendation this session was `velocityWindow 86400`, **which would have reverted on
+chain in front of the owner.** `setMaxItemsPerUpkeep` (5/10/15/20/30/40) caught this repo
+once already. **STANDING RULE: read the setter's require() before naming a value.** The
+real option space is a 4x4 grid whose loosest corner is one entry per four hours.
+
+✅ **WHY 2 AND NOT THE LOOSEST (1) — THE OWNER LEANED HERE AND THE MEASUREMENT AGREED.**
+The only case separating threshold 1 from 2 is a tier seeing exactly one entry in the
+window. Threshold 1 auto-promotes members INTO that tier — and 36.5's seat census measured
+the crossing shortfall by tier: **T1 $4.48 · T2 $11.20 · T3 $20.70 · T4 $44.80.** Promotion
+into a thin HIGH tier is how a member acquires the largest shortfall in the system, so an
+over-open gate is the MORE expensive error, not the safer one. Claude's initial "fail
+open" argument ignored that gradient and was corrected by the owner's instinct.
+The escape hatch covers the case that matters: `TierRouter:1180` force-opens the next
+tier's gate on a MatB crossing, so a member who genuinely becomes eligible has the gate
+opened BY THEIR OWN CROSSING. The periodic check governs sustained quiet, which is what a
+deflation throttle is for.
+
+⚠ **THIS IS NOT A CALIBRATED NUMBER AND MUST NOT BE QUOTED AS ONE.** Today's entry counts
+are overwhelmingly bigfill through `manualUpgrade`, which never reads this gate, so the
+ORGANIC rate it will face is unmeasurable from the current chain — the same trap as
+session 14's eviction ladder and 6d's two decisions. It was chosen on the SHAPE OF THE
+TWO ERRORS, not on data.
+
+▶ **THE WATCH ITEM, AGREED IN ADVANCE, SO A LATER SESSION DOES NOT RE-LITIGATE IT.** After
+the community deploy, re-run `diag_velocity_gate.js` with `WINDOW_SECS=86400`. **If any
+tier with a NON-ZERO wide-window count is sitting closed, the periodic check is beating
+the escape hatch — go to threshold 1.** A tier at ZERO is evidence of nothing; nobody was
+trying. Do not touch the dials on any other basis.
+
+### STATE AT THE MOMENT OF THE CHANGE (block 45911034, 2026-08-24T16:52Z)
+
+T1-T5 all read **OPEN**, `highestOpenTier 5`. Entries in the gate's own 1h window: T1 9 ·
+T2 12 · T3 5 · **T4 exactly 3, one entry from closing** · T5 7. Over 24h: T1 150 · T2 200 ·
+T3 104 · T4 53 · T5 73 · T6-T10 zero. **The gate was binding NOTHING at that moment** —
+T6-T10 are closed because **T5 MatB has 0 rotations lifetime**, so no member is eligible to
+be promoted into T6 and opening it would promote nobody. 33.8 said exactly this and it
+holds. ⚠ 33.8's "T5 15 entries/24h" is SUPERSEDED — it reads 73 today.
+
+### ⛔ TWO INSTRUMENT DEFECTS FOUND AND FIXED IN THE SAME HOUR
+
+1. **`diag_velocity_gate.js` PRINTED A CLAIM ITS OWN SENTENCE REFUTED** — *"T5 HAS crossed
+   members into MatB (0 rotations lifetime)"*. It tested `belowRot !== null`, where `null`
+   means UNREADABLE and `0n` means NEVER CROSSED — opposite facts that invert the advice.
+   Fixed: it now says *"NOT A FAULT — the ladder has not reached this tier, opening the
+   gate would promote nobody"*.
+2. **`set_velocity_gate.js` RAISED A FALSE ALARM ON A STALE RPC READ.** The live run read
+   back `threshold 3` and aborted — **both transactions had succeeded**; a dry run moments
+   later showed 14400/2. The threshold is the SECOND write, so its read landed a beat too
+   early. **The check was RIGHT to refuse to claim success — that is why this was caught
+   rather than assumed. The defect is that ONE READ IS NOT A MEASUREMENT against an RPC
+   that can serve stale state, in EITHER direction.** Now retries 6x over 12s before
+   declaring a mismatch. A false alarm costs the same trust as a missed failure.
+
 ## 36.6 ⛔⛔ NEXT, IN ORDER — REORDERED ON THE OWNER DIRECTIVE. SUPERSEDES 35.10 AND 36.4.
 
 **THE GOAL IS THE COMMUNITY DEPLOY OF V8.50, NOT ANOTHER V8.48 MEASUREMENT.** Anything
@@ -283,10 +357,11 @@ next deploy, and that is the lesson to carry, not the answers.
    over thirteen days** (35.3). It is the one thing on this list that helps a member today.
    **THE QA THAT MATTERS: park a wallet, approve, WAIT PAST ONE 30-SECOND POLL, confirm
    Self Rescue STAYS LIT.** That single wait is what the July fix never tested.
-3. ⛔⛔ **`velocityThreshold` — THE ONLY OPEN OWNER DECISION LEFT, AND IT IS EXPLICITLY
-   "BEFORE THE COMMUNITY DEPLOY"** (33.8 / 34.7 item 3 / 35.10 item 6). 78 wallets entered
-   T4 in 24h while T4 read AUTO-PAUSED; today it throttles ~12 organic leaders. Untouched
-   by sessions 34, 35 and 36. **This is now the critical path.**
+3. ✅✅ **`velocityThreshold` IS SETTLED AND APPLIED — SEE 36.7.** window 3600 -> 14400,
+   threshold 3 -> 2, verified on chain 2026-08-24. **This was the last open owner decision
+   and it is closed.** Its watch item (re-run the diagnostic after the community deploy;
+   go to threshold 1 only if a tier with NON-ZERO wide-window entries sits closed) is in
+   36.7 and should not be re-litigated on any other basis.
 4. **THE COMMUNITY POST** (35.10 item 3). Unblocks the moment 2 lands. ⚠ 36.5 does NOT
    clear its original caveat — on V8.48 a paid shortfall may still buy a lap — so the post
    should say what the fix does (the approval no longer goes stale) and must not promise
