@@ -35,8 +35,11 @@ owner-set, and the session that earned it got five things wrong by ignoring what
 #     re-applied, verified from disk. **A SYNTAX CHECK IS NOT AN EXISTENCE CHECK.**
 # ⛔ **37.6 ITEM 1 WAS ALREADY DONE BEFORE THIS SESSION OPENED — THE THIRD SESSION RUNNING
 #     (38.0).** `diag_wallet_charges.js` was already committed in `8e42f73`.
-# ▶ **WHAT IS LEFT (38.4): the 70-second single-position check (37.6 item 2, still the
-#     only unrun one), the 6 who cannot pay ($25.07), then the community deploy.**
+# ✅ **AND THE LAST UNRUN CHECK IS NOW RUN AND PASSED (38.4 item 1).** Owner stopwatched
+#     the single-position wait at **00:35.34**; the poll is exactly 30,000 ms and its
+#     interval is never restarted, so at ~33-34s real elapsed at least one tick fired,
+#     rebuilt the panel, and Self Rescue stayed lit. 37.6 item 2 is CLOSED.
+# ▶ **WHAT IS LEFT (38.4): the 6 who cannot pay ($25.07), then the community deploy.**
 
 # ⬛ SESSION 37 STATE — 2026-08-24. Superseded on the next-steps items by SESSION 38 above.
 # ✅✅ **THE QA 36.9 SAID WAS STILL UNANSWERED HAS NOW RUN, AND IT FAILED (37.1).** Good.
@@ -254,13 +257,23 @@ read. **A clean, plausible, wrong answer, produced by the instrument built to ch
 
 36.6 still governs: **the goal is the community deploy. Do not open a V8.48 measurement.**
 
-1. ▶ **THE 70-SECOND CHECK, STILL THE ONLY UNRUN ONE (37.6 item 2).** On a SINGLE-position
-   parked wallet: approve, wait 70s untouched, confirm Self Rescue stays lit and clickable.
-   37.1's mechanism is sound and 37.3 gated the un-hide on `_parkedAll.length < 2`, but
-   nobody has sat through two poll cycles since. **37.5 is the recipe: the owner's five
-   signable wallets are parked in 2-3 matrices each, so one must be cleared down to a single
-   position first — that is what switches the panel from the CARD path to the SINGLE path.**
-   Do not record it as done without running it.
+1. ✅ **THE POLL-CYCLE CHECK IS RUN AND PASSED (37.6 item 2 — CLOSED).** Owner, on a
+   single-position parked wallet: approved, sat untouched, stopwatched **00:35.34** with a
+   second or two of reaction on the stop, so **~33-34s of real elapsed time**. Self Rescue
+   was still lit and clickable. **The poll is exactly 30,000 ms (`index.html:8839`), so the
+   only question was whether one 30s boundary was crossed — it was.**
+   **AND THE MARGIN IS BETTER THAN 3 SECONDS.** `startRescuePolling` opens with
+   `if (_rescuePollTimer) return;`, so **the interval is never restarted** — it was already
+   running from the page load and the member's click does not reset its phase. Any 33-second
+   untouched window therefore GUARANTEES at least one tick and may contain two, whenever the
+   click lands relative to the interval. `loadDashboardData()` ran, rebuilt the panel
+   underneath the member, and the button survived — which is precisely the code that was the
+   suspect in 37.1 and 37.2.
+   ⚠ **DO NOT RE-DERIVE A "70 SECONDS" REQUIREMENT FROM 37.6.** Two cycles was
+   belt-and-braces, not a threshold: every tick runs identical code against identical state,
+   with no first-run flag and no counter, so tick two could not have told us anything tick
+   one did not. **The real acceptance criterion is "one poll tick, observed" — and the way
+   to check that is the interval constant, not a stopwatch target.**
 2. ▶ **THE 6 WHO CANNOT PAY** — $25.07 total across 6 wallets, from the 18:52 census.
 3. ▶ **THE COMMUNITY DEPLOY.** Nothing above blocks it.
 4. ▶ **AFTER the deploy:** `diag_velocity_gate.js` with `WINDOW_SECS=86400` (36.7's watch
