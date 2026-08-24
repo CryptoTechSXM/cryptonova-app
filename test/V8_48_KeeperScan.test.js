@@ -40,7 +40,12 @@
  *     KILLED   communityWallet pointed at the wrong contract
  *
  *     SURVIVES frozenMatBTimeout <-> parkedGracePeriod
- *              Both default to 6 hours, so the swap is a no-op at defaults; and with
+ *              Both defaulted to 6 hours WHEN THIS WAS WRITTEN, so the swap was a no-op
+ *              at defaults. Neither still does - V8.48 item 24 moved frozenMatBTimeout to
+ *              15 min, and 2026-08-24 moved parkedGracePeriod to 24h (owner policy:
+ *              testnet 24h, mainnet 48h; 6h was expedited testing only). The test does
+ *              not care - it sets both explicitly, which is the point. Do not re-derive
+ *              anything from the sentence above; and with
  *              distinct values it still hides, because _isFrozenMatB short-circuits on
  *              lastRotationTimestamp == 0 and never reads the timeout at all. Killing it
  *              needs a MatB that is full AND has rotated AND has then gone stale — a

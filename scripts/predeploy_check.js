@@ -484,6 +484,20 @@ if (mkText) {
     fail("evictionGracePeriod NOT found in MatrixKeeper.sol — V8.49 item 1 not applied; eviction timing is still split across parkedGracePeriod and extendedIdleTimeout");
   }
 
+  // ── THE LOAN CLOCK default, 2026-08-24 ────────────────────────────────────
+  // Same discipline as the eviction clock above, and for the same reason: the
+  // declared default is what ships if a deploy-time setter call is ever missed.
+  // It read "6 hours" until 2026-08-24 while deploy_v8.js shipped 86400 and owner
+  // policy said 48h on mainnet - three numbers, one behaviour, nothing keeping them
+  // equal. Testnet policy (24h) is the fail-safe default; mainnet 48h is enforced in
+  // deploy_v8.js, which refuses a non-testnet deploy below 172800.
+  if (/uint256\s+public\s+parkedGracePeriod\s*=\s*24\s+hours\s*;/.test(mkText) ||
+      /uint256\s+public\s+parkedGracePeriod\s*=\s*86_?400\s*;/.test(mkText)) {
+    ok("parkedGracePeriod declared default is 24h (testnet policy; mainnet 48h is set at deploy and enforced by deploy_v8.js)");
+  } else {
+    fail("parkedGracePeriod declared default is not 24h. This is the LOAN clock - how long a member has to fund their own re-entry before the SF lends them the gap and books a debt. Owner policy 2026-08-24: mainnet 48h, testnet 24h, anything shorter was expedited testing only.");
+  }
+
   // ── THE RECONCILIATION, and the check that matters most in this block ─────
   // Before V8.49 discovery gated on parkedGracePeriod (24h) and execution gated on
   // extendedIdleTimeout (7d). Nothing failed: work items were queued and silently
@@ -1646,12 +1660,15 @@ if (!htmlTxt) {
   const mkG  = read("contracts/MatrixKeeper.sol")  || "";
   const libG = read("contracts/MatrixKeeperLib.sol") || "";
 
-  // 1. parkedGracePeriod — deploy must set it explicitly, never rely on the 6h default
+  // 1. parkedGracePeriod — deploy must set it explicitly, never rely on the declared
+  //    default (24h since 2026-08-24; it was 6h, which was the expedited-testing value).
+  //    deploy_v8.js now ALSO refuses a non-testnet deploy below 172800 on its own, so
+  //    this check no longer stands alone behind someone remembering MAINNET=1.
   const parkedSecs = Number(process.env.PARKED_GRACE_SECS || 86400);
   if (/setParkedGracePeriod\(/.test(dep)) {
     ok(`deploy_v8.js sets parkedGracePeriod explicitly (this run: ${parkedSecs}s = ${parkedSecs/3600}h)`);
   } else {
-    fail("deploy_v8.js does NOT set parkedGracePeriod — it would ship the 6h contract default");
+    fail("deploy_v8.js does NOT set parkedGracePeriod — it would ship the declared contract default (24h testnet policy), which is NOT the 48h mainnet policy");
   }
   if (isMainnet && parkedSecs < 172800) {
     fail(`MAINNET: parkedGracePeriod ${parkedSecs}s is below the 48h policy — set PARKED_GRACE_SECS=172800`);

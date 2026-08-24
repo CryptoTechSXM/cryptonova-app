@@ -904,10 +904,40 @@ async function main() {
   )).wait();
   console.log("  ↳  MatrixPairFactory.setPeripherals FINAL (all addresses wired)");
 
-  // V8.34: Set parkedGracePeriod
+  // V8.34: Set parkedGracePeriod  (THE LOAN CLOCK - see MatrixKeeper.sol declaration)
+  //
+  // ⛔ 2026-08-24: this line defaulted to 86400 on EVERY network. On mainnet that ships
+  //    the TESTNET window silently - 24h where owner policy is 48h - and nothing in the
+  //    deploy or the predeploy check would have said a word. The value is not decoration:
+  //    it is how long a member has to fund their own re-entry before the SF lends them
+  //    the gap and books a debt against them.
+  //
+  //    THE DEFAULT NOW FAILS SAFE. An unrecognised network is treated as MAINNET, so a
+  //    new network name added to hardhat.config.js gets the LONGER window until someone
+  //    deliberately lists it as a testnet. Getting this wrong in the safe direction costs
+  //    a tester 24 extra hours; getting it wrong the other way costs a real member a loan
+  //    they did not need.
+  const _netName   = (() => { try { return require("hardhat").network.name; } catch (_) { return ""; } })();
+  const _TESTNETS  = ["hardhat", "localhost", "baseSepolia", "sepolia"];
+  const _isTestnet = _TESTNETS.includes(_netName);
   const GRACE_PERIOD_SECS = process.env.PARKED_GRACE_SECS
     ? Number(process.env.PARKED_GRACE_SECS)
-    : 86400; // 24h testnet default
+    : (_isTestnet ? 86400 : 172800);   // 24h testnet policy / 48h mainnet policy
+  // The setter takes a RANGE (0, or 5min..30d), so a typo cannot be caught by the
+  // contract the way a menu value would be. Check it here instead.
+  if (!(GRACE_PERIOD_SECS === 0 || (GRACE_PERIOD_SECS >= 300 && GRACE_PERIOD_SECS <= 2592000))) {
+    throw new Error(
+      `PARKED_GRACE_SECS=${GRACE_PERIOD_SECS} is outside setParkedGracePeriod's range ` +
+      `(0, or 300..2592000). Owner policy: mainnet 172800 (48h), testnet 86400 (24h).`
+    );
+  }
+  if (!_isTestnet && GRACE_PERIOD_SECS < 172800) {
+    throw new Error(
+      `Refusing to deploy to "${_netName || "unknown"}" with parkedGracePeriod=${GRACE_PERIOD_SECS}s. ` +
+      `Owner policy is 48h (172800) on mainnet. Set PARKED_GRACE_SECS explicitly if this is deliberate.`
+    );
+  }
+  console.log(`  ↳  network="${_netName || "unknown"}" treated as ${_isTestnet ? "TESTNET" : "MAINNET"} for the loan clock`);
   await (await keeper.setParkedGracePeriod(GRACE_PERIOD_SECS)).wait();
   console.log(`  ↳  MatrixKeeper.setParkedGracePeriod → ${GRACE_PERIOD_SECS}s (${GRACE_PERIOD_SECS/3600}h)`);
 

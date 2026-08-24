@@ -358,7 +358,22 @@ contract MatrixKeeper is Ownable {
     ///    menu value; shipping too low and discovering it in production is a silent
     ///    WorkItemFailed cascade nobody sees.** Ship safe, relax on evidence.
     uint256 public minGasPerItem = 7_500_000;
-    uint256 public parkedGracePeriod   = 6 hours;
+    /// @notice THE LOAN CLOCK. How long a parked member who CANNOT self-fund is left
+    ///         alone before the Stability Fund re-enters them with an advance.
+    ///
+    ///         OWNER POLICY, stated 2026-08-24 and the reason this line changed from
+    ///         6 hours: **mainnet 48h (172_800). Testnet 24h (86_400). 6h and anything
+    ///         shorter was EXPEDITED TESTING ONLY.** The old default and the old setter
+    ///         doc both said "mainnet 6 hours", which was wrong in the direction that
+    ///         costs a member money - it hands them a loan four times sooner than
+    ///         policy allows them to avoid one.
+    ///
+    ///         THE DEFAULT IS NOT WHAT SHIPS: deploy_v8.js calls setParkedGracePeriod
+    ///         explicitly on every deploy (24h on a known testnet, 48h otherwise). It is
+    ///         set to the TESTNET policy value anyway so that a forgotten setter call
+    ///         lands ON policy instead of four times under it. Range setter, not a menu:
+    ///         0 (admin/testing override) or 5 minutes..30 days.
+    uint256 public parkedGracePeriod   = 24 hours;   // 86_400 - testnet policy; mainnet 48h set at deploy
 
     /// @notice V8.48 item 12 — floor for a rescue that costs the Stability Fund NOTHING
     ///         (the member's own withdrawable + crossing reserve covers the fee).
@@ -652,7 +667,18 @@ contract MatrixKeeper is Ownable {
     /// @notice V8.20: DAO-governable.
     /// @dev V8.25: changed from enum check to range. 0 = no grace period (testing/admin override).
     ///      Non-zero values must be between 5 minutes and 30 days.
-    ///      Mainnet recommendation: 6 hours (21600). Testnet: 0 or 5-10 minutes.
+    ///
+    ///      ** MAINNET 48h (172_800). TESTNET 24h (86_400). ** Owner policy, 2026-08-24.
+    ///      This line previously read "Mainnet recommendation: 6 hours (21600). Testnet:
+    ///      0 or 5-10 minutes" and was wrong on BOTH networks. 6h was an expedited-testing
+    ///      value that outlived its purpose in a comment, and deploy_v8.js had already been
+    ///      shipping 86_400 for its own reasons - two copies of one fact, disagreeing, with
+    ///      nothing to keep them equal. Same shape as the 375/400 threshold drift.
+    ///
+    ///      This window protects members from UNWANTED LOANS, so short is not safe here:
+    ///      every hour cut off it is an hour a member loses to arrange their own funds
+    ///      before the Stability Fund lends them the gap. Self-funded members are NOT held
+    ///      by this clock - selfFundedGracePeriod (5 min, a race guard) is theirs.
     function setParkedGracePeriod(uint256 v) external onlyOwnerOrGovernance {
         require(v == 0 || (v >= 5 minutes && v <= 30 days), "MK: grace period out of range (0 or 5min-30d)");
         parkedGracePeriod = v;
