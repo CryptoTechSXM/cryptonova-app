@@ -10,7 +10,35 @@ owner-set, and the session that earned it got five things wrong by ignoring what
 
 ---
 
-# ⬛ SESSION 37 STATE — 2026-08-24, LATEST. READ THIS FIRST.
+# ⬛ SESSION 38 STATE — 2026-08-24, LATEST. READ THIS FIRST.
+# ✅✅ **THE COMMUNITY POST IS WRITTEN, APPROVED AND SENT (38.1). 37.6 item 3 IS CLOSED.**
+#     Owner: *"the post is good sent it out."* It carries the three things 37.6 required —
+#     the approval is the ENTRY FEE while only the shortfall is taken, leftover approval is
+#     normal and unspent, and a re-park is a NEW SEAT and not a second charge — plus the $1
+#     bounty and all three of this session's bugs, my own leaked fix included.
+#     **The two panel notes had to ship FIRST** (`b9bdff9`): the owner's standing rule is
+#     that the app states a policy before the announcement does.
+# ⛔⛔ **THE LOAN CLOCK HAD THREE VALUES AND MAINNET WOULD HAVE SHIPPED THE TESTNET ONE
+#     (38.2).** `parkedGracePeriod` is how long a member who CANNOT self-fund is left alone
+#     before the SF re-enters them with an advance **and books a debt against them**. The
+#     declaration said **6 hours**; the setter's own doc said *"mainnet 6h, testnet 0 or
+#     5-10 min"*; `deploy_v8.js` shipped **86400 on every network, unconditionally**. Owner
+#     policy, stated this session: **mainnet 48h, testnet 24h; 6h was EXPEDITED TESTING
+#     ONLY.** A mainnet deploy would have handed members a loan 24 hours before policy let
+#     them avoid one, and nothing would have said a word unless somebody remembered to set
+#     `MAINNET=1` on the predeploy run. Fixed `2fe1f11`. **145/145 predeploy, 16/16 KeeperScan.**
+# ⛔ **I EMPTIED A TEST FILE AND MY OWN VERIFICATION CALLED IT GREEN (38.3).**
+#     `open(p,'wb').write(open(p,'rb').read())` — the `'wb'` truncates BEFORE the read on
+#     the right runs. `V8_48_KeeperScan.test.js` went to **0 bytes**, **`node --check`
+#     passed it because an empty file is valid JavaScript**, and the suite then contributed
+#     **0 tests** to a run the owner and I both read as "43 passing". Restored from HEAD,
+#     re-applied, verified from disk. **A SYNTAX CHECK IS NOT AN EXISTENCE CHECK.**
+# ⛔ **37.6 ITEM 1 WAS ALREADY DONE BEFORE THIS SESSION OPENED — THE THIRD SESSION RUNNING
+#     (38.0).** `diag_wallet_charges.js` was already committed in `8e42f73`.
+# ▶ **WHAT IS LEFT (38.4): the 70-second single-position check (37.6 item 2, still the
+#     only unrun one), the 6 who cannot pay ($25.07), then the community deploy.**
+
+# ⬛ SESSION 37 STATE — 2026-08-24. Superseded on the next-steps items by SESSION 38 above.
 # ✅✅ **THE QA 36.9 SAID WAS STILL UNANSWERED HAS NOW RUN, AND IT FAILED (37.1).** Good.
 #     `ca66731` was deployed but not verified, and the wait found a SECOND cause with the
 #     same symptom. The 2026-07-29 report was blamed on opacity 0.5; this one is
@@ -80,6 +108,166 @@ owner-set, and the session that earned it got five things wrong by ignoring what
 # ⛔ **THE TWO `getParkedMember` OUT-OF-BOUNDS PANICS WERE A RACE, NOT A BUG (36.2).**
 #     The keeper drains the queue every 2-4s while a sweep takes minutes. Every read is
 #     now pinned to ONE BLOCK. Run 1's census was a smear; run 2's is a snapshot.
+
+## 38.0 STATE — WHAT SHIPPED
+
+    TESTNET APP — admin == preview == main == 6779fbf, verified from the REMOTE refs,
+    both truncation checks clean (`</body></html>`)
+      b9bdff9  re-park + entry-fee-approval notes on the parked panel       38.1
+      6779fbf  community post, with the real grace window in it             38.1 / 38.2
+
+    CONTRACTS — v8.1 == origin/v8.1 == 2fe1f11
+      2fe1f11  the loan clock: 24h testnet / 48h mainnet, enforced at
+               deploy instead of remembered                                 38.2
+
+⛔ **37.6 item 1 WAS ALREADY DONE when this session opened.** `diag_wallet_charges.js` was
+committed in `8e42f73`, not outstanding. 37.0 flagged this same pattern about ITSELF one
+session earlier; this is the third occurrence. **Verify with read-only `git --no-optional-locks`
+before believing any handoff line about what is uncommitted — including this one.**
+
+⚪ **BOTH REPOS SHOW PHANTOM MODIFICATIONS AND THEY ARE STILL EMPTY.** Contracts shows 2
+(`archive/windows_keeper/corescue.bat`, `contracts/test/CryptoNovaCommunityWallet.sol`);
+the testnet app shows dozens including `index.html` and all of `api/`. Diffed with
+`--ignore-cr-at-eol`: **zero real changed lines in any of them.** That is 36.6 item 6's
+`.gitattributes` phantom. Do not commit them, and always name files explicitly to `git add`.
+
+## 38.1 ✅ THE COMMUNITY POST — AND WHY THE PANEL NOTES HAD TO GO FIRST
+
+`community_post_2026-08-24.md` in the testnet app repo. Owner approved and sent it.
+
+**The owner's rule decided the order of work, not the other way round:** *publish a policy
+only once the frontend shows it.* The post's three required points (37.6 item 3) were all
+things the app did not say anywhere, so **the app had to say them first**. Two STATIC notes
+were added above the parked list (`index.html`, `b9bdff9`):
+
+    "Why a tier can ask again right after you rescue it."   — the re-park (37.5)
+    "Why the approval is bigger than the shortfall."        — entry fee vs shortfall
+
+⚠ **STATIC ON PURPOSE. NO `id`, NO DISPLAY TOGGLING.** 37.1 was a member-facing outage
+caused by an element something hid and nothing un-hid, and 37.3 was the leak from fixing
+it. A fourth toggled element on that panel is a fourth chance at the same bug. If a future
+session needs these to appear conditionally, read 37.1 and 37.3 first and grep every site
+that touches `display` on the element before writing a line.
+
+✅ **THE POST'S NUMBERS ARE MEASURED, NOT PARAPHRASED.** The three allowance rows come
+straight from 37.4's ledger; the fee schedule was read out of `index.html:5405`
+(`TIER_FEES_6`), not recalled; the approval wording was matched word for word against what
+the app actually prints at `:5864` / `:9857` / `:10170`.
+
+⛔ **ONE NUMBER WAS PULLED FROM THE DRAFT BECAUSE IT COULD NOT BE MEASURED FROM HERE, AND
+THAT IS WHAT FOUND 38.2.** The draft said "24-hour grace period" because the panel says so.
+Neither the cloud container nor `device_bash` can reach the RPC, so that figure could not be
+confirmed — it went out of the draft, the owner was told why, and his answer ("24h testnet,
+48h mainnet, 6h was expedited testing") is what exposed the three-way disagreement below.
+**Refusing to publish one unverified number is what surfaced a live mainnet defect.**
+
+## 38.2 ⛔⛔ THE LOAN CLOCK — THREE NUMBERS FOR ONE BEHAVIOUR, AND THE DEPLOY USED THE WRONG ONE
+
+`parkedGracePeriod` governs how long a parked member who **cannot self-fund** is left alone
+before the Stability Fund re-enters them with an advance. It is not cosmetic: every hour cut
+off it is an hour the member loses to cover the gap themselves before a debt is booked
+against them. (Self-funded members are held by `selfFundedGracePeriod`, 5 min, a race guard.
+Eviction is `evictionGracePeriod`, 7 days. Three clocks, three jobs — do not conflate them.)
+
+    WHAT EACH SOURCE CLAIMED, BEFORE                          OWNER POLICY (2026-08-24)
+      MatrixKeeper.sol declaration ....... 6 hours              mainnet   48h  (172_800)
+      setParkedGracePeriod doc ........... "mainnet 6h,          testnet   24h  ( 86_400)
+                                            testnet 0 or        6h and below = EXPEDITED
+                                            5-10 minutes"                    TESTING ONLY
+      deploy_v8.js ....................... 86400, every network, unconditionally
+
+**THE ONE THAT MATTERED IS THE DEPLOY SCRIPT.** It had no network detection at all, so a
+mainnet deploy would have silently shipped the TESTNET window — 24h where policy is 48h.
+`predeploy_check.js` did already carry a 48h assertion, but it only fires when `MAINNET=1`
+is exported **and** it reads `PARKED_GRACE_SECS` from the predeploy run's own environment,
+not from what the deploy will actually do. Enforcement that depends on remembering two
+environment variables is not enforcement.
+
+✅ **FIXED `2fe1f11`, four files:**
+
+  1. **Declaration 6h -> 24 hours.** The default is not what ships (deploy always sets it),
+     but a *forgotten* setter call now lands ON testnet policy instead of 4x under it.
+  2. **Setter doc rewritten** to the owner's policy, with the old wrong text quoted in place
+     so nobody re-derives it.
+  3. **`deploy_v8.js` is network-aware and FAILS SAFE.** 24h on a known testnet
+     (`hardhat`/`localhost`/`baseSepolia`/`sepolia`), **48h on anything else**, plus a hard
+     `throw` on a non-testnet deploy below 172800 and a range check on `PARKED_GRACE_SECS`
+     (the setter takes a RANGE, 0 or 5min-30d, so a typo cannot be caught by a menu the way
+     the other keeper setters catch theirs). **An unrecognised network is treated as MAINNET
+     on purpose** — a new name added to hardhat.config.js gets the longer window until
+     somebody deliberately lists it as a testnet. Wrong in the safe direction costs a tester
+     a day; wrong the other way costs a real member a loan they did not need.
+  4. **`predeploy_check.js` asserts the declared default**, the same mechanical way it
+     already does for the eviction clock, and two of its own messages that still quoted
+     "the 6h default" were corrected.
+
+**VERIFIED:** `npx hardhat compile` clean · `V8Governance` 43/43 · `V8_48_KeeperScan` 16/16
+· `predeploy_check` **145/145**, printing the new line *"parkedGracePeriod declared default
+is 24h (testnet policy; mainnet 48h is set at deploy and enforced by deploy_v8.js)"*.
+**Nothing on chain changed** — live testnet was already 24h, which is correct.
+
+⛔ **THIS IS THE 375/400 SHAPE AGAIN, IN THE DIRECTION THAT COSTS MEMBERS MONEY.** Two copies
+of one fact, no mechanism keeping them equal. The 2026-07-28 lesson said: when a live setter
+changes behaviour, change the SOURCE DEFAULT in the same session. **The extension this
+session earns: when the value differs BY NETWORK, the deploy script must derive it and
+refuse the wrong one — a comment recommending a value is not a mechanism, and neither is a
+predeploy check gated behind an environment variable somebody has to remember.**
+
+⚠ **STILL HARDCODED, NOT ON THE CRITICAL PATH:** `index.html:1333` prints "24-hour grace
+period" as literal text. Correct on testnet, **wrong the day mainnet ships at 48h.** The
+right fix is to read `parkedGracePeriod()` and substitute, with the sentence falling back to
+"the grace period" when the read fails — the app already does exactly this dance for
+`evictionGracePeriod`/`extendedIdleTimeout` at `:9997`. Do it as part of the mainnet cutover.
+
+## 38.3 ⛔ I EMPTIED A TEST FILE, AND `node --check` CALLED IT GREEN
+
+Applying a comment fix to `test/V8_48_KeeperScan.test.js`, the edit script did:
+
+    open(path,'wb').write(open(path,'rb').read().rstrip(b'\x00'))
+
+**The `'wb'` truncates the file to zero before the argument on the right is evaluated**, so
+the read returned empty and the write wrote empty. The file went to **0 bytes**. Three other
+edit scripts in the same session did the identical job across separate statements and were
+fine — only the one collapsed into a single expression died.
+
+**THE VERIFICATION IS THE REAL FINDING.** `node --check` reported *"syntax OK"* — because an
+empty file IS valid JavaScript. The suite then ran, contributed **zero tests**, and the
+output read "43 passing" from the OTHER file in the same command. Nothing anywhere said a
+word. It was caught only by noticing the KeeperScan `describe` block was absent from output
+the owner had already pasted.
+
+**RULES THIS EARNS:**
+  * **A syntax check is not an existence check.** After any scripted edit, assert SIZE and
+    a known CONTENT marker **read back from disk** — never from the in-memory buffer you
+    just built. The restore + re-apply in this session does exactly that and prints both.
+  * **Never collapse a read and a write of the same path into one expression.**
+  * **A test file that runs zero tests must be as loud as a failing one.** `V8_48_KeeperScan`
+    already has the antidote as its final case — *"the batch actually contains work, this
+    whole file is vacuous otherwise"* — which would have caught this had it been able to
+    run at all. **Other suites should carry the same guard.**
+
+Same family as `bypass_scan_full.js` printing a confident "0 direct-entry seats" over a
+known positive, and `withdraw_probe.js` v1 printing "$0.00 everywhere" out of a swallowed
+read. **A clean, plausible, wrong answer, produced by the instrument built to check.**
+
+## 38.4 ▶ NEXT — THE CRITICAL PATH
+
+36.6 still governs: **the goal is the community deploy. Do not open a V8.48 measurement.**
+
+1. ▶ **THE 70-SECOND CHECK, STILL THE ONLY UNRUN ONE (37.6 item 2).** On a SINGLE-position
+   parked wallet: approve, wait 70s untouched, confirm Self Rescue stays lit and clickable.
+   37.1's mechanism is sound and 37.3 gated the un-hide on `_parkedAll.length < 2`, but
+   nobody has sat through two poll cycles since. **37.5 is the recipe: the owner's five
+   signable wallets are parked in 2-3 matrices each, so one must be cleared down to a single
+   position first — that is what switches the panel from the CARD path to the SINGLE path.**
+   Do not record it as done without running it.
+2. ▶ **THE 6 WHO CANNOT PAY** — $25.07 total across 6 wallets, from the 18:52 census.
+3. ▶ **THE COMMUNITY DEPLOY.** Nothing above blocks it.
+4. ▶ **AFTER the deploy:** `diag_velocity_gate.js` with `WINDOW_SECS=86400` (36.7's watch
+   item), and count how many stuck members could exit the ratchet by upgrading (36.9).
+5. ⚠ **CARRIED, NOT URGENT:** the `index.html:1333` hardcoded 24h (38.2), and
+   `CryptoNova-Keepers/mint_usdc.js`'s hardcoded wallet array — **a fifth funding list**, on
+   top of 36.4's three (37.5). Migrate it with the others.
 
 ## 37.0 STATE — WHAT SHIPPED, AND WHAT THE HANDOFF SAID THAT WAS ALREADY STALE
 
