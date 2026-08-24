@@ -81,8 +81,11 @@ owner-set, and the session that earned it got five things wrong by ignoring what
   against the owner's list before any future funding run.**
 * ⚠ **THE `.gitattributes` LF WARNING FIRED A FOURTH TIME** (35.10 item 8 said third), on
   all three files of `4d29cb9`. Still unpinned in both repos.
-* ⛔ **THE COMMUNITY POST IS STILL BLOCKED** — 35.10 item 3 stands, and 36.1 does not
-  unblock it. It sharpens what the post would have to say.
+* ▶ **THE COMMUNITY POST IS NOW THE NEXT THING.** Its deploy blocker cleared when `main`
+  went to `de6e95c`; only the QA above stands between it and publication. ⚠ 36.1 and 36.5
+  still shape what it may SAY: on V8.48 a paid shortfall may buy a lap rather than an
+  exit, so the post can promise that the approval no longer goes stale and must NOT
+  promise that paying ends the parking. Read [[community-comms]] before drafting.
 
 ## 36.1 ⛔⛔ THE RATCHET — WHY BOTH HALVES OF 35.7 READ TRUE AT ONCE
 
@@ -226,6 +229,57 @@ already commits BUGS.md there through the GitHub Contents API on branch `admin`.
   `CryptoNova-Keepers/fund_list.txt` is now a STALE COPY — point them at the canonical
   file or delete them, before the next funding run re-creates the divergence.
 
+## 36.9 ⛔ THE OWNER'S LIVE QA FOUND THE SAME BUG IN THE PATH `ca66731` MISSED
+
+Wallet `0x4392471363D2b215c9E0D03C25C06EDd6bFA9871` (CN.09 Nicole | Mers), on the freshly
+deployed `main`, 2026-08-24. **Two rendering paths draw the self-rescue approval and
+`ca66731` only fixed one.**
+
+    SINGLE-position button (index.html:1353 / ~5851)   FIXED by ca66731
+    MULTI-position card list (~10125)                  MISSED — still printed the shortfall
+
+The single path carries the rule in its own comment: **"THE BUTTON MUST NAME THE FIGURE
+THE WALLET WILL ASK FOR … this label used to print the SHORTFALL, which would now disagree
+with the amount in the MetaMask popup."** The card list did exactly that: the screen read
+**"Approve $2.68"** on the button while the status line under it read **"Approving $10.00
+— only $2.68 is taken"** and MetaMask asked for $10.00. **On the very screen three members
+had already reported confusion about.** A label that disagrees with the wallet popup is how
+a member concludes the app is broken and stops.
+
+✅ **FIXED `6ed3881`, all three branches.** Card button and note now name the approved
+figure (T1 "Approve $10.00", T2 "Approve $25.00") and say only the shortfall is taken;
+falls back to the old wording when `c.fee` is unreadable, so it can never show a wrong
+number. 5 inline script blocks parse clean, CRLF preserved, ends `</body></html>`.
+
+⛔ **THE LESSON, AND IT IS NOT "CHECK THE LABEL": A FIX APPLIED TO ONE RENDERING PATH IS
+NOT APPLIED.** 35.3 recorded the label change as done. It was done ONCE. **Before closing
+any UI fix in this file, grep for EVERY site that renders the same value** — this app draws
+the parked position in at least two places and they drifted within a single commit.
+
+### ⚠ TWO THINGS FROM THE SAME QA THAT ARE **NOT** BUGS — RECORDED SO NOBODY RE-OPENS THEM
+
+* **CNOVA read 700.00 on the dashboard and 550.00 in the redeem panel.** Both call the SAME
+  `cnova.balanceOf(userAddr)` on the SAME contract (`:5463` and `:8513`), so this is not two
+  sources disagreeing. `loadRedeemData()` runs when the panel opens and does NOT re-read on
+  the 30s poll, so it holds whatever it read then. The dashboard is the live one:
+  **CNOVA VALUE $8.12 = 700 x $0.0116 exactly.** ▶ Minor UX item, not blocking: refresh the
+  redeem panel on the poll, or on open.
+* **The whale-gate approval read `$400.42 USDC (tier fees + rescue-loan settlement)`** —
+  $400.00 of tier fees (T3 $50 + T4 $100 + T5 $250) plus the wallet's exact $0.42 SF rescue
+  loan. **Correct, and two independent parts of the app agreeing.**
+
+▶ **AND IT IS A LIVE DEMONSTRATION WORTH CARRYING INTO V8.50: A TIER UPGRADE SETTLES THE
+RESCUE LOAN IN FULL, AS PART OF THE UPGRADE COST.** 36.1 established that the ratchet ends
+with a member permanently refused once net debt passes the ceiling. **Upgrading clears the
+debt outright and is therefore an EXIT from the ratchet** — an expensive one, but a real
+one, and no session has counted how many stuck members could take it. **Do not chase it on
+V8.48** (36.6 applies); note it as the first thing to measure once V8.50 is live.
+
+⛔ **THE QA THAT MATTERS IS STILL NOT ANSWERED.** Screenshots cannot show it: after Approve,
+**wait past one 30-second poll and confirm Self Rescue STAYS LIT.** The July fix passed
+every check except that one. **Until someone reports that wait, `ca66731` is deployed but
+NOT verified.**
+
 ## 36.5 ✅ THE V8.48 LAP ARITHMETIC — CLOSED, AND CLOSED IS THE POINT
 
 `scripts/diag_lap_economics.js`, snapshot block 45908796, **1,016 seated members walked,
@@ -352,11 +406,27 @@ next deploy, and that is the lesson to carry, not the answers.
    `diag_rescue_loan_counts.js`, `diag_lap_economics.js`, `V8_50_HANDOFF.md`.
    ⚠ `git status` through `device_bash` strands `.git/index.lock` (34.0) — the OWNER runs
    git, never the device shell.
-2. ⛔⛔ **THE `main` DEPLOY OF THE TESTNET APP.** `admin` and `preview` carry `edabf8e`;
-   `main` does not. This carries `ca66731`, the approval fix that **three members reported
-   over thirteen days** (35.3). It is the one thing on this list that helps a member today.
-   **THE QA THAT MATTERS: park a wallet, approve, WAIT PAST ONE 30-SECOND POLL, confirm
-   Self Rescue STAYS LIT.** That single wait is what the July fix never tested.
+2. ✅ **THE `main` DEPLOY IS DONE — 2026-08-24.** All three branches are at **`de6e95c`**.
+   Both promotions were pure fast-forwards (`origin/admin..origin/main` was empty, so no
+   divergence and nothing to merge): `edabf8e..de6e95c` -> preview, `74a1588..de6e95c` ->
+   main. main had been sitting on `74a1588`, **twelve commits and thirteen days behind the
+   approval fix.** `ca66731` is now live for members. index.html verified un-truncated at
+   source: ends `</body></html>`, 707,975 bytes.
+   ✅ The owner ran a live QA and it FOUND A DEFECT — see **36.9**, fixed and shipped as
+   `6ed3881` to all three branches. **That is what a QA is for.**
+   ⛔ **BUT THE ONE TEST THAT DECIDES `ca66731` IS STILL UNREPORTED, AND IT IS ONE
+   SPECIFIC SEQUENCE — NOT A SMOKE TEST:** park a
+   wallet, press Approve, **WAIT PAST ONE 30-SECOND POLL**, confirm Self Rescue STAYS LIT
+   (not dimmed to opacity 0.5, not replaced by Approve again), then complete the rescue.
+   **The July fix passed every check except this one.** The old code approved the exact
+   shortfall, which goes stale the moment the shortfall drifts, so the button un-dimmed
+   and RE-DIMMED on the next poll. **A QA pass that does not wait through a poll cycle
+   passes on a broken build.** ⚠ Leader sign-off (35.10 item 5) is the owner's judgement
+   and no session has a record of it being done.
+   ⚠ **`de6e95c` CARRIED THE AUTO-ADD TO PRODUCTION WITH IT.** The first real bug report
+   bearing a wallet address will append to `fund_list.txt` on `admin` and report the
+   outcome in the Telegram alert. That is intended — but it is now LIVE, and the `# auto`
+   entries it creates are not owner-verified. Review them before they reach mainnet.
 3. ✅✅ **`velocityThreshold` IS SETTLED AND APPLIED — SEE 36.7.** window 3600 -> 14400,
    threshold 3 -> 2, verified on chain 2026-08-24. **This was the last open owner decision
    and it is closed.** Its watch item (re-run the diagnostic after the community deploy;
@@ -419,7 +489,11 @@ only. Nothing in the Keepers repo changed this session.
 
 ## 35.0 STATE
 
-* ✅ **TESTNET-APP: THREE COMMITS, PUSHED TO `admin` AND `preview`** (`74a1588..edabf8e`):
+* ✅ **TESTNET-APP: ALL THREE BRANCHES AT `6ed3881`** (admin = preview = main), 2026-08-24.
+  `de6e95c` the canonical funding list + auto-add, `6ed3881` the card-list label fix (36.9).
+  main came from `74a1588`, twelve commits behind. ⛔ **`ca66731` IS DEPLOYED BUT THE
+  POLL-WAIT QA IS STILL UNREPORTED — see 36.9.**
+* (session 35 note) **TESTNET-APP: THREE COMMITS, PUSHED TO `admin` AND `preview`** (`74a1588..edabf8e`):
   **`ca66731`** the rescue fix (123 insertions / 19 deletions), **`90d89cb`** a CLAUDE.md
   correction that had sat uncommitted since 2026-08-22, **`edabf8e`** the bug triage.
   Truncation check run on `origin/preview` — ends `</body></html>`. **NOT on `main`.**
