@@ -10,7 +10,263 @@ owner-set, and the session that earned it got five things wrong by ignoring what
 
 ---
 
-# ⬛ SESSION 33 STATE — 2026-08-23, LATEST. READ THIS FIRST.
+# ⬛ SESSION 34 STATE — 2026-08-24, LATEST. READ THIS FIRST.
+# ✅✅ **33.6 ITEM 5 IS CLOSED.** `copay_rescue.js` states its own coverage. Two commits,
+#     two repos, both pushed: Keepers **`e420ba4`**, Contracts **`ce98472`**.
+# ⛔⛔ **33.9's CENTRAL CLAIM IS WRONG. "THE KEEPER NEVER REACHES THEM" — IT REACHES
+#     EVERYTHING.** 321 parked, 10 tiers, 20 pair managers, 40 matrices, **0 unreadable
+#     reads**. T3/T4 take no attempts because their queues are **under 17 hours old**.
+#     All three of 33.9's candidates are now closed: (a) refuted, (b) refuted, (c) IS the answer.
+# ⛔⛔ **THE MASTER AND THE DROPLET HAD DIVERGED, AND BOTH DEFAULTED TO A DEAD DEPLOYMENT.**
+#     Master → v8_45. Droplet → `deployed_addresses_current.json`, a SYMLINK still pointing
+#     at **v8_47 eleven days after V8.48 went live**. Only `.env` line 2 kept cron honest.
+# ⛔⛔ **I READ THE INSOLVENCY RULE OUT OF THE WORKING TREE AND QUOTED IT AS LIVE (34.5).**
+#     31 `execution reverted`. The functions were V8.49/V8.50. The comments said so, and
+#     33.7 says so. Only the instrument's refusal to conclude stopped a confident wrong answer.
+# ⛔⛔ **THE 40 STUCK MEMBERS SHOULD BE BEING EVICTED, NOT RESCUED (34.6).** `_triageParked`
+#     routes an insolvent member to `WORK_EVICT_PARKED`. All 40 satisfy both conditions and
+#     none is evicted. **THAT is the open question — not the bps dial I nearly asked for.**
+# ⛔ `git status` THROUGH `device_bash` IS NOT READ-ONLY: it strands `.git/index.lock` that
+#     the device shell cannot unlink, and the next commit fails. Cost one round trip (34.0).
+
+## ▶ SESSION 35 — READ IN THIS ORDER.
+
+**1. 34.6 — the eviction valve, and it is the live member-facing one.** 40 members past
+grace, oldest 3.86 days, needing $1.15-$2.67 each, refused while the fund holds $1,670. The
+contract's designed remedy for them is EVICTION and it is not firing. Everything needed to
+read a failed `EVICT_PARKED` item correctly is already in 33.4's `ADDR_ROLES`.
+
+**2. 34.5 — the working tree is not the deployment.** The single most expensive mistake of
+this session, and it is one `git show <deploy-commit>:contracts/X.sol` away from never
+happening again. **State which DEPLOYMENT a rule came from, not just which file.**
+
+**3. 34.3 / 34.4 — two corrections to session 33's own conclusions**, one to 33.9's cause
+and one to a verdict line in `diag_parked_ages.js` that asserts something we measured false.
+
+**4. 33.8 / 33.6 item 4 — `velocityThreshold` IS STILL UNTOUCHED.** Nothing this session
+moved it. It remains the only genuine owner decision on the board and the only PHASE 2 risk
+no gate step would catch.
+
+## 34.0 STATE
+
+* ✅ **TWO COMMITS, BOTH PUSHED.** Keepers (`origin/main`): **`e420ba4`** — copay_rescue.js,
+  106 insertions / 20 deletions. Contracts (`origin/v8.1`): **`ce98472`** —
+  `scripts/diag_headroom_stuck.js`, 179 insertions.
+* ✅ **DROPLET PARITY, MEASURED BOTH ENDS AFTER DEPLOY:** `/root/keeper/copay_rescue.js`
+  = **`8d9f6cd7c8f0b42fe298087769b2652b`**, 14,472 bytes, identical to master. Rollback kept
+  at `/root/keeper/copay_rescue.pre_reconcile_2026-08-24.bak` (**`643b5b7d…`**, the pre-session
+  live file). Every md5 in this section was RUN.
+* ✅ **THE FULL COVERAGE RUN IS AT `/root/keeper/copay_cov_2026-08-24.txt`** — deliberately
+  NOT in `copay.log`, because 33.6 item 4 still has to read that log for the de-censoring
+  census and hand-run lines would contaminate the sample.
+* ⚠ The pre-reconcile droplet copy is also at
+  `C:\CryptoNova-Keepers\_to_delete\copay_rescue.droplet.js` (gitignored) if the two-line
+  diff is ever wanted again.
+* ⛔ **THE TWO CRLF PHANTOMS ARE BACK.** 33.0 recorded `archive/windows_keeper/corescue.bat`
+  and `contracts/test/CryptoNovaCommunityWallet.sol` as absent; both are modified again today.
+  Nothing this session touched either. **And the mechanism was seen live**: committing
+  `diag_headroom_stuck.js` printed *"LF will be replaced by CRLF the next time Git touches
+  it"*. That is 33.6 item 10's `.gitattributes` pin, still unapplied to this repo.
+* ⛔ **`git status --porcelain` VIA `device_bash` STRANDS `.git/index.lock`.** The device
+  shell cannot unlink it ("Operation not permitted"), so the owner's next `git add`/`commit`
+  fails with *"Another git process seems to be running"*. The warning IS printed and was read
+  past. Clear with `Remove-Item <repo>\.git\index.lock -Force`. **Prefer `git -C <repo>
+  status` sparingly, or accept that a read command here leaves a write lock.**
+
+## 34.1 ⛔⛔ TWO COPIES OF THE RESCUE ENGINE, AND BOTH DEFAULTED TO A DEAD DEPLOYMENT
+
+33.2's lesson applied forward, and it paid immediately. Before editing anything, master vs
+droplet:
+
+    master   0bef04e7…   8,894 bytes   committed 40c97ca (2026-07-30), clean
+    droplet  643b5b7d…   8,864 bytes   mtime 2026-08-09 15:50, in no repo
+
+Same line count (177), so a `wc -l` parity check would have PASSED. It is not line endings
+either — master is pure LF, and its CRLF variant hashes to `3188c89e…`, not the droplet's.
+**Exactly two lines differed, and neither copy was right:**
+
+    :30 master   ADDRS_FILE || "deployed_addresses_v8_45.json"      <- DEAD (V8.45)
+        droplet  ADDRS_FILE || "deployed_addresses_current.json"    <- SYMLINK -> v8_47, ALSO DEAD
+    :62 master   JsonRpcProvider(RPC_URL, 84532, {staticNetwork})   <- what the other 5 keepers do
+        droplet  JsonRpcProvider(RPC_URL)                           <- the only keeper without it
+
+⛔ **`deployed_addresses_current.json` IS A SYMLINK TO `deployed_addresses_v8_47.json`**
+(md5 `14e014a8…` matches v8_47 exactly), created 2026-08-09 15:39. **V8.48 deployed
+2026-08-13 and nobody repointed it.** A name that claims currency and is not maintained is
+33.4's lesson wearing a different hat: **a symlink's name is a claim.**
+
+✅ **FIXED BY REMOVING THE DEFAULT ENTIRELY**, not by picking a better one — `system_keeper.js:68`
+already refuses to start without `ADDRESSES_FILE`, on this same droplet under this same `.env`,
+so the pattern was proven here before it was copied. Live cron is unaffected: `.env` line 2 sets
+`ADDRESSES_FILE=deployed_addresses_v8_48.json`.
+
+⚠ **THE SAME TRAP IS REPO-WIDE AND UNFIXED.** `direct_keeper.js`, `manual_rescue.js` and
+`integrity_check.js` default to **v8_45**; `fastlane_rescue.js` defaults to **v8_47**. Live is
+v8_48. Every one is upright only because `.env` sets the variable — a manual run measures a
+dead deployment and prints confident numbers. CLAUDE.md already carries this rule; it has
+drifted again. **Its own step.**
+⚠ Unexplained, recorded not chased: `/root/keeper/deployed_addresses_v8_44.json` has mtime
+**2026-08-23 12:09**.
+
+## 34.2 ✅ THE COVERAGE LINE, AND A SELFTEST THAT FOUND TWO FAULTS BEFORE THE CHAIN DID
+
+All seven previously-swallowed reads now raise a named `PROBLEM` instead of a silent default:
+`pairCount`, `getPairAt`, `getParkedCount`, `getParkedMember`, `parkedAt`, the price read, and
+`parkedGracePeriod`. Per tier the run now states pairs seen/reported, matrices scanned and
+empty, parked reported vs listed, examined, in-grace, already-rescued, attempted/ok/failed,
+UNPRICED and PROBLEMS. **Swept-and-empty and never-reached used to print the same thing:
+nothing.**
+
+⛔ **THE `parkedGracePeriod` FALLBACK IS 3600s AND THE LIVE CHAIN ANSWERS 86400s.** A
+swallowed failure there does not degrade gracefully — it silently shortens grace by 23 hours
+and starts attempting members the owner's three-way has not finished with. The header now
+prints `(FALLBACK, not from chain)` when it fires.
+
+⛔ **THE PRICE READ'S EMPTY CATCH LEFT `cost = 0n`, WHICH PASSES THE BUDGET CHECK.** An
+unpriceable rescue read as free.
+
+✅ **SELFTEST: 20/20** — a silent control plus seven planted faults, stubbed `ethers`, no chain.
+**It caught two things a casual read would have scored as a pass:**
+1. **The instrument's own total was short.** Four PROBLEM lines printed, total said 3 — the
+   pre-flight problem was raised before the coverage state existed. The summary now prints its
+   arithmetic: `N PROBLEM(s) this run (x pre-flight, y in the sweep)`.
+2. **A planted positive that did not plant.** The `getParkedCount` fault was aimed at the
+   PairManager; that call is made on the MATRIX. It never fired and the tier came back looking
+   clean. **A detector that reports zero must first find a planted positive — and the plant
+   must actually land.** CLAUDE.md's `bypass_scan_full.js` row, repeated.
+
+⛔ **AND ONE SHORTCUT I ALMOST TOOK, WHICH WOULD HAVE REPRODUCED THE DEFECT.** Before
+instrumenting I was going to run a plain `DRY_RUN` and count which tier labels appeared.
+**Label-counting cannot distinguish a matrix swept-and-empty from one never reached** — both
+print nothing. That is 32.2's hole in my own handwriting, and only stating the plan out loud
+caught it.
+
+## 34.3 ⛔⛔ 33.9 CORRECTED — THE SWEEP REACHES EVERYTHING; GRACE IS WHY T3/T4 ARE QUIET
+
+One full `DRY_RUN MAX=100000` sweep, 2026-08-24 01:45Z, **0 PROBLEMs**:
+
+    T1   pairs 2/2 | matrices 4 (2 empty) | parked 178 | grace 144 | attempted 34 | ok 0 failed 34
+    T2   pairs 6/6 | matrices 12 (9 empty)| parked  73 | grace  69 | attempted  4 | ok 2 failed 2
+    T3   pairs 4/4 | matrices 8 (6 empty) | parked  33 | grace  33 | attempted  0
+    T4   pairs 1/1 | matrices 2 (1 empty) | parked  37 | grace  37 | attempted  0
+    T5-T10  all pairs read, all matrices empty
+
+⛔ **33.9 SAYS "the keeper never reaches them." IT REACHES THEM.** Every tier, every pair,
+every matrix, no unreadable read. **T3 and T4 take zero attempts because 100% of their parked
+members are inside the 86400s grace window** — candidate (c). Candidate (a) is dead by the
+zero PROBLEM count; candidate (b) died separately below.
+
+⛔ **`MAX` IS A CAP ON SUCCESSES, NOT ATTEMPTS — MEASURED.** `MAX=1` produced 18+ attempts.
+`done` increments only on a rescue that lands; every refusal goes to `failed`, which gates
+nothing. With ~28 successes across a whole day, `MAX=120` is never binding. **Candidate (b)
+refuted.** ⚠ **It bites in `DRY_RUN`, where `WOULD RESCUE` DOES increment `done`** — an
+uncapped sweep needs `MAX` lifted explicitly or it truncates at 25 and prints a coverage
+table that looks complete.
+
+✅ **THE DAY-LONG SILENCE 33.9 FOUND IS EXPLAINED, NOT EXPLAINED AWAY.** `diag_parked_ages.js`
+puts T3's oldest parked member at **0.70d** and T4's at **0.67d** — those queues formed within
+~16 hours. Yesterday's grep found no T3/T4 attempts because those queues barely existed.
+
+⚠ **AN OPEN DISAGREEMENT, RECORDED RATHER THAN RESOLVED.** The two censuses, 7 minutes apart,
+agree on the total (**321**) and disagree on the split: copay T1 **178** / T3 **33**; ages
+T1 **179** / T3 **32**. The totals coincide only because the differences offset. Churn is the
+obvious candidate and it is **not measured**. One sample.
+
+## 34.4 ⛔ `diag_parked_ages.js` CLOSES WITH AN INFERENCE IT NEVER TESTED — AND IT IS WRONG
+
+Its verdict block reads: *"40 of them are past the 24.0h grace. These are members checkUpkeep
+should be queueing and is not."* **The coverage run measured `copay_rescue` ATTEMPTING 38 of
+them** and being refused by the fund with `"SF: insolvency floor"`. They are not un-queued;
+they are queued, attempted and declined. **The census measured ages honestly and then asserted
+a cause it had no instrument for.** Same shape as 30.5d's selector label: the measurement was
+sound, the sentence next to it was a guess, and the sentence is what a later session quotes.
+
+## 34.5 ⛔⛔ I READ THE MECHANISM OUT OF THE WORKING TREE AND QUOTED IT AS LIVE
+
+Asked why the fund refuses, I read `contracts/StabilityFund.sol` on branch `v8.1`, found
+`loanHeadroom = fee * insolvencyFloorBps / 10000 - memberDebt` plus a `baseAdvanceBps`
+sponsorship gate, and wrote it up as the live rule. **The first run returned 31
+`execution reverted`.** Those functions are V8.49 and V8.50. **The comments in that same file
+say so** (*"V8.49"*, *"V8.50 SPONSORSHIP GATE"*), and **33.7 already records that Policy B is
+not deployed.** Three signposts, all read past.
+
+✅ **THE DEPLOYED RULE, from `git show d382d37:contracts/StabilityFund.sol` (V8.48, 2026-08-13):**
+
+    function loanEligible(address member, uint8 tierIdx) public view returns (bool) {
+        return memberDebt[member] < tierEntryFees[tierIdx] * insolvencyFloorBps / 10_000;
+    }
+
+**A FLAT gate on existing debt. It never reads the amount being asked for**, so a member $0.31
+over the line is refused a $2.67 rescue exactly as hard as one $14 over. It also never reads
+the fund balance.
+
+✅ **THE INSTRUMENT NOW PROBES FOR THE RULE INSTEAD OF ASSUMING ONE** — tries the V8.49+
+signature, falls back to V8.48, and NAMES which answered. A version mismatch became a stated
+fact instead of a wall of PROBLEM lines.
+
+> **STANDING LESSON: "CODE IS TRUTH" MEANS THE DEPLOYED CODE.** A checked-out file is a claim
+> about a future deployment. **State which DEPLOYMENT a rule came from, not just which file** —
+> `git show <deploy-commit>:contracts/X.sol` is the whole fix. And the only reason this did not
+> ship as a confident wrong answer is that the script refuses to conclude when any read fails.
+> **That refusal is load-bearing. Do not soften it.**
+
+## 34.6 ⛔⛔ THE 40 STUCK MEMBERS ARE CAP-EXHAUSTED — AND THE CONTRACT'S ANSWER IS EVICTION
+
+`diag_headroom_stuck.js` on the ten oldest, **0 read failures**, using the contract's own
+`loanEligible`: **10 of 10 CAP EXHAUSTED.** Ceiling `$10.00 * 3400/10000 = $3.40` of lifetime
+debt; debts **$3.71 · $5.06 · $5.13 · $5.13 · $6.69 · $6.90 · $9.47 · $12.55 · $17.34 · $17.34**.
+Shortfalls **$0.15-$2.67**. Fund balance **$1,670.87**, which the gate never reads. Ages
+**3.03-3.86d**. All show `withdrawnRatio=0`, so the ratio branch of eviction does not fire either.
+
+⛔⛔ **AND THE REMEDY IS ALREADY IN THE DEPLOYED CONTRACT.** `MatrixKeeperLib._triageParked`:
+
+    if (sfShare > 0 && !loanEligible(member, tierIdx)) return (0, true);   // -> evict
+    ...  if (evict) { if (age < parkedGracePeriod) return none; return (member, WORK_EVICT_PARKED); }
+
+**An insolvent member is routed to the eviction valve — evicted with reserve released (V8.48
+item 46/47, owner policy 2026-08-13). All 40 satisfy both conditions: `sfShare > 0`,
+`loanEligible == false`, and past full grace. None is being evicted.**
+
+▶ **THIS IS THE NEXT MEASUREMENT, AND IT REPLACES THE QUESTION I ALMOST ASKED.** I was about to
+bring the owner a `insolvencyFloorBps` dial. **Raising the ceiling would have papered over a
+valve that is not firing.** Three candidates, none measured: (a) `checkUpkeep` is not queueing
+the item, (b) `performUpkeep` never reaches it (item budget / batch order — T1's 174-deep queue
+is scanned first), (c) the item is dispatched and fails silently. **33.4's `ADDR_ROLES` is
+exactly the tool for reading a failed `EVICT_PARKED` item: `addr1` is the MATRIX, `addr2` the
+MEMBER.**
+⚠ **BEFORE ACTING ON EVICTION, RE-READ CLAUDE.md's eviction row.** On V8.45 eviction zeroed
+`parkedAt` and permanently locked a member out of re-entry, because both `selfRescue` and
+`coPayRescue` require `parkedAt > 0`. V8.48's valve is documented as releasing the reserve.
+**Confirm which behaviour is deployed BEFORE evicting 40 real positions.**
+
+## 34.7 NEXT, IN ORDER — SUPERSEDES 33.6.
+
+1. ✅ **DONE — 33.6 ITEM 5 (34.1/34.2/34.3).** `e420ba4`. Coverage line shipped, droplet
+   reconciled, all three of 33.9's candidates closed.
+2. ⛔⛔ **WHY IS THE EVICTION VALVE NOT FIRING (34.6)?** 40 members, oldest 3.86 days, live and
+   member-facing. Measure which of the three candidates it is before touching any parameter.
+   **Confirm V8.48's eviction actually releases the reserve before evicting anyone.**
+3. ⛔⛔ **STILL UNTOUCHED AND STILL THE ONLY OWNER DECISION: `velocityThreshold` BEFORE THE
+   COMMUNITY DEPLOY (33.8 / 33.6 item 4).** Nothing in session 34 moved it. No PHASE G step
+   catches it.
+4. ⏳ **OPEN, DATED, UNMOVED: the de-censoring re-run at ~100 unique post-16.5M samples**
+   (31.6 / 32.6 item 4). 3 unique as of 2026-08-23. **Nothing in session 34 advanced it, and
+   the coverage run was deliberately kept OUT of `copay.log` to protect its sample.**
+5. **THE STALE `deployed_addresses_*` DEFAULTS, REPO-WIDE (34.1).** direct_keeper /
+   manual_rescue / integrity_check on v8_45; fastlane_rescue on v8_47; the droplet's
+   `deployed_addresses_current.json` symlink still on v8_47. Either repoint the symlink or
+   delete it — an unmaintained name that claims currency will lie again.
+6. **STOP `keeper.log` DOUBLE-WRITING** (32.7). Unchanged. Still AFTER item 4.
+7. **BATCH THE `:936` LOG SPLIT** (26.4) into the next RPC session.
+8. **THE NAMING CLEANUP — TIER 1 UNBLOCKED** (33.5). Still its own session.
+9. **THE CONTRACTS-REPO `.gitattributes` LF PIN** (33.0 / 34.0). **Now witnessed twice**: the
+   phantoms returned today and the LF->CRLF warning printed live during `ce98472`.
+10. **PHASE 2 ONWARDS** — community deploy — only after PHASE G passes.
+11. Backlog otherwise unchanged from 27.6.
+
+---
+
+# ⬛ SESSION 33 STATE — 2026-08-23. READ AFTER SESSION 34.
 # ✅✅ **32.6 ITEMS 2, 7 AND 10 ARE CLOSED.** Three commits, two repos, all pushed.
 # ⛔⛔ **BOTH ITEM 2 AND ITEM 10 WERE MISDESCRIBED — THE FOURTH AND FIFTH STALE
 #     "OUTSTANDING" LINES IN FOUR SESSIONS. Item 2 named a file that was already
