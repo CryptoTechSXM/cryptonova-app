@@ -10,7 +10,218 @@ owner-set, and the session that earned it got five things wrong by ignoring what
 
 ---
 
-# ⬛ SESSION 35 STATE — 2026-08-24, LATEST. READ THIS FIRST.
+# ⬛ SESSION 36 STATE — 2026-08-24, LATEST. READ THIS FIRST.
+# ⛔⛔ **35.7's COUNT IS REFUTED, ITS MECHANISM IS CONFIRMED, AND THE REASON THEY LOOK
+#     CONTRADICTORY IS THE FINDING (36.1).** Nobody took "one or two rescues". 24 of 26
+#     stuck members took THREE OR MORE, up to five. And the ceiling really does afford
+#     only ~1.4 loans. Both are true because **the gate reads NET debt at issue time, so
+#     every clawback repayment RE-OPENS it.** Members ratchet: borrow ~$5, claw back
+#     ~51%, keep ~$2.57 of net debt, go round again — until a lap's repayment can no
+#     longer drag net back under the ceiling, and then it shuts permanently.
+# ⛔ **`forceCrossKeeper` BOOKS DEBT TOO, AND 35.6/35.7 COUNTED ONLY RESCUES (36.3).**
+#     The 35.6 probe wallet shows **12 bookings = 10 coPayRescue + 2 forceCrossKeeper**,
+#     not the 8 that 35.6 recorded. Rescues are not the only path that mints debt.
+# ⛔⛔ **OWNER DIRECTIVE, 2026-08-24 — THE V8.48 ECONOMIC THREAD IS CLOSED (36.5, 36.6).**
+#     "V8.50 deploy changes the economics, mathematics, the crossing — wrap up the V8.48
+#     rabbit holes and work on deploying to the community so we can do real tests on that
+#     version, to get us to an actual mainnet deploy." **36.1 and 36.5 are WATCH ITEMS for
+#     V8.50 now, not open questions. The critical path is `velocityThreshold` -> `main`
+#     deploy -> community. Do not open another V8.48 measurement.**
+# ✅ **THE V8.48 LAP IS CONSERVATION OF MONEY, MEASURED TWO WAYS (36.5).** A lap needs
+#     5,000 bps earned; at most 3,900 can reach a member; the 1,100 bps gap IS the
+#     non-member take. Medians across the four busiest matrices: 3,476-3,999 bps.
+#     **82 of 1,016 seated members chain-wide (8.1%) can fund their next crossing.**
+# ⛔ **MY RUN-1 INSTRUMENT COUNTED THE WRONG REPAYMENT EVENT (36.2).** It read the
+#     MATRIX's `RescueDebtRepaid`; V8.47 put the ledger on the SF, which also accepts
+#     repayments from the **TierRouter**, and those emit nothing a matrix scan can see.
+#     5 of 26 members failed reconciliation because of it. Fixed by reading the SF's own
+#     `MemberDebtIncreased`/`MemberDebtRepaid`. **Reconciliation is the only reason that
+#     is a footnote and not a published wrong number.**
+# ⛔ **THE TWO `getParkedMember` OUT-OF-BOUNDS PANICS WERE A RACE, NOT A BUG (36.2).**
+#     The keeper drains the queue every 2-4s while a sweep takes minutes. Every read is
+#     now pinned to ONE BLOCK. Run 1's census was a smear; run 2's is a snapshot.
+
+## 36.0 STATE
+
+* ✅ **35.10 ITEM 1 IS ANSWERED AND CLOSED.** New instrument
+  `scripts/diag_rescue_loan_counts.js` (read-only, no key). Run 2: **0 PROBLEMs,
+  26/26 reconcile to the cent, both selftests pass.** Basis for every figure below:
+  `deployed_addresses_v8_48.json`, **snapshot block 45907638**, log window
+  **45430518-45907638**, 2026-08-24T15:00Z. CSV in `logs/`.
+* ⛔ **CONTRACTS REPO: FOUR FILES UNCOMMITTED NOW.** 35.0's three
+  (`diag_parked_solvency.js`, `diag_member_positions.js`, `bigfill_v8.js`) plus
+  `diag_rescue_loan_counts.js`. Nothing in the Keepers repo changed.
+* ⛔ **THE COMMUNITY POST IS STILL BLOCKED** — 35.10 item 3 stands, and 36.1 does not
+  unblock it. It sharpens what the post would have to say.
+
+## 36.1 ⛔⛔ THE RATCHET — WHY BOTH HALVES OF 35.7 READ TRUE AT ONCE
+
+    THE DISTRIBUTION, 26 stuck members, 28 positions
+      2 loans:  2 members
+      3 loans: 15 members     <- the mode
+      4 loans:  6 members
+      5 loans:  3 members
+      28/28 positions refused by the live gate RIGHT NOW
+
+    THE RATCHET
+      mean net debt left behind per loan : $2.57
+      mean share of each loan repaid     : 51.4%   (unweighted, this cohort)
+      loans the T1 ceiling ($3.40) affords at that rate: 0.7 min .. 2.7 max, median 1.4
+
+**35.7 SAID "ONE OR TWO RESCUES AND OUT". THE COUNT SAYS THREE TO FIVE. THE CEILING SAYS
+1.4. NEITHER IS WRONG — THE GATE IS NOT A LIFETIME CAP IN PRACTICE.**
+`loanEligible` tests `memberDebt[member] < fee * insolvencyFloorBps / 10000` on the
+**current NET** figure (StabilityFund:799), and the 60% clawback pays that figure down
+between laps. So the valve SHUTS at $3.40 and RE-OPENS every time the clawback drags net
+back under it. A member borrows ~$5, ~51% comes back, ~$2.57 of net debt stays, and they
+qualify again — until the residue outruns what one lap can repay. Then it shuts for good.
+**That is why the ceiling that affords 1.4 loans has issued 3-5 to everyone here.**
+
+⛔ **AND THAT IS WHAT 34.6 AND 35.7 WERE BOTH GROPING AT.** Raising `insolvencyFloorBps`
+does not add "one more rescue" — it adds laps, and every lap ratchets. Eviction still
+destroys the self-rescue exit (34.8). **The dial and the valve are both downstream of a
+loop that mints ~$5 of debt to return the member to where they started (35.6).**
+
+✅ **THE PER-TIER CEILING, MEASURED (fee x 3400bps, from chain):** T1 $3.40 · T2 $8.50 ·
+T3 $17.00 · T4 $34.00 · T5 $85.00 · T6 $170 · T7 $340 · T8 $850 · T9 $1,700 · T10 $3,400.
+**35.7 quoted T1's $3.40 as though it were "the" ceiling. It is the smallest one.** The
+ledger is global; the ceiling is priced off whichever tier is asking.
+
+⚠ **THE HONEST QUALIFIER ON "THEY ARE NOT BAD BORROWERS".** The whole book repays
+**85.8%** ($3,953.97 loaned / $3,392.72 repaid / **$561.24 outstanding**, 343 borrowers,
+1,006 bookings). This stuck cohort repays **51.4%** and holds **$232.67 — 41.5% of the
+entire outstanding book across 26 of 343 borrowers.** So they are not a random slice.
+**What separates them is not appetite for borrowing — it is that their matrices earn too
+little for the clawback to take anything back (35.6's earnings column: $0.00 · $0.25 ·
+$0.00 · $0.63 · $0.00 · $1.25).** The loop bills a fee per lap and pays cents, so the
+clawback has cents to work with. **STATED AS MEASURED; the causal direction is not
+proven and does not need to be for the decision on the board.**
+
+⚠ **SCALE, SO NOBODY QUOTES 26 AS "THE PROBLEM".** 359 parked positions live right now
+(T1 188 · T2 93 · T3 38 · T4 40); only **28 are past grace**. The other ~331 are inside
+the 24h window being churned by the keeper. 26 members have fallen out permanently.
+
+## 36.2 ⛔ TWO INSTRUMENT FAULTS IN RUN 1, BOTH CAUGHT BY THE SCRIPT'S OWN SELFTESTS
+
+**(1) I COUNTED THE MATRIX'S REPAYMENT EVENT, NOT THE LEDGER'S.** v1 read
+`RescueDebtRepaid` (MatrixLogicLib:267). 21 of 26 reconciled; 5 did not, every one with
+the chain holding LESS debt than the events derived ($1.60-$6.80 missing). The deployed
+source says why:
+
+    MatrixLogicLib:547   try IStabilityFund(...).receiveDebtRepayment(member, repay) {}
+    MatrixLogicLib:549   emit RescueDebtRepaid(member, repay, owed - repay);
+    StabilityFund:841    require(authorizedMatrices[msg.sender] || msg.sender == tierRouter)
+    StabilityFund:857    emit MemberDebtRepaid(member, applied, memberDebt[member]);
+
+V8.47 moved the ledger to the SF, and the SF takes repayments **from the TierRouter as
+well as any matrix**. A router-driven repayment moves the ledger and emits nothing a
+matrix scan can see. Now reconciled against the SF's own two events, which are the
+ledger's own record of every caller. **THE HOUSE LESSON AGAIN: I counted the event that
+was easy to find rather than the event the ledger emits.**
+
+**(2) THE OUT-OF-BOUNDS PANICS WERE A RACE.** `getParkedCount()` returns
+`_state.parkedMembers.length` and `getParkedMember(i)` indexes that same array
+(FigureEightMatrixV8:606-607), so an in-range index cannot be out of bounds in ONE state
+— only across two. The keeper drained a member mid-sweep. Also explains past-grace
+reading **41 at 12:36Z and 28 at 14:48Z**. Every read is now pinned to one block
+(`SNAPSHOT=0` disables it if a node ever refuses that state; a pruned-state refusal
+aborts rather than silently drifting to head).
+
+## 36.3 ⛔ `forceCrossKeeper` IS A SECOND DEBT PATH, AND IT WAS NOT IN THE PICTURE
+
+Selftest 1 on 35.6's probe wallet `0xA9B019e7`: **12 debt bookings — coPayRescue 10,
+forceCrossKeeper 2.** 35.6 recorded 8 co-pay rescues and 35.7 priced the ceiling against
+rescues alone. `MatrixLogicLib:1382` books `totalLoan` on the force-cross path just as
+:1423 books a co-pay shortfall. **Any argument about "how many rescues the ceiling
+affords" has to count every path that books debt, not the ones named "rescue".**
+
+## 36.5 ✅ THE V8.48 LAP ARITHMETIC — CLOSED, AND CLOSED IS THE POINT
+
+`scripts/diag_lap_economics.js`, snapshot block 45908796, **1,016 seated members walked,
+0 PROBLEMs, both exactly-true selftests pass** (reserve quantisation 1016/1016; the ten
+split legs sum to the payout base exactly).
+
+    PER ENTRY FEE (10,000 bps), from the deployed build:
+      5,000  crossing reserve, the entrant's own next crossing   MatrixLogicLib:958
+        250  instant direct earnings, to the ENTRANT             MatrixLogicLib:959
+      3,650  member splits: L1 500 + chain 1,350 + pool 1,800    -> OTHER members
+      1,100  non-member: treasury 500 + SF 300 + dev 100 + ops 50
+             + community 100 + buyback 25 + liquidity 25
+      (source's own sum check, :957 — 5000 + 250 + 4750 = 10000)
+
+    A lap needs 5,000 bps EARNED. Ceiling on what can reach a member: 250 + 3,650 = 3,900.
+    STRUCTURAL DEFICIT: 1,100 bps per member per lap = EXACTLY THE NON-MEMBER TAKE.
+
+    MEASURED median earned per completed lap, four busiest matrices:
+      3,476 · 3,484 · 3,934 · 3,999 bps    against the 3,900 ceiling
+      (the gap is orphaned L1 — 500 bps routes to accountOne with no referrer)
+
+**TWO INDEPENDENT INSTRUMENTS AGREE: the split constants and 1,016 seat readings.** The
+treadmill is CONSERVATION OF MONEY. **82 of 1,016 seated members chain-wide (8.1%) can
+fund their next crossing today.** This is session 11's conservation result confirmed a
+third time, now on live V8.48 with a per-seat census instead of a model.
+
+⛔ **AND THAT IS ALSO WHY IT STOPS HERE. OWNER DIRECTIVE 2026-08-24:**
+**"V8.50 deploy changes the economics, the mathematics, the crossing — wrap up the V8.48
+rabbit holes and work on deploying to the community so we can do real tests on that
+version, to get us to an actual mainnet deploy."** Every quantity in 36.5 is one V8.50
+rewrites. Re-deciding the treadmill on V8.48 arithmetic is work that the next deploy
+invalidates. **36.1's ratchet and 36.5's deficit are now WATCH ITEMS for V8.50, not open
+questions.** The V8.50 A/B already read loans 255 -> 85, dollars $311.33 -> $168.86, and
+45% of rescues costing the fund nothing — whether the 1,100 bps gap survives is a
+question for real members on the new build.
+
+⚠ **WHAT WAS NOT ESTABLISHED, SO NOBODY LATER READS IT AS IF IT WERE.** Depth was never
+tested. Every matrix on this chain that has ever rotated is 127/127 full; the partially
+filled ones (109, 93, 72, 62, 53 seats) all have `rotationCount 0`. Throughput varies
+40 to 3,285 rotations and does NOT track the funded rate (3,285 rot -> 0.8% funded;
+827 rot -> 26.8%). ⚠ `T3.1 MatB`'s 12,012 bps median rests on **14 of 127** completed
+laps — early entrants with outsized pool shares. Do not quote it.
+
+⚠ **ONE DOC BUG FOUND EN ROUTE, WORTH A ONE-LINE FIX WHENEVER THE FILE IS NEXT OPEN:**
+`MatrixLogicLib:189` still says *"payout base = 4_500 (45%)"*. It is **4,750 (47.5%)** —
+the comment was not updated when V8.32 halved `DIRECT_EARN_BPS` from 500 to 250. The
+adjacent sum check at :957 is correct, which is why this survived.
+
+## 36.6 ⛔⛔ NEXT, IN ORDER — REORDERED ON THE OWNER DIRECTIVE. SUPERSEDES 35.10 AND 36.4.
+
+**THE GOAL IS THE COMMUNITY DEPLOY OF V8.50, NOT ANOTHER V8.48 MEASUREMENT.** Anything
+below that does not move toward that deploy is parked. Sessions 34, 35 and 36 each opened
+a V8.48 economic question and each answered it correctly; the answers do not survive the
+next deploy, and that is the lesson to carry, not the answers.
+
+1. ⛔ **COMMIT AND PUSH THE CONTRACTS WORKING TREE.** Five scripts plus this handoff:
+   `diag_parked_solvency.js`, `diag_member_positions.js`, `bigfill_v8.js` (35.5 option B),
+   `diag_rescue_loan_counts.js`, `diag_lap_economics.js`, `V8_50_HANDOFF.md`.
+   ⚠ `git status` through `device_bash` strands `.git/index.lock` (34.0) — the OWNER runs
+   git, never the device shell.
+2. ⛔⛔ **THE `main` DEPLOY OF THE TESTNET APP.** `admin` and `preview` carry `edabf8e`;
+   `main` does not. This carries `ca66731`, the approval fix that **three members reported
+   over thirteen days** (35.3). It is the one thing on this list that helps a member today.
+   **THE QA THAT MATTERS: park a wallet, approve, WAIT PAST ONE 30-SECOND POLL, confirm
+   Self Rescue STAYS LIT.** That single wait is what the July fix never tested.
+3. ⛔⛔ **`velocityThreshold` — THE ONLY OPEN OWNER DECISION LEFT, AND IT IS EXPLICITLY
+   "BEFORE THE COMMUNITY DEPLOY"** (33.8 / 34.7 item 3 / 35.10 item 6). 78 wallets entered
+   T4 in 24h while T4 read AUTO-PAUSED; today it throttles ~12 organic leaders. Untouched
+   by sessions 34, 35 and 36. **This is now the critical path.**
+4. **THE COMMUNITY POST** (35.10 item 3). Unblocks the moment 2 lands. ⚠ 36.5 does NOT
+   clear its original caveat — on V8.48 a paid shortfall may still buy a lap — so the post
+   should say what the fix does (the approval no longer goes stale) and must not promise
+   that paying a shortfall ends the parking.
+5. **THE 6 WHO CANNOT PAY** ($25.07 against a fund holding $2,294.55 at 15:38Z). Trivially
+   coverable and it is now a goodwill call, not an economic one.
+6. `.gitattributes` LF pin, both repos (35.10 item 8). Its own step — a repo-wide pin
+   renormalises on next checkout.
+7. Stale `deployed_addresses_*` defaults, repo-wide (35.10 item 9).
+8. The de-censoring re-run (35.10 item 10).
+9. **AFTER THE COMMUNITY DEPLOY, NOT BEFORE:** re-run `diag_rescue_loan_counts.js` and
+   `diag_lap_economics.js` against V8.50 and compare to 36.1 and 36.5. Both instruments
+   are deployment-agnostic — they take `ADDRESSES_FILE` and refuse to start without it.
+   **That is the real test of whether V8.50 fixes the treadmill, and it costs one command.**
+
+---
+
+# ⬛ SESSION 35 STATE — 2026-08-24. READ AFTER SESSION 36.
 # ⛔⛔ **THE RE-ENTRY TREADMILL (35.6). A MEMBER WITH RE-ENTRY ON IN A NEAR-EMPTY MATRIX
 #     PAYS A SHORTFALL EVERY LAP AND EARNS CENTS.** Measured on one wallet: 6 of 6
 #     matrices re-park the moment a rescue completes, in the SAME BLOCK. One lap of all
