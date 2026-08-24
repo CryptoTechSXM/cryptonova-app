@@ -26,12 +26,19 @@ owner-set, and the session that earned it got five things wrong by ignoring what
 # ⛔⛔ **THE 40 STUCK MEMBERS SHOULD BE BEING EVICTED, NOT RESCUED (34.6).** `_triageParked`
 #     routes an insolvent member to `WORK_EVICT_PARKED`. All 40 satisfy both conditions and
 #     none is evicted. **THAT is the open question — not the bps dial I nearly asked for.**
+# ⛔⛔ **ADDED AFTER THE FACT (34.8): SELF-RESCUE BYPASSES THE INSOLVENCY FLOOR ENTIRELY, AND
+#     EVICTION WOULD DESTROY IT.** The 40 are not trapped — they can pay $0.15-$2.67 from their
+#     own wallet. **34.6 is partly reversed; read 34.8 with it.**
 # ⛔ `git status` THROUGH `device_bash` IS NOT READ-ONLY: it strands `.git/index.lock` that
 #     the device shell cannot unlink, and the next commit fails. Cost one round trip (34.0).
 
 ## ▶ SESSION 35 — READ IN THIS ORDER.
 
-**1. 34.6 — the eviction valve, and it is the live member-facing one.** 40 members past
+**1. 34.8 THEN 34.6 — in that order, and 34.8 partly reverses 34.6.** Self-rescue never reads
+`loanEligible`, so the 40 have a working exit; eviction would clear the `parkedAt` that exit
+requires. Ask whether those wallets hold USDC before touching anything.
+
+**1b. 34.6 — the eviction valve, and it is the live member-facing one.** 40 members past
 grace, oldest 3.86 days, needing $1.15-$2.67 each, refused while the fund holds $1,670. The
 contract's designed remedy for them is EVICTION and it is not firing. Everything needed to
 read a failed `EVICT_PARKED` item correctly is already in 33.4's `ADDR_ROLES`.
@@ -239,13 +246,65 @@ MEMBER.**
 `coPayRescue` require `parkedAt > 0`. V8.48's valve is documented as releasing the reserve.
 **Confirm which behaviour is deployed BEFORE evicting 40 real positions.**
 
+## 34.8 ⛔⛔ THE 40 ARE NOT TRAPPED — SELF-RESCUE BYPASSES THE FLOOR, AND EVICTION WOULD DESTROY IT
+
+From the owner's bigfill tail, 2026-08-24, read AFTER 34.6 was written. **It reframes 34.6 and
+partly reverses it.**
+
+✅ **VERIFIED AGAINST THE DEPLOYED BUILD** (`git show d382d37:contracts/MatrixLogicLib.sol`,
+`_selfRescue` at :1464) — 34.5's lesson applied before writing this down, not after:
+
+    require(self.parkedAt[member] > 0,  "F8V8: not parked");
+    ...
+    // Member pays their own shortfall directly -- no debt, no SF involvement.
+    cfg.usdc.safeTransferFrom(member, address(this), shortfall);
+
+⛔⛔ **SELF-RESCUE NEVER CONSULTS `loanEligible`.** It borrows nothing, so the insolvency floor
+cannot refuse it. **The 40 cap-exhausted members have a working exit that costs them
+$0.15-$2.67 from their own wallet** plus an approval **to the MATRIX, not TierRouter**
+(CLAUDE.md's standing correction).
+
+⛔⛔ **AND EVICTION WOULD TAKE THAT EXIT AWAY.** `_selfRescue` requires `parkedAt > 0`; eviction
+clears it. So the valve 34.6 flagged as broken, had it fired, would have removed the only path
+these members still have — and left them re-registering at full fee instead of paying $2.
+**34.7 item 2 is therefore NOT "fix the valve". It is "find out which outcome we want first."**
+
+✅ **INDEPENDENT SUPPORT THAT EVICTION HAS NEVER FIRED:** bigfill's own reinstatement pass
+reports **`MemberEvicted addresses found: 0`**. ⚠ Its scan range is not stated in the tail, so
+this is corroboration, not proof.
+
+⛔ **THE SAME ASYMMETRY AS THE VELOCITY GATE (33.8), IN A SECOND MECHANISM.** Bigfill
+self-rescued **69 of 69 parked wallets (100%)** in one run — and **tops up any wallet that is
+short** (`+$3.11 (short $1.11)`, `+$5.53 (short $3.53)` in this tail). **Bigfill manufactures
+the wallet solvency self-rescue requires. Real members cannot.** So neither the velocity gate
+nor the insolvency floor binds the population the private chain is testing with.
+
+▶ **THE FIRST MEASUREMENT NEXT SESSION, AND IT IS CHEAP AND DECISIVE: do those 40 wallets hold
+USDC?** If they do, this is a FRONTEND/COMMS problem — the dashboard must tell a parked member
+"pay $2.65 and re-enter", and the parity rule already demands it SAY why no loan came. If they
+do not, it is an economic one and the owner's dial is back on the table. **Do not touch the
+eviction valve until this is answered.**
+
+⚠ **A SECOND OBSERVATION, NOT MEASURED, WORTH ONE CHECK:** every one of the 40 past-grace
+members sits in **T1.1 / T2.1**, which bigfill's snapshot labels **"ARCHIVED - not taking
+entries"** while the live pair is **T1.2 (MatA 9/127)**. Whether an archived pair can still
+seat a rescue re-entry is **UNVERIFIED** and would explain a great deal if it cannot.
+
+✅ **TWO CROSS-CHECKS PASSED IN PASSING:** bigfill reads `StabilityFund bal: $1670.87`, exactly
+matching our independent read at 01:5xZ. And 7a's old people-vs-entries label is holding —
+`T1 unique members: 441` printed separately from `T1 entries (all routings): 3076` (370 unique
+on 2026-08-20, so the counter is moving as members, not entries).
+
 ## 34.7 NEXT, IN ORDER — SUPERSEDES 33.6.
 
 1. ✅ **DONE — 33.6 ITEM 5 (34.1/34.2/34.3).** `e420ba4`. Coverage line shipped, droplet
    reconciled, all three of 33.9's candidates closed.
-2. ⛔⛔ **WHY IS THE EVICTION VALVE NOT FIRING (34.6)?** 40 members, oldest 3.86 days, live and
-   member-facing. Measure which of the three candidates it is before touching any parameter.
-   **Confirm V8.48's eviction actually releases the reserve before evicting anyone.**
+2. ⛔⛔ **DO THE 40 STUCK WALLETS HOLD USDC (34.8)?** Cheap, decisive, and it must come FIRST.
+   Self-rescue bypasses the insolvency floor entirely and costs them $0.15-$2.67; if they can
+   pay, this is a frontend/comms problem, not an economic one. **Do NOT touch the eviction
+   valve until this is answered** — eviction clears `parkedAt`, which self-rescue requires, so
+   firing the valve would remove their only working exit (34.8). The valve question (34.6) and
+   whether an ARCHIVED pair can seat a rescue re-entry both come after.
 3. ⛔⛔ **STILL UNTOUCHED AND STILL THE ONLY OWNER DECISION: `velocityThreshold` BEFORE THE
    COMMUNITY DEPLOY (33.8 / 33.6 item 4).** Nothing in session 34 moved it. No PHASE G step
    catches it.
