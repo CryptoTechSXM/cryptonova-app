@@ -313,6 +313,47 @@ answers "where did the ladder stop today", **because the gate's own window prova
 Self-tested against a stubbed planted positive before it touched the chain — 11/11, and the
 self-test caught an error in one of its own regexes.
 
+## 33.9 ⛔⛔ THE HYPOTHESIS IS REFUTED — AND `copay_rescue.js` HAS 32.2's HOLE
+
+33.6 item 5 asked whether the insolvency floor was refusing T4's 33 parked members and so
+starving T4's MatB (and therefore T5's source pool). **Measured, one grep, and the answer is
+no** — one day of `copay.log`, every attempt the keeper made:
+
+    refusals ("SF: insolvency floor")        successes ("OK")
+      1502  T1.1 MatA                          12  T1.1 MatA
+       804  T1.1 MatB                           6  T2.1 MatB
+       180  T2.1 MatA                           6  T2.1 MatA
+       125  T2.1 MatB                           4  T1.1 MatB
+
+⛔ **T3 AND T4 APPEAR IN NEITHER COLUMN. NOT ONE REFUSAL, NOT ONE SUCCESS.** The floor is not
+refusing them; **the keeper never reaches them.** Per 20:00Z integrity, T3.1 MatA/MatB and
+T4.1 MatA hold **64 parked members between them**, and nothing attempted a single one today.
+**Strike the T4-floor → T4 MatB → T5 chain: it was a story, and the grep killed it.**
+
+⛔⛔ **AND THE SEARCH FOR WHY FOUND 32.2's COVERAGE HOLE, VERBATIM, IN THE RESCUE ENGINE:**
+
+    copay_rescue.js:100  let n = 1n;
+    copay_rescue.js:101  try { n = await pm.pairCount(); } catch {}              // -> silently "one pair"
+    copay_rescue.js:105  try { mats = await pm.getPairAt(i); } catch { continue; }
+    copay_rescue.js:111  try { count = await c.getParkedCount(); } catch { continue; }
+    copay_rescue.js:124  try { pAt = await c.parkedAt(m); } catch { continue; }
+
+Four swallowed reads, plus `getParkedMember` failures dropped into an empty catch — members
+vanish from the snapshot silently. **Its `3 rescued, 20 failed, 286 still in grace` line reads
+identically whether it swept ten tiers or one.** This is the SAME defect 32.2 found and fixed
+in `integrity_check.js`, still live in the job that rescues members.
+
+⚠ **IT IS NOT ESTABLISHED THAT THIS IS WHY T3/T4 WERE MISSED, AND THE GUESS IS NOT WORTH
+MAKING.** Three candidates, none measured: (a) a swallowed read skipping those PairManagers,
+(b) the `MAX=120` per-run cap with T1 (174 parked) processed first, (c) the grace filter.
+`tierKeys` is `Object.keys(a.tiers)` with `TIERS` unset in cron, so it is NOT tier-limited by
+configuration — that much is ruled out.
+
+▶ **THE FIX IS 32.2's, APPLIED TO A LIVE MEMBER-FACING ENGINE:** make the run state its own
+coverage — pairs seen per tier, matrices scanned, members examined, and a PROBLEM (not a
+silent default) on an unreadable read — then read one run's output before changing anything
+else. **Do it alone, with a before/after, exactly as 32.7 requires of the double-write fix.**
+
 ## 33.6 NEXT, IN ORDER — SUPERSEDES 32.6.
 
 1. ✅ **DONE — 32.6 ITEM 2 (33.1).** `fd42ebc` + `5ef392b`. The guard is versioned and the
@@ -328,11 +369,12 @@ self-test caught an error in one of its own regexes.
    **At migration the population becomes all-organic and it binds everyone.** No PHASE G step
    would catch this — the private chain is bigfill-driven too and sails past it identically.
    Owner decides the dial (it trades against the deflation throttle); then pin it with a test.
-5. **MEASURE WHETHER THE FLOOR IS STARVING T4's MatB (33.7 + 33.8). ⚠ UNVERIFIED HYPOTHESIS.**
-   T4.1 MatA is full at 127/127 with **33 parked**; rescued, those would populate T4's MatB —
-   the source pool T5 draws from (17). But the refusals actually observed in `copay.log` were
-   **T2**, not T4. **One grep of `copay.log` by tier settles it. Do not quote the chain
-   T4-floor -> T4 MatB -> T5 until that grep exists.**
+5. ⛔⛔ **GIVE `copay_rescue.js` ITS COVERAGE LINE — 32.2's HOLE IS IN THE RESCUE ENGINE (33.9).**
+   Four swallowed reads; a sweep of one tier and a sweep of ten print the same summary. **And
+   64 parked members in T3.1/T4.1 got zero attempts in a day, cause not established.** Live
+   member-facing job: change it alone, state coverage per tier, PROBLEM on an unreadable read,
+   and read one run before touching anything else. ✅ The old item 5 (the floor starving T4's
+   MatB) is **REFUTED and struck** — T4 appears in neither the refusal nor the success column.
 6. ⏳ **OPEN, DATED, AND UNMOVED: re-run the de-censoring check at ~100 unique post-16.5M
    samples (31.6 / 32.6 item 4).** Still the only thing that could move the floor. The
    instrument is built, tested and on the droplet: `sh /root/keeper/gas_sample_census.sh`,
