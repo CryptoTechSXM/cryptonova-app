@@ -10,7 +10,39 @@ owner-set, and the session that earned it got five things wrong by ignoring what
 
 ---
 
-# ⬛ SESSION 36 STATE — 2026-08-24, LATEST. READ THIS FIRST.
+# ⬛ SESSION 37 STATE — 2026-08-24, LATEST. READ THIS FIRST.
+# ✅✅ **THE QA 36.9 SAID WAS STILL UNANSWERED HAS NOW RUN, AND IT FAILED (37.1).** Good.
+#     `ca66731` was deployed but not verified, and the wait found a SECOND cause with the
+#     same symptom. The 2026-07-29 report was blamed on opacity 0.5; this one is
+#     `display:none`. **The multi-position card list hides `btn-self-rescue` outright and
+#     NOTHING ever un-hid it** — every other site sets opacity/disabled/textContent only.
+#     A member clearing two positions down to one saw "Approved — now click Self Rescue"
+#     with no button, recoverable only by a full page reload. Fixed `951533e`.
+# ⛔ **THE CARD BUTTONS WERE NEVER DISABLED AT ALL (37.2).** `doSelfRescue` disables the
+#     SINGLE-position button; the card list renders its own. Three fast clicks sent three
+#     transactions, and the 30s poll was a second route back to an enabled button because
+#     it re-renders the list underneath the member mid-signature. Fixed `af94619`: one
+#     in-flight lock on approve/self-rescue/copay, poll skips while a request is open.
+#     **`clearAllParked` is deliberately NOT wrapped — it calls all three itself.**
+# ⚠ **AND MY OWN FIX LEAKED (37.3).** The un-hide ran unconditionally, so it raised the
+#     single-position Self Rescue bar UNDERNEATH the two-card list — the exact ambiguity
+#     the list's hide exists to prevent. Owner saw it and called it: "a bigger banner at
+#     the bottom of the page". Gated on the parked count, `d1c488f`. **Three commits to
+#     get one screen right, and the owner's eye caught the third.**
+# ✅ **NO MEMBER WAS DOUBLE CHARGED — MEASURED, NOT ARGUED (37.4).** New instrument
+#     `scripts/diag_wallet_charges.js`. Two wallets, five rescues: every leftover
+#     allowance equals **fee minus EXACTLY ONE shortfall**. A second pull would have left
+#     $2-5 less. Screen balances agreed, but the ledger is what was asked for.
+# ⛔ **THE FIRST RUN OF THAT INSTRUMENT WAS UNFILTERED AND BLEW UP (37.4).** ethers v6
+#     `contract.filters.Transfer(...)` returns a DeferredTopicFilter and `{...filter}`
+#     copies NOTHING. On a quieter chain it would not have errored — it would have
+#     returned other people's transfers and reported a verdict on the wrong wallet.
+# ▶ **THE CRITICAL PATH IS UNCHANGED AND SHORTER (37.6): the community deploy.** 36.6
+#     item 1 was already done before this session started (contracts `v8.1` == `origin/v8.1`
+#     == `ff37d42`, verified). 36.9's unreported QA is now answered. **What is left is the
+#     community post and the 6 who cannot pay.**
+
+# ⬛ SESSION 36 STATE — 2026-08-24. Superseded on the QA items by SESSION 37 above.
 # ⛔⛔ **35.7's COUNT IS REFUTED, ITS MECHANISM IS CONFIRMED, AND THE REASON THEY LOOK
 #     CONTRADICTORY IS THE FINDING (36.1).** Nobody took "one or two rescues". 24 of 26
 #     stuck members took THREE OR MORE, up to five. And the ceiling really does afford
@@ -48,6 +80,197 @@ owner-set, and the session that earned it got five things wrong by ignoring what
 # ⛔ **THE TWO `getParkedMember` OUT-OF-BOUNDS PANICS WERE A RACE, NOT A BUG (36.2).**
 #     The keeper drains the queue every 2-4s while a sweep takes minutes. Every read is
 #     now pinned to ONE BLOCK. Run 1's census was a smear; run 2's is a snapshot.
+
+## 37.0 STATE — WHAT SHIPPED, AND WHAT THE HANDOFF SAID THAT WAS ALREADY STALE
+
+    TESTNET APP — admin == preview == main, all three, verified from the refs
+      6ed3881  card-list label fix (session 36) — VERIFIED LIVE this session
+      951533e  self-rescue button un-hidden by the panel that owns it        37.1
+      af94619  member actions serialised; poll skips while a request is open 37.2
+      d1c488f  that un-hide gated on the parked count                        37.3
+
+    CONTRACTS — nothing outstanding
+      v8.1 == origin/v8.1 == ff37d42  (36.9 handoff + velocity gate + fund_leaders)
+      NEW: scripts/diag_wallet_charges.js — NOT YET COMMITTED at the time of writing.
+
+⛔ **36.6 ITEM 1 WAS ALREADY DONE WHEN THIS SESSION OPENED, AND THE HANDOFF STILL LISTED
+IT AS OPEN.** 36.0 earned the rule that a handoff's claim about what is uncommitted is the
+one claim most often wrong; it was wrong again, about itself. Verified with read-only
+`git --no-optional-locks` rather than trusting the text. **The two files `git status` still
+shows as modified in the contracts repo (`archive/windows_keeper/corescue.bat`,
+`contracts/test/CryptoNovaCommunityWallet.sol`) contain ZERO real changes** — diff them
+ignoring CR at EOL and both are empty. That is 36.6 item 6's `.gitattributes` phantom, not
+work in progress. Do not "commit" them thinking they are pending.
+
+## 37.1 ⛔ THE POLL-CYCLE QA RAN, AND `ca66731` WAS NOT THE WHOLE FIX
+
+**PASS — the card path.** T1 card read `Approve $10.00`, note "only $1.57 is taken",
+and Rabby asked for **10.0000**. Label and wallet popup agree: `6ed3881` is verified live.
+After the approval the card flipped to **READY** by itself on the poll — the allowance-keyed
+logic works.
+
+**FAIL — the single-position path.** With T1 cleared, the panel dropped to one position.
+Approved $50.00, status line said *"✅ Approved $50.00 — only $5.29 will be taken. Now click
+Self Rescue"* — **and there was no Self Rescue button on the screen.** Refresh balance did
+nothing, twice. Only the browser reload brought it back.
+
+    THE MECHANISM
+      index.html:10210  the multi-position list sets display:none on FOUR ids:
+                        btn-self-approve, btn-self-rescue, btn-copay-rescue, copay-note
+      :5896             the poll sets `display` for btn-self-approve      -> recovers
+      :10352            _paintCopayOption sets `display` for both copay   -> recovers
+      btn-self-rescue   EVERY site sets opacity / disabled / textContent  -> NEVER recovers
+
+Three of the four had a counterpart that shows them again. One did not. A page reload
+rebuilds the DOM from source, where the button carries no `display:none` — which is
+exactly why a reload "fixed" it and the in-app refresh could not.
+
+✅ **FIXED `951533e`:** the single-position poll owns `display` for the rescue button the
+same way it already owned it for the approve button (`:5908`, `:5915`), and
+`approveSelfRescue` un-hides it the instant the approval confirms (`:9848`) so the button
+is present when the status line tells the member to press it.
+
+⛔ **THE LESSON IS 36.9's, ONE LAYER DEEPER.** 36.9 said a fix applied to one rendering
+path is not applied. This is the same shape at the level of a single DOM property: **a
+path that HIDES something must have a counterpart that SHOWS it, and the way to check is
+to grep every site that touches that element and ask which of them owns `display`.**
+
+⚠ **STILL NOT TIMED, AND DO NOT RECORD IT AS TIMED.** The button is now present and was
+used successfully on two wallets, but **nobody has sat through a deliberate two-poll
+(70s) wait untouched on the single-position path since the fix.** The mechanism is sound
+(the dim is keyed on allowance, the display is owned by the panel) but that is an argument,
+not an observation. It is a 60-second check for whoever picks this up.
+
+## 37.2 ⛔ THE CARD BUTTONS WERE NEVER DISABLED — DOUBLE SUBMIT, TWO INDEPENDENT ROUTES
+
+Owner, live: *"seems like i clicked the first a few times"* and *"the pop up came back while
+it was refreshing."* Both are real and they are two different holes.
+
+1. **NOTHING IN THE CARD PATH WAS EVER DISABLED.** `doSelfRescue` disables
+   `btn-self-rescue` — the single-position button, which in the card path is hidden.
+   The card renders its own `onclick="selectParked(i,'rescue')"` button and that one stays
+   enabled. Three fast clicks = three transactions. No poll needed.
+2. **THE 30s POLL RE-RENDERS MID-SIGNATURE.** `startRescuePolling` (`:8804`) called
+   `loadDashboardData()` with no in-flight guard, and that rebuilds the card list from
+   scratch — replacing the button the member just pressed with a brand-new enabled one.
+
+✅ **FIXED `af94619`.** One lock, `window._actionInFlight`, wrapping `approveSelfRescue`,
+`doSelfRescue` and `doCopayRescue` **at their definitions**. These are top-level
+declarations in a classic (non-module) script, so the identifier IS the global property —
+reassigning it covers the inline `onclick` handlers AND `selectParked`'s internal calls,
+with no edit inside any function body and no return path able to leak the lock (`finally`).
+Extra clicks get a toast: *"Still working on your last request — check your wallet."*
+The poll now returns early while `_actionInFlight` or `_clearAllRunning` is set.
+
+⛔ **`clearAllParked` IS DELIBERATELY NOT WRAPPED. DO NOT "TIDY THIS UP" BY ADDING IT.**
+It calls approve/self-rescue/copay itself, in sequence, per position. Wrapping it would
+make it take the lock and then have its OWN internal calls refused — Clear-all would stop
+after step one while reporting nothing wrong. It already self-guards with
+`_clearAllRunning` on its first line.
+
+⚠ **HONEST LIMIT, ALSO WRITTEN INTO THE FILE.** Between Clear-all's sequential steps the
+lock is briefly free, so a click landing exactly in that gap is not refused. The poll is
+suppressed for the whole run and the sequencer re-reads `getMember().isInMatrix` after every
+step, so a stray call is caught rather than believed. Closing it fully means threading a
+token through the sequencer's three call sites — **worth doing only if it is ever seen in
+the wild, not on principle.**
+
+## 37.3 ⚠ THE FIX LEAKED, THE OWNER CAUGHT IT, AND THAT IS THE THIRD COMMIT ON ONE SCREEN
+
+`951533e`'s un-hide and `af94619`'s un-hide both ran **unconditionally**. With two parked
+positions the card list renders and hides those buttons ON PURPOSE — they act on whichever
+position the picker chose last, which is ambiguous once a list is on screen. So the
+single-position Self Rescue bar reappeared **underneath the two-card list**. Owner: *"had to
+press a few times on the smaller banner with no results… but there is a bigger banner at
+the bottom of the page that worked fine."* The "no results" was the new lock correctly
+refusing clicks during a pending approve; the bigger banner was my leak.
+
+✅ **FIXED `d1c488f`:** both un-hides gated on `(window._parkedAll || []).length < 2`.
+`_parkedAll` is assigned at `:5783`, before the panel paint and before `renderParkedList`,
+so it is current for both paths. **`renderParkedList` is NOT awaited**, so which of the two
+renderers won was a race — the gate settles it by count instead of by timing.
+
+## 37.4 ✅ NOBODY WAS DOUBLE CHARGED — AND THE INSTRUMENT THAT PROVED IT FAILED FIRST
+
+**NEW: `scripts/diag_wallet_charges.js`.** Read-only. Every USDC Transfer a wallet paid and
+received over a block window, each destination labelled against the deployed matrices, an
+explicit same-destination-AND-same-amount duplicate hunt, and the leftover allowances. It
+refuses to print a total if any log window fails to read, rather than under-reporting.
+
+    0xd27170Eb — three rescues        0x28FC…0887 — two rescues
+      $1.075859 -> T1 MatB              $1.060355 -> T1 MatB
+      $4.75     -> T1 MatA              $2.626523 -> T2 MatB
+      $5.306202 -> T3 MatA
+      = $11.132061, matching the screen balances exactly
+
+✅ **THE LEFTOVER ALLOWANCE IS THE REAL PROOF, AND IT IS EXACT ON ALL FIVE.**
+$10.00 − $8.939645 = $1.060355. $25.00 − $22.373477 = $2.626523. $50.00 − $44.693798 =
+$5.306202. Every remainder equals the fee minus **exactly one** shortfall; a second pull
+would have left $2-5 less. Five independent contract-side confirmations. **Multi-clicking
+did nothing on chain — the contract reverts a rescue on a position already cleared.**
+
+⛔ **THE INSTRUMENT'S FIRST RUN WAS SILENTLY UNFILTERED.** ethers v6
+`contract.filters.Transfer(from, null)` returns a **DeferredTopicFilter**, and
+`{...filter, fromBlock, toBlock}` copies neither address nor topics. `getLogs` therefore
+pulled EVERY log on Base Sepolia for a 9,000-block window and the response overflowed
+Node's maximum string length. **The crash is the lucky outcome.** On a quieter chain it
+would have returned other members' transfers and reported a double-charge verdict on the
+wrong wallet. Now builds topics by hand, plus TWO selftests: the filter must carry the USDC
+address and Transfer topic before scanning, and every returned row must involve the member.
+
+⚠ **A DESTINATION CAN REPEAT LEGITIMATELY.** 0x28FC paid T1 MatB twice — $1.027575 in the
+morning, $1.060355 at night. Different amounts, hours apart: two rescues of the same matrix,
+which is the treadmill, not a duplicate. The check keys on destination AND amount for
+exactly this reason.
+
+✅ **THE $100.00 -> TierRouter AT BLOCK 45918275 IS EXPLAINED AND IS NOT A FINDING.** The
+owner ran a live upgrade on a call to demonstrate the flow. Recorded because a wallet-funded
+$100 with no signature would have been a serious question, and the next session should not
+re-open it.
+
+## 37.5 ⛔ FINDING A QA WALLET WAS MOST OF THE WORK — READ THIS BEFORE PLANNING THE NEXT QA
+
+**BIGFILL WALLETS CANNOT SUPPLY ONE. MEASURED, NOT ASSUMED.** Derived every wallet from
+`FILL_MNEMONIC` at indexes **0..3499** (V8.8 only ever used 0..3249) and matched against the
+28 past-grace parked positions: **exactly one is bigfill-derived — `0x52BEA7CE`, index 1 —
+and it holds $0.00, so it cannot pay.** The other 27 are not bigfill at all.
+
+**THE OWNER'S FIVE SIGNABLE WALLETS ARE ALL PARKED INSIDE GRACE, IN 2-3 MATRICES EACH:**
+`0x5bd38cf1` (3), `0x28FC…0887` (2), `0x081375aA` (3), `0xd27170Eb` (2), `0x85ec71AA` (2).
+Inside grace is stable for a QA: auto-rescue only re-enters free when the in-matrix balance
+already covers the fee, and none of these do. **Multi-position means the QA runs the CARD
+path; clearing down to one switches it to the SINGLE path.** That is how both paths got
+tested in one sitting, and it is the recipe to reuse.
+
+⚠ **A RESCUE CAN RE-PARK YOU IN THE OTHER HALF OF THE PAIR, AND IT LOOKS LIKE A DOUBLE
+CHARGE.** After clearing T1.1 MatB, 0xd27170Eb showed a NEW T1.1 MatA position short $4.75
+that was not in the 18:52 census. To a member that reads as *"I just rescued T1, why is T1
+asking again?"* — **the community post has to say this in plain words.** Whether the re-park
+is same-block (35.6) or happened in the intervening hour was NOT established here.
+
+⚠ **`CryptoNova-Keepers/mint_usdc.js` CARRIES ITS OWN HARDCODED WALLET ARRAY — A FIFTH
+LIST**, on top of the three 36.4 already flagged. `0x28FC…0887` is in it and is NOT in the
+canonical `fund_list.txt`. Same silent-divergence shape as 36.4. Not on the critical path;
+migrate it with the other three.
+
+## 37.6 ▶ NEXT — THE CRITICAL PATH, UPDATED
+
+36.6 still governs: **the goal is the community deploy.** Do not open a V8.48 measurement.
+
+1. ⚠ **COMMIT `scripts/diag_wallet_charges.js`** — written and run this session, not yet
+   committed at the time of writing. Check before assuming.
+2. ▶ **THE 60-SECOND CHECK 37.1 LEAVES OPEN:** on a single-position wallet, approve, wait
+   70s untouched, confirm Self Rescue stays lit. The mechanism is sound; the observation
+   is missing. Do not record it as done without running it.
+3. ▶ **THE COMMUNITY POST.** Blocked on nothing now. Must contain, in the owner's voice
+   with emoji, per [[community-comms]]: what Self Rescue asks the wallet for and why the
+   approval is the ENTRY FEE while only the shortfall is taken; that leftover approval is
+   normal and unspent; and **that a rescue can re-park you in the pair's other matrix and
+   that is a new position, not a second charge** (37.5).
+4. ▶ **THE 6 WHO CANNOT PAY** — total gap $25.07 across 6 wallets, from the 18:52 census.
+5. ▶ **AFTER the community deploy:** re-run `diag_velocity_gate.js` with `WINDOW_SECS=86400`
+   (36.7's agreed watch item) and count how many stuck members could exit the ratchet by
+   upgrading (36.9). Both are post-deploy, neither is open now.
 
 ## 36.0 STATE
 
