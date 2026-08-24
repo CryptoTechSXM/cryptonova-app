@@ -10,7 +10,301 @@ owner-set, and the session that earned it got five things wrong by ignoring what
 
 ---
 
-# ⬛ SESSION 34 STATE — 2026-08-24, LATEST. READ THIS FIRST.
+# ⬛ SESSION 35 STATE — 2026-08-24, LATEST. READ THIS FIRST.
+# ⛔⛔ **THE RE-ENTRY TREADMILL (35.6). A MEMBER WITH RE-ENTRY ON IN A NEAR-EMPTY MATRIX
+#     PAYS A SHORTFALL EVERY LAP AND EARNS CENTS.** Measured on one wallet: 6 of 6
+#     matrices re-park the moment a rescue completes, in the SAME BLOCK. One lap of all
+#     six costs **$125.38** and returns the member exactly where they started.
+# ⛔⛔ **THE INSOLVENCY CEILING IS SMALLER THAN ONE RESCUE (35.7).** `insolvencyFloorBps
+#     3400` at a $10 T1 fee is a **$3.40 LIFETIME** debt ceiling. A single T1 MatB rescue
+#     costs **$4.50-$5.00**. So a member gets roughly ONE keeper rescue, ever — while the
+#     treadmill mints a fresh rescue need every lap. **34.6's question was the wrong
+#     question: the thing to fix is the loop that mints the debt, not the valve or the dial.**
+# ✅✅ **34.7 ITEM 2 IS ANSWERED AND IT WAS NEVER ECONOMIC (35.1).** Of 41 past-grace
+#     positions, **35 hold the money and need only an approval**; 6 cannot pay; the entire
+#     gap is **$25.07** against a fund holding **$1,420.78**.
+# ⛔⛔ **THE APPROVAL BUG — THREE REPORTERS, THIRTEEN DAYS (35.3).** @Lavern-Gay 08-11,
+#     Sherwyn 08-21, @Koach100 08-24, all the same defect. The approval was the EXACT
+#     shortfall, which goes stale the moment the shortfall drifts. Fixed `ca66731`.
+# ⛔ **`withdrawableOf()` IS NOT THE FIELD THE RESCUE ARITHMETIC USES — THREE SITES (35.4).**
+#     Both `_selfRescue` and `coPayRescue` read the RAW struct field. Fixed `ca66731`.
+# ⛔ **BIGFILL DEFERS $0 WALLETS TO A KEEPER THAT CANNOT TAKE THEM (35.5).** 105 times,
+#     across 90 of 103 runs, one wallet. The comment claiming otherwise was never tested.
+# ⛔ **FIVE OF 36 MEMBERS ARE PARKED IN TWO MATRICES AT ONCE.** `bigfill_v8.js:609` asserts
+#     this is impossible ("break on first hit"). Measured false.
+# ⛔ **`.gitattributes` IS MISSING IN BOTH REPOS AND THE PHANTOM FIRED LIVE A THIRD TIME.**
+
+## ▶ SESSION 36 — READ IN THIS ORDER.
+
+**1. 35.6 THEN 35.7 — in that order.** The treadmill is the mechanism; the ceiling is why
+it becomes permanent. Read together they retire 34.6's eviction-vs-dial framing entirely.
+
+**2. 35.1 — the solvency answer**, because it is what turned the economic story into a
+frontend/comms story, and because the comms post is written and BLOCKED on 35.6.
+
+**3. 35.9 — three method failures this session**, all mine, all the same family the two
+rules exist to prevent. Read before trusting any instrument in this file.
+
+**4. 35.10 — what is uncommitted.** Three files in the contracts repo are working-tree
+only. Nothing in the Keepers repo changed this session.
+
+## 35.0 STATE
+
+* ✅ **TESTNET-APP: THREE COMMITS, PUSHED TO `admin` AND `preview`** (`74a1588..edabf8e`):
+  **`ca66731`** the rescue fix (123 insertions / 19 deletions), **`90d89cb`** a CLAUDE.md
+  correction that had sat uncommitted since 2026-08-22, **`edabf8e`** the bug triage.
+  Truncation check run on `origin/preview` — ends `</body></html>`. **NOT on `main`.**
+* ⛔ **CONTRACTS REPO: THREE FILES UNCOMMITTED.** `scripts/diag_parked_solvency.js` (new),
+  `scripts/diag_member_positions.js` (new), `scripts/bigfill_v8.js` (modified, +43 lines,
+  option B from 35.5). All three verified syntactically on the device; none committed.
+* ⛔ **THE COMMUNITY POST IS WRITTEN AND MUST NOT GO OUT YET.** Draft exists for
+  2026-08-24. Two blockers: the fix is not on `main` (owner rule — the app and the
+  announcement ship together), and **35.6 means telling a member to pay their shortfall
+  may buy them a lap rather than an exit.** Resolve 35.6 before publishing.
+* ⚠ **`0xA9B019e7455618BeC38451619B3b3893ed106617` IS MID-TREADMILL.** Owner's test wallet,
+  $1,138.03, five self-rescues paid in four minutes. Left as-is deliberately — it is the
+  live specimen for 35.6 and re-running it costs real USDC.
+
+## 35.1 ✅ 34.7 ITEM 2, ANSWERED — THEY HOLD THE MONEY
+
+`scripts/diag_parked_solvency.js`, 2026-08-24 12:36Z, **0 PROBLEMs**, selftest passed
+(planted positive `0x52BEA7CE` found at $0.00, agreeing with 105 bigfill observations):
+
+    grace 86400s (from chain)   SF rule: V8.48 loanEligible, FLAT   floorBps 3400
+    SF balance $1420.78   <- the gate never reads it
+    T1  pairs 2/2 | matrices 4 (2 empty)  | parked 184 | past-grace 36
+    T2  pairs 6/6 | matrices 12 (9 empty) | parked  90 | past-grace  5
+    T3  pairs 4/4 | matrices 8 (6 empty)  | parked  32 | past-grace  0
+    T4  pairs 1/1 | matrices 2 (1 empty)  | parked  22 | past-grace  0
+    T5-T10 all empty
+
+    can self-rescue right now     : 0
+    hold the money, need approval : 35
+    CANNOT pay from their wallet  : 6    (total gap $25.07)
+    unknown                       : 0
+
+⛔ **41 ROWS, 36 UNIQUE MEMBERS — FIVE ARE PARKED IN TWO MATRICES AT ONCE.** Not 40, as
+34.6 recorded. And shortfalls run **$0.15-$12.50**, not the $0.15-$2.67 in 34.6 — that
+range was T1-MatA-only. T1 MatB needs $5.00, T2 up to $12.50.
+
+⛔ **ALLOWANCE IS $0.00 ON 40 OF 41.** The one exception is `0xa0763F34`: **$11.88 approved
+against a $12.50 shortfall** — the only member who evidently followed the instructions, and
+$0.62 short. That single row is what identified 35.3.
+
+⚠ **DO NOT READ THE 40 ZEROS AS "THE FLOW IS BROKEN."** `approveSelfRescue` grants the
+approval just-in-time and the rescue spends it, so $0 at rest is what a member who never
+pressed the button looks like. The measurement says nobody used it. It does not say it failed.
+
+## 35.2 WHO THE 36 ARE — PARTLY ANSWERED, AND THE REST IS NOT WORTH GUESSING
+
+* **4 of 36 are on the owner's own funding list** (`CryptoNova-Keepers/fund_list.txt` — "91
+  addresses supplied by the owner, plus 9 reporter wallets found in BUGS.md"). One is
+  named: **`0x3c175568` is Anthony L**, in `bounties.json` with an accepted find. The other
+  three are `0x46CC052B`, `0x96482BB0`, `0x728FF080`. **All four hold $30,000.00 and need
+  under $2.**
+* **1 is a bigfill wallet** — `0x52BEA7CE`, and it is also one of the 6 who cannot pay.
+* **0 are leaders** (checked against the 41-address roster in `run_bigfill_rr.ps1`).
+* **31 are unattributed** and cluster hard: four at 1.57d / $5.00 / $4.79-80 debt / $0.00
+  balance; five at 1.32-1.33d / $2.17; three at 1.59d / $2.67. Real people do not arrive in
+  identical quadruples. **LEADING CANDIDATE, UNVERIFIED: `rr_keeper`'s pool, which uses the
+  `child` derivation `m/44'/60'/0'/0/0/i` while bigfill walks `std` `m/44'/60'/0'/0/i`** —
+  which is exactly why they are invisible to bigfill's sweep. Settling it needs the
+  mnemonic to derive against; it does not change any decision on the board.
+
+## 35.3 ⛔⛔ THE APPROVAL BUG — THREE REPORTERS, THIRTEEN DAYS, AND A JULY FIX THAT DID NOT HOLD
+
+    @Lavern-Gay  2026-08-11  "had to click both Approval and Self-Rescue several times,
+                              even though the transaction was marked as complete"
+    Sherwyn      2026-08-21  "Approving of self rescue fail.. On Chain error message
+                              display... On all my accounts"   (withdrew it 9 min later)
+    @Koach100    2026-08-24  "After approving USDC I was promoted to click self rescue
+                              but the button didn't display"   (+ "another account too")
+
+**THE MECHANISM.** `approveSelfRescue` granted `approve(matrixAddr, shortfall)` — the exact
+cent figure. The button's visibility test is `allowance < parkedInfo.shortfall`. The
+shortfall MOVES while a member is parked, so one cent of drift flipped that test back to
+true on the next 30-second poll, re-dimming Self Rescue to opacity 0.5 (invisible on a dark
+phone) and re-showing Approve. On the transaction side the same drift made
+`safeTransferFrom` revert on allowance.
+
+⛔ **THE 2026-07-29 IN-CODE NOTE DESCRIBES THIS EXACT SYMPTOM AND CALLS IT FIXED.** It was
+not. The un-dim in `approveSelfRescue` only survived until the next poll. **The exact-amount
+approval is what kept re-triggering it**, and that is what `ca66731` removes.
+
+✅ **THE FIX: APPROVE `ENTRY_FEE`, NOT THE SHORTFALL.** `_selfRescue` computes
+`shortfall = entryFee - effectiveContrib` floored at 0, so **`ENTRY_FEE` is the mathematical
+maximum the contract can ever pull.** It cannot be too little and cannot exceed one fee. No
+per-tier sizing, no guess at drift — bigfill's flat `$15 RESCUE_APPROVAL` carries a comment
+admitting it was sized for T1 and is wrong for T3+. The button label and a new sub-line now
+state the approved figure and that only the shortfall is taken.
+
+⚠ **AND IT REMOVED AN ACCIDENTAL BRAKE (see 35.6).** The exact-amount approval was spent by
+each rescue, forcing a re-approve. That friction was quietly slowing the treadmill. Still
+the right fix; the dashboard may now need to warn when a rescue will immediately re-park.
+
+## 35.4 ⛔ `withdrawableOf()` IS NOT THE FIELD — AND IT WAS WRONG IN THREE PLACES
+
+V8.44 item D split them: `FigureEightMatrixV8:613` returns `members[m].withdrawable +
+pendingPoolOf(...)`. **Both rescue functions in the deployed build read the RAW struct field
+and nothing else** — verified against the deployment, not the working tree
+(`git show d382d37:contracts/MatrixLogicLib.sol`): `_selfRescue` :1464 and `coPayRescue`
+:1390, byte-identical arithmetic. `coPayRescue` was checked SPECIFICALLY in case the co-pay
+path legitimately differed. It does not.
+
+All three `index.html` sites were wrong the same way: `doCopayRescue`'s quoted loan, the
+**permit path** (which would have signed a permit for LESS than the transfer pulls), and the
+classic pre-flight guard — a guard that failed PERMISSIVELY, waving through calls that
+revert. All now read `getMember()`, which also drops each path from three RPC calls to two.
+
+⚠ **LATENT, NOT LIVE, as of 2026-08-24**: the divergence check across all 41 past-grace
+positions found ZERO difference, i.e. `pendingPoolOf` is currently 0 for every one of them.
+⚠ **`copay_rescue.js` ON THE DROPLET HAS THE SAME MISPRICING** — it sizes rescues against
+`MAX_SPEND` using `withdrawableOf`. Does not break the transaction; the budget cap is looser
+than it reads. **Not touched — live keeper, mid-session.**
+
+## 35.5 ⛔ BIGFILL HANDS $0 WALLETS TO A KEEPER THAT CANNOT TAKE THEM
+
+`bigfill_v8.js:678` skipped any wallet with `usdcBal === 0n`, commented *"keeper's SF loan
+will handle them instead."* **That was an assumption beside a measurement and it is false.**
+Across all 103 `logs/bigfill_loop` runs, exactly ONE wallet has ever reached that branch —
+`0x52BEA7CE`, **105 times in 90 runs**, most recently the run that died at offset 368 — and
+it was never rescued once. The keeper it defers to calls `coPayRescue`, which the SF refuses
+on the insolvency floor.
+
+The irony: the USDC top-up at :796 only fires on a decoded `ERC20InsufficientBalance` from
+the dry run, which needs a NON-zero balance to reach. **Bigfill will fund a wallet holding
+$0.44 and refuses to fund one holding $0.00.**
+
+✅ **OPTION B SHIPPED (uncommitted):** the branch now COUNTS the wallet and names its
+situation, and the run summary lists them. **Deliberately NOT option A (fund them)** —
+34.8 measured that bigfill already manufactures solvency real members do not have, and
+funding $0 wallets widens that gap to rescue one address. **Owner decision, still open.**
+
+## 35.6 ⛔⛔ THE RE-ENTRY TREADMILL — MEASURED, NOT DERIVED
+
+`scripts/diag_member_positions.js` on `0xA9B019e7455618BeC38451619B3b3893ed106617`,
+2026-08-24, **0 PROBLEMs**:
+
+    optionsSet true | autoReentryEnabled true | reentryMinCycles 2
+    matrix       cycles  fee     reserve  withdrawable  shortfall   re-entry
+    T1.1 MatA      6     $10.00   $0.00      $0.00       $10.00     ON (own flag)
+    T1.1 MatB      5     $10.00   $5.00      $0.25        $4.75     ON (own flag)
+    T2.1 MatA      3     $25.00   $0.00      $0.00       $25.00     ON (own flag)
+    T2.1 MatB      1     $25.00  $12.50      $0.63       $11.88     ON (forced, < minCycles)
+    T3.1 MatA      1     $50.00   $0.00      $0.00       $50.00     ON (forced, < minCycles)
+    T3.1 MatB      0     $50.00  $25.00      $1.25       $23.75     ON (forced, < minCycles)
+
+**ALL SIX have `reserve + withdrawable < fee`, and re-entry ON in all six.** So every
+cycle-out hits `parkCycledOut` (`MatrixLogicLib:1685` — *"TierRouter parks a member whose
+MatB cycle-out could not fund a re-entry"*) and parks them again. **One lap of all six costs
+$125.38 and returns the member exactly where they started.**
+
+⛔ **THE RE-PARK SHARES A BLOCK WITH THE RESCUE.** Four complete T3 A↔B round trips in 110
+blocks (~4 minutes), every one atomic:
+
+    45906083  COPAY-RESCUE  T3.1 MatA
+    45906083  PARKED        T3.1 MatB     <- same block
+    45906108  SELF-RESCUE   T3.1 MatB
+    45906108  PARKED        T3.1 MatA     <- same block
+    45906135  SELF-RESCUE   T3.1 MatA
+    45906135  PARKED        T3.1 MatB
+    45906164  SELF-RESCUE   T3.1 MatB
+    45906164  PARKED        T3.1 MatA
+    45906193  SELF-RESCUE   T3.1 MatA
+    45906193  PARKED        T3.1 MatB
+
+Full history: **14 `MemberParked` across 6 matrices, 13 rescues (8 co-pay, 5 self).**
+
+⛔ **WHY IT IS A PUMP AND NOT A JOURNEY: THE EARNINGS COLUMN.** `$0.00 · $0.25 · $0.00 ·
+$0.63 · $0.00 · $1.25`. Those matrices are nearly empty (T3: 8 matrices, 6 of them empty),
+so there is no downline paying in. **Auto re-entry into a near-empty matrix bills a fee per
+lap and pays cents.** This is not the contract misbehaving — it is the contract doing
+exactly what it says in conditions where what it says is a treadmill.
+
+⚠ **`reentryMinCycles 2` MEANS A MEMBER CANNOT OPT OUT OF THEIR FIRST TWO CYCLES.** Below
+that threshold re-entry is forced on regardless of the member's own flag.
+
+## 35.7 ⛔⛔ THE CEILING IS SMALLER THAN ONE RESCUE — 34.6 AND 34.8 REFRAMED
+
+Put 35.6's co-pay rescues against the gate 34.5/34.6 spent a session on:
+
+    ceiling  = tierEntryFee * insolvencyFloorBps / 10000 = $10.00 * 0.34 = $3.40  LIFETIME
+    T1 MatB shortfall, measured 2026-08-24 : $4.50 - $5.00   <- ONE rescue exceeds it
+    T1 MatA shortfall, measured 2026-08-24 : $0.15 - $2.67   <- TWO rescues exceed it
+
+**The lifetime debt ceiling is worth about one MatB rescue, or two MatA rescues.** After
+that the member is permanently refused — while 35.6's loop mints a fresh rescue need every
+lap. **These two mechanisms are structurally incompatible.**
+
+✅ **AND IT MATCHES THE STUCK MEMBERS EXACTLY.** 34.6's debts: `$3.71 · $5.06 · $5.13 ·
+$5.13 · $6.69 · $6.90 · $9.47 · $12.55 · $17.34 · $17.34` — every one just past $3.40, which
+is what one-or-two rescues looks like, not a long history of borrowing.
+
+▶ **SO THE 36 ARE PROBABLY NOT A POPULATION OF BAD BORROWERS. They are a population that
+took one or two keeper rescues off a treadmill and hit a ceiling that affords one.**
+**STRONGLY SUPPORTED, NOT PROVEN.** The confirming measurement is cheap and is item 1 below:
+count `RescueLoanIssued` events per stuck member and check the count is one or two.
+
+⛔ **34.6 ASKED "EVICT THEM OR RAISE THE DIAL". BOTH ANSWERS TREAT THE SYMPTOM.** Raising
+`insolvencyFloorBps` buys more laps. Eviction destroys the self-rescue exit (34.8) of the 35
+members who can already afford it. **The thing to fix is the loop.**
+
+## 35.8 ✅ BUG TRIAGE — SIX CLOSED, SEVENTEEN OPEN
+
+`edabf8e`, via `triage_bugs_2026-08-24.cjs` (written to keep the API race window to one
+execution — `api/submit-bug.js` commits member reports to this file autonomously).
+Closed: the three approval reports (35.3), Sherwyn's own withdrawal (closed as *withdrawn
+but the bug was real*, bounty stands), @bevmawire's form-fields half (fixed `74a1588`,
+proved by them attaching a screenshot three days later), and the owner's upload test.
+**Deliberately left open:** @bevmawire's *"Couldn't load your status"* (08-22, has a
+screenshot) and Sherwyn's CNova redeeming failure (08-21). Neither has been touched.
+
+## 35.9 ⛔ THREE METHOD FAILURES THIS SESSION, ALL MINE
+
+1. **THE TEST PASSED BECAUSE IT WAS RUN IN THE WRONG DIRECTORY.** `triage_bugs.js` was
+   dry-run in a scratch dir with no `package.json`, where node defaulted to CommonJS. The
+   real repo sets `"type": "module"`, so `require` was undefined and it died on the owner's
+   machine. **The test did not reproduce the one condition that decided the outcome.** Now
+   `.cjs`, and it takes a file argument so future dry runs happen in the real directory
+   against a copy. **Check `package.json` "type" before writing any repo script** — the
+   contracts repo is `"commonjs"`, the testnet app is `"module"`.
+2. **I ATTRIBUTED THE REJECTED PUSH TO "AN EARLIER SESSION THAT DID NOT RECORD ITS WORK."**
+   It was the bug-report form committing member reports autonomously. The standing rule that
+   unexplained work is an incomplete handoff is right, but it made me stop looking at the
+   ordinary explanation first.
+3. **I NEARLY PUT AN UNVERIFIED FIGURE IN A MEMBER-FACING POST.** The first draft opened
+   "36 members are sitting parked". 36 is unique ADDRESSES; only 4 are confirmed members
+   (35.2). Caught before delivery, but only just.
+
+## 35.10 NEXT, IN ORDER — SUPERSEDES 34.7.
+
+1. ⛔⛔ **CONFIRM 35.7. Count `RescueLoanIssued` per stuck member.** If the counts are one or
+   two, the ceiling-versus-loop reading is established and the whole 34.6 branch closes.
+   Cheap, decisive, read-only, and everything below depends on it.
+2. ⛔⛔ **THEN DECIDE THE TREADMILL (35.6).** Candidates, none measured: let members opt out
+   below `reentryMinCycles`; refuse auto re-entry when the destination matrix cannot fund
+   it; warn on the dashboard that a rescue will immediately re-park. **Owner decision.**
+3. ⛔ **THE COMMUNITY POST IS WRITTEN AND BLOCKED ON BOTH OF THE ABOVE.** Do not publish it
+   telling members to pay a shortfall until we know that buys them an exit and not a lap.
+4. ⛔ **COMMIT THE THREE CONTRACTS-REPO FILES (35.0).** Working-tree only.
+5. **THE `main` DEPLOY.** `admin` and `preview` carry `edabf8e`. `main` needs QA plus leader
+   sign-off. The QA that matters: park a wallet, approve, **wait past one 30-second poll**,
+   confirm Self Rescue STAYS lit.
+6. ⛔ **STILL UNTOUCHED AND STILL THE ONLY OTHER OWNER DECISION: `velocityThreshold` BEFORE
+   THE COMMUNITY DEPLOY** (33.8 / 34.7 item 3). Nothing in session 35 moved it.
+7. **THE 6 WHO CANNOT PAY.** $25.07 total against a $1,420 fund. Trivially coverable, but
+   do not cover it before item 2 — funding a treadmill is not a rescue.
+8. **`.gitattributes` LF PIN, NOW BOTH REPOS** (34.7 item 9). Witnessed a third time: `git
+   add CLAUDE.md` printed the LF->CRLF warning live during `90d89cb`. Do it as its own step
+   — a repo-wide pin renormalises on next checkout.
+9. **THE STALE `deployed_addresses_*` DEFAULTS, REPO-WIDE** (34.7 item 5). Unchanged.
+   `check_member_options.js` still defaults to v8_45.
+10. **THE DE-CENSORING RE-RUN** (34.7 item 4). Unchanged, still dated, still waiting.
+11. Backlog otherwise unchanged from 34.7.
+
+---
+
+# ⬛ SESSION 34 STATE — 2026-08-24. READ AFTER SESSION 35.
 # ✅✅ **33.6 ITEM 5 IS CLOSED.** `copay_rescue.js` states its own coverage. Two commits,
 #     two repos, both pushed: Keepers **`e420ba4`**, Contracts **`ce98472`**.
 # ⛔⛔ **33.9's CENTRAL CLAIM IS WRONG. "THE KEEPER NEVER REACHES THEM" — IT REACHES

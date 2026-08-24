@@ -632,6 +632,11 @@ async function simulateSelfRescues({ walletList, matrices, usdc, usdcFunder, raw
   );
 
   let rescued = 0, skipped = 0;
+  // Wallets with $0 USDC. Not a skip -- see the long note at the balance check below.
+  // They have no self-rescue path (nothing to pay with) and no keeper path (the SF
+  // insolvency floor refuses the co-pay), so they are stuck until someone decides to
+  // fund them. Named in the summary so a run cannot report them as ordinary skips.
+  const unrescuable = [];
   // ── TRANSPORT ERRORS ARE NOT REFUSALS (added 2026-08-19 after a run lost 30 wallets) ──
   //
   // The catch below used to treat every failure the same way: count it as "skipped" and
@@ -674,10 +679,40 @@ async function simulateSelfRescues({ walletList, matrices, usdc, usdcFunder, raw
     try {
       const conn = w.connect(ethers.provider);
 
-      // Skip wallets with no USDC — keeper's SF loan will handle them instead.
+      // -- A $0 WALLET HAS NO PATH AT ALL, AND THIS LINE USED TO CLAIM IT DID ----------
+      //
+      // The comment here read "keeper's SF loan will handle them instead". That was an
+      // ASSUMPTION sitting next to a measurement, never tested, and it is FALSE.
+      //
+      // MEASURED 2026-08-24 across all 103 bigfill_loop run logs: exactly one wallet has
+      // ever reached this branch, 0x52BEA7CE, and it reached it 105 times in 90 runs --
+      // most recently the run that died at offset 368. It was never rescued once. The
+      // keeper it is handed to calls coPayRescue, which the StabilityFund refuses on
+      //     loanEligible = memberDebt < tierEntryFee * insolvencyFloorBps / 10000
+      // (V8.48, d382d37) -- a FLAT gate on lifetime debt that never reads the amount
+      // asked for and never reads the fund balance. At T1 the ceiling is $3.40 and this
+      // member is past it. So bigfill defers to a path that is STRUCTURALLY incapable of
+      // taking the handoff, and has done so 105 consecutive times.
+      //
+      // WHY THIS DOES NOT SIMPLY TOP THEM UP, WHICH WOULD WORK:
+      // the USDC top-up below (search "USDC TOP-UP AND RETRY") only fires on a decoded
+      // ERC20InsufficientBalance from the dry run, which needs a NON-zero balance to
+      // reach -- so bigfill will fund a wallet holding $0.44 and refuses to fund one
+      // holding $0.00. Moving the continue would fix that in one line. It is deliberately
+      // NOT done here: handoff 34.8 measured that bigfill already manufactures the wallet
+      // solvency self-rescue requires (it tops up any short wallet) while real members
+      // cannot, and the velocity gate shows the same asymmetry. Funding a $0 wallet
+      // widens the gap between the test cohort and the population being measured, to
+      // rescue one address. That is an OWNER decision, not a keeper one.
+      //
+      // So this COUNTS the wallet and names its situation instead of quietly deferring
+      // it. A zero here is a finding, not a skip.
       const usdcBal = await usdc.balanceOf(w.address);
       if (usdcBal === 0n) {
-        console.log(`  ! selfRescue ${label} ${w.address.slice(0, 10)}... - $0 USDC, keeper SF path`);
+        unrescuable.push(w.address);
+        console.log(`  ! selfRescue ${label} ${w.address.slice(0, 10)}... - $0 USDC, NO WORKING PATH ` +
+                    `(cannot self-rescue with an empty wallet; keeper coPayRescue is refused by the ` +
+                    `SF insolvency floor; NOT topped up here, by design - see the comment at this line)`);
         skipped++;
         continue;
       }
@@ -937,6 +972,14 @@ async function simulateSelfRescues({ walletList, matrices, usdc, usdcFunder, raw
     (nonceFails ? ` - ! ${nonceFails} STALE-NONCE FAILURES (not refusals - the RPC gave a stale tx count and the retry did not land; treat this sweep as INCOMPLETE)` : ``) +
     (remaining > 0 ? ` - ${remaining} parked wallets left for keeper` : '')
   );
+  if (unrescuable.length) {
+    console.log(
+      `  !! ${unrescuable.length} wallet(s) with $0 USDC have NO WORKING PATH: they cannot self-rescue ` +
+      `(nothing to pay the shortfall with) and the keeper's coPayRescue is refused by the SF ` +
+      `insolvency floor. These are NOT ordinary skips and will stay parked every run until funded.`
+    );
+    for (const a of unrescuable) console.log(`     ${a}`);
+  }
   return fNonce;
 }
 
