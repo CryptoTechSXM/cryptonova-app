@@ -17,7 +17,13 @@ const ADDRESSES_FILE = process.env.ADDRESSES_FILE || "deployed_addresses_v8_47.j
 const TARGET = 30_000_000_000n; // $30,000 in 6-decimal USDC
 const DRY    = process.env.DRY_RUN === "1";
 
-// 94 unique wallets (owner list 2026-08-08, deduplicated from 115 pasted lines)
+// 96 unique wallets. 94 from the owner list of 2026-08-08 (deduplicated from 115 pasted
+// lines); TWO ADDED 2026-08-23 from a fresh owner list — see the last entry below.
+//
+// ⚠ THIS LIST IS HARDCODED AND THE OWNER'S LIST LIVES ELSEWHERE, SO THEY DRIFT. The 2026-08-23
+//   list was a strict SUPERSET of this array: 94 overlapped, 0 were dropped, 2 were new. Diff
+//   the two before every run — an address missing here is not an error, it is a wallet that
+//   silently never gets funded, and the run still prints a clean summary.
 const LEADERS = [
 "0x6419E0192cDA27f8d6899A7c5A89Bcf8f7ff459F","0x702e7d2b3fF45d3EBf05f1e3baD36a07400d0c2D",
 "0xAdf9C692CB9C77e641Cd2438F117a7570963F238","0xF0382F843FF71aE90D5683b9ba1aC0C58F141Cca",
@@ -66,6 +72,8 @@ const LEADERS = [
 "0xdFD9e186b8D8A9000cBeE47BE14310a43Bdf602e","0xe8Ad7bbA862002414566a3e28f664E8BeA7F5ad5",
 "0xF1AD812938B7a57Bb1B5E9E34C0ACb9B12Bdf8d3","0xF28D6416Bdf5dC272B08BCA98761a0b3b94c0a5E",
 "0xF6193F6Cd1133e725B981DFb47ff4373fCD9131F","0xf675bA5425e23ed1DEB2a481C7e499a956e237dd",
+// ── ADDED 2026-08-23 (session 33). New in the owner's list, absent from the 08-08 array.
+"0x5F4d6EaBf85b955f1f8cdf010E2f5D10C2416c71","0x7a245ED3799D31C0D90BA0cfe3191c0CF9a46FBa",
 ];
 
 const usd = v => "$" + (Number(v) / 1e6).toFixed(2);
@@ -79,10 +87,30 @@ async function main() {
   if (owner.toLowerCase() !== deployer.address.toLowerCase()) {
     throw new Error("deployer is not MockUSDC owner — cannot mint");
   }
+  // ── PRE-FLIGHT: validate EVERY address before the first mint. ────────────────────────
+  // `ethers.getAddress` throws on a mixed-case address whose EIP-55 checksum is wrong. It
+  // used to be called inside the loop, so a bad entry at position 90 aborted the run AFTER
+  // 89 mints had already been sent. The run is re-runnable (it skips wallets already at
+  // target) so that was recoverable — but a validation that can only fail halfway through
+  // is not a validation. Fail before spending anything.
+  const bad = [], seen = new Map();
+  const CHECKED = LEADERS.map((a, i) => {
+    let c = null;
+    try { c = ethers.getAddress(a); } catch { bad.push(`#${i + 1} ${a}`); return null; }
+    if (seen.has(c)) bad.push(`#${i + 1} ${c} DUPLICATE of #${seen.get(c)}`);
+    else seen.set(c, i + 1);
+    return c;
+  }).filter(Boolean);
+  if (bad.length) {
+    console.error(`REFUSING TO RUN — ${bad.length} bad entr${bad.length === 1 ? "y" : "ies"} in LEADERS:`);
+    for (const b of bad) console.error(`   ${b}`);
+    throw new Error("fix the LEADERS list before funding");
+  }
+  console.log(`Pre-flight: ${CHECKED.length} addresses, all checksum-valid, no duplicates.`);
+
   let nonce = await ethers.provider.getTransactionCount(deployer.address);
   let topped = 0, skipped = 0, minted = 0n;
-  for (const a of LEADERS) {
-    const addr = ethers.getAddress(a);
+  for (const addr of CHECKED) {
     const bal  = BigInt(await usdc.balanceOf(addr));
     if (bal >= TARGET) {
       console.log(`  SKIP  ${addr}  already ${usd(bal)}`);
@@ -100,7 +128,7 @@ async function main() {
     topped++; minted += need;
     await new Promise(r => setTimeout(r, 150)); // pace under the RPC cap
   }
-  console.log(`\nDone: ${topped} topped up (${usd(minted)} total minted), ${skipped} already at/above $30k, ${LEADERS.length} wallets checked.`);
+  console.log(`\nDone: ${topped} topped up (${usd(minted)} total minted), ${skipped} already at/above $30k, ${CHECKED.length} wallets checked.`);
 }
 
 main().catch(e => { console.error("FATAL:", e.message); process.exit(1); });

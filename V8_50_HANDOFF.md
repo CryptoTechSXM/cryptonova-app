@@ -48,9 +48,31 @@ owner-set, and the session that earned it got five things wrong by ignoring what
   26/26 reconcile to the cent, both selftests pass.** Basis for every figure below:
   `deployed_addresses_v8_48.json`, **snapshot block 45907638**, log window
   **45430518-45907638**, 2026-08-24T15:00Z. CSV in `logs/`.
-* ⛔ **CONTRACTS REPO: FOUR FILES UNCOMMITTED NOW.** 35.0's three
-  (`diag_parked_solvency.js`, `diag_member_positions.js`, `bigfill_v8.js`) plus
-  `diag_rescue_loan_counts.js`. Nothing in the Keepers repo changed.
+* ⛔⛔ **35.0 SAID THREE FILES WERE UNCOMMITTED. ALL THREE WERE ALREADY IN `63a2926` —
+  SESSION 35'S OWN COMMIT.** `diag_parked_solvency.js`, `diag_member_positions.js` and
+  `bigfill_v8.js` are byte-identical to HEAD. Session 35 committed them and then wrote a
+  handoff saying it had not. **I COPIED THAT CLAIM INTO 36.0 WITHOUT CHECKING IT, WHICH
+  MAKES ME THE SECOND SESSION TO PUBLISH IT.** 33's header logged the fourth and fifth
+  stale "outstanding" lines; this is the sixth and seventh. **THE RULE THIS EARNS: a
+  handoff's claim about what is uncommitted is the ONE claim that is free to verify and
+  is wrong more often than any other. `git show HEAD:<file>` and diff it. Never restate
+  an inherited "uncommitted" line.**
+* ✅ **WHAT WAS ACTUALLY OUTSTANDING, AND IS NOW COMMITTED (`4d29cb9`):** three files —
+  `diag_rescue_loan_counts.js`, `diag_lap_economics.js`, `V8_50_HANDOFF.md`.
+* ⛔ **AND ONE NOBODY HAS EVER MENTIONED: `scripts/fund_leaders_30k.js` IS MODIFIED.**
+  Session 33 work (dated 2026-08-23 in its own comment), in the tree since, in no handoff.
+  It (a) ADDS TWO WALLETS to the hardcoded LEADERS list — 94 -> 96 — from "a fresh owner
+  list", and (b) moves `ethers.getAddress` validation to a PRE-FLIGHT over the whole list.
+  The second is a real fix: validation used to run inside the mint loop, so a bad entry at
+  position 90 aborted AFTER 89 mints had been sent. Syntax checked, both new addresses
+  EIP-55 valid. **✅ OWNER CONFIRMED BOTH ADDED ADDRESSES ON 2026-08-24 — asked directly,
+  answered yes. They are his, they belong on the leader funding list, and the question is
+  CLOSED. Do not re-ask.** ⚠ The file's own new comment still stands as a standing risk:
+  the hardcoded array and the owner's live list drift, and a wallet missing from the array
+  is silently never funded while the run still prints a clean summary. **Diff the array
+  against the owner's list before any future funding run.**
+* ⚠ **THE `.gitattributes` LF WARNING FIRED A FOURTH TIME** (35.10 item 8 said third), on
+  all three files of `4d29cb9`. Still unpinned in both repos.
 * ⛔ **THE COMMUNITY POST IS STILL BLOCKED** — 35.10 item 3 stands, and 36.1 does not
   unblock it. It sharpens what the post would have to say.
 
@@ -134,6 +156,32 @@ forceCrossKeeper 2.** 35.6 recorded 8 co-pay rescues and 35.7 priced the ceiling
 rescues alone. `MatrixLogicLib:1382` books `totalLoan` on the force-cross path just as
 :1423 books a co-pay shortfall. **Any argument about "how many rescues the ceiling
 affords" has to count every path that books debt, not the ones named "rescue".**
+
+## 36.4 ⛔⛔ TWO FUNDING LISTS EXIST, THEY HAVE DIVERGED, AND THE BUG REPORTERS ARE THE ONES MISSING
+
+Measured 2026-08-24 by diffing the two files that actually exist:
+
+    fund_leaders_30k.js  LEADERS array (contracts repo) :  96 addresses
+    CryptoNova-Keepers/fund_list.txt                    : 100 addresses
+    in BOTH                                             :  91
+    ONLY in the contracts script                        :   5
+    ONLY in fund_list.txt                               :   9
+
+⛔ **THE 9 THAT `fund_leaders_30k.js` WOULD SILENTLY NEVER FUND ARE THE BUG REPORTERS** —
+Sherwyn x4 (**the most accepted bounties of anyone**), @Koach100/June, @queensonnie,
+Cynthia Brown x2, CryptoJan22. `fund_list.txt`'s own header says they were found in
+BUGS.md and were missing from the owner's original list. They are still missing from the
+other one. **The run prints a clean summary either way, which is why nobody has noticed.**
+
+⚠ **AND IT ALREADY CORRUPTED A PUBLISHED FIGURE: 35.2's "4 of 36 are on the owner's
+funding list" CHECKED ONLY `fund_list.txt`.** `0x0d103cb2` and `0xb3ceb3cb` — both in
+36.1's stuck table — are on the CONTRACTS list. **It is 6 of 26, not 4 of 36.**
+
+✅ **OWNER, 2026-08-24: "i have a list that grows when new testers / leaders are added."**
+So the canonical list is the owner's and it CHANGES. A hardcoded array cannot track a
+growing list — it can only drift, and it has, twice, into two different shapes.
+**THE FIX IS STRUCTURAL, NOT A RE-TRANSCRIPTION: ONE FILE, READ BY BOTH SCRIPTS, NO
+HARDCODED ARRAY ANYWHERE.** Blocked on the owner naming where his canonical list lives.
 
 ## 36.5 ✅ THE V8.48 LAP ARITHMETIC — CLOSED, AND CLOSED IS THE POINT
 
