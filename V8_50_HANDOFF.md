@@ -183,6 +183,41 @@ growing list — it can only drift, and it has, twice, into two different shapes
 **THE FIX IS STRUCTURAL, NOT A RE-TRANSCRIPTION: ONE FILE, READ BY BOTH SCRIPTS, NO
 HARDCODED ARRAY ANYWHERE.** Blocked on the owner naming where his canonical list lives.
 
+### ✅ FIXED THE SAME SESSION — ONE FILE, NO ARRAYS, AND REPORTERS ADD THEMSELVES
+
+**THE CANONICAL LIST IS NOW `CryptoNova-Testnet-App/fund_list.txt` — 110 wallets**
+(101 from the owner's document, pasted 2026-08-24, + the 9 bug reporters), every entry
+EIP-55 checksummed, each reporter carrying their name. It lives in the testnet-app repo
+because that is the ONLY repo a running process can write to — `api/submit-bug.js`
+already commits BUGS.md there through the GitHub Contents API on branch `admin`.
+
+* **`scripts/fund_leaders_30k.js`: the `LEADERS` array is DELETED.** It reads the list
+  file, keeps session 33's pre-flight validation over it, prints the resolved path, the
+  wallet count and the file's mtime, warns if it is over 7 days old, and refuses to run
+  on a missing/empty/invalid list. It also prints each wallet's NAME beside its mint, so
+  an omission is visible in the output instead of silent.
+* ⛔ **AND IT NO LONGER DEFAULTS TO `deployed_addresses_v8_47.json`** — the dead
+  deployment 34.1 was written about. It now refuses without `ADDRESSES_FILE`, matching
+  every other instrument. **That is one more of 36.6 item 7 closed, found by accident.**
+* **`api/submit-bug.js` auto-adds the reporter's wallet** (owner: *"any new wallet that
+  submits a bug gets added"*). Runs AFTER BUGS.md is committed so a wallet is never added
+  for a report that did not survive; validates the address; dedupes case-insensitively;
+  retries once on a 409; tags the line `# auto <date> — bug report by <reporter>`; and
+  **never throws** — a failed list update must never cost a bug report. The Telegram
+  alert now says whether the wallet was added, because a silent auto-add is the same
+  class of failure as a silent omission.
+* ⚠ **THE ADDRESS IS USER-SUPPLIED AND THE BUG PAGE USES ONE SHARED PASSWORD.** Anyone
+  holding it can add an arbitrary address. On testnet that buys mock USDC and nothing
+  else — **but the `# auto` tag exists so these can be reviewed before anything like this
+  goes near mainnet. Do not carry auto-added entries forward unreviewed.**
+* **VERIFIED ON THE DEVICE, IN THE REAL MODULE MODE** (35.9 lesson 1 — the testnet app is
+  `"type": "module"`): ESM parse OK, and all five logic paths dry-run against the real
+  file — already-listed, UPPERCASE dedupe, brand-new append, garbage input, empty input.
+* ⚠ **STILL CARRYING THEIR OWN LISTS, NOT YET MIGRATED:** `scripts/mint_usdc_leaders.js`,
+  `CryptoNova-Keepers/mint_testers.js`, `CryptoNova-Keepers/fund_testers.js`. And
+  `CryptoNova-Keepers/fund_list.txt` is now a STALE COPY — point them at the canonical
+  file or delete them, before the next funding run re-creates the divergence.
+
 ## 36.5 ✅ THE V8.48 LAP ARITHMETIC — CLOSED, AND CLOSED IS THE POINT
 
 `scripts/diag_lap_economics.js`, snapshot block 45908796, **1,016 seated members walked,
