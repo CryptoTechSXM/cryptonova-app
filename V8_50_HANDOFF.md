@@ -68,6 +68,14 @@ owner-set, and the session that earned it got five things wrong by ignoring what
 #     with a predeploy assertion on the CALL. ⛔ My own read-back then raised a FALSE
 #     ALARM on the successful fix by re-reading before the node caught up — a lesson this
 #     repo already carried and this script had not applied.
+# ✅ **AND TWO OWNER ANSWERS ARE NOW WRITTEN DOWN (39.6).** **38.6's Q6 IS CLOSED:** the
+#     migration is a **fresh start by design — "brand new deploy and everyone registers
+#     new"** — and those parked balances are TESTNET USDC, so nobody carries real money
+#     across. ▶ What survives is **COMMS TIMING**: the 08-08 post promised advance notice
+#     with a withdrawal window, and no date has been announced. Still the owner's.
+#     ✅ The CommunityWallet's "Distribution ready to trigger" is **not a fault** — the
+#     keeper calls `distribute()` (work type 7) and the pending pool becomes claimable
+#     only after it runs. `distributionDayOfMonth` is 25.
 # ▶ **WHAT IS LEFT: PHASE G, and the chain. Both still exactly where 38.6 left them.**
 
 # ⬛ SESSION 38 STATE — 2026-08-24. Superseded on PARAM 59 by SESSION 39 above.
@@ -497,6 +505,50 @@ V3 matrix used by setFreeMode()"* — a copy-paste from `setTier1Matrix`. Not cl
 cause of the miss, but anyone auditing which setters a deploy must call would read straight
 past it. Comment-only fix; do it with the next contract touch.
 
+## 39.6 ✅ TWO OWNER ANSWERS, RECORDED — ONE OF THEM CLOSES 38.6's Q6
+
+Both came from the owner directly on 2026-08-25 and neither was written down when it was
+given. **38.6's question table still read `NOT ESTABLISHED` against Q6 while the answer had
+already been spoken** — the exact staleness this document keeps getting caught by (38.0's
+third-session-running item, 39.2's three-of-four already-answered audit items).
+
+⛔⛔ **Q6 IS ANSWERED. THE MIGRATION IS A FRESH START, BY DESIGN.** Owner, verbatim:
+*"This is testnet so when we redeploy it is a brand new deploy and everyone registers new."*
+
+  * So the V8.50 community deploy **resets positions and every member re-registers**, and
+    that is the intent — not a risk to be mitigated. It matches what members were already
+    told in `community_report_2026-08-08.md`.
+  * ⛔ **THIS DEFUSES MOST OF 38.6's FLAGGED INFERENCE AND MOST OF 39.3's URGENCY.** Session
+    38 flagged, correctly and marked as UNVERIFIED, that the community post tells 295 members
+    holding real balances how to spend from their wallet on seats a migration might delete.
+    **Those balances are TESTNET USDC.** Nobody carries real money across, so the exposure is
+    not financial.
+  * ▶ **WHAT SURVIVES IS COMMS TIMING, AND IT IS STILL OPEN AND STILL THE OWNER'S.** The
+    08-08 post committed to *"announce the date well in advance with a withdrawal window
+    beforehand, same as last time."* No date has been announced. **That promise is
+    outstanding and it is a trust question, not an economic one.**
+
+✅ **AND THE COMMUNITY WALLET'S "Distribution ready to trigger" IS NOT A FAULT — NOBODY HAS TO
+TRIGGER IT.** Owner asked how it fires and by whom, noting that in the past there was simply a
+balance to claim. From the contracts:
+
+    CommunityWallet.distribute()      external, NO role gate. Its own comment:
+                                      "Callable by anyone on or after distributionDayOfMonth,
+                                       once per month."
+    distributeReady()                 d >= distributionDayOfMonth && thisMonth > lastDistributionMonth
+    distributionDayOfMonth            25        <- and 2026-08-25 is the 25th
+    MatrixKeeper WORK_DISTRIBUTE_CW   work type 7, discovered by checkUpkeep gating on
+                                      distributeReady(), executed by direct_keeper
+
+  **So the badge is correct and self-clearing: the keeper calls it.** The `$7,167.30` sits in
+  the PENDING POOL until `distribute()` runs, and that run is what converts it into
+  per-member claimable — which is why the panel reads `$0.00` / "Nothing to claim yet"
+  alongside a full pool. It is the pre-distribution state, not a stuck one.
+  ⚠ **WATCH ITEM, worth one look and not more:** if it still reads "ready to trigger" well
+  after the 25th, that means the keeper is not reaching work type 7 — and **39.2 established
+  there is exactly ONE driver with no fallback**, so that is where to look first, not at the
+  CommunityWallet. Anyone can call `distribute()` by hand in the meantime; it is unpermissioned.
+
 ## 38.0 STATE — WHAT SHIPPED
 
     TESTNET APP — admin == preview == main == 6779fbf, verified from the REMOTE refs,
@@ -782,7 +834,10 @@ carried 36's phrasing forward on top of the newer meaning.**
     4  G.4 replacement pass criterion           NOT ESTABLISHED. Never encountered it.
     5  private V8.50 chain still up             NOT ESTABLISHED. Never touched the droplet;
                                                 never saw the private addresses file.
-    6  parked state across migration            NOT ESTABLISHED. See the flag below.
+    6  parked state across migration            ⛔ ANSWERED BY THE OWNER 2026-08-25 —
+                                                SEE 39.6. Fresh start by design, everyone
+                                                re-registers. 38's flag below stands as the
+                                                reasoning, not as an open question.
     7  insolvencyFloorBps on the deploy         NOT ESTABLISHED by me — but see below; the
                                                 disk answers it and the answer is bad.
     8  directCount gate still inert             BOUNDED YES — see below.
