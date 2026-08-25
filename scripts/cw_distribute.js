@@ -47,6 +47,15 @@ if (!process.env.ADDRESSES_FILE) {
 const A = require(path.join(__dirname, process.env.ADDRESSES_FILE));
 const ARM = process.env.ARM === "1";
 
+// WHO=1 — answer "who actually ran the distribution", from the chain rather than from
+// memory. Added 2026-08-25 because distributionCount went 0 -> 1 between two runs and the
+// honest answer to "was that me or the keeper?" was NOT ESTABLISHED. It matters: if the
+// KEEPER sent it, the starvation diagnosis in the header is wrong (or only intermittent),
+// and a wrong diagnosis left in a header is quoted as fact by later sessions.
+//   WHO=1 ADDRESSES_FILE=deployed_addresses_v8_48.json \
+//     npx hardhat run scripts/cw_distribute.js --network baseSepolia
+const WHO = process.env.WHO === "1";
+
 const CW_ABI = [
   "function distribute() external",
   "function distributeReady() view returns (bool)",
@@ -85,6 +94,38 @@ async function main() {
   console.log(`addresses file  ${process.env.ADDRESSES_FILE}`);
   console.log(`communityWallet ${A.communityWallet}`);
   console.log(`signer          ${await signer.getAddress()}   (distribute() needs no role)`);
+
+  if (WHO) {
+    // The deployed CW emits DistributionExecuted(distId, actualDist, perGenesis,
+    // perPioneer, gCount, pCount) — CommunityWallet.sol:149/349 at commit c9a1ffc.
+    const ev = new ethers.Contract(A.communityWallet, [
+      "event DistributionExecuted(uint256 indexed distId, uint256 amount, uint256 perGenesis, uint256 perPioneer, uint256 genesisCount, uint256 pioneerCount)",
+    ], signer.provider);
+    const KEEPER = "0xd419681BA72992636f05e256168681c939826B4b"; // the one authorised upkeepCaller (39.2)
+    const latest = await signer.provider.getBlockNumber();
+    let logs = [];
+    // chunked: the public endpoint caps eth_getLogs ranges.
+    for (let to = latest; to > 0 && logs.length === 0; to -= 40000) {
+      const from = to - 40000 > 0 ? to - 40000 : 0;
+      try { logs = await ev.queryFilter(ev.filters.DistributionExecuted(), from, to); } catch (e) {
+        console.log(`  (range ${from}-${to} failed: ${e.shortMessage || e.message})`);
+      }
+      if (from === 0) break;
+    }
+    console.log(`\nWHO RAN THE DISTRIBUTION — ${logs.length} DistributionExecuted event(s) found`);
+    for (const l of logs) {
+      const tx = await signer.provider.getTransaction(l.transactionHash);
+      const who = tx ? tx.from : "?";
+      const tag = who === "?" ? "" :
+        who.toLowerCase() === KEEPER.toLowerCase() ? "   <- THE KEEPER (starvation diagnosis would be WRONG)" :
+        who.toLowerCase() === (await signer.getAddress()).toLowerCase() ? "   <- this signer (a human ran it by hand)" : "   <- someone else";
+      console.log(`  distId ${l.args?.distId}  block ${l.blockNumber}  amount ${usd(l.args?.amount ?? 0n)}`);
+      console.log(`    tx   ${l.transactionHash}`);
+      console.log(`    from ${who}${tag}`);
+    }
+    if (logs.length === 0) console.log("  none found in the scanned range — widen it before concluding anything.");
+    return;
+  }
 
   const [ready, day, count, enrolled, bal] = await Promise.all([
     cw.distributeReady(), cw.distributionDayOfMonth(), cw.distributionCount(),

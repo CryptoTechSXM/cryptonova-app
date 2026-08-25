@@ -56,6 +56,17 @@ owner-set, and the session that earned it got five things wrong by ignoring what
 #     `update_addrs_vX_XX.py` rewrote `V8.47` → `V8.48` **inside comments**, leaving a block
 #     reading "V8.48 replaces V8.48" that no reader could recover without git. Restored from
 #     `17b6c02`. **It will do it again to whatever the comments say next time.**
+# ✅✅ **A LIVE MEMBER-FACING FAULT, REPORTED BY THE OWNER AND FIXED THE SAME DAY (40.8).**
+#     The dashboard read "Distribution ready to trigger" for 12 hours instead of giving
+#     members a claim. **MEASURED on live: `maxItemsPerUpkeep` 15 and the discovered work
+#     list was 15 of 15 — 14 EVICT_PARKED + 1 FORCE_ROTATE, ZERO DISTRIBUTE_CW.** On the
+#     DEPLOYED library the CW block sits behind two unbounded scans and is guarded
+#     `if (count < maxItems)`, so it never gets a slot. **`2ca0927` moved it above them on
+#     2026-08-17 — four days AFTER V8.48 deployed — and it is an ORDER, not a parameter, so
+#     no setter can fix the live chain.** Unblocked with new `scripts/cw_distribute.js`
+#     (`distribute()` is unpermissioned): count 0 -> 1, 470 members, claim now showing.
+#     ⛔ **REPEAT ON THE 25TH EACH MONTH UNTIL V8.50 SHIPS.** ⚠ 39.6 called this badge "not
+#     a fault — self-clearing"; **its own watch item is what caught that being half wrong.**
 # ⛔⛔ **OWNER FRAMING CORRECTION, 2026-08-25 — "MIGRATION" IS NOT A TESTNET CONCEPT AND
 #     SESSIONS 38, 39 AND 40 ALL USED IT WRONGLY (40.7).** Owner: *"we have no migration,
 #     this is testnet we are doing a new deploy and everyone reregisters."* **There is no
@@ -216,6 +227,69 @@ CHECK.** The only real proof is running it, which is why the corrected log was r
      error carried from 38.6/39.6. There is no migration. What remains is the ordinary
      courtesy of announcing a NEW DEPLOY with notice, per the 08-08 post.
 
+
+## 40.8 ⛔⛔ THE COMMUNITY WALLET NEVER DISTRIBUTED — THE KEEPER CANNOT REACH WORK TYPE 7 ON LIVE
+
+Owner report, 2026-08-25: the dashboard had read *"Distribution ready to trigger"* for **12
+hours** instead of giving members something to claim — *"in previous versions it was just
+claimable."* **39.6 had called this badge "not a fault — self-clearing, the keeper calls it."
+THAT WAS HALF WRONG, and the half that was wrong is the half that mattered.** The badge is
+correct. The keeper on the LIVE chain cannot reach the work, so "self-clearing" was an
+assumption about a code path that is not on that deployment. **39.6's own watch item is what
+caught it — it said if the badge persisted well past the 25th, look at the keeper first.**
+
+⛔ **THE MECHANISM, from git, then MEASURED.** `MatrixKeeperLib.discover()` fills a list and
+stops at `maxItemsPerUpkeep`; the CW block is guarded `if (count < cfg.maxItems)`.
+
+      DEPLOYED V8.48 (6211928, 2026-08-13)      SOURCE TODAY (after 2ca0927, 2026-08-17)
+        ... FORCE_ROTATE                          ... FORCE_ROTATE
+        _scanMatrix(matA) + _scanMatrix(matB)     WORK_DISTRIBUTE_CW      <- moved UP
+            ^^ TWO UNBOUNDED SCANS                WORK_ADVANCE_EPOCH
+        WORK_VELOCITY_GATE                        WORK_VELOCITY_GATE
+        WORK_DISTRIBUTE_CW   <- LAST              _scanMatrix(matA/matB)  <- moved DOWN
+
+**MEASURED on live, block 45947485, `diag_keeper_work.js`: `maxItemsPerUpkeep` 15, and the
+discovered list was 15 of 15 — 14 `EVICT_PARKED` + 1 `FORCE_ROTATE`, ZERO `DISTRIBUTE_CW`.**
+The batch is full before the CW block is ever reached. `distributeReady()` stays true forever.
+
+⛔⛔ **THE FIX EXISTS AND IS NOT ON THE LIVE CHAIN, AND NO SETTER CAN PUT IT THERE.** Commit
+`2ca0927` (2026-08-17) moved the CW block above both scans for exactly this reason — its own
+comment: *"WORK_ADVANCE_EPOCH has a CALENDAR deadline (the 25th) and used to sit dead last,
+behind two unbounded scans."* **V8.48 deployed 2026-08-13, FOUR DAYS EARLIER.** It is an
+ORDER, not a parameter, so it ships with V8.50 and cannot be configured onto the live chain.
+⚠ **AND `WORK_ADVANCE_EPOCH` IS STARVED BY THE SAME GUARD** — it sits in the same block, also
+on a calendar deadline. Check it before assuming only the CW is affected.
+
+⚠ **WHY IT LOOKED LIKE A REGRESSION FROM EARLIER VERSIONS, and the owner's phrasing was the
+tell.** `2ca0927`'s own note records that on 2026-08-17 it MEASURED the starvation as NOT
+firing — 106 parked, none past grace, `checkUpkeep` returning 1 item of 15 — and called the
+reorder *"insurance bought cheaply, not an outage being put out"*. **The parked queue has since
+grown to the hundreds with members past the eviction grace, so the latent hazard went live.**
+Earlier versions were "just claimable" because their scans left room. **A hazard measured as
+not-firing is not a hazard that will not fire; it is one whose trigger had not arrived.**
+
+✅ **RESOLVED FOR MEMBERS THE SAME DAY.** `scripts/cw_distribute.js` (new, READ-ONLY unless
+`ARM=1`, static-calls first, reads back pinned to the mined block per 39.5). Deployed
+`distribute()` is `external` with NO role gate (checked at commit `c9a1ffc`), needing only
+`totalEnrolled > 0`, and the calendar gate makes a second run in the same month revert rather
+than double-pay. Ran it: `distributionCount` **0 -> 1**, 470 enrolled, and the dashboard now
+shows a per-member claim (`$4.6547`) with a Sep 24 deadline instead of the badge.
+⛔ **THIS IS A WORKAROUND. It must be repeated on the 25th of each month until V8.50 ships —
+put a monthly cron on the droplet if V8.50 slips past September.**
+
+▶ **TWO THINGS LEFT OPEN HERE, both cheap:**
+  1. **`Pending Pool` still read $7,760.84 AFTER the distribution**, while $4.6547 x 470
+     ≈ $2,188 was allocated. Either the panel labels the CW's total USDC as "pending", or
+     only a ratio was distributed (`distributeRatioBps`). **Not wrong money — possibly a wrong
+     label. One read of `availablePool()` vs `totalActivePending` settles it.**
+  2. **14 of 15 keeper slots were EVICT_PARKED, all from ONE T1 matrix.** The keeper is
+     spending nearly its whole budget evicting, while 39.3 measured that 295 of 393 parked
+     members hold the money and need only an approval. **That is V8.48 audit material and it
+     is the thing crowding out everything else on the queue.**
+
+⛔ **AND A FOURTH HARDCODED-ADDRESS INSTRUMENT: `scripts/check_cw.mjs` hardcodes the CW as
+`0x525D14dA...`; live is `0xC786dbA7...`.** DO NOT USE IT until it reads the addresses file.
+Fourth today, after `diag_keeper_work.js`, `model_item_a.js` and `fund_testers.js` (39.4).
 
 ## 40.7 ⛔⛔ OWNER FRAMING CORRECTION — THERE IS NO MIGRATION, AND THREE SESSIONS SAID THERE WAS
 
