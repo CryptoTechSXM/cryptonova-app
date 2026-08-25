@@ -388,6 +388,11 @@ handoff 25.6). **Record which one this chain is running**; the halt behaviour de
 >     not junk — it was written for exactly this chain's configuration and is valid ON IT.
 >     ⚠ Note the direction: cap 1 is strictly SAFER for gas than cap 20, so a pass here is
 >     conservative — but "wrong number in the harmless direction" is not a control (38.6).
+>     ✅ **DECIDED 2026-08-25 (session 41, handoff 41.0): REDEPLOY from current source.**
+>     `G4_REDEPLOY_RUNSHEET.md` (repo root) instantiates PHASE 0/1 + G.PRE + G.0/G.1 for it;
+>     the new addresses file is `deployed_addresses_v8_50_private2.json`, and the 08-21
+>     chain stays as the measurement deployment. The waiver option above is therefore
+>     historical: it was not taken, for the reasons 38.6 gives.
 >   * ✅ **G.5 IS VALID ON THIS CHAIN AS IT STANDS.** Measurement 3 is ECONOMIC —
 >     `selfFundedRescues / rescues`, driven by `sfShare == 0`. The batch cap does not change
 >     whether a rescue was self-funded. **Run it here; no redeploy needed.**
@@ -399,16 +404,23 @@ handoff 25.6). **Record which one this chain is running**; the halt behaviour de
 
 **G.5**
 ```powershell
-node scripts\model_item_a.js
+node scripts\g5_sf_ratio.js
 ```
-🖥️PS — plain node; reads `ADDRESSES_FILE` and the RPC from `.env`.
-> **MEASUREMENT 3 — MatA parkers freed outright.** PHASE 2 of that script projects 67 of
-> 67, 100%. On the private chain this is `selfFundedRescues / rescues` on the V8.50 arm,
-> and it needs **no control**: `CoPayRescue` carries `sfShare` directly, so `sfShare == 0`
-> IS "the fund paid nothing".
+🖥️PS — plain node; reads the RPC from `.env`, `ADDRESSES_FILE` from the SESSION (mandatory —
+it refuses a default). Pin `FROM_BLOCK` to the chain's deploy block for a whole-of-chain ratio.
+> ⛔ **CORRECTED 2026-08-25 (session 41, handoff 41.1).** This step used to say
+> `model_item_a.js` — **that script never computes the ratio this PASS names** (session 40,
+> 40.4: its PHASE 2 is a PROJECTION, structurally zero on a chain that already has item A,
+> which is why G.5 returned NO VERDICT). `g5_sf_ratio.js` is the instrument that computes it.
+> `model_item_a.js` remains the tool for G.7's PHASE 7/8 re-confirmation, not for this step.
+> ⚠ New instrument, first run pending — 40.5's rule: a syntax check is not a runtime check.
+> **MEASUREMENT 3 — `selfFundedRescues / rescues` on the V8.50 arm.** It needs **no
+> control**: `CoPayRescue` carries `sfShare` directly, so `sfShare == 0` IS "the fund paid
+> nothing". (PHASE 2 of `model_item_a.js` projected 67 of 67, 100%, as the reference point.)
 > **PASS:** the share is at or near the projection.
 > ⚠ A shortfall here is an ECONOMIC finding on a population of scripts. Read handoff 14.6
-> before treating it as a fact about members.
+> before treating it as a fact about members — and on a `-SelfRescueRate 0.1` bigfill
+> cohort the ratio describes THAT SETTING, stated in the script's own output.
 
 **G.6**
 ```powershell

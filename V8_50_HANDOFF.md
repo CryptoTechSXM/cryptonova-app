@@ -10,7 +10,65 @@ owner-set, and the session that earned it got five things wrong by ignoring what
 
 ---
 
-# ⬛ SESSION 40 STATE — 2026-08-25, LATEST. READ THIS FIRST.
+# ⬛ SESSION 41 STATE — 2026-08-25, LATEST. READ THIS FIRST.
+# ▶▶ **40.6 ITEM 1 IS DECIDED: REDEPLOY THE PRIVATE GATE CHAIN FROM CURRENT SOURCE (41.0).**
+#     Not executed yet — `G4_REDEPLOY_RUNSHEET.md` (new, repo root) is the exact sequence,
+#     instantiating PHASE 0/1 + G.PRE + G.0/G.1 with this session's parameters. **The new
+#     addresses file is `deployed_addresses_v8_50_private2.json` — the 08-21 chain and its
+#     file STAY as the measurement deployment** (G.3 closed, 40.4's G.5/G.7 economics).
+# ✅ **THE BASIS, verified against the repo this session (41.0):** HEAD `fd61223` (branch
+#     `v8.1`) carries cap **1** (MatrixKeeper.sol:256), floor **7,500,000** (:378), both
+#     menus widened; `5a07cab` is an ancestor. The waiver alternative would validate a
+#     configuration V8.50 will not ship ("wrong number in the harmless direction is not a
+#     control", 38.6) and would leave G.4's rewritten criterion UNVERIFIED forever. And the
+#     gap is WIDER than gas config: `2fe1f11` (loan clock enforced at deploy) and `6cef30e`
+#     (parameter class) also postdate the 08-21 chain. Working tree: the three modified
+#     files are whitespace-only (`git diff --ignore-all-space` is empty) — safe deploy basis.
+# ✅ **40.6 ITEM 2 IS BUILT: `scripts/g5_sf_ratio.js` (41.1)** computes the
+#     `selfFundedRescues / rescues` ratio G.5 actually asks for — one CoPayRescue scan,
+#     `sfShare == 0` = "the fund paid nothing", per-matrix + aggregate, money split,
+#     basis printed. Addresses file mandatory (no fifth hardcoded instrument), getLogs
+#     chunked at 9,000 with a bounded, REPORTED window (40.8's lesson).
+#     ⚠ **SYNTAX-CHECKED ONLY, NOT RUN — and 40.5 says exactly what that is worth.** The
+#     session had no RPC path. Its first run IS its runtime test; treat output accordingly.
+# ▶ **WHAT IS LEFT: the owner executes the runsheet (hours), then G.4 under the rewritten
+#     criterion (recording whether it discriminates — it is UNVERIFIED), then
+#     `g5_sf_ratio.js` with FROM_BLOCK pinned to the new chain's deploy block.**
+
+## 41.0 ▶ THE REDEPLOY DECISION — WHY, AND WHY NOT THE WAIVER
+
+Decided this session, owner delegating ("decide whether to redeploy"), executed as PREP
+ONLY — the deploy itself is PowerShell on the Windows machine and is the owner's run.
+
+  * **For:** G.4 exists to prove the SHIPPING configuration at 127. The 08-21 chain
+    cannot express it — `setMaxItemsPerUpkeep`'s `require()` menu bottoms out at 5 and
+    cannot be widened after deployment (40.3). Redeploy is "the honest option and a
+    private failure costs a redeploy nobody sees" — the runbook's own stop-rule economics.
+  * **Against the waiver:** a cap-20/5M run is valid ONLY as a statement about the
+    pre-`5a07cab` configuration — a world V8.50 does not ship. It would also leave the
+    rewritten G.4 criterion untested, which 40.2 explicitly flagged as unverified debt.
+  * **Cost accepted:** G.0/G.1 burst mode is hours of testnet gas. ⚠ Source may still
+    move during the V8.48 audit; if contracts/ changes materially after this redeploy,
+    G.4's result is about the deployed commit — label it, and re-run only if the change
+    touches the keeper or crossing paths.
+  * ⚠ **Runsheet discipline:** `G4_REDEPLOY_RUNSHEET.md` deliberately does NOT restate
+    criteria — the runbook stays the authority, the sheet only pins session parameters.
+    40.2 is what happens when numbers get copied into prose.
+
+## 41.1 ▶ G.5'S MISSING INSTRUMENT — BUILT, NOT YET RUN
+
+`scripts/g5_sf_ratio.js`, plain node like its siblings. What it fixes: 40.4 established
+G.5's NO VERDICT was structural — `model_item_a.js` projects, it does not compute the
+ratio. This script reads the ratio off the chain the criterion names. What it refuses:
+starting without `ADDRESSES_FILE` (34.1/39.4/40.8 — this repo has found FOUR hardcoded
+instruments; this one will not be the fifth), and presenting an empty window as "no
+rescues" (it prints the range it searched, always). ⚠ It does NOT judge PASS — "at or
+near the projection" is a runbook call, and handoff 14.6's population caveat is printed
+in the output so the number cannot travel without it.
+
+---
+
+# ⬛ SESSION 40 STATE — 2026-08-25. Superseded on 40.6 item 1 by SESSION 41 above; otherwise current.
 # ✅✅ **PHASE G IS NO LONGER UNTOUCHED. G.8 HAS RUN FOR THE FIRST TIME EVER, AND IT
 #     FAILED — WHICH IS THE RETURN ON BUILDING IT (40.0).** 7 problems. **Only ONE was real,
 #     and it was not a V8.50 problem at all:** `liquidity.html` called `directSale.getFloorPrice()`,
