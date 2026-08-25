@@ -54,6 +54,10 @@ owner-set, and the session that earned it got five things wrong by ignoring what
 #     The count looks alarming because `evictionGracePeriod` is 7 days, so the queue is a
 #     week-deep buffer by design. The fixable part is the PRESENTATION. ⛔ Not a quick
 #     panel edit — 37.1 and 37.3 were both member-facing outages from that same panel.
+# ✅ **AND THE FIFTH FUNDING LIST IS CLOSED (39.4).** `fund_testers.js` read the STALE
+#     100-address copy (canonical is 110) and defaulted to a DEAD `v8_45` addresses file —
+#     on a script that transfers real USDC. Both fixed, stale copy deleted, Keepers
+#     `dc11aad`. ⛔ The droplet path is UNVERIFIED: pass `LIST=` explicitly there.
 # ▶ **WHAT IS LEFT: PHASE G, and the chain. Both still exactly where 38.6 left them.**
 
 # ⬛ SESSION 38 STATE — 2026-08-24. Superseded on PARAM 59 by SESSION 39 above.
@@ -389,6 +393,35 @@ the SAME CHAIN STATE and a completely different product.
   its own step with the split measured first, not as an edit to an existing element.**
   ⚠ Whether the three genuinely stuck members are real people or seeded wallets was **NOT
   established** (38.5) — settle that before spending anything on their $10.07.
+
+## 39.4 ✅ `fund_testers.js` — THE FIFTH FUNDING LIST, AND A DEAD-DEPLOYMENT DEFAULT ON A SCRIPT THAT MOVES MONEY
+
+38.5 said to delete or symlink `CryptoNova-Keepers/fund_list.txt`. **That instruction would
+have broken a live script** — `fund_testers.js` was its only reader (session 39 correction,
+recorded in 38.6's preamble). Repointing FIRST and deleting SECOND is the whole fix, and both
+halves shipped in Keepers `dc11aad`.
+
+  1. **IT SEARCHED `__dirname` FIRST**, so it read the stale 100-address copy every time; the
+     canonical Testnet-App copy (110) was not even in its search path. `api/submit-bug.js`
+     appends new bug reporters to the APP copy, **so the file it never read is the one that
+     grows** — the same shape as 36.4, where the bug reporters were the ones missing.
+     Fixed: canonical dirs are searched first, and the resolved path is PRINTED every run.
+     36.4's divergence survived weeks because no run ever printed the path it had read.
+  2. ⛔⛔ **AND IT DEFAULTED TO `deployed_addresses_v8_45.json` — A DEAD DEPLOYMENT, THREE
+     BEHIND LIVE.** That is 34.1's trap exactly, except `copay_rescue` only printed wrong
+     numbers: **this script transfers real USDC**, so a stale addresses file is a transfer
+     priced against the wrong deployment's contracts. `ADDRESSES_FILE` is now REQUIRED and
+     the script refuses to start without it.
+
+⛔ **NOT FIXED, AND DELIBERATELY NOT GUESSED AT — THE DROPLET.** `CANDIDATE_DIRS` still
+includes `/root/keeper`, and the canonical entries added above are Windows-side paths. **If
+`fund_testers.js` is ever run ON THE DROPLET it will fall through to whatever `fund_list.txt`
+sits there**, which may be its own stale copy — unverified either way. ▶ **Pass `LIST=`
+explicitly on the droplet until somebody checks it.** Writing untested path logic for a host
+this session could not reach would have been a worse defect than the one being fixed.
+▶ **STILL OUTSTANDING, from 37.5: `CryptoNova-Keepers/mint_usdc.js` carries its own hardcoded
+wallet array — a FIFTH list** — and takes a hardcoded 2500 USDC to a hardcoded set with no
+per-address amount. Migrate it with the others; it was not touched tonight.
 
 ## 38.0 STATE — WHAT SHIPPED
 
