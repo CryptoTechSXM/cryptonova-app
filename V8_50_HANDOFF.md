@@ -136,6 +136,12 @@ methodology.**
      becomes member-facing the day borrowers cross. Decide whether that is policy or a
      defect BEFORE the community deploy.
   2. Restart the live drip loop (`run_bigfill_loop.ps1 -StartOffset 386`) — owner timing.
+  2b. ⛔ **KEEPER CADENCE AT CAP 1 — A COMMUNITY-DEPLOY DECISION NOBODY HAS MADE.** The
+     community chain comes up at the source default `maxItemsPerUpkeep 1` (G.4-validated),
+     but `direct_keeper` runs every 10 minutes: **cap 1 × 6 ticks/hour = 6 items/hour**,
+     against live V8.48's 15 × 6 = 90/hour. G.4 measured items are NOT cheaper at depth
+     (max 13.86M), so the cap stays — throughput must come from CADENCE. Decide the cron
+     frequency (and the VPS keeper's gas budget ≥16.5M) before PHASE 5 re-points keepers.
   3. Cosmetic: driver GAS WARNING projects 15-item batches at cap 1; retire or gate it.
   4. Carried from 40.6-4: `frozen_matb_keeper` deletion · `mint_usdc.js` FIFTH wallet
      list · `CNOVATreasury.setCommunityWallet` docstring · second `upkeepCaller` decision
