@@ -270,15 +270,81 @@ is a keeper we are paying for without needing.
 
 ## Open items to close this audit
 
-1. **Is `frozen_matb_keeper` doing anything?** Check whether its log shows real
-   work or always-nothing (on-chain gets there at :05, it runs at :09):
-   `grep -c "rotated\|forced\|OK" /root/keeper/frozen_matb.log`
-2. **Is Chainlink CRE registered as an `upkeepCaller`?** If yes, `direct_keeper`
-   is a fallback, not a dependency.
-3. **Are WorkItemFailed events firing?** If `performUpkeep` is silently failing
-   items, the off-chain scripts are masking it:
-   scan `WorkItemFailed(uint8,uint8,address,address)` on MatrixKeeper.
-4. **Run the keepers-OFF gate** after V8.48.
+> **STATUS SWEPT 2026-08-25 (session 39), on the owner's ask to verify this list.**
+> Three of the four had answers that were never written back here. An audit whose
+> items are silently already-answered is worse than one with none, because the next
+> session spends a step re-asking. Each item below now carries its verdict and date.
+
+1. ✅ **ANSWERED 2026-08-23 (session 33) — `frozen_matb_keeper` IS NOT DOING ANYTHING,
+   AND THE VERDICT IS DELETE.** It has **no cron line at all** and its last log entry is
+   2026-08-13T11:59Z; `/root/keeper/frozen_matb.log` has been 0 bytes since 08-14. **This
+   is not a PHASE G pause** — it is absent from `crontab.backup.phaseG` too, so the job
+   has simply been off. **Rotation continues without it:** T1.1 MatB gained **+30
+   rotations in 34 minutes** while it was off (integrity.log 20:00Z rot=2302 vs a 20:34Z
+   read of 2332). That confirms verdict D's suspicion — it duplicates on-chain
+   `WORK_FORCE_ROTATE` (work type 8). ▶ **REMAINING ACTION: delete the script and its
+   entry from the naming table. Not yet done.**
+   ⚠ Settle any re-open with the **rotation COUNTER over time**, never with
+   `diag_frozen_matb.js`'s 🚨 flag: that flag tests occupancy at an instant, so a healthy
+   fast-churning MatB and a genuinely wedged one print the SAME line.
+
+2. ⛔ **ANSWERED NO — MEASURED ON CHAIN 2026-08-25 (session 39).
+   CHAINLINK CRE IS NOT REGISTERED, AND `direct_keeper` IS A DEPENDENCY.**
+   `scripts/diag_upkeep_callers.js` (contracts repo, read-only) enumerates all three
+   routes into `performUpkeep` (`MatrixKeeper.sol:914`), because this item was written as
+   one read and it is not one read — `upkeepCaller` is a `mapping`, with no enumerating
+   getter, and owner/governance can call it without a grant.
+
+       owner()      0xCd0Af6a4…  [EOA]        <- deployer
+       governance   0x0a833d31…  [contract]   <- v8Governance
+       upkeepCaller 0xd419681B…  [EOA] ALLOWED, granted once at block 45433132
+       senders      0xd419681B… sent 31 of 31 sampled performUpkeep transactions
+
+   **The single grant is an EOA, so it cannot be a Chainlink Automation registry — a
+   registry is a contract.** There is exactly one driver and no second path.
+   ✅ **The good news, worth recording: the keeper EOA is NOT the deployer key.** Keeper
+   and deploy custody are separated, which is the question worth asking next after
+   "is there a fallback".
+   ⛔ **THE RISK THIS EXPOSES IS AVAILABILITY, AND IT IS A COMMUNITY-DEPLOY RISK:** one
+   VPS, one cron, one key. If the droplet stops, nothing drives the keeper — no parked
+   rescue, no eviction, no velocity check — until somebody calls `performUpkeep` by hand
+   as owner or governance. ▶ **ADD TO THE LIST: decide whether a second authorised caller
+   is wanted before the community deploy.** `setUpkeepCaller` is deliberately NOT
+   DAO-gated (session 19: *"authorization is not economics — a compromised keeper key
+   must be revocable in minutes, not by vote + 48h timelock"*), so this is a fast change.
+
+3. ✅ **ANSWERED — YES, ABUNDANTLY, and the answer produced a shipped fix.** Session 31
+   traced a `WorkItemFailed` on `PARKED_RESCUE` to genuine out-of-gas seven frames deep
+   (31.4), which is what defect 8's `minGasPerItem` gas floor was built for.
+   `scripts/diag_failed_item_reason.js` exists to read these, and `performUpkeep` now
+   deliberately converts `SF: insolvency floor` refusals into `WorkItemFailed` so ONE
+   member is skipped instead of the whole batch reverting. **They are firing, they are
+   read, and they are not masked.**
+   ⚠ Two traps recorded while closing this: that file's `WORK` id table was wrong from id
+   5 up (four of ten ids naming the wrong job — G.4 survived by luck, being type 4 which
+   reads the same in both), and its `member` column mislabels which of `addr1`/`addr2` is
+   the member, because `performUpkeep` passes them POSITIONALLY into handlers with
+   different signatures. Both fixed in `ce3a0ec`.
+
+4. ▶ **NEVER RUN — the keepers-OFF gate.** Still the cleanest available answer to "how
+   much of this automation is really necessary", and it is the protocol's own falsifiable
+   criterion, set at `MatrixKeeper.sol:455`. **Item 1 is an accidental partial preview of
+   it: one job has been off for twelve days and nothing noticed.**
+   ⛔ Two preconditions this audit did not know about when it wrote the item: run it
+   against a chain whose parked queue is not mid-crisis, and note that the LIVE V8.48
+   deployment does not carry `minGasPerItem` at all (it postdates the 2026-08-13 deploy),
+   so a keepers-OFF window measured today is measured on the pre-defect-8 configuration.
+   **Say which deployment the result is about, or it will be quoted about the other one.**
+
+### Added by the sweep, not in the original four
+
+5. ▶ **`keeper.log` DOUBLE-WRITE — a known artefact, deliberately not yet fixed.**
+   `direct_keeper.js` appendFileSync's each line AND the crontab redirects stdout to the
+   same file, so every line lands twice, exactly 2.0x. **No work is being done twice**
+   (one `Gas/item:` call site, checked). The fix is a CHOICE, not a one-liner — dropping
+   either half loses something — so make it alone, with a before/after duplicate count,
+   and DATE it, because every historical count in the handoff was taken against the
+   doubled log.
 
 ## Scope note
 

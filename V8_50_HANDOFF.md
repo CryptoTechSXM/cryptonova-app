@@ -43,6 +43,17 @@ owner-set, and the session that earned it got five things wrong by ignoring what
 #     source says 1 and `minGasPerItem` is not in that bytecode at all. Nothing is currently
 #     failing (38.5 found the queue clean) — but **defect 5 recorded 15 -> 5 as MEASURED on
 #     2026-08-17 and the chain says 15.** Either it never landed or it was reverted. Open.
+# ✅ **THE AUTOMATION AUDIT IS SWEPT AND 3 OF ITS 4 OPEN ITEMS WERE ALREADY ANSWERED
+#     (39.2).** Verdicts and dates now live in `AUTOMATION_AUDIT.md` itself. **Item 2 is
+#     answered NO and it matters: Chainlink CRE is NOT registered, the single authorised
+#     `upkeepCaller` is an EOA that sent 31 of 31 sampled performUpkeep transactions, so
+#     the droplet's `direct_keeper` is a DEPENDENCY with no fallback.** ✅ It is not the
+#     deployer key — keeper and deploy custody are separated.
+# ▶ **THE PARKED QUEUE IS 75% A COMMS DEFECT AND 5% AN ECONOMIC ONE (39.3).** 295 of 393
+#     hold the money and need only an approval; **3 members are genuinely stuck, $10.07.**
+#     The count looks alarming because `evictionGracePeriod` is 7 days, so the queue is a
+#     week-deep buffer by design. The fixable part is the PRESENTATION. ⛔ Not a quick
+#     panel edit — 37.1 and 37.3 were both member-facing outages from that same panel.
 # ▶ **WHAT IS LEFT: PHASE G, and the chain. Both still exactly where 38.6 left them.**
 
 # ⬛ SESSION 38 STATE — 2026-08-24. Superseded on PARAM 59 by SESSION 39 above.
@@ -256,6 +267,128 @@ deploy must derive it and refuse the wrong one. **39 adds: when a live setter ca
 an owner decision, the SOURCE DEFAULT MOVES IN THE SAME SESSION — because `deploy_v8.js` sets
 2 of 28 parameters, so for 26 of them the declaration is not documentation, it is the shipping
 value.** And the check for that is now mechanical: run `diag_param_drift.js`.
+
+## 39.2 ✅ THE AUTOMATION AUDIT — SWEPT ON THE OWNER'S ASK. 3 OF 4 WERE ALREADY ANSWERED.
+
+Owner asked (2026-08-25) to verify the automation cleanup / audit and add what is missing to
+the lists. **`AUTOMATION_AUDIT.md`'s four open items have been dated and given verdicts in
+that file — read it there, it is the list.** Summary of what the sweep found:
+
+    1  frozen_matb_keeper doing anything?   ANSWERED 2026-08-23, never written back.
+                                            NO. No cron line, silent since 2026-08-13,
+                                            rotation continues without it (+30 rotations
+                                            in 34 min). VERDICT: DELETE. Not yet done.
+    2  Chainlink CRE an upkeepCaller?       ANSWERED NO, MEASURED 2026-08-25. See below.
+    3  WorkItemFailed events firing?        ANSWERED — yes, abundantly; 31.4's out-of-gas
+                                            came from one and produced defect 8.
+    4  the keepers-OFF gate                 NEVER RUN. Still the cleanest answer to
+                                            "how much automation do we actually need".
+
+⛔ **THE PATTERN IS THE FINDING AND IT IS THE SAME ONE AS 38.0's.** Three of four items had
+answers sitting in session 33/34 sections of THIS document and in nobody's checklist. **An
+audit whose items are silently already-answered is worse than one with no items at all**,
+because the next session spends a step re-asking. The fix applied: every item in that file
+now carries its verdict AND its date.
+
+⛔⛔ **ITEM 2's ANSWER IS A REAL FINDING, NOT A TICK. `direct_keeper` IS A DEPENDENCY.**
+New instrument `scripts/diag_upkeep_callers.js` (read-only, no key). The audit asked this as
+one read and **it is not one read** — `performUpkeep` (`MatrixKeeper.sol:914`) accepts
+`owner() || governance || upkeepCaller[msg.sender]`, and `upkeepCaller` is a `mapping` with
+no enumerating getter. The script scans `UpkeepCallerSet` from a deploy block it finds by
+**binary search on block timestamps** (26 reads, no hardcoded start block to go stale), then
+re-reads the mapping so current state comes from storage rather than the last event.
+
+    owner()      0xCd0Af6a4…  [EOA]        deployer
+    governance   0x0a833d31…  [contract]   v8Governance
+    upkeepCaller 0xd419681B…  [EOA]        ALLOWED, one grant, block 45433132
+    senders      0xd419681B…  31 of 31 sampled performUpkeep transactions
+
+**The one grant is an EOA, so it is NOT a Chainlink Automation registry — a registry is a
+CONTRACT.** ⛔ **Item 2 answers NO: there is no fallback driver.** One VPS, one cron, one
+key. If the droplet stops, nothing rescues a parked member, evicts, or runs the velocity
+check until somebody calls `performUpkeep` by hand.
+✅ **AND THE GOOD NEWS, RECORDED BECAUSE IT IS THE NEXT QUESTION: the keeper EOA is NOT the
+deployer key.** Keeper custody and deploy custody are separated.
+▶ **ADDED TO THE LIST: decide whether to authorise a second caller before the community
+deploy.** `setUpkeepCaller` is deliberately not DAO-gated (session 19: *"authorization is not
+economics — a compromised keeper key must be revocable in minutes, not by vote + 48h
+timelock"*), so it is a fast change whenever it is wanted.
+
+⚠ **THE SENDER SAMPLE IS BIASED AND THE SCRIPT SAYS SO IN ITS OWN OUTPUT.** `performUpkeep`
+emits nothing on a fully successful batch, so the sample anchors on `WorkItemFailed`. On this
+chain that is nearly every batch (~20 floor refusals per 10-minute run), but **a driver whose
+batches always fully succeed would be invisible here.** Stated rather than assumed away.
+
+⚠ **I PREDICTED THE MAPPING WOULD BE EMPTY AND SAID SO BEFORE THE RUN. IT WAS NOT.** The
+prediction was published so the run could contradict it, and it did. Recording that because
+the alternative — reading the result and calling it expected — is how 38.5's fund_list claims
+happened.
+
+## 39.3 ▶ WHY THE PARKED QUEUE GROWS — ASSEMBLED, NOT NEWLY MEASURED
+
+Owner, 2026-08-25: *"parked members growing reason and how can we resolve — don't look
+professional or maybe it is what it is."* **Every number below has already been measured by
+an earlier session. Nothing here is a new run; the finding is that nobody had put them in one
+place, and once they are, the answer changes shape.**
+
+    THE QUEUE, 393 parked positions, 2026-08-25T00:01Z (38.5, diag_parked_solvency)
+      hold the money, need only an approval ....... 295   75%   <- COMMS DEFECT
+      can self-rescue right now (funded+approved) ..  79   20%
+      cannot pay from their wallet ................  19    5%
+          of those 19: in grace AND loan-eligible ..  16   the keeper lends at 24h; they
+                                                          resolve themselves, do not fund
+          GENUINELY STUCK .........................   3   total gap $10.07
+
+**THE HEADLINE: THREE QUARTERS OF THE QUEUE IS ONE CLICK FROM RE-ENTERING, AND ONLY THREE
+MEMBERS ARE ACTUALLY STUCK.** Members sit parked holding four and five figures of USDC —
+`0x9DDD15A0` $6,504, `0x788b70FE` $33,737, dozens at $30,000 — with **$0.00 approved** to the
+matrix that needs it. They do not know what to approve or to whom. That is a frontend and
+comms defect, not an economic one, and the community post of 38.1 is the first fix for it.
+
+**WHY THE COUNT STILL CLIMBS — four mechanisms, all measured, none of them a bug:**
+
+  1. **THE FUND REFUSES ON POLICY, NOT ON MONEY (33.7).** One day of `copay.log` carries
+     **~2,389 `SF: insolvency floor` refusals**, ~20 per 10-minute run, while SF spendable
+     went **$866.03 -> $1,671.70 (+$806)** on the same day. Liquidity is not the constraint.
+  2. **AND THE DEPLOYED RULE IS A FLAT GATE (34.5).** Live V8.48 is
+     `memberDebt[member] < tierEntryFees[tierIdx] * insolvencyFloorBps / 10_000` — it
+     **never reads the amount being asked for and never reads the fund balance**, so a member
+     $0.31 over the line is refused a $2.67 rescue exactly as hard as one $14 over.
+  3. **THE RATCHET KEEPS THEM CYCLING (36.1).** The gate reads NET debt at issue time, so
+     every clawback repayment RE-OPENS it: borrow ~$5, claw back ~51%, keep ~$2.57 of net
+     debt, go round again — **24 of 26 stuck members took THREE OR MORE rescues, up to
+     five** — until a lap's repayment can no longer drag net back under the ceiling.
+  4. **AND THEY STAY VISIBLE FOR A WEEK.** `evictionGracePeriod` is **7 days**, so a refused
+     member sits parked and visible for the full week. ⛔ **That is exactly what members
+     reported as "wallets frozen for 3+ days."** The queue is a WEEK-DEEP BUFFER by design;
+     at a steady arrival rate it fills to a week's worth and then looks alarming forever.
+
+✅ **WHAT IS *NOT* WRONG, so nobody re-investigates it:**
+  * **The keeper is not missing anyone (34.3).** A full `DRY_RUN MAX=100000` sweep reached
+    every tier, every pair, every matrix, **0 PROBLEMs**. T3/T4 take zero rescue attempts
+    because **100% of their parked members are inside the grace window** — their queues
+    formed within ~16 hours. 33.9's "the keeper never reaches them" was refuted by 34.3.
+  * **Re-parking is not a failure and not a second charge (37.5).** A rescue can re-park a
+    member in the pair's OTHER matrix; that is a NEW seat. Some of the count is progress.
+
+▶ **SO: IS IT "WHAT IT IS"? PARTLY — AND THE FIXABLE PART IS THE PRESENTATION, NOT THE
+ECONOMICS.** The parked STATE is legitimate: a member between seats, held for a week by a
+grace period that exists to protect them from a loan. What looks unprofessional is **one
+undifferentiated count, under the word "parked", with no visible split between "waiting on
+you" and "waiting on the fund".** `393 parked` and `295 need one approval, 3 need help` are
+the SAME CHAIN STATE and a completely different product.
+
+  ⛔ **DO NOT TREAT THIS AS A QUICK PANEL EDIT.** Two member-facing outages came out of that
+  exact panel within one session — **37.1** (`display:none` on `btn-self-rescue` that nothing
+  ever un-hid) and **37.3** (the leak from fixing it), three commits to get one screen right.
+  38.1's two notes there are STATIC ON PURPOSE for the same reason.
+
+  ▶ **PROPOSED, NOT STARTED, owner's call:** split the count in the panel and the dashboard
+  along the 38.5 verdict lines, using words that say what the member must do; the data is
+  already computed by `diag_parked_solvency.js` and needs no new chain read. **Scope it as
+  its own step with the split measured first, not as an edit to an existing element.**
+  ⚠ Whether the three genuinely stuck members are real people or seeded wallets was **NOT
+  established** (38.5) — settle that before spending anything on their $10.07.
 
 ## 38.0 STATE — WHAT SHIPPED
 
