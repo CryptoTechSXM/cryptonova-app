@@ -103,15 +103,29 @@ async function main() {
     ], signer.provider);
     const KEEPER = "0xd419681BA72992636f05e256168681c939826B4b"; // the one authorised upkeepCaller (39.2)
     const latest = await signer.provider.getBlockNumber();
-    let logs = [];
-    // chunked: the public endpoint caps eth_getLogs ranges.
-    for (let to = latest; to > 0 && logs.length === 0; to -= 40000) {
-      const from = to - 40000 > 0 ? to - 40000 : 0;
-      try { logs = await ev.queryFilter(ev.filters.DistributionExecuted(), from, to); } catch (e) {
-        console.log(`  (range ${from}-${to} failed: ${e.shortMessage || e.message})`);
+    // ⛔ FIXED 2026-08-25, same day, first run: this chunked in 40,000-block ranges against
+    //    an endpoint that caps eth_getLogs at 10,000, so EVERY range failed and it walked
+    //    backwards printing 27 identical errors. The cap is documented in this repo and I
+    //    did not check it. CHUNK is now 9,000 with a BOUNDED lookback, and it reports how
+    //    far it actually searched so an empty result can never be read as "nobody ran it".
+    const CHUNK    = 9_000;
+    const LOOKBACK = Number(process.env.LOOKBACK || 250_000);
+    const floorBlk = latest - LOOKBACK > 0 ? latest - LOOKBACK : 0;
+    let logs = [], scannedTo = latest, failures = 0;
+    for (let to = latest; to > floorBlk && logs.length === 0; to -= CHUNK + 1) {
+      const from = to - CHUNK > floorBlk ? to - CHUNK : floorBlk;
+      try {
+        logs = await ev.queryFilter(ev.filters.DistributionExecuted(), from, to);
+      } catch (e) {
+        failures++;
+        if (failures <= 2) console.log(`  (range ${from}-${to} failed: ${e.shortMessage || e.message})`);
+        if (failures === 3) console.log(`  (further range errors suppressed)`);
       }
-      if (from === 0) break;
+      scannedTo = from;
     }
+    console.log(`  searched blocks ${scannedTo}..${latest} in ${CHUNK}-block chunks` +
+                `${failures ? ` (${failures} range error(s))` : ""}` +
+                `${scannedTo > floorBlk ? "" : " — full lookback exhausted"}`);
     console.log(`\nWHO RAN THE DISTRIBUTION — ${logs.length} DistributionExecuted event(s) found`);
     for (const l of logs) {
       const tx = await signer.provider.getTransaction(l.transactionHash);
@@ -123,7 +137,11 @@ async function main() {
       console.log(`    tx   ${l.transactionHash}`);
       console.log(`    from ${who}${tag}`);
     }
-    if (logs.length === 0) console.log("  none found in the scanned range — widen it before concluding anything.");
+    if (logs.length === 0) {
+      console.log("  ⚠ NONE FOUND IN THE SCANNED RANGE. That is NOT \"nobody ran it\" — it is");
+      console.log("     \"not in this window\". Re-run with a larger LOOKBACK before concluding:");
+      console.log("       LOOKBACK=1000000 WHO=1 ADDRESSES_FILE=... npx hardhat run scripts/cw_distribute.js --network baseSepolia");
+    }
     return;
   }
 

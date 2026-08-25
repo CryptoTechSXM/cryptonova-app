@@ -278,14 +278,24 @@ shows a per-member claim (`$4.6547`) with a Sep 24 deadline instead of the badge
 put a monthly cron on the droplet if V8.50 slips past September.**
 
 ▶ **TWO THINGS LEFT OPEN HERE, both cheap:**
-  1. **`Pending Pool` still read $7,760.84 AFTER the distribution**, while $4.6547 x 470
-     ≈ $2,188 was allocated. Either the panel labels the CW's total USDC as "pending", or
-     only a ratio was distributed (`distributeRatioBps`). **Not wrong money — possibly a wrong
-     label. One read of `availablePool()` vs `totalActivePending` settles it.**
+  1. ✅ **SETTLED THE SAME DAY, BY MEASUREMENT.** `Pending Pool` read $7,760.84 after the
+     distribution, which looked wrong against $4.6547 x 470 ≈ $2,188 allocated. Then a member
+     claimed and it moved to **$7,756.19 — down by exactly the $4.6547 claimed.** So
+     **`Pending Pool` is the CW's TOTAL USDC BALANCE**, and it falls only as members claim.
+     **No money is missing.** ▶ It IS a labelling question worth one small frontend fix: a
+     figure that includes already-allocated, already-claimable money reads to a member as
+     "not yet mine". Splitting it into allocated vs undistributed would say what it means.
   2. **14 of 15 keeper slots were EVICT_PARKED, all from ONE T1 matrix.** The keeper is
      spending nearly its whole budget evicting, while 39.3 measured that 295 of 393 parked
      members hold the money and need only an approval. **That is V8.48 audit material and it
      is the thing crowding out everything else on the queue.**
+
+⚠ **AND `WHO=1`'s FIRST RUN FAILED ON MY OWN BUG, WORTH ONE LINE BECAUSE IT IS THE DAY'S
+PATTERN AGAIN.** I chunked `eth_getLogs` in 40,000-block ranges against an endpoint that caps
+them at **10,000** — a limit this repo already knew — so every range failed and it walked
+backwards printing 27 identical errors. Fixed to 9,000-block chunks with a BOUNDED lookback
+that reports the range it actually searched, because an empty result must never be readable
+as "nobody ran it" when it means "not in this window".
 
 ⛔ **AND A FOURTH HARDCODED-ADDRESS INSTRUMENT: `scripts/check_cw.mjs` hardcodes the CW as
 `0x525D14dA...`; live is `0xC786dbA7...`.** DO NOT USE IT until it reads the addresses file.
