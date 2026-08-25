@@ -26,6 +26,7 @@ const KEEPER_ABI = [
   "function governance() view returns (address)",
   "function upkeepCaller(address) view returns (bool)",
   "function maxItemsPerUpkeep() view returns (uint256)",
+  "function minGasPerItem() view returns (uint256)",
 ];
 
 (async () => {
@@ -33,6 +34,26 @@ const KEEPER_ABI = [
   const p = new ethers.JsonRpcProvider(RPC, 84532, { staticNetwork: true });
   const k = new ethers.Contract(A.matrixKeeper, KEEPER_ABI, p);
   console.log(`block ${await p.getBlockNumber()}   keeper: ${A.matrixKeeper}\n`);
+
+  // ⛔ ADDED 2026-08-25: STATE THE CONFIGURATION THE RUN MEASURED IN.
+  //    A batch of exactly N items is the signature of maxItemsPerUpkeep = N, and the
+  //    V8.50 SOURCE ships 1 while live V8.48 reads 15 (handoff 39.0) — three different
+  //    worlds. PHASE G G.4's pass condition depends on which one the chain is in, so the
+  //    run must SAY, not leave it to be inferred from the item count.
+  //    Both getters can be ABSENT from an older deployment: minGasPerItem postdates the
+  //    2026-08-13 V8.48 deploy. A missing getter and a reverting one look identical over
+  //    RPC and mean opposite things, so "unreadable" is printed, never a number.
+  let cap = null, floorGas = null;
+  try { cap = await k.maxItemsPerUpkeep(); } catch (_) {}
+  try { floorGas = await k.minGasPerItem(); } catch (_) {}
+  console.log("config on THIS deployment:");
+  console.log(`  maxItemsPerUpkeep : ${cap === null ? "unreadable / absent from bytecode" : cap.toString()}`);
+  console.log(`  minGasPerItem     : ${floorGas === null ? "unreadable / absent from bytecode" : Number(floorGas).toLocaleString()}`);
+  if (cap !== null && cap !== 1n) {
+    console.log(`  ⚠ cap is ${cap} — the V8.50 SOURCE default is 1. A gas measurement taken here`);
+    console.log("     describes a batched world, not the one V8.50 deploys with. Say so in the result.");
+  }
+  console.log("");
 
   const [needed, performData] = await k.checkUpkeep("0x");
   console.log(`upkeepNeeded: ${needed}`);
@@ -97,7 +118,11 @@ const KEEPER_ABI = [
   }
 
   console.log("\nperformUpkeep simulation (staticCall as keeper wallet):");
-  await tryPerform(items, "FULL BATCH");
+  // ⚠ A SUCCEEDING FULL BATCH IS NOT PROOF THE BATCH DID THE WORK. BatchGasHalted makes
+  //    performUpkeep SUCCEED with processed < total — that is the gas guard working. A
+  //    staticCall cannot tell "all N done" from "halted after 2". Only a real transaction
+  //    receipt, with its events, answers that. Do not read the line below as completion.
+  await tryPerform(items, "FULL BATCH (success != all items processed — see note above)");
   if (items.length > 1) {
     for (let i = 0; i < items.length; i++) {
       await tryPerform([items[i]], `item ${i} (${WORK[Number(items[i].workType)]})`);
