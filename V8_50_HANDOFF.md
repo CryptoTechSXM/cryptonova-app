@@ -56,9 +56,16 @@ owner-set, and the session that earned it got five things wrong by ignoring what
 #     `update_addrs_vX_XX.py` rewrote `V8.47` → `V8.48` **inside comments**, leaving a block
 #     reading "V8.48 replaces V8.48" that no reader could recover without git. Restored from
 #     `17b6c02`. **It will do it again to whatever the comments say next time.**
+# ⛔⛔ **OWNER FRAMING CORRECTION, 2026-08-25 — "MIGRATION" IS NOT A TESTNET CONCEPT AND
+#     SESSIONS 38, 39 AND 40 ALL USED IT WRONGLY (40.7).** Owner: *"we have no migration,
+#     this is testnet we are doing a new deploy and everyone reregisters."* **There is no
+#     migration comms date outstanding — that item was a FRAMING ERROR, not an open task.**
+#     Mainnet is then deliberately a NO-MIGRATION period of about two [unit not stated],
+#     because the goal by then is CryptoNova's OWN PRIVATE BLOCKCHAIN and migrating happens
+#     only once that exists. **Current phase, his words: "we are now auditing v8.48 with the
+#     plan to deploy v8.50 for the community testing once we get it ready."**
 # ▶ **WHAT IS LEFT: G.4 (needs a private redeploy from current source, or an explicit
-#     waiver), the `selfFundedRescues/rescues` metric G.5 actually asks for, and the chain
-#     decision. The migration comms date remains the owner's and unannounced.**
+#     waiver) and the `selfFundedRescues/rescues` metric G.5 actually asks for.**
 
 ## 40.0 ✅ G.8 — RUN AT LAST, FAILED HONESTLY, AND ONLY 1 OF 7 WAS REAL
 
@@ -196,17 +203,49 @@ CHECK.** The only real proof is running it, which is why the corrected log was r
      honest option and "a private failure costs a redeploy nobody sees".**
   2. **Build the `selfFundedRescues / rescues` ratio** G.5 actually asks for — `CoPayRescue`
      carries `sfShare` directly, so it is one event scan, no control needed.
-  3. **The chain decision**, still open: the private V8.50 deployment records
+  3. ✅ **The chain question is CLOSED (40.7).** The private V8.50 deployment records
      `"network": "baseSepolia"`, so PHASE G's "private chain" is a separate DEPLOYMENT on the
-     same testnet, not a separate chain. Recommended: fresh Base Sepolia deployment for the
-     community, private one kept as the measurement deployment. **Owner's to confirm.**
+     same testnet, not a separate chain — and the owner has confirmed the community deploy is
+     **a NEW TESTNET DEPLOY where everyone re-registers.** Fresh Base Sepolia deployment for
+     the community; the private one stays as the measurement deployment.
   4. **Carried small items:** `frozen_matb_keeper` deletion (AUTOMATION_AUDIT item 1, verdict
      DELETE, still not done) · `mint_usdc.js`'s hardcoded FIFTH wallet list ·
      `CNOVATreasury.setCommunityWallet`'s copy-paste docstring · the second `upkeepCaller`
      decision before the community deploy · live `maxItemsPerUpkeep` 15 vs source 1.
-  5. ⛔ **The migration comms date. Owner's, and still unannounced** — the 08-08 post promised
-     the date well in advance with a withdrawal window. Unchanged from 39.6.
+  5. ⛔ **NOT an open item any more — see 40.7.** "The migration comms date" was a framing
+     error carried from 38.6/39.6. There is no migration. What remains is the ordinary
+     courtesy of announcing a NEW DEPLOY with notice, per the 08-08 post.
 
+
+## 40.7 ⛔⛔ OWNER FRAMING CORRECTION — THERE IS NO MIGRATION, AND THREE SESSIONS SAID THERE WAS
+
+Owner, 2026-08-25, correcting the framing this document had been carrying since 38.6:
+
+  * ⛔ **"we have no migration, this is testnet we are doing a new deploy and everyone
+    reregisters."** A V8.50 community deploy is a NEW DEPLOY plus re-registration. Nothing
+    carries across, so there is nothing to migrate and **no "migration comms date" is
+    outstanding.** 38.6 raised it as a sequencing question, 39.6 recorded it as "what
+    survives is COMMS TIMING", and 40 repeated it in its handover note. **All three were
+    describing a mechanism that does not exist on testnet.** What remains is the ordinary
+    courtesy of announcing a new deploy with notice — a communication choice, not a task
+    blocking anything.
+  * **MAINNET IS DELIBERATELY A NO-MIGRATION PERIOD.** Go to mainnet, run for about two
+    [unit not stated — most likely years] **with no migration at all**, because the goal by
+    then is **CryptoNova's OWN PRIVATE BLOCKCHAIN**, and migrating is what happens once that
+    chain exists. So "migration" is a FUTURE mainnet-to-own-chain event and never anything
+    in the current work. ⚠ That also raises the bar on the mainnet release: a version that
+    must run for years without a redeploy is a different engineering target from a testnet
+    version that is replaced weekly. Worth carrying into every V8.50-and-later scope call.
+  * **CURRENT PHASE, his words: "we are now auditing v8.48 with the plan to deploy v8.50 for
+    the community testing once we get it ready."** The live V8.48 chain is the AUDIT SUBJECT;
+    V8.50 is the release being prepared. **One workflow, not two competing priorities** —
+    which refines 36.5's "wrap up the V8.48 rabbit holes": auditing V8.48 to find what V8.50
+    must fix is IN scope; open-ended V8.48 economic measurement is not.
+  * **THE QUALITY BAR, and it should shape how findings are reported:** *"i know nothing is
+    perfect but we want to get as close to that as possible on the testnet, we build and fix
+    until we get it right."* **A found-and-fixed defect is the process working, not slippage.**
+    Do not trade thoroughness for deploy speed in this phase, and do not present a failing
+    gate as a delay — G.8 failing on its first run is exactly what it was built to do.
 
 # ⬛ SESSION 39 STATE — 2026-08-25. Superseded on PHASE G by SESSION 40 above.
 # ⛔⛔ **38.6's PARAM 59 FINDING IS BACKWARDS, AND ACTING ON IT WOULD HAVE SHIPPED A
