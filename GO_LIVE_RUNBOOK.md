@@ -359,6 +359,43 @@ handoff 25.6). **Record which one this chain is running**; the halt behaviour de
 > menu's 12.5M / 15M rungs exist for exactly that move.
 > ⚠ **UNVERIFIED — this rewritten criterion has not itself been run.** It is a criterion, not
 > a result. The first run to use it should say so and record whether it discriminates.
+>
+> ⛔⛔ **AND THE CRITERION YOU NEED DEPENDS ON WHICH CHAIN — MEASURED 2026-08-25, AFTER THE
+> REWRITE ABOVE WAS ALREADY WRITTEN.** I rewrote the PASS for cap 1 because that is what the
+> SOURCE ships, **without first reading what the chain under test actually runs. That is rule 2
+> broken in the act of fixing a rule-2 defect.** `diag_keeper_work.js` now prints the config:
+>
+>     private V8.50 chain (deployed_addresses_v8_50_private.json, block 45946005)
+>       maxItemsPerUpkeep  20      <- NOT the source default of 1
+>       minGasPerItem      5,000,000   <- NOT the source default of 7,500,000
+>
+> **It is not misconfigured — it PREDATES the configuration.** It was deployed 2026-08-21 from
+> `8c60b64` (2026-08-18), whose declared defaults are exactly 20 and 5,000,000. The V8.50 gas
+> configuration was settled in `5a07cab` on 2026-08-23, **two days later.** Same shape as 39.1's
+> PARAM 59: a chain that predates a decision is not a chain violating one.
+>
+> ⛔ **AND IT CANNOT BE CONFIGURED INTO THE SHIPPING WORLD. `setMaxItemsPerUpkeep` AT THAT
+> COMMIT IS `require(v == 5 || 10 || 15 || 20 || 30 || 40)` — 1 IS NOT ON THE MENU, AND A
+> `require()` CANNOT BE WIDENED AFTER DEPLOYMENT.** The lowest cap reachable on that chain is 5.
+> (`minGasPerItem` 7,500,000 IS reachable — it was already on the old menu.) **This is the
+> menu-immutability warning at `setMinGasPerItem` coming true on a live gate chain.**
+>
+> **SO, PER MEASUREMENT — and this is the useful part, because the gate is PARTLY RUNNABLE NOW:**
+>   * **G.4 CANNOT produce a V8.50-representative result on this chain.** Either redeploy
+>     privately from current source (G.0/G.1 again — hours, and "a private failure costs a
+>     redeploy nobody sees"), or run it here against the ORIGINAL cap-20/5M criterion and label
+>     the result as describing the pre-`5a07cab` configuration. ⚠ The original criterion is
+>     not junk — it was written for exactly this chain's configuration and is valid ON IT.
+>     ⚠ Note the direction: cap 1 is strictly SAFER for gas than cap 20, so a pass here is
+>     conservative — but "wrong number in the harmless direction" is not a control (38.6).
+>   * ✅ **G.5 IS VALID ON THIS CHAIN AS IT STANDS.** Measurement 3 is ECONOMIC —
+>     `selfFundedRescues / rescues`, driven by `sfShare == 0`. The batch cap does not change
+>     whether a rescue was self-funded. **Run it here; no redeploy needed.**
+>   * ✅ **G.7 IS ALSO ECONOMIC and valid here**, with the `insolvencyFloorBps` caveat already
+>     written at G.7. Read the floor off THIS chain before quoting any figure from it.
+>   * ✅ **G.3's CLOSED RESULT SURVIVES.** It was taken with `ONE_ITEM=1` in the DRIVER, which
+>     sends one item per transaction regardless of the contract's cap — so its per-item figure
+>     is basis-exact and independent of this finding. That is why G.2 drives one item.
 
 **G.5**
 ```powershell
