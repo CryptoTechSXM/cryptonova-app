@@ -223,6 +223,23 @@ async function readBufferBps(mk) {
   console.log(`  insolvencyFloorBps       ${floorBps}  (${Number(floorBps) / 100}%)`);
   console.log(`  crossing buffer          ${buf.bps} bps   <- ${buf.src}`);
   console.log(`  SF totalBalance          ${usd(sfBal)}`);
+
+  // ⛔ ADDED 2026-08-25 (session 40). THIS SCRIPT'S PROSE WAS HARDCODED TO "I AM READING
+  //    LIVE V8.48" IN THREE PLACES, WHILE ITS NUMBERS COME FROM WHATEVER ADDRESSES_FILE
+  //    POINTS AT. Run against the private V8.50 chain it printed "E1 is NOT DEPLOYED — the
+  //    live chain is V8.48" and "these are V8.48 members" ABOUT A CHAIN THAT DEPLOYS BOTH
+  //    ITEM A AND E1 (verified in the deployed commit 8c60b64), telling a future reader to
+  //    discount real V8.50 measurements as projections. Same family as diag_keeper_work.js's
+  //    hardcoded sender. The numbers were never wrong; the sentences around them were.
+  const IS_V850 = /v8_50/i.test(String(ADDRFILE || ""));
+  console.log(`  deployment basis         ${IS_V850 ? "V8.50 (item A + E1) — the V8.48 caveats below DO NOT apply" : "pre-V8.50 — the V8.48 caveats below DO apply"}`);
+  if (IS_V850) {
+    console.log("  ⚠ ON A V8.50 CHAIN, PHASE 2/3/4 MEASURE ITEM A AS ALREADY WORKING, NOT AS A");
+    console.log("     PROJECTED PRIZE. \"MatA parkers 0\" and \"$0.00 of lending avoided\" are the");
+    console.log("     SUCCESS signal — item A is what removes MatA parks — and are NOT comparable");
+    console.log("     to a pre-item-A chain. PHASE 3's split is the direct evidence: 100%/0%");
+    console.log("     reserve/withdrawable is item A working; a ~50/50 split is V8.48.");
+  }
   if (buf.bps > 0n) {
     console.log(`\n  ⚠ BUFFER IS ${buf.bps} bps AND NON-ZERO. Every rescue seeds ${Number(buf.bps) / 100}% of the fee`);
     console.log(`  into the member's withdrawable as SF money (MatrixLogicLib.sol:1368) WITHOUT going`);
@@ -604,7 +621,7 @@ async function readBufferBps(mk) {
         console.log(`    ${String(bps).padStart(5)} bps  ceiling ${usd(ceil).padStart(8)}   aggregate ${String(okA).padStart(3)}   LEDGER ${String(okL).padStart(3)}${flag}`);
       }
       console.log(`\n  ⛔ WHICH COLUMN APPLIES DEPENDS ON WHETHER ITEM E1 SHIPS — READ THIS BEFORE`);
-      console.log(`  QUOTING EITHER. This script reads the LIVE chain, which runs V8.48. It cannot`);
+      console.log(`  QUOTING EITHER. Basis: ${IS_V850 ? "a V8.50 chain — E1 IS deployed, so the AGGREGATE column is the live answer, not a projection" : "the LIVE V8.48 chain"}. It cannot`);
       console.log(`  "see" E1; both columns are PROJECTIONS onto the same V8.48 data.`);
       console.log(``);
       console.log(`    LEDGER column     = item A WITHOUT E1. The crossing stops charging earnings,`);
@@ -618,6 +635,8 @@ async function readBufferBps(mk) {
       console.log(`  aggregate column is not a separate measurement, it is the post-E1 answer. Do`);
       console.log(`  not present it as independent confirmation; it is the same arithmetic relabelled.`);
       console.log(`  WITHOUT E1 the honest floor is 6800. WITH E1 it is 3400 and it clears everyone.`);
+      if (IS_V850) console.log(`\n  ✅ THE V8.48-MEMBERS CAVEAT BELOW DOES NOT APPLY ON THIS CHAIN — these members`);
+      if (IS_V850) console.log(`  crossed UNDER item A, so their MatA balance was never spent on a full-fee crossing.`);
       console.log(`\n  ⚠ ONE CAVEAT, STATED SO IT IS NOT MISTAKEN FOR CERTAINTY: these are V8.48`);
       console.log(`  members. Their MatA balance was already spent on a full-fee crossing, so the`);
       console.log(`  ledger split item A CREATES is not fully visible in them yet. The LEDGER column`);
@@ -907,8 +926,12 @@ async function readBufferBps(mk) {
         const mark = bps === 3400 ? "  <- LIVE DEFAULT" : "";
         console.log(`    ${String(bps).padStart(5)} bps -> ceiling ${usd(BigInt(rows[0].fee) * BigInt(bps) / 10000n).padStart(6)} at T1, refuses ${String(refused).padStart(3)} of ${rows.length}${mark}`);
       }
-      console.log(`\n  ⚠ READ THE BASIS: POST-E1, i.e. the gate sees journey A + journey B. E1 is NOT`);
-      console.log(`  DEPLOYED — the live chain is V8.48. These rows are a projection of V8.50 onto`);
+      console.log(`\n  ⚠ READ THE BASIS: POST-E1, i.e. the gate sees journey A + journey B.`);
+      if (IS_V850) console.log(`  ✅ E1 IS DEPLOYED ON THIS CHAIN — these rows are a MEASUREMENT of a running V8.50`);
+      if (IS_V850) console.log(`  system, not a projection. The two lines below are written for a V8.48 basis; ignore`);
+      if (IS_V850) console.log(`  them here. THIS is the G.7 re-confirmation the runbook asks for.`);
+      if (!IS_V850) console.log(`  E1 is NOT`);
+      if (!IS_V850) console.log(`  DEPLOYED — the live chain is V8.48. These rows are a projection of V8.50 onto`);
       console.log(`  today's members, not a measurement of a running system. The honest way to`);
       console.log(`  settle either decision for real is a private-chain deploy of V8.50 and a`);
       console.log(`  re-run. Anything decided from this table should be re-checked there.`);
