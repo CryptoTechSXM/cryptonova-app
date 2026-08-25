@@ -274,6 +274,19 @@ not-firing is not a hazard that will not fire; it is one whose trigger had not a
 `totalEnrolled > 0`, and the calendar gate makes a second run in the same month revert rather
 than double-pay. Ran it: `distributionCount` **0 -> 1**, 470 enrolled, and the dashboard now
 shows a per-member claim (`$4.6547`) with a Sep 24 deadline instead of the badge.
+✅ **AND A MEMBER THEN CLAIMED, SO THE WHOLE LOOP IS PROVEN, NOT JUST THE FIRST HALF:**
+claimable went to $0.00, `Pending Pool` fell by exactly the claimed $4.6547, money moved.
+✅ **WHO SENT IT — MEASURED, NOT ASSUMED (`WHO=1`), BECAUSE IT DECIDES WHETHER THE DIAGNOSIS
+ABOVE IS TRUE.** If the KEEPER had sent it, the starvation finding would be wrong.
+
+      DistributionExecuted  distId 0   block 45947532   amount $2,187.71
+      tx    0xd7055466ea08ee17aa78e2eae7dd6105a0240d821650f8cfd64592686c49c0ae
+      from  0xCd0Af6a4...  <- the OWNER, by hand. NOT the keeper EOA 0xd419681B...
+
+**$2,187.71 = $4.6547 x 470 exactly, and `distId 0` means this deployment had never
+distributed once.** The keeper did not send it and could not have: at block 45947485,
+minutes earlier, `distributionCount` was still 0 while all 15 discovery slots were full with
+no DISTRIBUTE_CW. **The diagnosis is confirmed by the transaction, not by the story.**
 ⛔ **THIS IS A WORKAROUND. It must be repeated on the 25th of each month until V8.50 ships —
 put a monthly cron on the droplet if V8.50 slips past September.**
 
