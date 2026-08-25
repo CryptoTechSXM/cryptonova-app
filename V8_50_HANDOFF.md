@@ -337,14 +337,119 @@ DID NOT HOLD, BECAUSE "ONE CANONICAL FILE" WAS NEVER ONE FILE.**
       CryptoNova-Testnet-App/fund_list.txt   110 addresses   <- canonical (36.4)
       CryptoNova-Keepers/fund_list.txt       100 addresses   <- stale pre-36.4 copy
 
-  The 10 missing are all present in the app copy only. Worse, `scripts/fund_leaders_30k.js`
-  **documents the stale one in its header** (line 14: *"CryptoNova-Keepers/fund_list.txt 100
-  wallets"*) while its **code** defaults to the canonical one (line 56). Comment and code
-  disagree, and the comment names the wrong file. **Delete or symlink the Keepers copy and
-  fix that header — with the `mint_usdc.js` array (37.5), which is still a fifth list and
-  still takes a hardcoded 2500 USDC to a hardcoded set with no per-address amount.**
+  The 10 missing are all present in the app copy only.
+
+  ⛔⛔ **TWO CORRECTIONS TO THE PARAGRAPH THAT USED TO SIT HERE — SESSION 39 CHECKED THE
+  DISK AND I WAS WRONG ON BOTH, 2026-08-25.**
+    (a) I wrote *"delete or symlink the Keepers copy"*. **DO NOT DELETE IT.**
+        `CryptoNova-Keepers/fund_testers.js` READS that file. Deleting it breaks a live
+        script. **Repoint it at the canonical copy instead.**
+    (b) I wrote that `scripts/fund_leaders_30k.js` line 14 *"documents the stale one in its
+        header"* and that comment and code disagree. **It does not.** That block is a
+        HISTORY NOTE listing the three lists 36.4 found diverged; the code at line 56
+        defaults correctly to the app copy. **No fix is needed there, and my "fix that
+        header" instruction would have destroyed a deliberate record.**
+  **THE LESSON IS 38.3's, ONE LAYER OUT.** 38.3 was a scripted edit whose CHECK could not
+  see it had failed. This was a READ — I skimmed a comment block, inferred intent, and wrote
+  the inference into the handoff as a finding with a line number attached, which is what made
+  it look verified. **A line number is not a citation. Read what the block is FOR before
+  calling it stale, and never pair an unread inference with a "fix it" instruction.**
+
+  The real remaining work is the `mint_usdc.js` array (37.5) — still a fifth list, still a
+  hardcoded 2500 USDC to a hardcoded set with no per-address amount — plus repointing
+  `fund_testers.js`.
   ⚠ **None of the three stuck wallets is on either list**, so funding them is not a
   fund_list operation and must not become a sixth hardcoded array.
+
+## 38.6 ⛔⛔ SESSION 39 ASKED 38 NINE QUESTIONS. THE HONEST ANSWER TO MOST OF THEM IS "NOT ESTABLISHED."
+
+Session 39 opened on this handoff, found `GO_LIVE_RUNBOOK.md`'s **PHASE G** gate sitting
+immediately before the community announcement with G.5/G.7/G.8 never run, and noticed PHASE G
+is not mentioned in this document after session 34 (line 1534). Sessions 35, 36, 37 and 38 all
+dropped it. **This section is session 38 answering from its own record. Read it before acting
+on 38.4 item 3.**
+
+⛔⛔ **THE HEADLINE: 38.4 ITEM 3 — "THE COMMUNITY DEPLOY. Nothing above blocks it." — IS NOT A
+VERIFIED STATEMENT AND SHOULD NEVER HAVE BEEN READ AS ONE.**
+
+  * **I never opened `GO_LIVE_RUNBOOK.md`.** PHASE G was not in my context at any point in
+    session 38. Not waived, not judged passed, not narrowed — **simply absent.** Answer (c).
+  * **"Nothing above blocks it" meant "nothing in MY list above it blocks it"** — i.e. items
+    1 and 2 of 38.4, the poll-cycle check and the six who cannot pay. It was a statement about
+    the two bullets directly above it on the page. **It was not a claim about the runbook, and
+    I had no checklist behind the phrase.**
+  * **"The community deploy" is a phrase I INHERITED from 37.6 item 3 and 36.6 and carried
+    forward without ever resolving what it denotes.** I never named a chain, a phase, or a
+    first action for it.
+
+⚠ **THE ONE PIECE OF EVIDENCE I DID READ, QUOTED SO NOBODY RE-DERIVES IT AS MINE.** 36.7, in
+this file, says: *"What is left before the community deploy is the `main` deploy of the testnet
+app, and that is all."* That reads as session 36 meaning the TESTNET app's `main` deploy. The
+owner has since confirmed (2026-08-25, to session 39) that the community deploy means **V8.50**,
+not opening the live V8.48 app. **Those two are not the same thing, and 37.6 and 38.4 both
+carried 36's phrasing forward on top of the newer meaning.**
+
+    QUESTION                                    SESSION 38's ANSWER
+    1  which chain                              NOT ESTABLISHED. Never named one. Every
+                                                command I gave ran on baseSepolia.
+    2  was PHASE G considered                   (c) NOT IN CONTEXT. Never read the runbook.
+    3  G.5 / G.7 / G.8 ever run                 NOT ESTABLISHED. Never encountered them.
+    4  G.4 replacement pass criterion           NOT ESTABLISHED. Never encountered it.
+    5  private V8.50 chain still up             NOT ESTABLISHED. Never touched the droplet;
+                                                never saw the private addresses file.
+    6  parked state across migration            NOT ESTABLISHED. See the flag below.
+    7  insolvencyFloorBps on the deploy         NOT ESTABLISHED by me — but see below; the
+                                                disk answers it and the answer is bad.
+    8  directCount gate still inert             BOUNDED YES — see below.
+    9  what "community deploy" meant            NO CHECKLIST. See the headline above.
+
+⛔⛔ **Q7 IS THE 38.2 DEFECT AGAIN, ON THE PARAMETER THAT DECIDES WHO CAN BORROW. CHECKED ON
+DISK 2026-08-25 — THIS PART IS NOT FROM MEMORY.**
+
+      StabilityFund.sol:915   uint256 public insolvencyFloorBps = 5_000;
+      deploy_v8.js            NEVER SETS IT — no setInsolvencyFloorBps call anywhere
+      live V8.48 chain        3400  (printed by diag_parked_solvency, 2026-08-25T00:01Z)
+      6d owner decision       "PARAM 59 STAYS AT 3400"
+
+  **So the live 3400 exists ONLY as a post-deploy setter call, and the source default is 5000.
+  A V8.50 deploy run today ships 5000 — not the owner's 3400 — and nothing anywhere would say
+  a word.** This is precisely the loan-clock shape 38.2 caught eight hours earlier: source
+  default and owner policy disagreeing with no mechanism holding them equal, except this dial
+  decides who is allowed to borrow at all, and 38.5 measured three members already locked out
+  by it at 3400. **At 5000 the ceiling is $5.00 at T1 instead of $3.40 — LOOSER, so it fails in
+  the forgiving direction — but "the wrong number in the harmless direction" is not a control.
+  Fix it the way 38.2 fixed the loan clock: deploy_v8.js sets it explicitly and predeploy
+  asserts the default.** ⚠ Whether 6d's decision was about the live chain or about what V8.50
+  ships with is **NOT ESTABLISHED** — I did not read 6d.
+
+✅ **Q8 — BOUNDED YES, AND HERE IS EXACTLY HOW FAR THE BOUND GOES.** On disk today:
+`StabilityFund.sol:956  baseAdvanceBps = 10_000` (inert) and **deploy_v8.js never sets it**, so
+it ships inert by default. **Session 38 did not arm it, schedule it, or move it** — I can assert
+that confidently because I know every file I touched: `MatrixKeeper.sol` (loan-clock comments +
+one literal), `deploy_v8.js` (the grace block only), `predeploy_check.js`, one comment in
+`V8_48_KeeperScan.test.js`, two static notes in `index.html`, the community post, this handoff.
+**Sessions 35-37 I cannot speak for, and whether a live chain has been armed needs a chain read,
+not a grep.**
+
+⚠ **Q6 — NOT ESTABLISHED, PLUS ONE FLAG I AM MARKING AS INFERENCE, NOT RECORD.** I do not know
+whether parked state survives migration. **The one relevant thing I actually read this session**
+is `community_report_2026-08-08.md`, which told members: *"A V8.48 deployment on testnet means a
+fresh start (positions reset, everyone re-registers), and we will announce the date well in
+advance with a withdrawal window beforehand, same as last time."* That is precedent, not V8.50
+mechanics. **UNVERIFIED INFERENCE, flagged because the cost is members' money:** the post that
+went out 2026-08-24 tells 295 members holding real balances how to spend from their wallet to
+re-enter V8.48 positions. **If a migration wipes those positions, every member who acts on that
+post between now and migration day spends a shortfall on a seat that is about to be deleted.**
+The post itself promises nothing about permanence and is not wrong — but the 08-08 precedent
+commits to a withdrawal window announced in advance, and **no such window has been announced.**
+This is a question for the owner about sequencing, not a defect to fix. **Establish the migration
+plan before drafting any follow-up post.**
+
+▶ **WHAT 38.4 ITEM 3 SHOULD HAVE SAID, AND WHAT THE NEXT SESSION SHOULD DO WITH IT:**
+**Strike "nothing blocks it."** The correct statement is: *nothing in 38.4 items 1-2 blocks it,
+and session 38 never established what "it" is.* **PHASE G is unresolved, the chain is unnamed,
+and PARAM 59's deploy value is wrong. Resolve those three before treating the community deploy
+as a next action.**
 
 ## 37.0 STATE — WHAT SHIPPED, AND WHAT THE HANDOFF SAID THAT WAS ALREADY STALE
 
