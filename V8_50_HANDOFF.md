@@ -57,9 +57,13 @@ owner-set, and the session that earned it got five things wrong by ignoring what
 #     lent $157.39, 70 events == 70 loans, from different event sets on different
 #     contracts. (G.6's closing prose still chases its 2026-08-18 live-chain gap — read the
 #     GAP line, per 33's note. Its `FROM` env var is what keeps it off a from-genesis scan.)
-# ▶ **WHAT IS LEFT (41.4):** G.7 re-confirm on private2 is OPTIONAL (40.4 measured PARAM 59
-#     on a V8.50 chain; re-running `model_item_a.js` PHASE 7/8 here would confirm on the
-#     shipping config); driver GAS WARNING noise (projects 15-item batches at cap 1 —
+# ✅ **G.7 — CONFIRMED ON THE SHIPPING CONFIG (41.5), CLOSING THE SCOREBOARD.** PARAM 59
+#     at 5000 bps refuses 4 of 46 — **the same 4 that live's 3400 refuses**, so the decided
+#     value costs nothing over the old one here (their asks: $5.00-$5.72; 6800 clears all —
+#     an owner dial, not a defect). DECISION 2: **0 of 46 below the 4000 rung** (vs 80 of
+#     166 on the 08-21 cohort — population-dependent; leave preset 1). PHASE 8's honest
+#     negative re-confirms: median at cycle-out $3.45 vs $25.00 T2 — no acceleration.
+# ▶ **WHAT IS LEFT (41.4):** driver GAS WARNING noise (projects 15-item batches at cap 1 —
 #     meaningless, cosmetic); **the live-chain drip loop is still stopped — restart
 #     `run_bigfill_loop.ps1 -StartOffset 386` at the owner's timing**; carried small items
 #     from 40.6-4 unchanged. Bigfill run had 1 stale-nonce registration (never asked;
@@ -122,16 +126,42 @@ methodology.**
 
       G.0-G.2   done (today, private2)          G.5   PASS (MatA 100.0%, 41.3)
       G.3       closed (30.12, method kept)     G.6   PASS (GAP $0/$0 exact, today)
-      G.4       PASS (shipping config, 41.2)    G.7   measured (40.4); optional re-confirm
+      G.4       PASS (shipping config, 41.2)    G.7   PASS (confirmed on private2, 41.5)
                                                 G.8   pass state (1 waiver, at cutover)
 
-  1. Optional: `model_item_a.js` PHASE 7/8 on private2 for G.7 on the shipping config.
+  1. ⚠ WATCH (from 41.5's run, the script says "NOT IN THE HANDOFF"): `_crossToPartner`
+     sweeps ALL remaining withdrawable into SF-debt repayment right after a crossing
+     (MatrixLogicLib:882-897) — under item A an INDEBTED member arrives holding more and
+     is clawed back HARDER, not spared. Dormant here (0 of 46 MatB parkers carry debt);
+     becomes member-facing the day borrowers cross. Decide whether that is policy or a
+     defect BEFORE the community deploy.
   2. Restart the live drip loop (`run_bigfill_loop.ps1 -StartOffset 386`) — owner timing.
   3. Cosmetic: driver GAS WARNING projects 15-item batches at cap 1; retire or gate it.
   4. Carried from 40.6-4: `frozen_matb_keeper` deletion · `mint_usdc.js` FIFTH wallet
      list · `CNOVATreasury.setCommunityWallet` docstring · second `upkeepCaller` decision
      · live `maxItemsPerUpkeep` 15 vs source 1. Plus 40.8's monthly `cw_distribute.js`
      on the 25th until V8.50 ships.
+
+## 41.5 ✅ G.7 — RE-CONFIRMED ON THE SHIPPING CONFIGURATION (`model_item_a.js`, private2)
+
+The script's own basis line marks it: E1 is deployed, so PHASE 7's rows are a MEASUREMENT
+of a running V8.50 system. What it measured, 46 MatB parkers, post-E1 basis:
+
+      PARAM 59   3400 bps  ceiling $3.40   refuses  4 of 46   <- live V8.48's value
+                 5000 bps  ceiling $5.00   refuses  4 of 46   <- the DECIDED value: SAME set
+                 6800 bps  ceiling $6.80   refuses  0 of 46
+      ladder     0 of 46 below preset 1's 4000 rung — nobody evicted; rung not binding
+                 (the 08-21 cohort had 80 of 166 below it: DECISION 2 is population-shaped)
+
+**5000 HOLDS, at zero marginal cost over 3400 on this population.** The 4 refusals are
+asks of $5.00-$5.72 — rescuing them is the 6800 rung, an owner economic call. PHASE 5's
+median ask $3.15 sits within a nickel of the handoff's $3.20 prediction. PHASE 3: 334
+self-funded crossings, 100.0% from reserve, $0.00 from withdrawable — item A's signature,
+second chain in a row. PHASE 8 re-confirms 40.4's negative (median $3.45 at cycle-out vs
+$25.00 T2). PHASE 9: item D still has zero instances in 895 seatings, cause never fired.
+⚠ PHASE 5's control row: chain pay landed at 86.8% of its BPS-expected value (pool lag is
+expected; chain pay "should land close") — not a wild miss, but note it; PHASE 7 itself
+reads member state directly and does not depend on that event sum.
 
 ---
 
