@@ -201,8 +201,18 @@ reason**. An out-of-gas rescue and a rescue that reverted for any other cause ar
 line in the log. On a community chain that reads as "members are not being rescued", which
 is also what an ordinary refusal looks like. **That is why this cannot be watched live.**
 
-⚠ **`minGasPerItem` IS 5,000,000** (`MatrixKeeper.sol:290`, owner decision 2026-08-18). Any
-older note testing against 3.5M is stale — do not carry that number into this phase.
+⛔ **CORRECTED 2026-08-25 (session 40) — THIS LINE WAS ITSELF THE STALE NUMBER IT WARNS
+ABOUT.** It read *"`minGasPerItem` IS 5,000,000 ... any older note testing against 3.5M is
+stale"*. **Read from source today: `minGasPerItem = 7_500_000` (`MatrixKeeper.sol:378`) and
+`maxItemsPerUpkeep = 1` (`:256`)**, both moved by 30.10 / 31.4 and both setter menus widened
+on 2026-08-22 (`setMinGasPerItem` gained 12.5M and 15M; `setMaxItemsPerUpkeep` gained 1 and 2).
+**Every PASS threshold written below in units of 5,000,000 predates that change.** The basis
+for 7.5M is 160 live per-item samples over 8 days: **p50 3.94M, p90 7.00M, max 14.67M, with
+8.1% of rescues above 7.5M** — so the floor is deliberately BELOW the worst observed item and
+the 12.5M/15M rungs exist for that reason.
+⚠ **THE LIVE V8.48 CHAIN IS A DIFFERENT WORLD AGAIN (handoff 39.0): `maxItemsPerUpkeep`
+reads 15 there and `minGasPerItem` is ABSENT FROM THAT BYTECODE ENTIRELY** — it postdates the
+2026-08-13 deploy. Say which deployment any gas figure is about, every time.
 
 **G.0** Deploy privately: PHASE 0 and PHASE 1 exactly as written, with `MATRIX_SIZE` 127
 and the frontend NOT repointed. Being off the frontend is what makes it private.
@@ -264,9 +274,13 @@ npx hardhat run scripts\testchain_keeper.js --network baseSepolia
 exiting on it). `ONE_ITEM=1` sends the FIRST discovered work item as its own transaction
 and leaves the rest for the next tick.
 
-⛔ *Why not `maxItemsPerUpkeep = 1`: **it is not on the menu.**
-`setMaxItemsPerUpkeep` accepts 5 | 10 | 15 | 20 | 30 | 40 and reverts on anything else, so
-the obvious way to price one item does not exist. But `performUpkeep` decodes its work list
+⛔ *Why drive one item per transaction rather than rely on the cap:* **the "not on the menu"
+reason this note used to give is OBSOLETE — corrected 2026-08-25. `setMaxItemsPerUpkeep` was
+widened on 2026-08-22 and now accepts **1 | 2 | 5 | 10 | 15 | 20 | 30 | 40**, and the source
+default IS 1. The method below is still the right one, for a better reason: it does not
+depend on what the cap happens to be set to on the chain under test, and 39.0 measured that
+source (1) and live V8.48 (15) disagree. Driving one item explicitly makes the basis certain.
+*`performUpkeep` decodes its work list
 straight from calldata and never checks that the list came from `checkUpkeep`, and the
 owner is always allowlisted — so the driver just sends one item.*
 
@@ -292,9 +306,17 @@ node scripts\diag_keeper_gas_live.js
 > The script prints its own verdict. It computes the marginal cost as *dearest single-rescue
 > batch − the fixed overhead*, where the overhead is read off the cheapest work type in the
 > same run rather than assumed.
-> **PASS:** marginal max **< 5,000,000** with visible headroom.
-> ⛔ **STOP:** marginal max ≥ 5,000,000. `minGasPerItem` is wrong and must move BEFORE the
-> community deploy. **This single number is the whole reason this phase exists.**
+> ✅ **G.3 IS CLOSED (handoff 30.12) — recorded as correct and final for that chain.** It was
+> closed by proving no cheap item can exist there (fixed overhead 0.03M, dearest single-item
+> SF-funded rescue 4.58M), not by pricing one. Kept here as the method, not as an open step.
+> **PASS: marginal max < `minGasPerItem` with visible headroom.**
+> ⛔ **THE LITERAL `5,000,000` THAT USED TO BE WRITTEN HERE IS SUPERSEDED** — the floor is
+> 7,500,000 today. ✅ **The INSTRUMENT was already right when this text was wrong:**
+> `diag_keeper_gas_live.js:153` computes `ok: marginalMax < minGasPerItem` by READING the
+> floor off the chain, so its verdict self-updates. Trust the script's verdict over any
+> number typed into this runbook — including the ones I have just typed.
+> ⛔ **STOP:** marginal max ≥ the floor the script read. `minGasPerItem` must move to the next
+> menu rung BEFORE the community deploy. **This single number is the whole reason this phase exists.**
 > ⚠ **"NO VERDICT" IS NOT A PASS.** If no single-item rescue was observed, or no cheap type
 > was seen to measure the overhead with, the script refuses to answer. Fill more and re-run.
 
@@ -308,14 +330,35 @@ then re-run `node scripts\diag_keeper_gas_live.js`.
 ⚠ `maxItemsPerUpkeep` should be at its normal value for this (20 in source, 15 on live —
 handoff 25.6). **Record which one this chain is running**; the halt behaviour depends on it.
 
-> **MEASUREMENT 2 — does `BatchGasHalted` fire, and at what batch size?**
-> **PASS:** it fires, `processed < total`, and `gasRemaining` sits just under 5,000,000 —
-> the guard stopping cleanly before an item it could not afford.
-> ⛔ **STOP:** any `WorkItemFailed` on `PARKED_RESCUE`. The event carries no reason, so an
-> out-of-gas item and an ordinary revert are indistinguishable — **every non-zero count
-> here must be explained before go-live, not waved through.**
-> ⚠ If `BatchGasHalted` never fires at all, the queue was never deep enough to reach the
-> guard. That is an unfinished measurement, not a pass.
+> **MEASUREMENT 2 — REWRITTEN 2026-08-25 (session 40). ⛔ DO NOT RE-RUN AGAINST THE OLD TEXT.**
+> The original PASS was *"`BatchGasHalted` fires, `processed < total`, `gasRemaining` just
+> under 5,000,000"*. That was written for a **5M floor at cap 20**. At **7.5M floor and cap 1**
+> there is no in-batch halt left to observe — one item receives the whole budget — so the old
+> criterion cannot be satisfied by a healthy system and cannot be failed by a sick one.
+> **A criterion that no outcome can move is not a gate.** (Same shape as 31.1's constant and
+> 31.2's scenario: both printed green while checking a world that no longer existed.)
+>
+> **THE QUESTION IS NOW: at cap 1, does a deep queue drain cleanly, and is 7.5M the right rung?**
+> **PASS — all four:**
+>   1. Every tick processes **exactly one** item (`processed == 1`, `total > 1`) — which also
+>      confirms on chain which cap the chain under test is actually running (39.0: source 1,
+>      live V8.48 15; assume neither, read it).
+>   2. **ZERO `WorkItemFailed` on `PARKED_RESCUE`.** Unchanged, and now the PRIMARY signal
+>      rather than a side condition.
+>   3. `BatchGasHalted` count is **expected 0** at cap 1. If it DOES fire, the item was
+>      dispatched with under 7.5M left, which at cap 1 means the DRIVER's gas limit is too
+>      low — a driver finding, not a contract one. `testchain_keeper.js` uses an estimateGas
+>      ladder rather than a static limit, so read the limit off the run; do not assume 16.5M.
+>   4. Observed per-item **max** stays inside the driver's limit less the fixed overhead, and
+>      the distribution is reported next to the 160-sample live baseline (p50 3.94M, p90 7.00M,
+>      max 14.67M). **This is the real content of the measurement now.**
+> ⛔ **STOP:** any `WorkItemFailed` on `PARKED_RESCUE` — the event carries no reason, so an
+> out-of-gas item and an ordinary revert are indistinguishable, and every non-zero count must
+> be explained before go-live, not waved through. Also STOP if the per-item max at 127 exceeds
+> the 14.67M live baseline materially: 7.5M would then be under-floored for this size and the
+> menu's 12.5M / 15M rungs exist for exactly that move.
+> ⚠ **UNVERIFIED — this rewritten criterion has not itself been run.** It is a criterion, not
+> a result. The first run to use it should say so and record whether it discriminates.
 
 **G.5**
 ```powershell
@@ -348,6 +391,11 @@ hold" is a hypothesis and rule 2 applies.**
 ⚠ Note the live V8.48 chain runs `insolvencyFloorBps` **3400** while source ships 5,000
 (handoff 25.6). The private V8.50 deploy will come up at **5,000**. They are not the same
 world; do not compare a private figure against a V8.48 one without saying so.
+⛔ **AND DO NOT "FIX" THAT DIVERGENCE (handoff 39.1).** 5000 is the DECIDED V8.50 value
+(owner 2026-08-19, re-confirmed by 16.5 / 17.0 / 19). Live 3400 is a chain that PREDATES the
+decision, not a policy the deploy is about to violate. Session 38 concluded the opposite and
+prescribed writing 3400 into `deploy_v8.js`; that would have overturned a decision confirmed
+three times, on the dial that decides who is allowed to borrow. The DRIFT row is CORRECT.
 
 **G.8 RUN THE FRONTEND ABI AUDIT BEFORE THE ADDRESSES CHANGE:**
 ```powershell
@@ -358,6 +406,44 @@ node scripts\audit_frontend_abi.js
 Two failure modes it exists for: **MISSING** (the frontend calls something V8.50 does not
 have — breaks on deploy, loud) and **SHAPE DRIFT** (selector matches, OUTPUTS differ — the
 call succeeds and decodes to the WRONG VALUE, silent).
+
+> ✅ **RUN 2026-08-25 (session 40) — FIRST TIME EVER AGAINST V8.50. IT FAILED, 7 PROBLEMS,
+> WHICH IS WHY IT EXISTS. NOW AT 1, AND 1 IS THE PASS.**
+> **PASS CONDITION FROM HERE: exactly one MISSING row — `distributeInterval()` in index.html —
+> and SHAPE DRIFT 0.** Anything else is new and must be triaged before the cutover.
+> That one row is a WAIVER, marked in place at the call site: it is the pre-V8.48 fallback,
+> guarded by `.catch(() => null)`, deliberately kept while this app serves a LIVE chain.
+> **Remove it AT the cutover, not before** — and re-run G.8 once more after removing it.
+>
+> ⛔ **WHAT THE FIRST RUN CAUGHT, AND ONLY ONE OF THE SEVEN WAS REAL.** Triage each row to its
+> CALL SITE before believing the count — three of the seven came from one dead file.
+>   * ⛔ **`getFloorPrice()` in liquidity.html — THE REAL ONE, AND NOT A V8.50 PROBLEM AT ALL.**
+>     `git log -S 'getFloorPrice' -- contracts/` returns NOTHING: that name has never existed
+>     in any version. The call sat inside `catch (_) { set('amm-vs-floor',''); }`, so the
+>     "vs bonding floor" line has been silently blank on every page load since it was written.
+>     Real getter is `floorPriceE6()`; it returns `treasury.floorPrice()`, 6-dec USDC per full
+>     CNOVA, so the existing `/1e6` was already correct — only the NAME was wrong. Fixed, and
+>     the catch now logs its reason. **Found by the gate, not by a member. This is the return.**
+>   * ⚠ **The two SHAPE DRIFT rows were BENIGN, and that was MEASURED, not assumed.**
+>     `MATRIX_ABI`'s `getMember` declared 9 fields against V8's 10 (`crossingReserve`, a V8.31
+>     field — so this predates V8.48 and is what the live site runs on today). Encoding a
+>     10-field tuple and decoding it with the 9-field ABI in ethers v6 **decodes cleanly with
+>     all nine values correct**: identical field order, trailing word discarded. No site read
+>     `crossingReserve` off `getMember` — every one uses `crossingReserveOf`. Widened anyway.
+>     ⚠ The tool also compares against DEAD contracts (`CryptoNovaMatrixV6`,
+>     `FigureEightMatrix`) the frontend never talks to, which inflates a drift row.
+>   * `hasEverJoined`, `topUpAndCross` and one drift row were all in **`api/rescue.js`, a dead
+>     V8.29 endpoint nothing fetches** — deleted. `usdcBalance()` in buy.html and
+>     `distributeInterval()` in governance.html were **declared and never called** — removed.
+>   * ⚠ **One of the three "unparsable" lines IS a real fragment**, not prose: `index.html`
+>     splits it across lines with `+`. Confirmed correct (the 10-field form). **Check all three
+>     every run** — the tool lists them rather than dropping them precisely for this.
+>   * ⛔ **A BULK VERSION-LABEL REPLACE HAD CORRUPTED PROSE COMMENTS.** `update_addrs_vX_XX.py`
+>     rewrote `V8.47` → `V8.48` inside COMMENTS, leaving a block reading "V8.48 replaces V8.48"
+>     that no reader could recover without git. Restored from `17b6c02`. **That script will do
+>     it again to whatever the comments say at the time — scope its replace to code and
+>     addresses, or diff its comment changes before committing.**
+> Commits: `250f9b9`, `23e8f3d` (testnet app, `admin`).
 
 ---
 
