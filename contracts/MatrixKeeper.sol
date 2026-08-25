@@ -185,8 +185,26 @@ contract MatrixKeeper is Ownable {
     ///         pending pool just grows.
     uint8 public constant WORK_ADVANCE_EPOCH = 9;
 
-    uint256 public velocityWindow      = 3_600;
-    uint256 public velocityThreshold   = 3;
+    /// @notice THE VELOCITY GATE — 14400 / 2, the owner decision of 2026-08-24 (36.7),
+    ///         applied and verified on the live V8.48 chain that same day
+    ///         (`setVelocityWindow(14400)` 0x089eab36…, `setVelocityThreshold(2)`
+    ///         0x78bb337a…). Together: 0.50 entries/hour required, 6.0x looser than the
+    ///         3600 / 3 these lines used to declare.
+    /// @dev    ⛔ THESE DEFAULTS WERE 3_600 AND 3 UNTIL 2026-08-25, AND THE DECISION THAT
+    ///         MOVED THEM WAS FOUR DAYS OLD BY THEN. `deploy_v8.js` does not set either
+    ///         one, so the source default IS what a fresh deploy ships — which means a
+    ///         V8.50 deploy would have silently reverted the owner's last open decision
+    ///         back to 3600 / 3, and nothing anywhere would have said a word. Found by
+    ///         `scripts/diag_param_drift.js` (session 39), which reads every governed
+    ///         parameter off the chain and diffs it against these declarations.
+    ///         Same shape as 38.2's loan clock. If a live setter changes behaviour,
+    ///         CHANGE THE SOURCE DEFAULT IN THE SAME SESSION.
+    /// @dev    ⛔ BOTH SETTERS ARE ENUMERATED — window 1800/3600/7200/14400, threshold
+    ///         1/2/3/5. Read the require() before naming a value; 36.7 records a
+    ///         recommendation of 86400 that would have reverted on chain in front of
+    ///         the owner.
+    uint256 public velocityWindow      = 14_400;
+    uint256 public velocityThreshold   = 2;
     uint256 public deflationThreshold  = 10;
     uint256 public recoveryThreshold   = 3;
     uint256 public idleSlotTimeout     = 259_200;   // V8.33: 3 days (was 43200 = 12h)

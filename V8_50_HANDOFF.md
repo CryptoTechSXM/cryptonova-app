@@ -10,7 +10,42 @@ owner-set, and the session that earned it got five things wrong by ignoring what
 
 ---
 
-# ⬛ SESSION 38 STATE — 2026-08-24, LATEST. READ THIS FIRST.
+# ⬛ SESSION 39 STATE — 2026-08-25, LATEST. READ THIS FIRST.
+# ⛔⛔ **38.6's PARAM 59 FINDING IS BACKWARDS, AND ACTING ON IT WOULD HAVE SHIPPED A
+#     REGRESSION (39.1).** 38.6 says *"a V8.50 deploy ships 5000 — not the owner's 3400"*
+#     and prescribes writing 3400 into `deploy_v8.js`. **The source default of 5000 IS the
+#     decided V8.50 value.** 6d (2026-08-18) asked whether to RAISE the LIVE chain 3400 ->
+#     5000, measured that it refuses the identical member, and answered "no change" — a
+#     decision about the live V8.48 chain. **The owner decision of 2026-08-19 then moved the
+#     source to 5000, and 16.5 (accepted 08-20), 17.0 and session 19 each re-confirmed it.
+#     Three times.** 25.6 had ALREADY recorded this exact divergence as expected: *"V8.48 was
+#     deployed 2026-08-13, six days before PARAM 59 moved; nobody set it on the live chain."*
+#     Live 3400 is a chain that predates the decision. **NOTHING TO FIX. DO NOT TOUCH IT.**
+# ⛔⛔ **AND IT IS NOT TWO PARAMETERS, IT IS A CLASS OF 28 (39.0).** New instrument
+#     `scripts/diag_param_drift.js` reads EVERY governed parameter off the chain and diffs it
+#     against the source declaration and against what the deploy sets. **28 governed
+#     parameters. `deploy_v8.js` sets TWO** — both added by 38.2 yesterday. **For the other
+#     26 the SOURCE DEFAULT IS WHAT SHIPS.**
+# ✅✅ **THE REAL DEFECT WAS THE VELOCITY GATE, AND IT IS FIXED (39.1).** 36.7's owner
+#     decision — `velocityWindow` 14400, `velocityThreshold` 2, applied and verified on chain
+#     2026-08-24 — was never written back to the source. Source still declared 3600 / 3 and
+#     the deploy sets neither, **so a V8.50 deploy would have silently reverted the owner's
+#     LAST OPEN DECISION.** Defaults moved to 14400 / 2 with two new predeploy assertions.
+#     **147/147 predeploy · 59/59 KeeperScan + Governance · drift now 2, both deliberate.**
+# ⚪ **FOUR PARAMETERS ARE ABSENT FROM THE LIVE BYTECODE AND THAT IS CORRECT (39.0).**
+#     `baseAdvanceBps`, `crossingBufferBps`, `minGasPerItem`, `evictionGracePeriod` all
+#     postdate the V8.48 deploy of 2026-08-13 (dated from git: 2026-08-15, -15, -17, -21).
+#     `index.html:9976` had independently recorded the same absence from the frontend side.
+#     **The instrument proves absence from the 4-byte selector in `getCode`, not from a
+#     revert — a missing function and a reverting function are identical over RPC and mean
+#     opposite things. That is G.8's MISSING check in miniature.**
+# ⛔ **31.4's GAS FIX IS NOT ON THE LIVE CHAIN (39.0).** `maxItemsPerUpkeep` reads **15**;
+#     source says 1 and `minGasPerItem` is not in that bytecode at all. Nothing is currently
+#     failing (38.5 found the queue clean) — but **defect 5 recorded 15 -> 5 as MEASURED on
+#     2026-08-17 and the chain says 15.** Either it never landed or it was reverted. Open.
+# ▶ **WHAT IS LEFT: PHASE G, and the chain. Both still exactly where 38.6 left them.**
+
+# ⬛ SESSION 38 STATE — 2026-08-24. Superseded on PARAM 59 by SESSION 39 above.
 # ✅✅ **THE COMMUNITY POST IS WRITTEN, APPROVED AND SENT (38.1). 37.6 item 3 IS CLOSED.**
 #     Owner: *"the post is good sent it out."* It carries the three things 37.6 required —
 #     the approval is the ENTRY FEE while only the shortfall is taken, leftover approval is
@@ -111,6 +146,116 @@ owner-set, and the session that earned it got five things wrong by ignoring what
 # ⛔ **THE TWO `getParkedMember` OUT-OF-BOUNDS PANICS WERE A RACE, NOT A BUG (36.2).**
 #     The keeper drains the queue every 2-4s while a sweep takes minutes. Every read is
 #     now pinned to ONE BLOCK. Run 1's census was a smear; run 2's is a snapshot.
+
+## 39.0 ⛔⛔ THE PARAMETER CLASS — 28 GOVERNED, THE DEPLOY SETS 2, AND NOBODY HAD COUNTED
+
+38.2 found `parkedGracePeriod` carrying three values for one behaviour. Eight hours later 38.6
+found `insolvencyFloorBps` in what looked like the same shape. **Two found by accident in one
+day is not two bugs, it is a class — and the response to a class is an instrument, not a third
+fix.** RULE 2: build the instrument before the fix.
+
+`scripts/diag_param_drift.js` (new, read-only, no key). It re-parses `contracts/*.sol` for the
+declared defaults and `deploy_v8.js` for the setter calls **at every run**, so there is no
+table inside it to go stale — a hardcoded parameter list is the very defect being measured.
+
+    28 governed parameters (a source default AND a setter)
+      set by deploy_v8.js .................  2   <- both added by 38.2, yesterday
+      SOURCE DEFAULT IS WHAT SHIPS ........ 26
+
+    Run 2026-08-25T01:08Z, block 45925900, deployed_addresses_v8_48.json, PROBLEMS: 0
+      DRIFT   insolvencyFloorBps  src 5000   live 3400    <- CORRECT AS IS, see 39.1
+      DRIFT   maxItemsPerUpkeep   src 1      live 15      <- CORRECT AS IS, see below
+      ABSENT  baseAdvanceBps, crossingBufferBps, minGasPerItem, evictionGracePeriod
+      MATCH   the remaining 22
+
+⛔ **THE INSTRUMENT REFUSES TO SAY WHICH SIDE IS RIGHT, AND THAT IS DELIBERATE.** The obvious
+rule — *"make the deploy match the chain"* — is WRONG half the time here, and following it
+would have undone 31.4's gas fix. Sometimes LIVE is the decided policy and the source is stale
+(velocity gate). Sometimes SOURCE is the decided value and LIVE is a chain that never received
+the change (`maxItemsPerUpkeep`). **Read the commit that introduced each side before writing
+either into the deploy script.** The script prints that warning above its own findings.
+
+✅ **ABSENCE IS PROVED, NOT INFERRED — AND THIS IS G.8's CHECK IN MINIATURE.** A getter missing
+from the deployed bytecode and a getter that reverts are **identical over JSON-RPC and mean
+opposite things.** The first run called all four PROBLEMS. The fix: compute each getter's
+4-byte selector and look for it in `getCode`. All four postdate the V8.48 deploy —
+
+      crossingBufferBps    7d41fcc  2026-08-15  V8.49 item 1b
+      evictionGracePeriod  b14eba7  2026-08-15  V8.49 item 1
+      minGasPerItem        30f9c05  2026-08-17  V8.50 defect 8
+      baseAdvanceBps       a460adc  2026-08-21  V8.50 sponsorship gate
+
+  — and `index.html:9976` had **already recorded the same absence independently**, from the
+  frontend side, before this script existed: *"evictionGracePeriod ABSENT, extendedIdleTimeout
+  EXISTS = 604800, 4/4 controls green."* Two instruments, opposite ends, same answer.
+  ⛔ **Against a deployment that SHOULD carry them, an ABSENT row is the G.8 MISSING failure
+  and must stop the cutover.** The selftest plants one MATCH, one DRIFT and one ABSENT, so the
+  instrument has been shown able to print all three verdicts rather than only the clean one.
+
+⛔ **31.4's GAS FIX IS NOT ON THE LIVE CHAIN, AND THE RECORD DISAGREES WITH THE CHAIN.** Live
+`maxItemsPerUpkeep` is **15**; source is 1 (31.4) and `minGasPerItem` is absent entirely. So
+the keeper serving the 393 parked members runs batches of up to 15 **with no gas floor** — the
+configuration defect 8 was built for. **Nothing is currently failing**; 38.5 found the queue
+clean. But **defect 5 recorded `maxItemsPerUpkeep` 15 -> 5 as MEASURED on 2026-08-17** and the
+chain reads 15. Either that setter call never landed or it was reverted. **NOT ESTABLISHED —
+one chain read closes it, and it is worth one read before any deploy work.**
+
+⚠ **A STALE MENU IN THIS FILE NEARLY COST THE FIX.** Section 6c says `setMaxItemsPerUpkeep` is
+enumerated **5/10/15/20/30/40**, which would make the source default of 1 unreachable. The
+setter now reads **1/2/5/10/15/20/30/40** — widened, with its own comment: *"a menu whose
+minimum is above the safe value is not a dial, it is a constraint."* **36.7's standing rule
+saved it: READ THE SETTER'S require() BEFORE NAMING A VALUE.** All four target values were
+checked against their require() before a line was written.
+
+## 39.1 ✅ THE VELOCITY GATE DEFAULTS — THE ONE REAL DEFECT, FIXED. AND PARAM 59 IS NOT ONE.
+
+⛔⛔ **FIRST, THE CORRECTION, BECAUSE 38.6 IS WRONG IN THE DIRECTION THAT COSTS MONEY.**
+38.6 concludes: *"A V8.50 deploy run today ships 5000 — not the owner's 3400 ... Fix it the
+way 38.2 fixed the loan clock."* **Do not.** 38.6 flagged its own gap honestly — *"whether
+6d's decision was about the live chain or about what V8.50 ships with is NOT ESTABLISHED — I
+did not read 6d"* — and 6d is the whole answer:
+
+    6d, 2026-08-18   THE QUESTION WAS WHETHER TO RAISE THE LIVE CHAIN 3400 -> 5000.
+                     Measured on live V8.48, 40 MatB parkers: 3400 refuses 1 of 40,
+                     5000 refuses 1 — THE SAME MEMBER. So: no change, stays 3400.
+                     ⛔ THAT IS A DECISION ABOUT THE LIVE V8.48 CHAIN.
+    2026-08-19       Owner decision moves the SOURCE default to 5000.
+    16.5 / 17.0 / 19 "PARAM 59 stays at 5000" — re-confirmed THREE TIMES, on the A/B
+                     basis, accepted 2026-08-20.
+    25.6             Already recorded the divergence AND why it is expected: "V8.48 was
+                     deployed 2026-08-13, six days before PARAM 59 moved; nobody set it
+                     on the live chain, and the A/B runs 5000. They are not the same world."
+    13.11            "Tonight's chain is the wrong basis for setting the floor."
+
+**Live 3400 is a chain that predates the decision, not a policy the deploy is about to
+violate.** Writing 3400 into `deploy_v8.js` would have overturned a decision confirmed three
+times, on the dial that decides who can borrow. **NOTHING TO FIX. `insolvencyFloorBps` stays
+5000 in source, and its DRIFT row is expected and correct.**
+
+✅ **WHAT WAS ACTUALLY BROKEN: `velocityWindow` AND `velocityThreshold`.** 36.7 settled these
+on 2026-08-24 — 3600 -> **14400**, 3 -> **2**, 6.0x looser — applied them on chain and verified
+them there, and called it **the last open owner decision**. The source kept declaring 3600 / 3,
+and `deploy_v8.js` sets neither. **A V8.50 deploy would have shipped 3600 / 3 and silently
+reverted that decision, exactly as 38.2's loan clock would have shipped the testnet window.**
+
+  1. **`MatrixKeeper.sol` defaults -> `14_400` / `2`**, with the old values, the two setter
+     transaction hashes, and the reason quoted in place so nobody re-derives them.
+  2. **`predeploy_check.js` asserts both declared defaults** — 38.2's item 4 pattern. The
+     failure messages carry 36.7's reasoning, including *why 2 and not the loosest value 1*:
+     threshold 1 auto-promotes members INTO a thin high tier, where 36.5 measured the largest
+     shortfalls in the system (T3 $20.70, T4 $44.80), so an over-open gate is the MORE
+     expensive error.
+
+**VERIFIED 2026-08-25:** `npx hardhat compile` clean · **predeploy 147/147** (145 + the two new
+assertions, both firing) · `V8_48_KeeperScan` + `V8Governance` **59 passing** · re-run of
+`diag_param_drift.js` shows both parameters **MATCH**, leaving 2 DRIFT rows, both deliberate
+and both documented above. **Nothing on chain changed** — live was already 14400 / 2.
+
+⛔ **THE RULE THIS EARNS, EXTENDING 38.2's.** 38.2 said: when the value differs BY NETWORK, the
+deploy must derive it and refuse the wrong one. **39 adds: when a live setter call implements
+an owner decision, the SOURCE DEFAULT MOVES IN THE SAME SESSION — because `deploy_v8.js` sets
+2 of 28 parameters, so for 26 of them the declaration is not documentation, it is the shipping
+value.** And the check for that is now mechanical: run `diag_param_drift.js`.
 
 ## 38.0 STATE — WHAT SHIPPED
 
@@ -402,6 +547,14 @@ carried 36's phrasing forward on top of the newer meaning.**
                                                 disk answers it and the answer is bad.
     8  directCount gate still inert             BOUNDED YES — see below.
     9  what "community deploy" meant            NO CHECKLIST. See the headline above.
+
+⛔⛔ **Q7 — ⚠⚠ THIS WHOLE SUBSECTION IS REFUTED BY 39.1. READ 39.1 FIRST.** The disk figures
+below are accurate; **the conclusion drawn from them is backwards.** 5000 is the DECIDED V8.50
+value (owner 2026-08-19, re-confirmed by 16.5 / 17.0 / 19, and 25.6 already recorded the live
+3400 as an expected pre-decision leftover). The prescription below — *"deploy_v8.js sets it
+explicitly"* at 3400 — **would have overturned a decision confirmed three times.** It is left
+here unedited because the reasoning is instructive and because 38.6 flagged its own gap
+correctly: it had not read 6d, and 6d is the whole answer. **Original text follows.**
 
 ⛔⛔ **Q7 IS THE 38.2 DEFECT AGAIN, ON THE PARAMETER THAT DECIDES WHO CAN BORROW. CHECKED ON
 DISK 2026-08-25 — THIS PART IS NOT FROM MEMORY.**

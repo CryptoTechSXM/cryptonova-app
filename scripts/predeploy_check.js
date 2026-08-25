@@ -498,6 +498,25 @@ if (mkText) {
     fail("parkedGracePeriod declared default is not 24h. This is the LOAN clock - how long a member has to fund their own re-entry before the SF lends them the gap and books a debt. Owner policy 2026-08-24: mainnet 48h, testnet 24h, anything shorter was expedited testing only.");
   }
 
+  // ── THE VELOCITY GATE defaults, 2026-08-25 ────────────────────────────────
+  // 36.7 settled these on 2026-08-24 and applied them to the live chain, but the
+  // source kept declaring 3600 / 3 and deploy_v8.js sets NEITHER - so a fresh
+  // deploy would have shipped the pre-decision values and silently reverted the
+  // owner's last open decision. Found by scripts/diag_param_drift.js, which reads
+  // all 28 governed parameters off the chain and diffs them against these
+  // declarations. Both setters are ENUMERATED: window 1800/3600/7200/14400,
+  // threshold 1/2/3/5 - so a typo here cannot be rescued by a setter call later.
+  if (/uint256\s+public\s+velocityWindow\s*=\s*14_?400\s*;/.test(mkText)) {
+    ok("velocityWindow declared default is 14400s (owner decision 36.7, 2026-08-24, applied on chain)");
+  } else {
+    fail("velocityWindow declared default is not 14400. This is the deflation throttle's window - with velocityThreshold it sets how many entries per hour a tier must see before auto-upgrades are gated. Owner decision 2026-08-24: 14400 / 2 = 0.50 entries/hour, 6.0x looser than the 3600 / 3 it replaced.");
+  }
+  if (/uint256\s+public\s+velocityThreshold\s*=\s*2\s*;/.test(mkText)) {
+    ok("velocityThreshold declared default is 2 (owner decision 36.7, 2026-08-24, applied on chain)");
+  } else {
+    fail("velocityThreshold declared default is not 2. 36.7 chose 2 over the loosest value 1 deliberately: threshold 1 auto-promotes members INTO a thin high tier, where 36.5 measured the largest crossing shortfalls in the system (T3 $20.70, T4 $44.80), so an over-open gate is the MORE expensive error.");
+  }
+
   // ── THE RECONCILIATION, and the check that matters most in this block ─────
   // Before V8.49 discovery gated on parkedGracePeriod (24h) and execution gated on
   // extendedIdleTimeout (7d). Nothing failed: work items were queued and silently
