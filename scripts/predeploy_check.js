@@ -498,6 +498,21 @@ if (mkText) {
     fail("parkedGracePeriod declared default is not 24h. This is the LOAN clock - how long a member has to fund their own re-entry before the SF lends them the gap and books a debt. Owner policy 2026-08-24: mainnet 48h, testnet 24h, anything shorter was expedited testing only.");
   }
 
+  // ── CNOVATreasury.setCommunityWallet, 2026-08-25 ──────────────────────────
+  // The sixth CommunityWallet wiring. It was missing from deploy_v8.js from V8.48
+  // through 2026-08-25, so treasury.communityWallet read address(0) on the live chain
+  // and EVERY redeemAtFloor by a member who owed an early-exit penalty reverted with
+  // ERC20InvalidReceiver(0) - a USDC transfer to the zero address. A 0-bps member
+  // skipped the branch and redeemed fine, which is why it presented as an intermittent
+  // frontend error for weeks instead of a reproducible bug.
+  // ⛔ Assert the DEPLOY CALL, not the contract's setter: the setter always existed.
+  // What was missing was anybody calling it.
+  if (/treasury\s*\.\s*setCommunityWallet\s*\(/.test(deployText)) {
+    ok("deploy_v8.js calls treasury.setCommunityWallet - the early-exit penalty payout path is wired");
+  } else {
+    fail("deploy_v8.js does NOT call treasury.setCommunityWallet. CNOVATreasury.redeemAtFloor pays 20% of the early-exit penalty to communityWallet; unset, that is a transfer to address(0) and every redemption by a member who owes a penalty REVERTS. This shipped broken on V8.48 and was found on 2026-08-25 by scripts/diag_redeem_revert.js.");
+  }
+
   // ── THE VELOCITY GATE defaults, 2026-08-25 ────────────────────────────────
   // 36.7 settled these on 2026-08-24 and applied them to the live chain, but the
   // source kept declaring 3600 / 3 and deploy_v8.js sets NEITHER - so a fresh

@@ -58,6 +58,16 @@ owner-set, and the session that earned it got five things wrong by ignoring what
 #     100-address copy (canonical is 110) and defaulted to a DEAD `v8_45` addresses file —
 #     on a script that transfers real USDC. Both fixed, stale copy deleted, Keepers
 #     `dc11aad`. ⛔ The droplet path is UNVERIFIED: pass `LIST=` explicitly there.
+# ⛔⛔ **A LIVE MEMBER-FACING BUG, FOUND FROM A SCREENSHOT AND FIXED ON CHAIN (39.5).**
+#     `CNOVATreasury.communityWallet` was **address(0) since the V8.48 deploy**, so every
+#     CNOVA redemption by a member who OWED AN EARLY-EXIT PENALTY reverted with
+#     `ERC20InvalidReceiver(0)` — a USDC transfer to the zero address. **The deploy wires
+#     the CommunityWallet into SIX contracts and made FIVE calls.** 0-bps members were
+#     never affected, which is why twelve days of it read as an intermittent frontend
+#     error. Fixed on chain (tx `0x7a86fb57…`, block 45927566) and in `deploy_v8.js`,
+#     with a predeploy assertion on the CALL. ⛔ My own read-back then raised a FALSE
+#     ALARM on the successful fix by re-reading before the node caught up — a lesson this
+#     repo already carried and this script had not applied.
 # ▶ **WHAT IS LEFT: PHASE G, and the chain. Both still exactly where 38.6 left them.**
 
 # ⬛ SESSION 38 STATE — 2026-08-24. Superseded on PARAM 59 by SESSION 39 above.
@@ -422,6 +432,70 @@ this session could not reach would have been a worse defect than the one being f
 ▶ **STILL OUTSTANDING, from 37.5: `CryptoNova-Keepers/mint_usdc.js` carries its own hardcoded
 wallet array — a FIFTH list** — and takes a hardcoded 2500 USDC to a hardcoded set with no
 per-address amount. Migrate it with the others; it was not touched tonight.
+
+## 39.5 ⛔⛔ A LIVE MEMBER-FACING BUG, FOUND FROM ONE SCREENSHOT AND FIXED ON CHAIN
+
+Owner, 2026-08-25, with a screenshot: the dashboard's CNOVA redeem approves, then the redeem
+fails with the frontend's generic *"Transaction failed on-chain."* **It was not the wallet and
+not the RPC. `CNOVATreasury.communityWallet` was `address(0)` on the live chain, and it had
+been since V8.48 deployed on 2026-08-13.**
+
+    redeemAtFloor (CNOVATreasury.sol:288), inside `if (penalty > 0)`:
+        usdc.safeTransfer(communityWallet, toCW);      <- 20% of the early-exit penalty
+
+    communityWallet unset  ->  a USDC transfer to address(0)
+                           ->  ERC20InvalidReceiver(0)  ->  THE WHOLE REDEMPTION REVERTS
+
+⛔ **THE DEPLOY WIRES THE COMMUNITY WALLET INTO SIX CONTRACTS AND MADE FIVE CALLS.**
+`deploy_v8.js` set it on TierRouter, StabilityFund, both matrices and MatrixKeeper — and never
+on CNOVATreasury. `CNOVATreasury.setCommunityWallet` has existed all along; **nothing ever
+called it, and nothing anywhere checked.** Third instance tonight of one shape: a value the
+deploy is responsible for, with no mechanism confirming it was set.
+
+⚠ **WHY IT SURVIVED TWELVE DAYS — IT ONLY BITES MEMBERS WHO OWE A PENALTY.** A fully-vested
+member at 0 bps skips the branch entirely and redeems normally. So it presented as an
+INTERMITTENT generic frontend error, not a reproducible bug, and landed in the
+"Transaction failed on-chain" report class that has been SUSPECTED-and-never-measured with
+the wallet's public RPC as its standing prime suspect. **That suspect was wrong here.**
+
+⚠ **AND THE DEPLOY PRINTED `"CommunityWallet fully wired into SF + all matrices"` WHILE THE
+CALL DID NOT EXIST.** A console.log is not a check. Corrected to say what it actually does.
+
+✅ **MEASURED, NOT REASONED.** New `scripts/diag_redeem_revert.js` (read-only, no key) reads
+every precondition, reproduces the contract's own arithmetic, then `eth_call`s the real
+function AS THE MEMBER so the chain produces the revert. First run returned raw
+`0xec442f05…0000` — **a custom error, not a string, which is why the six `require` messages
+all passed while the call still failed.** `0xec442f05` is OZ's `ERC20InvalidReceiver(address)`
+and its argument was the zero address. The script now decodes the OZ ERC20 selectors by name.
+⚠ Ruled out before building it, so nobody re-opens it: **vesting is NOT the cause.**
+`CNOVAToken._update` skips its lock guard when `to == address(0)`, and a redemption burns.
+
+✅ **FIXED ON CHAIN 2026-08-25** — `scripts/set_treasury_community_wallet.js` (read-only
+unless `ARM=1`), tx `0x7a86fb578cd97b30920afc6aebabc2695cb295127d735248e0000d1c16ee71f3`,
+block **45927566**, status 1. `treasury.communityWallet` now reads
+`0xC786dbA720C04784d66F38AcCE6b2143e6C78bfF`, and `diag_redeem_revert.js` re-run confirms
+**all preconditions PASS and the call SUCCEEDS.** Nothing else changed — no rate, no fee, no
+balance.
+
+✅ **AND THE SOURCE FIX SO V8.50 CANNOT REPEAT IT:** `deploy_v8.js` now makes the sixth call,
+and `predeploy_check.js` asserts **the deploy CALLS it** — not that the setter exists, which
+it always did. What was missing was the caller, so the caller is what gets checked.
+
+⛔⛔ **AND MY OWN VERIFICATION RAISED A FALSE ALARM ON A TRANSACTION THAT WORKED.** The setter
+script re-read the value immediately after `tx.wait()`, hit a node that had not caught up to
+the block it had just mined, got the OLD value and printed **"READ-BACK MISMATCH — stop and
+investigate before telling anybody this is fixed"** about a completely successful fix.
+**The repo already carried this exact lesson** — an earlier instrument was made to retry 6x
+over 12s because *"ONE READ IS NOT A MEASUREMENT against an RPC that can serve stale state, in
+EITHER direction"* — **and this script did not apply it.** Now fixed: the read-back retries
+6x over ~10s AND is pinned to the mined block (36.2's rule), so a lagging node errors instead
+of quietly answering about an earlier block. **A false alarm on a live fix costs the same
+trust as a missed failure, and this one invited re-sending a transaction that had landed.**
+
+▶ **CARRIED, NOT DONE:** `CNOVATreasury.setCommunityWallet`'s docstring reads *"Set the Tier-1
+V3 matrix used by setFreeMode()"* — a copy-paste from `setTier1Matrix`. Not claimed as the
+cause of the miss, but anyone auditing which setters a deploy must call would read straight
+past it. Comment-only fix; do it with the next contract touch.
 
 ## 38.0 STATE — WHAT SHIPPED
 

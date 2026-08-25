@@ -832,10 +832,30 @@ async function main() {
     await (await mB.setCommunityWallet(cwAddr)).wait();
     console.log(`  ↳  T${tierNum} MatA + MatB → CommunityWallet set`);
   }
-  console.log("  ↳  CommunityWallet fully wired into SF + all matrices");
+  console.log("  ↳  CommunityWallet wired into TierRouter + SF + all matrices (Treasury below)");
 
   await (await keeper.setCommunityWallet(cwAddr)).wait();
   console.log(`  ↳  MatrixKeeper.setCommunityWallet OK`);
+
+  // ⛔⛔ THE SIXTH WIRING, MISSING UNTIL 2026-08-25 AND IT BROKE A MEMBER-FACING ACTION.
+  //
+  //    CNOVATreasury.redeemAtFloor pays 20% of the early-exit penalty to communityWallet
+  //    (CNOVATreasury.sol:288, inside `if (penalty > 0)`). This deploy wired the
+  //    CommunityWallet into TierRouter, StabilityFund, every matrix and MatrixKeeper —
+  //    FIVE calls — and never into the Treasury. So on live V8.48 that address read
+  //    address(0), and every redemption BY A MEMBER WHO OWED A PENALTY reverted with
+  //    ERC20InvalidReceiver(0): a USDC transfer to the zero address.
+  //
+  //    ⚠ WHY IT SURVIVED SINCE V8.48 WENT LIVE: a fully-vested member at 0 bps skips the
+  //    penalty branch entirely and redeems fine. Only members still inside the vesting
+  //    window hit it, so it presented as the frontend's intermittent generic
+  //    "Transaction failed on-chain" rather than as a reproducible bug. Measured with
+  //    `scripts/diag_redeem_revert.js` against the owner's own wallet, 2026-08-25.
+  //
+  //    ⚠ AND THE LOG LINE BELOW USED TO READ "fully wired into SF + all matrices" while
+  //    this call did not exist. A console.log is not a check.
+  await (await treasury.setCommunityWallet(cwAddr)).wait();
+  console.log(`  ↳  CNOVATreasury.setCommunityWallet OK  (penalty payout path)`);
 
   // ── 9d. CNOVADirectSale ──────────────────────────────────────────────────
   sep("CNOVADirectSale");
