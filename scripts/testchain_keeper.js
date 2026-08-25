@@ -167,6 +167,11 @@ async function main() {
   const allowed   = await keeper.upkeepCaller(deployer.address);
   const isOwner   = owner.toLowerCase() === deployer.address.toLowerCase();
 
+  // 41.2: the gas FLOOR, read off the chain once — the ladder below needs it to tell
+  // "the estimate priced the work" from "the estimate priced the HALT" without a human
+  // remembering to set GAS_LIMIT. Never assume 5M or 7.5M; 40.3 is what assuming cost.
+  const minGas    = await keeper.minGasPerItem();
+
   console.log("");
   console.log(`  addresses file : ${path.basename(ADDRESSES_FILE)}`);
   console.log(`  MatrixKeeper   : ${keeperAddr}`);
@@ -174,6 +179,7 @@ async function main() {
   console.log(`  keeper owner() : ${owner}`);
   console.log(`  signer is owner: ${isOwner}`);
   console.log(`  upkeepCaller   : ${allowed}`);
+  console.log(`  minGasPerItem  : ${minGas} (read off THIS chain — the ladder's halt-vs-work line)`);
   console.log(`  interval       : ${INTERVAL_SECS}s   max ticks: ${MAX_TICKS || "unlimited"}`);
   console.log(`  csv            : ${CSV_PATH}`);
 
@@ -307,12 +313,37 @@ async function main() {
     //     queue exactly as it found it. Observed: 60 consecutive ticks, gasUsed 30000
     //     every time, status 1, rescued 0.
     //     Set GAS_LIMIT to something above minGasPerItem to price a real item.
+    // ⛔ 41.2: WITHOUT GAS_LIMIT SET, THE TRAP DOCUMENTED ABOVE WAS STILL LIVE. Session 41's
+    //    first G.4 run drove 120 ticks at gasUsed 30000 — the halt price — with ZERO work
+    //    done and zero on-chain events except BatchGasHalted, because this guard only
+    //    WARNED when GAS_LIMIT was already set (backwards: the person who set GAS_LIMIT
+    //    is the one who already knew). The floor is now enforced by DEFAULT: an estimate
+    //    below minGasPerItem (read off the chain at startup, never assumed) can only be
+    //    the halt path, so the send is floored at minGasPerItem + 2M dispatch overhead.
+    //    GAS_LIMIT still overrides everything, both directions.
     const FORCED = process.env.GAS_LIMIT ? BigInt(process.env.GAS_LIMIT) : null;
-    if (FORCED && est < 1_000_000n) {
-      console.log(`            ⚠ estimate ${est} is below 1M — that is the BatchGasHalted price, not the item's.`);
-      console.log(`              Sending GAS_LIMIT=${FORCED} instead so the batch can actually dispatch.`);
+    let ladder;
+    if (FORCED) {
+      if (est < minGas) {
+        console.log(`            ⚠ estimate ${est} < minGasPerItem ${minGas} — that is the BatchGasHalted price, not the item's.`);
+        console.log(`              Sending GAS_LIMIT=${FORCED} instead so the batch can actually dispatch.`);
+      }
+      ladder = [ FORCED ];
+    } else if (est < minGas) {
+      // ⛔ 41.2b: the floor is the full 16.5M DRIVER BUDGET (31.4), NOT minGasPerItem + margin.
+      //    First version of this fix floored at 9.5M; the same session then measured a real
+      //    13.86M PARKED_RESCUE (tick 93, CSV 2026-08-25 22:05:50). A 9.5M send passes the
+      //    7.5M pre-dispatch check, STARTS that item, and dies inside the try/catch as a
+      //    reasonless WorkItemFailed — the exact silent failure the floor exists to prevent.
+      //    An item that is allowed to start must be given the budget the worst observed item
+      //    needs (live baseline max 14.67M; this chain measured 13.86M).
+      const floored = 16_500_000n;
+      console.log(`            ⚠ estimate ${est} < minGasPerItem ${minGas} — the estimate priced the HALT, not the work.`);
+      console.log(`              Flooring the send at ${floored} (the 16.5M driver budget) so a dear item can FINISH. GAS_LIMIT overrides.`);
+      ladder = [ floored ];
+    } else {
+      ladder = [ (est * 115n) / 100n, (est * 105n) / 100n, est ];
     }
-    const ladder = FORCED ? [ FORCED ] : [ (est * 115n) / 100n, (est * 105n) / 100n, est ];
     let receipt = null, lastErr = null;
     for (const gasLimit of ladder) {
       try {

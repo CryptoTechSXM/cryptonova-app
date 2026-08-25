@@ -11,64 +11,131 @@ owner-set, and the session that earned it got five things wrong by ignoring what
 ---
 
 # ⬛ SESSION 41 STATE — 2026-08-25, LATEST. READ THIS FIRST.
-# ▶▶ **40.6 ITEM 1 IS DECIDED: REDEPLOY THE PRIVATE GATE CHAIN FROM CURRENT SOURCE (41.0).**
-#     Not executed yet — `G4_REDEPLOY_RUNSHEET.md` (new, repo root) is the exact sequence,
-#     instantiating PHASE 0/1 + G.PRE + G.0/G.1 with this session's parameters. **The new
-#     addresses file is `deployed_addresses_v8_50_private2.json` — the 08-21 chain and its
-#     file STAY as the measurement deployment** (G.3 closed, 40.4's G.5/G.7 economics).
-# ✅ **THE BASIS, verified against the repo this session (41.0):** HEAD `fd61223` (branch
-#     `v8.1`) carries cap **1** (MatrixKeeper.sol:256), floor **7,500,000** (:378), both
-#     menus widened; `5a07cab` is an ancestor. The waiver alternative would validate a
-#     configuration V8.50 will not ship ("wrong number in the harmless direction is not a
-#     control", 38.6) and would leave G.4's rewritten criterion UNVERIFIED forever. And the
-#     gap is WIDER than gas config: `2fe1f11` (loan clock enforced at deploy) and `6cef30e`
-#     (parameter class) also postdate the 08-21 chain. Working tree: the three modified
-#     files are whitespace-only (`git diff --ignore-all-space` is empty) — safe deploy basis.
-# ✅ **40.6 ITEM 2 IS BUILT: `scripts/g5_sf_ratio.js` (41.1)** computes the
-#     `selfFundedRescues / rescues` ratio G.5 actually asks for — one CoPayRescue scan,
-#     `sfShare == 0` = "the fund paid nothing", per-matrix + aggregate, money split,
-#     basis printed. Addresses file mandatory (no fifth hardcoded instrument), getLogs
-#     chunked at 9,000 with a bounded, REPORTED window (40.8's lesson).
-#     ⚠ **SYNTAX-CHECKED ONLY, NOT RUN — and 40.5 says exactly what that is worth.** The
-#     session had no RPC path. Its first run IS its runtime test; treat output accordingly.
-# ▶ **WHAT IS LEFT: the owner executes the runsheet (hours), then G.4 under the rewritten
-#     criterion (recording whether it discriminates — it is UNVERIFIED), then
-#     `g5_sf_ratio.js` with FROM_BLOCK pinned to the new chain's deploy block.**
+# ✅✅ **THE REDEPLOY IS DONE AND THE GATE IS SUBSTANTIALLY GREEN FOR THE FIRST TIME, ON A
+#     CHAIN THAT REPRESENTS WHAT V8.50 SHIPS: G.4 PASS, G.5 PASS, G.6 PASS — all measured
+#     today on `deployed_addresses_v8_50_private2.json` (deployed 14:48Z, cap 1 / 7.5M READ
+#     BACK off the chain, 300 registered, INTEGRITY OK).** With G.3 closed (30.12), G.7
+#     measured (40.4) and G.8 at its pass state, PHASE G's scoreboard is green except one
+#     optional re-confirmation. The 08-21 chain and its file STAY as the measurement
+#     deployment for the results recorded against them.
+# ⛔⛔ **THE FIRST G.4 RUN WAS VOID, AND THE REWRITTEN CRITERION CAUGHT IT — WHICH IS THE
+#     CRITERION WORKING (41.2).** 120 ticks, every one `VELOCITY`, gasUsed 30,000, zero
+#     work: `eth_estimateGas` converges on the HALT price (the halt path succeeds), so the
+#     driver sent halt-sized budgets all run. **The driver's own 2026-08-22 comment
+#     documents this exact trap — but its guard only WARNED when `GAS_LIMIT` was already
+#     set, i.e. only to the person who already knew.** Proof on chain: 120 `BatchGasHalted`,
+#     `processed 0 of 1`, gasRemaining 0.08M. Zero WorkItemFailed, zero VelocityUpdated.
+# ⛔ **AND THE FIRST FIX WAS ITSELF WRONG IN THE DANGEROUS DIRECTION (41.2b).** Floor v1 was
+#     `minGasPerItem + 2M = 9.5M`; the same session then measured a real **13.86M** rescue
+#     (tick 93 — it survived only because that tick's estimate happened to come back real,
+#     sending ~15.9M). A 9.5M send passes the 7.5M pre-dispatch check, STARTS that item and
+#     dies inside the try/catch as a reasonless WorkItemFailed. **Floor is now the 16.5M
+#     driver budget (31.4), confirmed by a 30-tick run at 16.5M: 30/30 rescued, 0 reverts.**
+# ✅✅ **G.4 — PASS AT THE SHIPPING CONFIGURATION (41.2).** All four rewritten conditions
+#     measured: processed==1 every tick; **zero WorkItemFailed on PARKED_RESCUE (on-chain
+#     scan, not console)**; zero BatchGasHalted in the working runs; and the distribution,
+#     n=80 single-item rescues: **min 1.00M / median 4.58M / max 13.86M** against the live
+#     V8.48 baseline p50 3.94M / p90 7.00M / max 14.67M. Inside baseline; STOP not
+#     triggered. **The source's open question "V8.50 may be far cheaper at depth" is
+#     answered: NO — comparable to V8.48.** 7.5M floor + ≥16.5M budget stands.
+# ⛔⛔ **G.5'S CRITERION WAS WRONG A SECOND WAY, AND THE INSTRUMENT'S FIRST RUN CAUGHT IT
+#     (41.3): the keeper rescue path NEVER EMITS `CoPayRescue`.** v1 scanned it and found 0
+#     events against 110 known rescues — the event belongs to `coPayRescue()`, the VPS
+#     co-pay entry point, which nothing calls on a private chain. 40.4 wrote the PASS from
+#     the event DECLARATION, not the call path. **v2 joins `ParkedRescued` ⋈
+#     `RescueLoanIssued` BY TRANSACTION** (a rescue tx with no loan event = the fund paid
+#     nothing). Runbook G.5 corrected in place, second dated correction at that step today.
+# ✅✅ **G.5 — PASS, AT EXACTLY THE PROJECTION (41.3): T1 MatA 40 of 40 rescues self-funded,
+#     100.0%.** Item A's claim, measured on the shipping configuration. MatB 70/70
+#     fund-backed ($157.39 lent) is the DESIGN — full-fee crossings on a `-SelfRescueRate
+#     0.1` cohort built to be unable to pay (14.6 caveat printed in the output). Overall:
+#     142 episodes (110 keeper + 32 self-rescue), 50.7% needed no fund money. **This also
+#     closes the owner's live question "how can MatA have parked members?": MatA parking is
+#     a transient state the keeper clears at zero fund cost — every single time, measured.**
+# ✅ **G.6 — PASS ON PRIVATE2: GAP $0.00 / $0.00, EXACT FROM DEPLOY. And the two
+#     instruments cross-validate to the cent:** G.6's `totalRescueLoaned` $157.39 == G.5's
+#     lent $157.39, 70 events == 70 loans, from different event sets on different
+#     contracts. (G.6's closing prose still chases its 2026-08-18 live-chain gap — read the
+#     GAP line, per 33's note. Its `FROM` env var is what keeps it off a from-genesis scan.)
+# ▶ **WHAT IS LEFT (41.4):** G.7 re-confirm on private2 is OPTIONAL (40.4 measured PARAM 59
+#     on a V8.50 chain; re-running `model_item_a.js` PHASE 7/8 here would confirm on the
+#     shipping config); driver GAS WARNING noise (projects 15-item batches at cap 1 —
+#     meaningless, cosmetic); **the live-chain drip loop is still stopped — restart
+#     `run_bigfill_loop.ps1 -StartOffset 386` at the owner's timing**; carried small items
+#     from 40.6-4 unchanged. Bigfill run had 1 stale-nonce registration (never asked;
+#     wrapper says the offset must NOT advance over it — next private2 fill uses offset 0
+#     cohort rules, see the wrapper's marker).
 
-## 41.0 ▶ THE REDEPLOY DECISION — WHY, AND WHY NOT THE WAIVER
+## 41.0 ✅ THE REDEPLOY DECISION — DECIDED, THEN EXECUTED THE SAME DAY
 
-Decided this session, owner delegating ("decide whether to redeploy"), executed as PREP
-ONLY — the deploy itself is PowerShell on the Windows machine and is the owner's run.
+Decided (owner delegating), then run to completion via `G4_REDEPLOY_RUNSHEET.md` (repo
+root — the session-specific instantiation of PHASE 0/1 + G.PRE + G.0/G.1; the runbook
+stays the authority on criteria).
 
-  * **For:** G.4 exists to prove the SHIPPING configuration at 127. The 08-21 chain
-    cannot express it — `setMaxItemsPerUpkeep`'s `require()` menu bottoms out at 5 and
-    cannot be widened after deployment (40.3). Redeploy is "the honest option and a
-    private failure costs a redeploy nobody sees" — the runbook's own stop-rule economics.
-  * **Against the waiver:** a cap-20/5M run is valid ONLY as a statement about the
-    pre-`5a07cab` configuration — a world V8.50 does not ship. It would also leave the
-    rewritten G.4 criterion untested, which 40.2 explicitly flagged as unverified debt.
-  * **Cost accepted:** G.0/G.1 burst mode is hours of testnet gas. ⚠ Source may still
-    move during the V8.48 audit; if contracts/ changes materially after this redeploy,
-    G.4's result is about the deployed commit — label it, and re-run only if the change
-    touches the keeper or crossing paths.
-  * ⚠ **Runsheet discipline:** `G4_REDEPLOY_RUNSHEET.md` deliberately does NOT restate
-    criteria — the runbook stays the authority, the sheet only pins session parameters.
-    40.2 is what happens when numbers get copied into prose.
+  * **Why redeploy, not waiver:** the 08-21 chain's `setMaxItemsPerUpkeep` menu bottoms
+    out at 5, immutably (40.3) — it can never express cap 1. A cap-20/5M waiver run would
+    validate a configuration V8.50 does not ship ("wrong number in the harmless direction
+    is not a control", 38.6) and leave the rewritten G.4 criterion untested forever.
+  * **Verified basis before deploying:** HEAD `fd61223` carries cap 1 (:256) / 7.5M (:378)
+    / widened menus; `5a07cab` is an ancestor; working tree whitespace-only.
+  * **Execution notes that matter later:** VPS crontab — only the THREE deployer-key lines
+    paused (`copay_rescue`, `system_keeper`, `fastlane_rescue`, re-measured against
+    today's crontab, tagged `PHASEG2-PAUSED`) and restored right after 1.1;
+    `direct_keeper` never stopped. Integrity check ran LOCALLY-triggered on the VPS with
+    an INLINE `ADDRESSES_FILE` so `/root/keeper/.env` stayed pointed at live. The owner's
+    live-chain drip loop (`run_bigfill_loop.ps1`) was stopped for the deploy and is the
+    open restore item (offset 386).
 
-## 41.1 ▶ G.5'S MISSING INSTRUMENT — BUILT, NOT YET RUN
+## 41.1 ✅ G.5'S INSTRUMENT — BUILT, WRONG ONCE, VALIDATED BY MEASUREMENT
 
-`scripts/g5_sf_ratio.js`, plain node like its siblings. What it fixes: 40.4 established
-G.5's NO VERDICT was structural — `model_item_a.js` projects, it does not compute the
-ratio. This script reads the ratio off the chain the criterion names. What it refuses:
-starting without `ADDRESSES_FILE` (34.1/39.4/40.8 — this repo has found FOUR hardcoded
-instruments; this one will not be the fifth), and presenting an empty window as "no
-rescues" (it prints the range it searched, always). ⚠ It does NOT judge PASS — "at or
-near the projection" is a runbook call, and handoff 14.6's population caveat is printed
-in the output so the number cannot travel without it.
+`scripts/g5_sf_ratio.js`. v1 implemented the runbook's criterion faithfully and that is
+exactly why it failed: 0 `CoPayRescue` events against 110 known rescues (its own
+zero-events guard flagged the window as the thing to check; the window was fine, the
+CRITERION was wrong — see 41.3). v2 counts what the code emits: `ParkedRescued` (keeper,
+every rescue), joined by txHash to `RescueLoanIssued` (matrix, loans only), with
+`SelfRescue` and `CoPayRescue` reported alongside; per-matrix split because item A's
+claim is a MatA claim. **Validated against ground truth: 110 events == the driver's
+80+30, lent $157.39 == the SF counter to the cent.** Addresses file mandatory; bounded,
+reported scan windows (40.8).
+
+## 41.2 ⛔ THE DRIVER'S GAS TRAP — DOCUMENTED IN ITS OWN COMMENTS, STILL LIVE, NOW CLOSED
+
+The full mechanism and both fixes are summarised in the state block above; the residue
+worth keeping: **`eth_estimateGas` on `performUpkeep` is structurally useless whenever
+gasleft-gated halt paths exist** — the estimator finds the cheapest SUCCESS, and the halt
+IS a success. Any driver that sends estimate-sized budgets to such a function starves it
+silently. `testchain_keeper.js` now reads `minGasPerItem` off the chain at startup and
+floors any sub-floor estimate at the 16.5M budget by default; `GAS_LIMIT` still overrides
+both ways. `scripts/diag_velocity_live.js` (new, read-only) is the probe that separated
+"the item fails" from "the item never starts": frozen `lastVelocityCheck` + zero
+WorkItemFailed + zero VelocityUpdated + 120 BatchGasHalted = never started.
+
+## 41.3 ✅ G.5 — THE CRITERION CORRECTED AND THE MEASUREMENT TAKEN
+
+In the state block above. One line for the record that isn't there: the day's THIRD
+instance of the same defect class — 40.2 (stale numbers in criteria), 41.2 (guard
+warning the wrong audience), 41.3 (criterion citing an event the code path never emits).
+**All three were caught by running the thing, none by reading it. Rule 2 is the whole
+methodology.**
+
+## 41.4 ▶ SCOREBOARD AND WHAT SESSION 42 SHOULD PICK UP
+
+      G.0-G.2   done (today, private2)          G.5   PASS (MatA 100.0%, 41.3)
+      G.3       closed (30.12, method kept)     G.6   PASS (GAP $0/$0 exact, today)
+      G.4       PASS (shipping config, 41.2)    G.7   measured (40.4); optional re-confirm
+                                                G.8   pass state (1 waiver, at cutover)
+
+  1. Optional: `model_item_a.js` PHASE 7/8 on private2 for G.7 on the shipping config.
+  2. Restart the live drip loop (`run_bigfill_loop.ps1 -StartOffset 386`) — owner timing.
+  3. Cosmetic: driver GAS WARNING projects 15-item batches at cap 1; retire or gate it.
+  4. Carried from 40.6-4: `frozen_matb_keeper` deletion · `mint_usdc.js` FIFTH wallet
+     list · `CNOVATreasury.setCommunityWallet` docstring · second `upkeepCaller` decision
+     · live `maxItemsPerUpkeep` 15 vs source 1. Plus 40.8's monthly `cw_distribute.js`
+     on the 25th until V8.50 ships.
 
 ---
 
-# ⬛ SESSION 40 STATE — 2026-08-25. Superseded on 40.6 item 1 by SESSION 41 above; otherwise current.
+# ⬛ SESSION 40 STATE — 2026-08-25. Superseded by SESSION 41 above on 40.6 item 1 AND on 40.4's G.5 criterion (`CoPayRescue` — see 41.3); otherwise current.
 # ✅✅ **PHASE G IS NO LONGER UNTOUCHED. G.8 HAS RUN FOR THE FIRST TIME EVER, AND IT
 #     FAILED — WHICH IS THE RETURN ON BUILDING IT (40.0).** 7 problems. **Only ONE was real,
 #     and it was not a V8.50 problem at all:** `liquidity.html` called `directSale.getFloorPrice()`,

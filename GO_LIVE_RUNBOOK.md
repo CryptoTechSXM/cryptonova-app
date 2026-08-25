@@ -413,10 +413,19 @@ it refuses a default). Pin `FROM_BLOCK` to the chain's deploy block for a whole-
 > 40.4: its PHASE 2 is a PROJECTION, structurally zero on a chain that already has item A,
 > which is why G.5 returned NO VERDICT). `g5_sf_ratio.js` is the instrument that computes it.
 > `model_item_a.js` remains the tool for G.7's PHASE 7/8 re-confirmation, not for this step.
-> ⚠ New instrument, first run pending — 40.5's rule: a syntax check is not a runtime check.
-> **MEASUREMENT 3 — `selfFundedRescues / rescues` on the V8.50 arm.** It needs **no
-> control**: `CoPayRescue` carries `sfShare` directly, so `sfShare == 0` IS "the fund paid
-> nothing". (PHASE 2 of `model_item_a.js` projected 67 of 67, 100%, as the reference point.)
+> ⛔ **CORRECTED AGAIN THE SAME DAY (41.3) — THE `CoPayRescue.sfShare == 0` CRITERION WAS
+> ITSELF WRONG.** The instrument's first run found ZERO CoPayRescue events on a chain that
+> had just performed 110 keeper rescues, and the window was not the reason: **the keeper's
+> rescue path (`forceCrossKeeper`) NEVER emits `CoPayRescue`** — that event belongs to
+> `coPayRescue()`, the VPS co-pay keeper's entry point, which nothing calls on a private
+> chain. 40.4 wrote the PASS from the event DECLARATION, not the call path.
+> **The measured basis (v2, emit sites verified):** every keeper rescue emits
+> `ParkedRescued` (keeper); the fund-backed ones also emit `RescueLoanIssued` (matrix) in
+> the same transaction. A `ParkedRescued` whose tx carries no loan event is a rescue the
+> fund paid nothing for — joined by txHash, not subtraction. `SelfRescue` counts the
+> member-paid episodes alongside.
+> **MEASUREMENT 3 — `selfFundedRescues / rescues` on the V8.50 arm**, computed as above.
+> (PHASE 2 of `model_item_a.js` projected 67 of 67, 100%, as the reference point.)
 > **PASS:** the share is at or near the projection.
 > ⚠ A shortfall here is an ECONOMIC finding on a population of scripts. Read handoff 14.6
 > before treating it as a fact about members — and on a `-SelfRescueRate 0.1` bigfill
