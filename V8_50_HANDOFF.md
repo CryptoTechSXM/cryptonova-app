@@ -274,13 +274,77 @@ read. **A clean, plausible, wrong answer, produced by the instrument built to ch
    with no first-run flag and no counter, so tick two could not have told us anything tick
    one did not. **The real acceptance criterion is "one poll tick, observed" — and the way
    to check that is the interval constant, not a stopwatch target.**
-2. ▶ **THE 6 WHO CANNOT PAY** — $25.07 total across 6 wallets, from the 18:52 census.
+2. ⚠ **"THE 6 WHO CANNOT PAY / $25.07" IS SUPERSEDED — RE-MEASURED 2026-08-25T00:01Z (38.5).
+   THE REAL NUMBER OF STUCK MEMBERS IS THREE, AND THE REAL FINDING IS THE OTHER 295.**
+   `diag_parked_solvency.js`, 393 parked positions, selftest green (`0x52BEA7CE` found at
+   T1.1 MatA holding $0.00, agreeing with 105 bigfill observations), PROBLEMS: 0.
+   CSV: `logs/parked_solvency_2026-08-25T00-01-00-326Z.csv`.
 3. ▶ **THE COMMUNITY DEPLOY.** Nothing above blocks it.
 4. ▶ **AFTER the deploy:** `diag_velocity_gate.js` with `WINDOW_SECS=86400` (36.7's watch
    item), and count how many stuck members could exit the ratchet by upgrading (36.9).
 5. ⚠ **CARRIED, NOT URGENT:** the `index.html:1333` hardcoded 24h (38.2), and
    `CryptoNova-Keepers/mint_usdc.js`'s hardcoded wallet array — **a fifth funding list**, on
    top of 36.4's three (37.5). Migrate it with the others.
+
+## 38.5 ✅ THE PARKED CENSUS RE-RUN — 3 MEMBERS ARE STUCK, 295 ARE ONE APPROVAL AWAY
+
+Re-ran `diag_parked_solvency.js` because the handoff's "6 wallets / $25.07" came from the
+18:52 census and 37.5 had already shown positions moving inside an hour. **393 parked
+positions, 30 past grace** (grace read from chain: 86400s / 24.0h). Selftest green,
+PROBLEMS: 0.
+
+    THE VERDICT SPLIT — all 393 parked positions
+      can self-rescue right now (funded AND approved) .....  79
+      HOLD THE MONEY, need only an approval ............... 295     <- the finding
+      already covered, no payment needed ..................   0
+      CANNOT pay from their wallet ........................  19   ($31.99 total)
+      unknown (a read failed) .............................   0
+
+✅✅ **295 OF 393 (75%) ARE ONE APPROVAL AWAY FROM RE-ENTERING. THAT IS 34.8's READING
+CONFIRMED AT SCALE: THIS IS A FRONTEND/COMMS DEFECT, NOT AN ECONOMIC ONE.** Members are
+sitting parked holding four and five figures of USDC — `0x9DDD15A0` with $6,504, `0x788b70FE`
+with $33,737, dozens at $30,000 — with **$0.00 approved to the matrix that needs it.** They
+do not know what to approve or who to approve it to. **The community post that went out this
+session (38.1) is precisely this fix, which is the strongest argument yet that the community
+deploy is the right next move rather than another measurement.**
+
+⛔ **ONLY 3 OF THE 19 ARE ACTUALLY STUCK, AND THE OTHER 16 NEED NOTHING.** The CSV carries
+`in_grace` and `loan_eligible`, which splits the 19 cleanly:
+
+    PAST GRACE **AND** REFUSED A LOAN — genuinely stuck, gap $10.07
+      0x396DFA14  T1.1 MatA  4.00d  short $2.67  wallet $0.26  debt $3.71  gap $2.42
+      0x52BEA7CE  T1.1 MatA  3.95d  short $2.65  wallet $0.00  debt $5.13  gap $2.65
+      0x60c8BfD7  T1.1 MatB  2.04d  short $5.00  wallet $0.00  debt $4.79  gap $5.00
+
+    THE OTHER 16 — all `in_grace=true` AND `loan_eligible=true`. **The keeper will lend
+    them the gap when their 24h expires. They resolve themselves; do not fund them.**
+    Twelve are one seeded cohort at 0.01d, all short ~$1.10 with ~$0.44 in wallet and a
+    $13.4x allowance already set — a seeding shortfall, not a member problem.
+
+✅ **WHY THOSE THREE AND NOT THE OTHERS — THE CEILING, CONFIRMED ON ALL 19 ROWS.**
+`insolvencyFloorBps 3400` is a **lifetime debt ceiling of 34% of the tier fee**: $3.40 at T1,
+$8.50 at T2. Every wallet whose `sf_debt` exceeds its tier's ceiling has `loan_eligible=false`
+and every one below it has `true` — including `0x3e2E9511`, which carries $4.02 of debt and is
+STILL eligible **because it is parked at T2, where the ceiling is $8.50.** That is 35.7's
+finding with names against it: **these three are past grace, hold no money, and the floor
+refuses to lend — the only exit that does not need a contract change is cash in the wallet.**
+⚠ Whether they are real members or seeded wallets was NOT established; `0x52BEA7CE` is
+bigfill index 1 (37.5), the other two are not on any funding list (below).
+
+⛔ **NEW — `fund_list.txt` HAS TWO PHYSICAL COPIES AND THEY HAVE ALREADY DIVERGED. 36.4's FIX
+DID NOT HOLD, BECAUSE "ONE CANONICAL FILE" WAS NEVER ONE FILE.**
+
+      CryptoNova-Testnet-App/fund_list.txt   110 addresses   <- canonical (36.4)
+      CryptoNova-Keepers/fund_list.txt       100 addresses   <- stale pre-36.4 copy
+
+  The 10 missing are all present in the app copy only. Worse, `scripts/fund_leaders_30k.js`
+  **documents the stale one in its header** (line 14: *"CryptoNova-Keepers/fund_list.txt 100
+  wallets"*) while its **code** defaults to the canonical one (line 56). Comment and code
+  disagree, and the comment names the wrong file. **Delete or symlink the Keepers copy and
+  fix that header — with the `mint_usdc.js` array (37.5), which is still a fifth list and
+  still takes a hardcoded 2500 USDC to a hardcoded set with no per-address amount.**
+  ⚠ **None of the three stuck wallets is on either list**, so funding them is not a
+  fund_list operation and must not become a sixth hardcoded array.
 
 ## 37.0 STATE — WHAT SHIPPED, AND WHAT THE HANDOFF SAID THAT WAS ALREADY STALE
 
