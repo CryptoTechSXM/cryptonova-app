@@ -20,6 +20,12 @@ const WORK = ["VELOCITY","GHOST","RECLAIM","CHAIN_LINK","PARKED_RESCUE","VELOCIT
 const KEEPER_ABI = [
   "function checkUpkeep(bytes) view returns (bool upkeepNeeded, bytes performData)",
   "function performUpkeep(bytes)",
+  // 2026-08-25: the three routes performUpkeep accepts (MatrixKeeper.sol:914). Read
+  // them so an auth refusal can never again be mistaken for a finding about the chain.
+  "function owner() view returns (address)",
+  "function governance() view returns (address)",
+  "function upkeepCaller(address) view returns (bool)",
+  "function maxItemsPerUpkeep() view returns (uint256)",
 ];
 
 (async () => {
@@ -40,12 +46,48 @@ const KEEPER_ABI = [
     console.log(`  - ${WORK[wt] || "UNKNOWN(" + wt + ")"}  tier=T${Number(it.tierIndex) + 1}  addr1=${it.addr1}  addr2=${it.addr2}`);
   }
 
-  // Now try the whole batch, then each item alone, as the keeper wallet would.
-  const FROM = "0xd419681BA72992636f05e256168681c939826B4b"; // VPS keeper signer
+  // Now try the whole batch, then each item alone, as an AUTHORISED caller would.
+  //
+  // ⛔ FIXED 2026-08-25 (session 40). This was HARDCODED to the live V8.48 VPS keeper
+  //    EOA 0xd419681B... Pointed at the private V8.50 deployment — where that EOA was
+  //    never granted — every one of 20 items returned "MK: not authorized keeper", which
+  //    reads exactly like a real finding about that chain's configuration and is not one.
+  //    The whole simulation half of that run was void while looking perfectly plausible.
+  //    Same family as fund_testers.js's dead v8_45 default (handoff 39.4): a constant
+  //    baked into an instrument silently voids it the moment it is aimed somewhere else.
+  //    Now: FROM env override, else the deployment's own deployer/admin (owner() passes
+  //    the auth check), and the resolved value plus WHY is printed on every run.
+  const FROM = process.env.FROM || A.deployer || A.admin;
+  if (!FROM) { console.log("FATAL: no FROM — set $env:FROM or add deployer/admin to the addresses file"); process.exit(1); }
+
+  // Prove FROM is actually allowed BEFORE simulating, so a refusal is never ambiguous.
+  let owner = "?", gov = "?", isCaller = null;
+  try { owner = await k.owner(); } catch (e) { console.log(`  owner() unreadable: ${e.shortMessage || e.message}`); }
+  try { gov   = await k.governance(); } catch (e) { console.log(`  governance() unreadable: ${e.shortMessage || e.message}`); }
+  try { isCaller = await k.upkeepCaller(FROM); } catch (e) { console.log(`  upkeepCaller() unreadable: ${e.shortMessage || e.message}`); }
+  const eq = (a, b2) => a && b2 && String(a).toLowerCase() === String(b2).toLowerCase();
+  const why = eq(FROM, owner) ? "owner()" : eq(FROM, gov) ? "governance" : isCaller === true ? "upkeepCaller grant" : null;
+  console.log(`\nsimulating AS ${FROM}`);
+  console.log(`  source        : ${process.env.FROM ? "$env:FROM" : "addresses file deployer/admin"}`);
+  console.log(`  owner()       : ${owner}`);
+  console.log(`  governance    : ${gov}`);
+  console.log(`  upkeepCaller  : ${isCaller === null ? "unreadable" : isCaller}`);
+  if (why) {
+    console.log(`  AUTHORISED via ${why} — a revert below is about the WORK, not the caller.`);
+  } else {
+    console.log("  ⛔ NOT AUTHORISED on this deployment. Every item below will return");
+    console.log("     \"MK: not authorized keeper\" and NONE of it is a finding about the chain.");
+    console.log("     Set $env:FROM to owner/governance/a granted caller and re-run.");
+  }
+  // ⛔ 2026-08-25: was 12,000,000 — BELOW the 14.67M worst live per-item sample (30.10),
+  //    so a perfectly healthy dear rescue could staticCall out of gas and be written up as
+  //    a revert. Sized above the worst observed item; print it so the basis is never guessed.
+  const SIM_GAS = Number(process.env.SIM_GAS || 16_500_000);
+  console.log(`  simulation gasLimit: ${SIM_GAS.toLocaleString()} (override with $env:SIM_GAS)`);
   async function tryPerform(list, label) {
     const data = coder.encode(["tuple(uint8 workType,uint8 tierIndex,address addr1,address addr2)[]"], [list]);
     try {
-      await k.performUpkeep.staticCall(data, { from: FROM, gasLimit: 12_000_000 });
+      await k.performUpkeep.staticCall(data, { from: FROM, gasLimit: SIM_GAS });
       console.log(`  ${label}: would SUCCEED`);
     } catch (e) {
       const reason = e.reason || e.shortMessage || e.message;
