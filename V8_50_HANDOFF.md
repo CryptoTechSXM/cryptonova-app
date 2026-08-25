@@ -10,7 +10,205 @@ owner-set, and the session that earned it got five things wrong by ignoring what
 
 ---
 
-# ⬛ SESSION 39 STATE — 2026-08-25, LATEST. READ THIS FIRST.
+# ⬛ SESSION 40 STATE — 2026-08-25, LATEST. READ THIS FIRST.
+# ✅✅ **PHASE G IS NO LONGER UNTOUCHED. G.8 HAS RUN FOR THE FIRST TIME EVER, AND IT
+#     FAILED — WHICH IS THE RETURN ON BUILDING IT (40.0).** 7 problems. **Only ONE was real,
+#     and it was not a V8.50 problem at all:** `liquidity.html` called `directSale.getFloorPrice()`,
+#     a name that **has never existed in any version** (`git log -S` over all of `contracts/`
+#     returns nothing). It sat in `catch (_) { set('amm-vs-floor','') }`, so the "vs bonding
+#     floor" line has been **silently blank on every page load since it was written.** Real
+#     getter is `floorPriceE6()`; the existing `/1e6` was already correct — only the NAME was
+#     wrong. **G.8 now sits at its pass state: 1 MISSING (a documented waiver), 0 SHAPE DRIFT.**
+# ⛔⛔ **THE GATE'S OWN CRITERIA HAD GONE STALE, INCLUDING THE LINE THAT WARNS ABOUT STALE
+#     NUMBERS (40.2).** PHASE G's preamble read *"`minGasPerItem` IS 5,000,000 — any older note
+#     testing against 3.5M is stale"*. Source today: **7,500,000** and `maxItemsPerUpkeep` **1**.
+#     **G.4's PASS could no longer be satisfied OR failed by anything** — it asks for a halt at
+#     `gasRemaining` just under 5M, and at cap 1 there is no in-batch halt to observe.
+#     **A criterion no outcome can move is not a gate.** Rewritten, and marked UNVERIFIED.
+# ⛔⛔ **AND THE PRIVATE V8.50 CHAIN CANNOT BE PUT INTO THE CONFIGURATION V8.50 SHIPS WITH
+#     (40.3).** It reads `maxItemsPerUpkeep` **20** / `minGasPerItem` **5,000,000** — not
+#     misconfigured, it **PREDATES** the config: deployed 2026-08-21 from `8c60b64`, whose
+#     declared defaults are exactly those. `5a07cab` settled 7.5M/1 on 2026-08-23, **two days
+#     later.** ⛔ At that commit `setMaxItemsPerUpkeep` is
+#     `require(v == 5 || 10 || 15 || 20 || 30 || 40)` — **1 IS NOT ON THE MENU AND A require()
+#     CANNOT BE WIDENED AFTER DEPLOYMENT.** The menu-immutability warning came true on a gate
+#     chain. **G.4 is blocked there; G.5, G.7 and G.3's closed result are NOT affected.**
+# ▶ **G.5 RAN — NO VERDICT, AND THE REASON IS WORTH MORE THAN A PASS (40.4).** The runbook's
+#     PASS asks for `selfFundedRescues / rescues`; **the script never computes it.** PHASE 2
+#     prints a PROJECTION metric ("MatA parkers freed"), which on a chain that ALREADY HAS
+#     item A is structurally zero. ✅ **But the same run MEASURED item A working on a real
+#     V8.50 chain: 930 self-funded crossings, $5,490.00, 100% from reserve, $0.00 from
+#     withdrawable; 0 MatA funding parks against 618 MatB.** Item A and E1 both verified
+#     present in the deployed commit.
+# ✅ **AND G.7's ANSWER ARRIVED INSIDE IT, AS A MEASUREMENT NOT A PROJECTION (40.4).**
+#     PARAM 59 on that V8.50 chain: **5000 bps refuses 1 of 166; 3400 refuses 2.** First time
+#     the 5000 decision has been checked on a running V8.50 system. It holds.
+# ⛔ **THREE INSTRUMENTS CARRIED A HARDCODED CHAIN ASSUMPTION, AND ALL THREE PRODUCED
+#     PLAUSIBLE WRONG OUTPUT (40.5).** `diag_keeper_work.js` simulated as a hardcoded LIVE
+#     keeper EOA — against the private chain every item returned `MK: not authorized keeper`,
+#     **which reads exactly like a finding about that chain and is not one; the whole
+#     simulation half of that run was void.** `model_item_a.js` hardcoded its PROSE to "I am
+#     reading live V8.48" while its NUMBERS follow `ADDRESSES_FILE` — it labelled real V8.50
+#     measurements as projections. Both fixed. ⚠ **My first fix to the second one LEAKED
+#     (37.3's shape): it printed the correction BESIDE the sentence it was meant to replace
+#     and left an orphaned fragment.** Fixed properly on the second pass.
+# ⛔ **A BULK VERSION-LABEL REPLACE HAD CORRUPTED PROSE COMMENTS (40.1).**
+#     `update_addrs_vX_XX.py` rewrote `V8.47` → `V8.48` **inside comments**, leaving a block
+#     reading "V8.48 replaces V8.48" that no reader could recover without git. Restored from
+#     `17b6c02`. **It will do it again to whatever the comments say next time.**
+# ▶ **WHAT IS LEFT: G.4 (needs a private redeploy from current source, or an explicit
+#     waiver), the `selfFundedRescues/rescues` metric G.5 actually asks for, and the chain
+#     decision. The migration comms date remains the owner's and unannounced.**
+
+## 40.0 ✅ G.8 — RUN AT LAST, FAILED HONESTLY, AND ONLY 1 OF 7 WAS REAL
+
+**Full detail now lives in `GO_LIVE_RUNBOOK.md` at G.8, dated, with the pass condition and
+the waiver — that is the list, read it there.** Summary of what the triage established:
+
+  * ⛔ **`getFloorPrice()` — the only real defect, and it predates V8.50 entirely.** Never
+    existed in any version; an empty catch blanked the feature instead of reporting it.
+    **Found by the gate, not by a member.**
+  * ⚠ **The two SHAPE DRIFT rows were BENIGN, and that was MEASURED.** `MATRIX_ABI`'s
+    `getMember` declared 9 fields against V8's 10 (`crossingReserve`, a V8.31 field — so it
+    is what the live site runs on today). Encoding a 10-field tuple and decoding it with the
+    9-field ABI in ethers v6 **decodes cleanly, all nine values correct**: identical field
+    order, trailing word discarded. Widened anyway so the report reads clean.
+  * Three of the seven came from **one dead file**, `api/rescue.js` (V8.29, nothing fetches
+    it) — deleted. Two more were **declared and never called**. **Triage every row to its
+    CALL SITE before believing a count.**
+  * ⚠ **One of the three "unparsable" lines IS a real fragment**, split across lines with `+`.
+    Check all three every run.
+  Commits: testnet app `250f9b9`, `23e8f3d` (branch `admin`, not promoted past it).
+
+## 40.1 ⛔ THE ADDRESSES SCRIPT REWRITES PROSE, NOT JUST ADDRESSES
+
+`index.html` carried *"FEATURE-DETECTED ACROSS THE V8.48 → V8.48 CUTOVER"* and *"V8.48
+replaces ... V8.48"*. **Not a typo — `update_addrs_vX_XX.py`'s version-label replace is not
+scoped to code.** git (`17b6c02`) shows the original: `V8.47 → V8.48 CUTOVER`, `// V8.47 path`.
+Restored. ▶ **Scope that script's replace to code and addresses, or diff its comment changes
+before committing.** CLAUDE.md already mandates the script cover `api/telegram-qa.js` for
+exactly this reason; the mechanism is the same and the blast radius is wider than assumed.
+
+## 40.2 ⛔⛔ PHASE G'S CRITERIA DESCRIBED A WORLD THAT NO LONGER EXISTS
+
+All corrections are IN `GO_LIVE_RUNBOOK.md` at the steps they belong to. The shape:
+
+      runbook said                     source says today
+      minGasPerItem     5,000,000      7,500,000   (MatrixKeeper.sol:378)
+      maxItemsPerUpkeep 20 / "1 is     1           (:256), and 1 IS on the menu since
+                        not on the                 2026-08-22
+                        menu"
+
+✅ **THE INSTRUMENT WAS RIGHT WHERE THE DOCUMENT WAS WRONG.** `diag_keeper_gas_live.js:153`
+computes `ok: marginalMax < minGasPerItem` by READING the floor off the chain, so its verdict
+self-updates while the prose rotted. **Trust the script over any number typed into a runbook,
+including the ones session 40 typed.**
+
+## 40.3 ⛔⛔ THE PRIVATE GATE CHAIN PREDATES THE CONFIGURATION IT IS SUPPOSED TO PROVE
+
+Measured, then explained from git — in that order:
+
+      private V8.50 chain, block 45946005   maxItemsPerUpkeep 20   minGasPerItem 5,000,000
+      deployed 2026-08-21 from 8c60b64      declared defaults      20 and 5,000,000
+      5a07cab, 2026-08-23                   settled 7.5M / cap 1   TWO DAYS LATER
+
+⛔ **AND IT CANNOT BE FIXED WITH A SETTER.** At `8c60b64`, `setMaxItemsPerUpkeep` is
+`require(v == 5 || 10 || 15 || 20 || 30 || 40)`. **A require() menu can only be widened
+BEFORE deployment** — the setter's own comment says so, and this is that warning coming true.
+Lowest reachable cap there is 5. (`minGasPerItem` 7.5M IS reachable; it was on the old menu.)
+
+  * **G.4 — blocked.** Redeploy privately from current source, or run against the ORIGINAL
+    cap-20/5M criterion and LABEL the result as the pre-`5a07cab` configuration. ⚠ Cap 1 is
+    strictly safer for gas than cap 20, so a pass there is conservative — but "the wrong
+    number in the harmless direction is not a control" (38.6).
+  * ✅ **G.5 / G.7 — unaffected. Both are ECONOMIC**; the batch cap does not change whether a
+    rescue was self-funded.
+  * ✅ **G.3's closed result survives** — taken with `ONE_ITEM=1` in the DRIVER, which sends
+    one item per transaction regardless of the contract's cap. That is why G.2 drives one item.
+
+## 40.4 ▶ G.5 — NO VERDICT AGAINST ITS OWN CRITERION, AND A REAL MEASUREMENT ANYWAY
+
+⛔ **THE CRITERION AND THE INSTRUMENT DO NOT MEET.** The runbook's PASS is
+`selfFundedRescues / rescues` via `CoPayRescue.sfShare == 0`. **`model_item_a.js` does not
+compute that number.** What PHASE 2 prints is "where is the parked queue", a PROJECTION of
+item A's benefit onto a pre-item-A chain — and the private chain **already has item A**, so
+the prize reads $0.00 by construction. **NO VERDICT. Building that ratio is the remaining work
+for G.5.**
+
+✅ **WHAT THE RUN DID ESTABLISH, on the V8.50 private chain (log:
+`logs/G5_model_item_a_2026-08-25*.txt`):**
+
+      self-funded crossings      930      reconcile OK on all 930
+      paid from reserve          $5,490.00   100.0%
+      paid from withdrawable     $0.00         0.0%   <- ITEM A's SIGNATURE
+      parked in MatA             0 of 166     0.0%
+      funding parks MatA / MatB  0 / 618
+      item D (shallow seating)   0 of 2,155 seatings; 0 SlotReclaimed — cause never fired
+      T2 affordable at cycle-out 0 of 166 under V8.48 AND 0 of 166 under item A
+
+Item A and E1 both verified present in `8c60b64` (`V8.50 ITEM A`, `V8.50 ITEM E1`), so the
+100/0 split is the mechanism working, not an anomaly. ⚠ **PHASE 8 stands as a negative
+result worth keeping: item A raises median holding at cycle-out from $0.00 to $3.78 against a
+$25.00 T2 fee — real, and nowhere near the threshold. The acceleration claim does not
+generalise to this fee ladder.**
+
+✅ **G.7's RE-CONFIRMATION, and it is a measurement because E1 IS deployed here:**
+
+      PARAM 59 on the private V8.50 chain, 166 MatB parkers, post-E1 basis
+        3400 bps  ceiling $3.40  refuses 2 of 166
+        5000 bps  ceiling $5.00  refuses 1 of 166   <- the decided V8.50 value, HOLDS
+        6800 bps  ceiling $6.80  refuses 0 of 166
+
+⚠ Carried, not resolved: PHASE 7's ladder shows **80 of 166 fall below preset 1's 4000 rung
+and are EVICTED rather than lent to**; preset 2 would rescue 25 more, preset 3 another 47.
+**That is DECISION 2 and it is an owner economic call, not a defect.**
+
+## 40.5 ⛔ THREE INSTRUMENTS, ONE DEFECT: A CHAIN ASSUMPTION BAKED IN
+
+  1. **`diag_keeper_work.js` simulated as a HARDCODED live keeper EOA.** Against the private
+     chain: 20 items, all `MK: not authorized keeper`. **Plausible, alarming, and meaningless
+     — the entire simulation half of that run was void.** Now resolves the sender from the
+     deployment, PROVES authorisation before simulating (prints owner/governance/upkeepCaller
+     and which route applies), and prints the config it measured under. ⛔ Its sim gas was
+     **12M — below the 14.67M worst live per-item sample**, so a healthy dear rescue could
+     static-call out of gas and be written up as a revert. Now 16.5M and printed.
+  2. **`model_item_a.js` hardcoded its PROSE to "I am reading live V8.48"** in three places
+     while its numbers follow `ADDRESSES_FILE`. It printed *"E1 is NOT DEPLOYED"* and *"these
+     are V8.48 members"* about a chain that deploys both. **A future session would have
+     discounted real V8.50 measurements as projections.** Now detects the basis and says which
+     caveats apply.
+  3. ⚠ **AND MY OWN FIX TO (2) LEAKED, EXACTLY AS 37.3 DID.** I replaced the FIRST LINE of
+     multi-line prose blocks, so the correction printed BESIDE the sentence it contradicted
+     (*"the AGGREGATE column is the live answer, not a projection. It cannot 'see' E1; both
+     columns are PROJECTIONS"*) and PHASE 7 ended on an orphaned fragment. **Two passes to
+     get one script's narration right.** Gate whole blocks, never their first line.
+
+⚠ **AND A `node --check` PASSED A FILE THAT WOULD HAVE THROWN AT RUNTIME.** An intermediate
+edit left `IS_V850` referenced but undeclared — valid syntax, certain `ReferenceError`.
+**38.3's lesson generalises: a syntax check is not an existence check AND NOT A RUNTIME
+CHECK.** The only real proof is running it, which is why the corrected log was re-generated.
+
+## 40.6 ▶ WHAT SESSION 41 SHOULD PICK UP
+
+  1. **G.4.** Decide: private redeploy from current source (gets cap 1 / 7.5M and the widened
+     menus, and makes the whole gate representative), or run it on the existing chain against
+     the ORIGINAL criterion with the configuration stated in the result. **Redeploy is the
+     honest option and "a private failure costs a redeploy nobody sees".**
+  2. **Build the `selfFundedRescues / rescues` ratio** G.5 actually asks for — `CoPayRescue`
+     carries `sfShare` directly, so it is one event scan, no control needed.
+  3. **The chain decision**, still open: the private V8.50 deployment records
+     `"network": "baseSepolia"`, so PHASE G's "private chain" is a separate DEPLOYMENT on the
+     same testnet, not a separate chain. Recommended: fresh Base Sepolia deployment for the
+     community, private one kept as the measurement deployment. **Owner's to confirm.**
+  4. **Carried small items:** `frozen_matb_keeper` deletion (AUTOMATION_AUDIT item 1, verdict
+     DELETE, still not done) · `mint_usdc.js`'s hardcoded FIFTH wallet list ·
+     `CNOVATreasury.setCommunityWallet`'s copy-paste docstring · the second `upkeepCaller`
+     decision before the community deploy · live `maxItemsPerUpkeep` 15 vs source 1.
+  5. ⛔ **The migration comms date. Owner's, and still unannounced** — the 08-08 post promised
+     the date well in advance with a withdrawal window. Unchanged from 39.6.
+
+
+# ⬛ SESSION 39 STATE — 2026-08-25. Superseded on PHASE G by SESSION 40 above.
 # ⛔⛔ **38.6's PARAM 59 FINDING IS BACKWARDS, AND ACTING ON IT WOULD HAVE SHIPPED A
 #     REGRESSION (39.1).** 38.6 says *"a V8.50 deploy ships 5000 — not the owner's 3400"*
 #     and prescribes writing 3400 into `deploy_v8.js`. **The source default of 5000 IS the

@@ -376,9 +376,15 @@ async function readBufferBps(mk) {
       const b = byHalf[h];
       console.log(`    ${h}: ${String(b.n).padStart(5)} self-funded crossings, ${usd(b.earn).padStart(10)} taken from withdrawable`);
     }
-    console.log(`\n  A near-exact 50/50 split is EXPECTED, not a coincidence: the reserve is carved at`);
-    console.log(`  ${Number(crossReserveBps) / 100}% of the fee on entry and the destination charges the same fee, so`);
-    console.log(`  fromReserve is structurally half. That is item A's premise showing up in the data.`);
+    if (IS_V850) {
+      console.log(`\n  ✅ ON THIS V8.50 CHAIN THE SPLIT IS THE POINT: 100% reserve / 0% withdrawable is`);
+      console.log(`  ITEM A WORKING — a MatA member's reserve covers crossingCost outright, so earnings`);
+      console.log(`  are never charged. A ~50/50 split is what a PRE-item-A (V8.48) chain shows.`);
+    } else {
+      console.log(`\n  A near-exact 50/50 split is EXPECTED, not a coincidence: the reserve is carved at`);
+      console.log(`  ${Number(crossReserveBps) / 100}% of the fee on entry and the destination charges the same fee, so`);
+      console.log(`  fromReserve is structurally half. That is item A's premise showing up in the data.`);
+    }
   }
 
   // ---- PHASE 4 — parks item A removes. ---------------------------------------
@@ -621,8 +627,13 @@ async function readBufferBps(mk) {
         console.log(`    ${String(bps).padStart(5)} bps  ceiling ${usd(ceil).padStart(8)}   aggregate ${String(okA).padStart(3)}   LEDGER ${String(okL).padStart(3)}${flag}`);
       }
       console.log(`\n  ⛔ WHICH COLUMN APPLIES DEPENDS ON WHETHER ITEM E1 SHIPS — READ THIS BEFORE`);
-      console.log(`  QUOTING EITHER. Basis: ${IS_V850 ? "a V8.50 chain — E1 IS deployed, so the AGGREGATE column is the live answer, not a projection" : "the LIVE V8.48 chain"}. It cannot`);
-      console.log(`  "see" E1; both columns are PROJECTIONS onto the same V8.48 data.`);
+      if (IS_V850) {
+        console.log(`  QUOTING EITHER. Basis: a V8.50 chain — ITEM E1 IS DEPLOYED HERE, so the`);
+        console.log(`  AGGREGATE column is the LIVE ANSWER for this chain, not a projection.`);
+      } else {
+        console.log(`  QUOTING EITHER. This script reads a pre-V8.50 chain. It cannot`);
+        console.log(`  "see" E1; both columns are PROJECTIONS onto the same V8.48 data.`);
+      }
       console.log(``);
       console.log(`    LEDGER column     = item A WITHOUT E1. The crossing stops charging earnings,`);
       console.log(`                        but those earnings stay in the MatA ledger and the`);
@@ -637,11 +648,13 @@ async function readBufferBps(mk) {
       console.log(`  WITHOUT E1 the honest floor is 6800. WITH E1 it is 3400 and it clears everyone.`);
       if (IS_V850) console.log(`\n  ✅ THE V8.48-MEMBERS CAVEAT BELOW DOES NOT APPLY ON THIS CHAIN — these members`);
       if (IS_V850) console.log(`  crossed UNDER item A, so their MatA balance was never spent on a full-fee crossing.`);
-      console.log(`\n  ⚠ ONE CAVEAT, STATED SO IT IS NOT MISTAKEN FOR CERTAINTY: these are V8.48`);
-      console.log(`  members. Their MatA balance was already spent on a full-fee crossing, so the`);
-      console.log(`  ledger split item A CREATES is not fully visible in them yet. The LEDGER column`);
-      console.log(`  is therefore itself an upper bound on how good things are — a post-item-A`);
-      console.log(`  member keeps MORE in MatA, so MORE is stranded from this gate, not less.`);
+      if (!IS_V850) {
+        console.log(`\n  ⚠ ONE CAVEAT, STATED SO IT IS NOT MISTAKEN FOR CERTAINTY: these are V8.48`);
+        console.log(`  members. Their MatA balance was already spent on a full-fee crossing, so the`);
+        console.log(`  ledger split item A CREATES is not fully visible in them yet. The LEDGER column`);
+        console.log(`  is therefore itself an upper bound on how good things are — a post-item-A`);
+        console.log(`  member keeps MORE in MatA, so MORE is stranded from this gate, not less.`);
+      }
     }
   }
 
@@ -928,13 +941,14 @@ async function readBufferBps(mk) {
       }
       console.log(`\n  ⚠ READ THE BASIS: POST-E1, i.e. the gate sees journey A + journey B.`);
       if (IS_V850) console.log(`  ✅ E1 IS DEPLOYED ON THIS CHAIN — these rows are a MEASUREMENT of a running V8.50`);
-      if (IS_V850) console.log(`  system, not a projection. The two lines below are written for a V8.48 basis; ignore`);
-      if (IS_V850) console.log(`  them here. THIS is the G.7 re-confirmation the runbook asks for.`);
-      if (!IS_V850) console.log(`  E1 is NOT`);
-      if (!IS_V850) console.log(`  DEPLOYED — the live chain is V8.48. These rows are a projection of V8.50 onto`);
-      console.log(`  today's members, not a measurement of a running system. The honest way to`);
-      console.log(`  settle either decision for real is a private-chain deploy of V8.50 and a`);
-      console.log(`  re-run. Anything decided from this table should be re-checked there.`);
+      if (IS_V850) console.log(`  system, not a projection. THIS is the G.7 re-confirmation the runbook asks for.`);
+      if (!IS_V850) {
+        console.log(`  E1 is NOT`);
+        console.log(`  DEPLOYED — the live chain is V8.48. These rows are a projection of V8.50 onto`);
+        console.log(`  today's members, not a measurement of a running system. The honest way to`);
+        console.log(`  settle either decision for real is a private-chain deploy of V8.50 and a`);
+        console.log(`  re-run. Anything decided from this table should be re-checked there.`);
+      }
     }
   }
 
