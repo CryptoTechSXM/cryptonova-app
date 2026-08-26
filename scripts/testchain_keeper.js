@@ -171,6 +171,11 @@ async function main() {
   // "the estimate priced the work" from "the estimate priced the HALT" without a human
   // remembering to set GAS_LIMIT. Never assume 5M or 7.5M; 40.3 is what assuming cost.
   const minGas    = await keeper.minGasPerItem();
+  // 41.4-3: the batch projection below used to hardcode 15 — meaningless noise on a
+  // cap-1 deployment (it warned about a batch this chain can never assemble). Read the
+  // cap off the chain like the floor; 15 only as a pre-V8.50 fallback.
+  let capItems = 15;
+  try { capItems = Number(await keeper.maxItemsPerUpkeep()); } catch {}
 
   console.log("");
   console.log(`  addresses file : ${path.basename(ADDRESSES_FILE)}`);
@@ -180,6 +185,7 @@ async function main() {
   console.log(`  signer is owner: ${isOwner}`);
   console.log(`  upkeepCaller   : ${allowed}`);
   console.log(`  minGasPerItem  : ${minGas} (read off THIS chain — the ladder's halt-vs-work line)`);
+  console.log(`  maxItemsPerUpkeep: ${capItems} (read off THIS chain — sizes the GAS WARNING projection)`);
   console.log(`  interval       : ${INTERVAL_SECS}s   max ticks: ${MAX_TICKS || "unlimited"}`);
   console.log(`  csv            : ${CSV_PATH}`);
 
@@ -400,15 +406,16 @@ async function main() {
     //   an eviction costs 1/18th of a rescue, so a mixed batch's mean describes nothing
     //   that happened. Only quote this as a per-item cost in ONE_ITEM mode.
     const perItem = items.length ? Number(receipt.gasUsed) / items.length : 0;
-    const projected = perItem * 15;   // a full maxItemsPerUpkeep batch
+    const projected = perItem * capItems;   // a full batch at THIS chain's cap
     console.log(`            gas ${receipt.gasUsed}  rescued ${rescued}  reclaimed ${reclaimed}  skipped ${failed}` +
                 (failedDetail.length ? `  [${failedDetail.join(" ")}]` : "") +
                 (perItem ? `  (${Math.round(perItem / 1000)}k/item${process.env.ONE_ITEM === "1" ? " EXACT" : " avg"})` : ""));
     if (projected > 17_800_000) {
       console.log(`            *** GAS WARNING: ${Math.round(perItem / 1000)}k/item projects to ` +
-                  `${(projected / 1e6).toFixed(1)}M for a full 15-item batch, above the ~17.8M`);
+                  `${(projected / 1e6).toFixed(1)}M for a full ${capItems}-item batch, above the ~17.8M`);
       console.log(`            practical tx ceiling. If a batch that size comes due it may fail for a`);
-      console.log(`            GAS reason and look like a floor failure. Consider maxItemsPerUpkeep 5 or 10.`);
+      console.log(`            GAS reason and look like a floor failure.` +
+                  (capItems > 5 ? ` Consider a smaller maxItemsPerUpkeep.` : ``));
     }
     console.log(`            running: rescued ${totRescued}  reclaimed ${totReclaimed}  skipped ${totFailed}  REVERTS ${totReverts}`);
     csvAppend(`${stamp()},${tick},${items.length},${rescued},${reclaimed},${failed},${receipt.gasUsed},0,"${failedDetail.join(" ")}"`);

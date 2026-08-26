@@ -144,8 +144,11 @@ contract CNOVATreasury is Ownable2Step, ReentrancyGuard {
         emit AuthorizedCallerSet(caller, authorized);
     }
 
-    /// @notice Set the Tier-1 V3 matrix used by setFreeMode() to check totalMembers.
-    ///         Can only be set once.
+    /// @notice Set the community wallet — the address that receives the community
+    ///         share of early-exit penalties (20%, see the safeTransfer in the
+    ///         penalty path). Docstring was a copy-paste of setTier1Matrix's until
+    ///         2026-08-26 (handoff 40.6-4); unlike that setter, this one is NOT
+    ///         set-once — the owner can re-point it.
     function setCommunityWallet(address cw) external onlyOwner {
         require(cw != address(0), "Treasury: zero address");
         communityWallet = cw;

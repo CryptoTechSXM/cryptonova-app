@@ -586,6 +586,35 @@ scp -i C:\Users\CryptoTech\.ssh\do_keeper C:\CryptoNite-Smart-Contracts\CryptoNo
 and confirm the keeper's key matches the deployment owner wallet.
 *Why (V8.44+): keepers must sign as the wallet that owns the contracts — 0xCd0Af6.*
 
+**5.2b — CAP-1 CADENCE (decided 2026-08-25, handoff SESSION 42).** The community
+chain ships `maxItemsPerUpkeep = 1` (G.4-validated — items are NOT cheaper at depth,
+measured max 13.86M, so the cap stays). Throughput comes from the DRAIN LOOP in
+`direct_keeper.js`, not from cron frequency: **copy the drain-loop
+`direct_keeper.js` (master: `C:\CryptoNova-Keepers\direct_keeper.js`, loop added
+2026-08-25) to the VPS alongside the addresses file** — a pre-drain VPS copy does
+6 items/hour at cap 1 and starves any backlog. Cron stays `5-59/10` (writer-slot
+layout unchanged). The loop sends sequential performUpkeep txs while checkUpkeep
+reports work: 16.5M budget per tick, DRAIN_MAX_TICKS=40, 7-min wall-clock budget,
+breaks on a processed-0 BatchGasHalted. Ceiling ~240 items/hour burst vs live
+V8.48's 90/hour. ⚠ A full drain spends up to ~40× a one-shot slot from the keeper
+EOA — **watch its ETH balance, not just liveness** (2026-07-30: a near-zero gas
+tank IS an outage).
+
+**5.2c — KEEPER FAILOVER (decided 2026-08-26, handoff SESSION 42): no second
+`upkeepCaller` is granted.** The break-glass is the owner key itself —
+`performUpkeep` accepts `owner() || governance || upkeepCaller[msg.sender]`
+(MatrixKeeper.sol:914). If the droplet dies:
+```powershell
+cd C:\CryptoNova-Keepers   # .env: ADDRESSES_FILE=<community file>, KEEPER_PRIVATE_KEY=<deployer key>
+node direct_keeper.js       # drains up to 40 items/run; repeat as needed
+```
+🖥️PS. Parked members are parked-not-lost in the interim, and the drain loop catches
+up fast when the VPS returns. `setUpkeepCaller` is deliberately not DAO-gated, so a
+standing second caller is minutes away if ever wanted. While in 5.x, also: delete the
+VPS's stale `frozen_matb_keeper.js` (repo copy deleted 2026-08-26) and **resync
+`crontab_live_mirror.txt` from `crontab -l`** — it still shows a frozen_matb line the
+2026-08-23 audit measured as gone.
+
 **5.3** 🌐VPS: re-enable the RESCUE / MONITOR keepers only.
 
 > ⚠️ **NEVER restore a crontab backup blindly** (`crontab crontab.*.bak`). Those

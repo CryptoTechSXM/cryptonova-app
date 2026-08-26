@@ -10,7 +10,155 @@ owner-set, and the session that earned it got five things wrong by ignoring what
 
 ---
 
-# ⬛ SESSION 41 STATE — 2026-08-25, LATEST. READ THIS FIRST.
+# ⬛ SESSION 42 STATE — 2026-08-25, LATEST. READ THIS FIRST.
+# ✅✅ **BOTH PHASE-5 BLOCKERS ARE DECIDED (owner, this session), AND THE CADENCE ONE IS
+#     BUILT AND WIRE-TESTED.** 41.4 item 2b (keeper cadence at cap 1) and 41.4 item 1
+#     (clawback on crossing) no longer block PHASE 5 of the community deploy.
+# ✅✅ **2b — CADENCE: DRAIN LOOP, CRON UNCHANGED.** `direct_keeper.js` (master,
+#     C:\CryptoNova-Keepers) now DRAINS within its existing `5-59/10` slot: while
+#     checkUpkeep reports work it sends sequential performUpkeep txs (16.5M budget each,
+#     the 41.2 floor logic per tick), bounded by `DRAIN_MAX_TICKS` (default 40) and a
+#     7-minute wall-clock budget (`DRAIN_TIME_BUDGET_MS`), 1.5s between txs. Ceiling
+#     ~240 items/hour burst vs live V8.48's 15×6 = 90/hour; idle cost unchanged (one
+#     checkUpkeep read); one process on one wallet, so no new nonce contention; the
+#     one-writer-per-minute-slot cron layout is untouched. **A processed-0
+#     BatchGasHalted BREAKS the drain** — repeating a halt burns gas on the same
+#     condition (41.2) and its FAIL alert has already fired. Quiet-run accounting counts
+#     only a FIRST-tick empty check; an empty check after work is a drained backlog.
+#     Env overrides: DRAIN_MAX_TICKS / DRAIN_TIME_BUDGET_MS / DRAIN_TICK_DELAY_MS.
+# ✅ **THE LOOP WAS TESTED BY RUNNING IT, ALL FOUR PATHS, WITH A PLANTED POSITIVE
+#     (Rule 2; "a detector that reports zero must first find a planted positive").**
+#     Stubbed-ethers harness, real driver code end to end: (1) 3 scripted work ticks →
+#     3 txs then "DRAIN: complete — backlog cleared in 3 tick(s)"; (2) infinite work at
+#     DRAIN_MAX_TICKS=3 → cap message, remainder rolls to next slot + WARNING alert;
+#     (3) zero work → single checkUpkeep, quiet path byte-identical to the old one-shot;
+#     (4) planted processed-0 BatchGasHalted with 5 items pending → exactly ONE tx sent,
+#     loop broke. Not tested against a live chain — the next private2 backlog is the
+#     first live exercise; watch keeper.log for the DRAIN lines.
+# ⚠ **DEPLOYMENT CONSEQUENCES OF 2b:** (a) PHASE 5 must copy the drain-loop
+#     `direct_keeper.js` to the VPS — the VPS copy without it does 6 items/hour at cap 1
+#     and will starve any backlog; runbook has a new **5.2b** saying so. (b) Keeper EOA
+#     ETH: a 40-tick drain spends up to ~40× a one-shot slot — the 2026-07-30 lesson
+#     (near-zero gas tank IS an outage) gets sharper, watch balance not just liveness.
+# ✅✅ **1 — CLAWBACK ON CROSSING: POLICY. KEEP THE FULL SWEEP; SHIP UI DISCLOSURE.**
+#     The context 41.4's WATCH line lacked: the crossing sweep is the THIRD of three
+#     full-settlement moments that already exist — `withdrawCore` repays the full debt
+#     off the top of every withdrawal (V8.47) and MatB cycle-out does the same — while
+#     PARAM 59's bps rate (decided 5000) throttles only the pool-share DRIP in
+#     `_settlePool`. Design reading: drip at N bps from earnings, settle in full at
+#     liquidity events; a crossing is a liquidity event. Item A only makes it BITE
+#     harder because the member now arrives holding more (the crossing no longer spends
+#     their withdrawable). Dollar-for-dollar debt reduction, nobody parked or evicted by
+#     it, `RescueDebtRepaid` emitted, and the E1 comment already declares the ordering
+#     deliberate ("carrying first would quietly weaken the repayment path"). **No
+#     contract change. NOTE: 41.4's cite ":882-897" has drifted — the block is
+#     MatrixLogicLib :998-1016 ("SF rescue loan repayment" in `_crossToPartner`, after
+#     `_enterMatrix`, before the E1 carry).**
+# ⚠ **THE MEMBER-FACING HALF OF THAT DECISION IS A FRONTEND REQUIREMENT, NOT OPTIONAL:
+#     show the crossing-time `RescueDebtRepaid` deduction wherever balances/history are
+#     shown** — a balance that visibly shrinks on crossing with no explanation is the
+#     $10-lock mistake again (CLAUDE.md). Dormant until borrowers cross (0 of 46 MatB
+#     parkers on private2 carry debt; on the community chain SF-backed MatB rescues make
+#     borrowers by design, G.5), so this must land BEFORE community go-live, not after
+#     the first confused report.
+# ▶ **WHAT IS LEFT (42.2):** ship drain-loop direct_keeper.js to the VPS at PHASE 5
+#     (runbook 5.2b); the RescueDebtRepaid frontend disclosure; then 41.4 unchanged —
+#     item 2 (restart `run_bigfill_loop.ps1 -StartOffset 386`, owner timing), item 3
+#     (GAS WARNING cosmetic — the drain loop does NOT fix it), item 4 carried smalls +
+#     40.8's monthly `cw_distribute.js` on the 25th (TODAY is the 25th — check it ran).
+
+## 42.0 ✅ HOW THE TWO DECISIONS WERE MADE
+
+Both put to the owner with the ground truth attached (driver source, crontab mirror,
+MatrixLogicLib), both resolved to the recommended option: drain loop / policy-plus-
+disclosure. The cadence alternatives declined: faster one-shot cron (*/2 = 30/hr,
+still under live, floods writer slots) and a */5+small-loop hybrid (touches the cron
+layout for less ceiling than the drain). The clawback alternatives declined: throttling
+the crossing at clawbackBpsFor (inconsistent — withdrawing right after still sweeps
+100%, so it buys nothing but SF exposure) and removing the sweep (the E1 comment's
+warning; G.6's $0/$0 gap leans on repayment paths working).
+
+## 42.1 ✅ THE DRAIN LOOP — WHAT CHANGED IN direct_keeper.js
+
+`main()` now owns the loop; the old body is `runTick()` returning "no-work" | "worked"
+| "halted-zero". Hard failures keep their `process.exit(1)` — a dead tick ends the run,
+the next slot starts clean. `state.lastDrainTicks` records each run's tick count.
+Constants sit under HEARTBEAT_EVERY with the full rationale in-line. All telegram/log
+shapes preserved; per-tick saveState preserved.
+
+## 42.2 ▶ FOR SESSION 43
+
+**2026-08-26 update (owner):** bigfill loop RESTARTED (41.4 item 2 closed) · CW
+disbursement reported AVAILABLE TO CLAIM — the 40.8 monthly `cw_distribute.js` claim is
+the immediate owner action.
+
+In the state block above. Nothing else moved: PHASE G scoreboard stands as 41.4 printed
+it; the 08-21 chain stays the measurement deployment; private2 stays the shipping-config
+proof.
+
+## 42.3 ✅ 2026-08-26 — THE PRE-DEPLOY LIST, WORKED TO EMPTY
+
+Owner said "go down the list and then deploy". Every item is now done or decided; none
+of it is committed or pushed — review the diffs (`git diff` in all three repos).
+
+  1. ✅ **Frontend `RescueDebtRepaid` disclosure — SHIPPED (Testnet-App `index.html`).**
+     Two changes, both zero extra RPC: (a) the SF-loan banner's copy now names EVERY
+     settlement moment — payout share, withdrawal, tier upgrade, **and the automatic
+     crossing** — and says plainly that a balance can drop at a crossing while the loan
+     drops by the same amount; (b) **the banner no longer silently vanishes when the
+     debt hits 0**: it compares the already-fetched `memberDebt` against the last seen
+     value (localStorage, `cn_sf_debt_<addr>`) and shows a one-time green "SF Rescue
+     Loan Repaid — in full" notice explaining where the balance went, with the
+     BaseScan pointer and a dismiss link. "Repaid" vs "never borrowed" is decided by
+     the stored value, so first-time visitors see nothing. All 5 inline scripts parse
+     (the one FAIL, a duplicate `doCancelCoupon`, is PRE-EXISTING at HEAD — not
+     today's edit). ⚠ Ships through the app's own preview→main pipeline per its
+     CLAUDE.md; nothing pushed. ⚠ Today's edit normalized the file's mixed CRLF to
+     LF — `git diff --numstat` reads clean (43/4), content diff is the edit only.
+  2. ✅ **Second `upkeepCaller` — DECIDED (owner): DEFER, document break-glass.** No
+     new grant. The owner key is already an allowlisted caller by construction
+     (`owner() || governance || upkeepCaller`), so the droplet-death fallback is
+     running `direct_keeper.js` from the laptop with the deployer key. Runbook 5.2c
+     records the procedure. Parked members are parked-not-lost in the interim; the
+     drain loop makes VPS-restart catch-up fast. `setUpkeepCaller` stays minutes away
+     if a standing second caller is ever wanted.
+  3. ✅ **GAS WARNING (41.4-3) — GATED, not retired.** `testchain_keeper.js` now reads
+     `maxItemsPerUpkeep` off the chain at startup (15 only as pre-V8.50 fallback) and
+     projects a full batch at THAT cap. At cap 1 the projection equals the per-item
+     cost, so the warning only fires when a SINGLE item would clear ~17.8M — which is
+     real signal, not noise. Cap printed in the startup summary.
+  4. ✅ **`frozen_matb_keeper.js` — DELETED from the repo** (moved to `_to_delete/`,
+     AUTOMATION_AUDIT item 1, verdict DELETE). ⚠ TWO residues for PHASE 5: the VPS
+     copy still exists (`rm /root/keeper/frozen_matb_keeper.js`), and
+     `crontab_live_mirror.txt` still SHOWS a frozen_matb cron line while the 08-23
+     audit measured NO cron line on the VPS — the mirror is stale again, resync it
+     from `crontab -l` at PHASE 5 (the mirror's own header says why this matters).
+  5. ✅ **`mint_usdc.js` — the FIFTH list is gone (37.5).** Now loads the canonical
+     `CryptoNova-Testnet-App/fund_list.txt` (110 addresses, comment-stripping parser
+     tested against the real file: 110 valid, 0 dupes), `FUND_LIST` env override,
+     hard exit if no list found. ⚠ POPULATION CHANGE, stated loudly: the old
+     hardcoded array had 13 wallets and **10 of them are NOT in the canonical list**
+     (incl. `0x28FC…0887`, `0xd27170Eb`, `0x081375aA`, `0x85ec71AA` — the 37.5 QA
+     set). They no longer get minted to unless the owner adds them to the canonical
+     file or points FUND_LIST at a QA list. That divergence is the exact thing 36.4
+     existed to end; it is now visible instead of silent.
+  6. ✅ **`CNOVATreasury.setCommunityWallet` docstring — FIXED** (was a copy-paste of
+     setTier1Matrix's "Can only be set once", which is false and describes the wrong
+     function; now states what it does — the 20% early-exit-penalty receiver — and
+     that it IS re-pointable). Comment-only; ships with the community deploy's fresh
+     compile.
+
+**WHAT ACTUALLY REMAINS BEFORE PHASE 2:** nothing on the build side. The owner-side
+items: the CW claim comms (community affair, owner-timed), then the runbook sequence
+itself — PHASE 2 → 3 → 4 → 5 (addresses file + DRAIN-LOOP `direct_keeper.js` to the
+VPS, delete the frozen_matb residue, resync the crontab mirror) → remove the
+`distributeInterval()` waiver AT cutover and re-run G.8 to zero — → 6. First real
+drain on the community chain: read keeper.log's DRAIN lines and the keeper EOA
+balance.
+
+---
+
+# ⬛ SESSION 41 STATE — 2026-08-25. Superseded by SESSION 42 above on 41.4 items 1 and 2b (both DECIDED); otherwise current.
 # ✅✅ **THE REDEPLOY IS DONE AND THE GATE IS SUBSTANTIALLY GREEN FOR THE FIRST TIME, ON A
 #     CHAIN THAT REPRESENTS WHAT V8.50 SHIPS: G.4 PASS, G.5 PASS, G.6 PASS — all measured
 #     today on `deployed_addresses_v8_50_private2.json` (deployed 14:48Z, cap 1 / 7.5M READ
