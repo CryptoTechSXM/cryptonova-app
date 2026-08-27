@@ -46,6 +46,15 @@ Either do this after the restore, or rename in the backup file too — and verif
 
 ## 1. TIER 1 — FREE. Cron comment labels and lockfiles. Zero blast radius.
 
+✅ **DONE 2026-08-27 (session 43), applied on the VPS by `rename_tier1_locks.sh`**
+(keepers repo — kept as the record of the op; undo at
+`/root/crontab.backup.pre_rename_2026-08-27`). All 7 ACTIVE locks renamed + the two
+NECESSARY-section comment labels; verified per section 7: 11 active lines, every
+renamed job produced its new lock file and fresh log entries within one cron cycle.
+`frozen_matb` and `evict` rows are moot (job deleted 2026-08-26 / cron line absent);
+locks on PAUSED/TRIM lines deliberately untouched — rename them with their Tier 3
+script renames when stress is revisited.
+
 Lockfile paths are referenced nowhere but their own cron line. Rename freely.
 
 | current lock | proposed | the job's actual action |
@@ -180,10 +189,9 @@ done, the V8.50 migration is the cheapest moment it will ever have.**
 
 * **1.** CLAUDE.md selector row (30.5d) — smallest, and it is actively misleading.
 * **2.** Contract comments, Tier 4 — no bytecode, includes the 3M gas-limit trap.
-* **3.** Tier 1 lockfiles + cron comment labels — free, and only after PHASE G's crontab is
-  restored and verified at 11 lines (L4).
-* **4.** Settle `frozen_matb_keeper` redundancy (audit open item 1) — it may be a deletion
-  rather than a rename.
+* **3.** ✅ DONE 2026-08-27 — Tier 1 lockfiles + cron comment labels (see section 1).
+* **4.** ✅ SETTLED 2026-08-26 — `frozen_matb_keeper` was DELETED (audit item 1 verdict);
+  its cron line and file are gone from the VPS.
 * **5.** Tier 3 script renames, each with its cron line and lockfile in the same commit.
 * **6.** Tier 5 identifiers — internal subset now, ABI subset with the V8.50 deploy.
 * **NOT NOW:** log filenames (Tier 2), and nothing at all until 31.6's de-censoring re-run has

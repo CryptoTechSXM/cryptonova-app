@@ -10,7 +10,78 @@ owner-set, and the session that earned it got five things wrong by ignoring what
 
 ---
 
-# ⬛ SESSION 42 STATE — 2026-08-25, LATEST. READ THIS FIRST.
+# ⬛ SESSION 43 STATE — 2026-08-27, LATEST. READ THIS FIRST.
+# ✅✅ **DAY 1 CLEAN, QUIET-HOUR LIST DONE, AND PIF IS LAUNCHED TO THE COMMUNITY.**
+#     Fleet at 24h: INTEGRITY OK, parked 0 all day, drain loop's first real backlog
+#     cleared in 1 tick, SF $100→$106 on fees alone, zero rescue loans. Day-1 report
+#     + PIF announcement both drafted (community_post_2026-08-27_*.txt) and handed to
+#     the owner with fresh 20:01Z numbers.
+# ▶▶ **NEXT SESSION (44) OPENS WITH THE STRESS TEST — owner decision 2026-08-27
+#     evening: "simulate growth with stress test… start within the next 24hrs", ON
+#     THE COMMUNITY CHAIN.** ⛔ FIRST ACTION, before any PAUSED stress line wakes:
+#     the VPS stress SPONSORS/ROUND_ROBIN env still carries the 41-wallet roster —
+#     reduce to the 10-leader roster (run_bigfill_rr.ps1; "if you change one, change
+#     both", warning also in crontab_live_mirror.txt). Then: which jobs (rr A regs /
+#     B rescue / C upgrades, pool_primer) + budgets are OWNER calls; watch the drain
+#     ceiling (~240 items/hr), keeper EOA ETH (0.72), SF vs load, and session 33's
+#     velocity-gate threshold question — it becomes LIVE as population grows.
+## 43.0 ✅ FLEET DAY-1 (owner-run, 13:42Z): 11 cron lines, v8_50 .env, INTEGRITY OK,
+##     parked 0, T1 MatA 127/127. ⚠ WATCH: copay_rescue stands down while SF ≤ its
+##     $250 floor — the number to remember at the first "I'm stuck" report.
+## 43.1 ✅ alerts.jsonl LIVE (keepers 1f85184+3f04729): alert_log.js appended-into by
+##     the 4 PRIVATE senders (channel posts excluded — publications, not alerts);
+##     severity from the alert's own text, UNRECOGNISED → "unknown" (that grep IS the
+##     playbook's new-alert-type query); guarded require (opposite contract to
+##     keeper_gas_floor.js, deliberately); selftest 28/28 incl. planted unknown; first
+##     live unknown (system_keeper 🟢 heartbeat) triaged same-session per playbook rule.
+##     ALERT_PLAYBOOK.md's "Planned" section is now the shipped format + queries.
+## 43.2 ✅ TIER 1 NAMING PASS APPLIED+VERIFIED on the VPS (naming table s.1 marked
+##     DONE): rename_tier1_locks.sh (committed e2b5963 = the record; busy-guard;
+##     undo /root/crontab.backup.pre_rename_2026-08-27); 7 locks verb_object + 2 cron
+##     labels; verified by the table's own rule — all 7 new locks + fresh logs within
+##     one cycle; mirror resynced. mint_usdc balance guard landed (20bf453).
+## 43.3 ✅ PIF HARDENED (all findings from the owner's live testing, all on admin then
+##     mainlined at launch): standard chrome + professional copy; locked-like-buy
+##     pattern; registered members refused at BOTH doors; DOUBLE-FUND root-caused —
+##     ledger read reserve→unreserve→reserve→gifted, i.e. the RELEASE path freed a
+##     row after the coupon tx was already SENT (tx.wait() flake) — release is now
+##     money-aware (sent-but-unconfirmable KEEPS the reservation; polls receipts) and
+##     the [GIFTED] flip is awaited+retried; coupon ledger = chunked scans over public
+##     RPCs + per-wallet cache (v1 died in production: wallet RPCs cap eth_getLogs
+##     and the range grows ~43k blocks/day — a one-call scan from a deploy anchor is
+##     the fixed-lookback time bomb's twin); reservation clock 15 min in BOTH
+##     api/pif-request.js and the renderer (owner: 60min made ready sponsors wait
+##     behind walkaways; renderer previously froze stale rows on "BEING GIFTED NOW");
+##     diag_pif_sponsor.js in keepers repo (30a0dfd) — sponsor's full coupon trail,
+##     line check via memberReferrer (TierRouter:216 — sponsorOf DOES NOT EXIST),
+##     directCount cross-check; first run on the test sponsor: 3 funded / 2 redeemed
+##     both IN LINE / directCount=2 — correct end to end.
+##     ⚠ MAINNET-HARDENING (accepted testnet risk, on record): api/pif-request's
+##     unreserve is UNAUTHENTICATED on the public domain (admin is behind Vercel
+##     SSO) — a hostile release mid-funding recreates the double-fund deliberately.
+##     ⚠ By-design nuances worth remembering: targeted reservations bind the waitlist
+##     ROW, not redemption (bearer code — owner's test coupon for …277 was redeemed
+##     by …279); the API matches rows on wallet[2:10] (8 hex chars).
+## 43.4 ✅✅ PIF LAUNCHED: nav-btn-pif (index) + nav-lnk-pif/-m (status) out of the
+##     hide lists, Coming Soon gate removed from pif.html, PIF_WAITLIST.md reset to
+##     seed, pushed admin→preview→main. buy/gov/liq STAY gated.
+## 43.5 ✅ NAV CANONICAL across all 5 satellite pages (owner precondition for the
+##     announcement): Home·Dashboard·PIF·Buy·Governance·Liquidity·Status in sub-nav
+##     AND mobile menu, verified mechanically (d0ae434).
+## 43.6 ✅ BUGS: 4 tickets closed with MEASURED table rows (Lavern_Gay = coupon locks
+##     referrer to its funder BY DESIGN, UI now explains it under the field;
+##     CryptoJan = the max(fee,shortfall) fix; Sherwyn ×2 = redeems paid, penalty).
+##     ⚠ 16 OLD-CHAIN tickets (07-26→08-22) still in the OPEN section awaiting a
+##     dedicated measured triage pass — do NOT bulk-close.
+## 43.7 ⚠ STANDING SESSION LESSONS: device-bridge git leaves index.lock it cannot
+##     unlink — owner git blocks start with Remove-Item; PowerShell eats $vars/\"
+##     inside ssh strings — ship a script file instead of a one-liner (twice bitten).
+## 43.8 ▶ PARKED, in priority order after stress: old-chain ticket triage · keeper.log
+##     double-write fix (32.7, before/after census) · copay_rescue coverage-hole fix
+##     (32.2 pattern) · Tier 3/5 renames (lockstep commits) · PIF mainnet-hardening
+##     list · contracts-repo CRLF phantoms (31.0 warning applies).
+
+# ⬛ SESSION 42 STATE — 2026-08-25. Superseded by SESSION 43 above; launch-day ledger 42.4 still the deploy record.
 # ✅✅ **BOTH PHASE-5 BLOCKERS ARE DECIDED (owner, this session), AND THE CADENCE ONE IS
 #     BUILT AND WIRE-TESTED.** 41.4 item 2b (keeper cadence at cap 1) and 41.4 item 1
 #     (clawback on crossing) no longer block PHASE 5 of the community deploy.
