@@ -10,13 +10,122 @@ owner-set, and the session that earned it got five things wrong by ignoring what
 
 ---
 
+# ⬛ SESSION 44 STATE — 2026-08-27 evening, LATEST. READ THIS FIRST.
+# ✅✅ **43.9 REFERRER DEFECT AND 43.10 PIF WAITLIST: BOTH REPRODUCED, FIXED,
+#     RE-MEASURED AND PUSHED TO `admin`.** 43.9 = `98a0da2` (6 failing harness
+#     scenarios to 0). 43.10 = `cea5fff` (12 stubbed-handler checks, 7 failing on the
+#     old handler to 0). ⚠ NEITHER IS CLOSED: both still need live confirmation on
+#     the preview build — a two-account MetaMask switch with no reload for 43.9, and
+#     a PIF request appearing on BOTH the preview URL and www for 43.10 — plus a
+#     `diag_referrer.js` run on a wallet registered after the fix.
+## 44.1 ✅ **THE INSTRUMENT: `repro_referrer.mjs` (C:\CryptoNova-Testnet-App).**
+##     `node repro_referrer.mjs` — and `node repro_referrer.mjs <path-to-old-index>`
+##     runs the SAME harness against a pre-fix copy, so before/after is one tool, not
+##     two stories. It does NOT re-type the page logic: it SLICES the real bytes of
+##     `pickDefaultSponsor`, the loadUserData auto-fill block, the register referrer
+##     resolution, `useDefaultSponsor` and the accountsChanged reset out of
+##     index.html and executes those against a stub DOM. If the code moves, the slice
+##     markers stop matching and the run FAILS LOUDLY instead of silently testing
+##     nothing. Two control scenarios (S1/S2) pass in every run — that is what makes
+##     the failures worth believing.
+##     ⚠ It caught an error in MY OWN fixtures first: the test addresses were
+##     mixed-case with bad EIP-55 checksums, so `pickDefaultSponsor` fell into its
+##     `Math.random()` branch and the control failed. That accident IS finding 44.3.
+## 44.2 ✅ **MEASURED PRE-FIX: 6 of 10 scenarios placed a member under the WRONG
+##     sponsor.** S3 (A types a sponsor -> switch -> B inherits it), **S4 = the exact
+##     `0x5179A012…` signature** (A clicks Use-default -> switch -> B registers under
+##     **A's** pool default), S5 (field cleared after a switch -> stale global), S6
+##     (the Use-default button a member clicks TO FIX their referrer serves A's).
+## 44.3 ⛔ **NEW, AND IT NEEDS NO ACCOUNT SWITCH AT ALL — S8/S9.** A typed referrer
+##     that fails validation was **silently replaced by a rotation-pool sponsor**, no
+##     error anywhere. And `ethers.isAddress()` ENFORCES THE EIP-55 CHECKSUM, so a
+##     **correct** sponsor address pasted with the wrong letter-case (chat apps,
+##     screenshots, hand-retypes) counted as invalid and was silently swapped. S10
+##     shows the same address all-lowercase working. **This explains members who
+##     never switched accounts and still say "I typed a referrer and it did not
+##     take" — it is not a MetaMask bug and never was.**
+## 44.4 ✅ **REFUTED — the handoff's mechanism (ii) as written (S7).** With an EMPTY
+##     field the auto-fill block DOES re-run on an account switch and self-corrects.
+##     The stale global only bites once the field has been touched. Second hypothesis
+##     killed by measurement in two sessions; the FIELD, not the global, was primary.
+## 44.5 ▶ **THE FIX (index.html, 11 anchored edits, all commented in place).**
+##     (1) `defaultSponsorFor(addr)` — the default sponsor is cached PER WALLET
+##     (`window._defaultReferrerFor = {key,value}`), so cross-account staleness is
+##     impossible by construction, not merely unlikely — it holds even if
+##     accountsChanged never fires. `window._defaultReferrer` survives as a read-only
+##     mirror. (2) `normalizeAddressInput()` — 40 unambiguous hex digits are
+##     re-checksummed and ACCEPTED; anything else is refused OUT LOUD. (3) register
+##     never substitutes a default for something the member typed — it stops with a
+##     message. (4) accountsChanged resets the field + the cached default on a real
+##     switch (a `?ref=` link is re-applied; a coupon-locked readOnly field is left
+##     alone) and toasts "Wallet changed". (5) `useDefaultSponsor`, the register-tab
+##     validity check and `checkDefaultSponsorWarn` all go through the same
+##     normaliser — and the warn function now SAYS why Step 1 is disabled instead of
+##     hiding the warning and the button state at the same time.
+## 44.6 ⛔ **SAME FAMILY, FOUND WHILE SWEEPING, AND IT IS MONEY: the withdraw
+##     destination box.** `getWithdrawRecipient()` returned `null` for any value
+##     `isAddress()` rejected, and callers read `null` as "no destination given" — so
+##     a member who pasted a destination with the wrong letter-case had the
+##     withdrawal sent to their connected wallet with **nothing said**. Red border,
+##     no words. Fixed with the same normaliser + a written note + a toast at the
+##     moment of withdrawal. ▶ STILL OPEN, owner call: whether unreadable text in
+##     that box should BLOCK the withdrawal outright rather than fall back. I did not
+##     change withdrawal control flow — that is a deliberate scope line.
+## 44.7 ▶ **VERIFICATION STILL OWED (do not mark 43.9 closed until both are done):**
+##     (a) a live two-account MetaMask switch on the preview deployment, no reload;
+##     (b) `diag_referrer.js` on the VPS for the newly registered wallet, before/after.
+##     Also still owed from 43.9: **REOPEN the @Lavern_Gay ticket** — session 43
+##     closed it on an inferred coupon-lock mechanism the chain does not support.
+## 44.8 ✅ **43.10 PIF WAITLIST FIXED — the list is now served from the branch it is
+##     WRITTEN to.** `api/pif-request.js` gained a **GET** action that reads
+##     `PIF_WAITLIST.md` from `GH_BRANCH` and returns it as JSON; `pif.html`'s
+##     `loadWaitlist()` reads that API instead of `/PIF_WAITLIST.md` (its own
+##     deployment's static copy). One source of truth, correct on whatever branch the
+##     page is served from, and if GH_BRANCH ever changes both halves move together.
+##     • Caching: 30s shared cache so a page load does not cost a GitHub API call
+##     each time; a page that just CHANGED the list calls `loadWaitlist(true)` ->
+##     `?fresh=1` -> `no-store`, so a member never sees their own request missing
+##     from the refresh right after making it.
+##     • ⛔ The old code also failed as GOOD NEWS: `/PIF_WAITLIST.md` 404s to an HTML
+##     error page, `rows` comes back empty, and the member reads **"No open
+##     requests"** — an unreadable list wearing the empty list's words, the exact
+##     family this codebase has a standing rule against. The failure state now says
+##     it is a display problem, not an empty list.
+## 44.9 ✅ **INSTRUMENT: `test_pif_api.mjs` (Testnet-App root).** Runs the REAL
+##     handler with GitHub stubbed (no network, no token needed) — 12 checks: GET
+##     reads `ref=admin`, returns the list verbatim, issues no PUT, caches 30s,
+##     `?fresh=1` is `no-store`, a GitHub 404 surfaces as 502 and NOT as an empty
+##     list, POST still commits, PUT still 405, OPTIONS still answered.
+##     **It has teeth: 7 of 12 FAIL against the pre-fix handler, 0 against the fixed
+##     one.** `node test_pif_api.mjs <path-to-old-handler>` reruns it on any copy.
+## 44.10 ⚠⚠ **THIS REPO'S `git status` LISTS ~1,179 FILES AS MODIFIED AND ALMOST ALL
+##      OF IT IS LINE-ENDING PHANTOMS** (`core.autocrlf` unset; those files are CRLF
+##      on disk and LF in HEAD). Measured this session. Consequences, both real:
+##      • **NEVER `git add -A` / `git commit -a` in C:\CryptoNova-Testnet-App.** Stage
+##      files by name. Every owner git block in this handoff already does.
+##      • **NEVER commit `PIF_WAITLIST.md` from local.** `api/pif-request.js` commits
+##      it straight to origin/admin, so origin's copy is the LIVE list and the local
+##      one is stale — pushing it would erase members' real requests.
+##      At the time of writing local admin == origin/admin (`rev-list --left-right`
+##      = 0 0), but a PIF request can land at any moment, so if a push is rejected
+##      the answer is `git pull --rebase origin admin`, never a force.
+## 44.11 ▶ NEXT: the stress test (43.0 / owner decision) — and its FIRST action is
+##      still to cut the VPS stress SPONSORS/ROUND_ROBIN env from the 41-wallet
+##      roster to the 10-leader roster before any PAUSED stress line wakes.
+
+
 # ⬛ SESSION 43 STATE — 2026-08-27, LATEST. READ THIS FIRST.
 # ✅✅ **DAY 1 CLEAN, QUIET-HOUR LIST DONE, AND PIF IS LAUNCHED TO THE COMMUNITY.**
 #     Fleet at 24h: INTEGRITY OK, parked 0 all day, drain loop's first real backlog
 #     cleared in 1 tick, SF $100→$106 on fees alone, zero rescue loans. Day-1 report
 #     + PIF announcement both drafted (community_post_2026-08-27_*.txt) and handed to
 #     the owner with fresh 20:01Z numbers.
-# ▶▶ **NEXT SESSION (44) OPENS WITH THE STRESS TEST — owner decision 2026-08-27
+# ⛔⛔ **OWNER DECISION 2026-08-27 (evening): STRESS TEST / BIGFILL IS PUSHED BACK
+#     UNTIL THE REFERRER DEFECT IS SORTED.** Session 44 order: **43.9 the referrer
+#     defect FIRST** (members registering now, a typed referrer can be silently
+#     replaced — placement is money and trust), then **43.10 the PIF waitlist branch
+#     defect** (live and member-facing since launch day).
+# ▶▶ **ONLY AFTER THOSE, THE STRESS TEST — owner decision 2026-08-27
 #     evening: "simulate growth with stress test… start within the next 24hrs", ON
 #     THE COMMUNITY CHAIN.** ⛔ FIRST ACTION, before any PAUSED stress line wakes:
 #     the VPS stress SPONSORS/ROUND_ROBIN env still carries the 41-wallet roster —
@@ -25,6 +134,71 @@ owner-set, and the session that earned it got five things wrong by ignoring what
 #     B rescue / C upgrades, pool_primer) + budgets are OWNER calls; watch the drain
 #     ceiling (~240 items/hr), keeper EOA ETH (0.72), SF vs load, and session 33's
 #     velocity-gate threshold question — it becomes LIVE as population grows.
+## 43.9 ⛔⛔ **REFERRER LOST ON MULTI-ACCOUNT REGISTRATION — OPEN, AND IT OUTRANKS THE
+##     STRESS TEST.** Owner 2026-08-27: *"i think it is a metamask bug… this has been
+##     an issue from the inception and we do have a lot of members using metamask."*
+##     Two same-day reports (@ThanksAndPraises MetaMask, @Lavern_Gay MetaMask AND
+##     Rabby): typed referrers "revert to my original Default address".
+##     ✅ **MEASURED SMOKING GUN: @ThanksAndPraises' `0x3c1755…` is registered under
+##     `0x5179A012…`, which is ENTRY #4 of `DEFAULT_SPONSOR_POOL` (index.html).** He
+##     got an ORPHAN ROTATION DEFAULT, not anyone he typed — two independent sources
+##     (pool from source, memberReferrer from chain).
+##     ⚠ MECHANISM READ FROM SOURCE, **UNVERIFIED, REPRODUCE FIRST**: `window.
+##     _defaultReferrer` (index.html:4300) is set ONCE inside `if (refInput &&
+##     !refInput.value)`. A wallet account switch fires accountsChanged →
+##     connectWallet(true) → loadUserData **with NO page reload** (:2913-2930); on the
+##     2nd account the field still holds the 1st account's text so that block is
+##     SKIPPED and the global keeps the FIRST account's default. Register (:4768)
+##     falls back to `window._defaultReferrer || pickDefaultSponsor(userAddr)` — the
+##     global is truthy so the current wallet's default never computes. **Every later
+##     account that falls through gets the SAME address**, an exact description of
+##     "my original Default address". Second edge: the field is never cleared, so
+##     account B can inherit A's typed referrer. MetaMask is the TRIGGER (rapid
+##     multi-account switching, no reload); the defect is our stale global — which is
+##     why Rabby shows it too, and why "from inception" fits.
+##     ▶ FIX, SCOPED NOT WRITTEN: on accountsChanged clear `_defaultReferrer` + the
+##     referrer field and re-run auto-fill; at register recompute pickDefaultSponsor
+##     for the CURRENT wallet. ⛔ Member PLACEMENT = money and trust: reproduce (two
+##     accounts, one session, switch, no reload) → fix → verify on chain.
+##     ✅ **THE DISPLAY THEORY IS REFUTED — MEASURED 2026-08-27 with `diag_referrer.js`
+##     on all three wallets: sources [A] memberReferrer, [B] getMemberInfo.referrer and
+##     [C] every per-matrix getMember().referrer ARE IDENTICAL on all three.** The
+##     dashboard is honest. So this is NOT a display bug — the REGISTRATION really put
+##     him under a pool default, and the fix belongs in the register path alone. (The
+##     :5330 first-matrix source is still a latent fragility worth tidying, but it is
+##     not this defect.)
+##     ▶ **REFINED MECHANISM after the refutation, still UNVERIFIED:** two ways the
+##     typed referrer is lost, and TOGETHER they fit both directions of the reports —
+##     (i) the referrer FIELD is never cleared on an account switch, so account B
+##     silently reuses whatever account A typed (→ every later account lands on the
+##     same address, i.e. his main `0x149852b8…`, which is exactly what he describes
+##     and matches its 30 directs); (ii) when the field IS empty/invalid, the stale
+##     `window._defaultReferrer` global supplies the FIRST account's pool default
+##     (→ `0x5179A012…`, what the chain actually shows for `0x3c1755…`). Reproduce
+##     BOTH before fixing.
+##     ⛔ REOPEN the @Lavern_Gay ticket: session 43 closed it on an inferred
+##     coupon-lock mechanism that was never verified, and the chain shows her under
+##     `0x185B19c7…` — the referrer she asked for. The closure was wrong.
+## 43.10 ⛔⛔ **PIF WAITLIST IS INVISIBLE ON THE PUBLIC SITE — LIVE, MEMBER-FACING,
+##      FOUND 2026-08-27 from the owner's admin-vs-main screenshots.** admin shows the
+##      "testing PIF" request WAITING; `www.crypto-nova.app` shows "No open requests"
+##      for the same moment. CAUSE: `api/pif-request.js` hardcodes `GH_BRANCH='admin'`,
+##      so every member request commits to the ADMIN branch, while `pif.html` renders
+##      the list from `fetch('/PIF_WAITLIST.md')` — its OWN deployment's static file.
+##      Main's copy is the seed we reset at launch, so **on the public site the
+##      waitlist can never fill: requesters never see themselves, sponsors see nobody
+##      to sponsor.** Requests ARE captured (committed to admin + Telegram notice) and
+##      direct gifting by pasted address still works, so PIF is DEGRADED, not dead —
+##      but the list half of the loop is broken on the domain members actually use,
+##      the day it was announced. ▶ FIX (session 44, ahead of stress): serve the list
+##      from a branch-independent source — add a GET action to `api/pif-request.js`
+##      and have the page read the API instead of the static file. A push of
+##      admin→main is only a stopgap; it re-breaks with the next request.
+##      ⚠ SECOND, MINOR, BY DESIGN: coupon CODES are remembered in localStorage, which
+##      is per-ORIGIN — a coupon created on admin shows its code + "Share again" there
+##      and only its hash on www (the owner's screenshots). Same for phone-vs-desktop.
+##      Chain holds only hashes, so this is inherent; consider telling the sponsor why,
+##      or letting them re-enter a code to re-attach it.
 ## 43.0 ✅ FLEET DAY-1 (owner-run, 13:42Z): 11 cron lines, v8_50 .env, INTEGRITY OK,
 ##     parked 0, T1 MatA 127/127. ⚠ WATCH: copay_rescue stands down while SF ≤ its
 ##     $250 floor — the number to remember at the first "I'm stuck" report.
