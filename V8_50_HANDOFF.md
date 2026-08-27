@@ -96,6 +96,211 @@ In the state block above. Nothing else moved: PHASE G scoreboard stands as 41.4 
 it; the 08-21 chain stays the measurement deployment; private2 stays the shipping-config
 proof.
 
+## 42.4 ✅✅ 2026-08-26 ~03:50-05:25Z — THE V8.50 COMMUNITY CHAIN IS DEPLOYED
+
+Announcement posted (Telegram, `community_post_2026-08-26*` in the app repo): site off
+12:00 noon, early access 13:00, main 14:00, founder spots reset. Then the owner chose to
+deploy the same night so deploy day is only the cutover. Executed per PHASE 0/1 with the
+private-deploy keeper rule (pause ONLY the three deployer-key crons; `direct_keeper`
+kept serving live members; restored after 1.4 — verified 11 active lines back):
+
+  * PHASE 0: bigfill stopped (retires with the old chain) · 3 crons paused
+    (`DEPLOY50-PAUSED`, backup `/root/crontab.backup.v850deploy`) · laptop `.env`
+    ADDRESSES_FILE v8_48 → **v8_50** (⚠ EVERY laptop script now defaults to the
+    COMMUNITY chain) · whoami ✅ 0xCd0Af6, 60.4 ETH · nonce frozen 0x172eb across 30s ·
+    check_deploy_rpc 20/20 TWICE · predeploy_check **148/148**.
+  * PHASE 1.1: `deploy_v8.js` clean, all 10 tiers, ~35 min. The `getCode 0x` node-lag
+    warnings fired on CNOVADirectSale + CouponRegistry and the script's own guard
+    absorbed both (2 probes each). Grace clocks as decided: parked 86400 / self-funded
+    300 / eviction default 7d. PARAM 59 ships 5000 in source.
+  * Addresses: **`deployed_addresses_v8_50.json`**, committed `976cde6`. MatrixKeeper
+    `0xA04aD8Da…`, full table in the file. W1 `0x6512e9B5…` at T1 MatA root.
+  * 1.3 check_state: T1 MatA occ=1, all else 0, pool $1.80 / USDC $8.50, SF $0.30,
+    Treasury $0.50 — one $10 fee, split correctly.
+  * 1.3c set_upkeep_caller: keeper EOA `0xd419681B…` — first run showed the documented
+    stale-block `false FAILED`, second run read `before: true`. AUTHORIZED.
+  * 1.4 INTEGRITY OK — 20 matrices, 0 unset slots, run on the VPS with INLINE
+    ADDRESSES_FILE (`/root/keeper/.env` still points at LIVE v8_48 until PHASE 5).
+
+✅ **PHASE 3 DONE SAME NIGHT (~05:45Z), ADMIN ONLY (owner: "point to admin only",
+  early + main move on deploy day):** `update_addrs_v8_50.py` written (paths now
+  env-overridable) and run — 400 replacements across all 11 files incl. the Telegram
+  bot; the `distributeInterval()` WAIVER REMOVED (ABI line + fallback block, only a
+  history comment remains); **G.8 RE-RUN: 0 MISSING / 0 SHAPE DRIFT, 235/235 —
+  the zero/zero criterion is now in force, anything G.8 reports from here is NEW.**
+  Truncation check clean, en.json valid. Loan-banner disclosure rides in the same
+  push. Owner pushed origin admin (Vercel builds ~1-3 min).
+
+✅ **ADMIN PUSHED (~06:00Z, commit `8792d72` on `admin`).** The first push hit a stale
+  `index.lock` (a session `git status` over the device bridge timed out mid-read —
+  lock removed after `Get-Process git` showed nothing) and a rejected ref: origin/admin
+  had ONE new commit, `56a4dfa` — **a member bug report auto-committed 00:50 GMT:
+  Sherwyn, "Redeeming CNova tokens — redeemed but USDC not reflecting in wallet"
+  (Rabby, consistent, wallet 0x7d3c9488…). ⚠ TRIAGE IN THE MORNING, BEFORE CUTOVER —
+  it is member funds on the LIVE chain and the redeem path (BuybackReserve) retires
+  with it at noon.** Fast-forward pull, then commit+push clean; Vercel building.
+
+✅ **RR LEADER ROSTER REDUCED 41 → 10 (owner's exact list, W1 first) in
+  `run_bigfill_rr.ps1`;** dropped 31 remain in git history; file kept pure ASCII per
+  its own 2026-08-19 rule. ⚠ The VPS rr_keeper SPONSORS/ROUND_ROBIN env still carries
+  the 41 — "if you change one, change both": update it when stress is re-enabled
+  (PHASE 7), noted in the file's comment too. Not yet committed in the contracts repo.
+
+✅ **FRONTEND ORPHAN POOL ALIGNED (~06:20Z, `e6365ff` on admin):** the owner asked
+  whether the 10 were "also wired for registrations round robin from the frontend" —
+  they were NOT: `DEFAULT_SPONSOR_POOL` (index.html, deterministic orphan-sponsor
+  assignment for no-referral registrations) held 8 wallets including a dropped one.
+  Now the exact 10-leader roster, cross-referenced to run_bigfill_rr.ps1 in both
+  comments. Unregistered sponsors resolve to W1 on-chain, so the pool is safe before
+  leaders register; leaders registering early activates their orphan share.
+
+✅ **MORNING OF 08-26 (~13:00Z): SHERWYN'S REPORT CLOSED BY MEASUREMENT + THE CROSSING
+  SEMANTIC AUDIT THE OWNER ASKED FOR.** (a) `scripts/diag_sherwyn_redeem.js` (new,
+  read-only, REFUSES non-v8_48 addresses since laptop .env now names v8_50): both his
+  redeems SUCCEEDED AND PAID — $6.571675 (08-25, tx 0xab637c8d…) and $0.566131 (08-26,
+  tx 0xcf03f2b7…), 45% early-exit penalty withheld $5.84 of $12.98 gross (joined <30d),
+  wallet holds $30,065 USDC on-chain. NOT A BUG: penalty + a sub-$7 bump on a $30k
+  balance. (b) Owner's PHASE 4 pass found the Entry-Fee-Split popup still telling the
+  PRE-item-A story ("full $10 re-entry paid from reserve first, remainder from
+  earnings"). Swept EVERY member-facing surface for the old model ("funded half /
+  covers half / pre-funds half / released back as earnings"): ~23 corrections across
+  index.html (split tooltip + 2 reserve titles + breakdown detail-note), en.json (10
+  keys), compensation.html (2), faq.html (6), api/telegram-qa.js SYSTEM_PROMPT (2).
+  Post-sweep grep: ZERO stale phrases; all 5 inline scripts parse; en.json valid.
+  The story everywhere now: crossing costs HALF the fee == exactly the reserve,
+  pre-paid in full, nothing from earnings, balance travels (E1); the next full cycle
+  after MatB is a new full entry from accumulated funds. (c) Status-page loan panel
+  showing old-chain data: the `cnova_st_ver` localStorage buster was already bumped
+  by the address pass — owner to confirm a hard refresh zeroes it; if 351 borrowers
+  SURVIVE a hard refresh, dig for real.
+
+✅ **CRYPTOJAN'S REPORT (10:47 GMT) — A REAL BUG, FOUND AND FIXED BEFORE THE CUTOVER.**
+  Parked, saw Self Rescue + Copay but NO approve button, click said "still a
+  shortfall", intermittent. Mechanism, from the code: BOTH ready-gates (the card list
+  at renderParkedList and the single-position 30s poll) tested `allowance >=
+  SHORTFALL` — but the shortfall MOVES while parked, so an allowance that covered it
+  at render time fails at click time. The approve path already grants max(fee,
+  shortfall) (the contract's pull ceiling, ca66731 rationale); the gates never adopted
+  that bound. This is the measured 0xa0763F34 case (08-24 diag: $11.88 approved vs
+  $12.50 current) happening to a live member. FIX: both gates now compare against
+  max(fee, shortfall) — READY can never go stale. Ships with the cutover; CryptoJan's
+  own position resets at noon regardless. Reporter wallet auto-added to fund_list
+  (0x55a7ec55…, the 111th).
+
+✅ **CUTOVER PREP COMPLETE (~11:00 local).** Launch gate ARMED in admin's index.html
+  (host-based + timed: EARLY_MS 17:00Z / MAIN_MS 18:00Z — early and main open from the
+  CLOCKS after one push; admin always ungated), commit `1b0ed5f`. VPS staged: drain-loop
+  `direct_keeper.js` + `keeper_gas_floor.js` copied (INERT until .env repoints),
+  `frozen_matb_keeper.js` deleted, crontab mirror RESYNCED from real `crontab -l`
+  (finding: the evict_parked */30 line is ABSENT from the live crontab vs the 08-11
+  mirror — when/why UNVERIFIED, flagged in the mirror header; V8.50 covers eviction
+  on-chain). Keeper EOA 0xd419681B: 0.7246 ETH — thousands of drain ticks, fine.
+  Top-ups: mint_usdc now BALANCE-GUARDED (owner: skip wallets already holding the
+  amount) — ran clean: 3 minted (incl. CryptoJan, wallet #111), 108 skipped at ~$30k.
+  Keepers-repo .env created (rpc+deployer key copied file-to-file, never displayed).
+  NOON = exactly: `git push origin admin:preview --force` + `git push origin
+  admin:main --force`, then VPS .env → deployed_addresses_v8_50.json. Go-live posts
+  for 13:00/14:00 already drafted in-chat (Telegram format).
+
+✅ **STALE-LOANS ON STATUS — ROOT-CAUSED, AND THE 08-13 FIX TURNS OUT TO HAVE NEVER
+  WORKED.** Owner: 351 borrowers + full loan book on the fresh chain, surviving hard
+  refresh. First theory (stale bundle) was WRONG — he was on the new bundle. Real
+  mechanism, read from the code: the 08-13 defect ("book keyed per-wallet not
+  per-DEPLOYMENT", 456 borrowers painted onto empty T4/T5) was "fixed" by deriving
+  LOAN_KEY from the SF address via `window.ADDRS` — **but ADDRS is a top-level
+  `const`, script-scoped, never on `window`, so the ternary ALWAYS fell to
+  'unknown' and every deployment shared the key `cnova_loans:unknown`.** A fix that
+  was never watched working — same defect class as 40.2/41.2/41.3 (Rule 2: run the
+  thing; a guard you never saw fire is a guard you trust wrongly). Fixed three ways:
+  LOAN_KEY reads ADDRS directly; 'cnova_loans:unknown' added to the buster clear
+  list (purges the poisoned book for every visitor); SEED_BLOCK 45060000 → 45975000
+  (the V8.50 anchor). Plus, from the same session: the manual `cnova_st_ver` bump is
+  GONE — the buster string is now derived from the SF address, so redeploys
+  self-bust. ⚠ NOTE for any other page that wants ADDRS from another script:
+  top-level `const` IS visible cross-script via the global lexical environment —
+  reference it directly, `window.ADDRS` is always undefined. Swept: this was the
+  only occurrence.
+
+✅✅ **CUTOVER EXECUTED ~12:00 local 2026-08-26.** `admin:preview --force` and
+  `admin:main --force` both moved to `8df230e`; VPS `/root/keeper/.env` repointed to
+  `deployed_addresses_v8_50.json` (drain keeper + all cron serve V8.50 from the next
+  tick). Gate timestamps do the rest: early opens 13:00, main 14:00, automatically.
+  Verify: countdown pill on crypto-nova.app (incognito); first keeper.log tick shows
+  `minGasPerItem=7,500,000 maxItemsPerUpkeep=1` (v8_48 would say 5M/15). Go-live
+  posts drafted in-chat. THE OLD CHAIN IS RETIRED — CW claimed, withdrawal window
+  honored, keepers gone from it.
+
+✅ **KEEPER FLEET AUDIT (~12:40, owner asked "are all the keepers up to date") — NOW
+  MEASURED, NOT ASSUMED: all 12 active VPS keepers are BYTE-IDENTICAL to the repo
+  masters (md5 both sides).** The audit found 6 divergent files telling a two-way
+  story: every VPS copy had adopted a `deployed_addresses_current.json` fallback
+  convention that never came back to the repo, while 3 repo masters carried a
+  staticNetwork provider pin that never went up. Converged BOTH ways: repo masters
+  adopted the current.json convention (env-first unchanged — .env's v8_50 drives all
+  of them), the 6 files shipped up, and `deployed_addresses_current.json` is now a
+  real symlink → v8_50 on the VPS. Commit `070b8d1` (keepers repo). The fallback can
+  no longer silently point at a dead chain.
+
+✅ **LAUNCH AFTERNOON (~17:30): ALERT PLAYBOOK + MOBILE HINT + PIF v1 BUILT.**
+  (a) `ALERT_PLAYBOOK.md` (keepers repo): triage verdict for every fleet + frontend
+  alert type, grep-verified texts; standing rule — new alert types get a row the
+  session they appear. (b) No-wallet overlay shipped THROUGH TO MAIN (owner verified
+  the 4 steps): mobile visitors get in-app-browser steps with a ref-preserving copy
+  link; desktop gets extension advice. NO_WALLET telegram noise is now guided
+  traffic. (c) **PIF built per the owner's four dials (decided today via options:
+  gifter-funded $10 · ONE active gift per member · open waitlist · NO weekly SF cap —
+  owner chose against the recommended soft cap; floor is the guard, accepted risk on
+  record):** `pif.html` (two doors: waitlist request form + member gifting against
+  the LIVE CouponRegistry — approve+issueCoupon with optional ETH gas gift, code
+  hashed exactly as register's `keccak256(toUtf8Bytes(code.trim()))`, cancel/refund
+  for the active gift, waitlist rendered from the repo file), `api/pif-request.js`
+  (GitHub-commit pattern cloned from submit-bug.js, same env vars, honeypot,
+  [WAITING]→[GIFTED] flip, Telegram notify), `PIF_WAITLIST.md` seed. NOT yet
+  committed/pushed — goes to ADMIN first for the owner's test; concept in
+  PIF_CONCEPT.md. ⚠ Keeper RENAME still deliberately parked for a quiet hour
+  (naming table, session 32).
+
+✅✅ **PIF v1 COMPLETE AND OWNER-TESTED (evening of launch day).** The full loop works
+  on admin: waitlist request → Telegram notice → member gifts (approve + issueCoupon
+  vs the LIVE registry, optional ETH gas gift) → share overlay (native OS share sheet
+  FIRST — better than the dashboard's coupon share — then copy/TG/WA/X, public-site
+  links with embedded referral, auto-pops after funding) → code redeems on register.
+  TWO defects found by the owner's testing and fixed same-hour: (1) the api function
+  crashed — `module.exports` in a "type":"module" repo (35.9 lesson AGAIN; ESM export
+  now, commented at the crash site); (2) **double-funding race** — two wallets could
+  fund the same waitlist person. Fixed with RESERVE-BEFORE-FUND: atomic claim via the
+  sha-guarded GitHub commit ([WAITING]→[RESERVED by X @epoch]), reserved rows render
+  "BEING GIFTED NOW" without a button, failed/rejected funding auto-releases, 60-min
+  self-expiry for abandoned reservations, gifted accepted from either state. Owner
+  verified the conflict refusal live. **PIF LAUNCH IS ONE SWITCH: add the nav tab in
+  index.html + push + announcement (drafted on request). Owner's timing.**
+
+▶ **NEXT SESSION (43) SHOULD PICK UP:**
+  1. Keeper RENAME/cleanup (naming table, session 32) in a quiet hour — Tier 1 cron
+     comments/lockfiles first, scripts+crontab in lockstep, hash-verify both sides
+     (fleet is byte-identical as of today, the cleanest it has ever been). Fold in
+     `alerts.jsonl` (Telegram helper also appends JSON lines — ALERT_PLAYBOOK.md
+     bottom notes the shape).
+  2. PIF launch switch when the owner calls it; community post to draft then.
+  3. Watch: first organic MatB→T2 forward hops on the community chain (the 44% gap
+     economics, [[cryptonova-lending]]), SF climb past $100 (alert quiets itself),
+     drain-loop's first real backlog (keeper.log DRAIN lines + keeper EOA 0.72 ETH).
+  4. Day-1 community report to members (the V8.47-report tradition) once ~24h of
+     organic data exists.
+
+▶ **DEPLOY-DAY REMAINDER (now → 14:00 and after):**
+  0. Triage Sherwyn's redeem report (above) on LIVE before it retires; commit the
+     roster change with whatever the morning brings.
+  1. PHASE 4 owner test on admin.crypto-nova.app (hard refresh Ctrl+Shift+R), then at
+     the cutover push the SAME commit up the ladder: preview (early access, 13:00) →
+     main (14:00), per the app's push rules.
+  2. 12:00 site offline. PHASE 5: VPS `.env` → `deployed_addresses_v8_50.json`, **copy
+     the drain-loop `direct_keeper.js` to the VPS** (5.2b), `rm frozen_matb_keeper.js`,
+     resync `crontab_live_mirror.txt` from `crontab -l`, restart keepers against v8_50.
+  3. `node mint_usdc.js` top-ups (canonical fund_list, 110 wallets) before 14:00.
+  4. 13:00 early access · 14:00 main (PHASE 6). First backlog: watch keeper.log DRAIN
+     lines + keeper EOA ETH. PHASE 7b (sponsorship gate) NOT on go-live day.
+
 ## 42.3 ✅ 2026-08-26 — THE PRE-DEPLOY LIST, WORKED TO EMPTY
 
 Owner said "go down the list and then deploy". Every item is now done or decided; none
