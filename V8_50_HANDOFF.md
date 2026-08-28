@@ -299,9 +299,19 @@ owner-set, and the session that earned it got five things wrong by ignoring what
 ##      directly — EXACTLY the "one active sponsorship" illusion found earlier the same
 ##      day. Real enforcement needs `issueCoupon` to require `msg.value >= X` after a
 ##      member's first coupon: a CONTRACT change, mainnet scope, not a page change.
-##      ▶ OWNER STILL TO CHOOSE between his rule (opt out on coupon #1 only) and the
-##      simplification Claude offered: always included, no opt-out anywhere — which is
-##      what index.html:5124 ALREADY does, so it needs no per-member state at all.
+##      ✅ **SETTLED 2026-08-28 — ALWAYS INCLUDED, NO OPT-OUT.** Owner: *"always include it
+##      as you said, 25 cent is not worth the machinery."* He dropped his own
+##      first-coupon-optional rule for the simpler one, which also matches what
+##      index.html:5124 has always done, and needs no per-member state.
+##      ✅ **PART 2 DONE in pif.html:** the editable `gift-gas` input is GONE, replaced by
+##      a plain statement that 0.0001 ETH is included with every coupon, that it tops up
+##      the pool giving new members their first gas, and that it is NOT refundable
+##      (cancelling returns the $10 USDC, not the gas). The sender now reads a constant
+##      instead of the DOM — the old code fell back to `0n` whenever the input was blank
+##      or unparseable, so a stray keystroke silently issued a coupon with no gas and said
+##      nothing. Keep `GAS_GIFT_ETH` equal to index.html:5123's `GAS_GIFT_WEI`.
+##      ⚠ NOT tested live yet at the time of writing — needs one funded coupon on admin to
+##      confirm 0.0001 ETH actually leaves the sponsor and lands in the funder wallet.
 ##      ▶ REJECTED OPTION, kept so it is not re-proposed: (a) REMOVE the field —
 ##      the API funds recipients independently so the top-up buys nothing; or (b) call
 ##      `setGasGiftWallet` (owner-only, CouponRegistry.sol:105) to point it at the FUNDER
@@ -320,6 +330,88 @@ owner-set, and the session that earned it got five things wrong by ignoring what
 ##      automatically, the sponsor's contribution changes nothing for them, and it is
 ##      non-refundable. A "chip into the gas pool" feature, if wanted, is a separate and
 ##      honestly-labelled thing.
+
+## 44.15 ⛔⛔ **VERCEL IS NOT DEPLOYING — THE BRANCHES ARE LEVEL AND THE SITES ARE NOT.
+##      MEASURED IN THE VERCEL DASHBOARD 2026-08-28.** Symptom the owner reported: admin,
+##      early and www each render a DIFFERENT version of pif.html while `git rev-parse`
+##      says all three refs are `0e5b37d`.
+##      • Confirmed by fetching each domain with a cache-buster: **www still serves
+##      pre-`4121a58` code** — it still shows "One active sponsorship at a time", still
+##      hides the sponsor form when a coupon is active (so a member on www CANNOT sponsor),
+##      and still prints the hardcoded "1 active" with two coupons live.
+##      • Dashboard: last **Production** deployment = `6874045`, FOUR HOURS OLD, branch
+##      main. `10c3bae`, `5c2d280` and `0e5b37d` produced **NO DEPLOYMENT AT ALL** — not
+##      queued, not errored, absent. Project deployments simply stop ~2h ago.
+##      ⛔⛔⛔ **THE ACTUAL ROOT CAUSE, MEASURED FROM VERCEL'S OWN ERROR STRING:**
+##      `Resource is limited - try again in 24 hours (more than 100, code:
+##      "api-deployments-free-per-day")` — shown in red inside the Promote to Production
+##      dialog. **THE HOBBY PLAN'S 100-DEPLOYMENTS-PER-DAY CAP IS EXHAUSTED.** Nothing
+##      deploys and nothing can be promoted until it resets (~24h). This is why 5c2d280
+##      and 0e5b37d produced no deployment, and why three clicks on Promote appeared to
+##      do nothing — Vercel was REFUSING them, not ignoring them.
+##      ⛔ **THIS IS EXACTLY THE THING THE OWNER TOLD CLAUDE AT THE START:** *"when a bug
+##      report comes in it blocks vercel updates."* He had the answer; Claude went looking
+##      for a cleverer one and produced two wrong root causes before reading the error
+##      message that was on screen. **When the owner states an operational cause from
+##      experience, TEST THAT FIRST.**
+##      ⚠ **CLAIM RETRACTED — the entry below was written as "found and proven" and is
+##      NOT proven.** It may still be true (Vercel's own settings text does say it skips
+##      previously-deployed SHAs) but tonight's evidence CANNOT separate it from the cap:
+##      the empty-commit experiment produced one deployment because the cap refused the
+##      rest, not necessarily because of SHA dedup. **RE-TEST after the cap resets before
+##      believing either way.** Left here as an open question, not a finding:
+##      • ⚠ UNVERIFIED HYPOTHESIS — "the promotion ritual itself is broken":
+##      Vercel's own setting text: *"Vercel skips builds for commits with a previously
+##      deployed SHA."* Our ritual pushes the SHA to **admin first**, which builds it and
+##      registers it as deployed — so the subsequent `admin:preview --force` and
+##      `admin:main --force` of that IDENTICAL SHA are SKIPPED, no production deployment
+##      is created, and **the crypto-nova.app alias never moves.** PROVEN by experiment:
+##      an empty commit `2c5c703` pushed to all three branches produced exactly ONE
+##      deployment — Preview, branch admin. Nothing for preview or main.
+##      • The one time it appeared to work (`6874045` → three deployments in the same
+##      minute) the three pushes RACED AHEAD of the first build finishing, so there was no
+##      "previously deployed SHA" record yet. **Every push-to-all-three since has silently
+##      updated the git refs and nothing else.** Claude first hypothesised exactly this,
+##      then wrongly talked itself out of it on the 6874045 evidence — the race explains
+##      the exception, and the hypothesis was right.
+##      ▶ **CORRECT PROMOTION FROM NOW ON — do NOT force-push the same SHA to main.**
+##      Build once on admin, then in the Vercel dashboard: Deployments → ⋯ on that
+##      deployment → **Promote to Production**. It re-aliases crypto-nova.app and rebuilds
+##      with the PRODUCTION environment (which matters — production env vars differ from
+##      preview). Alternative if a CLI path is wanted later: `vercel promote <url>`, or
+##      give main its own distinct commit (a real merge commit) so the SHA is new.
+##      • ✅ **STRUCTURAL FINDING: `early.crypto-nova.app` is served by a SEPARATE VERCEL
+##      PROJECT — `cryptonova-preview` — not by the `preview` branch of
+##      `cryptonova-testnet-app`.** There are three projects (`cryptonova-testnet-app` →
+##      crypto-nova.app, `cryptonova-preview` → early.crypto-nova.app, `cryptonova-app` →
+##      no production deployment). This is why early and www can drift independently of
+##      branch state, and it contradicts the simple 3-branch ladder model in this handoff.
+##      **Correct the deploy-model note before relying on it again.**
+##      • Account is on the **Hobby** plan. `cryptonova-preview` DID deploy 1h ago, so the
+##      account is not globally frozen — whatever stopped builds is specific to the
+##      cryptonova-testnet-app project or to a per-day allowance it exhausted first.
+##      ⛔ **ROOT CAUSE THE OWNER ALREADY KNEW AND NO SESSION HAD WRITTEN DOWN: "when a bug
+##      report comes in it blocks vercel updates."** `api/submit-bug.js` and
+##      `api/pif-request.js` COMMIT TO THE admin BRANCH, and every one of those commits is
+##      a Vercel deployment. Today's PIF testing alone produced ~15. **Members filing bug
+##      reports and requesting PIF entries compete with real deploys for the same build
+##      allowance, and the busier the community gets the worse it gets.** A branch is being
+##      used as a live database, so every member action is a deploy event.
+##      ⛔ **CONSEQUENCE TONIGHT: www CANNOT BE SYNCED. It stays on `6874045` until the cap
+##      resets.** Members on www still cannot sponsor while holding an active coupon, and
+##      still see the hardcoded "1 active". Owner's call whether that needs saying to the
+##      community — it is a degraded feature, not a money bug.
+##      ▶ FIRST THING WHEN THE CAP RESETS, IN THIS ORDER: (1) apply the Ignored Build Step
+##      BEFORE anything else, so the very next member bug report does not start burning
+##      the fresh allowance; (2) then Promote to Production.
+##      ▶ FIX, NOT YET APPLIED, NEEDS OWNER APPROVAL (a Vercel settings change):
+##      Settings → Build and Deployment → **Ignored Build Step**, a command that exits 0
+##      (skip) when the commit message starts with `pif(` or `bugs(`. That removes ~90% of
+##      deployments and keeps the allowance for actual code pushes.
+##      ▶ PROPER FIX, MAINNET SCOPE: stop using a git branch as the datastore for the
+##      waitlist and bug reports — move both to Vercel KV/Blob or similar. Then member
+##      actions stop touching git at all, which also removes the "local admin goes stale in
+##      minutes" trap in 44.13.
 
 ## 44.11 ▶ NEXT: the stress test (43.0 / owner decision) — and its FIRST action is
 ##      still to cut the VPS stress SPONSORS/ROUND_ROBIN env from the 41-wallet
