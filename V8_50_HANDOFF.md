@@ -92,9 +92,21 @@ owner-set, and the session that earned it got five things wrong by ignoring what
 ##      the **debt double-count path CANNOT FIRE in this population and is therefore
 ##      UNTESTED, not clean**: `freeWithdrawable` subtracts the MEMBER-LEVEL debt inside
 ##      EVERY matrix (MatrixLogicLib:701) while [3] and [4] deduct it once, so a member in
-##      N matrices with debt D loses (N−1)×D on the card. **Re-run `SCAN=1 CALLS=1` the
-##      moment the SF starts lending.** A detector that reports zero must be able to see a
-##      positive (2026-07-29, bypass_scan) — this one has never seen one.
+##      N matrices with debt D loses (N−1)×D on the card. A detector that reports zero must
+##      be able to see a positive (2026-07-29, bypass_scan) — this one has never seen one.
+##      ✅ **THE TOOL NOW SAYS SO ITSELF** rather than relying on anyone remembering: every
+##      SCAN prints a `DEBT PATH: NOT TESTABLE / TESTABLE NOW` line with the count of swept
+##      members carrying SF debt (tallied BEFORE the zero-balance filter, since a member can
+##      owe with no balance). **Re-run `SCAN=1 CALLS=1` when that line goes non-zero.**
+##      ⛔ **WHEN DOES DEBT ACTUALLY APPEAR? (owner raised this; verified from the keepers,
+##      not assumed.)** Debt is created ONLY by `copay_rescue.js` → `coPayRescue()`, which
+##      is live at `4-59/10`. THREE things must coincide: (a) a member parks, (b) they
+##      cannot self-fund — `fastlane_rescue.js` runs at `3-59/10`, **one minute EARLIER
+##      every cycle**, and rescues self-funding members with NO loan, so it takes them
+##      first; and (c) **the SF is above its $250 floor** — `copay_rescue.js:131-134`
+##      computes its budget as `sfBal − SF_FLOOR` and stands down entirely at or below it.
+##      ⚠ The stress test will NOT produce debtors: rr_keeper job B was rewritten to
+##      member-signed `selfRescue` (no loan) and is PAUSED in the live crontab anyway.
 ##      ⚠ Also: [3] is CLAUDE'S re-implementation of the page's `_claimableAll`. The sweep
 ##      proves the two ALGORITHMS agree on this data; it does NOT prove a live browser
 ##      paints them identically (races between the three paint sites, stale globals, or an
