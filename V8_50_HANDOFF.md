@@ -89,7 +89,20 @@ owner-set, and the session that earned it got five things wrong by ignoring what
 ##      **"Use project's Ignore Build Step" was left UNCHECKED** so the promotion built.
 ##      ✅ **VERIFIED ON THE MEMBERS' OWN DOMAIN, not on the dashboard**: the served DOM at
 ##      `www.crypto-nova.app` contains the new **"Before the health fee"** sub-label under
-##      Total Withdrawn. Per 45.3 the `admin` push had already put it on early.* as well.
+##      Total Withdrawn.
+##      ⛔⛔ **BUT early.crypto-nova.app IS STILL OLD — AND 45.3 SAID IT WOULD NOT BE.**
+##      The owner looked and saw the OLD label ("$34.25 free to claim"). MEASURED in the
+##      Vercel `cryptonova-preview` project immediately after: `0c0dbe1` IS there and
+##      Ready — **tagged Preview** — while that project's **Production is `2c5c703` from
+##      branch `preview`, 18h old**, and THAT is what early.* serves.
+##      **45.3's claim "early.crypto-nova.app tracks admin, not the preview branch" IS
+##      FALSE. It measured that an admin push CREATES a deployment in the preview project
+##      and concluded the domain SERVES it. A deployment existing is not a domain alias.**
+##      Same confound 45.1 warned about: build the test so the two explanations cannot
+##      both fit. Corrected in 45.3 below too.
+##      ▶ **early.* is 18h behind production and is where QA looks.** To move it: promote
+##        `0c0dbe1` inside the `cryptonova-preview` project, or push `admin:preview`.
+##        NOT done — CLAUDE.md requires explicit approval for preview/main.
 ##      ▶ The member replies (`bug_replies_2026-08-28.txt`) are now UNBLOCKED — the claim
 ##        they make about the fee is true on the domain members use. **Owner sends them;
 ##        nothing is claimed as posted until he says so.**
@@ -243,8 +256,16 @@ owner-set, and the session that earned it got five things wrong by ignoring what
 ##      Production · Current, or fetch the domain.
 ##      ✅ ALSO MEASURED: **both Vercel projects build the `admin` branch** — one
 ##      admin push produced one Ready deployment in `cryptonova-testnet-app` AND
-##      one in `cryptonova-preview`, same SHA. So early.crypto-nova.app tracks
-##      admin, not the `preview` branch. The `preview` branch is vestigial.
+##      one in `cryptonova-preview`, same SHA.
+##      ⛔⛔ **THE CONCLUSION DRAWN FROM THAT WAS WRONG — RETRACTED 2026-08-28 (see 46.3).**
+##      This section said "early.crypto-nova.app tracks admin, not the `preview` branch"
+##      and that the `preview` branch is vestigial. **BOTH ARE FALSE.** The admin push
+##      creates a **Preview-environment** deployment in `cryptonova-preview`; that
+##      project's **Production** is separate and tracks the **`preview` branch** (measured
+##      2026-08-28: Production = `2c5c703`, branch `preview`, while `0c0dbe1` sat alongside
+##      it tagged Preview). **early.* serves that Production, so it does NOT follow admin,
+##      and the `preview` branch is NOT vestigial.**
+##      **A DEPLOYMENT EXISTING IS NOT A DOMAIN ALIAS — check what the domain SERVES.**
 ## 45.4 ⚠ MECHANICAL, COSTS A SESSION TEN MINUTES IF UNKNOWN: Claude's shell on the
 ##      owner's machine CANNOT DELETE FILES, so a `git status` run through it can
 ##      leave a stale `.git/index.lock` that blocks the owner's next `git add` with
