@@ -344,6 +344,86 @@ owner-set, and the session that earned it got five things wrong by ignoring what
 ##         several days.
 ##      4. PIF sock-puppet farming economics — is a farmed direct worth $9.23?
 ##         NOT measured. Answer before mainnet. See [[cryptonova-gate]].
+##      5. **The member drafts are WRITTEN AND VERIFIED BUT NOT SENT** —
+##         `community_post_2026-08-28_update.txt` (fixes, the Blockaid situation, and
+##         the growth simulation disclosed so members do not read test accounts as a
+##         rush of real people) and `bug_replies_2026-08-28.txt` (7 individual
+##         replies). Owner sends; nothing is claimed as posted until he says so.
+##      6. **The index.html failure-as-zero sweep is the highest-value open item on
+##         the bug ledger** — it closes @bevmawire and Maximum_71 together, and it
+##         was already an open item independently. Do it before hunting singles.
+##      7. The withdrawal family (4 tickets) needs ONE instrument: replay the
+##         withdraw path on a V8.50 wallet and print `withdrawableOf` · what the max
+##         button computes · what the contract actually transfers, side by side.
+##         @Koach100's three disagreeing numbers ($287.83 shown / $152.23 populated /
+##         $302.63 received) are the sharpest lead — the disagreement IS the finding.
+
+## 45.10 ✅ **BUG LEDGER TRIAGED — 17 open → 3 closed, 14 open.** Full per-ticket
+##      verdicts in `BUG_TRIAGE_2026-08-28.md` (Testnet-App root); the durable rules
+##      are in memory `/areas/cryptonova-bug-ledger.md`. Member drafts written:
+##      `community_post_2026-08-28_update.txt` and `bug_replies_2026-08-28.txt`.
+##      ✅ Every member-facing claim in the post was verified against the commit
+##      PRODUCTION ACTUALLY SERVES (`9b0cb92`), not against admin: `defaultSponsorFor`
+##      ×4, "the approval is now the ENTRY FEE" ×1, "as many entries as you like" ×1.
+##      That check exists because of the 2026-08-27 lesson — a launch was announced
+##      before the push had run.
+##      Closed on evidence only: Jacob (bug-report page sends NO transaction —
+##      measured zero `estimateGas`/`sendTransaction`/`.wait()`/`signer` in
+##      bug-report.html; and his report is IN the ledger, so the path worked),
+##      CryptoJan22's stuck self-rescue button (stale-shortfall gate, fixed 08-24 and
+##      08-26), and the display half of Kira's tiers-page report. Her "raise T1 to
+##      400 or 500" is a PRODUCT DECISION and is kept visible in the resolved row's
+##      label rather than buried inside a closure.
+##      ⛔ Fifteen were old-chain tickets and "the chain was replaced" was NOT used —
+##      that is precisely the shared explanation that closed @Lavern_Gay wrongly.
+## 45.11 ⛔⛔ **`bug_manager.js` WAS DANGEROUS IN FOUR SEPARATE WAYS. ONE OF THEM
+##      FIRED AND DELETED THE LEDGER. READ THIS BEFORE RUNNING IT.**
+##        1. **Wrong branch** — hardcoded `BRANCH='admin'` while the API files moved
+##           to `data`. 45.1 warned "all three move together or the data forks" and
+##           named three. **There were four.** Now `process.env.GH_BRANCH || 'data'`.
+##        2. **`close <match>` DELETED EVERY OPEN TICKET.** It replaced the whole
+##           open section with "_No open issues._" even for a FILTERED close, then
+##           appended a row for the match alone. It ran: all 17 open reports were
+##           wiped, and the resolved row did not even land (87 rows before and
+##           after). Now removes only the matched block, refuses to write if it
+##           cannot locate one.
+##        3. **`DRY_RUN` WAS NOT IN THE RUNNING COPY.** Claude patched the file,
+##           had the owner scp an EARLIER version, then added DRY_RUN and never
+##           re-issued the upload — and offered `DRY_RUN=1` as a safety net without
+##           checking. Three commands the owner believed were inert were live. **A
+##           safety flag you have not verified in the RUNNING copy is worse than no
+##           flag: it converts caution into false confidence.** Always
+##           `grep -c <guard> <file>` on the box before trusting it.
+##        4. **Broken table rows** — ticket titles contain newlines, so a row split
+##           across lines stops being a row; `api/get-reports.js` counts pipe-rows
+##           with 5+ cells, so the ticket would vanish from BOTH open and resolved.
+##           Now flattened, pipe-escaped, and self-checked; also reads each ticket's
+##           own Page field instead of hardcoding `index.html`.
+##        `close-all` now refuses without `CONFIRM_BULK_CLOSE=yes`.
+##      ✅ **RECOVERY: `restore_bugs.js` (keepers repo).** DRY_RUN by default,
+##      `APPLY=1` writes. Finds the newest `bug-sync: close` commit on `data`,
+##      restores BUGS.md from its PARENT BLOB (not from anyone's notes), and prints
+##      open/resolved counts before and after. Used: 0 open → 17 open restored, and
+##      the commit list proved NO member report had landed in between, so nothing
+##      was lost. Then all three closures were redone correctly: 17 → 14.
+## 45.12 ✅ **VPS `GITHUB_TOKEN` WAS DEAD (401) — replaced 2026-08-28.** Classic PAT,
+##      **`repo` scope only, EXPIRES 2026-11-26.** `bug_manager.js` is the ONLY
+##      consumer (grepped), so nothing else was silently failing. ⚠ The API side has
+##      its own token in Vercel — that is why member reports kept landing while the
+##      keeper's was dead. **A 401 from bug_manager means the KEEPER's token, never
+##      the site's.** Old env backed up at `.env.bak_token_20260828`. Set it with a
+##      `read -s` prompt and a python single-line replace — a `sed` one-liner invited
+##      pasting the token over the sed EXPRESSION, which is what happened first.
+## 45.13 ⚠ **CLAUDE PROCESS FAILURES, 2026-08-28 second half — worth more than the
+##      fixes.** (a) Told the owner to upload a file, then kept patching it and never
+##      re-issued the upload — the direct cause of the ledger wipe. **An instruction
+##      to deploy a file is void the moment that file changes again; re-issue it.**
+##      (b) Offered an unverified safety flag (see 45.11.3). (c) A redaction regex
+##      that hid a line's STRUCTURE, so the owner approved a crontab line he could
+##      not actually see (45.8). (d) Three command blocks written for PowerShell and
+##      handed over while the owner was sitting at the VPS prompt — say which prompt
+##      every block belongs at. (e) A grep whose pattern matched `429` inside ISO
+##      timestamps, inflating an error count to 3 when the truth was 0.
 
 # ⬛ SESSION 44 STATE — 2026-08-27 evening. ⚠ SUPERSEDED ON 44.15 BY SESSION 45 ABOVE —
 #     its prescribed Ignored Build Step does NOT save the deploy quota. Read 45.0 first.
