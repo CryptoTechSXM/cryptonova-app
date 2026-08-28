@@ -100,9 +100,18 @@ owner-set, and the session that earned it got five things wrong by ignoring what
 ##      and concluded the domain SERVES it. A deployment existing is not a domain alias.**
 ##      Same confound 45.1 warned about: build the test so the two explanations cannot
 ##      both fit. Corrected in 45.3 below too.
-##      ▶ **early.* is 18h behind production and is where QA looks.** To move it: promote
-##        `0c0dbe1` inside the `cryptonova-preview` project, or push `admin:preview`.
-##        NOT done — CLAUDE.md requires explicit approval for preview/main.
+##      ✅✅ **RESOLVED THE SAME SESSION (owner approved): `0c0dbe1` PROMOTED INSIDE THE
+##      `cryptonova-preview` PROJECT.** Deployment `2Fi1tSt37`, Ready, Environment
+##      Production, source `0c0dbe1`. **VERIFIED ON THE DOMAIN**: the DOM served by
+##      `early.crypto-nova.app` now carries "Before the health fee". Both domains are on
+##      `0c0dbe1`; QA and production no longer differ.
+##      ✅ **AND THE PROMOTE DIALOG INDEPENDENTLY CONFIRMED THE CORRECTED MODEL** — it
+##      listed exactly ONE alias, `early.crypto-nova.app`, where the testnet-app project's
+##      dialog had listed `crypto-nova.app +4`. **Two projects, two separate production
+##      aliases, each moved by its own Promote.** That is the shape to hold in mind.
+##      ⚠ The `preview` BRANCH is still at `2c5c703` — deliberately not pushed. Production
+##      in BOTH projects is moved by Promote, so the branch ref remains a poor indicator of
+##      what either domain serves. Read the domain, never the ref.
 ##      ▶ The member replies (`bug_replies_2026-08-28.txt`) are now UNBLOCKED — the claim
 ##        they make about the fee is true on the domain members use. **Owner sends them;
 ##        nothing is claimed as posted until he says so.**

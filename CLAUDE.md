@@ -181,6 +181,24 @@ for commit messages: use single quotes, or write "199 USD" and avoid the symbol 
 - **One command at a time.** Give one command, wait for output + no-error confirmation, then give the next. Never give multiple steps at once.
 - Run scripts with hardhat, not node: `npx hardhat run scripts/X.js --network baseSepolia`
 
+### Added 2026-08-28 (session 46) — ⚠ THE TWO RULES ABOVE ALREADY EXISTED AND WERE BOTH BROKEN
+The `$`-in-double-quotes rule and "one command at a time" were already written here, and
+Claude violated both in one session: a commit message went in with a literal `\$250`, and two
+commands handed over in one message were pasted onto a single line and ran as one broken
+command. **The failure was an UNREAD rule, not a missing one — the same shape as the
+2026-08-11 preferences drift. Re-read this section during long sessions, not only at the start.**
+Three traps that were NOT yet written down:
+- **No inner double quotes inside an ssh command string.** `ssh ... "grep -o \"x\" f"` — the
+  escaped `\"` is not an escape in PowerShell; the shell decides the line is unfinished and
+  hangs at the `>>` continuation prompt, needing Ctrl+C. Use SINGLE quotes inside, always.
+- **Never hand over a placeholder host.** `root@YOUR_VPS` was given as a literal and failed
+  instantly. The real one is in four runbooks: `ssh -i C:\Users\CryptoTech\.ssh\do_keeper
+  root@167.99.0.250`. Look it up before writing the block.
+- **Save long remote runs to a file on the box, then `sed` the section out.** A 5-minute
+  population sweep was piped through `tail -70`, which cut the very section the run was for
+  (it printed BEFORE the long per-wallet table) and the whole run had to be repeated. Pattern:
+  `node X.js > out_YYYYMMDD.txt 2>&1 ; sed -n '/^START/,/^END/p' out_YYYYMMDD.txt`.
+
 ---
 
 ## Deploy protocol (every deploy, no exceptions)
