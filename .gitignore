@@ -63,3 +63,6 @@ archive/captures/
 # but the negation is here so the intent is readable.
 .env.*
 !.env.example
+
+# scratch: before-state written by scripts/check_gas_gift_flow.js (MODE=snapshot)
+scripts/.gas_gift_snapshot.json

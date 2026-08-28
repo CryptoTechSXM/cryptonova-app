@@ -1,0 +1,91 @@
+Subject: Re: crypto-nova.app — ticket 1390129
+
+Hello Peter,
+
+Thank you for coming back to us, and for explaining what would help. Attached is a
+technical overview of the deployment, written for this request. Three things in it
+are worth stating directly in this message.
+
+1. A correction to our own report.
+
+Our submission said "the site requests one token approval: USDC spending for
+TierRouter... that is the only token permission the site ever asks for." That was
+written in good faith and it is not accurate. The site can also request approvals to
+our CouponRegistry (sponsoring another member's entry), our Treasury (token
+redemption), and our matrix contracts (a member repaying an advance). We would rather
+correct that ourselves than have you find it.
+
+What we should have written is the point that actually matters, and it holds for
+every one of them: the site never requests an unlimited allowance. There is no
+MaxUint256 or equivalent anywhere in the site source. Every approval is for an exact
+amount computed for the action the member just chose, and every spender is one of our
+own contracts listed below. That is verifiable in the page source served from the
+domain.
+
+2. This is a testnet deployment, and the token is a mock.
+
+Everything runs on Base Sepolia (chain id 84532). The settlement token is our own
+MockUSDC at 0x2D8B7b5eDec96bE441b6fb0D45D74a2BcE2C639a — a test token with no market
+value, not Circle USDC. There is no mainnet deployment of this system, and no mainnet
+asset is reachable from any contract involved.
+
+3. Every contract is verified, and the timing is probably the whole story.
+
+All 46 contracts of this deployment now have public verified source on BaseScan. The
+core ones:
+
+  CNOVAToken       0x98cCEb35f3C1624258073e6e66aBa1AE2be2F55a
+  TierRouter       0x0001660fF100a73134a86Ca1C8cf83977428dca4
+  CNOVATreasury    0xc1ED39a0FaAd9A6B291A2f3b6CBF165D2027a8D4
+  StabilityFund    0xCc6E704814B04bD492AA99e86fCa24e3cA938136
+  CouponRegistry   0x21063617Bd76B30c884EC3554186096300FBe9C1
+  CNOVADirectSale  0x5C12B34b9Ce1eea4CbBE6000a4bb52cD2CaF5c50
+  MatrixKeeper     0xA04aD8Dab09a9a742E0A845FB0c1e1107a86405F
+  MockUSDC         0x2D8B7b5eDec96bE441b6fb0D45D74a2BcE2C639a
+
+The attached document lists all 46 with links, including the ten tier PairManagers and
+their twenty matrices.
+
+The contracts were deployed on 2026-08-26 and verified on 2026-08-27. For about a day,
+a freshly-registered domain was asking visitors to approve token spending to contracts
+with no published source — which is the shape of a drainer, and we assume that is what
+the scan reacted to. That condition no longer holds. We had the same experience with an
+earlier deployment on 2026-07-30 for the same reason, which is why we recognise it.
+
+On documentation: we have not had a third-party security audit and we are not going to
+imply that we have. What we can send is our own internal work, described as exactly
+that. The most useful is PARITY_AUDIT.md, attached: every member-facing claim on the
+site listed against the contract function or constant that backs it, under a project
+rule that a claim without a named source does not ship — including the rows where we
+found the site wrong and corrected it. PIF_CONCEPT.md, also attached, describes the
+sponsorship feature behind CouponRegistry.
+
+What CryptoNova is, plainly: a matrix and referral community platform on testnet. A
+member pays a $10 test-USDC entry fee, is placed in a referral structure, and earns
+test USDC from it. We would rather describe it in those words than in softer ones.
+
+Some context on where this comes from. We have been building CryptoNova for the
+better part of three years, and for the past few months it has been on Base
+Sepolia in open testing with our community. Members register, report defects through a
+bug-report form on the site, and are credited and paid bounties for what they find;
+that feedback has shaped the build, including a number of the corrections recorded in
+the attached PARITY_AUDIT.md. The testnet phase exists precisely so that the people who
+will use this find its faults first.
+
+Parameter changes are governed on chain rather than by us alone. V8Governance
+(0x78DC530Ab3D63FC300e14381e27B6eACeD090951, verified) lets any CNOVA holder open a
+proposal and vote on it, with voting weight equal to their CNOVA balance, and members
+accrue CNOVA by participating. In the interest of being exact rather than flattering:
+the governance and direct-sale pages are still behind a "Coming Soon" gate on the
+public domains while we complete the testnet phase, so that surface is deployed and
+verified but not yet open to members.
+
+The flag currently appears on www.crypto-nova.app, crypto-nova.app, v8.crypto-nova.app,
+early.crypto-nova.app and admin.crypto-nova.app — the same build and the same contracts
+on each.
+
+We are glad to answer specific questions about any contract or transaction path, or to
+walk you through a registration end to end.
+
+Best regards,
+CryptoNova

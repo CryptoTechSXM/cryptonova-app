@@ -10,7 +10,162 @@ owner-set, and the session that earned it got five things wrong by ignoring what
 
 ---
 
-# ⬛ SESSION 44 STATE — 2026-08-27 evening, LATEST. READ THIS FIRST.
+# ⬛ SESSION 45 STATE — 2026-08-28 morning, LATEST. READ THIS FIRST.
+# ✅✅ **44.15 IS CLOSED. THE VERCEL DEPLOY LEAK IS FIXED, PROVEN, AND LIVE ON
+#     PRODUCTION.** But read 45.0 before you believe anything else in 44.15's
+#     "first actions" — **the fix that section prescribes does not work**, and
+#     the session that follows it will think it has solved the problem.
+## 45.0 ⛔⛔ **THE IGNORED BUILD STEP DOES NOT SAVE THE DEPLOYMENT QUOTA.**
+##      Vercel's own documentation, quoted verbatim (docs/project-configuration/
+##      project-settings, "Ignored Build Step"): *"Canceled builds are counted as
+##      full deployments as they execute a build command in the build step. This
+##      means that any canceled builds initiated using the ignore build step will
+##      still count towards your deployment quotas and concurrent build slots."*
+##      44.15 prescribed it as THE fix for the 100/day cap and ordered it done
+##      FIRST. It would have removed the build work and left every PIF request and
+##      bug report still consuming one of the hundred. **Measured before executing,
+##      which is the only reason it was caught.**
+##      ⚠ AND THE PATTERN 44.15 PROPOSED (`pif(` or `bugs(`) WAS WRONG IN BOTH
+##      DIRECTIONS. Read out of the API source, not guessed, the real prefixes are:
+##        `pif(`                     api/pif-request.js:143
+##        `bug-report(`              api/submit-bug.js:298
+##        `bug-report screenshot (`  api/submit-bug.js:239
+##        `fund-list(`               api/submit-bug.js:90
+##      `bugs(` matches NO API commit and DOES match human ones ("bugs: close 8
+##      resolved reports") — it would have skipped real code deploys while skipping
+##      none of the 46 bug-report commits. A prescribed fix is a hypothesis until
+##      someone reads the source it claims to match.
+## 45.1 ✅✅ **WHAT ACTUALLY FIXED IT — the `data` branch (admin `9b0cb92`).**
+##      Member-written data now lives on a branch **Vercel never deploys**:
+##        • `vercel.json` → `"git": {"deploymentEnabled": {"data": false}}`
+##        • `GH_BRANCH = 'data'` in api/pif-request.js, api/get-reports.js and
+##          api/submit-bug.js. ⛔ ALL THREE MOVE TOGETHER OR THE DATA FORKS.
+##      **PROVEN, not assumed:** commit `04360d8` pushed to `data` ALONE, with a
+##      UNIQUE SHA, produced NO deployment row of any kind. The unique SHA is what
+##      makes it decisive — `data` and `admin` briefly shared `9b0cb92`, where
+##      Vercel's SHA-dedup would have hidden the answer. **That is exactly the
+##      confound that produced 44.15's retracted claim; build the test so the two
+##      explanations cannot both fit.**
+##      Measured size of the leak: **121 of the last 300 commits on origin/admin
+##      (40%) were API-written.** That is what was competing with real deploys.
+##      • `vercel-ignore-build.sh` + `"ignoreCommand"` are KEPT, but only as a
+##        second line of defence — build minutes, concurrent slots, and a net if
+##        GH_BRANCH is ever pointed back at a deployable branch. Its header says so
+##        in full; do not re-read it as the quota fix.
+##      • ✅ INSTRUMENT `test_vercel_ignore.sh` (Testnet-App root). 12 fixtures
+##        including BOTH traps, plus all 300 real commit subjects cross-checked
+##        against an independently written classifier. Currently 121 skip / 179
+##        build / 0 mismatches. Re-run it after ANY change to the patterns.
+##      • ⛔ SAFE ONLY BECAUSE nothing reads that data from its own deployment any
+##        more: pif.html → api/pif-request.js GET → GitHub; reports.html →
+##        api/get-reports.js → GitHub; screenshots are path references inside
+##        BUGS.md. If a page ever reads PIF_WAITLIST.md/BUGS.md from the deployment
+##        again, BOTH the ignore script and the `data` branch must go.
+##      ▶ The 44.15 "PROPER FIX, MAINNET SCOPE" (move to Vercel KV/Blob) is now
+##        OPTIONAL, not required — the cost of a member action is already zero.
+## 45.2 ✅ **PROMOTED TO PRODUCTION 2026-08-28 (Claude drove Chrome; cap had reset).**
+##      `9b0cb92` → Ready, Environment Production · Current, aliased to
+##      crypto-nova.app +4. ⚠ The promote dialog offers a **"Use project's Ignore
+##      Build Step" checkbox — leave it UNCHECKED** so a promotion always builds.
+##      ✅✅ **VERIFIED ON THE MEMBERS' OWN DOMAIN, not on admin:**
+##      `www.crypto-nova.app/api/pif-request?fresh=1` → `{"ok":true,"branch":"data",
+##      "sha":"4ccccd8…","content":"# PIF — Pay It Forward waitlist…"}`. The
+##      `branch` field in that response is the cheap decisive check for any future
+##      branch move — it proves the PRODUCTION GITHUB_TOKEN reads the new branch,
+##      which was the one thing that could have silently broken.
+##      ✅ And www/pif.html now reads *"You can sponsor as many entries as you
+##      like"* — 44.12's fix is finally on the domain members use.
+##      ⚠ **"No open requests at the moment" on that page is TRUE, not a failed
+##      read** — all seven waitlist rows on origin/data are [GIFTED]. Checked,
+##      because an empty list is exactly where a failed read hides as good news.
+##      ✅ No commits landed on `admin` during the fork window, so nothing had to be
+##      merged into `data`.
+## 45.3 ⚠⚠ **THE BRANCH MODEL, CORRECTED AGAIN — `preview` AND `main` REFS ARE NOW
+##      STALE BY DESIGN.** Both sit at `2c5c703` while production serves `9b0cb92`.
+##      Production is moved by **Promote to Production**, never by pushing main.
+##      **Do not read branch refs as what is live.** Read the Vercel dashboard's
+##      Production · Current, or fetch the domain.
+##      ✅ ALSO MEASURED: **both Vercel projects build the `admin` branch** — one
+##      admin push produced one Ready deployment in `cryptonova-testnet-app` AND
+##      one in `cryptonova-preview`, same SHA. So early.crypto-nova.app tracks
+##      admin, not the `preview` branch. The `preview` branch is vestigial.
+## 45.4 ⚠ MECHANICAL, COSTS A SESSION TEN MINUTES IF UNKNOWN: Claude's shell on the
+##      owner's machine CANNOT DELETE FILES, so a `git status` run through it can
+##      leave a stale `.git/index.lock` that blocks the owner's next `git add` with
+##      "Unable to create index.lock". Hand him `Remove-Item .git\index.lock` with
+##      the block. Also: files Claude rewrites through that shell land LF, so git
+##      warns "LF will be replaced by CRLF" — cosmetic, the 44.10 phantom story.
+## 45.5 ▶ **STILL OPEN, IN THE ORDER I WOULD TAKE THEM:**
+##      1. **44.16 Blockaid reply — ✅ SENT 2026-08-28 by the owner.** BALL IS IN
+##         BLOCKAID'S COURT: do not re-submit, do not open a second ticket, and do
+##         not chase — 1390129 is a live appeal and duplicate reports re-scan and
+##         muddy it. Wait for Peter. If a session opens and nothing has come back
+##         after several days, ONE polite follow-up on the SAME thread. What was
+##         sent: `BLOCKAID_REPLY_1390129.txt` as the email body, with
+##         `BLOCKAID_APPEAL_1390129.md`, `PARITY_AUDIT.md` and `PIF_CONCEPT.md`
+##         attached. Both files
+##         are in the contracts repo root: `BLOCKAID_APPEAL_1390129.md` (technical
+##         overview; all 46 BaseScan links GENERATED from the address book so no
+##         address is hand-typed) and `BLOCKAID_REPLY_1390129.txt` (email body).
+##         Attach those two plus PARITY_AUDIT.md and PIF_CONCEPT.md. Peter's email
+##         is **Thu 2026-08-27 20:34**, not 08-28 as 44.16 says.
+##         ⛔⛔ **44.16's "WHAT ACTUALLY EXISTS TO SEND" LIST IS WRONG ON THREE OF
+##         FOUR. Read them before attaching — that instruction was right and this is
+##         what it found:**
+##           • `SECURITY_REVIEW.md` — says **"Chain: BNB Chain (BSC)"**, dated
+##             2026-05-23, covers three contracts. A different deployment on a
+##             different chain, and it opens with a "Bugs Found & Fixed" table.
+##           • `V8_SPEC.md` — 2026-06-05 design lock describing a **seven-tier**
+##             system. `MatrixFactory.sol:33` is `MAX_TIERS = 10`. It contradicts
+##             the contracts they can read on BaseScan.
+##           • `AUTOMATION_AUDIT.md` — its fourth line is "⚠️ CORRECTION — THE
+##             CENTRAL FINDING BELOW IS WRONG AT SOURCE LEVEL".
+##           • `PARITY_AUDIT.md` ✅ is the one to send — claim-to-contract-source
+##             mapping, exactly what they asked for. Internal review, never "audit".
+##         ⛔⛔ **AND WE ALREADY TOLD THEM SOMETHING UNTRUE.** The submitted report
+##         says *"the site requests one token approval: USDC for TierRouter... the
+##         only token permission the site ever asks for."* FALSE — `grep .approve(`
+##         finds TierRouter, CouponRegistry, CNOVATreasury, the matrix contracts,
+##         CNOVADirectSale, V8Governance and the LP/pool contracts. **The draft
+##         corrects it proactively.** A false claim to a security vendor loses the
+##         appeal and is the same shape as the thing being appealed.
+##         ✅ **THE TRUE AND STRONGER CLAIM, measured the same way: the site NEVER
+##         requests an unlimited allowance.** No MaxUint256 or equivalent anywhere
+##         in the page source; every approve() passes an exact computed amount to
+##         one of our own verified contracts. That is what a drainer heuristic
+##         actually keys on, and it is checkable in the served source.
+##         ✅ **VERIFICATION RE-MEASURED: 46 contracts verified, 0 unverified, 1
+##         WALLET** — `scripts/check_verification_v850.js` (READ-ONLY, new). **The
+##         "45 contracts" figure repeated across 44 sessions is wrong.**
+##         `liquidityReserve` `0x961fDE5C…` is not a contract at all:
+##         deploy_v8.js:459 reads it from LIQUIDITY_RESERVE_ADDRESS in .env, there
+##         is no LiquidityReserve.sol, and .env holds its private key. The script
+##         classifies on `eth_getCode`, not on a skip-list that would drift, and a
+##         rate-limited read reports UNKNOWN — never "unverified".
+##      2. ✅✅ **44.14 IS CLOSED — THE GAS GIFT REWIRE IS CONFIRMED ON CHAIN
+##         (2026-08-28).** One real coupon issued from
+##         `0x5179A012b54EE6E6c7db92f820C9b3d8126Eead2` on admin/pif.html, blocks
+##         46080421 → 46080568. All four checks passed:
+##           • funder `0xE5F5cc91…` **+0.0001 ETH exactly**
+##           • ops `0xa23A0492…` **+0.0 — did not move**, so the old defect is dead
+##           • sponsor paid 0.000101256648068103 (gift + 0.0000012566 gas)
+##           • sponsor paid 10.00 USDC for the coupon
+##         ✅ INSTRUMENT `scripts/check_gas_gift_flow.js` (READ-ONLY, two modes):
+##         `MODE=snapshot` writes the before-state to disk, `MODE=compare` reads
+##         again and prints deltas + verdict. **Why two modes: the sponsor's own
+##         balance falls by gift PLUS gas, so it can never prove the amount by
+##         itself — the decisive pair is FUNDER exactly +gift and OPS unmoved, and
+##         no single "after" read can show either.** It asserts the 0.0001 constant
+##         that index.html:5123 and pif.html:717 both hold, so a change to one door
+##         and not the other fails the test loudly. Re-run it after any coupon-path
+##         change; `SPONSOR=0x…` selects the wallet.
+##         ⚠ MECHANICAL: pass the SAME `SPONSOR` on both runs or the comparison is
+##         against the wrong wallet and the verdict is meaningless.
+##      3. 44.11 stress test — still gated on cutting the VPS SPONSORS/ROUND_ROBIN
+##         env from the 41-wallet roster to the 10-leader roster.
+
+# ⬛ SESSION 44 STATE — 2026-08-27 evening. ⚠ SUPERSEDED ON 44.15 BY SESSION 45 ABOVE —
+#     its prescribed Ignored Build Step does NOT save the deploy quota. Read 45.0 first.
 # ✅✅ **43.9 REFERRER DEFECT AND 43.10 PIF WAITLIST: BOTH REPRODUCED, FIXED,
 #     RE-MEASURED AND PUSHED TO `admin`.** 43.9 = `98a0da2` (6 failing harness
 #     scenarios to 0). 43.10 = `cea5fff` (12 stubbed-handler checks, 7 failing on the
@@ -331,6 +486,11 @@ owner-set, and the session that earned it got five things wrong by ignoring what
 ##      non-refundable. A "chip into the gas pool" feature, if wanted, is a separate and
 ##      honestly-labelled thing.
 
+## 44.15 ⚠⚠ SUPERSEDED BY 45.0/45.1 — the DIAGNOSIS below is right (Hobby 100/day cap,
+##      exhausted by API commits) but the PRESCRIBED FIX IS WRONG: Vercel counts
+##      canceled builds as full deployments, so an Ignored Build Step saves nothing
+##      here, and the `bugs(` pattern it proposes matches no API commit at all. The
+##      fix that works is the non-deploying `data` branch in 45.1. Read that first.
 ## 44.15 ⛔⛔ **VERCEL IS NOT DEPLOYING — THE BRANCHES ARE LEVEL AND THE SITES ARE NOT.
 ##      MEASURED IN THE VERCEL DASHBOARD 2026-08-28.** Symptom the owner reported: admin,
 ##      early and www each render a DIFFERENT version of pif.html while `git rev-parse`
@@ -412,6 +572,29 @@ owner-set, and the session that earned it got five things wrong by ignoring what
 ##      waitlist and bug reports — move both to Vercel KV/Blob or similar. Then member
 ##      actions stop touching git at all, which also removes the "local admin goes stale in
 ##      minutes" trap in 44.13.
+
+## 44.16 ▶ **BLOCKAID REPLIED, ticket 1390129 — 2026-08-28 20:34 local, from Peter,
+##      support@blockaid.co.** Not a rejection: they ask for *"any additional documentation
+##      that can help demonstrate the benign nature of your dApp… whitepaper, audit
+##      reports, security assessments, or any other relevant technical details."* They say
+##      they will keep us updated. **Reply on that email thread, referencing 1390129.**
+##      ✅ WHAT ACTUALLY EXISTS to send (checked, contracts repo unless noted):
+##      `V8_SPEC.md`, `SECURITY_REVIEW.md`, `PARITY_AUDIT.md`, `AUTOMATION_AUDIT.md`,
+##      plus `PIF_CONCEPT.md` and `README.md` in the Testnet-App repo, and — the strongest
+##      single asset — **all 45 contracts verified and readable on sepolia.basescan.org**.
+##      ⛔ **THERE IS NO THIRD-PARTY AUDIT. DO NOT IMPLY ONE.** `SECURITY_REVIEW.md` and
+##      the two AUDIT files are OUR OWN internal reviews. Describe them as exactly that —
+##      internal review documents — when sending. Sending a self-review labelled as an
+##      "audit report" to a security vendor is the fastest way to lose the appeal, and it
+##      would be the same class of untrue claim this whole session was spent removing.
+##      ▶ ALSO WORTH SAYING IN THE REPLY, because it is verifiable and unusually strong:
+##      this is a Base SEPOLIA TESTNET deployment using a MockUSDC; the only token
+##      permission the site ever requests is a USDC approval to TierRouter for the $10
+##      entry fee; and the contracts were verified on 2026-08-27, i.e. AFTER the flag was
+##      raised, which is very likely why it was raised.
+##      ⚠ Read the four docs BEFORE attaching them — they were written for us, not for an
+##      outside security reviewer, and may contain internal notes that read badly out of
+##      context.
 
 ## 44.11 ▶ NEXT: the stress test (43.0 / owner decision) — and its FIRST action is
 ##      still to cut the VPS stress SPONSORS/ROUND_ROBIN env from the 41-wallet
