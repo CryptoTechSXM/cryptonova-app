@@ -223,6 +223,128 @@ owner-set, and the session that earned it got five things wrong by ignoring what
 ##         surfaced — the prescribed action ("cut the env") was executable without
 ##         ever looking, and would have half-worked and reported success.
 
+## 45.6 ✅✅ **THE STRESS TEST IS LIVE (2026-08-28 ~17:20Z). 44.11 IS CLOSED.**
+##      Owner's scope: **jobs A/B/C only; 5 registrations every 20 minutes until 500
+##      total members, then 1.** Installed as three active crontab lines:
+##        A `*/20`   ONLY=A MAX_REG=5 REG_TAPER_AT=500 REG_TAPER_TO=1 POOL_SIZE=401
+##        B `3-59/5` ONLY=B  (drain — parked rescue, no loan)
+##        C `2-59/5` ONLY=C  (tier upgrades, self-funded)
+##      B and C kept their 5-minute cadence deliberately: they only drain what A
+##      creates, cost ~2s when there is nothing parked, and at A's cadence a parked
+##      member would wait up to 20 minutes for a rescue that was already ready.
+##      ✅ MEASURED WORKING: 196 → 206 members over two ticks, 5/tick, 4.2s median
+##      per registration, referrers rotating W1→#5 of the 10-leader roster in order
+##      — which is the roster cut of 45.5.3 proving itself end to end on chain.
+##      Backup of the pre-stress crontab: `/root/crontab.backup.pre_stress_2026-08-28`.
+##      ⛔ **JOB A HAD NO PER-TICK CAP AT ALL** — it registered until the time budget
+##      ran out, so the cron interval was the only throttle and "5 per tick" was not
+##      expressible. Added `MAX_REG`, plus `REG_TAPER_AT`/`REG_TAPER_TO` so the drop
+##      to 1 happens ON ITS OWN rather than needing someone to watch. The counter is
+##      `TierRouter.globalJoinedCount` (TierRouter:790, incremented once per
+##      register() behind `globalJoined[msg.sender]`) — UNIQUE members, community and
+##      stress together, no re-entries. Seat counts and `pairs[].totalRegistered` are
+##      CUMULATIVE and would over-count. **A failed count read falls back to the
+##      TAPERED cap, never to full speed** — the unsafe branch must not be where a
+##      broken read lands.
+##      ✅ **JOB B'S UNLIMITED APPROVALS ARE GONE.** It approved `MaxUint256` from
+##      every derived stress wallet to the matrix — a standing grant created once per
+##      wallet, thousands per run. Now approves `ENTRY_FEE`, which is a PROVABLE
+##      ceiling read from the source: `_selfRescue` (MatrixLogicLib:1749) pulls
+##      exactly `shortfall`, and shortfall ≤ crossingCost = `isMatrixA ?
+##      ENTRY_FEE*5000/10000 : ENTRY_FEE`. ENTRY_FEE is `immutable`, so unlike a
+##      shortfall it cannot go stale while a member sits parked — that staleness is
+##      what broke CryptoJan's approve button on 08-26. Cost, from source not guess:
+##      the allowance is only spent when a shortfall is actually pulled, so a
+##      zero-shortfall A→B rescue re-uses it; at most ONE extra approve per rescue
+##      that actually moves money.
+##      ✅ INSTRUMENT `stress_status.js` (keepers repo, READ-ONLY, owner-requested):
+##      one screen — cron lines installed? each job logged within its interval? locks
+##      held? pool left, member count vs taper, last 6 job-A lines. **It can say
+##      UNKNOWN and UNKNOWN is never counted as healthy**, so it cannot reproduce the
+##      "Keeper healthy asserted on a failed read" defect it exists to catch.
+##      ⚠ ITS FIRST VERSION WAS WRONG AND THE FIX IS THE GENERAL LESSON: it judged
+##      lockfiles by MTIME, but `flock` leaves the file on disk, so mtime is when the
+##      file was CREATED — it warned on all three healthy jobs at "38,604 min". Now
+##      it tests whether the lock can be ACQUIRED. **A monitor that cries wolf costs
+##      exactly as much as one that hides a fault.**
+## 45.7 ⛔⛔ **THE WALLET POOL WAS NOT WHAT EVERY CURSOR SAID — AND BOTH CURSORS LIED
+##      IN DIFFERENT DIRECTIONS.** Job A could not register at all: `pool exhausted`.
+##        • `pool_primer`'s cursor said 2840. Slots 2191-2196 had **0 ETH and $0.00** —
+##          it had advanced past wallets it never funded. Mechanism, read from source
+##          and marked **UNVERIFIED**: funding is gated on `needsUsdc && !isMember`,
+##          so wallets that were already members ON THE PREVIOUS DEPLOYMENT were
+##          skipped while the cursor moved on; the V8.50 redeploy then reset
+##          membership and left them unfunded with the cursor far past them.
+##        • Claude then asserted "roughly 808 wallets left", inferred from POOL_SIZE.
+##          **It was zero.** A figure derived from a config value is not a
+##          measurement — Rule 1, caught only because the owner asked for a check.
+##        • ✅ **THE OWNER'S INSTINCT BEAT THE PLAN.** He said "humour me, check
+##          wallet 1 to 400". Result: **1,854 usable wallets sitting BELOW the
+##          frontier** — 1..400 is 400/400 funded with $943,960 held, and none are
+##          members on V8.50 because the redeploy reset membership. The prepared
+##          $16,320 funding run was CANCELLED. 400 slots were re-approved for **zero
+##          USDC and zero ETH** — the approves are signed by the pool wallets from
+##          gas they already hold, so the deployer spent nothing.
+##        • ⚠ Their approvals pointed at the PREVIOUS deployment's T1 PairManager, so
+##          they read as zero against the current one. `rr_keeper`'s `bal < fee ||
+##          allow < fee` test cannot tell "never funded" from "funded, wrong
+##          PairManager" — hence instrument `probe_pool_slots.js` (READ-ONLY,
+##          `QUIET=1 FROM=n N=m`), which separates them and reports capacity.
+##        • Cursors now: `pool_primer_state.json` 401, `rr_keeper_state.json`
+##          poolCursor walking 1..400. Backups `.bak2_20260828` / `.bak_20260828`.
+##        • ⚠ Slot 128 failed its approve on a 503 — one isolated gap. Job A steps
+##          over isolated gaps and only stops on three consecutive. Harmless; re-approve
+##          whenever convenient.
+##        • ⛔ **`rr_keeper`'s DRY RUN MUTATES STATE** — a `DRY_RUN=1` job A advanced
+##          `poolCursor` by 5. `pool_primer` guards its cursor (`if (!DRY_RUN)
+##          saveCursor`), `rr_keeper` does not. Caught and rewound. **Small, real,
+##          still open — fix it before the next dry run is trusted.**
+##      ▶ WHEN THE POOL RUNS LOW (`stress_status.js` warns under 40 slots): extend
+##        into 401+ — but MEASURE the range first with `probe_pool_slots.js`. 401-1200
+##        has 33 unfunded and 1201-2000 has 113, so a blind `pool_primer` there WOULD
+##        spend real USDC where 1-400 did not. `pool_primer` is NOT scheduled and must
+##        not be — it is a by-hand prerequisite. Keep `TR_MULT=0` always.
+## 45.8 ✅ **RPC ENDPOINT REGISTER — `RPC_ASSIGNMENT.md` (keepers repo), owner-requested.**
+##      **TEN distinct QuickNode endpoints**: 7 on the VPS, 5 in the frontend, TWO
+##      shared. Regenerate rather than hand-edit — `rpc_assignment_report.py` reads
+##      the live crontab + `.env`, `rpc_scan_frontend.py` (Testnet-App root) reads the
+##      served source. Hosts and one-way sha256 fingerprints only: **the QuickNode key
+##      IS the path**, so a list of full URLs is a credentials file.
+##      ✅ MEASURED, not inferred: `cosmopolitan-still-fire` (`c0f897c7cd`) and
+##      `side-silent-sheet` (`4c12259e04`) fingerprint IDENTICALLY on both sides —
+##      the same URLs, not two keys on one host. Members' page loads and the stress
+##      engine were sharing them.
+##      ✅ **REBALANCED:** stress job B — the heaviest consumer in the fleet, 5
+##      concurrent workers every 5 minutes walking every pair and matrix — moved off
+##      `side-silent-sheet` onto `thrilling-newest-seed`, which carries no member
+##      traffic and no other scheduled job. Both its `BASE_SEPOLIA_RPC_URL` and its
+##      `RESCUE_RPCS` entry. Job A deliberately LEFT on the shared endpoint: 22
+##      seconds of work per 20 minutes does not justify spending an endpoint.
+##      Backup `/root/crontab.backup.pre_rpc_rebalance_2026-08-28`.
+##      ⚠ `crontab_live_mirror.txt` said "six distinct endpoints" — that count was
+##      CRONTAB-ONLY and missed the `.env` default. Corrected.
+##      ▶ IF REGISTRATION RATES RISE: add two QuickNode endpoints dedicated to stress
+##        A and B, leaving the frontend pool of five untouched. Not needed at 5/20min.
+##      ⛔⛔ **CLAUDE NEAR-MISS WORTH MORE THAN THE FIX.** The rebalance preview
+##      redacted URLs with `https?://([^/]+)/\S*`, and `\S*` swallowed
+##      `,url2,url3"` — so the owner approved a line that APPEARED to have one
+##      endpoint and no closing quote. The change was actually correct (verified
+##      after: even quotes, 3 endpoints, all settings present, job B ran clean), but
+##      he approved something he could not actually see. **A redaction that hides
+##      STRUCTURE is worse than no preview at all. Redact the path, never the shape.**
+## 45.9 ▶ **OPEN, IN THE ORDER I WOULD TAKE THEM:**
+##      1. **Watch the run.** `ssh … "cd /root/keeper && node stress_status.js"`.
+##         Watch: the taper firing at 500 (≈294 registrations away, ~20h at 5/20min,
+##         sooner with community traffic); pool slots left; SF vs load; drain ceiling
+##         ~240 items/hr; keeper EOA ETH; and session 33's velocity-gate threshold
+##         question, which becomes LIVE as population grows.
+##      2. `rr_keeper` DRY_RUN mutating state (45.7). Small, quick, real.
+##      3. 44.16 Blockaid — SENT, ball in their court. Do NOT re-submit or open a
+##         second ticket. One polite follow-up on the SAME thread if nothing after
+##         several days.
+##      4. PIF sock-puppet farming economics — is a farmed direct worth $9.23?
+##         NOT measured. Answer before mainnet. See [[cryptonova-gate]].
+
 # ⬛ SESSION 44 STATE — 2026-08-27 evening. ⚠ SUPERSEDED ON 44.15 BY SESSION 45 ABOVE —
 #     its prescribed Ignored Build Step does NOT save the deploy quota. Read 45.0 first.
 # ✅✅ **43.9 REFERRER DEFECT AND 43.10 PIF WAITLIST: BOTH REPRODUCED, FIXED,
