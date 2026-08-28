@@ -14,10 +14,82 @@ owner-set, and the session that earned it got five things wrong by ignoring what
 # ✅✅ **43.9 REFERRER DEFECT AND 43.10 PIF WAITLIST: BOTH REPRODUCED, FIXED,
 #     RE-MEASURED AND PUSHED TO `admin`.** 43.9 = `98a0da2` (6 failing harness
 #     scenarios to 0). 43.10 = `cea5fff` (12 stubbed-handler checks, 7 failing on the
-#     old handler to 0). ⚠ NEITHER IS CLOSED: both still need live confirmation on
-#     the preview build — a two-account MetaMask switch with no reload for 43.9, and
-#     a PIF request appearing on BOTH the preview URL and www for 43.10 — plus a
-#     `diag_referrer.js` run on a wallet registered after the fix.
+#     old handler to 0).
+# ✅ **43.10 CONFIRMED LIVE ON PREVIEW (2026-08-27, owner-verified).** After
+#     `git push origin admin:preview --force`, early.crypto-nova.app/pif.html shows
+#     the "testing PIF" WAITING row that ONLY admin could show before — the list
+#     fills on a domain other than the one the API writes to, which was the entire
+#     defect. Remote-ref truncation check passed on origin/preview for index.html
+#     and pif.html. ✅✅ **AND CONFIRMED ON MAIN — www.crypto-nova.app/pif.html shows
+#     the WAITING row after `git push origin admin:main --force` (owner-verified,
+#     2026-08-27). 43.10 IS CLOSED: the loop works on the domain members use.**
+# ✅ **43.9 LIVE CHECKS 1 AND 2 PASS (owner-verified on admin, 2026-08-27):** a real
+#     pool-leader address pasted with the wrong letter-case is now ACCEPTED (green
+#     border, Step 1 enabled) where it previously left a dead button and nothing to
+#     read; and `0x1234` now shows "Not a wallet address — it must start with 0x
+#     followed by 40 characters" with both steps disabled. ▶ CHECK 3 (the account
+#     switch) ✅ **ALSO PASSES — owner-verified on admin, 2026-08-27.** Switching
+#     MetaMask account with NO page reload EMPTIED the referrer box, and the
+#     placeholder re-read **"Auto: 0x391a…6F68 (default sponsor)"** — pool entry #10,
+#     i.e. the NEW wallet's own default, recomputed. Pre-fix it would have kept the
+#     first account's. **All three live frontend checks pass; the only step left to
+#     close 43.9 was the on-chain one.**
+# ✅✅ **AND THE CHAIN CONFIRMS IT END-TO-END (2026-08-27, owner-run).** A wallet
+#     registered through the fixed page — `0xf2CbD9b9a0F762A99D6F3B824C54f2231360476E`,
+#     with `0x6512e9B5FE1690F2570AFEE5E7b904EF106C9435` TYPED as the sponsor while the
+#     page's own auto-default was `0x391a…6F68`. `diag_referrer.js` on the V8.50
+#     TierRouter `0x0001660fF100a73134a86Ca1C8cf83977428dca4`: [A] memberReferrer,
+#     [B] getMemberInfo.referrer and [C] T1.MatA getMember().referrer (id 192) are ALL
+#     `0x6512e9B5…` — VERDICT line clean. **The typed referrer reaches the transaction;
+#     the auto-default did not overwrite it. That is the defect closed at the chain,
+#     not just on screen — and the differing-sponsor choice is what makes the test
+#     decisive rather than merely consistent.**
+#     ✅✅ **AND CONFIRMED IN METAMASK TOO (owner, 2026-08-27) — 43.9 IS CLOSED.**
+#     Account 1 `0xccF28…b512B` connected, sponsor `0x19a59fbD…` typed; switched to
+#     Account 2 `0x1C56C…906b7`; the referrer box EMPTIED and the placeholder
+#     re-derived to **`Auto: 0x1D3E…93AB (default sponsor)`** — a DIFFERENT pool entry
+#     from Account 1's `0x5179…ead2`. Per-wallet resolution works on both wallets.
+#     ⚠ METAMASK NUANCE WORTH KNOWING FOR SUPPORT: MetaMask scopes site permissions
+#     PER ACCOUNT. Selecting Account 2 in the MetaMask UI does NOT switch the site —
+#     it showed "Account 2 · Not connected" and the page still held Account 1 until
+#     the owner pressed **Connect** for that account. Only then does accountsChanged
+#     fire and our reset run. So a member who "switched accounts" may not have
+#     switched the SITE at all; that is MetaMask's model, not our bug, and it is a
+#     plausible contributor to the original confused reports.
+#     ⚠ COSMETIC, PARKED: the referrer input keeps its GREEN border while the red
+#     invalid-note is showing — contradictory. `checkDefaultSponsorWarn` sets the
+#     note and the button state but never the border. One-line fix, not urgent.
+# ⚠ **43.9 IS NOT CONFIRMED YET.** It still needs a live two-account MetaMask switch
+#     with no page reload on the preview build, plus a `diag_referrer.js` run on a
+#     wallet registered after the fix. Do not mark it closed before both.
+# ⛔⛔ **44.0 NEW, FOUND INCIDENTALLY IN THE 43.9 METAMASK SCREENSHOTS AND IT
+#     OUTRANKS THE STRESS TEST: METAMASK SHOWS "MALICIOUS SITE DETECTED —
+#     admin.crypto-nova.app — If you connect to this site, you could lose all your
+#     assets", with a red "Connect Anyway".** This is the Blockaid flag. CLAUDE.md's
+#     post-deploy section already documents this exact failure from 2026-07-30
+#     (early.crypto-nova.app + CNOVA flagged; the trigger was an UNVERIFIED contract
+#     requesting spending caps from a fresh domain) and prescribes the cure: verify
+#     every contract on BaseScan with `hardhat verify` FIRST, then submit domain +
+#     addresses to report.blockaid.io/mistake so the re-scan sees clean contracts.
+#     ⚠ **THAT CHECKLIST APPEARS NOT TO HAVE BEEN RUN FOR THE V8.50 COMMUNITY DEPLOY
+#     (2026-08-26).** Measured, not assumed: this handoff contains ZERO mentions of
+#     "blockaid", "hardhat verify" or "verified on basescan" across all 44 sessions,
+#     and `scripts/` holds `verify_all_v846.js` with NO V8.50 equivalent. BaseScan
+#     could not be checked from here (403 to the cloud fetcher) — so contract
+#     verification status is UNCONFIRMED, not disproven. ⛔ DO NOT state it as fact
+#     until someone loads the address on sepolia.basescan.org.
+#     ▶ SCOPE UNKNOWN AND IT IS THE FIRST THING TO MEASURE: the screenshots are
+#     admin.* only. If www.* carries the same flag, then every member registering
+#     since launch has been told they could lose all their assets — which would also
+#     be a far better explanation for "wallet problems" reports than anything in the
+#     page.
+#     ⛔⛔ **MEASURED 2026-08-27, owner: www.crypto-nova.app SHOWS THE SAME WARNING.**
+#     So this is live on the members' own domain and has been since launch. Every
+#     member who connects is told by MetaMask that they could lose all their assets.
+#     **TREAT AS THE TOP ITEM — ahead of the stress test, ahead of everything parked.**
+#     ORDER IS NOT OPTIONAL: verify the contracts on BaseScan FIRST, then submit to
+#     report.blockaid.io/mistake — a de-list requested while the contracts are still
+#     unverified re-scans dirty and does not stick.
 ## 44.1 ✅ **THE INSTRUMENT: `repro_referrer.mjs` (C:\CryptoNova-Testnet-App).**
 ##     `node repro_referrer.mjs` — and `node repro_referrer.mjs <path-to-old-index>`
 ##     runs the SAME harness against a pre-fix copy, so before/after is one tool, not
@@ -109,6 +181,146 @@ owner-set, and the session that earned it got five things wrong by ignoring what
 ##      At the time of writing local admin == origin/admin (`rev-list --left-right`
 ##      = 0 0), but a PIF request can land at any moment, so if a push is rejected
 ##      the answer is `git pull --rebase origin admin`, never a force.
+## 44.12 ✅ **PIF "ONE ACTIVE SPONSORSHIP" WAS A PROMISE THE SOFTWARE NEVER KEPT —
+##      COPY REMOVED, COUNT MADE REAL (owner decision 2026-08-28: "make it speak the
+##      truth").** Found because the owner's own account showed TWO active coupons
+##      under a header reading "1 active".
+##      • MEASURED, not assumed: `CouponRegistry.issueCoupon` has exactly two guards —
+##      non-empty hash, code not already taken (CouponRegistry.sol:117-119). **There is
+##      no per-issuer mapping in the contract at all.** And there are TWO issuance
+##      doors: `pif.html:677` (gated) and `index.html:5124` (no gate whatsoever), both
+##      calling the same function with the same wallet. Gating one of two doors is not
+##      enforcement — it misleads only the honest member, and it is how the owner came
+##      to hold two.
+##      • The header was the literal string `'1 active — awaiting redemption'`, not a
+##      count. Same family as failure-as-zero: a confident number nobody computed.
+##      • FIXED in pif.html: real `liveCount`; gift-maker no longer hidden; member copy
+##      at :263 rewritten; the stale "One active gift per member" function comment
+##      updated in the SAME edit (comments-drift rule).
+##      • ALSO CORRECTED: `community_post_2026-08-27_pif_launch.txt` still promised
+##      "One active gift at a time" — fixed in the file. ⛔ **CONFIRMED BY THE OWNER
+##      2026-08-28: THAT ANNOUNCEMENT ALREADY WENT OUT.** So the community was told a
+##      limit that does not exist, and once this ships the page will contradict the
+##      post they received. A short correction in the owner's voice is OWED — read
+##      [[community-comms]] before drafting it. Framing: this is good news (sponsor as
+##      many as you like), not a mea culpa, and it is accurate.
+##      • `PIF_CONCEPT.md` (⚠ UNTRACKED IN GIT until this commit) proposed the cap as a
+##      SELF-DEALING guard, not decoration — marked NEVER IMPLEMENTED there rather than
+##      rewriting the design intent.
+##      ⛔ **CLAUDE ERROR TO LEARN FROM, SAME SESSION:** Claude first told the owner the
+##      cap "buys nothing economically" — an assertion made BEFORE reading
+##      PIF_CONCEPT.md, which documents a real anti-farming purpose. Corrected in the
+##      next message. Rule 1 again: the confident aside is where the unverified claim
+##      hides, not the headline finding.
+##      ▶ OPEN, NOT MEASURED, belongs with [[cryptonova-gate]]: the CASH loop is dead —
+##      a sponsor at L1 earns 500bps + 270bps = $0.77 on a $10 entry they paid $10 for
+##      (−$9.23 per sock puppet, from the deployed SPLITS). But sponsoring inflates
+##      `directCount`, which the V8.50 sponsorship gate READS. **Is a farmed direct
+##      worth $9.23?** Nobody has run that. Answer it before mainnet.
+
+## 44.13 ⚠⚠ **BRANCH TRAP, HIT FOR REAL 2026-08-28 — READ BEFORE ANY PIF-ERA PUSH.**
+##      `admin` IS THE ONLY BRANCH SOMETHING OTHER THAN THE OWNER WRITES TO.
+##      `api/pif-request.js` commits `PIF_WAITLIST.md` straight to origin/admin on every
+##      request / reserve / unreserve / gifted, so local admin goes STALE WITHIN MINUTES
+##      of any PIF activity — including the owner's own testing. What happened: a push to
+##      admin was rejected ("fetch first") after ~10 API commits landed, but the
+##      `admin:preview --force` and `admin:main --force` promotions SUCCEEDED, leaving
+##      **main and preview AHEAD of admin** — the ladder inverted, with admin serving
+##      pif.html at the old gas default while main had the new one.
+##      ▶ THE FIX THAT WORKED (do this, not a force):
+##        git fetch origin
+##        git checkout -- BUGS.md PIF_WAITLIST.md    # phantom-only local mods
+##        git merge origin/admin -m "merge: PIF waitlist commits from the API"
+##        git push origin admin
+##        git push origin admin:preview --force ; git push origin admin:main --force
+##      ⛔ **NEVER `git push origin admin --force`.** Those pif(date): request/reserve/
+##      gifted commits are REAL MEMBER REQUESTS. Force on admin deletes them. Force is
+##      only ever safe on preview and main, which are promotion targets.
+##      ⚠ ROOT CAUSE OF THE 1,179 PHANTOM "MODIFIED" FILES, now measured: core.autocrlf
+##      is unset LOCALLY AND GLOBALLY — it is set at the **SYSTEM** level (Git for
+##      Windows default `true`). HEAD stores LF, checkout writes CRLF, so the tree is
+##      byte-identical but permanently "dirty". Commits normalise fine (which is why
+##      committing always works) but **rebase and pull --rebase REFUSE** on a dirty tree.
+##      That is why the merge route above is the reliable one. A permanent fix
+##      (.gitattributes `* text=auto eol=lf` + renormalize, or core.autocrlf=input) is a
+##      deliberate repo-wide change — NOT to be bundled into a hotfix. Parked.
+## 44.14 ⛔ **GAS GIFT: THE FIELD LIES, AND THE MONEY MAY BE GOING NOWHERE.** Owner spotted
+##      the default was ~$1.25 not ~$0.25. Measured from source, it is worse than a wrong
+##      number: `pif.html` labels it "Include gas for your recipient — covers their first
+##      transactions", but `CouponRegistry.issueCoupon` forwards `msg.value` to
+##      **`gasGiftWallet`** (CouponRegistry.sol:43,133-136) — a project wallet, NEVER the
+##      recipient. The recipient's gas actually comes from `/api/gas-gift`, which sends a
+##      fixed 0.0001 ETH from the FAUCET/GAS_GIFT key when their balance is under 0.0005,
+##      **whether or not the sponsor contributed anything**. And `cancelCoupon` refunds
+##      ONLY USDC (:150-155) — the ETH is unrecoverable, which the owner confirmed by
+##      measurement: cancel returned exactly $10.00.
+##      ✅ DONE: default aligned 0.0005 → 0.0001 to match index.html:5123 (two doors, one
+##      value, cross-referenced in comments).
+##      ⛔⛔ **MEASURED 2026-08-28 AND CONFIRMED — THEY ARE DIFFERENT WALLETS.**
+##      On-chain `CouponRegistry.gasGiftWallet` = **`0xa23A0492A823a2FfB6D3998dDd487695F5ba4019`**
+##      which is the **opsWallet** from `deployed_addresses_v8_50.json:9`. The API funder
+##      (`/api/gas-gift-address`) = **`0xE5F5cc91e8c5251193eF3108374Ae44CEE9841D3`**, not in
+##      the deploy address book at all. So the owner's recollection was right: the gas gift
+##      wallet was never attached and the address already sitting there — OPS — has been
+##      receiving every sponsor's ETH. It has never funded a single recipient.
+##      ✅ NOBODY WAS STRANDED: recipients are funded independently by /api/gas-gift from
+##      the funder wallet, so the broken path cost members nothing in service.
+##      ✅ AND IT IS TESTNET ETH — worth nothing today. **This is a MAINNET-CRITICAL defect,
+##      not a live loss.** Do not report it to the community as lost money.
+##      ⚠ SAME DEFECT, NO UI AT ALL: `index.html:5124` sends 0.0001 ETH with EVERY coupon
+##      issue, hardcoded, no opt-out and no mention — that ETH also lands in ops.
+##      ✅✅ **OWNER DECISION 2026-08-28: OPTION B — REWIRE, DO NOT REMOVE.** And the piece
+##      no previous session ever wrote down: **THE GAS GIFT WAS THE COMMUNITY'S OWN IDEA**
+##      (gift gas alongside the coupon so a new member can transact on arrival). It stays.
+##      ⛔ **POLICY HE SET AT THE SAME TIME — opting OUT of the gas gift is allowed on a
+##      member's FIRST coupon ONLY; every coupon after that MUST include gas.** His reason:
+##      someone chasing 100 directs could generate a hundred coupons, opt out each time and
+##      "get a free ride on the back of others or the ecosystem". The pool is a commons —
+##      one free pass, then you contribute. Now recorded in [[cryptonova-frontend]].
+##      ✅ **PART 1 DONE AND VERIFIED 2026-08-28.** `scripts/set_gas_gift_wallet.js` run by
+##      the owner; tx `0x9021e2ffc3554ba7ec0dd32e6ab1b12ed97254bf882ce4efefd2056ab61c8776`
+##      (block 46057498, Status Success). `gasGiftWallet` now reads
+##      `0xE5F5cc91e8c5251193eF3108374Ae44CEE9841D3` — the funder. Re-running the script is
+##      the cheap idempotent check: it exits with "already set" and sends nothing.
+##      ⚠ ETH already in ops stays there — the owner's own wallet, sweep separately if wanted.
+##      ⛔ **CLAUDE BUG, AND A GENERAL LESSON:** the script's first version asserted on a
+##      SINGLE read-back and reported "read-back MISMATCH — the set did not take" on a
+##      transaction that had SUCCEEDED. The read had landed on a pool node that had not yet
+##      seen the block. **A read-after-write against a load-balanced RPC is not a
+##      measurement until it agrees with itself** — retry before concluding, and check the
+##      tx status before believing a failure. Now retries 6×. Same family as the rest of
+##      this file: a confident number that nobody checked twice.
+##      ▶ IMPLEMENTATION, PART 2 REMAINS: pif.html
+##      enforces the first-coupon rule (the scan already knows `data.issued.length`) and
+##      relabels the field honestly + discloses non-refundable.
+##      ⛔ **AND THE ENFORCEMENT GAP, SO NO FUTURE SESSION MISTAKES THE PAGE FOR A GUARD:**
+##      `issueCoupon` accepts `msg.value: 0` from anyone, always. A first-coupon gas rule
+##      living in pif.html is walked past by using index.html or calling the contract
+##      directly — EXACTLY the "one active sponsorship" illusion found earlier the same
+##      day. Real enforcement needs `issueCoupon` to require `msg.value >= X` after a
+##      member's first coupon: a CONTRACT change, mainnet scope, not a page change.
+##      ▶ OWNER STILL TO CHOOSE between his rule (opt out on coupon #1 only) and the
+##      simplification Claude offered: always included, no opt-out anywhere — which is
+##      what index.html:5124 ALREADY does, so it needs no per-member state at all.
+##      ▶ REJECTED OPTION, kept so it is not re-proposed: (a) REMOVE the field —
+##      the API funds recipients independently so the top-up buys nothing; or (b) call
+##      `setGasGiftWallet` (owner-only, CouponRegistry.sol:105) to point it at the FUNDER
+##      wallet so contributions actually replenish what pays out — then relabel honestly
+##      and disclose that it is non-refundable. (b) makes the pool self-sustaining, which
+##      matters at mainnet volume; (a) is simpler and is right if the pool is topped up
+##      manually anyway.
+##      ⛔ HISTORICAL — the original open question, kept for the record: Nothing in the frontend ever reads
+##      `gasGiftWallet`, and nothing ties it to the API funder. **Owner 2026-08-28: "a
+##      previous session we created the gas gift wallet but was not properly attached so
+##      used another wallet that was already set."** If on-chain `gasGiftWallet` ≠ the
+##      `/api/gas-gift-address` wallet, every sponsor's ETH has been accumulating where
+##      nobody is ever paid from. CHECK BOTH: `/api/gas-gift-address` and BaseScan →
+##      CouponRegistry `0x21063617Bd76B30c884EC3554186096300FBe9C1` → Read → gasGiftWallet.
+##      ▶ CLAUDE'S RECOMMENDATION: REMOVE the field. The recipient is covered
+##      automatically, the sponsor's contribution changes nothing for them, and it is
+##      non-refundable. A "chip into the gas pool" feature, if wanted, is a separate and
+##      honestly-labelled thing.
+
 ## 44.11 ▶ NEXT: the stress test (43.0 / owner decision) — and its FIRST action is
 ##      still to cut the VPS stress SPONSORS/ROUND_ROBIN env from the 41-wallet
 ##      roster to the 10-leader roster before any PAUSED stress line wakes.
