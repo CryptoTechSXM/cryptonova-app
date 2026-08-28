@@ -161,8 +161,67 @@ owner-set, and the session that earned it got five things wrong by ignoring what
 ##         change; `SPONSOR=0x…` selects the wallet.
 ##         ⚠ MECHANICAL: pass the SAME `SPONSOR` on both runs or the comparison is
 ##         against the wrong wallet and the verdict is meaningless.
-##      3. 44.11 stress test — still gated on cutting the VPS SPONSORS/ROUND_ROBIN
-##         env from the 41-wallet roster to the 10-leader roster.
+##      3. ✅✅ **THE VPS ROSTER CUT IS DONE — 41 → 10, VERIFIED (2026-08-28,
+##         session 45). 44.11's gate is lifted; the stress test is now free to be
+##         scoped.** `/root/keeper/.env` rewritten by `cut_roster_to_10.sh` (left on
+##         the VPS; refuses to write unless no stress cron line is live, exactly two
+##         roster lines are found, and the new roster is exactly ten valid
+##         addresses). Backup `/root/keeper/.env.bak_roster41_20260828`.
+##         ✅ PROVEN, not assumed: counts 10/10; the two variables IDENTICAL to each
+##         other; `diff` of key-names-only before/after showed KEY NAMES UNCHANGED,
+##         so no secret was touched; and the ten diff clean against BOTH
+##         `run_bigfill_rr.ps1` and `DEFAULT_SPONSOR_POOL` in index.html — order and
+##         EIP-55 case included. All three copies of the roster now agree.
+##         ⛔⛔ **TWO FINDINGS THE OLD NOTE HAD WRONG, AND THE SECOND ONE MATTERS
+##         BEYOND THIS TASK:**
+##         **(1) `SPONSORS` AND `ROUND_ROBIN` ARE NOT ALIASES.** They feed different
+##         scripts: `ROUND_ROBIN` → `stress_keeper.js:29`, `SPONSORS` →
+##         `rr_keeper.js:312`. THAT is what "if you change one, change both" meant —
+##         it was never explained anywhere, and a session that assumed "same thing,
+##         written twice" would have cut one and left the other rotating 41.
+##         **(2) THE VPS `rr_keeper.js` IS NOT THE REPO COPY.** The repo's
+##         `CryptoNova-Keepers/rr_keeper.js` (677 lines) contains NO `SPONSORS`
+##         block at all. The VPS copy has one at :312, put there by **`patch_rr.js`,
+##         a script that rewrites `rr_keeper.js` in place and exists ONLY on the
+##         VPS.** Neither file is in any repo. This is the CLAUDE.md "VPS-only
+##         scripts" trap live again — reading the repo to decide what the keeper
+##         does gives a confident wrong answer.
+##         ✅ **BOTH FILES PULLED DOWN AND THE REPO CORRECTED (same session) — AND
+##         THE DIVERGENCE IS FAR BIGGER THAN THE PATCH.** `git log` on
+##         `CryptoNova-Keepers/rr_keeper.js`: **ONE commit, the 2026-07-30 initial
+##         import.** The repo copy had never been updated. The VPS copy is +104/-54
+##         lines against it and contains, all of it live for weeks:
+##           • **job B rewritten from SF-funded `coPayRescue` (a LOAN) to
+##             member-signed `selfRescue` + `setMemberOptions(autoReentry ON)` +
+##             gas top-up.** ⚠ The crontab mirror ALREADY described B as "self-rescue
+##             parked members (job B, no loan)" — the mirror was telling the truth
+##             about code the repo did not contain, and nobody noticed they disagreed;
+##           • `buildRescueMap()` + `rescue_index_map.json` (address → mnemonic
+##             index, cached — deriving thousands of children per tick is too slow);
+##           • multi-RPC parallelism (`RESCUE_RPCS`, `RESCUE_CONC_PER`) + `rpcRetry`;
+##           • `ONLY=A` early-break plumbing;
+##           • `ADDRESSES_FILE` default `deployed_addresses_v8_45.json` →
+##             `deployed_addresses_current.json`.
+##         **RESOLUTION: the running code is the truth, so the VPS copy was written
+##         OVER the repo copy** (the old one is preserved in git history) with a
+##         provenance header naming every item above. Recorded as deliberately
+##         dropped by that rewrite, so it is not lost silently: job B's
+##         `recordTiming()` and the SF `totalBalance` budget guard — both moot once
+##         B stopped spending SF money; `hasRoom`/`recordTiming` still serve the
+##         other jobs. `patch_rr.js` committed with a header saying it is ALREADY
+##         APPLIED and that re-running it inserts a SECOND `SPONSORS` block. Both
+##         files `node --check` clean.
+##         ⚠ **NOTED FOR THE STRESS TEST, NOT ACTED ON:** job B approves
+##         `ethers.MaxUint256` from each derived stress wallet **to the MATRIX**.
+##         Different spender from the 2026-07-29 cascade incident (TierRouter, via
+##         `onCrossToMatB`), so it does not re-open it — but it is a standing
+##         unlimited approval created thousands of times over a stress run. Re-read
+##         the CLAUDE.md cascade row before widening anything here, and never grant
+##         one to TierRouter.
+##         ⚠ METHOD NOTE, cheap and worth reusing: the whole task was one read-only
+##         measurement before any edit, and it is the ONLY reason both findings
+##         surfaced — the prescribed action ("cut the env") was executable without
+##         ever looking, and would have half-worked and reported success.
 
 # ⬛ SESSION 44 STATE — 2026-08-27 evening. ⚠ SUPERSEDED ON 44.15 BY SESSION 45 ABOVE —
 #     its prescribed Ignored Build Step does NOT save the deploy quota. Read 45.0 first.

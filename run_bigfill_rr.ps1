@@ -1,7 +1,7 @@
 # run_bigfill_rr.ps1 - bigfill with the leader round-robin referrer list.
 # V8.47 rebuild (2026-08-05): restored from archive/windows_keeper (July cleanup
-# had swept it), roster refreshed to the full 41-leader list (same set as the
-# VPS SPONSORS/ROUND_ROBIN - if you change one, change both), and SLOW-DRIP
+# had swept it), roster refreshed to the leader list (same set as the VPS
+# SPONSORS/ROUND_ROBIN - if you change one, change both), and SLOW-DRIP
 # pacing added: default 1 registration every 5 minutes (BatchSize/BatchDelay).
 # ROUND_ROBIN is set for THIS SESSION ONLY, so the VPS keepers are unaffected.
 # Unregistered leaders are skipped automatically; rotation fixed at run start.
@@ -147,9 +147,17 @@ $env:EVICT_REENTRY_MAX = "$EvictReentryMax"
 
 # 10-leader roster - REDUCED from the 41-wallet 2026-08-05 set by the owner on
 # 2026-08-26 for the V8.50 community chain (his exact list, W1 first). The dropped 31
-# stay in git history. WARNING: VPS SPONSORS/ROUND_ROBIN (rr_keeper stress jobs,
-# currently PAUSED) still carries the 41 - if you change one, change both: update the
-# VPS env when stress is re-enabled (PHASE 7), or stress rotates retired leaders.
+# stay in git history.
+# VPS ENV IS NOW IN SYNC - cut 41 -> these same 10 on 2026-08-28 (session 45), backup
+# at /root/keeper/.env.bak_roster41_20260828. Verified identical to this list AND to
+# DEFAULT_SPONSOR_POOL in index.html, byte-for-byte incl. checksum case and order.
+# THERE ARE TWO VPS VARIABLES, NOT ONE - measured 2026-08-28, they feed DIFFERENT
+# scripts and both must move together:
+#   ROUND_ROBIN -> stress_keeper.js:29
+#   SPONSORS    -> rr_keeper.js:312  (VPS copy ONLY - see below)
+# WARNING: the VPS rr_keeper.js is NOT the repo copy. A VPS-only script patch_rr.js
+# rewrites it in place to add the SPONSORS block; neither file is in CryptoNova-Keepers.
+# Grep the VPS, not the repo, before believing rr_keeper.js has no roster.
 $leaders = @(
   "0x6512e9B5FE1690F2570AFEE5E7b904EF106C9435"   # W1 / accountOne
   "0x19a59fbD6d2c1289668795D41453e1505B7B8102"
