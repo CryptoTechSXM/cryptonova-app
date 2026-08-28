@@ -82,8 +82,17 @@ owner-set, and the session that earned it got five things wrong by ignoring what
 ##          `i18n.js` re-applies `data-i18n` on every language switch. Two writers on one
 ##          field is the shape behind the reserve/withdrawable mismatches. The helper calls
 ##          `window.t()` itself for the empty state, so it still translates.
-##      ⚠ Per 45.3 an `admin` push builds BOTH Vercel projects, so this is on
-##      early.crypto-nova.app too. **Production is unchanged** — it moves only by Promote.
+##      ✅✅ **PROMOTED TO PRODUCTION 2026-08-28 (Claude drove Chrome, owner approved).**
+##      Deployment `D3UbSxvU4` — Status **Ready**, Environment **Production · Current**,
+##      Source `0c0dbe1`, aliased to **crypto-nova.app +4**. Build 15s.
+##      ⚠ 45.2's checkbox warning still applies and was honoured: the promote dialog's
+##      **"Use project's Ignore Build Step" was left UNCHECKED** so the promotion built.
+##      ✅ **VERIFIED ON THE MEMBERS' OWN DOMAIN, not on the dashboard**: the served DOM at
+##      `www.crypto-nova.app` contains the new **"Before the health fee"** sub-label under
+##      Total Withdrawn. Per 45.3 the `admin` push had already put it on early.* as well.
+##      ▶ The member replies (`bug_replies_2026-08-28.txt`) are now UNBLOCKED — the claim
+##        they make about the fee is true on the domain members use. **Owner sends them;
+##        nothing is claimed as posted until he says so.**
 ##      ▶ COSMETIC, PARKED: that card now carries three lines and the orange reserve badge
 ##        outweighs the dim fee line. Accurate, but the visual weight is inverted.
 ## 46.4 ⛔⛔ **WHAT 46.1 DOES NOT PROVE — DO NOT READ IT AS A CLEAN BILL.**
