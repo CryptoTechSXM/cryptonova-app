@@ -10,7 +10,142 @@ owner-set, and the session that earned it got five things wrong by ignoring what
 
 ---
 
-# ⬛ SESSION 45 STATE — 2026-08-28 morning, LATEST. READ THIS FIRST.
+# ⬛ SESSION 46 STATE — 2026-08-28 evening, LATEST. READ THIS FIRST.
+# ✅✅ **45.9 ITEM 7 IS CLOSED: THE WITHDRAWAL FAMILY HAS ONE LIVE DEFECT AND IT IS
+#     DISPLAY, NOT MONEY.** Measured across the WHOLE population, not one wallet.
+## 46.0 ✅ **INSTRUMENT `diag_withdraw.js` + `diag_withdraw.selftest.js`** (keepers repo,
+##      committed `98472aa`, pushed origin/main; live at /root/keeper). READ-ONLY —
+##      grepped for zero `sendTransaction` / `new ethers.Wallet` / `PRIVATE_KEY` / `.wait()`.
+##      ⛔ **THERE ARE FOUR DIFFERENT ARITHMETICS ANSWERING "HOW MUCH CAN I WITHDRAW",**
+##      which is the whole reason four members reported four different-looking bugs:
+##        [1] `withdrawableOf`    F8V8:613 — raw. No debt, no holds, no fee.
+##        [2] `freeWithdrawable`  F8V8:725 → MatrixLogicLib `_claimableAndHeld`:692. The
+##            contract's own withdrawCore mirror, GROSS of fee. **The dashboard card's
+##            first paint sums this per matrix** (index.html:5403).
+##        [3] the page's OWN `_claimableAll` (index.html:7349) — **the card repaint AND
+##            the MAX button**. Deducts debt ONCE at the end; [2] deducts it per matrix.
+##        [4] `withdrawCore` MatrixLogicLib:1361 — the only one that moves money, PER MATRIX.
+##      Column [5] of the tool is an **INDEPENDENT re-implementation of withdrawCore
+##      written from source**, not a call to the contract's mirror — so a [2]-vs-[5] gap
+##      means the VIEW has drifted from the ACTION (the V8.48 item 1 defect) rather than
+##      the tool agreeing with itself. Two independently written classifiers, the same
+##      technique that made 45.1's ignore-pattern test decisive.
+##      ✅ 19 offline selftest checks (both `require()` boundaries, member-level debt
+##      threaded across matrices, fee flooring, UNKNOWN propagation). **UNKNOWN NEVER
+##      COUNTS AS AGREEMENT** — the verdict prints CANNOT CONCLUDE instead, so the tool
+##      cannot reproduce the failure-as-zero defect it exists to hunt.
+##      Modes: `ADDRS=0x…` one wallet · `SCAN=1` sweeps every member from the
+##      MemberRegistered log · `CALLS=1` adds an eth_call of `withdraw()` per matrix.
+##      ⛔ SCAN takes its roster from the LOG, not the seat maps: a member who has LEFT a
+##      matrix still holds a balance there, and those are exactly the wallets most likely
+##      to diverge. A seat walk drops them silently.
+## 46.1 ✅✅ **THE MEASUREMENT — V8.50 community chain, block 46089180, 2026-08-28.**
+##      Full output kept at `/root/keeper/withdraw_scan_20260828.txt`.
+##      **241 registered members swept · 48 hold a balance · 0 unreadable.**
+##      **THE ONLY DISAGREEMENT IN THE ENTIRE POPULATION IS THE 1.5% HEALTH FEE.**
+##        • card [2] and MAX [3] agree with each other on **48 of 48**
+##        • `netClaimableOf` [4] and the independent replay [5] agree on **48 of 48**
+##        • every gap is exactly 1.5% ($41.68 → $0.6252 · $41.0363 → $0.6155 · …)
+##      **The card and MAX show GROSS; the wallet receives NET.** A labelling defect.
+##      ✅ [5] == [4] on 48/48 ⇒ **the contract's view has NOT drifted from its action.
+##      V8.48 item 1 is holding**, measured rather than assumed.
+##      `withdraw()` eth_call per matrix: **OK 60 · "must keep crossing reserve while
+##      active" 40 · "nothing to withdraw" 36 · "balance fully reserved for automation" 4**,
+##      and **0 of 48 funded members are blocked from withdrawing everywhere.**
+## 46.2 ✅ **@Koach100's THIRD NUMBER IS SETTLED FROM SOURCE.** He reported $287.83 shown /
+##      $152.23 populated / **$302.63 received**, adding "the withdrawn amount on the
+##      dashboard was a few dollars more". `withdrawCore:1444` does `totalWithdrawn += amt`
+##      with the **GROSS** amt and then transfers `amt - fee` (:1447). So "Total Withdrawn"
+##      is ALWAYS above the sum of wallet receipts. **302.63 / 0.985 = 307.24** — "a few
+##      dollars". That discrepancy is fully explained and is not a money defect.
+##      ⛔ **His other two numbers DO NOT REPRODUCE** — card and MAX are identical on every
+##      live wallet. His report is 2026-08-05, on a chain AND a frontend that no longer
+##      exist. **DO NOT close him on "the chain was replaced"** — that is the exact shared
+##      excuse that closed @Lavern_Gay wrongly. What is honest to tell him: the fee half is
+##      measured and fixed; the card/MAX half is not reproducible on current code.
+## 46.3 ✅ **FRONTEND FIX SHIPPED TO `admin` — commit `0c0dbe1`, pushed, truncation check on
+##      `origin/admin` PASSED (`</body></html>`), and OWNER-VERIFIED ON SCREEN**: card reads
+##      `$30.86` with **"$30.40 after the 1.5% health fee"** beneath it — 30.86 × 0.985 =
+##      30.397, matching `netClaimableOf` for that exact wallet (`0x149852b8`, card $30.8609
+##      → net $30.3980 in the sweep). What changed:
+##        • new `readyToClaimLabel()` applied at **ALL THREE** paint sites, not one — the
+##          2026-07-29 card/modal drift happened because only one of two sites was fixed.
+##        • **the headline stays GROSS deliberately.** It must match the MAX box, because
+##          that is the figure `doWithdrawPartial` compares against at full precision; the
+##          2026-07-29 bug was MAX handing over a number the same screen then refused.
+##        • **falls back to the plain label when the fee has not been read** — never a net
+##          computed from an assumed 150 bps. A guessed number that looks measured is the
+##          failure-as-zero family pointed at a member's money.
+##        • "Total Withdrawn" sub-label is now **"Before the health fee"** with a tooltip
+##          saying why, instead of the false "Paid out to wallet".
+##        • **`data-i18n` REMOVED from the ready label** — it is a computed value now, and
+##          `i18n.js` re-applies `data-i18n` on every language switch. Two writers on one
+##          field is the shape behind the reserve/withdrawable mismatches. The helper calls
+##          `window.t()` itself for the empty state, so it still translates.
+##      ⚠ Per 45.3 an `admin` push builds BOTH Vercel projects, so this is on
+##      early.crypto-nova.app too. **Production is unchanged** — it moves only by Promote.
+##      ▶ COSMETIC, PARKED: that card now carries three lines and the orange reserve badge
+##        outweighs the dim fee line. Accurate, but the visual weight is inverted.
+## 46.4 ⛔⛔ **WHAT 46.1 DOES NOT PROVE — DO NOT READ IT AS A CLEAN BILL.**
+##      **Every wallet in the sweep shows `debt $0.0000`.** The StabilityFund has issued no
+##      loans on V8.50 (still under its $250 copay floor, see [[cryptonova-fleet-ops]]), so
+##      the **debt double-count path CANNOT FIRE in this population and is therefore
+##      UNTESTED, not clean**: `freeWithdrawable` subtracts the MEMBER-LEVEL debt inside
+##      EVERY matrix (MatrixLogicLib:701) while [3] and [4] deduct it once, so a member in
+##      N matrices with debt D loses (N−1)×D on the card. **Re-run `SCAN=1 CALLS=1` the
+##      moment the SF starts lending.** A detector that reports zero must be able to see a
+##      positive (2026-07-29, bypass_scan) — this one has never seen one.
+##      ⚠ Also: [3] is CLAUDE'S re-implementation of the page's `_claimableAll`. The sweep
+##      proves the two ALGORITHMS agree on this data; it does NOT prove a live browser
+##      paints them identically (races between the three paint sites, stale globals, or an
+##      in-browser failed read are all still possible).
+##      ⚠ NEW, from reading withdrawCore: `require(available > 0)` is checked BEFORE the
+##      debt repayment (:1375) and `amt` is taken AFTER. **A member whose debt swallows
+##      their balance gets a transaction that SUCCEEDS and transfers ZERO** — not a revert,
+##      nothing on screen to explain it. Candidate mechanism for Deborah's "tried
+##      withdrawing and it failed, $50". Cannot fire today (no debt). The tool NAMES this
+##      case rather than printing a bare $0.
+## 46.5 ⚠ **THE OTHER THREE WITHDRAWAL TICKETS: NOT REPRODUCED, NOT CLOSED.**
+##      Sherwyn (08-13) "withdraw all triggers the contract but no wallet confirmation" and
+##      Deborah (08-10) "$50 failed" have a NAMED mechanism now — **a member whose
+##      `withdraw()` would revert gets no wallet prompt at all, because the wallet's own gas
+##      estimation fails before it can ask them to sign** — but 0 of 48 funded members are
+##      in that state today, so it is not currently present. CryptoJan22 (08-11) "clicking
+##      max, only 50% went through": 50% is not 1.5%, so the fee does not explain it and it
+##      does not reproduce. **Each needs its own next measurement or a member retest — the
+##      no-bulk-close rule applies and "it doesn't reproduce" is not a closure.**
+## 46.6 ✅ **`diag_referrer.js` WAS NEVER COMMITTED.** Written in session 43 and used to
+##      close 43.9 AT THE CHAIN, it sat untracked on the laptop for a day — the master-copy
+##      gap CLAUDE.md warns about, live again. Committed with the new instruments in
+##      `98472aa`. ▶ **Check `git status` in the keepers repo at every session close.**
+## 46.7 ⚠ **CLAUDE PROCESS FAILURES THIS SESSION.** (a) Handed over a command with the
+##      literal placeholder `YOUR_VPS` instead of the real host, which is in four runbooks.
+##      (b) Put two commands in one message; they were pasted onto one line and ran as a
+##      single broken command. **The one-command-at-a-time rule is not a style preference,
+##      it is what stops that.** (c) Escaped `\"` inside a double-quoted PowerShell string
+##      and hung the shell at `>>` — use NO inner double quotes in ssh command strings.
+##      (d) `tail -70` on the scan output cut the very section the run was for, because that
+##      section prints BEFORE the long per-wallet table. **Save long runs to a file on the
+##      box and `sed` the section out; never pay for a five-minute run twice.**
+## 46.8 ▶ **OPEN, IN THE ORDER I WOULD TAKE THEM:**
+##      1. ⛔ **RETRACTED IN-SESSION, AND THE LESSON IS THE POINT.** Claude saw
+##         `origin/data` move `f21b462..645b226` on a fetch and wrote "new member reports
+##         have landed". **It was OUR OWN session-45 triage** — three `bug-sync: close`
+##         commits plus the `restore BUGS.md` that undid the bug_manager wipe. **A branch
+##         pointer moving is not a reading of the branch.** Opened and checked before the
+##         handoff was committed. **NO new member report has arrived since the 2026-08-28
+##         triage**; the ledger still stands at 14 open. To check for real, read it:
+##         `git show origin/data:BUGS.md` — never infer it from a fetch line.
+##      2. Re-run `SCAN=1 CALLS=1` once the SF starts lending — 46.4 is the reason.
+##      3. The 45.9 list is otherwise unchanged: `rr_keeper` DRY_RUN mutating state;
+##         Blockaid (sent, do not re-submit); PIF sock-puppet economics; the member drafts
+##         `community_post_2026-08-28_update.txt` + `bug_replies_2026-08-28.txt` STILL NOT
+##         SENT; and the index.html failure-as-zero sweep, still the highest-value ledger item.
+##      4. Cosmetic: the Withdrawable card's visual weight (46.3).
+
+---
+
+# ⬛ SESSION 45 STATE — 2026-08-28 morning. ⚠ SUPERSEDED IN PART BY SESSION 46 ABOVE.
 # ✅✅ **44.15 IS CLOSED. THE VERCEL DEPLOY LEAK IS FIXED, PROVEN, AND LIVE ON
 #     PRODUCTION.** But read 45.0 before you believe anything else in 44.15's
 #     "first actions" — **the fix that section prescribes does not work**, and
