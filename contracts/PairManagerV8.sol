@@ -192,6 +192,11 @@ contract PairManagerV8 is Ownable2Step {
     event PairAdded(uint256 indexed pairId, address matrixA, address matrixB);
     event PairActivated(uint256 indexed pairId);
     event MemberRouted(address indexed member, uint256 indexed pairId, address matrixA);
+    /// @notice V8.50 item S: a rescued member was diverted out of their own pair because
+    ///         BOTH its halves were full. Emitted only on the escape hatch, so the
+    ///         keepers and pair_saturation.js can count how often it fires — a silent
+    ///         routing change is one nobody can measure. See rescueReentry.
+    event RescueOverflowed(address indexed member, uint256 indexed fromPair, uint256 indexed toPair);
     event ExpansionRecommended(uint256 pairId, uint256 combinedPct);
     // V8.21
     event GovernanceSet(address indexed governance);
@@ -281,13 +286,64 @@ contract PairManagerV8 is Ownable2Step {
         return type(uint256).max;
     }
 
+    /// @notice V8.50 item S. Is this pair full in BOTH halves? Used only to decide
+    ///         whether the saturation escape hatch in rescueReentry applies.
+    ///         ⛔ EVERY READ IS WRAPPED AND AN UNREADABLE MATRIX RETURNS false — i.e.
+    ///         "not known to be saturated", which keeps today's own-pair behaviour.
+    ///         Guessing "saturated" from a failed read would divert a member who had a
+    ///         seat waiting; that is the more damaging error of the two.
+    function _bothHalvesFull(Pair storage p) internal view returns (bool) {
+        if (p.matrixA == address(0)) return false;
+        uint256 aOcc; uint256 aSize; bool ok = true;
+        try IFigureEightMatrixV8PM(p.matrixA).occupancy()   returns (uint256 v) { aOcc  = v; } catch { ok = false; }
+        try IFigureEightMatrixV8PM(p.matrixA).MATRIX_SIZE() returns (uint256 v) { aSize = v; } catch { ok = false; }
+        if (!ok || aSize == 0 || aOcc < aSize) return false;
+        if (p.matrixB == address(0)) return true;
+        uint256 bOcc; uint256 bSize; ok = true;
+        try IFigureEightMatrixV8PM(p.matrixB).occupancy()   returns (uint256 v) { bOcc  = v; } catch { ok = false; }
+        try IFigureEightMatrixV8PM(p.matrixB).MATRIX_SIZE() returns (uint256 v) { bSize = v; } catch { ok = false; }
+        return ok && bSize != 0 && bOcc >= bSize;
+    }
+
+    /// @notice V8.50 item S. The first pair OTHER than `avoid` that has a genuinely free
+    ///         MatA seat and in which `member` holds no seat at all.
+    ///         ⛔ DELIBERATELY NOT _freePairFor: that one asks "does the member hold a
+    ///         seat here", which a FULL pair also answers no to. Routing a rescue into a
+    ///         second full pair would reproduce the exact defect this fixes, one pair
+    ///         along. Room is checked, not inferred.
+    function _hasRoomAndFree(Pair storage pr, address member) internal view returns (bool) {
+        if (pr.matrixA == address(0)) return false;
+        bool blocked;
+        try IFigureEightMatrixV8PM(pr.matrixA).isActiveInMatrix(member) returns (bool s) { blocked = s; } catch { blocked = true; }
+        if (blocked) return false;
+        if (pr.matrixB != address(0)) {
+            try IFigureEightMatrixV8PM(pr.matrixB).isActiveInMatrix(member) returns (bool s) { blocked = s; } catch { blocked = true; }
+            if (blocked) return false;
+        }
+        uint256 occ; uint256 size; bool ok = true;
+        try IFigureEightMatrixV8PM(pr.matrixA).occupancy()   returns (uint256 v) { occ  = v; } catch { ok = false; }
+        try IFigureEightMatrixV8PM(pr.matrixA).MATRIX_SIZE() returns (uint256 v) { size = v; } catch { ok = false; }
+        return ok && size != 0 && occ < size;
+    }
+
+    function _pairWithRoomFor(address member, uint256 avoid) internal view returns (uint256) {
+        uint256 n = pairs.length;
+        for (uint256 i = 1; i < n; i++) {                 // i from 1: never returns `avoid`
+            uint256 idx = (avoid + i) % n;
+            if (_hasRoomAndFree(pairs[idx], member)) return idx;
+        }
+        return type(uint256).max;
+    }
+
     /// @notice V8.44 overflow rework (replaces V8.43 rescueOverflow, which
     ///         diverted saturated-pair rescues to pair N+1 and starved the own
     ///         MatB — the frozen-MatB root cause). A pair's OWN member being
-    ///         rescued/re-entered ALWAYS returns to their OWN pair:
+    ///         rescued/re-entered returns to their OWN pair:
     ///           - below saturation → own MatA (normal self-sustaining loop)
-    ///           - at saturation    → own MatB (the entry rotates the full
-    ///             MatB root out — cycle-then-place — keeping it churning)
+    ///           - at saturation    → V8.50 item S, the escape hatch below.
+    ///         ⛔ THE OLD SECOND LINE HERE SAID "at saturation → own MatB". THAT HAS BEEN
+    ///         UNTRUE SINCE V8.48 ITEM 10 made this function use matrixA unconditionally;
+    ///         the comment was simply left behind. Corrected 2026-08-29 (session 49).
     ///         Called by one of this PM's matrices, which sends the entry fee
     ///         with the call (approve → safeTransferFrom here). Only genuinely
     ///         NEW externals overflow forward (_findExternalPair).
@@ -351,6 +407,55 @@ contract PairManagerV8 is Ownable2Step {
                 _forceExpand();
                 destPair = _freePairFor(member, fromPairIndex);
                 require(destPair != type(uint256).max, "PM8: no seat available for duplicate");
+            }
+        } else if (_bothHalvesFull(p)) {
+            // ── V8.50 ITEM S — THE SATURATION ESCAPE HATCH ────────────────────────────
+            //
+            // MEASURED ON CHAIN 2026-08-29 (noseat_witness.js, T1, blocks
+            // 46103781..46129371): 105 members parked with shortfall 0, and ALL 105 had
+            // another member take a seat in the SAME transaction. 0 exceptions.
+            //
+            // WHY THAT HAPPENS, counted through the trace (handoff 49.1e). A member
+            // entering a MatA that is full cycles its root R_A out, freeing ONE seat.
+            // R_A crosses to MatB, which is also full, so MatB cycles ITS root R_B out
+            // and R_A takes that seat. R_B then re-enters its OWN MatA — this function,
+            // item 10 — and takes the one seat R_A freed. Before: 254 seated. After:
+            // 254 seated. R_A and R_B SWAPPED HALVES and the arriving member is parked.
+            //
+            // ⛔ SO A PAIR SATURATED IN BOTH HALVES CANNOT ABSORB ANYBODY. Entry only
+            // rotates two existing members between the halves and parks the arrival.
+            // T1.1 parks exactly one member per entry, which is the 188-member queue.
+            // Live proof: T1.1 MatA reported FUNDING 0 / NO-SEAT 90 — every one of those
+            // members was fully funded and there was simply no seat.
+            //
+            // ⛔ "RESERVE THE FREED SEAT FOR THE ARRIVING MEMBER" WAS CONSIDERED AND
+            // REJECTED: one seat, two claimants. It creates nothing, it only picks R_B
+            // as the victim instead. Capacity has to come from a pair that HAS room.
+            //
+            // WHY THIS DOES NOT UNDO V8.48 ITEM 10. Item 10 cured a real MatB closed
+            // loop (measured 2026-08-09: T2.1 MatA rot 581 vs MatB rot 5684, 65% of
+            // parked members sitting in MatB) by sending every rescue to the own MatA.
+            // That rule is untouched here: this branch is reachable ONLY when BOTH
+            // halves are full, which is precisely the case item 10 has no answer for.
+            // Any pair with a single free seat still routes to the own MatA exactly as
+            // before, so the loop item 10 closed stays closed.
+            //
+            // SAFETY: rescueReentry is called from MatrixLogicLib with NO try/catch — a
+            // revert here takes a member's whole cycle-out with it (TierRouter:1372, and
+            // the T3.1/T4.1 repairs of 2026-07-28). So NOTHING in this branch reverts.
+            // Every read is wrapped; an unreadable matrix is skipped, never assumed; and
+            // if no pair has room the member falls through to the own MatA and parks
+            // exactly as they do today. This can improve the outcome, never break it.
+            uint256 alt = _pairWithRoomFor(member, fromPairIndex);
+            if (alt == type(uint256).max) {
+                // Normally unreachable — the 90% factory trigger keeps a standby pair
+                // open. Same wrapped force-expand the duplicate branch above uses.
+                _forceExpand();
+                alt = _pairWithRoomFor(member, fromPairIndex);
+            }
+            if (alt != type(uint256).max) {
+                destPair = alt;
+                emit RescueOverflowed(member, fromPairIndex, alt);
             }
         }
         address dest = pairs[destPair].matrixA;

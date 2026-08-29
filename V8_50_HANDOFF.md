@@ -10,6 +10,310 @@ owner-set, and the session that earned it got five things wrong by ignoring what
 
 ---
 
+# ⬛ SESSION 49 STATE — 2026-08-29 evening. LATEST. READ THIS FIRST.
+# ⛔⛔ 48.4'S SEAT THEFT IS REAL, REPRODUCED IN A FIXTURE, AND IT IS FUNDING-GATED.
+# Sherwyn's exact live signature — MemberCrossedToPartner in MatB, MemberParked
+# shortfall $0.00 in MatA, one transaction, no CycleOutFailed — now reproduces on demand.
+# ⛔ THE GATE IS THE INVERSION: the FUNDING SHORTAGE is the only thing suppressing it.
+# ⛔ SO A FUNDING FIX SHIPPED ALONE CONVERTS FUNDING PARKS INTO NO-SEAT PARKS.
+# ⚠ 49.1-49.5 BELOW WERE FIRST WRITTEN AS "48.4 IS KILLED". THAT WAS WRONG FOR ABOUT AN
+# HOUR AND C5 OVERTURNED IT IN THE SAME SESSION. The corrected reading is 49.1a.
+## 49.0 ✅✅ **THE INSTRUMENT: `test/V8_50_RefillSteal.test.js` (new, 434 lines, C1 + C3 +
+##      C4, ALL GREEN).** Built because 48.4 said in as many words "Prove it before
+##      building on it." It builds a real pair, saturates BOTH halves, parks a member in
+##      MatB, and rescues them — Sherwyn's exact move — asserting on the EMITTER of every
+##      event, because 48.0's whole finding is that a park in the DESTINATION is a
+##      different code site from a park in the SOURCE.
+## 49.1 ⚠ **SUPERSEDED BY 49.1a — READ THAT FIRST. As first written: "48.4 IS KILLED."**
+##      **WITH AN INSOLVENT MatB ROOT THE VICTIM WAS SEATED (MatA pos 4).** The test was written
+##      to assert the mechanism and FAILED, which is exactly why it was written that way.
+##      One transaction, sizes 4/4:
+##      ```
+##      MatB  SelfRescue             victim
+##      MatB  MemberCrossedToPartner victim -> PairManager
+##      MatA  MemberCycledOut        A_root          <- A cycles, as 48.4 predicted
+##      MatA  MemberCrossedToPartner A_root -> MatB  <- crosses, as 48.4 predicted
+##      MatB  MemberCycledOut        B_root          <- B cycles, as 48.4 predicted
+##      MatB  MemberParked           B_root  $5.48   <- ⛔ AND HERE IT STOPS
+##      MatB  MemberEntered          A_root  pos 4
+##      MatA  MemberEntered          victim  pos 4   <- SEATED
+##      ```
+##      **THE CASCADE IS REAL; THE THEFT IS NOT.** B's cycled-out root never crossed back
+##      into MatA to eat the freed seat: it could not afford the FULL-FEE MatB hop and
+##      funding-parked $5.48 short of a $10 fee (TierRouter:1473-1482, the no-strand
+##      epilogue). The seat MatA freed stayed free and the newcomer took it.
+## 49.1a ⛔⛔ **C5 RESURRECTED 48.4 AND THIS IS THE REAL FINDING OF THE SESSION.** Give a
+##      MatB root enough income to complete the full-fee hop and the theft fires exactly
+##      as 48.4 described. Measured, one transaction, sizes 4/4, solvent root:
+##      ```
+##      MatB       SelfRescue             victim
+##      MatB       MemberCrossedToPartner victim -> PairManager
+##      MatA       MemberCycledOut        A_root
+##      MatA       MemberCrossedToPartner A_root -> MatB
+##      MatB       MemberCycledOut        B_root      <- SOLVENT this time
+##      MatA       MemberEntered          B_root pos 4 <- ⛔ TAKES THE SEAT A JUST FREED
+##      TierRouter MemberReentered        B_root
+##      MatB       MemberEntered          A_root pos 4
+##      MatA       MemberParked           victim  shortfall $0.00   <- :529 NO-SEAT PARK
+##      ```
+##      **THAT IS SHERWYN'S TRAIL, LINE FOR LINE** (48.0): cross in MatB, park in MatA,
+##      shortfall 0, same tx, no `CycleOutFailed`. The live event now reproduces on demand.
+##      ✅ **THE FUNDING LADDER IS ITS OWN MEASUREMENT:** five successive MatB roots held
+##      **$4.07 / $2.74 / $2.74 / $2.85 / $2.90** against a $10 hop — none could move. The
+##      sixth was the SPONSOR (W1) at **$66.65**, and it stole the seat. **Only a
+##      well-sponsored member is ever solvent enough to do this**, which is exactly the
+##      shape of the live split: 1025 funding parks (cannot move) vs 68 no-seat parks
+##      (~6%, someone solvent moved first). ⚠ That correspondence is a HYPOTHESIS about
+##      live, not a measurement of live.
+## 49.1b ✅ **THE CODE PATH, CONFIRMED LINE BY LINE (not inferred — every hop read in
+##      source 2026-08-29, and every hop matches the C5 event trace).** This is the
+##      "confirm in code" half of the owner's instruction; 49.1c is the chain half.
+##      1. `MatB.selfRescue()` -> `_selfRescue` **MatrixLogicLib:1700**. Member pays their
+##         own shortfall (`crossingCost = cfg.isMatrixA ? _crossingPrice : entryFee` —
+##         **:1723**, so a MatB member is charged the FULL fee). Ends at `_finalizeCrossing`.
+##      2. `_finalizeCrossing`: MatB has a pairManager, so it takes the **PairManager
+##         branch**, emits `MemberCrossedToPartner(member, thisMatB, pairManager)` and
+##         calls `PairManagerV8.rescueReentry`. ⛔ **THIS IS WHY SHERWYN'S CROSS EVENT
+##         NAMES A NON-MATRIX ADDRESS** — it is the PairManager, not MatA.
+##      3. `PairManagerV8.rescueReentry` **:294**. V8.48 item 10: `dest = pairs[destPair].matrixA`
+##         — the member's OWN MatA, unconditionally. Then `dest.enterFor(member, referrer)`.
+##      4. `MatA._enterMatrix`. MatA is full, so `placed` stays false at **:516** and
+##         **:517** calls `_cycleOutRoot(self, cfg)`.
+##      5. `_cycleOutRoot` **:787**: clears the root seat, `occupancy -= 1`, shifts every
+##         member up one, and sets **`self.nextSlot = matrixSize`** (**:826**). One seat —
+##         the LAST one — is now free.
+##      6. Still inside `_cycleOutRoot`: MatA is a MatA, so it takes the **else** branch at
+##         **:911** and calls `_crossToPartner(root)` -> **:926**, which sets
+##         `crossingInProgress = true` **on MatA** and calls `MatB._enterMatrix(A_root)`.
+##         ⚠ **THE GUARD AT :938 IS ON THE SOURCE, SO IT DOES NOT PROTECT MatA's SEAT.**
+##      7. MatB is full -> `_cycleOutRoot(B)` **:787**. MatB has a tierRouter, so it takes
+##         the **`!cfg.isMatrixA && tierRouter != 0`** branch at **:871** ->
+##         `TierRouter.handleCycleOut` **TierRouter:1233**.
+##      8. `TierRouterLib.sameTierTarget` **:60-66** returns `toMatB = false` — *"own MatA.
+##         Always."* So B's root is re-seated into **the very MatA that is mid-cycle-out**,
+##         and `_takeSeat` consumes the seat freed at step 5.
+##         ⛔ **NOTHING STOPS IT:** `crossingInProgress` was set on MatA (step 6) but is
+##         only ever read by `_crossToPartner` (**:929**), never by `_enterMatrix`.
+##      9. If B's root is INSOLVENT it never gets here — TierRouter's no-strand epilogue
+##         **:1473-1482** parks it back in MatB with a shortfall (`parkCycledOut`). **THAT
+##         IS THE BRAKE**, and it is why C1 seats the newcomer and C5 does not.
+##     10. Control unwinds to step 4. `_lowestFreeSlot` **:580** returns 0 — its
+##         `nextSlot` hint points at the seat step 8 just took — so **:529** parks the
+##         member: `emit MemberParked(member, 0)`. No `CycleOutFailed` on this path.
+##      ✅ **EVERY STEP ABOVE IS VISIBLE IN C5's RECEIPT, IN ORDER.** The V8.45 comment at
+##      **:490-517** already warned that a nested entry can consume the freed slot and
+##      chose to PARK rather than corrupt the array — that was the right call for array
+##      integrity, and it is exactly the park members are now sitting in.
+## 49.1c ▶ **THE CHAIN HALF — `noseat_witness.js` (keepers, NEW, with a selftest).**
+##      Reasoning: if the fixture mechanism is what runs live, every :529 park should have
+##      a WITNESS — a `MemberEntered` in the SAME matrix in the SAME tx for a DIFFERENT
+##      member. Absence of a witness means the matrix refilled some other way and a
+##      seat-reservation fix would NOT help those parks. **The tool is built to be able to
+##      return either answer** (CONFIRMED / REFUTED / MIXED / UNDECIDABLE).
+##      ✅ **`noseat_witness.selftest.js` — 33/33 offline, no RPC.** Pins: it can see a
+##      positive; the parked member's OWN entry is NOT a witness; an entrant in a
+##      DIFFERENT tx is not a witness; a failed entrant scan is UNDECIDABLE and never
+##      "no witness"; funding (:979) and CycleOutFailed (:881/:908) parks are excluded
+##      before classification; MIXED is never reported as a pure answer; and the source
+##      contains no signing primitives (comment-stripped, so prose cannot satisfy it).
+##      ⛔ **THIS IS THE 48.1 GAP CLOSED ON THE NEW TOOL** — `pair_saturation.js` was
+##      quoted with its one real piece of logic unpinned. `pair_saturation` still needs
+##      its own selftest.
+## 49.1d ✅✅✅ **CONFIRMED ON CHAIN, UNANIMOUSLY. `noseat_witness.js`, live
+##      `deployed_addresses_current.json`, T1, blocks 46103781..46129371:**
+##      ```
+##      T1.1 MatA  occ 127/127  rot 1994   FUNDING    0 · COFAIL 0 · NO-SEAT 90
+##                 no-seat WITH a same-tx entrant: 90   without: 0
+##      T1.1 MatB  occ 127/127  rot 1956   FUNDING 1638 · COFAIL 7 · NO-SEAT 15
+##                 no-seat WITH a same-tx entrant: 15   without: 0
+##      T1.2 MatA  occ  10/127  rot 0      no parks      T1.2 MatB occ 0/127 rot 0
+##      TOTAL: 105 no-seat parks · 105 WITNESSED · 0 unwitnessed · 0 undecidable
+##      ```
+##      **EVERY no-seat park had another member take a seat in the same transaction.**
+##      Fixture (C5) + code path (49.1b) + chain (this) all agree. ⚠ Strictly this proves
+##      *someone else* took the seat, not that it was specifically the partner's cycled
+##      root — but the fix does not depend on which, so it was not worth another round trip.
+##      ⛔ **`deployed_addresses_current.json` == `deployed_addresses_v8_50.json` (identical
+##      addresses) IS THE LIVE CHAIN.** T1.1 MatA `0x387DD947…`, MatB `0xb1f621C1…`,
+##      T1.2 MatA `0x7d80B4e1…`, MatB `0x237491bF…`.
+##      ⛔⛔ **`deployed_addresses_v8_50_private2.json` IS NOT LIVE** — a different deploy
+##      (T1.1 MatA `0x56b37De2…`, rot 271). Session 49 ran the witness scan against it
+##      first and got all zeros; the occupancy/rotation cross-check against 48.2 is what
+##      caught it. `v8_50_private` is a third deploy again (`0xcd130673…`, rot 753).
+##      **THIS IS 47.7 ITEM 7 BITING AGAIN — always pass ADDRESSES_FILE, and always
+##      sanity-check rotations against the last known figure before believing a result.**
+##      ✅ **THE BACKLOG IS GROWING, measured against 48.2 the same day:** MatA rot
+##      1369 -> 1994, no-seat 58 -> 90; MatB funding 1025 -> 1638, no-seat 10 -> 15.
+## 49.1e ⛔⛔⛔ **THE STRUCTURAL FINDING, AND IT RETIRES THE "RESERVE THE SEAT" FIX.**
+##      Count the seats through the confirmed trace. Newcomer enters MatA (127/127) ->
+##      root R_A cycles out, ONE seat free -> R_A crosses to MatB (127/127) -> root R_B
+##      cycles out, R_A takes THAT seat -> R_B re-enters its OWN MatA (item 10) and takes
+##      the one free seat -> newcomer parked, shortfall 0.
+##      **Before: 254 seated. After: 254 seated. R_A and R_B simply SWAPPED HALVES.**
+##      ⛔ **A SATURATED PAIR CANNOT ABSORB ANYBODY. AN ENTRY ONLY ROTATES TWO EXISTING
+##      MEMBERS BETWEEN ITS HALVES AND PARKS THE ARRIVAL.** That is why T1.1 MatA reports
+##      FUNDING 0 / NO-SEAT 90 — those members were fully funded and there was simply
+##      never a seat.
+##      ⛔ **AND IT HOLDS WITH THE BRAKE ON TOO:** if R_B is insolvent it parks in MatB
+##      instead and the newcomer gets the seat — still one in, one parked, still 254.
+##      **T1.1 PARKS EXACTLY ONE MEMBER PER ENTRY EITHER WAY.** That is the 188 parked in
+##      MatB, and it is why the queue only ever grows.
+##      ⛔ **THEREFORE "RESERVE THE FREED SEAT FOR THE MEMBER WHO TRIGGERED THE CYCLE-OUT"
+##      IS NOT A FIX** — offered by Claude earlier this session and WITHDRAWN. One seat,
+##      two claimants; reserving only chooses R_B as the victim instead of the newcomer.
+##      It creates nothing.
+##      ✅ **SO THE FIX IS THE 48.9 ITEM 1 ROUTING DECISION, AND IT IS NOW STRUCTURAL
+##      RATHER THAN A PREFERENCE. T1.2 HAS 244 FREE SEATS AND ROTATION 0.** Nothing
+##      reaches it because `rescueReentry` (V8.48 item 10) returns every rescued member
+##      to their own MatA unconditionally. Item 10 was RIGHT for what it fixed (the MatB
+##      closed loop, measured 2026-08-09) — it simply has no escape hatch for a pair that
+##      is full in BOTH halves, which is where T1.1 has been for days.
+##      ✅ **AND IT VINDICATES THE PAUSE:** draining 1638 funding parks into a closed pair
+##      would have booked SF debt to shuffle members between halves. Owner's instinct was
+##      right, for a better reason than the one written in 48.4.
+## 49.1f ✅✅ **V8.50 ITEM S — THE SATURATION ESCAPE HATCH IS WRITTEN AND GREEN (7/7).**
+##      **[stated] OWNER DECIDED 2026-08-29:** overflow to the NEXT PAIR WITH ROOM, and
+##      **RESCUED MEMBERS ONLY** (not new entries). Both are implemented as decided.
+##      **`PairManagerV8.rescueReentry`** gains ONE `else if (_bothHalvesFull(p))` branch:
+##      route to `_pairWithRoomFor(member, fromPairIndex)`, else `_forceExpand()` and try
+##      once more, else fall through to today's own-MatA park. Plus event
+##      **`RescueOverflowed(member, fromPair, toPair)`** — a silent routing change is one
+##      nobody can measure.
+##      ⛔ **`_pairWithRoomFor` IS DELIBERATELY NOT `_freePairFor`.** The old helper asks
+##      only "does the member hold a seat here", which a FULL pair also answers no to;
+##      reusing it would route the rescue into a second full pair and reproduce this exact
+##      defect one pair along. **Room is checked, not inferred.**
+##      ⛔ **NOTHING IN THE BRANCH CAN REVERT.** `rescueReentry` is called from
+##      MatrixLogicLib with NO try/catch, so a revert takes the triggering member's whole
+##      cycle-out with it (T3.1/T4.1, 2026-07-28). Every read is `try`-wrapped; an
+##      unreadable matrix is SKIPPED, never assumed saturated (guessing "saturated" would
+##      divert a member who had a seat waiting — the more damaging error).
+##      ✅ Also corrected: the doc comment above `rescueReentry` still claimed *"at
+##      saturation → own MatB"*, untrue since item 10 made it unconditionally MatA.
+##      ✅ **`test/V8_50_RescueOverflow.test.js` — O1/O2/O3 green.**
+##      `O1` both halves full + P2 has room -> `RescueOverflowed pair 0 -> pair 1`, member
+##      seated **P2.MatA pos 1**, not parked. `O2` **THE ITEM 10 REGRESSION GUARD** — own
+##      pair has room, P2 sits empty and reachable, member still returns to **own MatA
+##      pos 2** and NO overflow fires. `O3` one pair only -> no revert, parks as before.
+##      ✅ **RefillSteal C1/C3/C4/C5 all still pass unchanged**, which is the cross-check
+##      that item S is invisible where it should be (single-pair fixtures).
+## 49.1g ⚠⚠ **AN UNMEASURED CONSEQUENCE OF ITEM S — READ BEFORE DEPLOYING IT.**
+##      **O1's receipt contains NO `MemberCycledOut` in P1 at all.** The diverted member
+##      never enters the full MatA, so the entry that used to drive a rotation no longer
+##      happens. **HYPOTHESIS, SAID OUT LOUD AS ONE: a saturated pair whose rescues all
+##      divert away may STOP ROTATING**, and its seated members would then stop cycling
+##      out and earning. Live T1.1 is at rot 1994 precisely because those entries keep
+##      arriving. The pair's internal MatB->MatA re-entry loop still exists, but it needs
+##      an entry to trigger it.
+##      ⛔⛔ **O4 RAN. THE FREEZE IS REAL AND MEASURED** (`test/V8_50_OverflowRotation.test.js`):
+##      ```
+##      [before]   P1 MatA rot 7  MatB rot 3  parked in MatB 3
+##      [rescue 1] P1 MatA rot 7  MatB rot 3  P2 MatA occ 1/4
+##      [rescue 2] P1 MatA rot 7  MatB rot 3  P2 MatA occ 2/4
+##      [rescue 3] P1 MatA rot 7  MatB rot 3  P2 MatA occ 3/4
+##      [after ]   MatA +0 · MatB +0 · diverted 3 · cycle-outs in those txs 0
+##      ```
+##      **Three rescues, three diversions, ZERO rotations. The queue drained and the pair
+##      stopped dead.** ⛔ **ITEM S MUST NOT BE DEPLOYED ON ITS OWN.**
+## 49.1h ⛔⛔ **WHAT THE FREEZE ACTUALLY EXPOSES — and it is bigger than item S.**
+##      A rotation is how a seated member cycles out and gets paid. In a saturated pair the
+##      ONLY thing that starts one is an arriving entry. So, mechanically: **a saturated
+##      pair pays its members out of arrivals who do not get a seat.** Item S did not break
+##      the pair; it removed that subsidy and revealed the pair has no engine of its own.
+##      ⚠ Reasoning from the measurements, NOT separately measured — mark it UNVERIFIED.
+##      ▶ **THE CANDIDATE REAL FIX, AND IT IS THE ORIGINAL V8.41 DESIGN.** `chainNext` and
+##      `setChainNext` already exist and V8.41's comment says *"MatB graduates to
+##      pairIndex+1 (FIFO graduation chain)"*. Today `TierRouterLib.sameTierTarget:60-66`
+##      returns *"own MatA. Always."* — so a MatB root re-enters its own pair instead of
+##      graduating. **Count the seats with graduation ON:** MatA root cycles out (one seat
+##      free) -> crosses to MatB -> MatB root cycles out and GRADUATES to the next pair ->
+##      A's root takes MatB's freed seat -> **the arriving member takes MatA's freed seat.
+##      NOBODY IS PARKED, the pair keeps rotating, and members flow onward into T1.2.**
+##      ⚠ **THIS IS A COUNT ON PAPER. IT HAS NOT BEEN RUN. Build the fixture first.**
+##      ▶ **IF IT HOLDS, THE PRIORITY INVERTS:** graduation is the fix, and item S becomes
+##      a safety net that should almost never fire. **Do not delete item S for it** — item S
+##      is what protects a member when no graduation target exists.
+##      ⛔ **AND CHECK IT AGAINST V8.48 ITEM 10 FIRST.** Item 10 stopped rescues going to
+##      the own MatB. Graduating a MatB root to the NEXT PAIR'S MatA is a different route,
+##      but 2026-08-09's closed loop is the reason to prove that with a fixture rather than
+##      an argument. `V8_50_RescueOverflow.test.js` O2 is the guard that already exists.
+## 49.2 ⛔⛔ **THE INVERSION — THE MOST IMPORTANT LINE IN THIS SECTION.**
+##      **THE FUNDING CONSTRAINT IS WHAT PREVENTS THE SEAT THEFT.** The same shortage
+##      that produces the 1025 live funding parks is the brake that stops the cascade
+##      from consuming a newcomer's seat. ✅ **NO LONGER A HYPOTHESIS — MEASURED FROM BOTH
+##      SIDES: C1 (brake on) seats the member, C5 (brake off) robs him.**
+##      ⛔⛔ **THEREFORE: A FUNDING FIX SHIPPED WITHOUT A SEATING FIX CONVERTS FUNDING
+##      PARKS INTO NO-SEAT PARKS.** Members who currently cannot afford to be robbed will
+##      be able to afford it. **THE FUNDING FIX AND THE SEATING FIX ARE ONE JOB.** C1 is a
+##      TRIPWIRE asserting the brake still fires; red means every rescue now runs C5's path.
+## 49.3 ✅✅ **C4 — THE OWNER'S ACTUAL QUESTION, ANSWERED. A real `coPayRescue` into a
+##      pair with BOTH halves 100% full: MEMBER SEATED, SF DEBT $0.00 -> $0.47.**
+##      C1 measured a SELF-funded rescue; the PAUSED KEEPERS run the SF-funded path, so
+##      that is the path the decision turns on. The SF did not lend for a seat that does
+##      not exist, and it lent the SHORTFALL (47c) — not a fee.
+##      ⚠ **TWO DECLARED HARNESS KNOBS, AND THEY BOUND THE CLAIM:** the SF is topped up
+##      directly (25 registrations only route ~$6 of stabilityBps, under the floor), and
+##      **`insolvencyFloorBps` is set to 0** because that floor is LENDING POLICY (V8.48
+##      item 46) and this test is about SEATING. **So C4 says NOTHING about whether the
+##      insolvency floor would have refused these loans live.**
+## 49.4 ✅ **C3 CONTROL AGREES.** Identical fixture, ONE free MatB seat (freed with
+##      `softParkIdle` — no idle gate, MatrixLogicLib:1494): the member is seated too,
+##      with a shorter cascade. So at 4/4, MatB saturation changes the cascade's LENGTH,
+##      not whether the rescued member gets a seat.
+## 49.5 ⛔ **WHAT THIS DOES NOT SETTLE — READ BEFORE QUOTING ANY OF 49.1-49.4.**
+##      The fixture is 4/4 with a thin income profile; live T1.1 is 127/127 at rot 1369,
+##      where members carry real downline income and a cycled MatB root CAN sometimes
+##      afford the hop. **THE LIVE NO-SEAT PARKS (58 MatA + 10 MatB, shortfall 0) ARE
+##      REPRODUCED IN A FIXTURE (49.1a) BUT NOT YET MEASURED ON CHAIN.** They are ~6% of
+##      all parks (68 of 1100: 68 no-seat, 1025 funding, 7 cofail). ⚠ **HYPOTHESIS, SAID
+##      OUT LOUD AS ONE:** the live 6% are the cases where the cycled MatB root was
+##      solvent. **To confirm it on chain: for each live `MemberParked(x,0)` in a MatA,
+##      check the same tx for a `MemberEntered` in that MatA for a DIFFERENT member.**
+##      That is a read-only log query and it would settle it.
+## 49.6 ✅ **DONE — THAT EXPERIMENT IS C5 AND IT CAME BACK POSITIVE (49.1a).** Its declared
+##      lever: `SOLVENT_SPLITS` redistributes the SAME mandatory 4750 bps into referral
+##      income (l1 4000). No money added. Needed because a MatB member's LIFETIME pool
+##      income is bounded near poolBps x fee — seat held (size-1) rotations, pool/size
+##      each — so pool can NEVER fund a full-fee hop at any matrix size or activity level.
+##      Only referral income scales. ⚠ Not production weights; C5 says nothing about live
+##      economics, only about what happens once a MatB root IS solvent.
+## 49.7 ⛔ **HARNESS FACTS, LEARNED THE HARD WAY — THEY WILL COST THE NEXT SESSION AN HOUR
+##      EACH.** (1) Hardhat's per-transaction gas cap in this repo is **16,777,216 (2^24)**,
+##      NOT the 30M block limit; a 29M `gasLimit` is rejected before the call runs.
+##      (2) **A saturation control CANNOT be built by sizing MatB larger** — tried 4/16 and
+##      MatB saturated anyway (MatA 4/4 rot 18, MatB 16/16 rot 2). A park is a CONSEQUENCE
+##      of saturation, so "parked out of MatB" and "MatB has room" are unreachable together
+##      by registering more members. Free a seat AFTER the fact with `softParkIdle`.
+## 49.8 ▶ **THE 48.4 / 48.9-item-1 DECISION IS NOW BETTER INFORMED, AND STILL THE OWNER'S.**
+##      Own-pair routing (V8.48 item 10) SEATED every rescued member in this fixture, so
+##      the case for overflow rested on a mechanism that had not been shown. IT HAS NOW
+##      BEEN SHOWN (49.1a), so the decision is live and better supported than 48.4 could
+##      make it. **Recommendation: KEEP BOTH KEEPERS PAUSED — now with a measured reason,
+##      not a precautionary one.** C4 seated its member only because the brake was on; a
+##      coPayRescue whose cascade contains a SOLVENT root books SF debt AND loses the
+##      seat. That is the owner's 48.4 fear, reproduced. Nothing in cron was touched.
+##      ▶ **TWO FIX SHAPES, AND THE CHOICE IS NOT MINE TO MAKE ALONE:**
+##      ⛔ **(b) "RESERVE THE SEAT" IS WITHDRAWN — SEE 49.1e.** It creates no seat.
+##      **(a) OVERFLOW IS THE ONLY FIX THAT ADDS CAPACITY:** when a pair is saturated in
+##      BOTH halves, route the member to a pair with room (T1.2 has 244 free seats)
+##      instead of parking. **The open design questions are the OWNER'S, because they are
+##      comp-plan economics, not code:** does overflow apply to rescues only or to new
+##      entries too; does an overflowed member keep any claim on their original pair; and
+##      does this weaken item 10's own-pair guarantee enough to reopen the MatB closed
+##      loop it cured on 2026-08-09. ⛔ Do NOT start until those are answered: this is
+##      release-shaping work on the version members re-register into.
+## 49.9 ▶ **OPEN — 48.9's list, re-ordered by what the measurement changed:**
+##      1. Run 49.6. It is the one experiment that could still resurrect 48.4, and it also
+##         tells us whether the funding fix and the seating fix are one job.
+##      2. **Reply to Sherwyn** (was 48.9 item 3, unchanged and still owed): his money is
+##         accounted for, the loop is real, it is ours, the keepers are paused. **16 tickets
+##         open, two are his. NOTHING CLOSED — no-bulk-close holds.**
+##      3. Everything else in 48.9 stands as written: privacy policy -> Blockaid reply ->
+##         PROMOTE the five `admin` commits in BOTH Vercel projects (read the DOMAIN, never
+##         the ref); the rescue panel that invites the paid loop; the 47.7 carry-overs.
+
+---
+
 # ⬛ SESSION 48 STATE — 2026-08-29 afternoon. LATEST. READ THIS FIRST.
 # The parked backlog finally has a MEASURED cause, and it is TWO causes, not one.
 # Both rescue keepers are PAUSED in cron pending an owner decision (48.4).
