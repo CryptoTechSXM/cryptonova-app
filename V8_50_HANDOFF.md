@@ -10,7 +10,139 @@ owner-set, and the session that earned it got five things wrong by ignoring what
 
 ---
 
-# ⬛ SESSION 46 STATE — 2026-08-28 evening, LATEST. READ THIS FIRST.
+# ⬛ SESSION 47 STATE — 2026-08-29. LATEST. READ THIS FIRST.
+# The owner's crossing question is ANSWERED AND CLEAN. Three failure-as-zero fixes are on
+# `admin` and NOT PROMOTED. One NEW live defect was found and it invalidates a belief that
+# has shaped member-facing code since July.
+## 47.0 ✅✅ **"WERE THERE DOUBLE PAYMENTS ON CROSSING?" — NO. MEASURED, NOT ARGUED.**
+##      Owner saw "a rescue, an eviction notice and another rescue within minutes or even
+##      seconds", account not noted. Instrument `diag_crossing_pay.js` +
+##      `diag_crossing_pay.selftest.js` (keepers `b11510d`, 35/35 offline, READ-ONLY).
+##      **Blocks 45971469..46103230 = V8.50's whole life. 308 members with activity, 575
+##      episodes, 444 crossings (391 out of MatA, 53 out of MatB), 0 flagged, 0 unreadable.
+##      DOUBLE PAYMENT: NONE. RESERVE HELD BUT NOT USED: NONE.** Tightest margin in the
+##      population is **$0.0000** — `0x6512e9b5` paid $5.0000 against a $5.0000 T1.MatA
+##      price — so the population sits exactly ON the price and the zero is measured, not
+##      slack. Output: `/root/keeper/crossing_pay_20260829_c.txt`.
+##      ✅ **ZERO `MemberEvicted` EVENTS IN V8.50's ENTIRE LIFE.** So the "eviction notice"
+##      was the dashboard's PENDING EVICTION badge, not an eviction — see 47.3(F4).
+## 47.1 ⛔ **THE INSTRUMENT'S OWN DEFECT, AND THE LESSON IS THE POINT.** v1 compared every
+##      episode against the FULL entry fee. `_crossingPrice` (MatrixLogicLib:219,
+##      `CROSSING_RESERVE_BPS = 5_000` at :190) means a hop OUT OF a MatA costs **HALF** the
+##      fee (:962, :1081). The tool READ `isMatrixA` and then NEVER USED IT, so a member
+##      charged 2x on a MatA hop — the exact defect being hunted — would have printed OK.
+##      Caught by checking `_crossingPrice` at source AFTER the first run had already said
+##      NONE FOUND. **READING A DISCRIMINATOR IS NOT USING IT.** The first run's MatA half
+##      is void; run `_c.txt` is the one to quote. Selftest now asserts both directions.
+##      ⛔ ALSO BUILT IN: `CrossingFunded` is emitted from TWO places with DIFFERENT
+##      meanings — :989 (real money) and :1095 (rescued crossing, restates the assembled fee
+##      because the rescue caller already consumed the member's funds). Summing both reports
+##      a double payment on EVERY rescued crossing. Told apart by TRANSACTION HASH.
+## 47.2 ⛔ **`/root/keeper` IS NOT A GIT CLONE.** `git pull` there fails "not a git
+##      repository". Files reach the box by **`scp -i C:\Users\CryptoTech\.ssh\do_keeper
+##      <file> root@167.99.0.250:/root/keeper/`**. Push to the keepers repo for the master
+##      copy (46.6), then scp separately — they are two different actions.
+##      ✅ **AND VERIFY WITH `md5sum` AFTER EVERY SCP.** One scp in this session silently did
+##      not land and the box ran the previous version; only the hash check caught it. This is
+##      the bug_manager DRY_RUN failure (ledger item 3) in a new costume.
+## 47.3 ✅ **INDEX.HTML FAILURE-AS-ZERO SWEEP — 3 of 4 SHIPPED TO `admin`, NOT PROMOTED.**
+##      Commits `9a33b90` (F1+F3) and `f4f2b1a` (F4). Truncation check on `origin/admin`
+##      PASSED both times. 58 zero/false-defaulting catches were found in index.html; these
+##      are the ones that make a FALSE CLAIM rather than merely miss data.
+##      **F1 — THE SHIPPED 0c0dbe1 FIX HAD AN UNREACHABLE GUARD.** `readyToClaimLabel`
+##        (:2904) correctly refused to quote a net when the fee was unread — but the read
+##        site did `withdrawalFeeBps().catch(() => 150n)` and STORED THE GUESS in
+##        `window._withdrawFeeBps`, so the guard could never fire and the card printed
+##        "after the 1.5% health fee" from a number nobody read. Four more sites did
+##        `window._withdrawFeeBps || 150n` (which also rewrites a legitimate 0n fee to 1.5%).
+##        Now ONE reader `withdrawFeeBps()` returning null; the read is retried and only a
+##        real value is published; the withdraw preview — the line that promises what lands
+##        in the wallet — says the fee could not be read rather than quoting a guess.
+##      **F3 — THE FALSE "NOT YET REGISTERED" WAS STILL LIVE IN THE COUPON BRANCH.** The
+##        v8.19 fix of 2026-06-20 hardened `globalJoined`; fifteen lines below it the coupon
+##        fallback still used `catch(_) {}`, so a blipped `getMember` on a T1 MatA read as
+##        "not found" and a coupon member — whose ONLY path this is — was told they were not
+##        registered. Now retried, and a failed read shows the honest unknown panel.
+##      **F4 — THE 2026-08-07 PARKED-LIST DEFECT WAS BACK.** `parkedAt`, `ENTRY_FEE` and
+##        `crossingReserveOf` all did `.catch(()=>0n)` (:5528-5534). Each failure is a false
+##        claim: parkedAt->0 makes a parked member VANISH from the rescue list silently;
+##        ENTRY_FEE->0 computes shortfall 0 ("your earnings cover it"); reserve->0
+##        OVERSTATES the shortfall by the whole reserve — the "$10.00 instead of ~$1.60"
+##        defect the 08-07 audit already fixed once. **An overstated shortfall is what drives
+##        the PENDING EVICTION badge, and 47.0 measured ZERO evictions ever — so the badge
+##        the owner saw came from here.** All three retried; `shortfallUnknown` marks a
+##        candidate whose gap could not be confirmed and `_evictInfo` returns CHECKING before
+##        any comparison; `window._parkedReadFailed` gives the panel a real empty state.
+##        ⛔ `shortfall` KEEPS ITS BigInt TYPE DELIBERATELY — it is read in ~40 places incl.
+##        the approve bound and the copay pre-flight, and a null there reads as "covered".
+##        (Checked: the copay `loan` figure is display + pre-flight only, never a tx argument.)
+## 47.4 ▶ **F2 NOT DONE — the highest-value one left.** @bevmawire's mechanism: when the
+##      `globalJoined` retry fails, `loadDashboardData` HIDES `dash-content` and shows the ⚠
+##      panel **even when the dashboard was already painted**. Rescues call
+##      `_staggeredDashRefresh` (2s/8s/20s), so one blip mid-rescue tears the page down under
+##      the member. status.html solved this in 2026-08-07 with last-good holders
+##      (`_lastParkedCount`, `_lastTierData`, `_lastTotals`, :816-824); index.html has none.
+##      Plan drafted: `_dashEverPainted` + a `dash-stale-notice` banner, so a failed REFRESH
+##      keeps the last-good content instead of tearing down. **First paint with no data must
+##      still show the honest unknown panel — only a REFRESH holds last-good.**
+## 47.5 ⛔⛔ **THE "~17.8M NETWORK CEILING" IS A MYTH, AND IT HAS SHAPED MEMBER-FACING CODE
+##      SINCE JULY.** Owner hit a live self-rescue refusal on `www.crypto-nova.app`:
+##      wallet built gas **18,232,497** (0x11634b1), refused with
+##      *"[From https://sepolia.base.org] gas limit too high"*. Member
+##      `0x8e2d8956…`, matrix `0xb1f621C1…` (T1.1 Matrix B), $2.26 gap.
+##      **MEASURED (`gas_ceiling.js`, keepers): Base Sepolia `blockGasLimit` = 1,200,000,000.**
+##      The refused tx is ~1.5% of a block. `index.html:11060`'s "Base Sepolia refuses above
+##      roughly 17.8M" is FALSE at the block level, and it is the sole basis for the
+##      15,000,000 refusal threshold (:11068), the 16,500,000 cap (:11095), and the member
+##      message *"the network could not fit this re-entry right now."*
+##      **MEASURED (`probe_rescue_gas.js`): the estimate is 14,945,951, IDENTICAL on 16 of 16
+##      samples across TWO nodes (QuickNode and sepolia.base.org) over ~20 blocks, spread 0.**
+##      ⛔ So the BIMODAL claim at :9194 (~12.9M seat / ~19M cascade) does NOT hold for this
+##      member, and the message telling them to *"wait a minute and press Self Rescue again —
+##      it usually goes through on the next attempt"* is FALSE COMFORT: a stable estimate
+##      fails deterministically, every time.
+##      ⛔ THE CODE ALSO CONTRADICTS ITSELF: it refuses estimates >15M because wallets pad
+##      ~1.15x, then caps at 16,500,000 — and 16,500,000 x 1.15 = 18,975,000, which by its
+##      own reasoning cannot be sent. Every estimate in 14,347,826..15,000,000 lands on a cap
+##      no wallet pad can survive. The owner's was 14,945,951 — inside that window by 54,049.
+##      ▶ **STILL UNKNOWN AND MUST NOT BE GUESSED: WHAT ACTUALLY REFUSED IT.** Not the block
+##      limit. Candidates: the wallet's own internal cap, or a provider-level cap on
+##      transaction creation. **NEXT MEASUREMENT: reproduce the refusal against a known gas
+##      value and identify which layer emits the error, before changing either constant.**
+##      ⚠ Do NOT simply lower the numbers — the guard may itself be denying rescues that
+##      would succeed, and that is the opposite failure. Measure the refuser first.
+##      ▶ This is a LIVE REPRODUCTION of the Sherwyn / Deborah family that 46.5 recorded as
+##      "not reproduced". Different symptom (a prompt then a refusal, vs no prompt at all),
+##      same root: a rescue whose gas sits near whatever ceiling is actually being enforced.
+## 47.6 ⚠ **CLAUDE PROCESS FAILURES THIS SESSION.** (a) Ran `git status` in the frontend repo
+##      over the device bridge — the thing the deploy notes forbid — leaving a
+##      `.git/index.lock` and making all 1,173 files read as modified (a mount artifact, not
+##      real changes). (b) Assumed `/root/keeper` was a git clone (47.2). (c) Handed over a
+##      PowerShell `node -e` one-liner; PowerShell strips the inner double quotes when
+##      passing to a native program and it died on a syntax error — **write a file, never an
+##      inline JS one-liner** (the 46.7(c) quoting family).
+## 47.7 ▶ **OPEN, IN THE ORDER I WOULD TAKE THEM:**
+##      1. **47.5 — identify what refuses the transaction.** Live, blocking a real member,
+##         and two member tickets hang off it. Measure the refuser, then set the constants.
+##      2. **F2 (47.4)** — the last of the sweep, and @bevmawire's actual mechanism.
+##      3. **PROMOTE.** `9a33b90` + `f4f2b1a` are on `admin` only. Nothing is on either
+##         domain; both still serve `0c0dbe1`. Promote in BOTH Vercel projects
+##         ([[cryptonova-deploy-model]], 46.3) with "Use project's Ignore Build Step"
+##         UNCHECKED, then verify on each DOMAIN, never the ref.
+##      4. The 45.9 list is otherwise unchanged: `rr_keeper` DRY_RUN mutating state;
+##         Blockaid (sent, do not re-submit); PIF sock-puppet economics; and the member
+##         drafts `community_post_2026-08-28_update.txt` + `bug_replies_2026-08-28.txt`
+##         STILL NOT SENT.
+##      5. ▶ UNEXPLAINED, from the 47.0 sweep: many members show repeated `SelfRescue` on a
+##         **~300s cadence** (`0x3bd8b58c` nine times in ~40 min). No money defect attaches —
+##         every episode reconciled — but no keeper runs on 5 minutes (fastlane `3-59/10`,
+##         copay `4-59/10`) and 46.4 says rr_keeper job B is PAUSED. The chain and the
+##         documented crontab disagree; the disagreement is the finding.
+##      6. Cosmetic, carried from 46.8: the Withdrawable card's visual weight.
+
+---
+
+# ⬛ SESSION 46 STATE — 2026-08-28 evening. ⚠ SUPERSEDED IN PART BY SESSION 47 ABOVE.
 # ✅✅ **45.9 ITEM 7 IS CLOSED: THE WITHDRAWAL FAMILY HAS ONE LIVE DEFECT AND IT IS
 #     DISPLAY, NOT MONEY.** Measured across the WHOLE population, not one wallet.
 ## 46.0 ✅ **INSTRUMENT `diag_withdraw.js` + `diag_withdraw.selftest.js`** (keepers repo,
