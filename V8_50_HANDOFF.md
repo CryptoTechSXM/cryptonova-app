@@ -10,10 +10,227 @@ owner-set, and the session that earned it got five things wrong by ignoring what
 
 ---
 
-# ⬛ SESSION 47 STATE — 2026-08-29. LATEST. READ THIS FIRST.
-# The owner's crossing question is ANSWERED AND CLEAN. Three failure-as-zero fixes are on
-# `admin` and NOT PROMOTED. One NEW live defect was found and it invalidates a belief that
-# has shaped member-facing code since July.
+# ⬛ SESSION 48 STATE — 2026-08-29 afternoon. LATEST. READ THIS FIRST.
+# The parked backlog finally has a MEASURED cause, and it is TWO causes, not one.
+# Both rescue keepers are PAUSED in cron pending an owner decision (48.4).
+# FIVE frontend commits sit on `admin` UNPROMOTED — both domains still serve `0c0dbe1`.
+## 48.0 ⛔⛔ **A MEMBER PAID SIX TIMES AND WAS NEVER SEATED ONCE.** Sherwyn
+##      (`0x1e8e2dcf`) filed two tickets today: *"each time I approve and self rescue,
+##      the system says you're back in the matrix but a refresh says I'm still parked...
+##      have done it 4 consecutive times"* and *"every time I do the continuous self
+##      rescue, my CNova amount increases"*. `diag_crossing_pay.js` (ADDR filter, blocks
+##      46090000..46123088): **8 episodes, 0 flagged, 3 crossings out of MatA + 3 out of
+##      MatB, NO DOUBLE PAYMENT** — roughly **$45 spent** — and he is parked again now
+##      with **$0.25** earned. `member_history.js` gave the shape, identical six times:
+##      ```
+##      46118522   T1.1 MatB   MemberCrossedToPartner
+##      46118522   T1.1 MatA   MemberParked   PARKED shortfall $0.00
+##      ```
+##      **A park carrying shortfall 0 is not a funding park.** `MemberParked(member, 0)`
+##      is emitted from FOUR sites; :881 and :908 also emit `CycleOutFailed` (absent from
+##      his trail) and :938 parks in the SOURCE before crossing (his parks are in the
+##      DESTINATION). That isolates **MatrixLogicLib:529** — *"Cascade refilled every
+##      seat. Park instead of corrupting the array."*
+##      ✅ **THE ~300s `SelfRescue` CADENCE FROM 47.7 ITEM 8 IS SOLVED AND IT WAS NEVER A
+##      KEEPER — IT IS MEMBERS PRESSING THE BUTTON AGAIN.** Gaps of 100s/98s/46s/256s/50s
+##      are a person retrying. Two 300s that did not connect, and the answer was a human.
+## 48.1 ✅ **INSTRUMENT `pair_saturation.js`** (keepers `36fe73c`, scp'd, md5
+##      `cd1ef1727474d0582d99053be2c36157` verified on the box; READ-ONLY — zero
+##      `Wallet`/`PRIVATE_KEY`/`sendTransaction`/`.wait()`). Occupancy vs MATRIX_SIZE per
+##      matrix, then splits the `MemberParked` log into **NO-SEAT** (shortfall 0, no
+##      `CycleOutFailed` same-tx → :529) / **FUNDING** (:979) / **CYCLE-OUT-FAILED**.
+##      A failed read prints `?`; an unread size prints SATURATION UNKNOWN, never
+##      "has room". ⚠ **IT HAS NO SELFTEST FILE**, unlike `diag_withdraw` and
+##      `diag_crossing_pay`. The `CycleOutFailed` cross-check is the one real piece of
+##      logic in it and is unpinned by a test. Build one before quoting it again.
+## 48.2 ✅✅ **MEASURED, T1, blocks 46103781..46123781 (~11h):**
+##      ```
+##      T1.1 MatA  occ 127/127  parked   0  rot 1369   SATURATED   NO-SEAT 58 · FUNDING    0
+##      T1.1 MatB  occ 127/127  parked 190  rot 1305   SATURATED   NO-SEAT 10 · FUNDING 1025 · COFAIL 7
+##      T1.2 MatA  occ  10/127  parked   0  rot    0   room 117    all zero
+##      T1.2 MatB  occ   0/127  parked   0  rot    0   room 127    all zero
+##      ```
+##      **BOTH HALVES OF T1.1 ARE PERMANENTLY FULL. T1.2 IS EMPTY — 244 free seats
+##      nobody reaches.**
+## 48.3 ⛔ **CLAUDE WAS WRONG TWICE TODAY ON THE SAME QUESTION, AND THE MEASUREMENTS
+##      CAUGHT BOTH. LOG THIS, IT IS THE MOST USEFUL PART OF THE SESSION.**
+##      **(a)** I found `fastlane_rescue.js:96` gating on the FULL `ENTRY_FEE` while
+##      `MatrixLogicLib:1637` (V8.50 item A) prices a MatA hop at `_crossingPrice` = HALF
+##      the fee — a real defect, and the script even built a "MatA"/"MatB" label at :83
+##      and never used it in the decision (the 47.1 shape again, different file). I then
+##      announced it as the explanation for the growing backlog. **The DRY run said
+##      `1 fast-laned, 267 need SF help, 287 scanned`.** The fix is right and is live;
+##      the diagnosis was not. **(b)** I then said saturation was the cause. **48.2 says
+##      FUNDING 1025 vs NO-SEAT 68** — funding parks outnumber seat parks ~15:1.
+##      **The honest picture is BOTH, in a specific order: most members park because a
+##      MatB hop costs the FULL fee while the reserve only ever covers half (the
+##      documented funding constraint); and when a rescue does come, a saturated pair can
+##      refuse them a seat and park them again having taken their money.**
+## 48.4 ⛔⛔ **WHY THE RESCUE KEEPERS ARE PAUSED, AND THE DECISION THAT IS OWED.**
+##      `crontab.bak_20260829` on the VPS; both lines prefixed `#PAUSED20260829`;
+##      **restore with `crontab /root/keeper/crontab.bak_20260829`.**
+##      The 24h grace was about to expire on 287 parked members and **no copay rescue has
+##      ever completed on V8.50**. `PairManagerV8.rescueReentry` (V8.48 item 10) says
+##      **"a rescued member ALWAYS returns to their own MatA"** — by design, and that fix
+##      cured a real MatB closed loop measured on 2026-08-09. But T1.1's own MatA is
+##      127/127, so draining 1025 funding-parked members sends every one of them back
+##      into a full pair. **The SF would lend the crossing fee and book member debt for a
+##      seat that may not exist.** ⚠ **REASONED FROM SOURCE, NOT MEASURED END TO END:**
+##      with BOTH halves at capacity, `_cycleOutRoot` on A pushes its root into B, B
+##      cycles ITS root, and that root crosses back into the slot A just freed — the
+##      refill at :529 consuming the seat the newcomer was cycled out to make. That would
+##      explain a no-seat park on a matrix that is turning over 1369 times. **Prove it
+##      before building on it.**
+##      ✅ **OWNER DECIDED 2026-08-29: KEEP BOTH KEEPERS PAUSED** until the seat problem is
+##      understood. His reasoning is the right one — nobody should accrue SF debt for a
+##      seat that may not exist. Parked members stay parked meanwhile; that is a known and
+##      accepted cost, NOT an oversight, and it is reversible with the saved crontab.
+##      ⚠ **DO NOT UNPAUSE WITHOUT REVISITING 48.4** — a later session finding the queue
+##      undrained should not read it as a broken keeper and 'fix' it by restarting cron.
+##      ▶ **THE OWNER'S CALL (economics, not code): V8.48 item 10 forces a rescued member
+##      back to their OWN pair; T1.2 has 244 free seats. Overflowing rescues to a pair
+##      with room would break Sherwyn's loop but partially undoes item 10's fix.** Do not
+##      decide this from the code alone.
+## 48.5 ✅ **KEEPER FIX SHIPPED ANYWAY (it is correct regardless of 48.3a).** Keepers
+##      `8c02b68`: `fastlane_rescue.js` now reads `isMatrixA()` from the matrix itself
+##      rather than inferring the side from a loop index, and prices via a
+##      `crossingPrice()` helper mirroring `CROSSING_RESERVE_BPS`; `copay_rescue.js`'s
+##      SF **cost estimate** had the same 2x error (budget-only — the contract books the
+##      true shortfall either way, so it tripped the budget cap early). Both md5-verified
+##      on the box; previous versions kept as `*.bak_20260829`.
+##      ⛔ **AND A CONTRACT FACT WORTH CARRYING: `coPayRescue` HAS NO GRACE GATE ON CHAIN.**
+##      Its only requires are member / not-in-matrix / parked / partner / SF
+##      (MatrixLogicLib:1620-1626). **The 24 hours is entirely `copay_rescue.js:86-88`
+##      keeper policy.** 47.7 item 6's undecoded `coPayRescue.staticCall` reverts are
+##      therefore NOT explained by grace — still open.
+## 48.6 ✅ **FRONTEND — FIVE COMMITS ON `admin`, NONE PROMOTED. Both domains serve
+##      `0c0dbe1`.** `9a33b90` (F1+F3) · `f4f2b1a` (F4) · `717782c` (gas ceiling) ·
+##      `15bdaaa` (ROI copy + rescue-desc) · `cbeedfd` (F2). Truncation check on
+##      `origin/admin` passed after every push.
+##      **F2 IS DONE (47.4 closed).** `_dashHoldable()` / `_showDashStale()` /
+##      `_clearDashStale()` + a `dash-stale-notice` banner. Three teardown sites now hold
+##      last-good on a REFRESH; the paint marker is set at the END of a complete pass so a
+##      run that threw part-way never counts. **Scoped to the ADDRESS it painted for**, so
+##      switching to a genuinely unregistered wallet still tells the truth. **I added a
+##      third site beyond the drafted plan: the "Not Yet Registered" verdict itself** —
+##      no path un-registers a member, so reaching it for an address we already painted
+##      means the lookup is wrong, not the member. All 5 inline script blocks pass
+##      `node --check`; `userAddr` is declared at :2648, above the helpers, so no TDZ.
+##      ⚠ **NOT VERIFIED UNDER A REAL RPC FAILURE.** Console test to actually prove it:
+##      `const _o = retryRead; retryRead = async () => ({ok:false}); loadDashboardData().then(() => { retryRead = _o; });`
+## 48.7 ✅ **ROI COPY REMOVED SITE-WIDE (Blockaid item 6, and an owner standing rule).**
+##      Owner: *"it is not a guarantee and should never be stated that way anywhere."*
+##      `index.html:1216-1218` "~30/40/55% ROI" gone, panel retitled "Tier 1 worked
+##      example", and a bordered **"Illustration only, not a forecast"** disclosure
+##      inserted DIRECTLY UNDER the figures. The `(~31% ROI)` / `(~%31 ROI)` /
+##      `（约 31% ROI）` parentheticals stripped from **all 10 locale files** — locale
+##      overrides HTML, so fixing only the HTML would have been cosmetic. All 10 JSONs
+##      parse; ROI count per locale 4 → 1. **The surviving one is the faq glossary entry,
+##      left deliberately: it defines the term and already ends "ROI is not guaranteed",
+##      which is disclosure, not a claim.** Measured and already clean: every other
+##      "guaranteed" hit on the site is a NEGATION.
+## 48.8 ▶ **BLOCKAID — IT IS SITE WORK, NOT AN EMAIL.** Peter's 2nd reply (thread
+##      `WYJY0N-ZG4W2`, ticket 1390129) is the standard 7-point investment-scam-indicator
+##      checklist, and its operative sentence is *"Once these changes have been
+##      IMPLEMENTED and reflected on-chain or in the relevant public documentation, the
+##      site can be submitted for reassessment."* **Replying without the changes will not
+##      clear the flag.** Owner's answers, verbatim, to be used and never embellished:
+##      **no registered company — "just me"; no licence; ROI framing must go everywhere;
+##      "this should be a decentralized project that is handed over to the members
+##      eventually with limited control from the owner".**
+##      ✅ item 6 done (48.7). ✅ item 7 mostly already met — `terms.html` has Risk
+##      Disclosure / No Financial Advice / Eligibility & Restricted Jurisdictions / No
+##      Refunds, and `compensation.html` is the fee schedule. ⛔ **MISSING: a privacy
+##      policy — 0 mentions of "privacy" anywhere, no page exists.** ▶ Item 4 is the
+##      strongest card: no custody, and 46.1/47.10's sweeps are real withdrawal evidence.
+##      ▶ Item 5 asks us to explain the observed Base Sepolia RPC activity — that is our
+##      keepers, say so plainly. ⚠ Claude is not a lawyer; the "licensing not required
+##      because testnet / mock token / no custody / nothing on sale" line is a STATED
+##      POSITION, not advice.
+## 48.9 ▶ **OPEN, IN THE ORDER I WOULD TAKE THEM:**
+##      1. **The 48.4 decision** — rescue routing vs V8.48 item 10. Blocks unpausing.
+##      2. **Prove or kill the 48.4 refill mechanism** with a fixture, then decide the fix.
+##      3. **Reply to Sherwyn.** He is owed one: his money is accounted for, the loop is
+##         real, it is ours, and the keepers are paused. **16 tickets open; two are his,
+##         from today. NOTHING CLOSED THIS SESSION — no-bulk-close holds.**
+##      4. **Privacy policy**, then the Blockaid reply, then PROMOTE all five commits as
+##         one piece in BOTH Vercel projects ([[cryptonova-deploy-model]], "Ignore Build
+##         Step" UNCHECKED), verifying on each DOMAIN, never the ref. **Blockaid rescans
+##         the LIVE domains, so the promote is now part of that appeal, not separate.**
+##      5. **The rescue panel invites a paid loop.** It says "you're back in the matrix"
+##         and offers the button again without saying what the next hop costs or that
+##         paying again changes nothing while the pair is full. Same family as the $10
+##         lock and the hardcoded `rescue-desc`.
+##      6. `pair_entries.js` is DEAD for V8.50 — it reads `pairExpansionThreshold`, deleted
+##         in V8.46 for contract size. It refused to print rather than guess, which is the
+##         tool behaving correctly. `pair_saturation.js` replaces it.
+##      7. Still carried from 47.7: the undecoded `coPayRescue.staticCall` reverts (now
+##         known NOT to be grace — 48.5); **47 keeper scripts still default to
+##         `deployed_addresses_v8_45.json`, a dead deployment** — always pass
+##         `ADDRESSES_FILE` explicitly, `ticket_triage.js` is the one that matters
+##         operationally; `rr_keeper` DRY_RUN mutating state; PIF sock-puppet economics;
+##         the member drafts `community_post_2026-08-28_update.txt` and
+##         `bug_replies_2026-08-28.txt` STILL NOT SENT.
+##      8. Housekeeping: `C:\CryptoNova-Keepers\_to_delete\` holds one stray file Claude
+##         created and cannot remove over the device bridge.
+
+---
+
+# ⬛ SESSION 47 STATE — 2026-08-29 morning. ⚠ SUPERSEDED IN PART BY SESSION 48 ABOVE.
+# The owner's crossing question is ANSWERED AND CLEAN. The "~17.8M network ceiling" that has
+# shaped member-facing code since July is now MEASURED — it is 16,777,216 = 2^24 — and the
+# frontend + keeper tooling are corrected and pushed. Three failure-as-zero fixes plus this
+# one are on `admin` and NOT PROMOTED. F2 is the last of the sweep and is still open.
+## 47.M ▶ **FIRST THING NEXT MORNING — one paste, before any code.** Overnight the first
+##      copay GRACE EXPIRIES land (47.9): 122 members parked 2026-08-29, grace 86,400s, and
+##      **no copay rescue has ever completed on V8.50**. That is the one thing that changes
+##      while nobody is watching, and it is unproven, so read it before anything else.
+##      ```
+##      ssh -i C:\Users\CryptoTech\.ssh\do_keeper root@167.99.0.250 "cd /root/keeper; echo '--- did copay start rescuing? ---'; grep -h 'done:' copay.log | tail -8; echo '--- first successes ---'; grep -h '  OK   T' copay.log | tail -15; echo '--- failures ---'; grep -hE '  (FAIL|SKIP) ' copay.log | tail -15; echo '--- fastlane ---'; grep -h 'done:' fastlane.log | tail -5; echo '--- SF ---'; grep -h 'budget this run' copay.log | tail -3"
+##      ```
+##      READ IT AS: `done: N rescued` going non-zero = the path works end to end, first time.
+##      Still `0 rescued` with `still in grace` FALLING = they left grace and are being
+##      skipped for some other reason — that is the real problem, and the SKIP/FAIL lines
+##      name it. Still `0 rescued` with the grace count HOLDING = they have not aged out yet.
+##      ⛔ Do not read `0 rescued` alone as a fault (47.8). Read the neighbouring column.
+##      ▶ ALSO UNCOMMITTED: the 47.11 rescue-desc fix is in the working tree only.
+##      ▶ THEN new member reports: `git fetch origin data && git show origin/data:BUGS.md`
+##      — never the branch pointer, never WebFetch (robots.txt), see [[cryptonova-bug-ledger]].
+##      ⛔ **AND IF THE TICKETS ARE MANY, THE NO-BULK-CLOSE RULE MATTERS MORE, NOT LESS.**
+##      Volume is exactly the pressure that produced the @Lavern_Gay mis-close. Each closure
+##      still needs its own line of code or chain read.
+##      ⚠ NOTHING FROM SESSION 47 IS ON EITHER DOMAIN — both still serve `0c0dbe1` — so no
+##      ticket arriving overnight can have been caused by today's work.
+
+## 47.11 ⛔ **THE RESCUE PANEL'S OPENING SENTENCE WAS A HARDCODED CLAIM.** Owner registered a
+##      fresh account (`0x09D160F2…8D8D`, member #382), was parked immediately in T1.1 MatA,
+##      and the panel told him **"You cycled out of your matrix but didn't have enough
+##      earnings to auto re-enter"** — while **"Tier Cycles 0"** sat a few rows below ON THE
+##      SAME PAGE. `index.html:1313` was STATIC MARKUP; `grep rescue-desc` returns ONLY its
+##      own definition, so nothing in the file has ever written to it. **The failure-as-zero
+##      sweep could never have caught this: no read fails, because there is no read.** It
+##      also carried no `data-i18n`, so it never translated either.
+##      ✅ FIXED (working tree, NOT committed): `#rescue-desc` is computed at the parked-panel
+##      render site from `activeCycles` — the cycled-out wording only when cycles > 0,
+##      otherwise "your matrix moved you on to the next position, and your in-matrix balance
+##      doesn't cover its entry fee yet". No `data-i18n` added: computed value, i18n.js would
+##      overwrite it (the F1 two-writers shape).
+##      ⚠ **A WHOLE CLASS THE SWEEP HAS NOT COVERED — static copy that asserts something
+##      about a member's history or state that only the chain knows.** Grep for member-facing
+##      sentences containing a claim that are never written to. Worth a pass of its own.
+##      ▶ LATENT, SAME FAMILY, NOT FIXED: `index.html:5710-5714` — five dashboard card reads,
+##      FOUR turning a failed read into a confident 0 (`cnova.balanceOf`, treasury balance,
+##      **`cnova.totalSupply()`**, communityWallet balance), each `.catch(()=>0n)` AND `?? 0n`,
+##      all painted as dollar figures. `totalSupply -> 0n` is the worst: CNOVA value derives
+##      from it. Only `floorPrice()` is honest.
+##      ✅ CHECKED AND NOT DEFECTS, do not chase: Withdrawable $0.00 vs rescue panel $0.25
+##      (card explains it — held toward the $35.00 reserve target); shortfall arithmetic exact
+##      ($5.00 + $0.25 = $5.25, $10.00 − $5.25 = $4.75); CNOVA 113,800 − 100 = 113,700 and
+##      50 × $0.0112 = $0.56; **Community Pool $504.07 vs Community Wallet $507.62 both read
+##      the SAME `usdc.balanceOf(communityWallet)`** at different moments and it takes 1% of
+##      every entry; parking right after registering is the documented figure-8 behaviour.
+##      ▶ OPEN, cheap: **Member ID #382 but "Total Registered 387"** in the same session.
+
 ## 47.0 ✅✅ **"WERE THERE DOUBLE PAYMENTS ON CROSSING?" — NO. MEASURED, NOT ARGUED.**
 ##      Owner saw "a rescue, an eviction notice and another rescue within minutes or even
 ##      seconds", account not noted. Instrument `diag_crossing_pay.js` +
@@ -85,35 +302,56 @@ owner-set, and the session that earned it got five things wrong by ignoring what
 ##      Plan drafted: `_dashEverPainted` + a `dash-stale-notice` banner, so a failed REFRESH
 ##      keeps the last-good content instead of tearing down. **First paint with no data must
 ##      still show the honest unknown panel — only a REFRESH holds last-good.**
-## 47.5 ⛔⛔ **THE "~17.8M NETWORK CEILING" IS A MYTH, AND IT HAS SHAPED MEMBER-FACING CODE
-##      SINCE JULY.** Owner hit a live self-rescue refusal on `www.crypto-nova.app`:
-##      wallet built gas **18,232,497** (0x11634b1), refused with
-##      *"[From https://sepolia.base.org] gas limit too high"*. Member
-##      `0x8e2d8956…`, matrix `0xb1f621C1…` (T1.1 Matrix B), $2.26 gap.
-##      **MEASURED (`gas_ceiling.js`, keepers): Base Sepolia `blockGasLimit` = 1,200,000,000.**
-##      The refused tx is ~1.5% of a block. `index.html:11060`'s "Base Sepolia refuses above
-##      roughly 17.8M" is FALSE at the block level, and it is the sole basis for the
-##      15,000,000 refusal threshold (:11068), the 16,500,000 cap (:11095), and the member
-##      message *"the network could not fit this re-entry right now."*
-##      **MEASURED (`probe_rescue_gas.js`): the estimate is 14,945,951, IDENTICAL on 16 of 16
-##      samples across TWO nodes (QuickNode and sepolia.base.org) over ~20 blocks, spread 0.**
-##      ⛔ So the BIMODAL claim at :9194 (~12.9M seat / ~19M cascade) does NOT hold for this
-##      member, and the message telling them to *"wait a minute and press Self Rescue again —
-##      it usually goes through on the next attempt"* is FALSE COMFORT: a stable estimate
-##      fails deterministically, every time.
-##      ⛔ THE CODE ALSO CONTRADICTS ITSELF: it refuses estimates >15M because wallets pad
-##      ~1.15x, then caps at 16,500,000 — and 16,500,000 x 1.15 = 18,975,000, which by its
-##      own reasoning cannot be sent. Every estimate in 14,347,826..15,000,000 lands on a cap
-##      no wallet pad can survive. The owner's was 14,945,951 — inside that window by 54,049.
-##      ▶ **STILL UNKNOWN AND MUST NOT BE GUESSED: WHAT ACTUALLY REFUSED IT.** Not the block
-##      limit. Candidates: the wallet's own internal cap, or a provider-level cap on
-##      transaction creation. **NEXT MEASUREMENT: reproduce the refusal against a known gas
-##      value and identify which layer emits the error, before changing either constant.**
-##      ⚠ Do NOT simply lower the numbers — the guard may itself be denying rescues that
-##      would succeed, and that is the opposite failure. Measure the refuser first.
-##      ▶ This is a LIVE REPRODUCTION of the Sherwyn / Deborah family that 46.5 recorded as
-##      "not reproduced". Different symptom (a prompt then a refusal, vs no prompt at all),
-##      same root: a rescue whose gas sits near whatever ceiling is actually being enforced.
+## 47.5 ✅✅ **THE CEILING IS MEASURED: 16,777,216 = 2^24. THE "~17.8M" WAS A MYTH AND IT
+##      WAS LOAD-BEARING.** (47.7 item 1, closed 2026-08-29.)
+##      ✅ INSTRUMENT `refusal_layer.js` + `.selftest.js` (keepers `f9c54b1`, 48/48 offline).
+##      It signs but CANNOT SPEND: the only key is `ethers.Wallet.createRandom()` made in
+##      memory, unfunded, sending to itself with value 0 and empty data, so the probe tx can
+##      never be included — being refused IS the measurement. The selftest greps the source
+##      to prove no `DEPLOYER_PRIVATE_KEY`, no `new ethers.Wallet(...)`, no `.wait()`.
+##      **THREE LAYERS, ROUTINELY CONFLATED, MEASURED SEPARATELY:**
+##        A. BLOCK       `blockGasLimit` = 1,200,000,000. Never the constraint.
+##        B. CALL PATH   `eth_call` accepted **50,000,000** on both endpoints. This is
+##                       `--rpc.gascap` and it is NOT the path a wallet uses.
+##        C. ADMIT PATH  `eth_sendRawTransaction` — **accepts 16,777,216, refuses 16,777,217
+##                       with -32003 "gas limit too high".** Bisected to the unit.
+##      ✅ **IDENTICAL BOUNDARY ON `sepolia.base.org` AND ON QUICKNODE**, so it is a
+##      client/protocol-level rule, NOT one provider's policy — changing RPC buys no
+##      headroom. (A second, different cap sits higher: -32000 "exceeds max transaction…"
+##      at 30M+.) Output kept at `/root/keeper/refusal_layer_20260829.txt`.
+##      ⛔⛔ **AND THE PART THAT LIMITS WHAT THE FRONTEND CAN EVER DO: OUR `gasLimit` IS
+##      ADVISORY.** Every index.html path caps at 16,500,000 or throws, yet the transaction
+##      that reached the node carried 18,232,497. No page path can emit that number, so the
+##      WALLET re-estimated and submitted its own figure with its own pad. Second independent
+##      observation of the same override (index.html:9190, 0xdE5fe7cB: ours 14,903,722 ->
+##      wallet 20,067,248). **So no constant chosen here can guarantee acceptance. The
+##      guard's only real product is the MESSAGE.**
+##      ⛔ The old 15,000,000 line was TOO HIGH and is what waved the owner's member through:
+##      max estimate that survives is **14,588,883 at a 1.15x pad** (15,978,300 at 1.05x).
+##      ⚠ **THE ESTIMATE DRIFTS OVER HOURS: 14,945,951 -> 15,264,637 the same day**, upward.
+##      "Stable" is true within minutes (16/16, spread 0, ~20 blocks) and FALSE across hours.
+##      Say it that way; the "wait and press again" advice is still false comfort either way.
+##      ✅ **SHIPPED to `admin` `717782c`, truncation check on `origin/admin` PASSED.** One
+##      constant block (`NODE_TX_GAS_CAP`, `WALLET_PAD`, `MAX_SAFE_ESTIMATE`, `capGas()`)
+##      replaces the myth at ALL SIX sites — bulkUpgrade, manualUpgrade, limbo re-entry,
+##      permit rescue, classic self-rescue, friendlyError. Fixing one and not the rest is
+##      exactly the 2026-07-29 card/modal drift. Self-rescue now has THREE bands, and the
+##      middle one is the honest part: between 14,588,883 and the cap the WALLET's pad
+##      decides, so it still ATTEMPTS (a refusal happens before broadcast and costs the
+##      member nothing) but warns instead of promising.
+##      ✅ **KEEPERS `f9c54b1`:** the same stale figure corrected in `gas_probe.js`,
+##      `pre_rotate.js`, `diag_member_rescue.js`, `manual_rescue.js`, `direct_keeper.js`
+##      (comment only — its 16,500,000 is genuinely under the cap; raising it to 2^24 is now
+##      known safe but UNMEASURED for batch behaviour, so it was left alone).
+##      ⛔⛔ **THE MYTH PRODUCED A WRONG OPERATOR VERDICT — the cleanest proof it mattered.**
+##      `ticket_triage.js` carried `CAP = 17_800_000` and printed **"VERDICT: SHOULD SUCCEED
+##      — tell them to press Self Rescue"** for `0x8E2d8956` (est 15,264,637 x1.15 =
+##      17,554,333, under the myth) while that member's wallet had ALREADY been refused at
+##      18,232,497. A tool reading an unmeasured constant back to us as advice. Now three
+##      bands matching index.html: IMPOSSIBLE / WALLET-DEPENDENT / SHOULD SUCCEED.
+##      ▶ ⚠ **THE VPS COPY IS STILL THE OLD ONE** unless the scp has been done — repo push
+##      and `/root/keeper` are two different actions (47.2). `ticket_triage.js` is the one
+##      that matters operationally there.
 ## 47.6 ⚠ **CLAUDE PROCESS FAILURES THIS SESSION.** (a) Ran `git status` in the frontend repo
 ##      over the device bridge — the thing the deploy notes forbid — leaving a
 ##      `.git/index.lock` and making all 1,173 files read as modified (a mount artifact, not
@@ -122,23 +360,98 @@ owner-set, and the session that earned it got five things wrong by ignoring what
 ##      passing to a native program and it died on a syntax error — **write a file, never an
 ##      inline JS one-liner** (the 46.7(c) quoting family).
 ## 47.7 ▶ **OPEN, IN THE ORDER I WOULD TAKE THEM:**
-##      1. **47.5 — identify what refuses the transaction.** Live, blocking a real member,
-##         and two member tickets hang off it. Measure the refuser, then set the constants.
-##      2. **F2 (47.4)** — the last of the sweep, and @bevmawire's actual mechanism.
-##      3. **PROMOTE.** `9a33b90` + `f4f2b1a` are on `admin` only. Nothing is on either
-##         domain; both still serve `0c0dbe1`. Promote in BOTH Vercel projects
+##      1. **F2 (47.4)** — the last of the failure-as-zero sweep, and @bevmawire's actual
+##         mechanism. Plan already drafted: `_dashEverPainted` + a `dash-stale-notice`
+##         banner so a failed REFRESH keeps last-good content instead of tearing the page
+##         down mid-rescue. First paint with no data must STILL show the honest unknown.
+##      2. **PROMOTE.** `9a33b90` + `f4f2b1a` + `717782c` are on `admin` only; both domains
+##         still serve `0c0dbe1`. Promote in BOTH Vercel projects
 ##         ([[cryptonova-deploy-model]], 46.3) with "Use project's Ignore Build Step"
-##         UNCHECKED, then verify on each DOMAIN, never the ref.
-##      4. The 45.9 list is otherwise unchanged: `rr_keeper` DRY_RUN mutating state;
+##         UNCHECKED, then verify on each DOMAIN, never the ref. Worth doing F2 first and
+##         promoting the sweep as one piece.
+##      3. ⚠ **WATCH THE FIRST COPAY GRACE EXPIRY.** See 47.9 — the path is designed right
+##         and funded, but NO copay rescue has ever completed on V8.50. Observe it drain;
+##         do not assume it.
+##      4. ✅ DONE — see 47.10. The sweep was re-run; the withdrawal family is still clean and
+##         the debt path is open but NOT YET REACHABLE.
+##      5. ▶ **47 KEEPER SCRIPTS STILL DEFAULT TO `deployed_addresses_v8_45.json`** — a dead
+##         deployment — and cron does not pass `ADDRESSES_FILE` for several of them. Until
+##         swept, ALWAYS pass it explicitly. `deployed_addresses_current.json` is correct.
+##      6. ▶ **TWO FASTLANE CANDIDATES REVERT ON THE PRE-FLIGHT.** `0xEe98Fe6d` (earnings
+##         $10.06 >= fee $10.00) and `0xd27170Eb` ($11.54 >= $10.00) both died on
+##         `coPayRescue.staticCall` with "transaction execution reverted" — before gas. The
+##         fast lane qualifies members it then cannot rescue. Not decoded.
+##      7. The 45.9 list is otherwise unchanged: `rr_keeper` DRY_RUN mutating state;
 ##         Blockaid (sent, do not re-submit); PIF sock-puppet economics; and the member
 ##         drafts `community_post_2026-08-28_update.txt` + `bug_replies_2026-08-28.txt`
 ##         STILL NOT SENT.
-##      5. ▶ UNEXPLAINED, from the 47.0 sweep: many members show repeated `SelfRescue` on a
+##      8. ▶ UNEXPLAINED, from the 47.0 sweep: many members show repeated `SelfRescue` on a
 ##         **~300s cadence** (`0x3bd8b58c` nine times in ~40 min). No money defect attaches —
-##         every episode reconciled — but no keeper runs on 5 minutes (fastlane `3-59/10`,
-##         copay `4-59/10`) and 46.4 says rr_keeper job B is PAUSED. The chain and the
-##         documented crontab disagree; the disagreement is the finding.
-##      6. Cosmetic, carried from 46.8: the Withdrawable card's visual weight.
+##         every episode reconciled — but no keeper runs on 5 minutes and 46.4 says rr_keeper
+##         job B is PAUSED. ⚠ **A 300 DOES EXIST IN THE RESCUE PATH — `fastlane_rescue.js:28`
+##         `MIN_AGE = 300` — BUT IT DOES NOT EXPLAIN THIS, and the reason is the useful part:
+##         fastlane calls `coPayRescue`, so it CANNOT emit `SelfRescue`, and MIN_AGE is a
+##         minimum park AGE, not a cadence. Two 300s that do not connect.** Recorded so the
+##         next session does not spend the same twenty minutes on it. The real discriminator
+##         is the event name and the tx sender: read those before theorising.
+##      9. Cosmetic, carried from 46.8: the Withdrawable card's visual weight.
+##
+## 47.8 ⚠ **CLAUDE PROCESS FAILURE, LOGGED BECAUSE IT NEARLY SHIPPED.** I wrote "the rescue
+##      keeper re-enters parked members automatically" into FIVE member-facing strings and
+##      only then went to verify it. The check showed 122 parked, 0 rescued, and I called it
+##      a growing backlog and an outage — **before reading the column immediately next to the
+##      zero.** `examined 122 (grace 122, already-rescued 0)` says nothing is failing and
+##      everything is waiting. A counter at zero is not a failure until the neighbouring
+##      column has been read. The right half of this was verifying the promise BEFORE
+##      shipping it; the wrong half was announcing a diagnosis from one number.
+##
+## 47.9 ✅ **THE KEEPER FALLBACK IS REAL BUT TIMED — 24h, AND IT COMES FROM THE CHAIN.**
+##      `copay_rescue.js:86-88` reads `parkedGracePeriod()` off the matrixKeeper contract
+##      (the run logs `grace 86400s` with NO "(FALLBACK, not from chain)" marker, so it is a
+##      genuine chain read) and will not co-pay before it expires. `fastlane_rescue.js` uses
+##      a separate `MIN_AGE` of 300s but only takes ZERO-DEBT members (reserve + earnings >=
+##      fee), which is why the owner's member — $0.00 reserve + $7.74 earned vs a $10.00 fee,
+##      SHORT $2.26 — is correctly skipped by fastlane and owned by copay.
+##      ✅ **THE SF IS HEALTHY AND IS NOT THE BLOCKER**: $503.34, fully backed, invariants OK,
+##      budget $250.79-$253.34 every run against its $250 floor. It is NOT standing down.
+##      ✅ **index.html NOW STATES THE WINDOW AND READS IT FROM CHAIN.** New
+##      `readParkedGrace()` (retried once, returns null on failure) + `keeperFallbackSentence()`
+##      quote "about N hours" ONLY when `parkedGracePeriod()` was actually read, and fall back
+##      to "after a waiting period" otherwise. **⛔ NEVER HARDCODE 24h — it is a chain
+##      parameter.** This is F1's rule applied to a member's patience instead of their money.
+##      ⚠ A member told "the keeper will get you" with no window hears "minutes" and files a
+##      bug when it does not happen. That is how the old promise cost more than it gave.
+
+## 47.10 ✅ **WITHDRAWAL SWEEP RE-RUN ON LIVE DEBT — STILL CLEAN, block 46107028.**
+##      46.1's premise had flipped: it recorded "the SF has issued no loans", and
+##      `sf_invariant_check` now shows 647 debtors ever booked, $29.597156 loaned,
+##      $26.744664 repaid, **$2.852492 outstanding**. So the sweep was re-run.
+##      **376 members swept (241 in 46.1) · 230 hold a balance · 0 unreadable.**
+##      ✅ **ALL 230 DISAGREEMENTS ARE THE 1.5% FEE** — the pair ranking lists only
+##      `[2] vs [4]` and `[3] vs [5]`, each 230. **`[2] card vs [3] MAX` DOES NOT APPEAR**,
+##      and that pair is precisely where the (N-1)xD double-count would surface. So the
+##      defect has NOT fired, on a population 56% larger than the one 46.1 measured.
+##      `withdraw()` per matrix: OK 366 · "nothing to withdraw" 282 · "must keep crossing
+##      reserve while active" 190 · "balance fully reserved for automation" 37.
+##      ⛔ **BUT: `DEBT PATH: TESTABLE NOW - 1 of 376`. THE PATH IS OPEN AND STILL NOT
+##      REACHABLE.** The single debtor holds no balance, so neither arithmetic has anything
+##      to differ over. **This sweep is NOT evidence the double-count is absent — it is
+##      evidence it still cannot be observed.** The reproducing shape is unchanged: a
+##      debtor with a balance across 2+ matrices.
+##      ⚠ **AND THE TOOL COULD NOT NAME THE DEBTOR.** It counted one and printed nothing
+##      identifying, because the per-wallet list only prints wallets with a balance or a
+##      disagreement and a zero-balance debtor is in neither. A detector that reports a
+##      positive it will not name forces the next reader to guess. **FIXED**: the DEBT PATH
+##      block now lists each debtor with debt, balance and position count, and states per
+##      debtor whether it CAN REPRODUCE — plus an explicit "open but not reachable" verdict
+##      when none can. Selftest still 19/19.
+##      ✅ LANDED: keepers `a08f79b` pushed to `main`, scp'd to `/root/keeper`, md5
+##      `5dfe001264ecca5fc865b7d14dba11d7` verified on the box, selftest 19/19 there.
+##      ⛔ **A TDZ BUG IN THAT FIX, CAUGHT BEFORE SHIPPING, AND WORTH THE LINE:** the first
+##      version pushed `free` into the debtors list, but that `const` is declared TWO LINES
+##      BELOW — a ReferenceError that fires ONLY for a wallet carrying debt, i.e. only in
+##      the case the block exists to report, and invisible in every debt-free run. `node
+##      --check` passes TDZ. Now uses `r.sums.free`.
 
 ---
 
