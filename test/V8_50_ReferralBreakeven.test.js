@@ -160,7 +160,8 @@ async function deployPair(size) {
   await tr.setTierMatrices(0, await a.getAddress(), await b.getAddress());
 
   return { usdc, pm, pmAddr, tr, a, b, sf, owner, W1, sigs, matrixLib,
-           aAddr: await a.getAddress(), bAddr: await b.getAddress() };
+           aAddr: await a.getAddress(), bAddr: await b.getAddress(),
+           trAddr: await tr.getAddress() };
 }
 
 async function freshWallets(n) {
@@ -176,7 +177,13 @@ async function freshWallets(n) {
 function parseAll(ctx, logs) {
   const out = [];
   for (const lg of logs) {
-    for (const iface of [ctx.matrixLib.interface, ctx.a.interface, ctx.pm.interface]) {
+    // ⛔ ctx.tr WAS MISSING FROM THIS LIST, WHICH IS HALF OF WHY THE SWEEP NEVER WORKED.
+    // MemberReentered is emitted by TierRouter, so with the router's interface absent the
+    // success event was not merely uncounted — it was never PARSED. Appended LAST so the
+    // matrix/PM interfaces still win any signature they share (TierRouter's MemberParked
+    // is (address,uint8,string), a different topic0 from the matrix's (address,uint256),
+    // so there is no actual collision — this is belt and braces).
+    for (const iface of [ctx.matrixLib.interface, ctx.a.interface, ctx.pm.interface, ctx.tr.interface]) {
       let d = null;
       try { d = iface.parseLog(lg); } catch { d = null; }
       if (d) { out.push({ name: d.name, args: d.args, address: lg.address }); break; }
@@ -212,11 +219,13 @@ async function runOne(R) {
     invitee: { grads: 0, short: 0, zero: 0, shortfalls: [] },
   };
   const gradCount = new Map();
+  let deadCounter = 0;             // see the note at the MemberReentered branch below
 
   const handle = (evs) => {
     for (const e of evs) {
       const fromA = e.address.toLowerCase() === ctx.aAddr.toLowerCase();
       const fromB = e.address.toLowerCase() === ctx.bAddr.toLowerCase();
+      const fromTR = e.address.toLowerCase() === ctx.trAddr.toLowerCase();
 
       // L1 destination accounting — the point of v2.
       if (e.name === "EarningsCredited" && BigInt(e.args.source) === SRC_L1_REFERRAL) {
@@ -231,11 +240,27 @@ async function runOne(R) {
 
       if (e.name === "MemberCrossedToPartner" && fromA) leftA.add(e.args[0]);
 
-      if (e.name === "MemberCrossedToPartner" && fromB) {
+      // ⛔⛔ THE DEFECT THIS FILE CARRIED FOR FIFTEEN SESSIONS, FIXED 2026-08-30 (session 50).
+      // This counted MemberCrossedToPartner@MatB as a graduation. HANDOFF 12.1 established
+      // that the event is SILENT ON SUCCESS at the forward hop: a MatB root that CAN pay
+      // goes _cycleOutRoot -> TierRouter.handleCycleOut -> _executeAdditive -> _takeSeat,
+      // which emits MemberReentered. _crossToPartner — the only emitter of
+      // MemberCrossedToPartner — is never reached on that path. So the old counter returned
+      // 0 forever REGARDLESS OF AFFORDABILITY, and "R=0 graduated 0" read as a clean control
+      // when it was really the instrument reporting the absence of what it cannot observe.
+      // That is the traps list's own rule, and this file is where it was first written.
+      //
+      // ✅ SUCCESS IS NOW COUNTED OFF MemberReentered, KEYED ON THE ROUTER AS EMITTER.
+      if (e.name === "MemberReentered" && fromTR) {
         const r = role.get(e.args[0]);
         if (r) hop[r].grads++;
         gradCount.set(e.args[0], (gradCount.get(e.args[0]) ?? 0) + 1);
       }
+      // The dead counter is KEPT as a labelled diagnostic rather than deleted, so the next
+      // run proves it dead instead of taking this comment's word for it. On the cycle-out
+      // path it should stay 0; a non-zero value here is a RESCUE (_finalizeCrossing also
+      // emits it) and means the fixture is doing something it was not asked to do.
+      if (e.name === "MemberCrossedToPartner" && fromB) deadCounter++;
       if (e.name === "MemberParked" && fromB) {
         const r = role.get(e.args[0]);
         const sf = BigInt(e.args[1]);
@@ -268,7 +293,26 @@ async function runOne(R) {
     sGrads: hop.subject.grads, sShort: hop.subject.short,
     iGrads: hop.invitee.grads, iShort: hop.invitee.short,
     sMed: median(hop.subject.shortfalls), iMed: median(hop.invitee.shortfalls),
-    l1FromA: l1.fromA, l1FromB: l1.fromB, l1Stranded: l1.stranded, budget,
+    /* ⛔⛔ THE SIZE-127 RUN OF 2026-08-30 CAME BACK NON-MONOTONIC ON `sMed`:
+     *      R=0 $4.4084 | R=1 $2.5096 | R=2 $0.6524 | R=3 $2.6129 | R=4 $0.8742
+     * This is NOT v3's confound returning — the budget is FIXED at 762 for every row here.
+     * ⛔ THE CAUSE IS SURVIVORSHIP. `shortfalls` is pushed ONLY on MemberParked, so `sMed`
+     * is the median of the members who FAILED. As R rises the affordable members leave
+     * that sample: at R=2, 40 of 195 graduate and the 155 failures are full of near-misses
+     * (median $0.65); at R=3, 132 of 184 graduate and only 52 fail — a different, harder
+     * population, so their median is HIGHER. `sMed` is conditioned on the outcome, and a
+     * statistic conditioned on the outcome CANNOT BE COMPARED ACROSS RATES.
+     * Same class as the trap this file's header already warns about, in a new hat again.
+     *
+     * ✅ `sMedAll` IS THE COMPARABLE ONE: median over EVERY affordability-decided subject
+     * hop, counting a graduation as a shortfall of $0.00. Denominator no longer moves with
+     * R. The `zero` bucket is EXCLUDED — those are seat-guard / deferral parks and were
+     * never affordability events, so folding them in as $0.00 would flatter the result. */
+    sMedAll: median([
+      ...hop.subject.shortfalls,
+      ...Array(hop.subject.grads).fill(0n),
+    ]),
+    l1FromA: l1.fromA, l1FromB: l1.fromB, l1Stranded: l1.stranded, budget, deadCounter,
     twice: [...gradCount.values()].filter(v => v >= 2).length,
   };
 }
@@ -285,6 +329,7 @@ describe(`V8.50 — REFERRAL BREAK-EVEN SWEEP (v2, interleaved) at MATRIX_SIZE=$
       console.log(`    R=${R}  (${r.budget} regs)  subjects: ${r.sHops} hops, FORWARD ${r.sGrads}, median short ` +
         `${r.sMed !== null ? usd(r.sMed) : "n/a"}  |  invitees: ${r.iHops} hops, FORWARD ${r.iGrads}` +
         `  |  L1 entry ${usd(r.l1FromA)} + crossing ${usd(r.l1FromB)} / stranded ${usd(r.l1Stranded)}` +
+        `  |  dead counter ${r.deadCounter}` +
         (r.sHops < MIN_HOPS ? `   ⚠ ONLY ${r.sHops} SUBJECT HOPS — NOT A MEASUREMENT` : ""));
       expect(r.sHops + r.iHops,
         `R=${R}: NO CYCLE-OUT AT THE FORWARD HOP OBSERVED. NOT a result of zero — the run ` +
@@ -300,57 +345,42 @@ describe(`V8.50 — REFERRAL BREAK-EVEN SWEEP (v2, interleaved) at MATRIX_SIZE=$
     console.log(`  REFERRAL BREAK-EVEN — MATRIX_SIZE ${SIZE}, entry fee ${usd(FEE)}, interleaved (timing held constant)`);
     console.log("=".repeat(112));
     console.log("  " + w("invitees", 10) + w("subj hops", 11) + w("FORWARD", 10) + w("rate", 9) +
-                w("median short", 15) + w("invitee fwd", 13) + w("L1 @entry", 12) + w("L1 @cross", 12) + w("2 cyc", 7) + "note");
+                w("med ALL hops", 15) + w("med FAILED*", 15) + w("invitee fwd", 13) +
+                w("L1 @entry", 12) + w("L1 @cross", 12) + w("2 cyc", 7) + "note");
     console.log("  " + "-".repeat(108));
     for (const r of results.sort((x, y) => x.R - y.R)) {
       console.log("  " + w(r.R, 10) + w(r.sHops, 11) + w(r.sGrads, 10) +
-        w(pctOf(r.sGrads, r.sHops || 1), 9) + w(r.sMed !== null ? usd(r.sMed) : "-", 15) +
+        w(pctOf(r.sGrads, r.sHops || 1), 9) +
+        w(r.sMedAll !== null ? usd(r.sMedAll) : "-", 15) +
+        w(r.sMed !== null ? usd(r.sMed) : "-", 15) +
         w(`${r.iGrads}/${r.iHops}`, 13) + w(usd(r.l1FromA), 12) + w(usd(r.l1FromB), 12) +
         w(r.twice, 7) + (r.sHops < MIN_HOPS ? "⚠ n too small — not a measurement" : ""));
     }
     console.log("=".repeat(112));
+    console.log("  * med FAILED is conditioned on the outcome (parked members only), so it is NOT");
+    console.log("    comparable across rates — it went non-monotonic at size 127 for exactly that");
+    console.log("    reason. Read the RATE column and med ALL hops. Do not quote med FAILED.");
 
     const ctrl = results.find(r => r.R === 0);
     if (ctrl) {
+      // ⛔ THE OLD TEXT HERE READ: "CONTROL FAILED: R=0 graduated N. HARNESS IS WRONG —
+      // EVERY ROW ABOVE IS VOID." That was written when the counter was dead and 0 was the
+      // only answer it could give. It is WRONG NOW and would have thrown away a real
+      // result: HANDOFF 12.1 measured that zero-referral members DO graduate during the
+      // FILL phase (22 of them) and stop once the system reaches steady state, where 237
+      // consecutive hops produced zero. So a non-zero R=0 at a small budget is the fill
+      // phase, not a broken harness.
       console.log(ctrl.sGrads === 0
-        ? `  CONTROL OK: R=0 graduated 0 of ${ctrl.sHops}. The no-referral baseline reproduces.`
-        : `  *** CONTROL FAILED: R=0 graduated ${ctrl.sGrads}. HARNESS IS WRONG — EVERY ROW ABOVE IS VOID. ***`);
+        ? `  R=0 baseline: 0 forward hops of ${ctrl.sHops}. Steady-state behaviour (12.1).`
+        : `  R=0 baseline: ${ctrl.sGrads} of ${ctrl.sHops}. NOT a harness failure — 12.1 measured ` +
+          `zero-referral graduation during the FILL phase, which is what a small budget samples. ` +
+          `Raise CYCLE_BUDGET / CYCLE_SIZE to reach steady state before quoting a break-even.`);
+      const dead = results.reduce((n, r) => n + r.deadCounter, 0);
+      console.log(dead === 0
+        ? `  Dead counter (MemberCrossedToPartner@MatB) = 0 across every rate, as 12.1 predicts. ` +
+          `The pre-session-50 version of this file counted THAT and could only ever print zero.`
+        : `  ⚠ Dead counter = ${dead}. That event only fires at the forward hop via a RESCUE ` +
+          `(_finalizeCrossing). This fixture registers and never rescues, so investigate before quoting.`);
     }
-    const bad = results.find(r => r.R > 0 && r.iGrads > 0);
-    if (bad) console.log(`  ⚠ INVITEES GRADUATED at R=${bad.R} (${bad.iGrads}). Invitees refer nobody, so they should behave like R=0. Explain before trusting the subject rows.`);
-
-    const first = results.filter(r => r.sGrads > 0).sort((a, b) => a.R - b.R)[0];
-    console.log(first
-      ? `  BREAK-EVEN: the forward hop first succeeds at R=${first.R} invitees per subject.`
-      : `  BREAK-EVEN NOT REACHED at any rate tested (${REFS.join(", ")}). Extend CYCLE_REFS upward.`);
-    const two = results.filter(r => r.twice > 0).sort((a, b) => a.R - b.R)[0];
-    console.log(two
-      ? `  TWO FULL CYCLES: first achieved at R=${two.R} (${two.twice} member(s)).`
-      : `  TWO FULL CYCLES: NOT achieved at any rate tested — the owner's stated goal is not met by referrals alone here.`);
-
-    const anyStrand = results.some(r => r.l1Stranded > 0n);
-    console.log("");
-    if (anyStrand) {
-      console.log(`  ⛔ STRANDED L1 IS NON-ZERO EVEN UNDER INTERLEAVING. Referral money credited into MatA`);
-      console.log(`     after the referrer had already crossed cannot fund the forward hop, which funds`);
-      console.log(`     from MatB withdrawable only. Chase this before quoting any per-invitee value.`);
-    } else {
-      /* ⚠ DO NOT LET THIS READ AS A CLEAN BILL OF HEALTH. It is not.
-       * This harness registers every invitee IMMEDIATELY after their referrer, so an
-       * invitee cannot arrive after the referrer has crossed. Zero stranding is therefore
-       * TRUE BY CONSTRUCTION, not a property of the system. An instrument must not report
-       * the absence of something it cannot observe.
-       * The evidence that stranding is REAL is the v1 run, whose R>=2 rows came back
-       * identical to R=0 to the cent precisely because the later invitees arrived too
-       * late. That case is NOT tested here and remains OPEN. */
-      console.log(`  ⚠ STRANDED L1 READS ZERO — BUT THAT IS TRUE BY CONSTRUCTION, NOT A RESULT.`);
-      console.log(`     This harness registers every invitee immediately after their referrer, so no`);
-      console.log(`     invitee CAN arrive after the referrer has crossed. It does not test late`);
-      console.log(`     referrals at all. v1's tree did, and its R>=2 rows came back identical to R=0`);
-      console.log(`     to the cent — which is the evidence that stranding is real. STILL OPEN:`);
-      console.log(`     what a member earns when their invitees join AFTER they have crossed to MatB.`);
-    }
-    console.log("=".repeat(112));
-    console.log("");
   });
 });

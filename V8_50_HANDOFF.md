@@ -138,7 +138,135 @@ owner-set, and the session that earned it got five things wrong by ignoring what
 ##      `MatrixLogicLib` 24,281 (295) are also tight. **The next matrix edit WILL breach
 ##      the factory.** Relief route if needed: move logic into `MatrixLogicLib`, which is
 ##      LINKED not embedded — `scripts/sizes.js` prints the note itself.
-## 50.7 ▶ **WHAT IS LANDED AND WHAT IS DELIBERATELY NOT.**
+## 50.7 ✅✅✅ **THE REFERRAL BREAK-EVEN IS MEASURED. FIFTEEN SESSIONS OF BACKLOG, CLOSED.**
+##      The carried item read *"`V8_50_ReferralBreakeven.test.js` v4 counts the dead event…
+##      THIS IS WHY THE REFERRAL BREAK-EVEN IS STILL UNKNOWN."* **TWO defects, not one:**
+##      1. It counted `MemberCrossedToPartner@MatB` as a graduation. 12.1 established that
+##         event is **silent on success** — an affordable MatB root goes `handleCycleOut` ->
+##         `_executeAdditive` -> `_takeSeat`, which emits **`MemberReentered`**. The counter
+##         returned 0 forever regardless of affordability.
+##      2. ⛔ **`ctx.tr` WAS NEVER IN `parseAll`'s INTERFACE LIST**, so `MemberReentered` was
+##         not merely uncounted — **it was never PARSED**. No amount of staring at the
+##         counter would have found that; it took reading the parser.
+##      ✅ Fixed 2026-08-30. The dead counter is KEPT as a labelled diagnostic and came back
+##      **0 across every rate at size 127**, which proves it dead rather than asserting it.
+##      ### THE SWEEP — `CYCLE_SIZE=127`, budget FIXED at 762 regs per row, 11 minutes
+##      ```
+##      R   subj hops   FORWARD   rate      med FAILED*   stranded L1
+##      0   508          23        4.53%    $4.4084       $0.00
+##      1   254          34       13.39%    $2.5096       $9.50
+##      2   195          40       20.51%    $0.6524       $13.30
+##      3   184         132       71.74%    $2.6129       $15.20
+##      4   148         115       77.70%    $0.8742       $16.15
+##      ```
+##      ✅✅ **THE ANSWER IS THE RATE COLUMN, AND IT IS CLEANLY MONOTONIC:
+##      4.53% -> 13.39% -> 20.51% -> 71.74% -> 77.70%. THE STEP IS BETWEEN R=2 AND R=3
+##      (20.5% -> 71.7%). 11.4's arithmetic predicted ~2.35 invitees per cycle from the
+##      split table. THE MEASUREMENT AGREES.** Structure and census now agree twice: once
+##      on the gap ($4.464 predicted vs $4.4084 measured) and now on the break-even.
+##      ⛔⛔ **AND THE `med FAILED` COLUMN IS NOT COMPARABLE ACROSS RATES — DO NOT QUOTE IT.
+##      IT WENT NON-MONOTONIC ($0.65 at R=2, $2.61 at R=3) AND THAT IS SURVIVORSHIP, NOT
+##      NOISE AND NOT v3's CONFOUND** (the budget is fixed at 762 for every row here).
+##      `shortfalls` is pushed only on `MemberParked`, so the statistic is conditioned on
+##      FAILING. At R=2, 40 of 195 graduate and the 155 failures are full of near-misses; at
+##      R=3, 132 of 184 graduate and only 52 fail — a harder residue with a higher median.
+##      **A statistic conditioned on the outcome cannot be compared across the variable that
+##      moves the outcome.** Same class as this file's own header warnings, third hat.
+##      ✅ **INSTRUMENT FIXED, NOT JUST ANNOTATED:** a `med ALL hops` column now medians over
+##      every affordability-decided subject hop counting a graduation as $0.00, so the
+##      denominator no longer moves with R. ⚠ **NOT YET RUN — the table above predates it.**
+##      Re-run `CYCLE_SIZE=127` to fill that column; the RATE answer does not depend on it.
+##      ✅ **R=0 GRADUATED 23 OF 508 (4.53%) AND THAT CORROBORATES 12.1**, which measured 22
+##      fill-phase graduations before steady state. The old control text would have called
+##      this "HARNESS IS WRONG — EVERY ROW VOID"; it was corrected this session for exactly
+##      that reason.
+##      ⚠ **STRANDED L1 IS NOW OBSERVABLE AND IS SMALL:** $9.50-$16.15 against $663-$980 of
+##      L1 per row, ~1.4-1.6%. v2 reported "stranded = zero" as a finding when it was zero
+##      BY CONSTRUCTION; at size 127 the pair is large enough for a referrer to cross before
+##      their later invitees arrive, so the instrument can finally observe it. **Real, and
+##      too small to be a lever.**
+##      ▶ **WHAT THIS UNBLOCKS: 11.4's A/B/C DECISION, WHICH HAS BEEN OPEN SINCE SESSION 11.**
+##      **A** accept the gap · **B** lend it (⚠ live T1 loan ceiling **$3.40** vs median
+##      shortfall **$4.41** — the ceiling cannot cover the median member) · **C** change the
+##      splits. The missing input was always what the referral requirement actually IS.
+##      **It is ~3 invitees per cycle.** ⛔ Still the owner's call — economics, not code.
+##      ✅ **AND ITEM G REMOVED THE OTHER BLOCKER.** 49.2: a funding fix shipped alone
+##      converts funding parks into no-seat parks. **The seating half now exists, so a
+##      funding change is finally safe to ship — in the same release, never before it.**
+
+## 50.9 ✅✅✅ **LEVER C EXPLORED AND CLOSED. THE DECISION IS A, AND IT IS NOW PRICED.**
+##      **[stated] OWNER 2026-08-30: "i would stick to A, while just explore C to see what
+##      the outcome could be"**, then **"after seeing the outcome make a final decision."**
+##      ⛔ **A SPLIT CHANGE WAS NEVER AUTHORISED AND IS NOT AUTHORISED NOW.**
+##      ### THE INSTRUMENT: `scripts/model_split_c.js` (new, READ-ONLY, no RPC, no signing)
+##      Closed form rather than a fixture sweep because the fixture costs 11 minutes per
+##      split table at size 127 and the arithmetic is already measured-exact. **It
+##      SELF-CHECKS against the census before printing anything** and refuses to print a
+##      table if it drifts: model $5.5360 vs census $5.5916, gap $4.4640 vs $4.4084 —
+##      **5.6 cents.** ⚠ THE MODEL SCREENS; THE FIXTURE DECIDES.
+##      ```
+##      scenario                          take      shortfall  break-even  system take
+##      A — baseline (SHIPPING)           $5.5360   $4.4640    2.35 inv    $2.5640
+##      C1 — orphaned L1 to the member    $7.4360   $2.5640    1.35 inv    $2.5640
+##      C2 — orphaned L1 to the pool      $5.5510   $4.4490    2.34 inv    $2.5640
+##      C3 — halve treasury into pool     $6.2490   $3.7510    1.97 inv    $1.8510
+##      C4 — C1 + halve treasury          $8.1490   $1.8510    0.97 inv    $1.8510
+##      C5 — zero the ENTIRE system take  $8.1000   $1.9000    1.00 inv    $0.0000
+##      C6 — BOTH leaks zero (C1+C5)     $10.0000   $0.0000    self-funds  $0.0000
+##      ```
+##      ### WHY THE ANSWER IS A — FOUR REASONS, ALL OFF THE TABLE ABOVE
+##      1. ⛔ **C CANNOT DELIVER WHAT IT IS FOR. Only C6 self-funds, and C6 means project
+##         income $0.00.** That is not a comp plan, it is a shutdown. **C5 zeroes ALL
+##         project income and STILL leaves a $1.90 gap** — because the orphaned L1 leaks
+##         regardless. 11.4's conservation argument, now priced rather than argued.
+##      2. **The best realistic row buys about ONE invitee** (2.35 -> 1.35) and 12.2
+##         measured where it comes from: **80% out of the community + dev wallets.** That
+##         moves money between member-facing pockets; it does not create capacity.
+##      3. ⛔ **C2 IS WORTH ONE AND A HALF CENTS ($4.4640 -> $4.4490) AND THIS IS THE MOST
+##         USEFUL ROW IN THE TABLE.** "Route orphaned L1 to the pool" is the fair-sounding
+##         obvious answer and it does essentially NOTHING for the orphan, because pool is
+##         split across seats 2..N so they get back 1/(N-1) of it. Anyone who proposes it
+##         in a future session should be shown this row.
+##      4. ✅ **A ALREADY IMPLEMENTS THE OWNER'S STATED POLICY — see the correction below.**
+##      ### ⛔⛔ A STALE NUMBER CORRECTED — 11.4's LEVER-B NOTE IS WRONG TWICE
+##      11.4 says *"the live T1 loan ceiling is $3.40 and the median shortfall is $4.41 —
+##      the current ceiling cannot cover the median member."* **BOTH HALVES ARE WRONG.**
+##      - ⛔ **THE VALUE IS 5_000, NOT 3_400.** `StabilityFund.insolvencyFloorBps` ships
+##        **5_000** — OWNER DECISION 2026-08-19 on a measured A/B curve that **SATURATES AT
+##        4500** (4500/5000/6800/10000 byte-identical on all three seeds). 3_400 is the
+##        superseded value. **$5.00 > the $4.41 median shortfall.**
+##      - ⛔ **IT IS NOT A LOAN CEILING.** It is a FLAT GATE ON OUTSTANDING DEBT: it refuses
+##        a NEW loan once `memberDebt >= fee x bps/10000` and **never reads the amount being
+##        asked for** (handoff 4938). Calling it a ceiling invites exactly this error.
+##      ✅ **CONSEQUENCE: under A a member with no referrals IS lendable today**, and is cut
+##      off only once their debt reaches $5.00 — which is precisely the owner's stated
+##      policy: *"It is not a free ride for ever… evicted bcuz the loan no longer covers
+##      their coverage %."* **A + the existing floor already does what C was being asked
+##      to do.**
+##      ### ▶ THE ONE THING STILL WORTH MEASURING, AND IT IS NOT A SPLITS QUESTION
+##      **C1/C4 help ONLY members with NO referrer, and the orphan share of the live
+##      population has never been measured.** If it is small, C is even less interesting
+##      than this table says. If it is large, that is an ONBOARDING finding — people are
+##      joining without a sponsor — and the fix is in signup, not in the split table.
+##      Read it off `OrphanFeeRouted` on the live chain; read-only log query.
+##      ### ✅ WHAT SHIPS TO MEMBERS OUT OF ALL THIS
+##      **~3 invitees per cycle**, stated as a RATE and never as a total (11.4). That is the
+##      actionable output of the whole funding investigation and it belongs in the member
+##      copy, alongside the honest statement that a member who invites nobody is on borrowed
+##      money and will eventually be evicted.
+
+## 50.8 ▶ **WHAT IS LANDED AND WHAT IS DELIBERATELY NOT.**
+##      ✅ **LANDED 2026-08-30: contracts `cryptonova-app.git` branch `v8.1`, commit
+##      `bc2daea`** — item G across `FigureEightMatrixV8` / `PairManagerV8` / `TierRouter`
+##      / `TierRouterLib`, plus `test/V8_50_Graduation.test.js` and this handoff.
+##      6 files, +715/-7. Keepers repo untouched this session.
+##      ⚠ **THE SHA ABOVE WAS ADDED AFTER THAT COMMIT, SO IT RIDES IN THE NEXT ONE — the
+##      same loop 49.1i fell into. It is recorded here deliberately rather than left
+##      dangling; commit it with whatever lands next.**
+##      ✅ **AND `git add` CONFIRMED 50.0 OUT LOUD:** every added file warned *"LF will be
+##      replaced by CRLF the next time Git touches it"*. That is the whole mechanism —
+##      the repo stores LF, Windows checks out CRLF, and nothing else was ever wrong with
+##      those three files.
 ##      ⛔ **NOTHING IS DEPLOYED. Item G is committed source only, behind a flag that
 ##      ships FALSE. BOTH RESCUE KEEPERS REMAIN PAUSED** (`#PAUSED20260829`); **cron was
 ##      not touched at any point this session** — see the standing owner decision in
