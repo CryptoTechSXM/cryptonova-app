@@ -10,7 +10,159 @@ owner-set, and the session that earned it got five things wrong by ignoring what
 
 ---
 
-# ⬛ SESSION 49 STATE — 2026-08-29 evening. LATEST. READ THIS FIRST.
+# ⬛ SESSION 50 STATE — 2026-08-30. LATEST. READ THIS FIRST.
+# ✅✅ 49.1h's PAPER COUNT HOLDS. MatB GRADUATION IS BUILT, MEASURED AND GREEN (6/6),
+# AND IT SHIPS BEHIND A FLAG THAT DEFAULTS OFF. V8.50 = ITEM G.
+# ⛔ IT FIXES THE 105 NO-SEAT PARKS AND NOT ONE OF THE 1638 FUNDING PARKS. Do not let
+# it be reported as fixing the parked backlog — it is the SEATING half of 49.2's one job.
+# ⛔ THE SEAT THEFT IS NOT A RESCUE DEFECT. G0b reproduces Sherwyn's signature through a
+# PLAIN register(). Item S never reaches that path; item G does.
+## 50.0 ✅ **THE THREE "UNEXPLAINED" UNCOMMITTED FILES (49.1i) ARE A LINE-ENDING ARTIFACT
+##      AND NOTHING ELSE. CLOSED.** `archive/windows_keeper/corescue.bat`,
+##      `contracts/test/CryptoNovaCommunityWallet.sol`, `scripts/diag_wallet_charges.js`:
+##      ~1350 changed lines under `git diff`, **ZERO** under `git diff --ignore-cr-at-eol`.
+##      Every differing line is identical but for a trailing `^M`. `core.autocrlf` is
+##      UNSET and there is no `.gitattributes`, so any Windows tool that rewrites one of
+##      these makes it look permanently modified. **Not lost work, not an earlier
+##      session's loose end.** ⚠ Leave them out of commits (name files explicitly, never
+##      `git add -A`) or normalise them deliberately in their own commit.
+##      The one REAL uncommitted change was **49.1i itself**, written after `e59a45f`.
+## 50.1 ✅✅ **THE SEAT THEFT IS WIDER THAN 49.1a SAID: IT IS ON THE ENTRY PATH, NOT THE
+##      RESCUE PATH.** `test/V8_50_Graduation.test.js` G0b reproduces Sherwyn's exact
+##      signature through an ordinary `TierRouter.register()` — no `selfRescue` anywhere:
+##      ```
+##      P1.MatA MemberCycledOut         incumbent
+##      P1.MatA MemberCrossedToPartner  -> P1.MatB
+##      P1.MatB MemberCycledOut         incumbent
+##      P1.MatA MemberEntered           incumbent  pos 4   <- takes the freed seat
+##      TierRtr MemberReentered         incumbent
+##      P1.MatB MemberEntered           incumbent  pos 4
+##      P1.MatA MemberParked            ARRIVAL    $0.00   <- :529 no-seat park
+##      ```
+##      **So EVERY new member entering a saturated pair with a solvent MatB root is robbed
+##      the same way.** ⛔ **THIS IS WHY ITEM S CANNOT BE THE FIX ON ITS OWN** — item S is
+##      scoped to rescued members by owner decision (49.1f) and never reaches this path.
+##      ✅ `PairManagerV8._findExternalPair()` is `internal pure returns 0` — **ONE DOOR.**
+##      Every new external enters pair 0 whether or not pair 0 has a seat. That is why
+##      T1.2 sits at rotation 0 with 244 free seats.
+## 50.2 ✅ **BOTH BASELINES CONFIRM 49.1e AT FIXTURE SCALE, AND THE INVARIANT IS NOT WHAT
+##      I FIRST ASSERTED.** G0a (production-shaped splits): the MatB root funding-parks
+##      $1.42 short and the ARRIVAL keeps the seat. G0b (C5's `SOLVENT_SPLITS`, root holds
+##      $28.10 vs a $10 hop): the root takes the seat and the ARRIVAL parks. **8 seated
+##      before, 8 after, in BOTH.** ⛔ **The first draft of G0 asserted "the arrival is
+##      parked" and FAILED. That was my error, not a contradiction: the invariant is ONE
+##      PARKED PER ENTRY; WHICH member is the victim depends on the brake.**
+## 50.3 ⛔⛔ **G1 FAILED FIRST, AND THE FAILURE IS THE MOST REUSABLE THING IN THIS SECTION:
+##      SATURATION IS NOT OBSERVABLE AT THE MOMENT THE ROUTING DECISION IS MADE.**
+##      Item G's first gate was `_bothHalvesFull` and it **never fired once** — G1's trace
+##      came back byte-identical to G0b with `P2 received: 0`. By the time
+##      `TierRouterLib.sameTierTarget` runs, `_cycleOutRoot` has ALREADY decremented
+##      occupancy on BOTH halves (**MatrixLogicLib:787**): MatA 4/4 -> 3/4 freeing the
+##      arrival's seat, MatB 4/4 -> 3/4 freeing this root's. **A pair that IS saturated
+##      reports 3/4 and 3/4, and `_bothHalvesFull` correctly answers false.**
+##      ✅ **AND THE RIGHT QUESTION WAS NEVER "IS THE PAIR FULL". It is "IS THE SEAT I AM
+##      ABOUT TO TAKE ALREADY SPOKEN FOR", and `crossingInProgress` on the MatA answers
+##      exactly that.** It is EXACT, not a proxy: set only by `_crossToPartner`
+##      (MatrixLogicLib:993), which runs only from `_cycleOutRoot`, which runs only when an
+##      entry found MatA FULL — and a MatB root only reaches this code by cycling out,
+##      which needs MatB full too. 49.1b step 8 had already noted the flag is written there
+##      and read by nothing.
+##      ⛔ **THE PROXY THAT WAS REJECTED, WRITTEN INTO THE CODE COMMENT SO IT STAYS
+##      REJECTED:** `occ + 1 >= size` on both halves. It would also fire on a pair that
+##      genuinely had one free seat per half, diverting a member who had a seat waiting —
+##      the more damaging error, the same argument item S's `_pairWithRoomFor` makes.
+## 50.4 ✅✅✅ **V8.50 ITEM G — GRADUATION. BUILT, 6/6 GREEN, AND OFF BY DEFAULT.**
+##      - **`FigureEightMatrixV8.crossingInProgress()`** — new external view, one line.
+##      - **`PairManagerV8.graduationTargetFor(member, fromPairIndex)`** — one view that
+##        never reverts; gates on contention, then reuses item S's `_pairWithRoomFor` so
+##        **room is checked, not inferred**.
+##      - **`TierRouterLib.sameTierTarget(matrixB, member, pairManager, graduate)`** — the
+##        read is `try`-wrapped and fails toward own-MatA.
+##      - **`TierRouter.graduationEnabled` + `setGraduationEnabled` (owner OR governance)**
+##        — **SHIPS FALSE. Deploying changes nothing until it is set**, which is what makes
+##        this safe to land while the funding half is still open.
+##      ✅ **G1, THE PROOF. Same fixture as G0b, same solvent root, ONE FLAG FLIPPED:**
+##      ```
+##      P1.MatA MemberCycledOut         incumbent
+##      P1.MatA MemberCrossedToPartner  -> P1.MatB
+##      P1.MatB MemberCycledOut         incumbent
+##      P2.MatA MemberEntered           incumbent  pos 1   <- GRADUATED
+##      TierRtr MemberReentered         incumbent
+##      P1.MatB MemberEntered           incumbent  pos 4
+##      P1.MatA MemberEntered           ARRIVAL    pos 4   <- KEEPS THE SEAT
+##      seats 8 -> 9 · parks 0 · P2 received 1
+##      ```
+##      ⛔ **AND THIS IS NOT 49.1e's WITHDRAWN "RESERVE THE SEAT".** That one denied R_B
+##      the seat and made R_B the victim instead, creating nothing. Item G gives R_B a
+##      REAL seat in another pair — hence `8 -> 9`. **The seat-count delta is the whole
+##      difference between the two proposals, which is why G1 asserts it.**
+##      ✅ **G2 — THE C1 TRIPWIRE FOR ITEM G:** with an INSOLVENT root, graduation is
+##      invisible; the root still funding-parks in TierRouter's no-strand epilogue
+##      (:1473-1482) before `sameTierTarget` is ever reached. **Red means item G is
+##      reaching a path it was never scoped to touch.**
+##      ✅ **G4 — EXHAUSTION:** every reachable pair full -> falls back to today's park,
+##      **no revert**. This runs inside `_cycleOutRoot`, which has NO try/catch above it;
+##      a revert kills a stranger's transaction (T3.1/T4.1, 2026-07-28).
+##      ✅ **O1/O2/O3 and C1/C3/C4/C5 all still green — 13/13 with the two prior suites.**
+##      **O2 confirms V8.48 item 10 is intact and the 2026-08-09 MatB closed loop is not
+##      back.**
+## 50.5 ⛔⛔ **G3 ANSWERS 49.1g/49.1h's FREEZE QUESTION — AND SIZES THE PRIZE HONESTLY.**
+##      ```
+##      3 arrivals · MatA rot +3 · MatB rot +3 · arrivals seated 3/3
+##      graduations 1 · NO-SEAT parks 0 · FUNDING parks 2 · tier seats 8 -> 9
+##      ```
+##      ✅ **NO FREEZE. Item G does NOT reproduce O4's problem**, because the arrival still
+##      enters MatA and it is the arrival that drives the rotation. That is also what keeps
+##      it clear of the **2026-07-26 incident** (`_sameTierTarget`'s own comment): the
+##      branch V8.48 removed diverted re-entry on a CUMULATIVE lifetime counter, every pair
+##      crossed it permanently, MatA lost its entry source from both directions and froze
+##      in all 10 tiers. Item G fires only on genuine contention and leaves MatA's entry
+##      source untouched.
+##      ⛔ **BUT ONLY 1 OF 3 ARRIVALS GREW THE TIER, AND MY FIRST TWO G3 ASSERTIONS WERE
+##      BOTH WRONG.** Draft 1 asserted the tier grows by N; it came back 1 of 3. **That is
+##      49.2's inversion reasserting itself INSIDE the fixture:** only the first arrival's
+##      MatB root was solvent (the sponsor, $66.65). Once it graduated away the next roots
+##      held ~$2.74 against a $10 hop, funding-parked, and never reached the graduation
+##      branch at all.
+##      ✅ **SO THE CLAIM ITEM G ACTUALLY MAKES, AND THE ONE G3 NOW ASSERTS: while a
+##      graduation target exists, NO MEMBER IS EVER PARKED FOR WANT OF A SEAT.** Remaining
+##      parks are FUNDING parks — a different defect with a different fix.
+##      ⛔⛔ **LIVE IS 1638 FUNDING PARKS TO 105 NO-SEAT PARKS. ITEM G ADDRESSES THE 105.
+##      IT DOES NOT ADDRESS THE 1638. DO NOT REPORT IT AS FIXING THE PARKED BACKLOG.**
+##      It is the SEATING half of 49.2's "one job" — and it is the half that must exist
+##      FIRST, because a funding fix shipped alone converts funding parks into no-seat
+##      parks (49.2, measured from both sides by C1/C5).
+## 50.6 ⚠⚠ **SIZE: `MatrixPairFactory` IS AT 24,544 — 32 BYTES OF HEADROOM, DOWN FROM 112.**
+##      `crossingInProgress()` on the matrix cost 80 bytes, and the factory embeds
+##      FigureEightMatrixV8's CREATION code (CLAUDE.md). `TierRouter` 24,345 (231) and
+##      `MatrixLogicLib` 24,281 (295) are also tight. **The next matrix edit WILL breach
+##      the factory.** Relief route if needed: move logic into `MatrixLogicLib`, which is
+##      LINKED not embedded — `scripts/sizes.js` prints the note itself.
+## 50.7 ▶ **WHAT IS LANDED AND WHAT IS DELIBERATELY NOT.**
+##      ⛔ **NOTHING IS DEPLOYED. Item G is committed source only, behind a flag that
+##      ships FALSE. BOTH RESCUE KEEPERS REMAIN PAUSED** (`#PAUSED20260829`); **cron was
+##      not touched at any point this session** — see the standing owner decision in
+##      `/areas/cryptonova-parked-backlog.md`, and do NOT read the undrained queue as a
+##      broken keeper.
+##      ▶ **STILL THE OWNER'S CALL, unchanged from 49.8 and now better informed:** does
+##      overflow/graduation apply to new entries too (item G says yes, on the entry path;
+##      item S is rescues only); does a graduated member keep any claim on their original
+##      pair; and does either weaken item 10 enough to matter (O2 says no, measured).
+##      ▶ **THE FUNDING HALF IS UNTOUCHED AND IS NOW THE MAIN OPEN QUESTION.** 49.6's
+##      finding stands: a MatB member's LIFETIME pool income is bounded near poolBps x fee,
+##      so pool can NEVER fund a full-fee hop at any matrix size — only referral income
+##      scales. **That is comp-plan economics, i.e. the owner's, not code.**
+##      ▶ **Reply to Sherwyn still owed** (48.9 item 3, 49.9 item 2). His money is
+##      accounted for, the loop is real, it is ours, the keepers are paused — and it is now
+##      measured that his signature is reachable from a plain registration too.
+##      ▶ Everything else in 49.9 stands: privacy policy -> Blockaid resubmission (site
+##      work, not an email — the ROI copy at `index.html:1216-1218` + all 10 locales) ->
+##      PROMOTE the five `admin` commits in BOTH Vercel projects (read the DOMAIN, never
+##      the ref); the rescue panel that invites the paid loop; the 47.7 carry-overs.
+
+---
+
+# ⬛ SESSION 49 STATE — 2026-08-29 evening. ⚠ SUPERSEDED IN PART BY SESSION 50 ABOVE.
 # ⛔⛔ 48.4'S SEAT THEFT IS REAL, REPRODUCED IN A FIXTURE, AND IT IS FUNDING-GATED.
 # Sherwyn's exact live signature — MemberCrossedToPartner in MatB, MemberParked
 # shortfall $0.00 in MatA, one transaction, no CycleOutFailed — now reproduces on demand.
@@ -237,6 +389,21 @@ owner-set, and the session that earned it got five things wrong by ignoring what
 ##      the own MatB. Graduating a MatB root to the NEXT PAIR'S MatA is a different route,
 ##      but 2026-08-09's closed loop is the reason to prove that with a fixture rather than
 ##      an argument. `V8_50_RescueOverflow.test.js` O2 is the guard that already exists.
+## 49.1i ✅ **LANDED AND PUSHED 2026-08-29.**
+##      - Contracts `cryptonova-app.git` branch **`v8.1`, commit `e59a45f`** — item S in
+##        `PairManagerV8.sol`, plus `V8_50_RefillSteal` / `V8_50_RescueOverflow` /
+##        `V8_50_OverflowRotation` and this handoff. 5 files, +1392.
+##      - Keepers `CryptoNova-Keepers.git` branch **`main`, commit `f11454e`** —
+##        `noseat_witness.js` + its selftest.
+##      ⛔ **NOTHING IS DEPLOYED. `PairManagerV8` item S is committed source only** — the
+##      live chain still runs the unfixed contract, and 49.1g/49.1h say why it must stay
+##      that way until graduation is measured. **BOTH RESCUE KEEPERS REMAIN PAUSED**
+##      (`#PAUSED20260829`); cron was not touched at any point this session.
+##      ⚠ **STILL UNCOMMITTED IN THE CONTRACTS REPO, AND NOT SESSION 49's WORK:**
+##      `archive/windows_keeper/corescue.bat`, `contracts/test/CryptoNovaCommunityWallet.sol`,
+##      `scripts/diag_wallet_charges.js`. Deliberately left alone — an earlier session's
+##      loose end. Identify them before committing; per the owner's standing rule they are
+##      an incomplete handoff, not somebody else's change.
 ## 49.2 ⛔⛔ **THE INVERSION — THE MOST IMPORTANT LINE IN THIS SECTION.**
 ##      **THE FUNDING CONSTRAINT IS WHAT PREVENTS THE SEAT THEFT.** The same shortage
 ##      that produces the 1025 live funding parks is the brake that stops the cascade

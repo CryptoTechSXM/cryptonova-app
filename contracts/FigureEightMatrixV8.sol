@@ -823,6 +823,13 @@ contract FigureEightMatrixV8 is Ownable2Step {
     function posToMember(uint256 p) external view returns (address) { return _state.posToMember[p]; }
     function occupancy() external view returns (uint256) { return _state.occupancy; }
     function nextSlot() external view returns (uint256) { return _state.nextSlot; }
+    /// @notice V8.50 item G. True while this matrix is mid-cycle-out: its root has been
+    ///         removed and is being crossed to the partner. ⛔ THE SEAT THIS MATRIX JUST
+    ///         FREED IS SPOKEN FOR — the entry that triggered the rotation is waiting for
+    ///         it. Read by TierRouterLib.sameTierTarget to tell a contested seat from a
+    ///         genuinely free one. Was internal-only until now (49.1b step 8 noted it is
+    ///         written by _crossToPartner and read by nothing else).
+    function crossingInProgress() external view returns (bool) { return _state.crossingInProgress; }
     function rotationCount() external view returns (uint256) { return _state.rotationCount; }
     function joinCountSinceRotation() external view returns (uint256) { return _state.joinCountSinceRotation; }
     function lastRotationTimestamp() external view returns (uint256) { return _state.lastRotationTimestamp; }

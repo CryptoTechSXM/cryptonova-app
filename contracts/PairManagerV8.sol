@@ -41,6 +41,8 @@ interface IMatrixPairFactory {
 }
 
 interface IFigureEightMatrixV8PM {
+    /// V8.50 item G: the contested-seat flag (see graduationTargetFor).
+    function crossingInProgress() external view returns (bool);
     function enterFor(address member, address referrer) external;
     function occupancy()   external view returns (uint256);
     function MATRIX_SIZE() external view returns (uint256);
@@ -333,6 +335,54 @@ contract PairManagerV8 is Ownable2Step {
             if (_hasRoomAndFree(pairs[idx], member)) return idx;
         }
         return type(uint256).max;
+    }
+
+    /// @notice V8.50 ITEM G — GRADUATION. Where should a MatB root cycling out of
+    ///         `fromPairIndex` re-enter? Returns type(uint256).max for "nowhere else —
+    ///         keep today's own-MatA behaviour", which is the answer whenever the pair
+    ///         still has room or no other pair does.
+    ///
+    ///         ⛔ THIS IS A VIEW AND IT NEVER REVERTS. TierRouterLib calls it from inside
+    ///         a cycle-out that has NO try/catch above it (T3.1/T4.1, 2026-07-28), so a
+    ///         revert here would take an unrelated member's registration with it. Both
+    ///         helpers below are already fully try-wrapped and fail toward "no change".
+    ///
+    ///         ⛔ IT REUSES ITEM S's `_pairWithRoomFor`, NOT `_freePairFor`: room is
+    ///         checked, not inferred. Graduating into a second FULL pair would move the
+    ///         defect one pair along instead of fixing it.
+    function graduationTargetFor(address member, uint256 fromPairIndex)
+        external view returns (uint256)
+    {
+        if (fromPairIndex >= pairs.length) return type(uint256).max;
+        address matA = pairs[fromPairIndex].matrixA;
+        if (matA == address(0)) return type(uint256).max;
+
+        // ⛔⛔ THE FIRST VERSION OF THIS GATED ON _bothHalvesFull AND NEVER FIRED ONCE.
+        // MEASURED, session 50, G1: the trace came back byte-identical to the no-graduation
+        // baseline with "P2 received: 0". By the time this is reached, _cycleOutRoot has
+        // ALREADY decremented occupancy on BOTH halves (MatrixLogicLib:787) — MatA went
+        // 4/4 -> 3/4 freeing the arrival's seat, MatB 4/4 -> 3/4 freeing this root's — so a
+        // pair that IS saturated reports 3/4 and 3/4 and _bothHalvesFull answers false.
+        // ⛔ SATURATION IS NOT OBSERVABLE AT THE MOMENT THE ROUTING DECISION IS MADE.
+        //
+        // ✅ AND THE RIGHT QUESTION WAS NEVER "IS THE PAIR FULL" ANYWAY. It is "IS THE SEAT
+        // I AM ABOUT TO TAKE ALREADY SPOKEN FOR". `crossingInProgress` on the MatA answers
+        // exactly that and is EXACT, not a proxy: it is set only by _crossToPartner
+        // (MatrixLogicLib:993), which runs only from _cycleOutRoot, which runs only when an
+        // entry found MatA FULL. And a MatB root only reaches this function by cycling out,
+        // which needs MatB full too. So the flag being set means both halves were full AND
+        // an arrival is waiting on the seat.
+        //
+        // ⚠ THE PROXY THAT WAS REJECTED: "occ + 1 >= size on both halves". It would also
+        // fire on a pair that genuinely had one free seat in each half, diverting a member
+        // who had a seat waiting — the more damaging error, exactly as item S's
+        // _pairWithRoomFor comment argues.
+        bool contested;
+        try IFigureEightMatrixV8PM(matA).crossingInProgress() returns (bool c) { contested = c; }
+        catch { return type(uint256).max; }        // unreadable → own MatA, as before
+        if (!contested) return type(uint256).max;
+
+        return _pairWithRoomFor(member, fromPairIndex);
     }
 
     /// @notice V8.44 overflow rework (replaces V8.43 rescueOverflow, which

@@ -283,6 +283,11 @@ contract TierRouter is Ownable2Step {
     // ─── V8.1: DAO-votable parameters (enumerated menus only) ────────────────
     uint256 public autoUpgradeCycleThreshold = 5;
     uint256 public reentryMinCycles = 2;
+
+    /// @notice V8.50 ITEM G. When true, a member cycling out of a pair that is full in
+    ///         BOTH halves re-enters the next pair WITH ROOM instead of their own MatA.
+    ///         ⛔ SHIPS FALSE. Deploying this contract changes nothing until it is set.
+    bool public graduationEnabled;
     // V8.21: escrowFloorMultiplier and its setter were removed entirely.
     // It gated auto-upgrade via Guard f in _resolveDest() against a `escrow`
     // value that's hardcoded to 0 at every call site (escrow tracking was
@@ -393,6 +398,7 @@ contract TierRouter is Ownable2Step {
     event VelocityGateSet(uint8 indexed tier, bool green);
     event AutoUpgradeThresholdSet(uint256 threshold);
     event ReentryMinCyclesSet(uint256 minCycles);
+    event GraduationEnabledSet(bool enabled);
     // V8.21: EscrowFloorMultiplierSet removed along with the setter/storage var.
     event MatrixKeeperSet(address indexed keeper);
     // V8.11 events
@@ -599,6 +605,13 @@ contract TierRouter is Ownable2Step {
         if (threshold != 1 && threshold != 3 && threshold != 5 && threshold != 10) revert TRBadValue();
         autoUpgradeCycleThreshold = threshold;
         emit AutoUpgradeThresholdSet(threshold);
+    }
+
+    /// @notice V8.50 item G. Governance-tunable by design — the owner's stated end state
+    ///         is member control, so a routing rule this consequential is not owner-only.
+    function setGraduationEnabled(bool enabled) external onlyOwnerOrGovernance {
+        graduationEnabled = enabled;
+        emit GraduationEnabledSet(enabled);
     }
 
     function setReentryMinCycles(uint256 minCycles) external onlyOwnerOrGovernance {
@@ -1595,8 +1608,11 @@ contract TierRouter is Ownable2Step {
     function _sameTierTarget(address matrixB, uint8 tierIndex, address member)
         internal view returns (bool toMatB, uint256 target)
     {
-        tierIndex; // unused; kept so the call sites and ABI are unchanged
-        // Re-entry ALWAYS returns to the member's own MatA. Entering a full MatA
+        // V8.50 item G: tierIndex is USED again — it selects the tier's PairManager,
+        // which is what knows whether the member's pair is full and which pair has room.
+        // The two `tierIndex; // unused` no-ops that stood here since V8.48 are gone.
+        // Re-entry returns to the member's own MatA unless graduationEnabled is set AND
+        // the pair is full in both halves. Entering a full MatA
         // is not a problem — it rotates the root, which crosses into the pair's
         // own MatB. That IS the figure-eight, and it is what keeps a saturated
         // pair self-sustaining once _findExternalPair (PairManagerV8:495) stops
@@ -1614,9 +1630,10 @@ contract TierRouter is Ownable2Step {
         // seconds, integrity clean across 19+ hours. This makes that permanent.
         // pairExpansionThreshold and its setter are now DELETED — nothing read
         // them once this became unconditional, and TierRouter needed the space.
-        tierIndex; // unused; kept so the call sites and ABI are unchanged
         // Body extracted to the linked TierRouterLib for EIP-170 headroom.
-        return TierRouterLib.sameTierTarget(matrixB, member);
+        return TierRouterLib.sameTierTarget(
+            matrixB, member, tierPairManagers[tierIndex], graduationEnabled
+        );
     }
 
     /// @dev V8.21: generalized from the old T5-only `_checkT5FirstEntry` to

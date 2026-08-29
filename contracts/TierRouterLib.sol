@@ -22,6 +22,10 @@ interface ILMat {
     function reservedHeldOf(address member) external view returns (uint256);
 }
 
+interface ILPairRoom {
+    function graduationTargetFor(address member, uint256 fromPairIndex) external view returns (uint256);
+}
+
 interface ILSF {
     function memberDebtOf(address member) external view returns (uint256);
     function receiveDebtRepayment(address member, uint256 amount) external;
@@ -57,12 +61,44 @@ library TierRouterLib {
     ///         passes through — so re-entry, double and upgrade are all covered by one
     ///         guard rather than three patched call sites. Same doctrine as the V8.46 seat
     ///         guard. `registerForMatB` is unreachable as a result; see V8_48_SCOPE.md.
-    function sameTierTarget(address matrixB, address member)
+    ///         V8.50 ITEM G — GRADUATION, AND IT IS OFF BY DEFAULT.
+    ///
+    ///         `graduate` is TierRouter.graduationEnabled, which ships FALSE. With it
+    ///         false this function behaves EXACTLY as V8.48 left it, byte for byte in
+    ///         effect — that is deliberate, so the contract can be deployed without
+    ///         changing live behaviour and the switch thrown separately.
+    ///
+    ///         With it true, and ONLY when the member's own pair is full in BOTH halves,
+    ///         the re-entry goes to the next pair that genuinely has room. Measured
+    ///         reason (V8_50_HANDOFF 49.1e, confirmed on chain by `noseat_witness.js`):
+    ///         a saturated pair cannot absorb anybody. An arrival frees one MatA seat by
+    ///         cycling its root out, and this very re-entry consumes that seat, so the
+    ///         arrival parks with shortfall 0 — 105 of 105 live no-seat parks had a
+    ///         same-transaction witness taking the seat. Sending this root onward instead
+    ///         leaves the freed seat for the arrival AND puts a member into the empty
+    ///         pair next door (T1.2: 244 free seats, rotation 0, nobody has ever reached
+    ///         it because this line has always said "own MatA. Always.").
+    ///
+    ///         ⛔ THE READ IS try-WRAPPED AND FAILS TOWARD OWN-MatA. This runs inside
+    ///         _cycleOutRoot, which has no try/catch above it: a revert here would kill
+    ///         an unrelated member's transaction (T3.1/T4.1, 2026-07-28).
+    ///
+    ///         ⚠ THIS IS NOT A LICENCE TO DIVERT RE-ENTRY GENERALLY. The branch V8.48
+    ///         removed sent re-entry to own MatB whenever a CUMULATIVE lifetime counter
+    ///         was crossed — every pair crossed it permanently, MatA lost its entry
+    ///         source from both directions and froze (measured 2026-07-26, all 10 tiers).
+    ///         This branch fires only at genuine both-halves saturation, and the arriving
+    ///         member still enters MatA, so MatA keeps exactly the entry source that
+    ///         incident proved it needs.
+    function sameTierTarget(address matrixB, address member, address pairManager, bool graduate)
         external view returns (bool toMatB, uint256 target)
     {
-        member;                                   // duplicate handling moved to registerFor
         target = ILMat(matrixB).pairIndex();      // own pair
         toMatB = false;                           // own MatA. Always.
+        if (!graduate || pairManager == address(0)) return (toMatB, target);
+        try ILPairRoom(pairManager).graduationTargetFor(member, target) returns (uint256 alt) {
+            if (alt != type(uint256).max) target = alt;
+        } catch { /* unreadable → own MatA, exactly as before */ }
     }
 
     /// @notice Draw a member's FREE earnings from one matrix toward `remaining`, returning
