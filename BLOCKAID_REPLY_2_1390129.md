@@ -1,10 +1,3 @@
-<!--
-  ⛔ DRAFT — NOT SENT. For CryptoTech to review and send. Written 2026-08-30,
-  updated the same day with the owner's legal name, three real withdrawal tx hashes,
-  the CORRECTED organic-member count, and the upcoming-redeploy notice.
-  Everything in this document is measured, not asserted.
--->
-
 # CryptoNova — reply to the reassessment checklist (ticket 1390129)
 
 Prepared 2026-08-30, in reply to Peter's message of 2026-08-29.
