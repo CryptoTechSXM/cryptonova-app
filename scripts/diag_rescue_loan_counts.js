@@ -129,7 +129,10 @@ const SF_ABI = [
   "function loanEligible(address,uint8) view returns (bool)",
   "function clawbackBpsFor(address) view returns (uint256)",
 ];
-const KEEPER_ABI = ["function parkedGracePeriod() view returns (uint256)"];
+const KEEPER_ABI = [
+  "function parkedGracePeriod() view returns (uint256)",
+  "function selfFundedGracePeriod() view returns (uint256)",
+];
 
 const usd = v => (v === null || v === undefined) ? "?" : "$" + (Number(v) / 1e6).toFixed(2);
 const ts  = () => new Date().toISOString();
@@ -225,7 +228,22 @@ async function main() {
     return;
   }
   const grace = g.v;
-  console.log(`  grace       : ${grace}s (${(Number(grace) / 3600).toFixed(1)}h), from chain`);
+  console.log(`  grace       : ${grace}s (${(Number(grace) / 3600).toFixed(1)}h), from chain  [parkedGracePeriod]`);
+  // ⛔⛔ THERE ARE THREE CLOCKS, NOT ONE — established from source 2026-08-30 (51.5).
+  //     MatrixKeeperLib._checkParked:753 gates the work queue on
+  //         age < (sfShare == 0 ? selfFundedGracePeriod : parkedGracePeriod)
+  //     so a SELF-FUNDED member becomes actionable after selfFundedGracePeriod
+  //     (300s at the live setting — a race guard, explicitly NOT a grace period,
+  //     MatrixKeeper.sol:416) while a LOAN-BEARING one waits parkedGracePeriod (24h).
+  //     This script judges EVERY parked member by the 24h clock, which UNDERSTATES
+  //     what the queue considers actionable — measured 2026-08-30 at block 46177592:
+  //     18 of 444 positions past 24h, 435 of 444 past 300s. Both bounds are printed
+  //     below. sfShare is not readable off-chain without reimplementing _triageParked,
+  //     so the true figure is NOT computed here — inventing it would be a hypothesis.
+  const gs = await read("selfFundedGracePeriod()", () => keeper.selfFundedGracePeriod(at()));
+  const selfGrace = gs.ok ? gs.v : null;
+  console.log(`  self grace  : ${selfGrace === null ? "UNREADABLE — self-funded bound not computed"
+                : `${selfGrace}s (${(Number(selfGrace) / 60).toFixed(0)}m), from chain  [selfFundedGracePeriod]`}`);
 
   // ── the gate's own inputs ────────────────────────────────────────────────────────────
   const sf    = await ethers.getContractAt(SF_ABI, A.stabilityFund);
@@ -259,7 +277,7 @@ async function main() {
     const pc = await read(`${tk} pairCount()`, () => pm.pairCount(at()));
     if (!pc.ok) { cov.push(`${tk}: pairCount UNREADABLE — TIER NOT SWEPT`); continue; }
 
-    let seenPairs = 0, seenMx = 0, parkedTotal = 0, pastGrace = 0;
+    let seenPairs = 0, seenMx = 0, parkedTotal = 0, pastGrace = 0, pastSelf = 0;
     for (let i = 0n; i < pc.v; i++) {
       const pr = await read(`${tk} getPairAt(${i})`, () => pm.getPairAt(i, at()));
       if (!pr.ok) continue;
@@ -287,12 +305,13 @@ async function main() {
           const inGrace = ageS < grace;
           if (inGrace && !INCLUDE_GRACE) continue;
           if (!inGrace) pastGrace++;
+          if (selfGrace !== null && ageS >= selfGrace) pastSelf++;
           stuck.push({ tier: tk, matrix: label, matrixAddr: addr, member: m,
                        ageDays: (Number(ageS) / 86400).toFixed(2), inGrace });
         }
       }
     }
-    cov.push(`${tk}: pairs ${seenPairs}/${pc.v} | matrices ${seenMx} | parked ${parkedTotal} | past-grace ${pastGrace}`);
+    cov.push(`${tk}: pairs ${seenPairs}/${pc.v} | matrices ${seenMx} | parked ${parkedTotal} | past 24h ${pastGrace} | past ${selfGrace === null ? "self n/a" : (Number(selfGrace) / 60) + "m " + pastSelf}`);
   }
 
   console.log("\n  COVERAGE");
@@ -373,7 +392,16 @@ async function main() {
   }
 
   // ── SELFTEST 1: the planted positive — 35.6's treadmill wallet ───────────────────────
-  const PROBE = lc(process.env.PROBE || "0xA9B019e7455618BeC38451619B3b3893ed106617");
+  // ⛔ CANARY RE-PLANTED 2026-08-30 (session 52), closing handoff 51.4.
+  //    WAS 0xA9B019e7455618BeC38451619B3b3893ed106617 — a wallet that borrowed on an
+  //    OLDER deployment. On V8.50 it can never fire, so SELFTEST 1 printed "the ledger
+  //    scan is blind — STOP HERE" while the scan was in fact finding 38 bookings. A
+  //    canary that cannot fire on the chain under test is worse than no canary: it
+  //    reports a false negative with full confidence.
+  //    NOW 0x762d09ef… — traced end to end on V8.50 (Telegram heartbeat -> keeper_state
+  //    -> on-chain SF ledger), $3.01 in exactly 1 event at T1, and re-confirmed live by
+  //    scripts/diag_rescue_seat_outcome.js at block 46177592.
+  const PROBE = lc(process.env.PROBE || "0x762d09ef3a23cf31382a96f19710d8c5f0ad762f");
   if (process.env.SELFTEST !== "0") {
     console.log("\n  SELFTEST 1 — planted positive " + PROBE.slice(0, 10));
     const n = (inc.get(PROBE) || []).length;
@@ -381,15 +409,16 @@ async function main() {
     const byType = {};
     tl.forEach(t => { byType[t] = (byType[t] || 0) + 1; });
     if (n === 0) {
-      console.log("  ⛔ ZERO debt bookings. 35.6 recorded rescues on this wallet and a co-pay");
-      console.log("     borrows. If the ledger scan cannot see them it is blind — STOP HERE.");
+      console.log("  ⛔ ZERO debt bookings for the canary. It borrowed $3.01 on V8.50 in one");
+      console.log("     event, confirmed on the SF ledger. If this scan cannot see that, it is");
+      console.log("     blind, or ADDRESSES_FILE/FROM_BLOCK point off this deployment — STOP HERE.");
     } else {
       console.log(`  ✅ ${n} debt bookings on the ledger; matrix events type them as ` +
                   `${Object.entries(byType).map(([k, v]) => `${k}:${v}`).join(", ") || "(none seen)"}.`);
-      console.log(`     35.6 recorded 8 co-pay rescues on this wallet from its own event scan.`);
-      console.log(`     A higher count here is not a contradiction — 35.6 counted one wallet's`);
-      console.log(`     rescue events; this counts every path that books debt, forceCrossKeeper`);
-      console.log(`     included. The reconciliation below is what decides whether it is right.`);
+      console.log(`     EXPECTED for this canary: exactly 1 booking totalling $3.01 at T1.`);
+      console.log(`     A DIFFERENT count is a finding, not noise — it means either this scan`);
+      console.log(`     or the seat-outcome instrument is wrong, and they must be reconciled`);
+      console.log(`     before either total is quoted.`);
     }
   }
 

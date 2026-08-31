@@ -66,3 +66,9 @@ archive/captures/
 
 # scratch: before-state written by scripts/check_gas_gift_flow.js (MODE=snapshot)
 scripts/.gas_gift_snapshot.json
+
+# session 52 (2026-08-31): generated cohort files for diag_rescue_seat_outcome.js STRESS_CSV.
+# Derived on the VPS, reproducible from probe_pool_membership.js / derive_harness_addresses.js.
+# Addresses only (no key material) but large and dated — regenerate rather than commit.
+scripts/pool_membership.csv
+scripts/harness_addresses.csv
