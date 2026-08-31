@@ -10,12 +10,172 @@ owner-set, and the session that earned it got five things wrong by ignoring what
 
 ---
 
-# ⬛ SESSION 51 STATE — 2026-08-30. LATEST. READ THIS FIRST.
+# ⬛ SESSION 52 STATE — 2026-08-31. LATEST. READ THIS FIRST.
+# ⛔⛔ THE HEADLINE: THE DEBT WAS NEVER THE PROBLEM, AND THE DEBT NUMBER YOU INHERITED
+# IS TWENTY TIMES TOO SMALL. Organic exposure is $145.89. **At least 80% of the real
+# community is sitting parked, and every single wasted advance is in a MatB.**
+# ✅ Item 1 (51.0, the owner's rescue-exposure decision) is SETTLED: ACCEPT. Cron untouched.
+# ⛔ Job A has registered NOBODY for 12+ hours and the monitor reports it as ALIVE.
+## 52.0 ✅✅ **ITEM 1 IS ANSWERED — ACCEPT THE WORK-QUEUE RESCUES.** Measured organic
+##      exposure on the live V8.50 StabilityFund: **`$145.89` across 147 organic
+##      borrowers, largest single debt `$36.54`**, most reading `live $0.00` against
+##      `loaned $20+` because the banded clawback repays them. **92% of the book sits on
+##      harness wallets.** ⛔ Do NOT disable work type 4. Do NOT un-pause `copay_rescue`
+##      or `fastlane_rescue` — the work queue already rescues, nothing is stalled for
+##      lack of a keeper, and `coPayRescue` has NO grace gate on chain, so re-enabling it
+##      adds a FASTER loan path. **CRON WAS NOT TOUCHED AT ANY POINT THIS SESSION.**
+## 52.1 ⛔⛔⛔ **THE BOOK IS NOT $52.75. THE SF'S OWN MONOTONIC COUNTERS:**
+##      ```
+##      block 46142462  2026-08-30 01:00Z   $97.50 - $44.75   = $52.75      36 borrowers
+##      block 46177592  2026-08-30 20:57Z  $2835.03 - $1756.42 = $1078.62  187 borrowers
+##      block 46186441  2026-08-31 01:52Z  $4725.28 - $2956.39 = $1768.89  225 borrowers
+##      ```
+##      **≈$145/hr net, ACCELERATING, and job A has registered nobody the whole time —
+##      so this is pure CHURN of the existing 450 members, not new joins.** ⚠ Any figure
+##      in this file is stale within hours. Re-run before quoting. 62% of everything ever
+##      loaned has already been clawed back, so it is a flow with a working return path.
+## 52.2 ⛔⛔⛔ **THE REAL FINDING: AT LEAST 80% OF THE REAL COMMUNITY IS PARKED.**
+##      162 organic members standing parked against **at most** 202 organic members
+##      (450 `globalJoinedCount` − 248 job-A pool members). **162/202 = 80.2% is a LOWER
+##      BOUND and can only get worse** — membership was measured only for the 401-wallet
+##      pool range, so if any of the other 14,599 harness addresses are members the
+##      organic denominator shrinks. **ALL 90 no-seat rows are in a MatB.** Census at
+##      block 46186441: **447 POSITIONS held by 281 MEMBERS** (T1 188 · T2 92 · T3 73 ·
+##      T4 47 · T5 47), 117 members holding more than one position.
+## 52.3 ✅✅ **HOW THE ORGANIC/SYNTHETIC SPLIT WAS MEASURED, AND WHY IT CAN BE TRUSTED.**
+##      Two NEW read-only instruments, both committed:
+##      - `CryptoNova-Keepers/probe_pool_membership.js` — runs ON THE VPS (derivation
+##        needs `FILL_MNEMONIC`; ⛔ the phrase never leaves the box, only addresses come
+##        back). Job-A pool `child:300000..300400`: **248 ARE members, 153 are NOT.**
+##      - `CryptoNova-Keepers/derive_harness_addresses.js` — OFFLINE, no RPC at all.
+##        Union of live job B/C `UPGRADE_RANGES` = **15,000 addresses in 30s.**
+##      - `scripts/diag_rescue_seat_outcome.js` (contracts) takes either as `STRESS_CSV=`.
+##      ✅✅ **THE CONTROL: widening the harness set 401 → 15,000 moved the organic
+##      figures by ZERO** (147 borrowers · $145.89 · 36 no-seat · 162 parked, identical
+##      in both runs). 14,599 extra addresses caught not one hidden synthetic. **That is
+##      why 52.0 and 52.2 are measurements and no longer bounds.**
+##      ✅ [stated] The OWNER predicted this from arithmetic before it was measured:
+##      *"when it started it had 196 wallets now it has 450 so at most it should have
+##      254."* Measured synthetic = **248**. Two independent routes, six apart.
+## 52.4 ⛔⛔ **JOB A IS DEAD AND `stress_status.js` CALLS THE FLEET "ALIVE".** Every tick
+##      since ~18:20Z: `A: pool exhausted — re-run pool_primer.js` · `A:0 reg` ·
+##      `pool 401/401`. The OWNER spotted it from an absence in Telegram; **the monitor
+##      should have caught it eight hours earlier.** Its liveness test is *"did it log
+##      inside its interval"*, and a job that wakes, logs and exits in 0.4s passes that
+##      forever. ▶ **FIX: `A:0 reg` for N consecutive ticks with `pool == POOL_SIZE` is
+##      STALLED, not ALIVE.** ⚠ Session 45 fixed the MIRROR bug in this same file (mtime
+##      locks, crying wolf on three healthy jobs) and wrote *"a monitor that cries wolf
+##      costs as much as one that hides a fault."* This is the hiding half.
+##      ⛔⛔ **AND THE POOL IS NOT ACTUALLY EXHAUSTED — 153 FUNDED WALLETS ARE STRANDED
+##      BEHIND THE CURSOR.** `rr_keeper.js:382` does `cursor++` BEFORE the already-member
+##      and unprimed checks and the already-member path never rewinds: **38% of the pool
+##      burned.** ▶ **THEREFORE THE LOG'S OWN ADVICE — "re-run pool_primer.js" — IS THE
+##      WRONG FIX and would spend USDC needlessly.** The fix is a CURSOR REWIND plus
+##      `probe_pool_slots.js` to see whether those 153 are still primed. ⛔ Third cursor
+##      defect in this fleet: treat every keeper cursor as untrusted until measured.
+##      ⚠ `registrations 1867 … since its state file began` is the 51.2 trap again — a
+##      cross-deployment state-file counter printed beside live V8.50 figures.
+## 52.5 ✅✅ **51.5's GRACE CONTRADICTION IS SETTLED FROM SOURCE: BOTH STATEMENTS WERE
+##      TRUE, ABOUT DIFFERENT CODE. THERE ARE THREE CLOCKS.**
+##      - `MatrixLogicLib.coPayRescue():1620-1626` has **NO grace gate** — five requires,
+##        none a clock. The parked-backlog record was right ABOUT THAT FUNCTION.
+##      - `parkedGracePeriod` **IS** a real chain parameter (`MatrixKeeper.sol:394`,
+##        `= 24 hours`, setter `:700`, range 0 or 5min-30d). The generalisation "there is
+##        no grace on chain" was never true.
+##      - What it gates is the WORK QUEUE: `MatrixKeeperLib._checkParked:753` —
+##        `age < (sfShare == 0 ? selfFundedGracePeriod : parkedGracePeriod)`.
+##      **THE THREE: `parkedGracePeriod` 24h (loans) · `selfFundedGracePeriod` 300s
+##      (:416, a RACE GUARD, explicitly not grace) · `evictionGracePeriod` 7 days
+##      (:475), with GHOSTS deliberately kept on the 24h clock.**
+##      ⛔ **AND THE YARDSTICK ERROR IS HUGE IN PRACTICE:** against 24h only **18 of 447**
+##      positions are past grace; against 300s, **435**. No single-clock report can name
+##      the actionable figure, and `sfShare` is not readable off-chain without
+##      reimplementing `_triageParked` — so **do not invent one.** Both bounds are now
+##      printed by both instruments.
+## 52.6 ✅ **51.3 IS SETTLED BY DEFINITION, NOT BY A TIEBREAK.** `getParkedCount()` /
+##      `getParkedMember()` is a **QUEUE DEPTH at a pinned block**; the "1638 funding
+##      parks" figure counts `MemberParked` **LOGS OVER A RANGE** — a **FLOW**. Different
+##      quantities; they never could have contradicted each other. **"0 stuck" only ever
+##      meant "none past grace".** ⚠ And POSITIONS ≠ MEMBERS: 447 positions, 281 members.
+## 52.7 ✅✅ **51.4's CANARY IS RE-PLANTED AND PROVEN.**
+##      `0x762d09ef3a23cf31382a96f19710d8c5f0ad762f` — $3.01, exactly 1 event, T1, matched
+##      on prefix+suffix+amount+event-count, all four known independently of the run.
+##      `diag_rescue_loan_counts.js`'s `PROBE` now defaults to it with the reason written
+##      above the line. **A canary that cannot fire on the chain under test is worse than
+##      no canary: it reports a false negative with full confidence.**
+## 52.8 ✅✅ **THE OWNER'S CYCLE-OUT / TREADMILL MODEL, TESTED AGAINST THE CODE AND THE
+##      CHAIN.** [stated] *"the loan goes out at the cycle out of B… if at cycle out of b
+##      after the loan they cannot afford to pay that loan they are parked."*
+##      - CORRECTED ON ONE BEAT: the PARK comes first (`MatrixLogicLib:962`, and
+##        `parkCycledOut:1929`), the LOAN is issued LATER when a keeper rescues them —
+##        `coPayRescue` requires `parkedAt[member] > 0`. **Measured: `park+loan same
+##        block: 0`, gaps −0.03h to −30h. The sequence is cycle out → park → rescue.**
+##      - CORRECTED ON REPAYMENT: nothing is repaid at the crossing. It is a **banded
+##        clawback on pool earnings** (`_settlePool:624-640`, `clawbackBpsFor`, bands
+##        `[9000,8000,7000,6000]`). **So a parked member repays nothing, because a parked
+##        member earns nothing.**
+##      - ✅✅ **BUT THE CONSEQUENCE HE NAMED IS REAL AND ALREADY IN THE CONTRACT.**
+##        `MatrixKeeper.sol:155-157`: *"the banded clawback then takes 60% of the member's
+##        pool income to repay it — consuming the very earnings they need to fund the next
+##        crossing. Bigger advance → heavier clawback → larger next shortfall."* Visible
+##        in the data as the `[parked in a tier they never borrowed in]` cluster: members
+##        who took a LARGE advance at T4/T5 sitting parked at T2/T3 still carrying it.
+##        **A high-tier loan serviced out of low-tier earnings is what keeps them parked.**
+## 52.9 ⛔ **TWO RETRACTIONS OF MY OWN, BOTH CAUGHT IN-SESSION.**
+##      1. **The "ceiling breach" was MY error, not the contract's.** I compared each
+##         borrower's debt to the ceiling of the tier they are PARKED in. `0x1dfa6d8f…`
+##         ($119.84, parked T3) **borrowed at T4/T5**; `0xa37c1d5b…` ($92.04, parked T2)
+##         **borrowed at T5**. Debt is one global balance that follows the member down, so
+##         the governing ceiling is the ISSUING tier's. ▶ Confirming `loanEligible` is
+##         still worth doing; **"the ceiling is not holding" must NOT be carried forward.**
+##      2. **The `[park tier != loan tier]` annotation fired 90/90** because it compared a
+##         member's EARLIEST park against their LAST loan, on members holding 2-4
+##         positions. Badly-posed question, not a finding. Fixed to test the park against
+##         the SET of tiers borrowed at. `MemberDebtIncreased.tier` is **0-based**
+##         (`tier < MAX_TIERS`, `tierEntryFees[0]` = T1) — that part was never wrong.
+## 52.10 ✅ **WHAT LANDED.** Contracts `cryptonova-app.git` branch `v8.1`:
+##      `429946b` strip the DRAFT header from `BLOCKAID_REPLY_2_1390129.md` (51's item 0,
+##      done) · **`0b552c0`** `diag_rescue_seat_outcome.js` + the canary re-plant and
+##      dual-clock reporting in `diag_rescue_loan_counts.js` + `.gitignore`.
+##      Keepers `CryptoNova-Keepers.git` branch `main`: **`77fe8d4`** `probe_pool_membership.js`
+##      + `derive_harness_addresses.js` + `.gitignore`.
+##      ⚠ The cohort CSVs are gitignored — reproducible in ~30s, and they rot.
+##      ⚠ **MEMORY IS THE AUTHORITATIVE SHA RECORD** — a handoff cannot contain the SHA of
+##      the commit that creates it. Full detail in `/areas/cryptonova-rescue-exposure.md`.
+## 52.11 ▶ **WHAT IS OPEN, IN THE ORDER I WOULD TAKE IT.**
+##      1. **ITEM G.** Three independent lines of evidence now converge on it: all 90
+##         wasted advances are in a MatB, ≥80% of real members are parked, and the book
+##         grows $145/hr on churn with ZERO new registrations. It is written, 6/6 green,
+##         and ships behind a flag that defaults FALSE. ⛔⛔ **STANDING PRE-DEPLOY RULE:
+##         VERIFY EVERY CONTRACT ON BASESCAN *BEFORE* POINTING MEMBERS AT IT** — the
+##         unverified window is what triggered the Blockaid flag on 2026-07-30 AND
+##         2026-08-26. A third time would be entirely our own doing.
+##      2. **Job A recovery** — cursor rewind, NOT `pool_primer`. Measure the 153 stranded
+##         slots with `probe_pool_slots.js` first. ⚠ Deliberately NOT done tonight: job A
+##         stalling froze new load, which is the ideal condition for measuring.
+##      3. **`stress_status.js` liveness fix** (52.4) — it is quietly lying on every check.
+##      4. **The crontab header lies**: line 1 says *"Stress engine OFF until midday"* and
+##         line 2 *"STRESS ENGINE — DISABLED"* while three stress jobs run 20 lines below.
+##         Not cosmetic — it is a false statement about live state in the operator's
+##         primary reference. One crontab edit.
+##      5. `direct_keeper.js:25`'s dead-deployment default (51.2); `privacy.html` locale
+##         keys; `loanEligible` confirmation (52.9).
+##      6. **Blockaid: WAIT for Peter.** Do not re-send. Send the verified address table
+##         unprompted when the redeploy lands.
+##      ⚠ `core.autocrlf` is ON in the contracts repo (git warns on every add) although
+##      50.0 recorded it as UNSET. Harmless today — git stores LF — but it is the likely
+##      source of any FOURTH CRLF phantom. Not chased.
+
+---
+
+# ⬛ SESSION 51 STATE — 2026-08-30. ⚠ SUPERSEDED IN PART BY SESSION 52 ABOVE.
 # ⛔⛔ THE HEADLINE IS A RETRACTION: THE 2026-08-29 RESCUE PAUSE NEVER TOOK EFFECT.
 # `direct_keeper.js` was never paused and drives the contract's own WORK_PARKED_RESCUE.
 # Sessions 49 and 50 reasoned from "both rescue keepers are paused". They were wrong.
 # ⛔ FIVE "STILL OUTSTANDING" ITEMS IN THIS FILE WERE STALE. Verify before spending a step.
-# ✅ The V8.50 debt exposure that pause was meant to prevent is $52.75. Measured twice.
+# ⛔⛔ **THE "$52.75, MEASURED TWICE" LINE THAT WAS HERE IS DEAD. IT WAS ACCURATE FOR ONE
+# DAY.** At 01:52Z the next morning the same two instruments read **$1,768.89**. 51.1's
+# figure is a dated datapoint, never a current one — see 52.1.
 ## 51.0 ⛔⛔⛔ **THE PAUSE DID NOT STOP RESCUES OR ADVANCES — MEASURED FROM `crontab -l`.**
 ##      The OWNER caught it, from a keeper heartbeat that contradicted a page Claude had
 ##      just shipped. Live crontab:
