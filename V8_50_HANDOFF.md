@@ -10,7 +10,216 @@ owner-set, and the session that earned it got five things wrong by ignoring what
 
 ---
 
-# ⬛ SESSION 52 STATE — 2026-08-31. LATEST. READ THIS FIRST.
+# ⬛ SESSION 53 STATE — 2026-08-31. LATEST. READ THIS FIRST.
+# ⛔⛔ THE HEADLINE: THE SUITE HAD BEEN RED FOR TWO WEEKS AND NOBODY KNEW, BECAUSE EVERY
+# SESSION RAN ONLY ITS OWN SUITE. 650 passing / 12 FAILING against a tree whose last
+# recorded FULL-SUITE green was 2026-08-17. Now **665 / 7 pending / 0 failing.**
+# ⛔ AND ITEM G IS SIZED HONESTLY AT LAST: it fixes **5.7%** of the park flow. The other
+# 94% is FUNDING, which is decision A and needs referrals, not code.
+# ✅✅ THE REDEPLOY IS DECIDED BY THE OWNER. Private **V8.51** gate chain is LIVE.
+# ⛔ `rr_keeper.OFF` IS STILL ON — `rm /root/keeper/rr_keeper.OFF` TO RESUME STRESS.
+## 53.0 ✅✅✅ **ITEM G/S's YIELD IS MEASURED BEFORE THE DEPLOY, AND 50.5's WARNING SURVIVES
+##      AT FIVE TIMES THE SCALE.** `noseat_witness.js` (selftest 33/33 first), live V8.50,
+##      blocks 46143241..46186924 (~24h), all 10 tiers, every pair:
+##      **NO-SEAT 152 · FUNDING 2504 · COFAIL 0 · undecidable 0. All 152 WITNESSED, 0 not.**
+##      No-seat share **5.72%**; session 49's T1-only figure was 6.0%. **THE RATIO HELD
+##      ACROSS FIVE TIERS AND TWO DAYS.** ▶ **ITEM G + ITEM S FIX THE 152, NOT THE 2504.
+##      ≥80% of real members being parked (52.2) is a FUNDING outcome and item G does not
+##      move it. Anyone reporting item G as "fixes the parked backlog" is wrong, twice
+##      measured.**
+##      ✅✅ **THE CLEANEST STRUCTURAL RESULT OF THE WHOLE INVESTIGATION — THE SPLIT IS
+##      PERFECT BY HALF. Every MatA park is a NO-SEAT park (113; funding 0 in all five
+##      MatAs). Every FUNDING park is in a MatB (2504; no-seat 39).** Mechanically right:
+##      a MatA seat is paid by the entry fee already collected, crossing out of MatB must
+##      fund the next hop. **So "which half is the member parked in" names the defect with
+##      no event decoding at all.**
+##      ⛔⛔ **AND THE ARGUMENT THAT ACTUALLY CARRIES THE DEPLOY: ~1,676 FREE SEATS SIT IDLE
+##      AT ROTATION 0 IN EXPANSION PAIRS WHILE 152 MEMBERS/24h PARK FOR WANT OF A SEAT.**
+##      T1.2 243 · T2.2 87 · T2.3 171 · T2.4 238 · T3.2 196 · T4.2 246 · T5.2 254 · T6.1 241.
+##      **T2 now has FOUR pairs, three near-empty.** 49.1e's "T1.2 has 244 free seats" is an
+##      eight-pair pattern. The seats exist; only the routing is missing.
+##      ⚠ **DO NOT CONFLATE TWO "no-seat" QUANTITIES.** 52.2's *"all 90 no-seat rows are in
+##      a MatB"* counts rescue ADVANCES that bought no seat. This counts PARK EVENTS at
+##      `MatrixLogicLib:529`. Different populations, opposite on the MatA/MatB axis —
+##      **113 of the 152 no-seat PARKS are in a MatA.** Both are right about their own
+##      question. ⚠ `noseat_witness.js` resolves `ADDRESSES_FILE` with
+##      `path.join(__dirname,…)`, so the file must sit BESIDE it in the keepers repo; only
+##      `_v8_50_private2.json` was there, which the handoff flags as NOT LIVE.
+## 53.1 ⛔⛔⛔ **THE SUITE WAS RED FOR TWO WEEKS. THIS IS THE BIGGER FINDING.** Full run:
+##      **650 passing / 7 pending / 12 FAILING.** Last recorded full-suite green: **2026-08-17.**
+##      Item A, defect 8, the velocity fix, the gas config, the loan clock, item S, item G —
+##      **all signed off on their own suite only, and each handoff quoted that per-suite
+##      green as the tree's state. A PER-SUITE GREEN IS NOT A SUITE GREEN.**
+##      ✅✅ **TEN OF THE TWELVE, ONE CAUSE, TRACED TO SOURCE THEN PROVEN BY EXPERIMENT.**
+##      `MatrixKeeperLib.discover()` allocates `WorkItem[](cfg.maxItems)` and hands **slot 0
+##      to the VELOCITY item** whenever `block.timestamp >= lastVelocityCheck + velocityWindow`.
+##      **`5a07cab` (2026-08-23, AFTER the last green) changed `maxItemsPerUpkeep`'s DEFAULT
+##      from 15 to 1.** At cap 1 a due velocity check **consumes the entire batch** and
+##      discovery returns nothing else. Four fixtures advance past a 24h grace while
+##      `velocityWindow` is 4h, so velocity was ALWAYS due and every per-member assertion saw
+##      `[]`. **One `setMaxItemsPerUpkeep(15)` line took those four suites to 39/0.**
+##      ✅ **ITEM G AND S WERE INNOCENT** — those fixtures run against `MockPairManagerK` /
+##      `MockMatrixK`; neither contract is in the picture. Suspicion fell on the newest
+##      commits by reflex; the mock world ruled them out with no extra run.
+##      ✅ **FIX = PIN + TRIPWIRE, NOT A DEFAULT CHANGE.** Cap 1 is right (30.10a/30.10b: the
+##      only setting provably safe against a 14.67M item on a ~16.5M budget) and stays. The
+##      four fixtures are pinned to 15 with the reasoning AT the pin (they test ROUTING, not
+##      batching — same as GhostFloor's existing `setEvictionGracePeriod` pin). **Pinning
+##      hides the behaviour again, so `test/V8_50_CapOneVelocity.test.js` (NEW, 3 cases)
+##      asserts the trade deliberately: CV1 cap 1 + velocity due = velocity-only batch,
+##      member invisible · CV2 same state at cap 15 finds her, proving it was BATCH SIZE not
+##      her state · CV3 TRIPWIRE — once velocity has run the freed slot goes to the member.**
+##      ⛔ **CV3 RED = THE KEEPER IS STARVED, A LIVE OUTAGE NOT A TEST FAILURE.**
+##      ▶ **LIVE CONSEQUENCE, then SETTLED:** `velocityWindow` 4h and `deploy_v8.js` never
+##      sets the cap, so production runs at 1. Safe only while `lastVelocityCheck` advances —
+##      and the velocity check **reverted on every deployment before V8.50** (`8c60b64`).
+##      ✅ **CHECKED: `direct_keeper.js` NEVER FILTERS VELOCITY OUT.** `adaptiveRescueBatch()`
+##      re-encodes `[...otherItems, ...rescueItems.slice(0,adaptive)]` — `otherItems` kept in
+##      FULL — and at cap 1 returns `performData` untouched. ✅ **AND IT DRAINS** (sequential
+##      `performUpkeep` while work remains, ~240 items/hr), so even the velocity tick is not
+##      wasted. **`c302608`'s "6 items/hour at cap 1" is WRONG for this driver; it would only
+##      bite a one-shot caller like a Chainlink registry.** ⛔ Repo copy read; **VPS copy not
+##      md5-checked.**
+##      ✅ **THE OTHER TWO (O4, O7) WERE ITEM S WORKING, AND WERE RETARGETED NOT RELAXED.**
+##      O4 asserted pair-1 occupancy `== 0`; it returned 4. O7 required `DoubleEntryFired > 0`
+##      and its own comment gave the reason — *"rescueReentry's branch needs a member who
+##      ALREADY holds a seat in the pair they are re-entering"* — **which item S made false by
+##      adding a route needing no duplicate seat.** Both now require occupants to be explained
+##      by a **NAMED route** (`DoubleEntryFired` OR `RescueOverflowed`), and O4 asserts an
+##      overflow must LEAVE the saturated pair (`toPair != fromPair`). **The law they exist
+##      for — nothing reaches a later pair through the FRONT DOOR — is untouched and still
+##      asserted by O7's LIMB 1 and its `firstAt` check.** ⚠ **A DESIGN-LAW GATE MUST NEVER BE
+##      EDITED SILENTLY: the old assertion is quoted above each new one.**
+## 53.2 ⛔⛔ **ITEM G IS FLAGGED. ITEM S IS NOT. THE HANDOFF NEVER SAID THIS.**
+##      `graduationEnabled` defaults FALSE, but `rescueReentry`'s `_bothHalvesFull` branch
+##      changes rescue routing **the instant the contracts are deployed.** So *"deploying
+##      changes nothing until we flip the switch"* is **TRUE of G and FALSE of S.** Say it
+##      that way to the owner, every time.
+## 53.3 ✅✅ **THE CEILING QUESTION (52.9) IS CLOSED — BY ASKING THE CHAIN, NOT THE SOURCE.**
+##      `diag_headroom_stuck.js` on live V8.50: **`DEPLOYED RULE: V8.49+
+##      loanEligibleFor(member,tier,advance) — amount-aware`**, sponsorship gate present,
+##      `insolvencyFloorBps 5000`, ceiling `fee × bps/10000` = **$5.00 lifetime at T1**,
+##      7 members, 0 read failures. **NO CONTRACT DEFECT; "the ceiling is not holding" is now
+##      doubly dead.** ✅ That script's header warns a past session read the mechanism out of
+##      `contracts/StabilityFund.sol` and quoted it as live, earning 31 `execution reverted` —
+##      **THE WORKING TREE IS NOT THE DEPLOYMENT.**
+##      ⚠⚠ **SEPARATE, ECONOMIC, NOT A BUG: A SHORTFALL LARGER THAN THE TIER'S WHOLE LIFETIME
+##      CEILING CAN NEVER BE ADVANCED, EVEN AT ZERO DEBT.** All 7 read `debt $0.00`; two were
+##      refused — shortfalls **$5.60** and **$5.83** against the **$5.00** ceiling, because
+##      policy B tests `debt + advance <= ceiling`. Those members are permanently unrescuable
+##      at T1. ⛔ **DO NOT QUOTE "2 of 7" AS A RATE** — `DEFAULT_MEMBERS` is a stale session-34
+##      list (3 of 10 were not even in the queue). **The unrescuable population is UNMEASURED.**
+##      ✅ **NOT A DEPLOY BLOCKER:** `insolvencyFloorBps` is DAO param 59 with an
+##      owner/governance setter, tunable on chain. ⚠ Tension to resolve on evidence, not on
+##      this sample: 50.9's A/B **saturates at 4500**, i.e. the floor is not binding in
+##      aggregate, while this run shows it binding hard on individuals. Both can be true.
+## 53.4 ✅✅✅ **THE REDEPLOY IS DECIDED. [stated] OWNER 2026-08-31:** *"the best would be the
+##      redploy but we would have to announce it, it is costly but a necessary cost and the
+##      community knows but some maybe pulling away until we go mainnet but that is a chance
+##      i have to take if we have to get this to a standard that makes them some money vs
+##      breaks at any time."* ⛔ **SETTLED — do not re-open or re-price it.**
+##      - [stated] **admin/owner stays `0xCd0Af6a4…`**, AccountOne stays `0x6512e9B5…`.
+##      - [stated] **MEMBERS REGISTER FIRST** — his standing practice, and it is right: early
+##        positions cycle out first and earn first, so letting the harness in ahead of members
+##        buries them behind the bots. ✅ Reconciled with testing via a PRIVATE gate chain.
+##      - [stated] Peter/Blockaid was already replied to. **Wait; send the new verified
+##        address table unprompted when the redeploy lands. Do not re-send anything.**
+##      ⛔⛔ **NAMING: LIVE AND PENDING WERE BOTH "V8.50"** — live `deployed_addresses_v8_50.json`
+##      (2026-08-26) has NEITHER item G NOR S. **The new one is V8.51.** This shape already
+##      cost a session (49.1d). ⚠ **`deploy_v8.js` still PRINTS a hardcoded "V8.50 Deploy"
+##      banner — fix it before the community deploy or the run log lies about the release.**
+## 53.5 ✅ **THE CASH-OUT LINE IS MEASURED BEFORE IT IS PROMISED.** NEW instrument
+##      `scripts/diag_cashout_gate.js` (READ-ONLY; static-calls `redeemAtFloor` AS each member
+##      so a revert reason is the answer). Live V8.50: **floor $0.0149/CNOVA · `usdcReserve`
+##      $32,557.5697 and the contract HOLDS exactly that (NO DRIFT — the SF
+##      totalBalance-vs-balanceOf trap does not apply) · supply 2,185,770 → redeeming EVERY
+##      CNOVA asks $32,557.04.** **FULLY BACKED: everyone can exit, so the post must NOT say
+##      first-come-first-served.** ⛔ **But every member is inside the 0-30 day band, so the V4
+##      early-exit penalty is 45%** (`joinedAt` reads correctly). All four sims reverted on a
+##      missing allowance. ✅ The site already handles both: a two-step *"Step 1: Approve CNOVA
+##      → Step 2: Redeem for USDC"* panel that DISPLAYS the real penalty and blanks the preview
+##      if it cannot read it. ▶ **Frame it honestly: USDC carries over to V8.51, CNOVA does
+##      not — cashing out converts a token that becomes worthless into the currency that pays
+##      re-registration. 55% of something vs 100% of nothing.** ▶ **Claude's advice: do NOT
+##      soften the penalty ladder in the new treasury** — it is the anti-dump mechanism, and
+##      weakening a permanent safeguard to smooth a one-off migration is a bad trade.
+## 53.6 ✅✅✅ **PRIVATE V8.51 GATE CHAIN DEPLOYED 03:49Z, CLEAN.**
+##      `deployed_addresses_v8_51_private.json`, **`MATRIX_SIZE=15`**, all 10 tiers, **USDC
+##      REUSED `0x2D8B7b5e…`**. ⛔ **NOT a community deployment — never point members here.**
+##      - **Why size 15:** item G/S only fire when a pair is full in BOTH halves — 254 seats at
+##        127, **30 at 15** — so saturation is minutes, not days. Routing logic is
+##        size-independent (fixtures use 4 and 7). ⚠ **DOES NOT TEST GAS AT 127.**
+##      - **Why reuse USDC (do it again for the community deploy):** the 401 harness wallets
+##        already hold that token so they need no re-funding, and **MEMBERS KEEP THEIR WALLET
+##        BALANCES — re-registration becomes approve-and-register.** Approvals are per-spender
+##        so none carry; `rr_keeper` approves just-in-time.
+##      - `tierRouter 0x8AEdeA4B77018463F7996d4C141Ba554f72d0611` · `matrixKeeper
+##        0x1956B075f00d8045bCCC269Ad74D7532BDAb9339` · `stabilityFund 0x31C6ef6237Fe87dE30791f2d72264Dc1Dcb2575B`
+##        · `treasury 0x04a66e9eCBac0FBB2Fec5aC86aBBc6093E40E325` · `cnova 0x811b463299Ca4048Dd67fBd0B53742D4b60cca26`
+##        · `pairFactory 0x841fd315003C0B4E09611F79c8416A9B997113bc` · `v8Governance 0x45642952B39AB923FaffC1E0b800cA0a35C3f495`
+##        · `communityWallet 0x2802E0461E7320a81e5266E012202363A8235b10` · **T1 PM `0x3bDE6dC4…`
+##        MatA `0xFdEeeD04…` MatB `0x2707A757…`**.
+##      - ✅ Deploy set its own clocks (`parkedGracePeriod 86400s`, `selfFundedGracePeriod 300s`),
+##        treated the network as TESTNET, registered W1 `0x6512e9B5…` as T1 MatA position-1 and
+##        set it as `defaultReferrer`. ⚠ **`graduationEnabled` IS STILL FALSE here.**
+##      - ⚠ The `provider.getCode … returned 0x` warnings are the script's own RPC-lag retries
+##        working (`⏳ node saw code after 2 probes`), not errors.
+## 53.7 ▶▶ **WHAT THE PRIVATE CHAIN IS FOR — AN A/B, NOT A SMOKE TEST. START HERE.**
+##      **Phase 1:** fill T1 to saturation with graduation still **OFF** (`bigfill_v8.js`, which
+##      the deploy script itself names as the next step), then run `noseat_witness.js` against
+##      `deployed_addresses_v8_51_private.json` to **CAPTURE the seat theft happening on a real
+##      chain.** **Phase 2:** `setGraduationEnabled(true)`, keep loading, show the no-seat parks
+##      stop and graduations appear. **That is G0b vs G1 reproduced on chain, and it is far
+##      stronger than "nothing went wrong".**
+## 53.8 ⛔⛔ **STRESS IS OFF AND MUST BE TURNED BACK ON: `rm /root/keeper/rr_keeper.OFF`.**
+##      The hazard was **the DEPLOYER'S NONCE**, not the harness touching new contracts (it
+##      cannot — different addresses). `rr_keeper.js` sends from `DEPLOYER_PRIVATE_KEY` (`:335`
+##      wallet, `:498` gas, `:708` USDC) and its own `:705` comment names the nonce race, while
+##      `deploy_v8.js` fires 40+ txs from the same EOA. ✅ **Kill switch `touch
+##      /root/keeper/rr_keeper.OFF` (`:192`, `:329`) — ONE file stops ALL THREE stress jobs**,
+##      confirmed in all three logs. Safer than a crontab edit: reversible, touches nothing else.
+##      ⚠⚠ **METHOD ERROR WORTH KEEPING: I FIRST CHECKED IT WITH `find -mmin` AND NEARLY CALLED
+##      THE JOBS ALIVE.** A touched log can equally mean "did work" or "wrote *standing down*" —
+##      **mtime is not evidence of work.** That is session 45's mirror-image lesson repeated one
+##      session after writing it up. **READ THE LOG CONTENTS, NEVER THE TIMESTAMP.**
+##      ✅ `direct_keeper` was deliberately LEFT RUNNING (`KEEPER_PRIVATE_KEY` `0xd419681B`, no
+##      deployer conflict) so live members kept being rescued. ⚠ **`system_keeper` (:11 and :41)
+##      ALSO sends from the deployer and has NO kill switch** — deploy in the gap between ticks.
+##      ⚠ **EVERY VPS BLOCK MUST INCLUDE `ssh -i C:\Users\CryptoTech\.ssh\do_keeper
+##      root@167.99.0.250`** — one was written without it and got pasted into local PowerShell.
+## 53.9 ✅ **WHAT LANDED.** Contracts `cryptonova-app.git` branch `v8.1`:
+##      **`769e673`** the four cap pins + `test/V8_50_CapOneVelocity.test.js` + the O4/O7
+##      retarget (6 files, +214/-7) · **`1509e1d`** `scripts/diag_cashout_gate.js` +
+##      `scripts/deployed_addresses_v8_51_private.json` (2 files, +282).
+##      **Suite 665 passing / 7 pending / 0 failing.** Sizes unchanged and all fitting:
+##      `MatrixPairFactory` 24,544 (**32 bytes**) · `TierRouter` 24,345 (231) · `MatrixLogicLib`
+##      24,281 (295) — **no room for another matrix edit**; relief is `MatrixLogicLib`, linked
+##      not embedded. `predeploy_check.js` **149/149 PASSED**. Keepers repo untouched (⚠ an
+##      UNCOMMITTED `deployed_addresses_v8_50.json` was copied into `C:\CryptoNova-Keepers` so
+##      `noseat_witness.js` can resolve it). Frontend untouched, still `2664eae`.
+##      ⚠ **MEMORY IS THE AUTHORITATIVE SHA RECORD** — a handoff cannot contain the SHA of the
+##      commit that creates it. Full detail in `/areas/cryptonova-v851-release.md`.
+## 53.10 ▶ **WHAT IS OPEN, IN THE ORDER I WOULD TAKE IT.**
+##      1. **THE A/B ON THE PRIVATE CHAIN (53.7).** Phase 1 then phase 2. This is the whole
+##         point of the gate chain and nothing downstream should start before it.
+##      2. **Community V8.51 deploy** at `MATRIX_SIZE=127`, reusing USDC, from a BRAND-NEW
+##         PowerShell window. Fix the "V8.50 Deploy" banner first (53.4).
+##      3. ⛔⛔ **VERIFY EVERY CONTRACT ON BASESCAN BEFORE ANY MEMBER IS POINTED AT IT.** The
+##         unverified window triggered Blockaid on 2026-07-30 AND 2026-08-26. A third time
+##         would be entirely our own doing.
+##      4. **`setGraduationEnabled(true)` BEFORE members arrive**, not after — otherwise they
+##         re-register onto the seat theft this release exists to fix.
+##      5. **Announce** (08-08 advance-notice promise; owner's voice + emoji, read
+##         [[community-comms]] first) → `update_addrs` incl. `api/telegram-qa.js` → 3-stage
+##         ladder with the timed gate → members re-register → Blockaid address table.
+##      6. **`rm /root/keeper/rr_keeper.OFF`** (53.8) · job A cursor rewind, NOT `pool_primer`
+##         (52.11) · `stress_status.js` liveness fix · the crontab header lie · the stale
+##         "copay/fastlane remain LIVE" note in `predeploy_check.js` (paused since 2026-08-29).
+##      7. Measure the unrescuable population (53.3) once the new chain has traffic.
+
+---
+
+# ⬛ SESSION 52 STATE — 2026-08-31. ⚠ SUPERSEDED IN PART BY SESSION 53 ABOVE.
 # ⛔⛔ THE HEADLINE: THE DEBT WAS NEVER THE PROBLEM, AND THE DEBT NUMBER YOU INHERITED
 # IS TWENTY TIMES TOO SMALL. Organic exposure is $145.89. **At least 80% of the real
 # community is sitting parked, and every single wasted advance is in a MatB.**
