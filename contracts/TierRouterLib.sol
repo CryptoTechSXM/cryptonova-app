@@ -90,15 +90,40 @@ library TierRouterLib {
     ///         This branch fires only at genuine both-halves saturation, and the arriving
     ///         member still enters MatA, so MatA keeps exactly the entry source that
     ///         incident proved it needs.
+    /// @notice V8.51: emitted when item G diverts a re-entry to a pair with room.
+    ///         ADDED 2026-08-31 (session 53) AFTER PROVING ITEM G ON CHAIN THE HARD WAY.
+    ///         Item S was given `RescueOverflowed` deliberately, on the rule written into
+    ///         49.1f: "a silent routing change is one nobody can measure." Item G shipped
+    ///         WITHOUT one, and the cost was measured on the V8.51 gate chain: item S was
+    ///         provable in a single log query, while item G took a tx-hash cross-reference
+    ///         over every later-pair entry plus reading a 104-log transaction by hand.
+    ///         Adding it now is also the only cheap moment — after members re-register,
+    ///         adding an event means another deploy and another re-registration ask.
+    event MemberGraduated(address indexed member, uint256 indexed fromPair, uint256 indexed toPair);
+
+    /// @dev ⛔ THIS IS DELIBERATELY NO LONGER `view` — it was, until the event above.
+    ///      WHAT THAT DOES NOT COST US: the only external call here,
+    ///      `ILPairRoom.graduationTargetFor`, is declared `view` in this file's own
+    ///      interface, so solc still issues STATICCALL for it. The guarantee that the
+    ///      PairManager cannot write during a routing decision is therefore UNCHANGED;
+    ///      the only new capability is this library's own log.
+    ///      WHY THE EMIT LIVES HERE AND NOT IN TierRouter: TierRouter had 231 bytes of
+    ///      EIP-170 headroom (24,345 / 24,576) and this library is LINKED, not embedded,
+    ///      so the emit costs the router essentially nothing. `scripts/sizes.js` is the
+    ///      check, not this comment.
     function sameTierTarget(address matrixB, address member, address pairManager, bool graduate)
-        external view returns (bool toMatB, uint256 target)
+        external returns (bool toMatB, uint256 target)
     {
         target = ILMat(matrixB).pairIndex();      // own pair
         toMatB = false;                           // own MatA. Always.
         if (!graduate || pairManager == address(0)) return (toMatB, target);
+        uint256 ownPair = target;
         try ILPairRoom(pairManager).graduationTargetFor(member, target) returns (uint256 alt) {
             if (alt != type(uint256).max) target = alt;
         } catch { /* unreadable → own MatA, exactly as before */ }
+        // Only a REAL divergence is a graduation. Equality is the ordinary re-entry path
+        // and must stay silent, or the event becomes noise and stops meaning anything.
+        if (target != ownPair) emit MemberGraduated(member, ownPair, target);
     }
 
     /// @notice Draw a member's FREE earnings from one matrix toward `remaining`, returning

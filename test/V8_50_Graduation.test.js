@@ -67,6 +67,13 @@ const EV = new ethers.Interface([
   "event MemberParked(address indexed member, uint256 shortfall)",
   "event RescueOverflowed(address indexed member, uint256 indexed fromPair, uint256 indexed toPair)",
   "event MemberReentered(address indexed member, uint8 tier)",
+  // ⛔ V8.51 item G's own event. IT MUST BE IN THIS LIST OR IT DOES NOT EXIST AS FAR AS
+  // these tests are concerned — 50.7 lost a whole investigation to exactly that: the
+  // referral break-even counter returned 0 forever because `ctx.tr` was never in
+  // parseAll's interface list, so MemberReentered was not merely uncounted, it was
+  // never PARSED. Emitted by TierRouterLib via delegatecall, so it arrives with
+  // TierRouter's address.
+  "event MemberGraduated(address indexed member, uint256 indexed fromPair, uint256 indexed toPair)",
 ]);
 
 async function deployBase() {
@@ -155,7 +162,8 @@ function printTrace(t, name, label) {
     const extra = e.event === "MemberParked" ? `  shortfall ${usd(e.args[1])}`
                 : e.event === "MemberEntered" ? `  pos ${e.args[1]}`
                 : e.event === "MemberCrossedToPartner" ? `  -> ${name(e.args[2])}`
-                : e.event === "RescueOverflowed" ? `  pair ${e.args[1]} -> pair ${e.args[2]}` : "";
+                : e.event === "RescueOverflowed" ? `  pair ${e.args[1]} -> pair ${e.args[2]}`
+                : e.event === "MemberGraduated" ? `  GRADUATED pair ${e.args[1]} -> pair ${e.args[2]}` : "";
     console.log(`         ${e.emitter.padEnd(10)} ${e.event.padEnd(23)} ${e.who.padEnd(10)}${extra}`);
   }
 }
@@ -311,6 +319,22 @@ describe("V8.50 — MatB graduation (49.1h): does it seat the arrival?", functio
       "pair cannot absorb anybody; if graduation is the fix, THIS is the number that proves it."
     ).to.equal(1);
     expect(r.p2Received, "nobody reached P2 — the graduating root went somewhere else").to.equal(1);
+
+    // ⛔ V8.51: THE EVENT ITSELF. Added because item G shipped SILENT and proving it on the
+    // gate chain took a tx-hash cross-reference plus reading a 104-log transaction by hand,
+    // while item S — which has RescueOverflowed — took one log query. A routing change
+    // nobody can measure is the thing 49.1f already ruled against.
+    const grads = r.t.filter(e => e.event === "MemberGraduated");
+    expect(grads.length,
+      "graduation happened (P2 received a member) but MemberGraduated did NOT fire exactly once. " +
+      "An event that misses the thing it exists to report is worse than no event: it reads as " +
+      "proof of absence."
+    ).to.equal(1);
+    expect(String(grads[0].member).toLowerCase(),
+      "MemberGraduated named the wrong member — it must be the MatB ROOT that graduated, not the arrival"
+    ).to.equal(String(root).toLowerCase());
+    expect(grads[0].args[1]).to.not.equal(grads[0].args[2],
+      "fromPair == toPair, so this was ordinary re-entry and the event should not have fired at all");
     expect(Number(r.after.rotA) - Number(r.before.rotA), "P1 MatA did not rotate").to.be.greaterThan(0);
     expect(Number(r.after.rotB) - Number(r.before.rotB), "P1 MatB did not rotate").to.be.greaterThan(0);
   });
@@ -334,6 +358,12 @@ describe("V8.50 — MatB graduation (49.1h): does it seat the arrival?", functio
     ).to.be.greaterThan(0);
     expect(r.seated, "the arrival lost its seat in the insolvent case — item G made this WORSE").to.equal(true);
     expect(r.p2Received, "an insolvent root was diverted to P2 — it cannot afford to be there").to.equal(0);
+    // ⛔ AND THE EVENT MUST BE SILENT HERE. An event that fires on the ordinary path is
+    // noise, and noise is how a signal stops meaning anything. This is the half that keeps
+    // MemberGraduated worth reading.
+    expect(r.t.filter(e => e.event === "MemberGraduated").length,
+      "MemberGraduated fired on the INSOLVENT path, where graduation is not reachable at all"
+    ).to.equal(0);
   });
 
   it("G3 — THE FREEZE QUESTION (49.1g/49.1h): does the pair keep rotating under sustained arrivals?", async function () {

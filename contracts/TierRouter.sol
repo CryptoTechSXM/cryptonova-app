@@ -1605,8 +1605,14 @@ contract TierRouter is Ownable2Step {
     ///      MatB when the member already occupies MatA. If they somehow hold
     ///      both, the seat call still reverts and V8.46-C parks them with a
     ///      CycleOutFailed event instead of losing them.
+    /// @dev V8.51: no longer `view` — TierRouterLib.sameTierTarget now emits
+    ///      MemberGraduated. See that function's comment for why the emit lives in the
+    ///      linked library (this contract's EIP-170 headroom) and why dropping `view`
+    ///      costs no safety (graduationTargetFor is itself `view`, so it stays a
+    ///      STATICCALL). The sole caller, _executeAdditive, is already state-changing —
+    ///      it emits MemberReentered two lines below the call.
     function _sameTierTarget(address matrixB, uint8 tierIndex, address member)
-        internal view returns (bool toMatB, uint256 target)
+        internal returns (bool toMatB, uint256 target)
     {
         // V8.50 item G: tierIndex is USED again — it selects the tier's PairManager,
         // which is what knows whether the member's pair is full and which pair has room.
