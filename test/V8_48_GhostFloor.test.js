@@ -524,6 +524,25 @@ describe("V8.48 items 45+46+47 — ghosts, the insolvency floor, and the evictio
       const pm = await (await ethers.getContractFactory("MockPairManagerK")).deploy();
       await pm.addPair(await matA.getAddress(), await matB.getAddress());
       await keeper.setPairManager(0, await pm.getAddress());
+      // ⛔ maxItemsPerUpkeep IS PINNED HERE ON PURPOSE — DO NOT DELETE THIS LINE.
+      // MEASURED 2026-08-31 (session 53). The DEFAULT went 15 -> 1 in 5a07cab
+      // (2026-08-23), AFTER the last full-suite green (2026-08-17). It took TEN tests
+      // across FOUR files down and nobody saw it, because every session in between ran
+      // only its own suite. That gap is the real lesson, not the constant.
+      // MECHANISM: MatrixKeeperLib.discover() allocates WorkItem[](cfg.maxItems) and
+      // hands slot 0 to the VELOCITY item whenever one is due. At cap 1 a due velocity
+      // check consumes the ENTIRE batch, discovery returns nothing else, and every
+      // per-member assertion below sees []. These fixtures advance time past a 24h
+      // grace period while velocityWindow is 4h, so velocity is ALWAYS due here.
+      // WHY PIN THE FIXTURE INSTEAD OF CHANGING THE DEFAULT: cap 1 is the shipping
+      // value and it is right — handoff 30.10a/30.10b, the only setting provably safe
+      // against a 14.67M worst-case item on a ~16.5M budget. These tests are about
+      // ROUTING (which valve a member is sent to), not about batching. Identical
+      // reasoning to the setEvictionGracePeriod pin above: set the knob so the
+      // assertion keeps meaning what it was written to mean, rather than weaken it.
+      // The cap-1 behaviour ITSELF is asserted deliberately in V8_50_CapOneVelocity.test.js
+      // so that it stays visible instead of being rediscovered as a bug.
+      await keeper.setMaxItemsPerUpkeep(15);
       await keeper.setParkedGracePeriod(PARKED_GRACE);
       // V8.49 item 1 split the EVICTION clock out of the rescue clock (default 7 days).
       // These GF-D* tests are about ROUTING — which valve a member is sent to — not

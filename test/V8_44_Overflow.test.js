@@ -391,7 +391,30 @@ describe("V8.44 — overflow rework: own members return to own pair", function (
       .to.equal(await matB2.getAddress());
     expect(await matB2.partner(), "pair-1 MatB must be wired to its MatA")
       .to.equal(await matA2.getAddress());
-    expect(await matA2.occupancy(), "pair-1 is standby: idle, not frozen").to.equal(0n);
+    // ⛔ RETARGETED AGAIN — V8.50 ITEM S (session 53, 2026-08-31). This line read
+    //     expect(await matA2.occupancy(), "pair-1 is standby: idle, not frozen").to.equal(0n);
+    // and it went RED the moment item S shipped: pair-1 MatA held 4 members. That is item S
+    // WORKING, not a regression. rescueReentry now routes a member out of a pair that is full
+    // in BOTH halves into a pair that has room (PairManagerV8, the _bothHalvesFull branch),
+    // and this run's rescueParked() loop saturates pair 0 and then rescues — precisely that
+    // case. Measured on chain the same day (noseat_witness.js, 24h, live V8.50): ~1,676 free
+    // seats sat idle at rotation 0 in expansion pairs while 152 members/24h parked for want
+    // of a seat. An expansion pair that never receives anybody is the defect, not the law.
+    //
+    // ⛔ THE LAW IS UNCHANGED AND STILL ENFORCED: nothing reaches pair 1 through the FRONT
+    // DOOR. What is dropped is only the stronger assumption that nothing reaches pair 1 AT
+    // ALL, which item S deliberately made false. Every occupant must be explained by a
+    // NAMED route — a silent arrival in a standby pair is exactly what this gate forbids.
+    const overflowedO4 = await ctx.pm.queryFilter(ctx.pm.filters.RescueOverflowed());
+    if ((await matA2.occupancy()) > 0n) {
+      expect(overflowedO4.length,
+        "pair 1 has occupants, so item S's RescueOverflowed must account for them"
+      ).to.be.gt(0);
+      for (const ev of overflowedO4) {
+        expect(ev.args.toPair, "an overflow must LEAVE the saturated pair, never re-target it")
+          .to.not.equal(ev.args.fromPair);
+      }
+    }
 
     // Zero stranded reserves: every wallet that is out of a matrix and not
     // parked must hold no crossingReserve in that matrix.
@@ -670,23 +693,39 @@ describe("V8.44 — overflow rework: own members return to own pair", function (
     // pair 1 therefore has to be the double — this asserts that rather than assuming
     // it. (TierRouterLib.sameTierTarget returns the member's OWN pairIndex, so there
     // is no forward-graduation path that could have filled pair 1 instead.)
+    //
+    // ⛔ RETARGETED — V8.50 ITEM S (session 53, 2026-08-31). The paragraph above argued the
+    // double must be the ONLY possible feeder, because "rescueReentry's branch needs a member
+    // who ALREADY holds a seat in the pair they are re-entering". Item S added a SECOND
+    // rescueReentry route into a later pair — the _bothHalvesFull escape hatch — which needs
+    // no duplicate seat at all. So that reasoning is now false, DoubleEntryFired came back 0,
+    // and this assertion failed for the right reason. THE LAW IS UNTOUCHED: "pair 1 fills from
+    // EXISTING members cycling, never from the front door" is still asserted by LIMB 1 and by
+    // the firstAt check above. What changes is only that the route must be NAMED, and there
+    // are now two legitimate names.
     const doubles = await tr.queryFilter(tr.filters.DoubleEntryFired());
-    expect(doubles.length,
-      "pair 1 must have been fed by the DOUBLE seat (TierRouter:1382 -> freePairFor)"
+    const overflowed = await ctx.pm.queryFilter(ctx.pm.filters.RescueOverflowed());
+    expect(doubles.length + overflowed.length,
+      "pair 1 must have been fed by a NAMED route — the DOUBLE seat (TierRouter:1382 -> " +
+      "freePairFor) or item S's saturation escape hatch (PairManagerV8 _bothHalvesFull -> " +
+      "_pairWithRoomFor). Zero of BOTH means somebody reached pair 1 by a path nobody declared."
     ).to.be.gt(0);
 
-    const doubled = new Set(doubles.map((d) => d.args.member));
+    const routedMembers = new Set([
+      ...doubles.map((d) => d.args.member),
+      ...overflowed.map((o) => o.args.member),
+    ]);
     const inPair1 = [];
-    for (const m of doubled) {
+    for (const m of routedMembers) {
       if ((await matA2.isActiveInMatrix(m)) || (await matB2.isActiveInMatrix(m))) inPair1.push(m);
     }
     expect(inPair1.length,
-      "the doubled member is the one holding the pair-1 seat").to.be.gt(0);
+      "a member named by one of those two routes is the one holding the pair-1 seat").to.be.gt(0);
 
     // The V8.46 universal pair guard still holds while all this is happening: a
     // member may hold a seat in TWO PAIRS, never in both halves of ONE pair. That is
     // the invariant the whole second-pair route exists to respect.
-    for (const m of doubled) {
+    for (const m of routedMembers) {
       expect(
         (await matA.isActiveInMatrix(m)) && (await matB.isActiveInMatrix(m)),
         `${m} holds both halves of pair 0`).to.equal(false);

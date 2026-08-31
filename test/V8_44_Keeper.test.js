@@ -86,6 +86,12 @@ async function deployWithKeeper(size) {
   await sf.setTierFee(0, FEE);
   await sf.setTierRouter(trAddr);
   await keeper.setPairManager(0, pmAddr);
+  // ⛔ PINNED ON PURPOSE — DO NOT DELETE. maxItemsPerUpkeep's default is 1 (the
+  // measured-safe shipping value, 5a07cab) and at cap 1 a due VELOCITY item
+  // consumes the whole batch, so discovery returns nothing else and every
+  // per-member assertion below sees []. Full write-up in V8_48_GhostFloor.test.js;
+  // the behaviour itself is asserted in V8_50_CapOneVelocity.test.js.
+  await keeper.setMaxItemsPerUpkeep(15);
 
   return { usdc, tr, pm, sf, matA, matB, keeper, owner, W1, devOps, sigs,
            pmAddr, matAAddr, matBAddr, keeperAddr };

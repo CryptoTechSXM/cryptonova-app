@@ -109,6 +109,12 @@ describe("V8.48 item 12 — grace protects against LOANS, not against your own m
     const pm = await (await ethers.getContractFactory("MockPairManagerK")).deploy();
     await pm.addPair(await matA.getAddress(), await matB.getAddress());
     await keeper.setPairManager(0, await pm.getAddress());
+    // ⛔ PINNED ON PURPOSE — DO NOT DELETE. maxItemsPerUpkeep's default is 1 (the
+    // measured-safe shipping value, 5a07cab) and at cap 1 a due VELOCITY item
+    // consumes the whole batch, so discovery returns nothing else and every
+    // per-member assertion below sees []. Full write-up in V8_48_GhostFloor.test.js;
+    // the behaviour itself is asserted in V8_50_CapOneVelocity.test.js.
+    await keeper.setMaxItemsPerUpkeep(15);
 
     await keeper.setParkedGracePeriod(PARKED_GRACE);
     await keeper.setSelfFundedGracePeriod(SELF_GRACE);
