@@ -10,7 +10,177 @@ owner-set, and the session that earned it got five things wrong by ignoring what
 
 ---
 
-# ⬛ SESSION 55 STATE — 2026-09-01. LATEST. READ THIS FIRST.
+# ⬛ SESSION 56 STATE — 2026-09-01. LATEST. READ THIS FIRST.
+# (Continues session 55 the same day. 55.x is still correct except where marked.)
+# ✅✅✅ THE HEADLINE: **55.8 ITEMS 1, 2, 4 AND 5 ARE DONE**, all proven rather than
+# asserted — and item 1 was MISDIAGNOSED in the 55 handoff.
+# ⛔⛔ AND THE HEADLINE FINDING, FROM A LIVE MEMBER INCIDENT: **AN RPC TRANSPORT 403 WAS
+# BEING SHOWN TO MEMBERS AS "Transaction failed on-chain — hard-refresh".** The most
+# common report class in BUGS.md was PARTLY A LABELLING BUG, not only an endpoint bug.
+## 56.0 ⛔⛔⛔ **55.8 ITEM 1 SAID `monitor_v8.js` "WILL FAIL". IT DOES NOT FAIL — IT LIES.**
+##      `epochRewards(epoch).catch(() => ethers.parseEther('50'))`. **`epochRewards` is a
+##      public `uint256[9]` ARRAY, so its getter is `epochRewards(uint256)` — the declared
+##      `epochRewards(uint8)` is a selector NO CONTRACT HAS** (`0xda317a96` vs `0x4dc47d34`,
+##      measured; `CNOVAToken` has no fallback). Every call reverted and **the catch rendered
+##      a FABRICATED 50 CNOVA into the daily Telegram report as an observation.**
+##      ⛔ **IT SURVIVED BECAUSE THE LIE EQUALLED THE TRUTH: `epochRewards[0]` genuinely IS
+##      50e18** (Nebula Genesis). It would have started lying at the first halving,
+##      overstating the member reward rate by 25%. **A wrong default that happens to be
+##      right today is the hardest defect class to see.**
+##      ⛔ **TWO MORE IN THE SAME TWO LINES:** the epoch NUMBER was off by one (`currentEpoch`
+##      is a 0-BASED index, `CNOVAToken.sol:295`; the human number is `currentEpoch + 1`,
+##      which is what every event emits and what `currentEpochNumber()` returns), and the
+##      epoch NAMES were **eight invented ones** (`Genesis, Pioneer, Expansion...`) against
+##      the canonical nine (`Nebula Genesis ... Final Frontier`). **`Genesis`/`Pioneer` are
+##      CommunityWallet ENROLLMENT tiers — two concepts conflated in the one file that
+##      reads both.** ✅ The frontend was right all along (`index.html:3817`) and is the model.
+##      ✅✅ **FIXED and OBSERVED ON CHAIN: `Current epoch: 1 (Nebula Genesis)` ·
+##      `Reward/entry: 50 CNOVA`.** The 50 now MEANS something — with the fabricating catch
+##      gone, a failed read prints `⚠️ UNREADABLE` instead.
+## 56.1 ✅✅ **55.8 ITEM 2 DONE — `system_keeper.js` `getMember` 8 → 10 fields, both ABI
+##      copies, the fragment GENERATED FROM `FigureEightMatrixV8.json` rather than typed.**
+##      ✅✅✅ **AND THE IMPACT WAS MEASURED, NOT INFERRED — offline `AbiCoder` decode of the
+##      same bytes both ways: THE OLD 8-FIELD TUPLE DOES NOT THROW**, ethers silently ignores
+##      the trailing words. **`withdrawable` is slot 3 and always decoded CORRECTLY, so every
+##      "W1 withdrawable" ever Telegrammed was right.** ⛔ But slot 5 on was garbage that
+##      LOOKED FINE: `cyclesCompleted` read `totalWithdrawn` (42,000,000 for a true 3), and
+##      `isInMatrix` read `cyclesCompleted` — i.e. it silently meant "has cycled at least
+##      once". **Both booleans decoded `true` with no error.** The same 8-field fragment
+##      remains in `limbo_check`, `member_ledger`, `tx_decode`, `organic_drip` — all one-off
+##      diagnostics, now the known-bad list.
+## 56.2 ✅✅ **55.8 ITEMS 4 AND 5 — THE CENSUS AND THE GUARD.** `KEEPER_CENSUS_2026-09-01.md`
+##      (keepers repo) classifies all 94 scripts **from a FRESH `crontab -l`, not the
+##      2026-08-27 mirror, which says in its own header that the VPS is the source of truth.**
+##      ⛔ **55.7's "12 in cron" COUNTED LINES: 12 lines = 10 DISTINCT SCRIPTS, because
+##      `rr_keeper.js` runs on THREE lines (A register `*/20` · B rescue `3-59/5` · C upgrade
+##      `2-59/5`).** ▶▶ **SO `rm rr_keeper.OFF` RESTARTS THREE JOBS, TWO ON A 5-MINUTE
+##      CADENCE — the owner must know that before pulling it. IT IS STILL ON.**
+##      **A live-cron 10 · B load-bearing deps 3 (`alert_log`, `keeper_gas_floor`,
+##      `rpcProvider`) · C paused-cron 6 · D selftests 6 · E diagnostics 64 · F retire 5.**
+##      ⛔ **THE ADDRESS-BOOK PROBLEM WAS FLEET-WIDE, NOT ONE FILE: 67 scripts resolved
+##      `ADDRESSES_FILE || "<stale book>"`.** ✅ **CORRECTION TO 55.5 — FOUR files already
+##      refused (`copay_rescue`, `noseat_witness`, `pair_saturation`, `system_keeper`), not
+##      one; the pattern was copied, not invented.** ✅✅ **All 9 unguarded live jobs now
+##      refuse, PROVEN BOTH WAYS** (empty → all 9 FATAL; set → the 6 read-only ones load the
+##      book). **The positive test was deliberately NOT run on the 3 spending jobs.**
+##      ⛔⛔ **AND A WORSE DEFECT FOUND IN THE SAME PASS: `channel_pulse`, `monitor_v8` and
+##      `onramp_keeper` LOADED `.env` FROM THE CWD, NOT `__dirname`.** Run from any other
+##      directory and NO `.env` loaded at all. **The `cd /root/keeper` in each cron line was
+##      load-bearing and nothing said so.** All three now anchor to `__dirname`.
+##      ✅ **Deployed via a `_stage` dir + atomic `mv` (never scp over a job on a 5-minute
+##      schedule); 9/9 md5 matched; engine ticked clean afterwards, no FATAL.**
+## 56.3 ⛔⛔⛔ **THE LIVE INCIDENT — AND THE DEFECT WAS OURS, NOT ONLY THE ENDPOINT'S.**
+##      Members hit `TX_FAILED` on `approve-usdc`, `-32080 httpStatus 403`. The approve runs
+##      through **MetaMask's OWN provider**, so a 403 kills `eth_estimateGas` **before the
+##      confirmation dialog ever appears** — the member is never asked to sign.
+##      ⛔⛔ **PROVEN BY LIFTING THE REAL `friendlyError()` OUT OF `index.html` AND FEEDING IT
+##      THE ACTUAL ERROR TEXT: it returns `❌ Transaction failed on-chain — hard-refresh`
+##      FOR A REQUEST THAT NEVER REACHED THE CHAIN.** The revert heuristic (`~:9455`) fires on
+##      `_earlyRaw.includes('"data":')`, and a JSON-RPC TRANSPORT error carries its own
+##      `"data": { "httpStatus": 403 }`. **There was no branch for 403/httpStatus/-32080
+##      anywhere in the function.**
+##      ▶▶ **SO AN UNKNOWN SHARE OF "Transaction failed on-chain — hard-refresh" — THE MOST
+##      COMMON CLASS IN BUGS.md — WAS NEVER ON-CHAIN AT ALL, and the advice was
+##      unactionable.** The member restarted his device as instructed; nothing changed.
+##      ⚠ **The share is UNMEASURED. Do not now assume the whole class is RPC** — the new
+##      message is what will separate them going forward.
+##      ✅✅ **FIXED: a transport branch inserted ABOVE the revert heuristic** (structured
+##      `httpStatus >= 400`, `-32080`, `RPC endpoint returned HTTP`, a `"httpStatus": 4xx/5xx`
+##      pattern, or `SERVER_ERROR`/`NETWORK_ERROR`/`TIMEOUT`). ⚠⚠ **ORDER IS LOAD-BEARING —
+##      if it is ever moved BELOW the `"data":` heuristic the bug returns silently.**
+##      ✅✅✅ **5/5 on the lifted function: live 403 → new message · 502 → new message · real
+##      revert → still "failed on-chain" · revert with a reason → still `❌ Matrix full` ·
+##      user cancel → still `✋ You cancelled`. No path regressed.**
+##      ✅ **`api/log-error.js` INSTRUMENTED**: `countKey` keyed on the ADDRESS (it keyed on
+##      the wallet BRAND, so "Session count 15" was 15 failures across ALL MetaMask users
+##      while showing ONE address — units-conflation, the 55.1 family) · error window
+##      200 → 600 · new `📡 RPC host:` line. ⛔ **HOST ONLY, NEVER THE URL — our QuickNode
+##      endpoints carry the API KEY IN THE PATH and this posts to Telegram.** Asserted in the
+##      test: 5/5, key absent.
+##      ⚠ `sessionCounts` is in-memory in a Vercel function and alerts only fire on the 1st,
+##      5th, 10th… — **any count from it is a FLOOR, never a total.**
+## 56.4 ✅ **[stated] OWNER'S ENDPOINT DECISION, 2026-09-01 — NO PAID RPC FOR TESTNET.**
+##      *"anymore paying would be for mainnet. they should have a better working RPC for
+##      mainnet or redundancy so not paying now for that for a few members that can just
+##      retry in 5 mins or less."* ▶ **`WALLET_RPC_URLS` STAYS `sepolia.base.org`. The fix is
+##      the honest message. MAINNET GETS A PAID NODE WITH REDUNDANCY — carry this forward.**
+##      ⚠ **UNVERIFIED BUT LOAD-BEARING: changing `WALLET_RPC_URLS` would NOT be retroactive**
+##      — `wallet_addEthereumChain` does not rewrite the RPC of a chain a wallet already has.
+##      Confirm before ever promising members a push will fix them.
+##      ⚠ **[stated] Owner: he does not see this on Rabby.** Consistent with the diagnosis
+##      (different wallet, different endpoint) but **n=1 and not a measurement** — the reply
+##      to the member says so in those terms.
+## 56.5 ⚠ **METHOD NOTES.**
+##      - ⛔⛔ **I LEFT A STALE `.git/index.lock` IN THE KEEPERS REPO AND IT BLOCKED THE
+##        OWNER'S `git add`/`commit`.** `git status --porcelain <pathspec>` in the Cowork
+##        device shell rewrites the index and **cannot delete its own lock, because that
+##        shell is denied `unlink`.** ⚠ **CORRECTED LATER THE SAME SESSION: it is NOT only
+##        the pathspec form — a BARE `git status --porcelain` left locks in the frontend and
+##        contracts repos too. ANY `git status` can do it.** ▶▶ **Only `git log`,
+##        `git rev-parse` and `git --no-pager diff` are reliably index-free. ALWAYS check for
+##        `.git/index.lock` before handing the owner a `git add`, and give him the `del` line
+##        in the same block — do not let him meet it as a `fatal:`.**
+##      - ⛔ **`git push` ANSWERED `Everything up-to-date` AND THAT LOOKED LIKE SUCCESS** —
+##        nothing had been committed, because the commands before it failed. **Read a push
+##        block from its FIRST line.**
+##      - ⛔ **A BARE `scp`/`ssh` FAILED `Permission denied (publickey)`; the answer was
+##        already in the repo.** `docs/v8_39_testing_checklist.md:20`:
+##        **`-i C:\Users\CryptoTech\.ssh\do_keeper`**. **Take the exact invocation from the
+##        repo, never compose it from memory.**
+##      - ⛔⛔⛔ **THE POWERSHELL DOUBLE-QUOTE TRAP FIRED AGAIN, IN A COMMIT MESSAGE, AND
+##        THE RULE WAS ALREADY WRITTEN DOWN.** I put `'\"data\":'` inside a `git commit -m`
+##        string; **PowerShell ate the escaped quotes, terminated the argument early, and the
+##        remaining 43 words became pathspecs** (`error: pathspec 'and' did not match...`).
+##        Nothing was committed — **and the THREE pushes that followed all answered
+##        `Everything up-to-date`, which reads exactly like success.**
+##        ▶▶ **RULE: NO DOUBLE QUOTES, BACKTICKS OR `$` ANYWHERE INSIDE A POWERSHELL-BOUND
+##        `-m` MESSAGE OR `ssh` COMMAND — not even escaped. Rewrite the sentence instead.**
+##        ⚠ **Same failure as the deploy-run's `grep -q \"standing down\"` incident. Knowing
+##        the rule did not prevent it; the message must be BUILT quote-free from the start.**
+##      - ⛔⛔ **FOUR DETECTOR FALSE POSITIVES IN ONE SESSION, AND I CAUSED THE LAST ONE AFTER
+##        WRITING THE RULE DOWN.** A residue guard fired on my own explanatory comment (twice);
+##        a spend-scan flagged `refusal_layer.selftest.js`, which matches regex literals that
+##        **assert the ABSENCE** of those patterns. ▶▶ **A GREP DETECTOR MATCHES THE FILES
+##        THAT TALK ABOUT ITS SUBJECT, NOT ONLY THOSE THAT DO IT. Filter comments BY DEFAULT.**
+##      - ⛔⛔⛔ **I EMPTIED THIS 1.18 MB HANDOFF FILE MID-SESSION.** `io.open(P,"w")`
+##        **TRUNCATES ON OPEN**, and my `.write(s)` then raised `UnicodeEncodeError:
+##        surrogates not allowed` (a `\ud83d\udce1` pair in the patch script). The file was
+##        left at **0 bytes**. Recovered byte-identical with **`git show HEAD:<file> >
+##        <file>`** — **NOT `git checkout --`, which the device shell cannot do (54.7).**
+##        ▶▶ **RULE: ENCODE FIRST, THEN OPEN — `data = s.encode("utf-8")` then
+##        `open(P,"wb").write(data)`. Never let a possible exception sit between truncation
+##        and the write.** Use `\U0001F4E1` for astral emoji, never surrogate pairs.
+##        ⚠ **And the reason this cost nothing: the file was COMMITTED. Uncommitted work
+##        has no such floor.**
+##      - ⚠ **PowerShell `>` WRITES UTF-16 AND MANGLES EM-DASHES** (`ΓÇö`). Use
+##        `| Out-File -Encoding utf8` for any capture meant to be committed.
+## 56.6 ▶▶ **WHAT IS OPEN, IN ORDER.**
+##      1. **PUSH THE FRONTEND FIX** — `index.html` + `api/log-error.js` ONLY, 3-stage ladder
+##         (`LAUNCH_RUNBOOK.md:62-84`). **NEVER `git add -A` here (1,171 CRLF phantoms).**
+##         Then send `community_reply_2026-09-01_cryptojan22_rpc.txt` — **after the push, per
+##         the standing rule that the app and the announcement go together.**
+##      2. **`rm /root/keeper/rr_keeper.OFF`** when the owner judges members have had their
+##         head start. **Remember: three jobs, not one.**
+##      3. **Watch the next `TX_FAILED` alert for the new `📡 RPC host:` line** — that is what
+##         finally proves (or refutes) `sepolia.base.org` as the endpoint at fault.
+##      4. **Retire the 5 candidates in section F** of the census, to `_to_delete/`, on the
+##         owner's approval. Never delete.
+##      5. **The crontab header lie** (still says "V8.46 LIVE … Stress engine OFF" above three
+##         live stress lines), and `audit_frontend_abi.js` still printing "MISSING from V8.50".
+##      6. **`monitor_v8.js` has no `DRY_RUN`**, and both it and its state file are
+##         CWD-relative in ways that were only half fixed (the `.env` anchor landed; the
+##         `STATE_FILE = './monitor_state.json'` is still CWD-relative).
+##      7. Then 55.8's items 7–9 (the 242 unresolved parked, the V8.50 37,282-gas puzzle,
+##         session 54's leftovers).
+## 56.7 ✅ **WHAT LANDED.** Keepers `main`: `af4f787` → `fadbadf` (epoch + tuple) → `74d4d9c`
+##      (census) → `3f4b97b` (the 9 guards). **All md5-verified on the box.**
+##      **Frontend: UNCOMMITTED at handoff — `index.html`, `api/log-error.js`, and the reply
+##      draft. `git diff --ignore-cr-at-eol --stat` = exactly those files.**
+##      Contracts: unchanged at `1c11a4f` plus this handoff edit.
+
+---
+
+# ⬛ SESSION 55 STATE — 2026-09-01. ⚠ SUPERSEDED IN PART BY SESSION 56 ABOVE.
 # (Continues session 54 the same day. 54.x is still correct except where marked.)
 # ✅✅✅ THE HEADLINE: **V8.51 IS LIVE TO MEMBERS.** Frontend all three branches on
 # `f651ed8`, gate verified in-browser, 49 leaders seeded pre-open, keepers repointed and
