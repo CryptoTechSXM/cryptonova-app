@@ -45,8 +45,36 @@ async function main() {
 
   const tx = await keeper.setUpkeepCaller(KEEPER_WALLET, true);
   console.log("tx submitted:", tx.hash);
-  await tx.wait();
-  const after = await keeper.upkeepCaller(KEEPER_WALLET);
-  console.log("upkeepCaller after: ", after, after ? "AUTHORIZED OK" : "FAILED");
+  const rc = await tx.wait();
+  console.log(`mined: block ${rc.blockNumber}  status ${rc.status}`);
+
+  // ⛔⛔ 2026-09-01: THIS READ-BACK USED TO BE A SINGLE READ AND IT REPORTED "FAILED"
+  // ON A TRANSACTION THAT HAD ALREADY SET THE FLAG. Re-running seconds later read
+  // `true`. Base Sepolia sheds state reads — the same phenomenon that makes
+  // deploy_v8.js see `0x NO CODE` for contracts it just deployed, and that made
+  // setGraduationEnabled report "the flag did not change" twice. FOUR independent
+  // confirmations now. A guard that cries wolf costs as much as one that hides a
+  // fault (session 45), and this one fired during a live outage with members on
+  // the site, which is the worst possible moment to be told a good tx failed.
+  //
+  // ▶ BOUNDED PROBE, deliberately NOT a retry-until-you-like-the-answer loop: if the
+  //   flag never reads true inside the window, that is a MINED-BUT-NO-STATE-CHANGE
+  //   situation — a contract-level problem to investigate, not to paper over.
+  const PROBES = Number(process.env.PROBES || 10), GAP_MS = 3000;
+  let after = false;
+  for (let i = 1; i <= PROBES; i++) {
+    after = await keeper.upkeepCaller(KEEPER_WALLET);
+    if (after) { console.log(`upkeepCaller after:  true  AUTHORIZED OK (settled after ${i} probe${i === 1 ? "" : "s"})`); break; }
+    if (i < PROBES) {
+      console.log(`  probe ${i}: reads false, want true — node is likely behind, waiting 3s`);
+      await new Promise(r => setTimeout(r, GAP_MS));
+    }
+  }
+  if (!after) {
+    console.log(`upkeepCaller after:  false  ⛔ STILL FALSE AFTER ${PROBES} PROBES`);
+    console.log("   The tx mined but the flag did not change. Do NOT just re-send —");
+    console.log(`   read tx ${tx.hash} on BaseScan and find out why.`);
+    process.exit(1);
+  }
 }
 main().catch(e => { console.error(e); process.exit(1); });

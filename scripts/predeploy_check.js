@@ -1738,6 +1738,44 @@ sep("V8.51 item G — graduation (FLAGGED, ships FALSE)");
   ok("NOTE: because the flag ships FALSE, `scripts/set_graduation.js` MUST be run BEFORE members re-register (release sequence step 4) — otherwise they register onto the seat theft this release exists to fix.");
 }
 
+sep("POST-DEPLOY — keeper EOA authorisation (learned the hard way, 2026-09-01)");
+{
+  // ⛔⛔ WHAT THIS COSTS WHEN IT IS MISSED, MEASURED: on the V8.51 cutover the keeper
+  // EOA was never authorised on the new MatrixKeeper. `direct_keeper` reverted on
+  // EVERY performUpkeep from the minute /root/keeper/.env was repointed, with members
+  // arriving on the site. MatrixKeeper.sol gates performUpkeep on
+  //     msg.sender == owner() || msg.sender == governance || upkeepCaller[msg.sender]
+  // and the keeper signs as 0xd419681B…, which is NEITHER owner nor governance.
+  //
+  // ⛔ THE STEP WAS NOT MISSING — `scripts/set_upkeep_caller.js` has existed since
+  // V8.46. THE RUNBOOK ENTRY WAS MISSING. A deploy that wires roles for every
+  // contract but not for the EOA that DRIVES them is only half wired, and nothing
+  // catches it until the first performUpkeep of the new chain.
+  const depK = stripComments(read("scripts/deploy_v8.js"));
+
+  if (depK && !/setUpkeepCaller\s*\(/.test(depK)) {
+    ok("deploy_v8.js does NOT call setUpkeepCaller — so the manual post-deploy step below is genuinely required (this check keeps the NOTE honest)");
+  } else {
+    fail("deploy_v8.js now calls setUpkeepCaller — good, but the NOTE below is stale and must be rewritten rather than left contradicting the code");
+  }
+
+  const hasSetter = read("scripts/set_upkeep_caller.js");
+  if (hasSetter && /setUpkeepCaller\s*\(\s*KEEPER_WALLET\s*,\s*true\s*\)/.test(hasSetter)) {
+    ok("scripts/set_upkeep_caller.js present and still authorises KEEPER_WALLET");
+  } else {
+    fail("scripts/set_upkeep_caller.js missing or no longer authorises KEEPER_WALLET — the post-deploy step has no tool");
+  }
+
+  // The read-back trap, fixed 2026-09-01 after it reported FAILED on a tx that worked.
+  if (hasSetter && /probe/i.test(hasSetter)) {
+    ok("set_upkeep_caller.js read-back is a bounded probe — a single post-mine read is worthless on Base Sepolia (4 confirmations)");
+  } else {
+    fail("set_upkeep_caller.js has a single-read read-back — it WILL report FAILED on a good tx during an outage");
+  }
+
+  ok("NOTE: after EVERY deploy, run `ADDRESSES_FILE=<new> npx hardhat run scripts/set_upkeep_caller.js --network baseSepolia` BEFORE repointing /root/keeper/.env — otherwise the engine reverts on every tick the moment the keepers move.");
+}
+
 
 // ─────────────────────────────────────────────────────────────────────────────
 // 20. V8.48 item 38 — frontend ABI ↔ contract surface (the mechanical half of
