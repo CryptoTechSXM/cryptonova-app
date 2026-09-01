@@ -17,6 +17,9 @@ owner-set, and the session that earned it got five things wrong by ignoring what
 # ⛔ AND ITEM G IS SIZED HONESTLY AT LAST: it fixes **5.7%** of the park flow. The other
 # 94% is FUNDING, which is decision A and needs referrals, not code.
 # ✅✅ THE REDEPLOY IS DECIDED BY THE OWNER. Private **V8.51** gate chain is LIVE.
+# ✅✅ AND THEN, THE SAME DAY: **ITEM S AND ITEM G ARE BOTH PROVEN ON CHAIN**, item G now
+# emits `MemberGraduated`, and the SHIPPING bytecode was re-proven on a second gate chain.
+# **THE CONTRACTS ARE DONE. What is left is the community release.** (53.11-53.15)
 # ⛔ `rr_keeper.OFF` IS STILL ON — `rm /root/keeper/rr_keeper.OFF` TO RESUME STRESS.
 ## 53.0 ✅✅✅ **ITEM G/S's YIELD IS MEASURED BEFORE THE DEPLOY, AND 50.5's WARNING SURVIVES
 ##      AT FIVE TIMES THE SCALE.** `noseat_witness.js` (selftest 33/33 first), live V8.50,
@@ -216,6 +219,108 @@ owner-set, and the session that earned it got five things wrong by ignoring what
 ##         (52.11) · `stress_status.js` liveness fix · the crontab header lie · the stale
 ##         "copay/fastlane remain LIVE" note in `predeploy_check.js` (paused since 2026-08-29).
 ##      7. Measure the unrescuable population (53.3) once the new chain has traffic.
+
+## 53.11 ✅✅✅ **ITEM S IS PROVEN ON CHAIN, WITH EXACT ACCOUNTING.** Private gate chain
+##      `deployed_addresses_v8_51_private.json` (MATRIX_SIZE 15, USDC reused, 03:49Z).
+##      Phase 1, graduation OFF: `bigfill COUNT=40` → **7 `RescueOverflowed`, 7
+##      `MemberEntered` in T1.2 MatA, 7 occupants. Nothing unaccounted for.** Phase 2 after
+##      a second fill: **43 overflows.** `rescueReentry` found pair 0 full in BOTH halves and
+##      gave those members real seats instead of parking them.
+##      ✅✅ **AND 53.0's STRUCTURAL SPLIT REPLICATED ON A DIFFERENT CHAIN, SIZE AND
+##      POPULATION: T1.1 MatA `FUNDING 0 · NO-SEAT 1` · MatB `FUNDING 47 · NO-SEAT 0`.**
+##      That makes the MatA/MatB split a property of the DESIGN, not of the live chain's
+##      history. ⚠ Only 1 no-seat park — **not because it is fixed, but 49.2's INVERSION a
+##      third time: the MatB roots were BROKE, so the brake fired and arrivals kept their
+##      seats.** New externals still ALL enter pair 0 (T1.1 MatA `MemberEntered` 41→81 vs
+##      T1.2's 7), confirming 50.1's one-door finding. ⛔ **bigfill's "ACTIVE pair: T1.x" line
+##      is a COMPUTED LABEL, not an observation of routing — it says entries are going to a
+##      later pair when they are not. Do not read it as evidence.**
+## 53.12 ✅✅✅ **ITEM G IS PROVEN ON CHAIN.** Flag set (`graduationEnabled true`, read back),
+##      second fill: 40/40 registered, 84 cycles, W1 climbed T1→T2→T3, T1 spawned 5 pairs,
+##      **zero CycleOutFailed, zero new no-seat parks**, funding parks 11→47 and still
+##      MatB-only — **so G2's insolvent-root brake still fires and item G is not reaching
+##      paths it was never scoped to touch.**
+##      ⛔ **HOW IT WAS IDENTIFIED, AND THE METHOD MATTERS: BY TX-HASH CROSS-REFERENCE, NOT
+##      SUBTRACTION.** entries into pairs 2+ = 47 · in a `RescueOverflowed` tx = 43 · **NOT
+##      explained by item S = 4**, and those 4 appeared only after the flag was set. A
+##      remainder from a subtraction is not evidence, so all four were NAMED and two were
+##      opened event-by-event. **Both are textbook G1: MatB root cycles out → enters the NEXT
+##      pair's MatA → `TierRouter MemberReentered` → and the ARRIVING member (the tx sender)
+##      KEEPS ITS SEAT with no park.** One is W1 graduating to **pair 2, not pair 1**, because
+##      T1.2 MatA was already full — `graduationTargetFor` reuses item S's `_pairWithRoomFor`,
+##      so **room is CHECKED, not inferred**, which is exactly why 50.3 rejected the
+##      `occ + 1 >= size` proxy. That reasoning now holds on a real chain.
+## 53.13 ✅✅ **ITEM G NOW EMITS `MemberGraduated(member, fromPair, toPair)` — AND THE EMIT IS
+##      IN THE LINKED LIBRARY.** 50.4 shipped item G silent; item S was given
+##      `RescueOverflowed` deliberately on 49.1f's rule *"a silent routing change is one
+##      nobody can measure"*, and the cost was measured: item S took ONE log query, item G
+##      took a cross-reference plus reading a 104-log transaction by hand. **It was also the
+##      only cheap moment — after members re-register, a new event means another deploy and
+##      another re-registration ask.**
+##      - **`TierRouterLib.sameTierTarget` is deliberately NO LONGER `view`.** That costs no
+##        safety: its only external call, `graduationTargetFor`, is itself `view` in the
+##        interface, so solc still issues STATICCALL and the PairManager still cannot write
+##        during a routing decision. `TierRouter._sameTierTarget` drops `view` to match; its
+##        sole caller `_executeAdditive` already emits `MemberReentered` two lines below.
+##      - ✅ **MEASURED, NOT ASSUMED: `TierRouter` 24,345 → 24,345 (UNCHANGED, 231 spare) ·
+##        `TierRouterLib` 4,812 → 4,892 · `MatrixPairFactory` 24,544 and `MatrixLogicLib`
+##        24,281 both untouched.** The whole cost landed in the linked library, as intended.
+##      - ✅ Fires ONLY on a real divergence (`target != ownPair`); ordinary re-entry stays
+##        silent or the event becomes noise. **G1 asserts it fires exactly once and names the
+##        graduating ROOT; G2 asserts it stays SILENT on the insolvent path.** `EV` in the
+##        test file now declares it — 50.7 lost an entire investigation to an event missing
+##        from the parser's interface list. **Suite 665 passing / 7 pending / 0 failing.**
+## 53.14 ✅✅✅ **GATE CHAIN 2 — THE SHIPPING BYTECODE, PROVEN.**
+##      ⛔ **WHY: gate 1 proved item G on bytecode that no longer existed.** The event changed
+##      the contracts AFTER that proof. **STANDING RULE: a contract change after an on-chain
+##      proof invalidates the proof.** [stated] owner: *"ok with the private test and that
+##      route is always best."*
+##      `deployed_addresses_v8_51_gate2.json`, 21:09Z, size 15, USDC reused. `tierRouter
+##      0x0EbD8242991951fA5297A798e540528EbCCdd20b` · `tierRouterLib 0xA88F59D1…` ·
+##      `matrixKeeper 0xC4cCA11C…` · `stabilityFund 0x4fcD3904…` · T1 PM `0x828f6080…`
+##      MatA `0x91c28417…` MatB `0xAe306Cd1…`. ⛔ Named **gate2**, NOT "private2" —
+##      `deployed_addresses_v8_50_private2.json` is a different dead deploy and two files one
+##      character apart is how 49.1d lost a session.
+##      ✅ **CHEAP BYTECODE CHECK WORTH REUSING: `TierRouterLib` 4,892 bytes here vs 4,812 on
+##      gate 1 — the 80-byte delta IS the event**, proof the new code shipped before running
+##      anything.
+##      ✅✅✅ **THE CROSS-CHECK PASSED ON THE SAME TRANSACTION, NOT JUST THE SAME COUNT.**
+##      elimination → **1**, tx `0x638ff390…` · `MemberGraduated` → **1**, W1 `0x6512e9B5…`
+##      `pair 0 -> pair 1`, blk 46224000, tx `0x638ff390…`. Item S fired 7× alongside.
+##      **Two independent methods, identical event, on the exact bytecode we would ship.**
+##      ✅ **AND THE FIXED READ-BACK PROVED ITSELF ON FIRST USE:** `probe 1: reads false,
+##      want true`, settled on probe 2 — **direct confirmation that the earlier "THE FLAG DID
+##      NOT CHANGE" was RPC staleness, not a contract fault.** ⚠ **ON THIS CHAIN, NEVER JUDGE
+##      A WRITE BY ONE READ TAKEN IMMEDIATELY AFTER MINING.**
+## 53.15 ▶▶ **THE CONTRACTS ARE DONE. WHAT IS OPEN IS THE COMMUNITY RELEASE — a different
+##      kind of work, because it spends the re-registration ask rather than testnet gas.**
+##      1. `predeploy_check.js` **re-run** (it was 149/149, but `deploy_v8.js` changed since).
+##      2. **Community V8.51 deploy at `MATRIX_SIZE=127`**, reusing USDC
+##         (`0x2D8B7b5eDec96bE441b6fb0D45D74a2BcE2C639a` — members keep their balances and
+##         re-registration becomes approve-and-register), from a **BRAND-NEW PowerShell**.
+##      3. ⛔⛔ **VERIFY EVERY CONTRACT ON BASESCAN BEFORE ANY MEMBER IS POINTED AT IT.**
+##      4. `setGraduationEnabled(true)` **before members arrive**, not after.
+##      5. Announce (08-08 advance-notice promise; owner's voice + emoji, read
+##         [[community-comms]] first) → `update_addrs` incl. `api/telegram-qa.js` → 3-stage
+##         ladder with the timed gate → members re-register.
+##      6. **`rm /root/keeper/rr_keeper.OFF`** · then job A cursor rewind (NOT `pool_primer`),
+##         `stress_status.js` liveness, the crontab header lie, the stale copay/fastlane note
+##         in `predeploy_check.js`.
+##      7. Blockaid: send the new verified address table unprompted. Do not re-send anything.
+##      ⛔ **WHAT THE ANNOUNCEMENT MUST NOT PROMISE:** this fixes SEATING (152 no-seat parks
+##      /24h on live, 100% of all MatA parks, plus advances that bought nothing) and opens
+##      ~1,676 idle seats. **It does NOT reduce parking** — 94% of parks are FUNDING parks,
+##      which is decision A and needs referrals (~3 invitees/cycle). And **item G is flagged,
+##      item S is NOT** — "deploying changes nothing until we flip the switch" is true of G
+##      and false of S.
+##      ✅ **CASH-OUT LINE IS SAFE TO GIVE WITH THE PENALTY STATED:** floor `$0.0149`/CNOVA,
+##      reserve `$32,557.5697` and the contract holds exactly that (no drift), whole supply
+##      redeems for `$32,557.04` — **fully backed, so do NOT say first-come-first-served.**
+##      ⛔ Every member is inside the 0-30 day band so the early-exit penalty is **45%**; the
+##      site already shows it in a two-step approve→redeem panel. Frame it honestly: **USDC
+##      carries over to V8.51 and CNOVA does not, so cashing out converts a token that becomes
+##      worthless into the currency that pays re-registration — 55% of something vs 100% of
+##      nothing.** ▶ Do NOT soften the penalty ladder; it is the anti-dump mechanism.
 
 ---
 
