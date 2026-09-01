@@ -155,6 +155,22 @@ owner-set, and the session that earned it got five things wrong by ignoring what
 ##      - ⚠ **PowerShell `>` WRITES UTF-16 AND MANGLES EM-DASHES** (`ΓÇö`). Use
 ##        `| Out-File -Encoding utf8` for any capture meant to be committed.
 ## 56.6 ▶▶ **WHAT IS OPEN, IN ORDER.**
+##      0. ⛔⛔⛔ **UNVERIFIED, AND FIRST BECAUSE IT IS A POSSIBLE PUBLIC DISCLOSURE:
+##         THE CONTRACTS REPO AUTO-DEPLOYS TO TWO VERCEL PROJECTS — `cryptonova-app` AND
+##         `cryptonova-mainnet` — ON EVERY `v8.1` PUSH.** Seen on the Vercel dashboard: the
+##         pure-markdown handoff commits `1c11a4f` and `1b87db5` each triggered builds of
+##         both. The repo has **no `vercel.json` and no `public/`**, but does have
+##         `dashboard.html` and `v849_watch.html` at its root.
+##         ▶ **IF THE PROJECT SERVES THE REPO ROOT STATICALLY, THEN `V8_50_HANDOFF.md`
+##         (1.18 MB of internal findings, addresses and defect history),
+##         `v851_deploy_transcript.txt` and `scripts/` MAY BE PUBLICLY FETCHABLE.**
+##         ⚠ **NOT MEASURED — those projects may sit behind Vercel deployment protection,
+##         exactly as `admin.crypto-nova.app` does (55.9). DO NOT PANIC AND DO NOT ASSUME
+##         EITHER WAY. Open a deployment URL and request `/V8_50_HANDOFF.md`.**
+##         ▶ If it IS reachable: set a Root Directory / ignore-build step, or add deployment
+##         protection, before mainnet. **`cryptonova-mainnet` is the project that will carry
+##         REAL value, and 55.3 already warns that mainnet must not meet members before
+##         Blockaid sees it — a public internal-docs mirror is the same class of mistake.**
 ##      1. **PUSH THE FRONTEND FIX** — `index.html` + `api/log-error.js` ONLY, 3-stage ladder
 ##         (`LAUNCH_RUNBOOK.md:62-84`). **NEVER `git add -A` here (1,171 CRLF phantoms).**
 ##         Then send `community_reply_2026-09-01_cryptojan22_rpc.txt` — **after the push, per
