@@ -1504,9 +1504,16 @@ sep("V8.48 item 12 — split grace (self-funded vs loan)");
   } else {
     fail("MatrixKeeper.sol: selfFundedGracePeriod is not enumerated — a long value silently turns it back into a second loan window");
   }
-  // The keepers stay ON as backup (owner decision 2026-08-11). Flag if that changes
-  // without the on-chain path having been observed to agree.
-  ok("NOTE: fastlane_rescue.js + copay_rescue.js remain LIVE as backup by owner decision — retire only after on-chain discovery is observed doing the same work");
+  // ⛔ STATE NOTE, NOT A CHECK. This script reads the working tree; it cannot see the
+  // VPS crontab, so it must not assert live fleet state. It used to say both keepers
+  // "remain LIVE as backup (owner decision 2026-08-11)" — and that became FALSE on
+  // 2026-08-29 without this line changing, which is exactly the crontab-header failure
+  // shape: a false statement about live state sitting in a reference the operator trusts.
+  // LAST MEASURED 2026-08-30 (owner ran `crontab -l`): copay_rescue.js and
+  // fastlane_rescue.js are BOTH commented out as `#PAUSED20260829`. Consequence worth
+  // knowing before reading any rescue figure: the only rescue path still open to an
+  // organic parked member is direct_keeper's work queue, which BOOKS A LOAN.
+  ok("NOTE (fleet state, NOT verifiable from this script): copay_rescue.js + fastlane_rescue.js were both #PAUSED20260829 on the VPS as of 2026-08-30 — direct_keeper's work queue is the only remaining rescue path, and it books a loan. Re-read `crontab -l` before trusting this line; do not cite it as evidence.");
 }
 
 
@@ -1547,6 +1554,188 @@ sep("V8.48 items 7+13 — treasury member tracker wiring");
   } else {
     fail("deploy_v8.js: setMemberTracker NOT called — earlyExitPenaltyBps returns 0 and setFreeMode reverts, the exact pre-V8.48 state");
   }
+}
+
+
+// ─────────────────────────────────────────────────────────────────────────────
+// V8.51 — ITEM S (rescue overflow) and ITEM G (graduation). THE RELEASE PAYLOAD.
+// ─────────────────────────────────────────────────────────────────────────────
+// ⛔⛔ WHY THIS SECTION EXISTS. Session 53 re-ran this gate before the community
+// deploy and it returned 149/149 — while checking NOT ONE THING that V8.51 adds.
+// Every check above validates V8.48-era wiring. The two changes this entire
+// release exists to ship were invisible to it, so "safe to deploy" was a
+// statement about the previous release. That is 53.1's lesson generalised: a
+// green that does not cover the change is not evidence about the change.
+//
+// ⛔⛔ AND THE ASYMMETRY THAT MAKES IT URGENT: ITEM G IS FLAGGED, ITEM S IS NOT.
+// `graduationEnabled` ships FALSE, so item G is inert until it is switched on.
+// `rescueReentry`'s `_bothHalvesFull` branch has NO flag and changes rescue
+// routing THE INSTANT THE CONTRACTS ARE DEPLOYED. "Deploying changes nothing
+// until we flip the switch" is TRUE of G and FALSE of S (handoff 53.2).
+//
+// ✅✅ NON-VACUITY PROVEN BY MUTATION, 2026-09-01 — because a gate that only ever
+// says PASS is the `stress_status.js` "VERDICT: ALIVE" failure in a new costume.
+// Six deliberate defects were injected one at a time and the gate re-run; EVERY
+// one went red, and each produced EXACTLY ONE failure (no collateral):
+//   1. graduationEnabled stops reaching TierRouterLib.sameTierTarget  -> RED
+//   2. the MemberGraduated emit loses its `target != ownPair` guard   -> RED
+//   3. graduationTargetFor returns _freePairFor (room inferred)       -> RED
+//   4. deploy_v8.js calls setGraduationEnabled(true)                  -> RED
+//   5. item S's `emit RescueOverflowed` commented out                 -> RED
+//   6. item S's `_bothHalvesFull` branch removed entirely             -> RED
+// ⚠ TWO METHOD TRAPS, BOTH HIT, BOTH WORTH KEEPING FOR WHOEVER REPEATS THIS:
+//   (a) `git checkout -- <file>` CANNOT restore a file in the Cowork device shell —
+//       it unlinks before rewriting and unlink is refused, so it left a MUTATED
+//       contract on disk. Restore by REWRITING the original bytes in place.
+//   (b) Running the gate from a python subprocess immediately after a python write
+//       read STALE file contents and every mutation came back falsely green. Run
+//       the gate from the shell, as its own process, after the write.
+sep("V8.51 item S — rescue overflow (UNFLAGGED: live the moment we deploy)");
+{
+  // ⛔ STRIPPED. My first version of this section tested the RAW text and the
+  // graduationTargetFor check went RED on a real, correct contract — it matched the
+  // comment block explaining why _bothHalvesFull was ABANDONED. A gate that reads
+  // prose as if it were code is worse than no gate: it cries wolf on the exact
+  // tombstone comment that documents the fix. That is what stripComments() is for.
+  const pmS = stripComments(read("contracts/PairManagerV8.sol"));
+
+  if (pmS && /event RescueOverflowed\(address indexed member, uint256 indexed fromPair, uint256 indexed toPair\);/.test(pmS)) {
+    ok("PairManagerV8.sol: event RescueOverflowed(member, fromPair, toPair) declared");
+  } else {
+    fail("PairManagerV8.sol: RescueOverflowed is MISSING or its signature changed — item S becomes a silent routing change, which is exactly what 49.1f forbade");
+  }
+
+  // The branch itself. Item S is reachable ONLY when both halves are full; that
+  // condition is what keeps V8.48 item 10's MatB loop closed for every other pair.
+  if (pmS && /\}\s*else if \(_bothHalvesFull\(p\)\) \{/.test(pmS)) {
+    ok("PairManagerV8.sol: rescueReentry has the _bothHalvesFull escape-hatch branch (item S)");
+  } else {
+    fail("PairManagerV8.sol: the _bothHalvesFull branch in rescueReentry is GONE — a saturated pair goes back to parking every arrival (the 152 no-seat parks/24h measured on live V8.50)");
+  }
+
+  if (pmS && /emit RescueOverflowed\(member, fromPairIndex, alt\);/.test(pmS)) {
+    ok("PairManagerV8.sol: the overflow branch EMITS RescueOverflowed — the route stays measurable in one log query");
+  } else {
+    fail("PairManagerV8.sol: the overflow branch no longer emits RescueOverflowed — item S would still route, but nobody could count it");
+  }
+
+  // Room is CHECKED, and if nothing has room the branch force-expands and asks
+  // AGAIN before giving up. Without the re-ask, a full standby pair silently
+  // sends the member back to the park they were being rescued from.
+  if (pmS && /_pairWithRoomFor\(member, fromPairIndex\)[\s\S]{0,400}?_forceExpand\(\);[\s\S]{0,200}?_pairWithRoomFor\(member, fromPairIndex\)/.test(pmS)) {
+    ok("PairManagerV8.sol: item S checks room, force-expands, then RE-CHECKS before falling through");
+  } else {
+    fail("PairManagerV8.sol: item S's force-expand-then-recheck sequence is broken — a saturated standby pair silently re-parks the member");
+  }
+
+  // ⛔ Item S must never acquire item G's flag by accident. If a future session
+  // "tidies up" by gating both on graduationEnabled, item S goes dark on every
+  // deploy and the release quietly ships half of itself.
+  if (pmS && /graduationEnabled/.test(pmS)) {
+    fail("PairManagerV8.sol references graduationEnabled — item S must stay UNFLAGGED; coupling it to item G's switch would make it inert on deploy");
+  } else {
+    ok("PairManagerV8.sol: item S is not gated on graduationEnabled (correct — it is deliberately unflagged)");
+  }
+  ok("NOTE: item S has NO FLAG. It is ACTIVE from the first block after deploy. Do not tell anyone the deploy is inert until the switch is flipped — that is true of item G only.");
+}
+
+sep("V8.51 item G — graduation (FLAGGED, ships FALSE)");
+{
+  // Comments stripped — see the note in the item S block above. It matters most for
+  // the two ABSENCE checks below (graduationEnabled in PairManagerV8, and
+  // setGraduationEnabled in deploy_v8.js): a future comment merely NAMING either one
+  // would otherwise fail the gate while the code was perfectly correct.
+  const trG   = stripComments(read("contracts/TierRouter.sol"));
+  const trlG  = stripComments(read("contracts/TierRouterLib.sol"));
+  const pmG   = stripComments(read("contracts/PairManagerV8.sol"));
+  const depG  = stripComments(read("scripts/deploy_v8.js"));
+
+  // Ships FALSE: declared with no initializer. A `= true` here would put every
+  // re-registering member straight onto an unproven routing rule.
+  if (trG && /bool\s+public\s+graduationEnabled;/.test(trG) && !/bool\s+public\s+graduationEnabled\s*=/.test(trG)) {
+    ok("TierRouter.sol: graduationEnabled declared with NO initializer — it ships FALSE");
+  } else {
+    fail("TierRouter.sol: graduationEnabled is missing or pre-initialised — item G must ship OFF and be switched on deliberately");
+  }
+
+  if (trG && /function setGraduationEnabled\(bool enabled\) external onlyOwnerOrGovernance/.test(trG)) {
+    ok("TierRouter.sol: setGraduationEnabled() present and onlyOwnerOrGovernance (DAO-tunable by design)");
+  } else {
+    fail("TierRouter.sol: setGraduationEnabled() missing or its access modifier changed — the flag could not be turned on after deploy");
+  }
+
+  // ⛔ THE ITEM-12 FAILURE SHAPE: a field that exists, has a setter, and never
+  // reaches the code that reads it. The flag must be PASSED to the library.
+  if (trG && /TierRouterLib\.sameTierTarget\([\s\S]{0,200}?graduationEnabled/.test(trG)) {
+    ok("TierRouter.sol: _sameTierTarget PASSES graduationEnabled into TierRouterLib.sameTierTarget — the flag reaches the code that reads it");
+  } else {
+    fail("TierRouter.sol: graduationEnabled does not reach TierRouterLib.sameTierTarget — the flag would exist, set cleanly, and do nothing (the V8.48 item 12 failure shape)");
+  }
+
+  if (trlG && /event MemberGraduated\(address indexed member, uint256 indexed fromPair, uint256 indexed toPair\);/.test(trlG)) {
+    ok("TierRouterLib.sol: event MemberGraduated(member, fromPair, toPair) declared (V8.51)");
+  } else {
+    fail("TierRouterLib.sol: MemberGraduated is MISSING — item G goes back to being unmeasurable, and 53.13 records that this is the only cheap moment to have it");
+  }
+
+  // Fires ONLY on a real divergence. Equality is ordinary re-entry; emitting
+  // there would bury the graduations in noise and the event stops meaning anything.
+  if (trlG && /if \(target != ownPair\) emit MemberGraduated\(member, ownPair, target\);/.test(trlG)) {
+    ok("TierRouterLib.sol: MemberGraduated fires only on a REAL divergence (target != ownPair) — ordinary re-entry stays silent");
+  } else {
+    fail("TierRouterLib.sol: the MemberGraduated emit is not gated on target != ownPair — every ordinary re-entry would log a graduation");
+  }
+
+  // graduationTargetFor: the gate is crossingInProgress, NOT _bothHalvesFull.
+  // Session 50 measured the _bothHalvesFull version firing ZERO times, because
+  // _cycleOutRoot has already decremented BOTH halves by the time it is asked.
+  // Bounded window so this reads the function and not the whole file.
+  // ⛔⛔ THE WINDOW IS BOUNDED BY STRUCTURE, NOT BY A CHARACTER COUNT, AND THAT IS
+  // NOT A STYLE CHOICE. The first version sliced a flat 2500 chars from the function
+  // name. That was correct against the RAW file and became WRONG the moment comments
+  // were stripped: the same 2500 chars then reached past graduationTargetFor and into
+  // rescueReentry, whose item S branch contains a genuine `_bothHalvesFull(p)` call —
+  // so the gate reported "graduationTargetFor gates on _bothHalvesFull" about a
+  // contract where it does no such thing. A fixed-size window silently changes what it
+  // covers whenever the text around it changes. Bound it at the next function instead,
+  // and refuse to guess if that boundary cannot be found.
+  const gtIdx = pmG ? pmG.indexOf("function graduationTargetFor") : -1;
+  const gtEnd = gtIdx >= 0 ? pmG.indexOf("\n    function ", gtIdx + 1) : -1;
+  const gtBody = (gtIdx >= 0 && gtEnd > gtIdx) ? pmG.slice(gtIdx, gtEnd) : "";
+  if (gtIdx >= 0 && gtEnd <= gtIdx) {
+    fail("predeploy_check: could not find the END of graduationTargetFor (no following `function` at that indent) — the checks below would read an unbounded window, so they are not run. Re-read PairManagerV8.sol.");
+  }
+  if (gtBody && /crossingInProgress\(\)/.test(gtBody) && !/_bothHalvesFull/.test(gtBody)) {
+    ok("PairManagerV8.sol: graduationTargetFor gates on crossingInProgress, NOT _bothHalvesFull (the version that measured zero fires in session 50)");
+  } else if (gtBody && /_bothHalvesFull/.test(gtBody)) {
+    fail("PairManagerV8.sol: graduationTargetFor gates on _bothHalvesFull — MEASURED to never fire once (session 50 G1: trace byte-identical to the no-graduation baseline). Saturation is not observable at the moment the routing decision is made.");
+  } else {
+    fail("PairManagerV8.sol: graduationTargetFor not found or its gate is unrecognised — re-read it before trusting this check");
+  }
+
+  if (gtBody && /return _pairWithRoomFor\(member, fromPairIndex\);/.test(gtBody)) {
+    ok("PairManagerV8.sol: graduationTargetFor returns _pairWithRoomFor — room is CHECKED, not inferred (50.3 rejected the occ+1>=size proxy)");
+  } else {
+    fail("PairManagerV8.sol: graduationTargetFor no longer routes through _pairWithRoomFor — graduating into a second FULL pair moves the defect one pair along instead of fixing it");
+  }
+
+  // The emit lives in the LINKED library, so an unlinked or stale TierRouterLib
+  // means no event and no graduation, with TierRouter looking perfectly healthy.
+  if (depG && /getContractFactory\("TierRouterLib"/.test(depG) &&
+      /libraries:\s*\{\s*TierRouterLib:\s*trLibAddr\s*\}/.test(depG)) {
+    ok("deploy_v8.js: TierRouterLib is deployed AND linked into TierRouter (item G's routing and its event both live in that library)");
+  } else {
+    fail("deploy_v8.js: TierRouterLib deploy/link wiring not found — item G's code and its event are in the linked library, so an unlinked router silently loses both");
+  }
+
+  // Deliberate: the flag is set as a separate, witnessed transaction AFTER
+  // BaseScan verification and BEFORE members arrive (release sequence step 4).
+  if (depG && /setGraduationEnabled/.test(depG)) {
+    fail("deploy_v8.js calls setGraduationEnabled — item G must ship OFF and be switched on as a separate, verified transaction (scripts/set_graduation.js), not buried in a 40-tx deploy run");
+  } else {
+    ok("deploy_v8.js does NOT call setGraduationEnabled — the flag ships FALSE by design");
+  }
+  ok("NOTE: because the flag ships FALSE, `scripts/set_graduation.js` MUST be run BEFORE members re-register (release sequence step 4) — otherwise they register onto the seat theft this release exists to fix.");
 }
 
 

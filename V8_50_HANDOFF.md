@@ -129,8 +129,10 @@ owner-set, and the session that earned it got five things wrong by ignoring what
 ##        address table unprompted when the redeploy lands. Do not re-send anything.**
 ##      ⛔⛔ **NAMING: LIVE AND PENDING WERE BOTH "V8.50"** — live `deployed_addresses_v8_50.json`
 ##      (2026-08-26) has NEITHER item G NOR S. **The new one is V8.51.** This shape already
-##      cost a session (49.1d). ⚠ **`deploy_v8.js` still PRINTS a hardcoded "V8.50 Deploy"
-##      banner — fix it before the community deploy or the run log lies about the release.**
+##      cost a session (49.1d). ✅ **DONE in `ba1739d` — the banner is no longer hardcoded.**
+##      `deploy_v8.js` now parses the release out of `ADDRESSES_FILE` (`/v(\d+)_(\d+)/`) and
+##      prints `V8.51 Deploy` when the target file says so. **A banner that cannot drift is
+##      one less way to make the 49.1d mistake.** Nothing left to do here.
 ## 53.5 ✅ **THE CASH-OUT LINE IS MEASURED BEFORE IT IS PROMISED.** NEW instrument
 ##      `scripts/diag_cashout_gate.js` (READ-ONLY; static-calls `redeemAtFloor` AS each member
 ##      so a revert reason is the answer). Live V8.50: **floor $0.0149/CNOVA · `usdcReserve`
@@ -206,7 +208,7 @@ owner-set, and the session that earned it got five things wrong by ignoring what
 ##      1. **THE A/B ON THE PRIVATE CHAIN (53.7).** Phase 1 then phase 2. This is the whole
 ##         point of the gate chain and nothing downstream should start before it.
 ##      2. **Community V8.51 deploy** at `MATRIX_SIZE=127`, reusing USDC, from a BRAND-NEW
-##         PowerShell window. Fix the "V8.50 Deploy" banner first (53.4).
+##         PowerShell window. ✅ The "V8.50 Deploy" banner was already fixed in `ba1739d`.
 ##      3. ⛔⛔ **VERIFY EVERY CONTRACT ON BASESCAN BEFORE ANY MEMBER IS POINTED AT IT.** The
 ##         unverified window triggered Blockaid on 2026-07-30 AND 2026-08-26. A third time
 ##         would be entirely our own doing.
