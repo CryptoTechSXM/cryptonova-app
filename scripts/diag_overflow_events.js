@@ -38,7 +38,12 @@ const PM_ABI = [
   "function getPairAt(uint256) view returns (address,address)",
   "event RescueOverflowed(address indexed member, uint256 indexed fromPair, uint256 indexed toPair)",
 ];
-const TR_ABI = ["function graduationEnabled() view returns (bool)"];
+const TR_ABI = [
+  "function graduationEnabled() view returns (bool)",
+  // V8.51: item G finally has an event. Emitted by TierRouterLib via delegatecall, so it
+  // arrives with TierRouter's address even though TierRouter's own ABI does not declare it.
+  "event MemberGraduated(address indexed member, uint256 indexed fromPair, uint256 indexed toPair)",
+];
 const MAT_ABI = [
   "function occupancy() view returns (uint256)",
   "function rotationCount() view returns (uint256)",
@@ -93,6 +98,7 @@ async function main() {
   const T_ENTER = matIface.getEvent("MemberEntered").topicHash;
 
   let grand = 0, anyFail = false;
+  let grandUnexplained = null;   // set per tier below; null means never computed
 
   for (const tk of Object.keys(A.tiers || {})) {
     if (TIER_ONLY && tk.toUpperCase() !== TIER_ONLY) continue;
@@ -154,6 +160,7 @@ async function main() {
     console.log(`   entries into pairs 2+            : ${laterEntries}`);
     console.log(`   of those, in a RescueOverflowed tx: ${laterEntries - unexplained.length}   (ITEM S)`);
     console.log(`   NOT explained by item S           : ${unexplained.length}`);
+    grandUnexplained = (grandUnexplained || 0) + unexplained.length;
     if (unexplained.length === 0) {
       console.log("   ⛔ ZERO. Every entry into a later pair is item S. On this evidence ITEM G HAS NOT");
       console.log("      FIRED — do not describe it as proven on chain, however green the fixtures are.");
@@ -165,6 +172,46 @@ async function main() {
         console.log(`     ${u.label.padEnd(12)} ${u.who}  blk ${u.blk}  tx ${u.tx}`);
       }
       if (unexplained.length > 20) console.log(`     … and ${unexplained.length - 20} more`);
+    }
+  }
+
+  // ── THE CROSS-CHECK. Two independent methods must agree. ───────────────────
+  // Before V8.51 item G had no event, so a graduation could only be found by ELIMINATION:
+  // an entry into a later pair whose tx carries no RescueOverflowed. Now it emits
+  // MemberGraduated, so the same quantity is directly observable. Running BOTH and
+  // comparing is the point: the event is new code, and new code that agrees with an
+  // independent method is trustworthy in a way that either one alone is not.
+  // ⛔ If they disagree, DO NOT prefer the event because it is newer and easier to read.
+  // A disagreement IS the finding — measure it, do not explain it.
+  const trIface = new ethers.Interface(TR_ABI);
+  const T_GRAD = trIface.getEvent("MemberGraduated").topicHash;
+  const g = await scanTopic(p, A.tierRouter, T_GRAD, from, head, CHUNK);
+  console.log("\n── ITEM G's OWN EVENT (V8.51+) ──");
+  if (!g.ok) {
+    console.log(`   ⛔ MemberGraduated SCAN FAILED: ${g.why} — NOT reported as zero`);
+    anyFail = true;
+  } else {
+    console.log(`   MemberGraduated events on TierRouter ${A.tierRouter}: ${g.logs.length}`);
+    for (const lg of g.logs.slice(0, 12)) {
+      const d = trIface.parseLog({ topics: [...lg.topics], data: lg.data });
+      console.log(`     ${d.args.member}  pair ${d.args.fromPair} -> pair ${d.args.toPair}   blk ${lg.blockNumber}  tx ${lg.transactionHash.slice(0, 18)}…`);
+    }
+    if (g.logs.length > 12) console.log(`     … and ${g.logs.length - 12} more`);
+    if (g.logs.length === 0) {
+      console.log("   ⚠ ZERO — either item G never fired, or this deployment predates the event");
+      console.log("     (the V8.51 gate chain deployed 2026-08-31 03:49Z has NO MemberGraduated in its");
+      console.log("      bytecode). Check which before concluding anything.");
+    } else if (grandUnexplained !== null) {
+      console.log(`\n   CROSS-CHECK  event count ${g.logs.length}  vs  unexplained-by-item-S ${grandUnexplained}`);
+      if (g.logs.length === grandUnexplained) {
+        console.log("   ✅ TWO INDEPENDENT METHODS AGREE. The event reports exactly the entries that");
+        console.log("      elimination attributes to graduation. Either one alone could be wrong; both");
+        console.log("      agreeing is what makes this trustworthy.");
+      } else {
+        console.log("   ⛔⛔ THEY DISAGREE. That IS the finding — do not explain it, measure it. Open the");
+        console.log("      difference with scripts/diag_tx_events.js before believing either number, and");
+        console.log("      do NOT prefer the event just because it is newer and easier to read.");
+      }
     }
   }
 

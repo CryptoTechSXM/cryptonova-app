@@ -458,7 +458,14 @@ async function main() {
   const admin            = process.env.ADMIN_WALLET_ADDRESS      || deployerAddr;
   const liquidityReserve = process.env.LIQUIDITY_RESERVE_ADDRESS || opsWallet;
 
-  console.log("\n  V8.50 Deploy — FIFO pair routing (external->pair 0, graduates->pairIndex+1)");
+  // ⛔ THE RELEASE NAME IS READ FROM ADDRESSES_FILE, NOT HARDCODED — fixed 2026-08-31.
+  // It said "V8.50 Deploy" while deploying V8.51, so the run log named the wrong release.
+  // That matters more than it looks: the LIVE community chain and the pending release were
+  // BOTH called V8.50 for a while, and a wrong-deploy mix-up has already cost a session
+  // (49.1d). A banner that cannot drift is one less way to make that mistake.
+  const RELEASE = (String(process.env.ADDRESSES_FILE || "").match(/v(\d+)_(\d+)/i) || [])
+    .slice(1, 3).join(".") || "?";
+  console.log(`\n  V${RELEASE} Deploy — FIFO pair routing (external->pair 0, graduates->pairIndex+1)`);
   // 29.7: the old line here told the reader to set ADDRESSES_FILE in .env and named
   // v8_47. Both are wrong now — 28.2(b) requires the SESSION variable and .env left
   // alone for a private deploy, and the overwrite guard above enforces it.
@@ -1078,7 +1085,7 @@ async function main() {
   }
   sep();
   console.log(`  Addresses file: ${require("path").basename(ADDRESSES_FILE)}`);
-  console.log("  V8.50 Deploy complete.\n");
+  console.log(`  V${RELEASE} Deploy complete.\n`);
   console.log("  NEXT STEP: run scripts/seed_w1.js then scripts/bigfill_v8.js\n");
   sep();
 }
