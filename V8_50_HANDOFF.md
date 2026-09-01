@@ -10,7 +10,174 @@ owner-set, and the session that earned it got five things wrong by ignoring what
 
 ---
 
-# ⬛ SESSION 53 STATE — 2026-08-31. LATEST. READ THIS FIRST.
+# ⬛ SESSION 54 STATE — 2026-09-01. LATEST. READ THIS FIRST.
+# (Continues session 53 directly — same work, new session. 53.x is still correct except
+#  where marked below.)
+# ✅✅✅ THE HEADLINE: **V8.51 IS DEPLOYED TO THE COMMUNITY CHAIN, ALL 46 CONTRACTS ARE
+# VERIFIED ON BASESCAN, AND ITEM G IS ON.** 1h25m run, ZERO nonce errors, 1 transport retry.
+# ⛔⛔ AND THE OTHER HEADLINE: **NOBODY IS ON IT.** Frontend untouched (`2664eae`), keepers
+# still read V8.50, members still on the live chain and still being rescued. **Everything
+# that remains is member-facing** — announcement, addresses, frontend ladder, re-registration.
+# ⛔ **`rr_keeper.OFF` IS STILL ON.** It now stops `system_keeper` too, so the Telegram
+# health report is DARK until `rm /root/keeper/rr_keeper.OFF`. `direct_keeper` still runs.
+## 54.0 ⛔⛔⛔ **THE PRE-DEPLOY GATE WAS GREEN ABOUT THE WRONG RELEASE.** 53.15 item 1 asked
+##      for a re-run of `predeploy_check.js`; it returned **149/149 PASSED**. Then a grep for
+##      `graduat|RescueOverflowed|_bothHalvesFull|rescueReentry|sameTierTarget` across the
+##      whole gate returned **ONE incidental line.** All 149 checks validate V8.48-era
+##      wiring. **"Safe to deploy" was a statement about the PREVIOUS release.**
+##      ▶▶ **STANDING RULE EARNED: WHEN A RELEASE ADDS BEHAVIOUR, THE PRE-DEPLOY GATE MUST
+##      GAIN CHECKS IN THE SAME COMMIT, OR ITS GREEN IS ABOUT THE OLD CODE.** This is 53.1's
+##      lesson one level up — a per-suite green is not a suite green; a green that does not
+##      cover the change is not evidence about the change.
+##      ✅ **FIXED: a V8.51 section, 16 checks, 149 → 165, count ties exactly.**
+##      **Item S (6):** `RescueOverflowed` declared · the `_bothHalvesFull` branch exists in
+##      `rescueReentry` · it emits · it force-expands and **RE-CHECKS** before falling
+##      through · **FAILS if `graduationEnabled` ever appears in `PairManagerV8.sol`** (item S
+##      must never inherit item G's switch, or it goes dark on deploy) · a loud NOTE that
+##      item S is live from block 1.
+##      **Item G (10):** flag declared with **no initializer** (ships FALSE) · setter present
+##      and `onlyOwnerOrGovernance` · **the flag actually REACHES `TierRouterLib.sameTierTarget`**
+##      (the V8.48 item-12 shape: a field that exists, sets cleanly and does nothing) ·
+##      `MemberGraduated` declared · emit gated on `target != ownPair` · `graduationTargetFor`
+##      gates on **`crossingInProgress`, NOT `_bothHalvesFull`** · returns `_pairWithRoomFor`
+##      (room CHECKED not inferred) · `TierRouterLib` deployed AND linked in `deploy_v8.js` ·
+##      **FAILS if `deploy_v8.js` calls `setGraduationEnabled`** · a NOTE that step 4 is
+##      therefore mandatory and manual.
+##      ✅✅✅ **NON-VACUITY PROVEN BY MUTATION — 6 INJECTED DEFECTS, 6 REDS, EXACTLY ONE
+##      FAILURE EACH.** A gate that only ever says PASS is `stress_status.js`'s *"VERDICT:
+##      ALIVE"* in a new costume, so it was proven rather than asserted.
+##      ⛔⛔ **MY OWN CHECK WENT RED ON A CORRECT CONTRACT TWICE, AND BOTH CAUSES ARE REUSABLE:**
+##      (1) it tested the RAW file and matched **the comment explaining why `_bothHalvesFull`
+##      was ABANDONED** — the gate read prose as code and cried wolf on the tombstone that
+##      documents the fix. `predeploy_check.js` already has `stripComments()` for this.
+##      (2) after stripping, a **fixed 2,500-char window** sliced from the function name
+##      reached PAST `graduationTargetFor` into `rescueReentry`, which holds a genuine
+##      `_bothHalvesFull(p)` call. ▶ **A fixed-size window silently changes what it covers
+##      whenever the surrounding text changes. Bound windows by STRUCTURE and FAIL LOUDLY if
+##      the boundary is not found.**
+##      ⚠ Also fixed: `predeploy_check.js:1509` asserted *"fastlane_rescue.js + copay_rescue.js
+##      remain LIVE"* — **FALSE since 2026-08-29** (`#PAUSED20260829`), the crontab-header
+##      failure shape sitting in the operator's own gate. And 53.4/53.10's instruction to fix
+##      the `"V8.50 Deploy"` banner was **already done in `ba1739d`**; both sites now say so.
+## 54.1 ⛔⛔⛔ **`system_keeper` HAD A FAIL-OPEN THAT SENDS A DEPLOYER TX ON A DROPPED RPC READ.**
+##      **[stated] OWNER: A FULL 127-SEAT DEPLOY TAKES 1h15–1h30.** That single fact **kills
+##      53.8's mitigation** — `system_keeper` runs `11-59/30` (**:11 and :41**), so a 75–90
+##      minute deploy contains **~3 ticks.** *"Deploy in the gap between its ticks"* was
+##      impossible; there is no gap.
+##      ✅ **FLEET AUDIT FROM SOURCE: it is the ONLY unguarded deployer-signing cron job.**
+##      `direct_keeper` → `KEEPER_PRIVATE_KEY`, `onramp_keeper` → `DISTRIBUTOR_PRIVATE_KEY`,
+##      and `dupe_watch`/`growth_snapshot`/`monitor_v8`/`channel_pulse`/`integrity_check`/
+##      `sf_invariant_check` construct **no wallet at all**. The three stress jobs are all
+##      `rr_keeper.js`, already covered.
+##      ⛔⛔ **Its cron line passes NO env flags. `AUTO_RESCUE`/`SF_AUTOFUND`/`W1_WITHDRAW`
+##      default false — but `T2_AUTO_GATE` is `!== 'false'`, so UNSET MEANS ON**, and it sends
+##      `setTierVelocityGreen(1,true)` from the deployer. ⚠ **The file's own header says all
+##      actions are "OFF by default". That comment is FALSE.**
+##      ⛔⛔⛔ **THE DEFECT: `safeCall(() => tr.getVelocityGates(), Array(10).fill(false))`.**
+##      `safeCall` swallows the error and returns the fallback, so an **UNREADABLE** gate came
+##      back as a well-formed array of **all-closed** gates — **indistinguishable from a real
+##      reading**, uncatchable by `Array.isArray()`. `needsOpenT2Gate` is `!t2GateOpen`, so **A
+##      DROPPED RPC READ MADE THIS JOB SEND A DEPLOYER TRANSACTION.** Failure defaulted toward
+##      **ACTING**. Not hypothetical here: Base Sepolia sheds state reads, and read pressure
+##      peaks during a 40-tx deploy.
+##      ✅✅ **BOTH FIXED (keepers `bde7172`, scp'd, md5 `1b8bdaeb…` identical both sides):**
+##      it now honours **`rr_keeper.OFF` — the SAME file**, so ONE `touch` stops EVERY
+##      deployer-signing job; and the fallback is a **`null` sentinel**, `gatesReadable` gates
+##      the action, and the log prints **`⚠️ UNREADABLE (NOT treated as closed)`**.
+##      ⚠ A crontab edit was **rejected**: a commented-out line must be remembered and
+##      restored under time pressure — the shape that left job A dead 12h.
+##      ✅✅ **PROVEN IN A SANDBOX, THEN ON THE REAL BOX DURING THE DEPLOY:** `health.log`'s
+##      02:41 tick reads *"kill switch present … standing down"*. Decision table old vs new:
+##      gates-read cases **identical**, `READ FAILED` flips **true → false**.
+##      ⚠ **`log()` BUFFERS and only writes on `flushLog()`, which the early return skips** —
+##      the standing-down line goes to STDOUT, which cron redirects into `health.log`. Looking
+##      in `KEEPER_LOG` finds nothing and that is not a failure.
+##      ⚠ **The `system_keeper` cron line writes to `health.log`, NOT `system_keeper.log`.**
+##      Take a log's name from the crontab; never guess it.
+## 54.2 ✅✅✅ **THE DEPLOY. 02:35:34Z → 04:00Z, 1h25m, `deployed_addresses_v8_51.json`.**
+##      **`tierRouter 0x73772F4f4ACF7DcE64a69060878A92fD272c7CD8` · `stabilityFund
+##      0xb7962158FA9DDCB15697d0a0358473c1F34C13FF` · `matrixKeeper
+##      0x693519F442cE01633954D9E700B6faC3F96d25FA` · `pairFactory
+##      0x97E10ADfED7c7E367dd3572b3eF6be6B2CE05c5B` · `v8Governance
+##      0x56Ba053e649e1e2E99a131301B39B9F9510A4575` · `communityWallet
+##      0x64ec12541e783b89402fA4983238C0FF4e367C02` · `cnova
+##      0x486580A65A4952Ad79cCC14C1593BE6dB1A62d4B` · `treasury
+##      0x31eD4325F0a75FFA061F3ca8de613f8e0df2c6af` · USDC REUSED
+##      `0x2D8B7b5eDec96bE441b6fb0D45D74a2BcE2C639a`.**
+##      **LIBS:** `MatrixLogicLib 0x3E3928BE…` · **`TierRouterLib 0x08F1dD4F…`** ·
+##      `MatrixKeeperLib 0x3E7f783a…`. **T1 PM `0xBEaA7DA4…` MatA `0x2f37A4eA…` MatB
+##      `0x395ee7eD…`** (T2–T10 in the addresses file).
+##      ✅ **THE CHEAP BYTECODE CHECK PASSED ON CHAIN AGAIN: `TierRouterLib … (4892 bytes)`**
+##      — 4,812 was the pre-`MemberGraduated` size, so the event is in the deployed bytecode.
+##      ✅ **ZERO NONCE ERRORS; 1 transport retry in 1h25m.** All 10 tiers wired, MINTER_ROLE
+##      on all 20 matrices, `Treasury.setMemberTracker(T1 PM)` OK, `setPeripherals FINAL`,
+##      TESTNET loan clock, `parkedGracePeriod 86400s`, `selfFundedGracePeriod 300s`,
+##      **velocity gate T1 OPEN / T2–T10 CLOSED**, W1 seated as T1 MatA root + `defaultReferrer`.
+##      ⚠ `maxItemsPerUpkeep` is at its default of **1** — deliberate (30.10a/b). Do not "fix" it.
+##      ✅ **NEW: `scripts/preflight_v851.js`** (READ-ONLY, no signer bound to a provider) —
+##      because `deploy_v8.js` has **no deployer-ETH check** and running dry at minute 60
+##      leaves contracts deployed with **no addresses file** (written only at the end).
+##      ⚠ **`.env:69` still names the LIVE `deployed_addresses_v8_50.json`, and `.env` sets
+##      NEITHER `MATRIX_SIZE` NOR `DEPLOY_TIERS`.** The session variable is load-bearing on
+##      every deploy; look for *"taken from the SESSION, not .env (28.2b)"*.
+## 54.3 ✅✅✅ **VERIFICATION: 46 VERIFIED · 0 UNVERIFIED · 0 UNKNOWN · 1 EOA.**
+##      Pass 1 `verify_all_v850.js` (release-agnostic — reads whatever address book it is
+##      given; the `_v850` name is stale and was deliberately not renamed mid-deploy):
+##      **45 verified or already-verified · 0 failed.** ⚠ Many said *"already verified"* on
+##      minutes-old addresses — legitimate BaseScan bytecode auto-matching, **but hardhat
+##      cannot tell the two apart and says so.** Pass 2 `check_verification_v850.js`
+##      **re-asked BaseScan directly: 47 addresses → 46 verified, 0 unverified, 0 unknown.**
+##      That is session 45's rule honoured. ▶ **Its printed `#code` URLs ARE the Blockaid
+##      attachment.** ⛔ The unverified window was closed BEFORE any traffic — the whole
+##      reason for this ordering.
+## 54.4 ✅✅ **ITEM G IS ON: `setGraduationEnabled(true)`, tx `0x74047534…`, block 46238054,
+##      status 1, `BEFORE false → AFTER true`.** ✅ `probe 1: reads false, want true — node is
+##      likely behind` → `settled after 2 probes`: **third independent confirmation that a
+##      single read taken right after mining is worthless on this chain.**
+##      ⛔⛔ **ITEM S HAS NO FLAG AND IS LIVE FROM BLOCK 1.** *"Nothing changes until we flip
+##      the switch"* is TRUE of G and FALSE of S. Say it that way in the announcement.
+## 54.5 ▶▶ **WHAT IS OPEN — ALL OF IT MEMBER-FACING.**
+##      1. **Announce** (08-08 advance-notice promise; owner's voice + emoji — **read
+##         [[community-comms]] FIRST**). ⛔ It fixes **SEATING** (152 no-seat parks/24h, 100%
+##         of MatA parks) and opens ~1,676 idle seats. **It does NOT reduce parking** — 94% of
+##         parks are FUNDING parks (decision A, needs referrals). Cash-out line is safe WITH
+##         the 45% early-exit penalty stated; **fully backed, so NOT first-come-first-served**.
+##      2. `update_addrs` **incl. `api/telegram-qa.js`** → 3-stage frontend ladder with the
+##         timed gate → members re-register.
+##      3. Copy `deployed_addresses_v8_51.json` into `C:\CryptoNova-Keepers` (`noseat_witness.js`
+##         resolves via `path.join(__dirname,…)`) and repoint `/root/keeper/.env`
+##         `ADDRESSES_FILE` — **only after the frontend cuts over**, or keepers act on a chain
+##         members are not on yet.
+##      4. **`rm /root/keeper/rr_keeper.OFF`** — restores stress AND the health report.
+##      5. **Blockaid**: send the new verified address table unprompted. Do not re-send anything.
+##      6. Then: job A cursor rewind (NOT `pool_primer`), `stress_status.js` liveness fix, the
+##         crontab header lie, and measure the unrescuable population (53.3).
+## 54.6 ⛔⛔ **AN OPEN QUESTION, DELIBERATELY NOT ANSWERED — DO NOT LET IT DIE.**
+##      `health.log` reports `Parked: 0 total 🟢 OK` / `Overall: 🟢 HEALTHY` **and Telegrams
+##      it**, against 446 parked positions measured on 08-31. **`system_keeper` only ever
+##      reads T1 and T2 at PAIR 0** — it never enumerates pairs, so T1.2, T2.2–T2.4 and all of
+##      T3+ are invisible to it (72/46/46 parked positions sat there). ⚠ **BUT DO NOT CALL THE
+##      MONITOR A LIAR YET:** stress has been off ~23h with `direct_keeper` draining, so the
+##      queue may genuinely have emptied. **Two live hypotheses, unmeasured — the disagreement
+##      IS the finding.** This is `stress_status.js`'s *"VERDICT: ALIVE"* in a third
+##      instrument. ▶ **Settle it before telling members anything about parking.**
+## 54.7 ⚠ **METHOD NOTES FROM THIS SESSION, ALL EARNED THE HARD WAY.**
+##      - **`git checkout -- <file>` CANNOT restore a file in the Cowork device shell** — it
+##        unlinks before rewriting and unlink is refused, so it **left a mutated `TierRouter.sol`
+##        on disk**. Restore by REWRITING the original bytes in place.
+##      - **Running a check from a python subprocess right after a python write read STALE
+##        contents** — five mutations came back falsely GREEN while `grep` saw the change in
+##        0.02s. **Mutate in one process, run the check from the shell.**
+##      - **PowerShell EATS EMBEDDED DOUBLE QUOTES when calling a native exe.** A polling loop
+##        sent via `ssh` as `grep -q "standing down"` arrived as TWO arguments and printed
+##        `grep: down: No such file or directory` forty times while the log was correct.
+##        ▶ **Avoid inner quotes in PowerShell→ssh blocks, or escape them.**
+##      - The three CRLF phantoms are back in `git status` and were re-verified **EOL-ONLY**
+##        (`git diff --ignore-cr-at-eol` empty for all three). **Never `git add -A`.**
+
+---
+
+# ⬛ SESSION 53 STATE — 2026-08-31. ⚠ SUPERSEDED IN PART BY SESSION 54 ABOVE.
 # ⛔⛔ THE HEADLINE: THE SUITE HAD BEEN RED FOR TWO WEEKS AND NOBODY KNEW, BECAUSE EVERY
 # SESSION RAN ONLY ITS OWN SUITE. 650 passing / 12 FAILING against a tree whose last
 # recorded FULL-SUITE green was 2026-08-17. Now **665 / 7 pending / 0 failing.**
