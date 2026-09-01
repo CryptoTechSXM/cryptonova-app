@@ -10,7 +10,231 @@ owner-set, and the session that earned it got five things wrong by ignoring what
 
 ---
 
-# ⬛ SESSION 54 STATE — 2026-09-01. LATEST. READ THIS FIRST.
+# ⬛ SESSION 55 STATE — 2026-09-01. LATEST. READ THIS FIRST.
+# (Continues session 54 the same day. 54.x is still correct except where marked.)
+# ✅✅✅ THE HEADLINE: **V8.51 IS LIVE TO MEMBERS.** Frontend all three branches on
+# `f651ed8`, gate verified in-browser, 49 leaders seeded pre-open, keepers repointed and
+# authorised, Blockaid told. The chain that sat empty at the end of session 54 now has
+# people on it.
+# ⛔⛔ AND THE HEADLINE FAILURE: **THE ENGINE WAS DEAD FOR ~50 MINUTES WITH MEMBERS
+# ARRIVING**, because a post-deploy step that has existed since V8.46 was never written
+# into the runbook. Fixed, and the gate now carries it (165 → 169).
+## 55.0 ✅✅✅ **54.6 IS SETTLED — H-BLIND, AND WORSE THAN A COVERAGE GAP.**
+##      `diag_parked_census.js` (NEW, read-only) on live V8.50, block 46238925, **34 of 34
+##      matrices, zero failed reads: RAW 496 · LIVE 496 · PEOPLE 301 · stale 0 · dupes 0.**
+##      `system_keeper` saw **0 of 496**.
+##      ⛔⛔ **EVERY PARKED POSITION ON THE CHAIN WAS IN A MatB, AND ONLY IN PAIR 1 OF
+##      T1–T5** (T1.1 191 · T2.1 106 · T3.1 87 · T4.1 56 · T5.1 56). **`system_keeper` read
+##      MatA ONLY — the two matrices on the entire chain that structurally CANNOT show a
+##      park.** Its `0` was not lag and not luck: **the metric could never be non-zero**,
+##      which made `PARKED_WARN 50` / `PARKED_CRITICAL 200` dead thresholds and
+##      `AUTO_RESCUE` unreachable. **A monitor whose metric cannot vary is not a monitor** —
+##      third instance of the `stress_status.js` "VERDICT: ALIVE" shape.
+##      ✅✅ **AND A GOOD RESULT: the "915 parked" GHOST INFLATION DOES NOT REPRODUCE.**
+##      `stale 0, dupes 0` across all 34 — RAW == LIVE exactly, so V8.46's dequeue-on-seat
+##      is holding and `getParkedCount()` is trustworthy as a POSITION count on this chain.
+##      ⚠ Re-check after V8.51; do not inherit it.
+##      ▶ **496 positions vs 301 people ⇒ ~195 people parked in more than one tier's MatB.
+##      MEMBER-FACING COPY MAY ONLY EVER USE THE PEOPLE COUNT.**
+## 55.1 ✅✅✅ **OWNER'S QUESTION ANSWERED ON CHAIN: "matA parked yes but no loans required
+##      right" — CORRECT.** `diag_park_reason.js` (NEW, read-only), live V8.50, 24h, every
+##      read succeeded. The discriminator is in the event, not in interpretation:
+##      `MatrixLogicLib.sol:279 event MemberParked(address indexed member, uint256
+##      shortfall)` — **0 = NO-SEAT, >0 = FUNDING**.
+##      **MatA: NO-SEAT 13 · FUNDING 0. MatB: NO-SEAT 12 · FUNDING 264.**
+##      ⛔ **SHARPEN THE OLD CLAIM: "100% of MatA parks are no-seat" is TRUE; "all no-seat
+##      parks are MatA" is FALSE** — MatB logged 12 no-seat parks in the same window. Memory
+##      had blurred the two.
+##      ✅✅ **AND THE FLOW/STOCK QUESTION IS CLOSED: MatA park EVENTS 13, MatA QUEUED 0.**
+##      Seat parks are TRANSIENT — they clear within minutes. **Stock 0 and flow > 0 were
+##      always true together; the 152/24h record never contradicted the empty queue.**
+##      ⚠ **But the flow is now 13/24h, not 152 — stress had been off ~23h. THE 152 FIGURE
+##      WAS MEASURED UNDER STRESS LOAD; it is not a current rate.**
+##      ⛔ **THE STUCK POPULATION IS ONLY HALF-RESOLVED AND THE SCRIPT SAID SO: 494 queued →
+##      FUNDS 242 (owed $5,864.68) · SEAT 10 · UNRESOLVED 242** (parked before the window).
+##      96% of the RESOLVED are funding parks. ▶ To measure the rest: `HOURS=168`, or read
+##      current state with `diag_parked_solvency.js` instead of a log window.
+## 55.2 ✅✅ **THE CUTOVER. All three branches `2664eae..f651ed8`; gate 13:00/14:00 local.**
+##      NEW `update_addrs_v8_51.py` carries two guards the v8_50 script lacked: it **refuses
+##      unless `NEW.tierRouter == 0x73772F4f…`** (`_v8_51`, `_v8_51_private` and
+##      `_v8_51_gate2` are one character apart — 49.1d lost a session to exactly that, and
+##      pointing members at a 15-seat gate chain would be far worse), and it **refuses if it
+##      derives zero address replacements** (writing nothing silently is how a cutover
+##      "succeeds" without cutting over). 45 addresses + 17 label/gate changes, 447
+##      replacements, 11 files, **`api/telegram-qa.js` included** per the standing rule.
+##      ⛔⛔ **LANDMINE CAUGHT BEFORE IT FIRED: the frontend repo shows 1,171 MODIFIED FILES
+##      AND EVERY ONE IS LINE-ENDINGS ONLY** — `git diff --stat` 238,165/238,165 identical,
+##      `git diff --ignore-cr-at-eol` EMPTY. **NEVER `git add -A` THERE.** Add only the files
+##      `update_addrs` reports; it prints the exact `git add` line.
+##      ⛔⛔ **TIMING TRAP: the gate lives INSIDE `index.html`, so the site goes offline THE
+##      MOMENT `main` IS PUSHED, not at the hour in the constant.** `EARLY_MS`/`MAIN_MS` only
+##      say when the countdown ENDS. The announcement promised the site up until 12:00, so
+##      `main` was pushed at 12:00 — not before.
+##      ✅ Ladder per `LAUNCH_RUNBOOK.md:62-84`: `admin:preview --force` → STOP → `admin:main
+##      --force`. **Gate verified in the owner's own Chrome afterwards** (the only way — see
+##      55.7): countdowns correct, new router present, old router and the string "V8.50"
+##      absent from both pages.
+##      ⛔ **`pif.html` HAD A SILENT SHAPE DRIFT PREDATING THIS RELEASE:** it declared
+##      `memberHighestTier(address) → uint256`; every contract returns `uint8`. Selector
+##      matches, so it never reverted — it decoded wrong. Arrived with the PIF page after the
+##      08-26 cutover, when that audit last read clean. Fixed; audit then 237/0/0.
+## 55.3 ✅ **BLOCKAID (ticket 1390129) — `BLOCKAID_UPDATE_V851_1390129.md` + covering email
+##      SENT, unprompted, explicitly asking for NO reply.** Re-verified **immediately before
+##      sending** (`46 verified · 0 unverified · 0 unknown · 1 EOA`) — the session-45 rule on
+##      the exact document type that earned it. Table generated from the address book and
+##      **cross-checked programmatically: 46 rows, none missing, nothing extra.**
+##      ▶ The argument that matters, and it is now true: **verification finished BEFORE any
+##      member was pointed at the contracts.** Both prior flags followed an unverified window.
+##      ✅ **[stated] OWNER ON DOMAINS: "we are only on testnet with crypto-nova.app, the
+##      cryptonova.ai will be used for mainnet."** So `cryptonova.ai` was deliberately LEFT
+##      OUT — it serves nothing today. `index.html:505` checks for `admin.cryptonova.ai`; that
+##      is a forward-looking branch, not evidence the domain is live.
+##      ⛔⛔ **THE THIRD FLAG IS VISIBLE FROM HERE: mainnet = a NEW domain, fresh contracts,
+##      REAL value. NOTIFY BLOCKAID BEFORE MAINNET TAKES TRAFFIC.** Do not let mainnet be the
+##      first time they see `cryptonova.ai`.
+## 55.4 ⛔⛔⛔ **THE OUTAGE — `upkeepCaller` IS A POST-DEPLOY STEP NOBODY WROTE DOWN.**
+##      From the minute `/root/keeper/.env` was repointed (16:55Z) `direct_keeper` reverted on
+##      EVERY `performUpkeep`, `estimateGas` failing, Telegram alerting — with members
+##      arriving. **The timing IS the proof: at 16:48Z, still on V8.50, the same job's txs
+##      confirmed `status=OK`. Same code, same wallet, different chain.**
+##      **`MatrixKeeper.sol:914` gates performUpkeep on `owner() || governance ||
+##      upkeepCaller[msg.sender]`.** The keeper signs as `0xd419681B…` — neither owner nor
+##      governance — and **`deploy_v8.js` never writes that mapping.**
+##      ⛔ **THE STEP WAS NOT MISSING: `scripts/set_upkeep_caller.js` HAS EXISTED SINCE
+##      V8.46. THE RUNBOOK ENTRY WAS MISSING.** A deploy that wires roles for every contract
+##      but not for the EOA that DRIVES them is only half wired, and nothing catches it until
+##      the first performUpkeep of the new chain.
+##      ✅ Fixed on chain: `upkeepCaller before: false` → tx
+##      `0xfb5f55008901aae794d3268e036eee55cdbeff818cf51a7d05901b258b123e79` → `true`.
+##      **Engine recovered at the next slot doing REAL work: `gasUsed=627,566` (not the
+##      37,282 no-op), "⚡ Keeper active — non-rescue work", "DRAIN: complete — backlog
+##      cleared in 1 tick".**
+##      ✅✅ **AND THE GATE NOW CARRIES IT — new `predeploy_check.js` section, 165 → 169,
+##      all passing.** Non-vacuous by construction: it FAILS if `deploy_v8.js` ever starts
+##      calling `setUpkeepCaller` (so the NOTE cannot go stale), if the script disappears, or
+##      if its read-back reverts to a single read.
+##      ⛔⛔ **THE READ-BACK TRAP FIRED A FOURTH TIME, AND DURING THE OUTAGE: the setter
+##      printed `upkeepCaller after: false FAILED` on the transaction that HAD worked.** The
+##      re-run read `true`. **A guard that cries wolf costs as much as one that hides a fault
+##      (session 45) — and this one did it at the worst possible moment.** ✅ Fixed: bounded
+##      probe (10 × 3s), prints the probe count, and **deliberately does NOT loop until it
+##      likes the answer** — if the flag never matches it exits non-zero and says to read the
+##      tx on BaseScan rather than re-send.
+##      ▶▶ **STANDING RULE, EARNED FOUR TIMES: EVERY WRITE-THEN-VERIFY SCRIPT ON THIS CHAIN
+##      MUST USE A BOUNDED PROBE. Audit the rest for single reads.**
+## 55.5 ✅✅ **AUTOMATION MOVED TO V8.51, AND THE FALLBACKS WERE A SILENT-SUCCESS TRAP.**
+##      **Every live cron job resolves `process.env.ADDRESSES_FILE || "<stale default>"`, and
+##      every default is a DEAD deployment**: `direct_keeper` + `integrity_check` → **v8_45**,
+##      `monitor_v8` → **v8_11**, and `onramp_keeper`/`dupe_watch`/`growth_snapshot`/
+##      `channel_pulse`/`sf_invariant_check`/`rr_keeper` → **`deployed_addresses_current.json`,
+##      a real symlink that was pointing at V8.50**.
+##      ⛔ **SO A TYPO IN `.env` DOES NOT FAIL — it falls through to a dead chain and the job
+##      runs happily with no error and plausible output. EDITING `.env` IS NOT VERIFYING THE
+##      REPOINT.** ⚠ Only `copay_rescue.js` refuses to start without `ADDRESSES_FILE`; **that
+##      is the pattern the others should adopt (parked).**
+##      ✅ **NEW `verify_addresses.js` (keepers repo, read-only, no network, no ethers):**
+##      reads `.env`, resolves the book, prints network/matrixSize/tierRouter/usdc, checks the
+##      router against an expected value (`EXPECT_ROUTER` for mainnet reuse), **and enumerates
+##      what each stale fallback WOULD read.** ✅ Repoint proven on the box, and the
+##      `deployed_addresses_current.json` symlink repointed to v8_51 so even the fallback path
+##      is safe.
+## 55.6 ✅✅ **`system_keeper` REBUILT TWICE, BOTH PROVEN.** (a) **Chain-wide parked census** —
+##      enumerates every tier × every pair × both halves via `pairCount()`/`getPairAt(i)`;
+##      **`positions` is `null`, never `0`, when unreadable**; prints `⚠️ UNREADABLE (NOT
+##      treated as 0)`, the worst matrix, the failed-read count, and says out loud it counts
+##      **positions, not people**. **And the same fail-open one level up was caught: `null > N`
+##      is false, so an unreadable count would have graded 🟢 HEALTHY — unreadable is now
+##      WARNING at minimum.** ✅✅✅ **8/8 in an offline sandbox that LIFTS THE REAL FUNCTION
+##      TEXT out of the file so the test cannot drift from the source; the OLD formula returns
+##      0 on the same chain where the new one returns 496 — that is the non-vacuity proof.**
+##      (b) ⛔⛔ **THE 54.1 COUPLING WAS DELIBERATELY UNDONE.** One file was conflating two
+##      unrelated decisions — *should the harness compete with members?* (no) and *should
+##      monitoring run?* (yes). **On a FRESH chain this job is LOAD-BEARING, not decorative:
+##      the deploy leaves T2–T10 CLOSED and the matrix keeper only opens each at 80% MatB fill
+##      (101 of 127), so `T2_AUTO_GATE` — which fires on T1 MatB's first member — is what
+##      stops the FIRST CYCLERS BEING STRANDED.** It now honours its own `system_keeper.OFF`.
+##      ▶▶ **DEPLOY RULE, ALSO WRITTEN INTO THE FILE: `touch /root/keeper/rr_keeper.OFF
+##      /root/keeper/system_keeper.OFF` before any deploy; remove both after.**
+## 55.7 ⚠ **THE FLEET'S FIRST-EVER ABI AUDIT — `FRONTEND=C:\CryptoNova-Keepers node
+##      scripts/audit_frontend_abi.js`.** The tool is generic; the keepers had simply never
+##      been audited. **104 files, 263 fragments, 15 MISSING, 7 SHAPE DRIFT.** ⚠ Set the env
+##      var in a shell you then CLOSE, or the next frontend audit silently audits the keepers.
+##      ▶ **Only TWO are live cron jobs** — checked against the crontab, not counted:
+##      • **`system_keeper.js` SHAPE DRIFT on `getMember`** — declares 8 tuple fields,
+##        `FigureEightMatrixV8` returns 10 (`totalWithdrawn`, `crossingReserve` added). Slots
+##        0–4 align so `withdrawable`/`totalEarned` are correct, but `cyclesCompleted`,
+##        `isInMatrix`, `hasEverJoined` all read ONE SLOT EARLY. It only consumes
+##        `.withdrawable`, so impact today is nil — **but it is a live job decoding garbage.**
+##      • **`monitor_v8.js` MISSING `epochRewards(uint8)`** — daily 08:32. **Will fail.**
+##      Everything else (`tx_decode`, `route_rr`, `set_threshold`, `identify_driver`,
+##      `withdraw_probe`, `check_reporters`, `organic_drip`, `limbo_check`, `member_ledger`,
+##      the `diag_*` set) is a one-off diagnostic: real drift, zero operational risk, and good
+##      evidence for the redundancy census below.
+##      ⛔ **THE CRONTAB HEADER LIE IS STILL THERE:** `# CryptoNova keeper — V8.46 LIVE …
+##      Stress engine OFF until midday` sits above **three LIVE stress lines**. It is V8.51,
+##      and they are stopped today only by `rr_keeper.OFF`, not by that comment.
+## 55.8 ▶▶ **WHAT IS OPEN, IN THE ORDER I WOULD TAKE IT.**
+##      1. **`monitor_v8.js` `epochRewards`** — breaks at 08:32 tomorrow.
+##      2. **`system_keeper.js` `getMember` tuple** — 8 → 10 fields.
+##      3. **`rm /root/keeper/rr_keeper.OFF`** when the owner judges members have had their
+##         head start. **It is still ON.** Stress off = members first, his standing practice.
+##      4. **Keeper redundancy census** — ~70 files, 12 in cron. Classify every file as
+##         live-cron / kept-diagnostic / dead; deliverable is a table plus a retirement list
+##         he approves, **not a pile of deletions**. `diag_overflow.js` hardcodes
+##         `/root/keeper/deployed_addresses_v8_45.json` and is a clear first candidate.
+##      5. **Make the other cron jobs refuse a missing `ADDRESSES_FILE`**, the way
+##         `copay_rescue.js` already does. Kills the whole silent-success class.
+##      6. **The crontab header lie**, and `audit_frontend_abi.js` still printing "MISSING
+##         from V8.50" on a V8.51 run — same stale-label family as the old deploy banner.
+##      7. **The 242 UNRESOLVED parked positions** on the retired chain (`HOURS=168` or
+##         `diag_parked_solvency.js`) — only if it still matters after migration.
+##      8. **The V8.50 puzzle from 16:48Z:** forty confirmed txs at `gasUsed=37,282` each,
+##         processing NOTHING, while `checkUpkeep` insisted work was needed — the keeper's own
+##         guard said *"it cannot have processed an item"* and it sent anyway. Moot for the
+##         retired chain, **but that signature is now known: if it appears on V8.51, read it
+##         immediately.** ⚠ Sits with an old blind monitor — two blind spots compounding is
+##         plausibly how 496 parked positions accumulated unnoticed.
+##      9. Then session 54's leftovers: job A cursor rewind (NOT `pool_primer`),
+##         `stress_status.js` liveness, the unrescuable population (53.3).
+## 55.9 ⚠ **METHOD NOTES, ALL EARNED TODAY.**
+##      - ⛔⛔ **`origin/*` REFS ARE NOT REMOTE TRUTH IN THE COWORK DEVICE SHELL.** I read
+##        `git rev-parse origin/preview` as `f651ed8` and told the owner stage 2 was pushed;
+##        the push then printed `2664eae..f651ed8`. **Remote-tracking refs update only on
+##        fetch or push, and THIS SHELL HAS NO NETWORK, so they can never refresh.** Use
+##        `git ls-remote` in PowerShell, or the push output, which is authoritative. Same
+##        family as "mtime is not evidence of work" and "a computed label is not an
+##        observation".
+##      - ⛔ **THE DEVICE SHELL HAS NO EGRESS AT ALL:** `npx hardhat run` there dies at
+##        `HH502 … Proxy response (403) !== 200 when HTTP Tunneling` before it can even list
+##        compilers. **Every hardhat/RPC diagnostic must be run by the owner in PowerShell.**
+##        File edits, greps, `node --check` and offline sandboxes are Claude's.
+##      - ⚠ **NO FRONT-END DOMAIN IS FETCHABLE FROM THE SESSION:** `admin.*` 302s to
+##        `vercel.com/login` (Vercel deployment protection — **so leaders cannot self-register
+##        there either**), `early.*` needs an approval that timed out, `crypto-nova.app` fails
+##        with `robots.txt … Response too large`. ✅ **Claude in Chrome, driving the owner's
+##        own browser, worked perfectly** and is the way to verify a deploy visually.
+##      - ⚠ **A NAIVE RESIDUE GREP FLAGGED 8 "STALE" V8.50 ADDRESSES AND ALL 8 WERE FALSE** —
+##        `usdc`, `accountOne` and `liquidityReserve` are byte-identical in both books by
+##        design. **A residue check must diff the two address books first.**
+##      - ⚠ Before the gate opens, `early.` shows a COUNTDOWN ONLY — `openEarlyCoupon()` does
+##        not run until it expires, so **there is no coupon box to type into before the hour**.
+##      - ⚠ Keeper log writes **every line twice**, and prints `maxItemsPerUpkeep=1`
+##        immediately followed by `Batch size: 4 max`. Cosmetic; both worth a tidy.
+## 55.10 ✅ **WHAT LANDED (memory is the authoritative SHA record).**
+##      - **Contracts `cryptonova-app.git` `v8.1`: `f9c73ed` → `41f226d` → `864ed34`.**
+##        `41f226d` = `diag_parked_census.js` + `diag_park_reason.js` +
+##        `BLOCKAID_UPDATE_V851_1390129.md` (+583). `864ed34` = bounded-probe
+##        `set_upkeep_caller.js` + the `predeploy_check.js` keeper-auth section (+69/-3).
+##      - **Frontend `cryptonova-testnet-app.git`: `admin` = `preview` = `main` = `f651ed8`**
+##        (`4e4aebf` cutover, then `f651ed8` adding `update_addrs_v8_51.py` + the post).
+##      - **Keepers `CryptoNova-Keepers.git` `main`: `bde7172` → `cfae5e8` → `af4f787`.**
+##        md5 verified on the box at each step (`487abf5b…`, then `0bfde9fa…`).
+##      - ⚠ **Deliberately uncommitted:** contracts' three CRLF phantoms +
+##        `v851_deploy_transcript.txt`; frontend's `BUGS_snapshot.md` (not ours).
+
+---
+
+# ⬛ SESSION 54 STATE — 2026-09-01. ⚠ SUPERSEDED IN PART BY SESSION 55 ABOVE.
 # (Continues session 53 directly — same work, new session. 53.x is still correct except
 #  where marked below.)
 # ✅✅✅ THE HEADLINE: **V8.51 IS DEPLOYED TO THE COMMUNITY CHAIN, ALL 46 CONTRACTS ARE
