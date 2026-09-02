@@ -10,6 +10,95 @@ owner-set, and the session that earned it got five things wrong by ignoring what
 
 ---
 
+# ⬛ SESSION 57 STATE — 2026-09-02. LATEST. READ THIS FIRST.
+# (Opens on 56.6 item 0. 56.x is still correct except where marked.)
+# ⛔⛔⛔ THE HEADLINE: **56.6 ITEM 0 IS ANSWERED AND THE ANSWER IS THE BAD ONE. THIS FILE
+# IS PUBLICLY FETCHABLE, UNAUTHENTICATED, RIGHT NOW.**
+## 57.0 ⛔⛔⛔ **MEASURED: `https://cryptonova-mainnet-mxl824lku-cryptotechsxms-projects`
+##      `.vercel.app/V8_50_HANDOFF.md` RETURNS THIS ENTIRE 1.18 MB FILE WITH NO LOGIN.**
+##      Read back verbatim from a logged-out client: *"# V8.50 HANDOFF — the crossing
+##      redesign. READ THIS FIRST."* followed by the whole SESSION 56 STATE block.
+##      ⛔⛔ **THE INSTRUMENT IS THE WHOLE POINT AND 56.6 DID NOT SAY IT: THE OWNER'S CHROME
+##      IS SIGNED IN TO VERCEL.** Opening a deployment URL there shows the page to HIM and
+##      proves nothing — a protected deployment looks identical to an unprotected one.
+##      ✅ **The test was run from Claude's own browser pane, PROVEN unauthenticated because
+##      vercel.com served it the LOGIN page.** ▶ **Any future re-check must use a logged-out
+##      client, or it is not a measurement.**
+## 57.1 ▶▶ **THE FINDING IS AN ASYMMETRY, NOT A BLANKET LEAK. TWO VERCEL PROJECTS BUILD THE
+##      SAME CONTRACTS REPO AND ONLY ONE IS PROTECTED.**
+##      - ✅ **`cryptonova-app` — PROTECTED.** Tested on TWO deployment URLs (`j5revvdrt`
+##        = `b3d76be`, `h3i9bhofk` = `1b87db5`) and on its branch domain
+##        `cryptonova-app-six.vercel.app`. **All three redirect to Vercel login.**
+##      - ⛔ **`cryptonova-mainnet` — NOT PROTECTED.** Same repo, same commits, wide open.
+##      ✅ **Org `cryptotechsxms-projects`, Hobby. THREE projects: `cryptonova-app`
+##      (`cryptonova-app-six.vercel.app`, branch `admin`) · `cryptonova-mainnet`
+##      (`cryptonova-mainnet.vercel.app`, branch `mainnet`) · `cryptonova-preview`
+##      (`early.crypto-nova.app`).**
+##      ⛔ **DO NOT COMPOSE VERCEL URLS FROM PROJECT NAMES. `cryptonova-app.vercel.app` IS
+##      SOMEONE ELSE'S SITE** — an unrelated ML price-prediction page. I guessed it first and
+##      got a confident, wrong reading. **Take deployment URLs off the dashboard.**
+##      ✅ **Both projects' production branch is `main`, and NEITHER has a production domain,
+##      so every `v8.1` push lands as a PREVIEW.** That is why 56 sessions never noticed.
+## 57.2 ✅✅ **BLAST RADIUS — NO KEY MATERIAL. CHECKED. DO NOT RE-PANIC ABOUT THIS PART.**
+##      `.gitignore` catches `.env` and every `.env.*` variant (session 31's fix held);
+##      **`.env.example` is placeholders only** (`0xyour_private_key_here`);
+##      **`cryptonova-keeper/secrets.yaml` is a THREE-LINE TEMPLATE**
+##      (`secretsNames: SECRET_ID: - SECRET_VALUE`), not live secrets.
+##      ▶ **What IS exposed is 655 committed files of internal material: this handoff, the
+##      whole defect history, contract addresses, the Blockaid appeal correspondence,
+##      `scripts/`, `test/`, `deployments/`.** ▶▶ **Classify it as adversary intelligence and
+##      reputation, NOT custody.** The contracts themselves are already public on BaseScan.
+##      ⚠ **UNVERIFIED: only ROOT-level paths were confirmed served. Whether `scripts/` and
+##      other SUBDIRECTORIES are served was not measured** — the fetch was blocked before it
+##      ran. **Assume yes until measured; do not state it as fact.**
+## 57.3 ✅ **THE TWO PUBLIC BRANCH DOMAINS ARE SEPARATELY CLEAN — MEASURED BOTH WAYS.**
+##      `cryptonova-mainnet.vercel.app` serves branch `mainnet`: a **23-file June-19
+##      marketing tree with its own `vercel.json`**, no handoff, no `scripts/`.
+##      `/V8_50_HANDOFF.md` there falls back to the index page.
+##      ✅✅ **NON-VACUITY PROVEN: `/faq.html` on that same host returns a real distinct page
+##      ("FAQ & Glossary — CryptoNova"), so the host does serve real files** — the handoff
+##      genuinely is not on that branch, rather than everything falling back.
+##      ✅ Branch `admin` (31 files, marketing) is likewise clean of internal docs.
+## 57.4 ✅✅✅ **CLOSED THE SAME SESSION. THE LEAK IS SHUT AND THE MARKETING PAGE IS BACK.**
+##      **Driven in the owner's Chrome at his request. THREE changes, on project
+##      `cryptonova-mainnet` only — `cryptonova-app` was already protected and untouched:**
+##      1. **Deployment Protection -> Vercel Authentication = Require Log In, Standard
+##         Protection.** It was OFF. ▶ **This is the change that closed it, and the reason it
+##         had to be first: protection covers deployments that ALREADY EXIST.** An ignored
+##         build step or a Root Directory setting — what 56.6 item 0 proposed — would have
+##         stopped only FUTURE builds and left every existing preview URL live.
+##      2. **Domains -> `cryptonova-mainnet.vercel.app` re-connected from Preview/branch
+##         `mainnet` to the PRODUCTION environment.**
+##      3. **Environments -> Production -> Branch Tracking `main` -> `mainnet`, then
+##         Redeploy** of the June-19 `mainnet` commit into Production.
+##      ⛔⛔ **STEP 3 FAILED TWICE — `Failed to save branch tracking. Try again.` — UNTIL
+##      STEP 2 WAS DONE.** ▶▶ **Vercel refuses to make a branch the production branch while a
+##      domain is still pinned to that branch as a PREVIEW alias. Re-point the domain to
+##      Production FIRST.** The error text says nothing about the cause; two identical
+##      failures, then it saved immediately.
+##      ✅✅✅ **VERIFIED FROM THE LOGGED-OUT CLIENT, FOUR STATES:**
+##      - v8.1 preview `/V8_50_HANDOFF.md` -> **Vercel login** (it was the full 1.18 MB file
+##        minutes earlier — same URL, same client).
+##      - `cryptonova-mainnet.vercel.app/` -> **"CryptoNova — Mainnet", public again.**
+##      - `cryptonova-mainnet.vercel.app/V8_50_HANDOFF.md` -> **falls back to the index.**
+##      - preview re-checked AFTER all three changes -> **still login.**
+##      ⛔⛔⛔ **THE TRADE THIS CREATES — CARRY IT TO MAINNET DAY. PRODUCTION IS NOW
+##      DELIBERATELY UNPROTECTED** (Standard Protection exempts Production) **and Production
+##      tracks branch `mainnet`.** ▶▶ **If anything from the `v8.1` tree is ever merged or
+##      promoted into `mainnet` on this project, the handoff goes public again with NO
+##      warning and no error.** **`mainnet` must stay the 23-file marketing tree.**
+##      ▶ **STILL OPEN, not urgent now the leak is shut: the repo's own `admin` commit calls
+##      it "superseded ... (frozen)", so ideally NOTHING builds it. Disconnecting both
+##      projects from the repo is the tidy end-state.**
+## 57.5 ▶ **OPEN LIST — 56.6 ITEMS 2 THROUGH 7 ARE UNCHANGED AND STILL THE QUEUE.**
+##      Item 1 (push the frontend fix) LANDED in session 56: frontend `admin`=`preview`=
+##      `main`=`065dcf5`, Vercel confirmed both Production slots green, member reply sent.
+##      **Item 0 is now this section; the remediation above is the only part still open.**
+##      ⚠ **`rr_keeper.OFF` IS STILL ON** — removing it restarts THREE jobs, two on a
+##      5-minute cadence.
+
+---
+
 # ⬛ SESSION 56 STATE — 2026-09-01. LATEST. READ THIS FIRST.
 # (Continues session 55 the same day. 55.x is still correct except where marked.)
 # ✅✅✅ THE HEADLINE: **55.8 ITEMS 1, 2, 4 AND 5 ARE DONE**, all proven rather than
