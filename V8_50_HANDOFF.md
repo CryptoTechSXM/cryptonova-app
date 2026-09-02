@@ -260,6 +260,40 @@ owner-set, and the session that earned it got five things wrong by ignoring what
 ##         `monitor_v8` DRY_RUN/STATE_FILE, and 55.8's 7-9).
 ##      ⚠ **`rr_keeper.OFF` IS STILL IN PLACE. Removing it starts THREE jobs.**
 
+## 57.13 ✅✅✅ **ALL 26 SPENDING KEEPER SCRIPTS ARE NOW GUARDED (2026-09-02, keepers `7b136f0`).**
+##      **57.12 item 2 said "`pool_primer.js`, then the other manual spenders". THE SCOPE WAS
+##      19 FILES, NOT ONE.** Of the 26 spenders: 5 already guarded · 1 reads no address book
+##      (`mint_usdc`) · 1 already refuses honestly (`fund_testers` prints its own FATAL) ·
+##      **19 carried a stale default, SEVENTEEN of them `deployed_addresses_v8_45.json` —
+##      dead for three releases.** A manual run with a missing env var SPENDS AND APPROVES
+##      against contracts nobody is on.
+##      ✅ **Guard copied VERBATIM from `system_keeper.js:76`. 19 files, +171/-19,
+##      `node --check` 19/19, staged + atomic `mv` + all 19 md5s verified on the box;
+##      originals kept in `/root/keeper/_bak_20260902/`.**
+##      ✅✅ **PROVEN BOTH WAYS on `pool_primer`: unset → FATAL and refuses; set → passes the
+##      guard and fails on the NEXT check.** ✅ **Residue sweep: ZERO spenders still carry a
+##      default. The 38 remaining hits fleet-wide are all READ-ONLY diagnostics.**
+##      ✅ **SAFER THAN THE NINE-JOB PASS: none of the 19 are in LIVE cron, so this cannot
+##      stop the engine.** Five are in the PAUSED block (`fastlane_rescue`, `manual_rescue`,
+##      `route_rr`, `unwedge`, `pool_primer`) — ⚠ **if those lines are ever uncommented,
+##      `ADDRESSES_FILE` must be in `/root/keeper/.env`. It already is.**
+##      ⚠ `evict_parked` and `fastlane_rescue` defaulted to `deployed_addresses_current.json`
+##      **which does not exist in the keepers repo** — they would have thrown ENOENT rather
+##      than read a dead book. Less dangerous than the v8_45 group; moot now.
+##      ⛔ **CLAUDE'S DETECTOR FALSE-POSITIVED A FIFTH TIME: the spender scan called
+##      `organic_drip` ambiguous because the grep matched its HEADER DOCS line, not code.**
+##      Hand-check found the real `||` at :43. **Strip comments by default — a scan that
+##      reads documentation as code is not a measurement.**
+##      ▶ **STILL OPEN: the 38 read-only diagnostics keep their stale defaults.** They cannot
+##      spend, but they still report confidently on a dead chain when run by hand.
+##      ▶ **NEXT, AND IT IS THE ONE PICKED FOR SESSION 58: the crontab header lie (56.6
+##      item 5).** The live crontab still reads *"V8.46 LIVE … Stress engine OFF until
+##      midday"* with a `STRESS ENGINE — DISABLED` band above TWO COMMENTED lines, while
+##      **three uncommented `rr_keeper` stress lines run further down**, held only by
+##      `rr_keeper.OFF`. **Comment-only edit, cannot break anything, removes a file that
+##      actively misleads the next reader.** ⚠ **Capture with `| Out-File -Encoding utf8`,
+##      never `>`, or the em-dashes come back as `ΓÇö`.**
+
 ---
 
 # ⬛ SESSION 56 STATE — 2026-09-01. LATEST. READ THIS FIRST.
