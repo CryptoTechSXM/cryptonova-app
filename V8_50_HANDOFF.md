@@ -10,7 +10,195 @@ owner-set, and the session that earned it got five things wrong by ignoring what
 
 ---
 
-# ⬛ SESSION 59 STATE — 2026-09-02. LATEST. READ THIS FIRST.
+# ⬛ SESSION 60 STATE — 2026-09-02. LATEST. READ THIS FIRST.
+# (Opened on 59.8 item 1. 59.x is still correct EXCEPT 59.3's blast radius, widened in 60.2.)
+# ⛔⛔⛔ THE HEADLINE: **BOTH LEAKED KEYS ARE ROTATED AND VERIFIED LIVE — BUT ONE OF
+# THEM WAS ALREADY PUBLIC IN THREE DEPLOYED FRONTEND PAGES, SO THE CRONTAB DIFF WAS
+# THE SMALLER HALF OF THAT EXPOSURE. AND FIVE COUNT-BASED CHECKS PASSED A CRONTAB
+# EDIT THAT WOULD HAVE KILLED JOBS A AND C; ONE HASH CAUGHT IT.**
+## 60.0 ✅✅✅ **59.8 ITEM 1 IS CLOSED. RPC_D `cosmopolitan-still-fire` -> `morning-proud-wish`
+##      (job A) and RPC_F `fluent-neat-moon` -> `autumn-clean-fire` (job C).**
+##      **Live crontab md5 `abb6bed5f2f88d230c3de89311aba8c0` -> `08d8cf7cdc130ad417ef16708e1b363a`**,
+##      byte-identical to the staged file. Post-install: old-name refs 0/0 · 14 active
+##      lines · all 10 `BASE_SEPOLIA_RPC_URL=` present. **Rollback is
+##      `crontab /root/keeper/crontab_pre_rotate_20260902.txt`.**
+##      ✅ **VERIFIED BY TRAFFIC, NOT BY INSTALL: job A ticked 21:40Z `A: 312/450 members —
+##      cap 5/tick`, 5 registered, 0 errors; job C swept 21:42Z, 0 errors.**
+##      ⚠ **`14` ACTIVE LINES, NOT 58.0's `12` — AND THAT IS CORRECT:** 58.6 uncommented
+##      `copay_rescue` and `fastlane_rescue`. 12 + 2 = 14. **Checked, not assumed.**
+##      ✅ **The VPS `.env` carries NEITHER endpoint (measured 0 and 0), so the swap was
+##      two crontab lines and nothing else on the box.** ⚠ The LOCAL gitignored
+##      `C:\CryptoNova-Keepers\.env` still holds the dead `fluent-neat-moon` URL.
+##      ⛔ **`fluent-neat-moon` is safe to delete at QuickNode. `cosmopolitan-still-fire`
+##      IS NOT — see 60.2.** Docs committed keepers `6dfeed4` -> **`bae3ed9`**, pushed.
+## 60.1 ⛔⛔⛔ **THE ROTATION SED ATE `BASE_SEPOLIA_RPC_URL=` AND FIVE CHECKS SAID IT WAS FINE.**
+##      `s#[^ ]*cosmopolitan-still-fire[^ ]*#$NEW#g` matches the WHOLE non-space token,
+##      which in a cron line is `BASE_SEPOLIA_RPC_URL=https://…`. **It replaced the
+##      variable name along with the URL, leaving `cd /root/keeper && https://… ONLY=A
+##      node rr_keeper.js` — the shell asked to EXECUTE a URL. Jobs A and C would have
+##      died silently on their next tick with the engine live.**
+##      ⛔⛔ **EVERY COUNT PASSED: old-name refs 0/0 · URL-bearing lines 10/10 · key-path
+##      URLs 10/10 · active lines 14/14 · changed lines 4.** The URL was still there;
+##      only the variable in front of it vanished, **which no count can see.**
+##      ✅✅✅ **WHAT CAUGHT IT, AND KEEP IT FOREVER: blank every URL in BOTH files and
+##      compare md5.** `sed -E 's#https?://[^ ]*#X#g' <file> | md5sum`. **Identical =
+##      nothing but the URLs changed. It prints no secret.**
+##      ✅ **CORRECT PATTERN: `s#https?://[^ ,]*<name>[^ ,]*#$NEW#g`** — anchored at
+##      `https?://` so the `VAR=` survives, stopping at a COMMA so it cannot eat a
+##      neighbour out of job B's `RESCUE_RPCS` list.
+##      ✅ **CONFIRMING DIAGNOSTIC, secret-free: `grep -o 'BASE_SEPOLIA_RPC_URL=' | wc -l`
+##      read 10 -> 8.** It NAMED the defect instead of leaving it a theory.
+##      ▶▶ **THE RULE: A COUNT CANNOT SEE A SUBSTITUTION THAT PRESERVES THE COUNT. Pair
+##      every count with a whole-artefact equivalence check that neutralises only the
+##      field you meant to change.** This is BUILD THE SECOND INSTRUMENT in a new coat.
+## 60.2 ⛔⛔⛔ **KEY MATERIAL IS IN THE DEPLOYED FRONTEND — 12 QUICKNODE URLS WITH LIVE
+##      41-CHARACTER KEYS, AND 58.10 ITEM 3 RECORDED IT AS ONE FILE.**
+##      ✅ **MEASURED: `index.html:3019`, `pif.html:377`, `status.html:658` (+ a health
+##      JSON), all `git ls-files` TRACKED in `CryptoNova-Testnet-App`. Every URL carries
+##      exactly 41 characters after `quiknode.pro/`** — hostname-only would be 0.
+##      ⛔ **FIVE endpoints are public, not one:** `frequent-misty-meme` (8 refs) ·
+##      `cosmopolitan-still-fire` (3) · `wiser-proportionate-forest` (2) ·
+##      `side-silent-sheet` (2) · `newest-cold-isle` (2).
+##      ▶ **A BACKLOG ITEM THAT NAMES ONE INSTANCE OF A CLASS GETS WORKED AS ONE
+##      INSTANCE. Re-measure the SCOPE of an old item before scheduling it.**
+##      ⛔⛔⛔ **THE REAL DEFECT IS SHARING, NOT SECRECY. `RPC_ASSIGNMENT.md:31` marked
+##      `cosmopolitan-still-fire` "**BOTH**" — the member read pool AND stress job A.
+##      A KEEPER JOB WAS AUTHENTICATING WITH A KEY PUBLISHED TO EVERY SITE VISITOR.**
+##      ✅ **60.0's rotation moved job A off it and fixed that BY ACCIDENT.**
+##      ▶▶ **A BROWSER dAPP CANNOT HIDE ITS RPC ENDPOINT — the client must reach it, so
+##      the key is public by construction. ROTATING A FRONTEND KEY JUST PUBLISHES A NEW
+##      ONE.** The mitigation is ENDPOINT RESTRICTION (QuickNode domain/referrer allowlist
+##      + rate limits), plus the absolute rule: **FRONTEND AND KEEPER ENDPOINTS ARE NEVER
+##      THE SAME ENDPOINT, whatever the traffic volume.** The 2026-08-28 decision to leave
+##      job A on the shared endpoint was argued on RPC LOAD, which was the wrong axis.
+##      ⛔ **OPERATIONAL: `cosmopolitan-still-fire` MUST NOT BE DELETED — three live pages
+##      read through it.** ▶ **NOT YET MEASURED, and it is the 58.11 check: whether the
+##      DEPLOYED pages serve these keys or only the repo carries them.** The instrument is
+##      a count, never a print: `curl -s <domain>/status.html | grep -coE 'quiknode\.pro/[0-9a-zA-Z]{8,}'`.
+## 60.3 ✅✅ **59.8 ITEM 4 ANSWERED: A LIVE JOB C REACHES THE REAL ORACLE AND `TRGate`
+##      REFUSES EVERYONE.** Live tick granted a real approval (`0x5B42fFEa… approved
+##      $25.00 just-in-time`) and reached `manualUpgrade.staticCall`. Verdicts are real:
+##      `T2 not eligible for T3 — TRGate` x2, `T1 not eligible for T2 — TRGate` x3.
+##      **`TRGate` (`rr_keeper.js:275`) = the tier is not open to this member yet.**
+##      ▶ **So `C: 0 upgraded` on a LIVE tick is a genuine finding, NOT 59.6b's dry-run
+##      artifact. Nothing is broken.** Auto-upgrade at crossing is a contract path.
+##      ✅ **59.6's SPARSE-POOL NOTE CONFIRMED LIVE:** cursor bands 0/400/1200/1600/2000/
+##      2400/2800/3200/3600/4000/5200/5600/6000/6400/6800/7600 -> **0 candidates each**;
+##      band 800 -> **6 candidates, 139 left to auto-upgrade**.
+##      ⛔ **THE `tried <= 5` LOG CAP BIT THE SAME WAY 59.7(1) DID.** "6 candidates checked"
+##      with 5 reason lines read like a missing verdict. **Both verdict logs (`:701`,
+##      `:805`) are gated `if (tried <= 5)`; the approve log at `:744` is NOT.**
+##      ▶▶ **A COUNT AND ITS REASON LINES COME FROM DIFFERENT GATES — NEVER RECONCILE
+##      THEM BY SUBTRACTION.**
+## 60.4 ⛔⛔ **JOB C LEAVES STANDING TierRouter ALLOWANCES — CONFIRMED IN SOURCE AND ON
+##      CHAIN — BUT THE CASCADE DEPTH IS ZERO TODAY, SO DO NOT REVOKE.**
+##      **THE DEFECT: `:739-753` grants the allowance -> funding -> `:782` the eligibility
+##      `staticCall` -> `:805` refusal `continue`s. THERE IS NO REVOKE ON THE REFUSAL
+##      PATH.** ⛔ So `:735`'s comment — *"no wallet carries an allowance between ticks…
+##      the upgrade consumes it and it is gone"* — **is true only for members who
+##      actually upgrade. A TRGate-refused member consumes nothing and keeps it.**
+##      ✅✅ **MEASURED, `revoke_allowances.js` DRY RUN `OFFSET=300400 COUNT=400`:
+##      3 wallets, $125 standing** — `0xD57220F5…` $50/bal $65, `0x056D1D95…` $50/bal
+##      $215, `0x5B42fFEa…` $25/bal $35. **ALL THREE ARE FROM THE 20:47 JOB C TICK.**
+##      `0x5B42fFEa` is the one logged "approved just-in-time" that never upgraded; the
+##      other two printed NO approve line **because they already carried $50 from earlier
+##      ticks.** ⚠ **`unreadable: 233` of 800 — 3 IS A FLOOR, NOT A COUNT.**
+##      ⚠ **Every one has balance >= allowance, so `onCrossToMatB`'s `balanceOf >= fee
+##      AND allowance >= fee` is satisfied on all three RIGHT NOW.**
+##      ✅✅✅ **AND YET: `cascade_chain.js FROM_TIER=2` on V8.51 reads `T2.1 MatA 63/127 —
+##      HAS A FREE SEAT, no rotation needed` -> `PREDICTED CASCADE DEPTH: 0 link(s)`.**
+##      **The cascade needs a FULL MatA to force a rotation. T2.1 has 64 free seats, so
+##      $125 of standing allowance cannot start a chain today.**
+##      ⛔⛔ **THE NUMBER THAT WOULD HAVE JUSTIFIED REVOKING WAS 5 LINKS / 18.2M GAS FROM
+##      2026-07-29, MEASURED WHEN T2.1 WAS FULL. On V8.51 it is 0.** ▶ **Acting on the
+##      recorded figure would have disabled the owner's "the system should auto upgrade
+##      the balance" spec to fix a chain that does not exist.** Same class as 58.3, 58.6.
+##      ⛔⛔⛔ **THE STOP NOTE, AND IT NAMES ITS OWN LIFTING CONDITION (58.11): THE MOMENT
+##      `T2.1 MatA` APPROACHES 127/127, ROTATIONS BEGIN AND THIS GOES LIVE. Re-run
+##      `cascade_chain.js` THEN before assuming depth is still 0.**
+##      ▶ **THE CODE FIX IS NOT OBVIOUS — READ TierRouter's REVERT ORDERING FIRST.**
+##      Moving the approve after the `staticCall` may make an unallowanced wallet revert
+##      `ERC20InsufficientAllowance` instead of returning the real `TRGate` verdict —
+##      masking eligibility, the very defect 59.6b complains about. The alternative
+##      (revoke on the refusal path) costs one tx per refusal, expensive when TRGate
+##      refuses nearly everyone.
+##      ✅ **DOCUMENT DISAGREEMENT RESOLVED: `cascade_chain.js` is CURRENT** (its footer
+##      knows the keeper re-approves); **`revoke_allowances.js`'s header is STALE** — it
+##      still says C/D skip unallowanced wallets, and that revoking stops automatic
+##      upgrades outright, when `onCrossToMatB` path B (MATRIX withdrawable,
+##      `TierRouter:1136-1143`) survives a revoke.
+## 60.5 ✅✅ **THE PARKS ARE `FUNDING`, NOT `NO-SEAT` — THE 16:00Z COPAY TEST STANDS.**
+##      **`pair_saturation.js` TIER=T1 at 21:55Z: `NO-SEAT 0 · FUNDING 46 ·
+##      CYCLE-OUT-FAILED 0`.** All 42 parked sit in **T1.1 MatB (127/127, 67 rot)**;
+##      T1.1 MatA **127/127, 194 rotations**; **T1.2 MatA 21/127 (room for 106)**;
+##      T1.2 MatB 0/127.
+##      ⛔ **CLAUDE PREDICTED NO-SEAT AND WAS WRONG. THE REASONING ERROR IS THE VALUABLE
+##      PART: SATURATION WAS CONFLATED WITH THE PARK REASON.** "T1.1 is saturated,
+##      therefore parks must be no-seat" does not follow — **a FUNDING park happens at
+##      the crossing-fee step, BEFORE seating is attempted, so occupancy is irrelevant to
+##      it.** ▶ **They are independent axes; occupancy cannot infer a park reason.**
+##      ✅ **Consequence is the good one: copay is the right instrument for this queue.**
+##      ⚠ **Same shape as 16:13Z (`FUNDING 13`) — the KNOWN pattern scaled by the
+##      registration rate, not a new behaviour.** It began between the 04:06Z fill
+##      (FUNDING 0 throughout) and 16:13Z, not during tonight's paced run.
+##      **MONEY: SF $175.80 (19:15Z) -> $195.45 (20:54Z) -> $205.05 (21:55Z), about
+##      +$10/h. Floor $100, spendable $105.05. Parked 7 -> 29 -> 42, about +13/h.**
+##      ✅ **The fund covers the CURRENT queue** (42 x ~$2 = ~$85 against $105 spendable).
+##      ⚠⚠ **PROJECTION ONLY, THREE POINTS AND A BORROWED SHORTFALL AVERAGE — DO NOT
+##      QUOTE AS MEASURED:** naive demand ~$26/h against ~$10/h growth goes under water
+##      before 16:00Z; **but 45%-of-rescues-cost-the-fund-nothing cuts effective demand
+##      to ~$14/h, near break-even.** ▶ **MEASURE IT: two more SF/parked readings before
+##      16:00Z and fit the real rates.**
+## 60.6 ⛔ **MY DETECTOR FALSE-POSITIVED AGAIN — THE 6th — AND IT MATCHED A TIMESTAMP.**
+##      An "auth/connectivity errors" grep reported `rr_rescue.log: 2`. **BOTH HITS WERE
+##      TIMESTAMPS: `19:03:02.403Z` and `19:18:02.403Z`** — the pattern carried the bare
+##      token `403` and `.403Z` is a millisecond field. The lines were "kill switch
+##      present — standing down" and a gas reading.
+##      ▶▶ **NEVER PUT A BARE HTTP STATUS NUMBER IN A LOG SCAN. `401`/`403`/`500` appear
+##      in timestamps, gas figures, block numbers and addresses. Match WORDS
+##      (`unauthorized`, `forbidden`, `ENOTFOUND`) or an anchored `HTTP 40[13]`.**
+##      ✅ **It cost nothing only because the matched lines were read WITH CONTEXT
+##      (`-A1 -B1`). A count alone would have left a phantom defect in the record** — and
+##      the rotated jobs returned 0 on the same over-broad pattern, so their clean bill is
+##      stronger than it looked, not weaker.
+## 60.7 ✅ **SMALLER THINGS SETTLED, EACH MEASURED.**
+##      ✅ **The +2 member anomaly (59.x watch) WAS A ONE-OFF, NOT A RATE.** 297 -> 312
+##      across three ticks is exactly +5, +5, +5. **The taper ETA holds at ~06:55Z.** My
+##      "could be 04:00Z" branch was a rate inferred from ONE interval — dead.
+##      ✅ **`CryptoNova-Keepers` DOES NOT NEED 59.4's `core.autocrlf` FIX.** It has none
+##      set and `git diff --name-only` returns **3 files WITH and WITHOUT
+##      `--ignore-cr-at-eol`** — zero phantom dirt, because its `.gitattributes` already
+##      pins `*.sh`/`*.js` to `eol=lf`. **59.4 was right to do three repos, not four.**
+##      ⚠ **59.7's `HEAD.lock` WARNING FIRED EXACTLY AS WRITTEN** — the commit left a
+##      zero-byte `.git/HEAD.lock` plus 111 `tmp_obj_*`. **`mv` aside worked; the owner
+##      deleted them on Windows.** The Cowork shell also has **no GitHub credentials** —
+##      `git push` there fails `could not read Username`; pushes are a Windows step.
+##      ✅ **FOUR SECTIONS CLAIMED "LATEST. READ THIS FIRST." AT ONCE (60, 58, 57, 56) —
+##      successors demoted the previous header only sometimes, so the marker had stopped
+##      meaning anything. All older ones demoted; **exactly one section carries it now.**
+##      ▶ **A MARKER THAT IS NEVER CLEARED IS NOT A MARKER. If you add one, clear the last.**
+## 60.8 ▶ **WHAT IS OPEN, IN ORDER, FOR SESSION 61.**
+##      1. **THE TAPER, ~06:55Z 2026-09-03.** Log must print `A: 450/450 members >= 450 —
+##         cap 1/tick`. **If registrations continue at 5 past 450, the taper is broken.**
+##      2. **THE COPAY TEST, ~16:00Z 2026-09-03**, now KNOWN to be a genuine FUNDING queue
+##         (60.5). Watch `/root/keeper/copay.log` and the SF. **Take two SF/parked
+##         readings before then and fit the real rates rather than trusting 60.5's
+##         projection.**
+##      3. ⛔ **DELETE `fluent-neat-moon` at QuickNode (safe). DO NOT DELETE
+##         `cosmopolitan-still-fire` (60.2).** Update the local
+##         `C:\CryptoNova-Keepers\.env`, which still holds the dead URL.
+##      4. **60.2's unmeasured half: does the DEPLOYED site serve those 12 keys?** Then
+##         decide on QuickNode domain restrictions for the five frontend endpoints.
+##      5. **60.4's stop note: re-run `cascade_chain.js` when `T2.1 MatA` nears 127.**
+##         Re-run the allowance scan to cover the 233 unreadable wallets.
+##      6. **59.8's list is otherwise UNCHANGED:** `diag_parked_census.js` block-0 read;
+##         `pair_saturation.js` missing dotenv; the 38 read-only diagnostics with stale
+##         `ADDRESSES_FILE` defaults (`cascade_chain.js:40` is one); memory merges;
+##         `entryFee`'s catch; the two `DRY_RUN` defects (59.6); MT5-Bots dirty files.
+##      ⚠ **`rr_keeper.OFF` IS STILL GONE AND ALL THREE JOBS ARE RUNNING.**
+##      **`touch /root/keeper/rr_keeper.OFF` stops them within a tick.**
+
+# ⬛ SESSION 59 STATE — 2026-09-02.
 # (Opened on 58.10 item 1. 58.x is still correct throughout.)
 # ⛔⛔⛔ THE HEADLINE: **ITEM S IS CONFIRMED LIVE END-TO-END, AND THE STATUS PAGE
 # WAS COUNTING LOANS AND CALLING THEM RESCUES — SO THE RESCUE THAT PROVED IT WAS
@@ -196,7 +384,7 @@ owner-set, and the session that earned it got five things wrong by ignoring what
 ##      first handoff since 48.4 where that is true — recreate the file to stop them.
 
 ---
-# ⬛ SESSION 58 STATE — 2026-09-02. LATEST. READ THIS FIRST.
+# ⬛ SESSION 58 STATE — 2026-09-02.
 # (Opened on 57.13's named job. 57.x is still correct EXCEPT 57.10, corrected below.)
 # ⛔⛔⛔ THE HEADLINE: **TWO OF THIS SESSION'S FOUR BIGGEST FINDINGS WERE STALE NOTES
 # IN THIS FILE, NOT DEFECTS IN THE CODE. A HANDOFF THAT RECORDS A STOP WITHOUT
@@ -344,7 +532,7 @@ owner-set, and the session that earned it got five things wrong by ignoring what
 
 ---
 
-# ⬛ SESSION 57 STATE — 2026-09-02. LATEST. READ THIS FIRST.
+# ⬛ SESSION 57 STATE — 2026-09-02.
 # (Opens on 56.6 item 0. 56.x is still correct except where marked.)
 # ⛔⛔⛔ THE HEADLINE: **56.6 ITEM 0 IS ANSWERED AND THE ANSWER IS THE BAD ONE. THIS FILE
 # IS PUBLICLY FETCHABLE, UNAUTHENTICATED, RIGHT NOW.**
@@ -630,7 +818,7 @@ owner-set, and the session that earned it got five things wrong by ignoring what
 
 ---
 
-# ⬛ SESSION 56 STATE — 2026-09-01. LATEST. READ THIS FIRST.
+# ⬛ SESSION 56 STATE — 2026-09-01.
 # (Continues session 55 the same day. 55.x is still correct except where marked.)
 # ✅✅✅ THE HEADLINE: **55.8 ITEMS 1, 2, 4 AND 5 ARE DONE**, all proven rather than
 # asserted — and item 1 was MISDIAGNOSED in the 55 handoff.
