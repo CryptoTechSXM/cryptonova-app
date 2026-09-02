@@ -10,6 +10,192 @@ owner-set, and the session that earned it got five things wrong by ignoring what
 
 ---
 
+# ⬛ SESSION 59 STATE — 2026-09-02. LATEST. READ THIS FIRST.
+# (Opened on 58.10 item 1. 58.x is still correct throughout.)
+# ⛔⛔⛔ THE HEADLINE: **ITEM S IS CONFIRMED LIVE END-TO-END, AND THE STATUS PAGE
+# WAS COUNTING LOANS AND CALLING THEM RESCUES — SO THE RESCUE THAT PROVED IT WAS
+# INVISIBLE TO THE PAGE. A ZERO-COST RESCUE IS THE COMMON CASE, NOT AN EDGE.**
+# ⛔ **I ALSO LEAKED TWO QUICKNODE KEYS BY DIFFING THE LIVE CRONTAB — SEE 59.3.
+# ROTATE `cosmopolitan-still-fire` AND `fluent-neat-moon`.**
+## 59.0 ✅✅✅ **58.7's WATCH IS ANSWERED: `RescueOverflowed` FIRED AND THE MEMBER WAS SEATED.**
+##      tx `0xda3b7d28a47a6022…`, block **46297808**, keeper EOA `0xd419681B…` ->
+##      MatrixKeeper via **`performUpkeep`**. The whole chain is in one receipt:
+##      `MemberCrossedToPartner` (T1.1 MatB -> PM) -> **`RescueOverflowed(member
+##      0x26388a81…, fromPair 0, toPair 1)`** -> $10.00 USDC MatB -> T1.2 MatA
+##      `0x8c139A1a…` -> full entry economics -> **`MemberEntered(bfsPosition 15,
+##      memberId 15)`** -> `MemberRouted(pairId 1)` -> `ParkedRescued`.
+##      ⛔ **58.6's PREDICTION WAS WRONG IN DETAIL, RIGHT IN SUBSTANCE.** It said rescue
+##      #1 would take the NORMAL path because T1.1 MatB had room for one. **The FIRST
+##      rescue took the OVERFLOW branch** — `_bothHalvesFull` was TRUE at execution.
+##      ▶ **Occupancy at 16:13Z was a snapshot; the branch is decided at the moment of
+##      the call. 58.7's own lesson, one session later.**
+##      ✅ **IT COST THE FUND NOTHING** — the $10.00 came from MatB's balance and the SF
+##      **received** $0.30 (`FundDeposit`). No `MemberDebtIncreased`, no loan.
+## 59.1 ✅✅ **THE STATUS PAGE COUNTED LOANS AND CALLED THEM RESCUES. Frontend `5adea95`
+##      -> `5c98d4c`, full ladder, live and verified on the page.**
+##      ⛔⛔ **`status.html:995` queried `sf.MemberDebtIncreased` into a variable named
+##      `rescueCount`. That event fires ONLY when the fund ADVANCES money**, so the
+##      59.0 rescue emitted none and the page read **"Total rescues 0 · Last rescue: No
+##      rescues yet"** an hour after a real, seated rescue. **~45% of V8.50 rescues cost
+##      the fund nothing — the undercount was the COMMON case.**
+##      ✅ **NOW THE UNION OF BOTH PATHS, deduped per transaction+member:
+##      `ParkedRescued` (MatrixKeeper; keeper path, loan or not) and
+##      `MemberDebtIncreased` (StabilityFund; also `manual_rescue.js`, which never
+##      emits `ParkedRescued`). Neither event alone answers the question.**
+##      ✅ **The loan-funded subset is its OWN ROW with its OWN read flag** — the fund
+##      ledger can land when the keeper query does not. **A partial union UNDERSTATES,
+##      which is failure-as-zero in a new costume, so the total is claimed only when
+##      BOTH reads land; otherwise last-good, else a dash.**
+##      ✅ **Replayed against 9 fixtures before shipping** (the live case, same-tx dedupe,
+##      loan-only, mixed batch, honest zero, each query failing alone, legacy cache
+##      shape). **LIVE NOW READS `1 rescue · 0 fund-assisted · last 2h ago`**, which
+##      matches the chain exactly.
+## 59.2 ⛔⛔ **THE TWO-WRITERS SHAPE BIT FOR REAL, AND IT PRINTED A FALSE CLAIM.**
+##      `status.html:483` was corrected to **"recent window ~5h"** when the window went
+##      100k -> 9,000 blocks (QuickNode caps `eth_getLogs` at 10k). **But the span
+##      carries `data-i18n` and ALL TEN locale files still said "last 100k blocks", so
+##      i18n.js overwrote the fix on every load, in every language.**
+##      ✅ **MEASURED, NOT ASSUMED: the deployed file WAS current (`blk - 9000` present,
+##      `blk - 100000` absent) and the rendered heading was still the stale string.**
+##      ▶▶ **THE RULE: CORRECTING INLINE TEXT ON A `data-i18n` ELEMENT CHANGES NOTHING.
+##      The locale files are the writer that wins.** All ten fixed, plus the new key.
+##      ⚠ Still open, same family: `#summary-sf` (harmless placeholder, 58.5) and
+##      `entryFee`'s `try {} catch {}` onto a hardcoded `10_000_000n`.
+## 59.3 ⛔⛔⛔ **I LEAKED TWO QUICKNODE KEYS. ROTATE THEM.**
+##      A `diff` of the pre/post crontab — run ON THE BOX, showing only the two changed
+##      lines — printed the FULL `BASE_SEPOLIA_RPC_URL=` values of jobs A and C into the
+##      owner's console. **Exposed: `cosmopolitan-still-fire` (job A / RPC_D) and
+##      `fluent-neat-moon` (job C / RPC_F).**
+##      ⛔⛔ **ROOT CAUSE IS A MIRROR-VS-SOURCE ERROR.** I read
+##      `crontab_live_mirror.txt`, saw `BASE_SEPOLIA_RPC_URL=${RPC_D}`, and declared a
+##      line-diff safe because the lines reference VARIABLES. **The mirror is REDACTED
+##      — that is what redaction looks like. The LIVE crontab has the keys INLINE in
+##      every job line.** 58.2 already said a raw `crontab -l` is credential-bearing; I
+##      applied that to whole-file capture and not to a two-line diff.
+##      ▶▶ **THE RULE: NEVER PRINT ANY LINE OF THE LIVE CRONTAB — not a diff, not a
+##      grep, not a tail. Verify crontab edits by COUNTS AND HASHES ONLY**
+##      (`crontab -l | md5sum`, `awk '!/^[ \t]*#/ && NF' | wc -l`, `grep -c <token>`).
+##      ⚠ **`grep` prints the line; `grep -c` prints a number. That is the whole margin.**
+##      ✅ **Editing the crontab ON THE BOX with `sed`, never capturing it to Windows, is
+##      still right and should stay** — it sidesteps 58.1's cp437 corruption entirely.
+##      **It was the DISPLAY step that leaked, not the edit method.**
+## 59.4 ✅✅ **THE "1,159 MODIFIED FILES" IN THE FRONTEND REPO WERE NEVER REAL.**
+##      `git diff --ignore-cr-at-eol` returned EMPTY for every one. **Windows git has
+##      `core.autocrlf` ON globally (the Keepers `.gitattributes` states this in its own
+##      comments), so it checks out CRLF; the Cowork Linux shell has no such setting and
+##      reads every line as changed.**
+##      ✅ **THE FIX WAS ALREADY IN THE HOUSE AND HAD NEVER BEEN PROPAGATED:
+##      `CryptoNova-App` already carried `core.autocrlf = true` in `.git/config` and read
+##      dirty = 0.** Copied to **`CryptoNova-Testnet-App` (1,159 -> 0)** and
+##      **`CryptoNite-Smart-Contracts/CryptoNova` (3 -> 0)**. `.git/config` is untracked
+##      and shared through the mount, so nothing in the repos changed.
+##      ⛔ **NOT COSMETIC: `git add -A` would have swept 1,159 phantom files into a
+##      commit. Stage by explicit path until the config is confirmed set.**
+##      ⛔ **DO NOT "FIX" THIS WITH `* text=auto`** — the Keepers `.gitattributes`
+##      rejects it in writing: it renormalises the whole repo and produces the enormous
+##      no-op diff *"where a real change goes to hide"*.
+##      ⚠ **STILL OPEN, DIFFERENT AND REAL: `CryptoNite-MT5-Bots` has 12 dirty files of
+##      which 8 are NOT line-endings — 5,284 deletions, including `rpcProvider.js` and
+##      `v8_39_testing_checklist.md`, which look like keeper files in the wrong repo.**
+## 59.5 ✅✅✅ **THE PACED STRESS RUN IS LIVE — STARTED 19:14:23Z. Keepers `517d3e9` ->
+##      `6dfeed4`. Live crontab md5 `abb6bed5f2f88d230c3de89311aba8c0`.**
+##      [stated] **OWNER'S SPEC: job A 5 registrations every 20 min, stop at 450 members
+##      then 1 every 20 min; job B unchanged; job C only ~5% MANUAL upgrades, "the
+##      system should auto upgrade the balance".**
+##      ✅✅ **THE AUTO SIDE NEEDED NO WORK, AND THAT WAS VERIFIED IN THE CONTRACT BEFORE
+##      ANYTHING WAS WRITTEN:** `memberOptions.autoUpgradeDisabled` defaults **false**
+##      (`TierRouter:245`, comment *"default false (= autoUpgrade ON)"*); it fires at the
+##      crossing (`:1207`) and again at cycle-out settle (`:1376`); **since V8.43 it funds
+##      from the member's in-matrix WITHDRAWABLE in the MatA they just crossed out of when
+##      the wallet cannot pay, leaving the crossing reserve locked**; and
+##      `autoUpgradeCycleThreshold = 5` forces it on for a member's first five cycles
+##      whatever their own setting says. Job B already sets autoUpgrade ON.
+##      ✅ **JOB A CONFIRMED ON TWO CONSECUTIVE LIVE TICKS:** 19:20 `A: 275/450 members —
+##      cap 5/tick`, 5 registered, `cap 5 reached`; 19:40 `A: 280/450`, 5 registered.
+##      **`MAX_REG`/`REG_TAPER_AT`/`REG_TAPER_TO` ALREADY EXISTED** (built 2026-08-28 to
+##      the owner's earlier "5/tick until 500 then 1") — only the number moved, 500 -> 450.
+##      ⛔ **`POOL_SIZE=401` WOULD HAVE REGISTERED NOTHING: the persisted `poolCursor` was
+##      already 522 and job A breaks out the moment `cursor >= POOL_SIZE`.** ✅ Primed 250
+##      wallets at `HDR_OFFSET=300522` (300522..300771, 0 failed) and set **`POOL_SIZE=772`
+##      — the exact end of the primed range, so exhaustion is a VISIBLE stop** rather than
+##      silent failures against unfunded wallets. **Next prime is `HDR_OFFSET=300772`.**
+##      ✅ **Those wallets already held ETH and USDC** — every one read
+##      `would fund: APPROVE-PM`, funded under an earlier deployment and needing only an
+##      approval to the **V8.51** T1 PM. **Real cost was 250 approvals (gas), not the
+##      0.5 ETH / $10,000 the preflight quotes** (a worst case computed before inspection).
+##      ✅ **JOB C: `UPG_MANUAL_PCT` (new). Selection by `keccak(address) % 100`.
+##      DETERMINISTIC, NOT RANDOM, ON PURPOSE** — the same wallets are the hand-upgraders
+##      every tick, so it is a stable property of a member, not a dice roll; a random draw
+##      would make EVERY wallet a manual upgrader eventually and make the run
+##      unreproducible. **Placed above `tried++`, so an excluded wallet costs one view call
+##      and never an attempt slot. Job C only. Default 100 = today's behaviour exactly.**
+##      ✅ **MEASURED: live `C: 5 candidates checked, 115 left to auto-upgrade` = 4.2% on
+##      a sample of 120 (binomial SD ~2.4); and 4.73% over 10,000 synthetic addresses,
+##      deterministic across instances, case-insensitive.**
+##      **BASELINE AT START (19:15Z):** members 275 · T1.1 MatA 127/127 · MatB 126/127
+##      (26 rot) · T1.2 MatA 15/127 · T1.2 MatB 0/127 · T2 MatA 56 · SF $175.80
+##      (spendable $75.80) · rescues 1, fund-assisted 0 · **parked 7**.
+##      ▶ **STOPPING IS ONE COMMAND: `touch /root/keeper/rr_keeper.OFF`** — halts all
+##      three jobs within a tick without touching the crontab.
+## 59.6 ⛔⛔ **TWO `DRY_RUN` DEFECTS IN `rr_keeper.js`, FOUND WHILE VERIFYING. NEITHER FIXED.**
+##      **(a) DRY_RUN ADVANCES THE PERSISTED POOL CURSOR.** `:435` increments `cursor`
+##      before the `if (DRY_RUN)` branch and `:485` writes `state.poolCursor` regardless,
+##      so a SIMULATION of job A permanently consumes one primed wallet per WOULD-register
+##      line. ✅ **ZERO-COST WORKAROUND, USED AND PROVEN: `POOL_SIZE=0`** — the cap line
+##      still prints (it is resolved before the loop), then the first iteration breaks on
+##      "pool exhausted" and the cursor is written back unchanged.
+##      **(b) DRY_RUN CAN NEVER SHOW JOB C OR D UPGRADING ANYONE.** `:740` skips the
+##      just-in-time approve under DRY_RUN, then `:749` logs "no TierRouter allowance and
+##      could not set one" and **`continue`s BEFORE the `manualUpgrade.staticCall`
+##      eligibility oracle**. Since the 2026-07-29 cascade fix **no wallet carries an
+##      allowance between ticks**, so EVERY candidate takes that branch.
+##      ⛔ **`C: N candidates checked, 0 upgraded` IN A DRY RUN IS AN ARTIFACT, NOT A
+##      FINDING.** The code already treats the analogous BALANCE shortfall as a green
+##      light (`:795` — `ERC20InsufficientBalance` -> "ELIGIBLE, dry run does not fund");
+##      **the ALLOWANCE case gets no such handling.** ▶ Fix by letting it fall through to
+##      the staticCall, or say "would approve".
+##      ✅ **GOOD DESIGN WORTH KEEPING (`:424-429`): a FAILED `globalJoinedCount()` read
+##      falls to the TAPERED cap, not full speed.** The worst case of an RPC hiccup is
+##      registering too FEW.
+##      ⚠ **The child:300000 pool is SPARSELY registered** — slots 400-800 held 120
+##      registered wallets while 0-400, 1984-3184 and 6800-7800 held none. **Job C's
+##      per-tick yield depends heavily on where `upgradeCursor` sits.** Not investigated.
+## 59.7 ▶▶ **THE METHOD LESSONS, AND BOTH ARE MINE.**
+##      **(1) A GREP THAT FINDS NOTHING IS NOT EVIDENCE THAT NOTHING HAPPENED.** I grepped
+##      `upgraded|ELIGIBLE|not eligible`, got three lines, and concluded the reason lines
+##      "were not emitted". They were — as *"no TierRouter allowance and could not set
+##      one"*, wording my filter did not match. **Read the ungrepped output, or read the
+##      source, before calling a silence a finding.**
+##      **(2) I ASSERTED A SAFETY PROPERTY FROM A DOCUMENT INSTEAD OF MEASURING IT ON THE
+##      THING ITSELF** (59.3). The mirror's own header says it is not the source of truth.
+##      **Before claiming any output is safe to print, check the artefact that will
+##      actually produce it.** ▶ This is 58.11 in a new coat.
+##      ⚠ **The Cowork device shell cannot `unlink`.** A `git commit` there leaves a stale
+##      zero-byte **`.git/HEAD.lock`** — which blocks the NEXT ref update — plus
+##      `tmp_obj_*` files. ✅ **`mv` works where `rm` does not**; move the lock aside and
+##      have the owner delete on Windows. **Check for `HEAD.lock`, not only `index.lock`.**
+## 59.8 ▶ **WHAT IS OPEN, IN ORDER, FOR SESSION 60.**
+##      1. ⛔ **ROTATE THE TWO QUICKNODE KEYS (59.3)** and update `/root/keeper/.env` and
+##         the crontab. Nothing is broken meanwhile; do not leave it.
+##      2. **THE TAPER HAS NOT YET BEEN PROVEN.** It should fire ~07:00Z 2026-09-03 (03:00
+##         owner local). **The log must print `A: 450/450 members >= 450 — cap 1/tick`.
+##         If registrations continue at 5 past 450, the taper is broken.**
+##      3. ⚠⚠ **THE FIRST REAL TEST OF THE COPAY PATH IS ~16:00Z 2026-09-03**, when the
+##         earliest parks clear the 24h grace — now with job A adding registrations on
+##         top. **Parked went 5 (16:13Z) -> 5 (17:11Z) -> 7 (19:15Z) and that is CORRECT:
+##         nothing is eligible yet, so `copay_rescue` having no work is right, not a
+##         fault.** Watch `/root/keeper/copay.log` and the SF balance.
+##      4. **Whether a LIVE job C actually upgrades anyone** — unprovable in a dry run
+##         (59.6b). First populated-band tick after 19:40Z answers it.
+##      5. **58.10's list is otherwise UNCHANGED and still correct:** fix
+##         `diag_parked_census.js`'s block-0 read and `pair_saturation.js`'s missing
+##         dotenv; the QuickNode key in `pif.html`; the 38 read-only diagnostics with
+##         stale `ADDRESSES_FILE` defaults; memory file merges; `entryFee`'s catch.
+##      6. **The two `DRY_RUN` defects (59.6) and the MT5-Bots dirty files (59.4).**
+##      ⚠ **`rr_keeper.OFF` IS NOW GONE AND ALL THREE JOBS ARE RUNNING.** This is the
+##      first handoff since 48.4 where that is true — recreate the file to stop them.
+
+---
 # ⬛ SESSION 58 STATE — 2026-09-02. LATEST. READ THIS FIRST.
 # (Opened on 57.13's named job. 57.x is still correct EXCEPT 57.10, corrected below.)
 # ⛔⛔⛔ THE HEADLINE: **TWO OF THIS SESSION'S FOUR BIGGEST FINDINGS WERE STALE NOTES
