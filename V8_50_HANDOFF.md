@@ -10,6 +10,154 @@ owner-set, and the session that earned it got five things wrong by ignoring what
 
 ---
 
+# ⬛ SESSION 58 STATE — 2026-09-02. LATEST. READ THIS FIRST.
+# (Opened on 57.13's named job. 57.x is still correct EXCEPT 57.10, corrected below.)
+# ⛔⛔⛔ THE HEADLINE: **TWO OF THIS SESSION'S FOUR BIGGEST FINDINGS WERE STALE NOTES
+# IN THIS FILE, NOT DEFECTS IN THE CODE. A HANDOFF THAT RECORDS A STOP WITHOUT
+# RECORDING WHAT WOULD LIFT IT BECOMES PERMANENT BY DEFAULT.**
+## 58.0 ✅ **THE CRONTAB HEADER LIE IS CLOSED (56.6 item 5). Keepers `7b136f0` -> `edfdba3`.**
+##      Header now names V8.51, states jobs A/B/C are UNCOMMENTED AND LIVE, names
+##      `/root/keeper/rr_keeper.OFF` as the only thing holding them, warns that deleting it
+##      starts THREE jobs, and points at `FORCE_RUN=1` for a controlled run. The DISABLED
+##      band became **"STRESS ENGINE, PART 1 — GENUINELY COMMENTED OUT (the two lines below
+##      only)"**; a new **"PART 2 — LIVE AND UNCOMMENTED"** band sits above the three live lines.
+##      ▶ **A SECOND LIE IN THE SAME FILE, found only by reading every comment: job A was
+##      labelled "every 10 min" on a `*/20` schedule.** Fixed.
+##      ✅ **SAFETY PROVEN, NOT ASSERTED: comments+blanks stripped from before and after gives
+##      12 active lines each, both hashing `c0c78bd25511b05cb89723f6e7f765dd`.**
+## 58.1 ⛔⛔⛔ **THE CAPTURE RULE IN 56.x WAS HALF RIGHT AND WOULD HAVE CORRUPTED THE LIVE
+##      CRONTAB.** It said `>` writes UTF-16LE, use `| Out-File -Encoding utf8`.
+##      ▶ **`Out-File` sets how the file is WRITTEN. It does NOTHING about how the console
+##      DECODES ssh's bytes.** With a cp437 console the UTF-8 em-dash `e2 80 94` becomes
+##      `ΓÇö` and `─` becomes `ΓöÇ` **before Out-File ever runs**. First capture came back
+##      with 255 mangled characters.
+##      ✅ **THE REAL RULE: `[Console]::OutputEncoding = [System.Text.Encoding]::UTF8` BEFORE
+##      the ssh call.**
+##      ▶▶ **AND THE HABIT THAT ACTUALLY SAVED IT: do not trust either copy — ask the BOX.
+##      `crontab -l | md5sum` and `hexdump -C` of line 1 returned `e2 80 94`, proving the VPS
+##      was clean and WINDOWS was the corruption.** Editing that first capture would have
+##      turned a comment-only job into real damage. **Verify a capture by md5 against the box
+##      before editing it.**
+## 58.2 ⛔⛔ **A RAW `crontab -l` IS CREDENTIAL-BEARING.** The live crontab embeds QuickNode
+##      API KEYS in the URL PATH — the path IS the credential. **Three key-bearing files sat
+##      in `C:\CryptoNova-Keepers` mid-session**; all deleted before committing. Only the
+##      REDACTED `crontab_live_mirror.txt` is ever committed.
+##      ▶ **NEW: `thrilling-newest-seed` is a SEVENTH crontab endpoint the 2026-08-27 legend
+##      never listed** — job B's primary RPC, also in its `RESCUE_RPCS`. Assigned **RPC_G**.
+##      **`side-silent-sheet` (RPC_E) is now UNUSED in the crontab.**
+## 58.3 ⛔⛔⛔ **57.10's BLOCKER WAS FALSE AND NOBODY HAD RE-RUN IT.** It said `SF_FLOOR` is
+##      keeper-side only "so the page cannot read it — owner's call where the number lives".
+##      ▶ **`StabilityFund.sol:202` carries a PUBLIC `stabilityFloor` with `setStabilityFloor`
+##      (`onlyOwnerOrGovernance`, capped at `sfTarget()`). It was ALWAYS readable.**
+##      ✅ **MEASURED `$0.00`** — never initialised; the only assignment in the contract is
+##      inside the setter. **[stated] The owner said "the SF never really blocks a loan" and
+##      he was right.** `governance` `0x56Ba053e…` IS wired; `sfTarget()` $250 (T2 fee x 10).
+##      ⛔ **THE SAME FACT LIVED IN THREE PLACES, ALL DIFFERENT: contract $0 · `copay_rescue.js:51`
+##      private $250 · `status.html` a third rule (`balance/5`).** That is why the page
+##      promised twelve rescues the keeper would refuse.
+## 58.4 ✅✅✅ **ONE FLOOR NOW, ON CHAIN, DAO-GOVERNED.**
+##      [stated] **OWNER'S RULE: the buffer is whatever the T1 multiplier makes it —
+##      "10 x 10 = 100".** ✅ **`stabilityFloor` set to `$100.00`** (tx `0x90b6e5a3…`, signer =
+##      owner). Balance $170.10 -> **spendable $70.10**.
+##      ✅ **`copay_rescue.js` NO LONGER DEFINES A FLOOR** — reads `stabilityFloor()` live.
+##      **The `SF_FLOOR` env override was deleted ON PURPOSE: an env var is the private copy
+##      wearing a different hat.** ⛔ **A FAILED READ STANDS THE RUN DOWN (3 retries, then
+##      refuse) — it must NEVER default to 0n; this is a SPENDING script and failure-as-zero
+##      would let one run drain the fund.** Proven live: `floor $100.00 from chain`.
+##      ⚠⚠ **THE RULE IS DERIVED, THE CONTRACT STORES A CONSTANT — THEY WILL DRIFT.** If the
+##      DAO moves `sfTargetMultiplier[0]` or T1's fee, the stored floor does NOT follow.
+##      ✅ Mitigated twice: **`scripts/set_stability_floor.js --from-t1`** computes the rule
+##      from live reads (type the RULE, never the number), and **`sf_floor_probe.js` prints
+##      IN STEP / *** DRIFT ***.** **Auto-derivation would need a contract change; not made.**
+## 58.5 ✅✅ **STATUS PAGE: THE RESCUE-CAPACITY CLAIM IS FIXED (57.10). Frontend `30c898f` ->
+##      `5adea95`, full ladder, live on both domains.**
+##      ⛔ **`Math.floor(sfBalance / 5)` was wrong THREE ways:** (1) $5 is **T1's** crossing
+##      price — a parked T2 member costs $12.50 (the $10-withdrawal-lock hardcode again);
+##      (2) no concept of `stabilityFloor`; (3) it answered a hypothetical **while the same
+##      function already held each waiting member's own shortfall**.
+##      ✅ **NOW: walk the REAL queue in the REAL rescue order** (`stillParked` is already
+##      sorted longest-waiting-first, which is the order the keeper works), spending
+##      `totalBalance - stabilityFloor` down member by member. **An unreadable cost STOPS the
+##      count and the label becomes "at least N"** — a floor reported as a floor.
+##      ✅ **BOTH display sites read ONE measurement now** (`_rescueCap`). **`Math.floor(sfNum/5)`
+##      appeared TWICE and the two agreeing is what made it look right.**
+##      ✅ **Replayed against 9 fixtures before shipping** (0 parked -> "no members waiting";
+##      40 x $5 at $167.40 -> "33 of 40"; unread cost -> "at least 1 of 3"; DAO floor $150 ->
+##      what $17.40 covers; floor above balance -> 0). All 4 inline script blocks parse.
+##      ⚠ **LEFT ALONE, KNOWN: `#summary-sf` has `data-i18n` AND is written by `setText`** —
+##      the two-writers shape. A language switch reverts it to a static sentence until the
+##      next poll: a harmless placeholder, never a false number. **`entryFee` at the shortfall
+##      site still does `try {} catch {}` onto a hardcoded `10_000_000n`** — same class, open.
+## 58.6 ✅✅✅ **48.4 IS OBSOLETE AND BOTH RESCUE KEEPERS ARE LIVE AGAIN. Live crontab md5
+##      `c573588256b5ba8602a678a68c0996ac`; keepers `94ee5d1` -> `517d3e9`.**
+##      [stated] **THE OWNER SUPPLIED THE MECHANISM 48.4 LACKED:** *"parked members primarily
+##      enter their own pair but if no seat it causes a rotation and the #1 then rotates out
+##      opening that seat… once funded from SF they either enter same pair or go to a new
+##      pair… saturation is good as it generates rotations and rotations get members paid."*
+##      [stated] He also said **"There is so much not carried over from other sessions."**
+##      ▶ **He was right and Claude's caution was wrong.**
+##      ✅✅ **VERIFIED IN SOURCE, `PairManagerV8.rescueReentry` (:400-510)** — the doc comment
+##      states his mechanism nearly verbatim. **PRECISION: the rotation only SEATS the arrival
+##      if a half has room. With BOTH halves full, R_A and R_B merely SWAP HALVES and the
+##      arrival parks** (`noseat_witness.js` 2026-08-29: 105 parked at shortfall 0, 0 exceptions).
+##      ✅✅✅ **V8.50 ITEM S IS THE ESCAPE HATCH AND IT IS IN THE DEPLOYED TREE:**
+##      `else if (_bothHalvesFull(p))` -> `_pairWithRoomFor()` -> a pair with a genuinely free
+##      MatA seat -> `emit RescueOverflowed`. **Every read try-wrapped; NOTHING in the branch
+##      reverts** (rescueReentry is called with no try/catch above it); **with no pair free it
+##      falls through to today's behaviour. It can improve the outcome, never break it.**
+##      ⛔⛔⛔ **THE LESSON: 48.4 WAS WRITTEN 2026-08-29 AND ITEM S WAS BUILT THE SAME WEEK
+##      FROM THE SAME MEASUREMENT — NOBODY UPDATED THE STOP NOTE.** 48.4 recorded a DECISION
+##      and not a MECHANISM, so the block outlived its cause and THIS session re-derived the
+##      fear from the stale note and nearly re-imposed it.
+##      ✅ **The crontab itself now carries the whole why**, so it cannot go stale silently.
+## 58.7 ⚠ **LIVE STATE AT SESSION END, AND WHAT TO WATCH FIRST.**
+##      **T1.1 MatA 127/127 `*** SATURATED ***` (rotations 150) · T1.1 MatB 126/127 with
+##      5 PARKED · T1.2 MatA 15/127 · T1.2 MatB 0/127.** SF $170.10, floor $100, spendable
+##      $70.10. **All 5 were inside the 24h grace at 16:13Z.**
+##      ⛔ **PARKS ARE ACCUMULATING: 4 at 15:59Z, 5 at 16:13Z.** Two instruments disagreeing
+##      (copay said 4, pair_saturation said 5) was **not** a stale slot or a miscount — **the
+##      population MOVED between runs. Re-running both back-to-back is what showed it.**
+##      ▶▶ **WATCH: `RescueOverflowed` FIRING IS ITEM S WORKING.** Rescue #1 should take the
+##      normal path (MatB's last seat absorbs the rotated root); #2 onward should overflow to
+##      T1.2. **Rescues succeeding with both halves full and NO such event means the branch is
+##      not being reached — investigate.** Re-run `pair_saturation.js`; occupancy shows it.
+## 58.8 ⛔ **TWO INSTRUMENT DEFECTS FOUND, NEITHER CHASED.**
+##      **(a) `diag_parked_census.js` (contracts) IS UNUSABLE** — reports `head block: 0` and
+##      pins every read to block 0, so all 10 `pairCount` reads fail `could not decode result
+##      data`. Its block-number read is failing to zero. ✅ **It refuses to report totals and
+##      says "THESE TOTALS ARE FLOORS, NOT COUNTS. Do not quote them" — correct behaviour, and
+##      the only reason the zeros were not believed.** Use `pair_saturation.js` meanwhile.
+##      **(b) `pair_saturation.js` REFUSES TO START THOUGH `ADDRESSES_FILE` IS IN `.env`** —
+##      it never loads `.env` at all, so the guard fires on a value that is present. Must be
+##      passed inline. **Guard right, wiring incomplete.** ⚠ **This is why `fastlane_rescue.js`
+##      was grepped for `dotenv…__dirname` BEFORE being re-enabled** — it has it (`:35`).
+## 58.9 ⚠ **A `git push` REPORTING "Everything up-to-date" WAS INVESTIGATED AND WAS BENIGN
+##      THIS TIME** — `status.html` was already committed and pushed (`5adea95`), so the
+##      second attempt was a true no-op. **`git ls-files -v` showed `H` (no assume-unchanged),
+##      `git cat-file -s HEAD:status.html` = 121509 = the edited size.** ▶ **It is
+##      indistinguishable from the 56.5 failure without looking. Always look.**
+## 58.10 ▶ **WHAT IS OPEN, IN ORDER, FOR SESSION 59.**
+##      1. **WATCH THE FIRST RESCUES** (58.7) — `RescueOverflowed`, occupancy, and whether the
+##         5 seat cleanly. This is the only thing with live members in it.
+##      2. **Fix `diag_parked_census.js`'s block-0 read and `pair_saturation.js`'s missing
+##         dotenv** (58.8) — both are instruments other work depends on.
+##      3. **The QuickNode key in `pif.html`** (57.8) — decide, and check the other pages.
+##      4. **The 38 read-only diagnostics still carrying stale `ADDRESSES_FILE` defaults** (57.13).
+##      5. **Memory file merges** (57.11), starting with the three `v851-*`.
+##      6. **`entryFee`'s `try {} catch {}` -> hardcoded $10 in `status.html`** (58.5).
+##      7. Then 56.6 items 2, 4, 6, 7 (`rr_keeper.OFF`, retirements, `monitor_v8`
+##         DRY_RUN/STATE_FILE, and 55.8's 7-9). **Item 5 is now CLOSED (58.0).**
+##      ⚠ **`rr_keeper.OFF` IS STILL IN PLACE. Removing it starts THREE jobs.**
+## 58.11 ▶▶ **THE METHOD RULE THIS SESSION EARNED, AND IT IS THE OWNER'S COMPLAINT IN ONE
+##      LINE: A HANDOFF NOTE THAT RECORDS A STOP MUST RECORD THE CONDITION THAT WOULD LIFT IT.**
+##      Two of the four biggest findings today were stale notes in THIS FILE, not defects:
+##      **48.4's pause** (fixed by item S four days later, note never updated) and **57.10's
+##      blocker** (an assertion nobody re-ran, treated as settled fact for a session).
+##      ▶ **Neither cost anything only because the owner pushed back and the claims were
+##      re-measured. Re-measure inherited blockers before honouring them.**
+
+---
+
 # ⬛ SESSION 57 STATE — 2026-09-02. LATEST. READ THIS FIRST.
 # (Opens on 56.6 item 0. 56.x is still correct except where marked.)
 # ⛔⛔⛔ THE HEADLINE: **56.6 ITEM 0 IS ANSWERED AND THE ANSWER IS THE BAD ONE. THIS FILE
