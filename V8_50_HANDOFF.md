@@ -97,6 +97,169 @@ owner-set, and the session that earned it got five things wrong by ignoring what
 ##      ⚠ **`rr_keeper.OFF` IS STILL ON** — removing it restarts THREE jobs, two on a
 ##      5-minute cadence.
 
+## 57.6 ✅✅ **VERIFIED AFTER THE PUSH, AND IT CORRECTS 57.4. THE EXPOSED SURFACE IS ONE
+##      HOSTNAME, NOT THE WHOLE PRODUCTION ENVIRONMENT.**
+##      - ✅ **The BRAND-NEW preview built from `0ecc343` — the commit carrying these very
+##        57.x sections — `cryptonova-mainnet-6i1mdlk0y-...` -> Vercel login.**
+##        ▶ **So the fix is FORWARD-LOOKING, not only retroactive. Future `v8.1` pushes are
+##        covered. That was asserted in 57.4; it is now measured.**
+##      - ⛔ **CORRECTION TO 57.4: I WROTE THAT PRODUCTION IS UNPROTECTED. IT IS NOT.**
+##        The production deployment GENERATED URL
+##        `cryptonova-mainnet-reayo44h4-...` **also returns the Vercel login.**
+##        ▶▶ **Standard Protection exempts only the ASSIGNED PRODUCTION DOMAIN. So exactly
+##        ONE hostname is public: `cryptonova-mainnet.vercel.app`.** Everything else on both
+##        projects — every preview, and even production by its generated URL — is gated.
+##      ▶ **THE STANDING RISK IS THEREFORE NARROWER THAN 57.4 SAID, BUT IT IS NOT GONE:**
+##      anything merged or promoted into branch `mainnet` on this project appears on that one
+##      public hostname. **`mainnet` must stay the 23-file marketing tree.**
+##      ⚠ **The 57.4 wording was written from how Vercel documents Standard Protection, not
+##      from a measurement. Same class of error the TWO RULES exist to stop — it was caught
+##      only because the post-push verification was run at all.**
+
+## 57.7 ⛔⛔⛔ **56.6 ITEM 3 ANSWERED BY TWO REAL ALERTS — AND THE INSTRUMENT CANNOT SETTLE
+##      V8.49 ITEM 2. NOT NOW, NOT EVER.**
+##      Alerts: **Sep 1 20:36:56 GMT** (`0x95EB...e1e5`, page `/?coupon=PIF-HH7T-CGJW&ref=...`)
+##      and **Sep 1 23:02:07 GMT** (`0xc63A...4998`). Both MetaMask, mobile, `approve-usdc`,
+##      `-32080` / `httpStatus 403`.
+##      - ✅ **THE NEW `log-error.js` IS LIVE, PROVEN NOT ASSUMED: alert 3's error text runs
+##        far past 200 chars and is cut off mid-token at the 600 boundary.** Old code sliced
+##        at 200. **The widened window works.**
+##      - ⛔⛔⛔ **NEITHER ALERT CARRIES A `📡 RPC host:` LINE, AND THE EXTRACTOR IS NOT
+##        BROKEN — THERE IS NO URL IN THE ERROR AT ALL.** 56.3 assumed `slice(0,200)` was
+##        cutting the URL off. With the full message visible, **MetaMask reports
+##        `RPC <chainIdHex> <label> <method>` and NEVER the endpoint.**
+##        ▶▶ **AND EIP-1193 EXPOSES NO API FOR A WALLET'S RPC URL, so NO amount of frontend
+##        instrumentation can ever recover it.** ⚠ **The 600-char widening was built on a
+##        hypothesis about WHY the field was missing, and the hypothesis was never checked
+##        against a real payload first. Widen the instrument only after reading the input.**
+##      - ⛔⛔ **56.3's MECHANISM IS INCOMPLETE. The failing methods are `eth_blockNumber`
+##        and `eth_getCode` — PLAIN READS, NOT `eth_estimateGas`.** ▶ The member's endpoint
+##        is refusing routine reads; `approve-usdc` is only where it surfaces first. The
+##        "dies before the confirmation dialog" story holds; "because gas estimation fails"
+##        does not.
+##      - ⚠⚠ **NEW LEAD, LEFT DELIBERATELY UNRESOLVED — the network label reads `Custom`,
+##        while we pass `chainName: 'Base Sepolia'` at BOTH call sites (`index.html:3202`,
+##        `:3269`).** **(a)** the member added the network himself, so it is HIS endpoint and
+##        `sepolia.base.org` is exonerated; **(b)** MetaMask labels ANY
+##        `wallet_addEthereumChain` network "Custom" versus built-in, which discriminates
+##        nothing. ▶ **(b) is quite plausible. DO NOT PICK ONE FROM THIS DATA.**
+##      - ⚠ **Session count reading 1 per address is WEAK evidence for the address-keying
+##        fix, not proof** — `sessionCounts` is in-memory and the alerts are 2.5 h apart
+##        across near-certain cold starts, which gives 1 either way.
+##      - ✅✅✅ **THE FRONTEND FIX RE-PROVEN ON THE DEPLOYED CODE AGAINST THE REAL ALERTS,
+##        5/5.** `friendlyError` lifted from `index.html:9358-9611` (`node --check` clean),
+##        fed the verbatim alert-2 text and the alert-3 nested shape → **both return the
+##        honest transport message.** ⛔ **Alert 3's shape is NEW and STILL CONTAINS `"data":`
+##        — without the transport branch it would have hit the revert heuristic. The fix is
+##        doing real work on a shape it was never designed against.** Controls unregressed.
+##      - ⚠ **Cosmetic: the `(HTTP 403)` suffix does NOT print** — `_httpStatus` is null
+##        because the status sits inside the message STRING, not as a structured property;
+##        the branch matched on `-32080` and the regex. Not a defect.
+##      - ▶▶ **THE ONLY ROUTE LEFT TO ITEM 2 IS TO ASK A MEMBER.** Draft written:
+##        `community_reply_2026-09-02_cryptojan22_rpc_followup.txt` (Testnet-App repo,
+##        Telegram plain text, no markdown symbols) — asks for **(1)** the exact on-screen
+##        message, which is the PRODUCTION non-vacuity check the fix has never had, and
+##        **(2)** the RPC URL from MetaMask Settings, **with an explicit caution to strip any
+##        trailing key** — our own host-only rule applied to a member.
+##      - ⚠ **UNSENT at the time of writing. Owner approves before it goes out.**
+
+## 57.8 ✅✅✅ **THE PIF BLOCKER WAS NOT DIRTY DATA — `pif.html` WAS STILL ON V8.50 ADDRESSES.**
+##      Owner: a wallet refused on Pay It Forward as *"already a registered CryptoNova
+##      member"* while the DASHBOARD, same wallet, same app, same moment, said **"Not Yet
+##      Registered"**. He asked to CLEAN the old PIF data.
+##      ⛔⛔ **THERE WAS NOTHING TO CLEAN. `pif.html` carries its own hardcoded `ADDRS` and
+##      held `tierRouter 0x0001660f…` + `couponRegistry 0x21063617…` — BOTH V8.50.** The page
+##      was asking the OLD chain, where that wallet genuinely IS registered.
+##      ▶▶ **THE ASK WAS TO CLEAN; THE FIX WAS TO REPOINT. Deleting would have destroyed real
+##      V8.50 records to hide a display bug and the symptom would have returned.**
+##      **FIND OUT WHAT A PAGE IS READING BEFORE CLEANING WHAT IT SHOWS.**
+##      ⛔ **ROOT CAUSE: `update_addrs_v8_51.py`'s `ALL_FILES` IS A HAND-KEPT LIST OF 11 AND
+##      `pif.html` WAS NEVER ON IT** — the same shape as the fleet-wide `ADDRESSES_FILE ||
+##      "<stale book>"` default: **anything not on the list is stale by default and nothing
+##      says so.** The script even carries a MANDATORY comment about keeping
+##      `api/telegram-qa.js` on the list — someone fixed the INSTANCE, not the CLASS.
+##      ✅ **CONTAINED: of 45 addresses that changed V8.50→V8.51, `pif.html` was the ONLY
+##      file in the repo carrying any.** ✅ **BOTH HALVES FIXED — page repointed, and the tool
+##      gained `pif.html` plus a `residue_sweep()` that globs EVERY `*.html` and `api/*.js`
+##      (not a list) and `sys.exit(1)`s on any superseded address. NON-VACUITY PROVEN BOTH
+##      WAYS: clean on the fixed repo, CATCHES the defect when reinstated in a temp copy.**
+##      ⚠ **Claude's near-miss inside that fix: the sweep first referenced `OLD`/`NEW`; the
+##      script's variables are `old_data`/`new_data`. NameError at run time, would have read
+##      as "the cutover tool crashed". A guard is only as good as the variables it binds.**
+##      ✅✅ **SHIPPED AND VERIFIED ON BOTH DOMAINS (`30c898f`, full ladder).** Measured IN THE
+##      SERVED PAGE on `0x67757a3a…`: **`memberHighestTier` = 0 on V8.51, = 1 on V8.50**,
+##      `isRegisteredMember()` now false. **Both directions in one read.**
+##      ⚠ **SEPARATE, UNDECIDED: `pif.html`'s `READ_RPCS` ships a QuickNode endpoint with the
+##      API KEY IN THE PATH, in a public file.** The backend follows host-only for exactly
+##      this reason; the frontend contradicts it. **Owner's call — leave, rotate, proxy, or
+##      move this page to the public endpoint. Check the other pages first.**
+## 57.9 ✅✅✅ **STRESS FILL DONE — T1.1 MatA 127/127 AND MatB 127/127, ZERO PARKS THROUGHOUT.**
+##      Seven controlled chunks, ~2h, **NO-SEAT 0 · FUNDING 0 · CYCLE-OUT-FAILED 0 at every
+##      single measurement.** Full recipe and numbers: memory `cryptonova-stress-fill`.
+##      ⛔ **THE KILL SWITCH BLOCKED EVEN A DRY RUN** — `rr_keeper.js` checked `rr_keeper.OFF`
+##      at the top of `main()`, before every job AND every `DRY_RUN` branch. **The safety
+##      mechanism prevented safe observation; the only way to look was to delete it, which
+##      restarts all THREE cron lines.** ✅ **`FORCE_RUN=1` now lets a HUMAN-INVOKED run
+##      proceed while the switch STAYS IN PLACE — cron never sets it, so the schedule keeps
+##      standing down. Seven manual runs, zero cron ticks.** md5 `e63f2262…` on the box.
+##      ✅ **MECHANISM MEASURED, THEN TESTED: MatA rotations == MatB occupancy, 1:1.** Each
+##      MatA rotation cycles the root out into MatB; the cascade refills MatA, which is why
+##      it stays pinned at 127. ⛔ **Claude first told the owner MatB fills "by crossings, not
+##      registrations" — half right and misleading. Measure the pair before theorising.**
+##      ⛔⛔ **THE 1:1 HELD FOR SIX CHUNKS AND BROKE AT THE BOUNDARY. The final SINGLE
+##      registration produced: MatA rotations +3 · MatB +1 · MatB rotations 0→2 · T1.2 MatA
+##      0→1.** A CASCADE — the last seat completed MatB, **MatB itself began rotating (the
+##      FIRST completed figure-8 cycles on V8.51)**, and the overflow opened the next pair.
+##      ▶▶ **RULE: A LINEAR RELATIONSHIP MEASURED INSIDE A RANGE SAYS NOTHING ABOUT ITS EDGE.
+##      STEP THE LAST UNIT ALONE.** Stepping 20 there would have buried it.
+##      ⛔ **T1.2 AUTO-OPENED (MatA `0x8c139A1a…`, MatB `0xfaFfc9978…`). Registrations now
+##      route to T1.2 and no longer rotate T1.1 — T1.1 IS FINISHED AND STAYS FINISHED.**
+##      ⚠ **One chunk-4 registration reverted (`0xcD64e496…`) after priming fine — CAUSE
+##      UNINVESTIGATED. MatB moved exactly +19 that chunk, which is how we know.**
+##      ⛔ **`pool_primer.js:42` STILL defaults to `deployed_addresses_v8_45.json` and it
+##      SPENDS AND APPROVES. Bare, it approves against a dead PairManager. Next guard job.**
+## 57.10 ⛔⛔ **`status.html` CLAIMS A RESCUE CAPACITY THE KEEPER WILL NOT DELIVER. NOT FIXED.**
+##      Live: `STABILITY FUND · $62.55 · CRITICAL · ~12 members can be rescued`. **THE TRUE
+##      NUMBER IS ZERO.** `status.html:1259/:1676` compute `Math.floor(sfBalance / 5)`;
+##      `copay_rescue.js:131` budgets `sfBal − SF_FLOOR` and stands down at or below **250**.
+##      ✅ **MEASURED: all 9 `floor` matches in the file are `Math.floor` — the page has NO
+##      concept of the copay floor.** Not off by a little; unrelated rules.
+##      ⛔ **BLOCKER: `SF_FLOOR` is a KEEPER-SIDE SCRIPT CONSTANT, not a chain value, so the
+##      page cannot read it. Deciding where that number lives IS the fix — owner's call.**
+##      ⚠ Harmless while parked = 0; live the moment anyone parks under the floor.
+##      ✅ **SEPARATELY, THE SF "% health" DRIFT IS NOT A DRAIN AND MUST NOT BE CHASED** —
+##      [stated] owner, verified in source: `sfTarget()` = `tierEntryFees[highestOpenTier−1]
+##      × 10`, so the DENOMINATOR rises as tiers open. **And the balance is fine too for a
+##      reason he did not state: V8.51 DEPLOYED A NEW SF CONTRACT** (`0xb7962158…` vs V8.50's
+##      `0xCc6E7048…`), **so it started at ZERO on 09-01. Claude proposed investigating "what
+##      drained it" — nothing did. Compare the CONTRACT ADDRESS before comparing balances
+##      across a redeploy.**
+## 57.11 ⚠⚠ **MEMORY IS AT ITS CEILING — SYSTEMIC, NOT INCIDENTAL.** `bug-ledger` and
+##      `keeper-census` both hit the 32 KB cap mid-session and REFUSED writes; findings had
+##      to be parked in other files. ✅ Split into `cryptonova-stress-fill`,
+##      `cryptonova-vercel-exposure`, `cryptonova-withdrawal-audit`,
+##      `cryptonova-frontend-truth`; census 32,436→11,118 and ledger 32,762→7,480.
+##      ⛔ **NINE MORE FILES ARE WITHIN 800 BYTES OF THE CAP** — `automation` 32,739 ·
+##      `parked-backlog` 32,693 · `roadmap` 32,636 · `cryptonova` 32,276 · `rescue-exposure`
+##      32,056 · `fleet-ops` 31,999 · `v851-release` 31,926 · `v851-cutover` 31,318 ·
+##      `v851-deploy-run` 30,250. **`cryptonova.md` has not been written since 2026-08-07,
+##      which suggests it stopped accepting writes and nobody noticed.**
+##      ▶ **The three `v851-*` files are one deployment described across 93 KB — merge
+##      candidate. Fix is always the same: split by subject, leave a pointer.**
+## 57.12 ▶ **WHAT IS OPEN, IN ORDER, FOR SESSION 58.**
+##      1. **COMMIT THE UNCOMMITTED** — contracts `V8_50_HANDOFF.md` (57.6-57.12) and keepers
+##         `rr_keeper.js` (`FORCE_RUN`). ⛔ **`rr_keeper.js` IS DEPLOYED TO THE BOX BUT NOT
+##         COMMITTED — the exact "uncommitted work has no floor" trap from 56.5.**
+##      2. **`pool_primer.js` gets the ADDRESSES_FILE guard**, then the other manual spenders.
+##      3. **Decide where `SF_FLOOR` lives**, then fix the status-page capacity claim (57.10).
+##      4. **The QuickNode key in `pif.html`** (57.8) — decide and check the other pages.
+##      5. **Memory file merges** (57.11), starting with the three `v851-*`.
+##      6. **Watch for the members' replies** on the two RPC drafts — the exact on-screen
+##         message is the production non-vacuity check the transport fix has never had.
+##      7. Then 56.6 items 2, 4, 5, 6 and 7 (rr_keeper.OFF, retirements, crontab header lie,
+##         `monitor_v8` DRY_RUN/STATE_FILE, and 55.8's 7-9).
+##      ⚠ **`rr_keeper.OFF` IS STILL IN PLACE. Removing it starts THREE jobs.**
+
 ---
 
 # ⬛ SESSION 56 STATE — 2026-09-01. LATEST. READ THIS FIRST.
