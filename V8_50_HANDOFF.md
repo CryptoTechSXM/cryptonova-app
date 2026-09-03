@@ -197,6 +197,62 @@ owner-set, and the session that earned it got five things wrong by ignoring what
 ##         `entryFee`'s catch; the two `DRY_RUN` defects (59.6); MT5-Bots dirty files.
 ##      ⚠ **`rr_keeper.OFF` IS STILL GONE AND ALL THREE JOBS ARE RUNNING.**
 ##      **`touch /root/keeper/rr_keeper.OFF` stops them within a tick.**
+##      ⛔⛔ **READ 60.9 BEFORE THIS LIST. It is the OWNER'S finding, it corrects a claim
+##      in 59.5, and it outranks everything numbered above.**
+## 60.9 ⛔⛔⛔ **THE OWNER ASKED WHY T1.2 IS STUCK AND HE WAS RIGHT. 59.5's "T1.1 IS
+##      FINISHED AND WILL STAY FINISHED" IS FALSE — THE FRONT DOOR IS HARDCODED TO PAIR 0.**
+##      [stated] **His model:** *"It should be entry only through T1.1 A to B then when no
+##      space flows to T1.2… T1.2 A to B then fills up flows to T1.3. We also had a self
+##      sustaining loop and extra pairs opening up for double entry positions."*
+##      ✅✅ **HALF OF THAT IS EXACTLY THE CODE. `PairManagerV8._findExternalPair()` (:915)
+##      is `internal pure returns (uint256) { return 0; }` — A HARDCODED LITERAL. Every new
+##      registration enters pair 0's MatA, forever.** Its own comment: *"New entries are
+##      never diluted across pairs: concentrating them is what keeps pair 0 at MATRIX_SIZE
+##      and rotating, and a full MatA only rotates when it RECEIVES an entry
+##      (MatrixLogicLib:407)… Diverting new members away from a full pair is what FREEZES
+##      it."* **All five call sites route through it (:612, :646, :1045, :1072, :1116).**
+##      ⛔ **THE OTHER HALF IS NOT: NEW ENTRIES NEVER FLOW FORWARD TO T1.2.** Later pairs
+##      are populated ONLY by existing members cycling, the 2nd-pair route when the member
+##      already holds a seat, upgrades, and `rescueReentry` overflow (item S).
+##      *"Not by splitting the front door."*
+##      ⛔⛔⛔ **AND HIS MEMORY OF FORWARD GRADUATION IS NOT IMAGINED — IT WAS REAL, IT WAS
+##      REMOVED, AND THE FILE STILL DOCUMENTS IT. `PairManagerV8:776`:** *"V8.41 FIFO: stamp
+##      both matrices with their pair index so TierRouter can route graduates to
+##      pairIndex+1 (T1.1 MatB root → T1.2 MatA, etc.)"*. **V8.46 made re-entry return to
+##      the member's OWN pair. The identical stale claim at `:683` WAS corrected — and its
+##      correction note says it was fixed "because the next person to read it would have
+##      believed it."** ▶▶ **THE NEXT PERSON READ `:776` INSTEAD. A CORRECTION APPLIED AT
+##      ONE SITE AND NEVER SWEPT FOR SIBLINGS LEAVES THE FILE CONTRADICTING ITSELF.**
+##      ✅ **MEASURED AGREEMENT WITH THE CODE, WHICH IS WHY 59.5 WAS CAUGHT: T1.1 MatA
+##      rotations 150 (58.7) → 194 (21:55Z) while T1.2 MatA moved only 15 → 21.** T1.1
+##      never stopped rotating. **59.5 inferred its claim from T1.2 merely APPEARING and
+##      never checked the router. Same class as 48.4 and 57.10.**
+##      ▶▶ **WHY T1.2 IS THROTTLED, AND IT IS MONEY NOT ROUTING: T1.2 is fed by T1.1 MatB
+##      CYCLE-OUTS. MatB has 67 rotations against MatA's 194, and 42 members sit parked at
+##      the crossing (`NO-SEAT 0 · FUNDING 46`). Each registration rotates a root out of
+##      MatA; that root must fund the crossing into MatB; it cannot; it parks — and those
+##      parked roots are exactly the members who would otherwise cycle MatB into T1.2.**
+##      **The 24h copay grace means nothing clears them for a day, so the forward flow is
+##      throttled by a TIMER, not by a routing defect.**
+##      ⛔ **OWNER'S CORRECTION, AND CLAUDE HAD IT WRONG:** [stated] *"T1.1 A do not pay
+##      $10 to cross to T1.1 B, it uses the reserved crossing fee $5."* ▶ **$10 is the
+##      ENTRY fee; THE CROSSING IS $5 at T1, paid from the member's accrued CROSSING
+##      RESERVE.** ⚠ **58.5 ALREADY SAID "$5 is T1's crossing price" — Claude quoted that
+##      very section tonight and still wrote $10.**
+##      ▶▶▶ **THE MEASUREMENT THAT DECIDES THE DESIGN QUESTION, AND IT IS THE FIRST JOB OF
+##      SESSION 61: WHAT DOES A ROTATION ACTUALLY CREDIT TO THE ROTATED-OUT ROOT, AGAINST
+##      THE $5 ITS CROSSING RESERVE MUST REACH?** The average parked shortfall is ~$2.01
+##      against $5, so a parked root has accrued roughly 60% of what it needs. ⛔ **If a
+##      rotation credits less than $5, the figure-8 CANNOT FUND ITS OWN CROSSINGS and the
+##      Stability Fund is STRUCTURAL, not a safety net. That is an owner-level economic
+##      decision and it must be made on the number, not on an argument. NOT MEASURED — do
+##      not assume either way.**
+##      ✅ **The 2nd-pair route (`registerFor`, V8.48 chokepoint) and the double route
+##      (`freePairFor`, `TierRouter:1382`) BOTH EXIST** — both gated on the member already
+##      holding a seat in the pair. **The "extra pairs for double entry" he remembers is in
+##      the tree; whether it is FIRING is unmeasured.**
+##      ⚠ **ALL OF 60.9 IS READ FROM THE REPO SOURCE. Confirming the DEPLOYED V8.51
+##      bytecode matches was NOT done and is a separate step.**
 
 # ⬛ SESSION 59 STATE — 2026-09-02.
 # (Opened on 58.10 item 1. 58.x is still correct throughout.)
