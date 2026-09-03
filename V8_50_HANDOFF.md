@@ -66,7 +66,39 @@ owner-set, and the session that earned it got five things wrong by ignoring what
 ##      rotations). Parked in T1.1 MatB 12 -> 28 (+16): FUNDING parks happen at MatB CYCLE-OUT,
 ##      not at the MatA->MatB crossing. So 19 MatB cycle-outs = 16 parked + the owner + 2
 ##      others.** Lifetime ratios are not rates. Measure the interval.
+## 62.6 ✅✅✅ **THE ROUTING FIX IS WRITTEN, TEST-FIRST, AND GREEN ON THE TARGETED FILES.
+##      V8.52 = ONE FUNCTION: `PairManagerV8._findExternalPair()` is now `view` and returns
+##      THE FULL MatA THAT HAS ROTATED LEAST (pair 0 until pair 0 is full; then whichever full
+##      pair is most starved; a full matrix at 0 rotations always wins; no full MatA -> pair 0).
+##      Reads live occupancy()/rotationCount() only — no cursor, no threshold, no counter (R3).**
+##      ▶ **ORDER OF EVENTS, BECAUSE THE ORDER IS THE POINT:** (1) `REGRESSION_REGISTER.md` got
+##      R11 ("a test retargeted to pass is a deleted test" — O4's history) and the R1 addendum
+##      naming the cure BEFORE any code; (2) `test/V8_52_FrozenPair.test.js` written and run on
+##      unfixed code: **3 passing / 1 failing — F1: "pair 1 MatA is 4/4 with rotationCount 0
+##      after 16 further front-door entries"** — the live freeze reproduced in the harness for
+##      the first time; (3) the function changed, sibling comments swept (R7: :166, :641, :832,
+##      :854); (4) **F1 green, F2 (pair 0 keeps rotating — the relocated-freeze guard) and F3
+##      (never thin-spread) green; `V8_44_Overflow` 9/9; `sizes.js` PairManagerV8 16,855,
+##      headroom 7,721.**
+##      ⛔ **WHY NOT THE DOC'S OWN RULE ("pair 0 until physically full, then the next"): a full
+##      pair is the designed steady state, so "then the next" would starve pair 0 — the freeze
+##      relocated a fourth time. F2 exists to catch exactly that.**
+##      ✅ **O7's law restated per R11, not deleted:** "pair 1 fills from existing members
+##      cycling, never from the front door" -> "the front door reaches a later pair only once its
+##      MatA is FULL". O7's own drive stops at pair 1's first arrival, so its assertions were
+##      exact under both laws; title and LIMB 1 text changed, assertions unchanged.
+##      ▶ **THE OWNER, TONIGHT, VERBATIM: "double entry wasn't necessary before and it shouldn't
+##      be now" — he was right, 61.9 item 2 (default enableDouble=true) is WITHDRAWN. The double
+##      proved the mechanism; the front door is the design.** And: "i don't really want to stop
+##      but if this continues in circles for much longer i will be forced to." ▶ **Converge. No
+##      new scope. Every session ends with something he can see moved.**
+##      ⚠ **NOT YET: the FULL suite (Step 8, running at time of writing), the commit, the
+##      predeploy gate, and the V8.52 deploy itself — the deploy is the owner's timing call.**
 ## 62.5 ▶ **WHAT IS OPEN, IN ORDER, FOR SESSION 63.**
+##      0. **FULL SUITE RESULT for V8.52, then COMMIT `contracts/PairManagerV8.sol`,
+##         `test/V8_52_FrozenPair.test.js`, `test/V8_44_Overflow.test.js`,
+##         `REGRESSION_REGISTER.md`, this handoff. Then the predeploy gate. Then deploy V8.52
+##         when the owner says so — it is a PairManager change, i.e. a full redeploy.**
 ##      1. ⚠ **COMMIT. The whole SESSION 61 block (220 lines) and `REGRESSION_REGISTER.md`
 ##         (untracked) were NEVER committed — found at the start of session 62. Plus this block,
 ##         and `check_member_options.js` in the keepers repo (then scp to the VPS).**

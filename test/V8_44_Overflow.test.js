@@ -594,7 +594,7 @@ describe("V8.44 — overflow rework: own members return to own pair", function (
   // to a member who was already in the protocol.
   // ───────────────────────────────────────────────────────────────────────────
 
-  it("O7: DESIGN-LAW GATE, strengthened — pair 1 fills from EXISTING members cycling, never from the front door", async function () {
+  it("O7: DESIGN-LAW GATE, strengthened — pair 1 fills from EXISTING members cycling; the front door reaches it only once its MatA is FULL (V8.52)", async function () {
     const SIZE = 4;
     const ctx  = await deployTwoPairs(SIZE);
     const { pm, tr, matA, matB, matA2, matB2, W1, sigs, owner, usdc } = ctx;
@@ -655,10 +655,18 @@ describe("V8.44 — overflow rework: own members return to own pair", function (
       if (!firstAt.has(ev.args.member)) firstAt.set(ev.args.member, idx);
     });
 
-    // LIMB 1 — ONE DOOR. Every member's first appearance is pair 0. New entries are
-    // never diluted across pairs: diverting them away from a full pair is what
-    // freezes it (MatrixLogicLib:407 — a full MatA only rotates when it RECEIVES an
-    // entry; 254 members, 2026-08-06).
+    // LIMB 1 — THE DOOR. ⛔ LAW RESTATED, V8.52 (2026-09-03, REGRESSION_REGISTER R11 + R1
+    // addendum). This limb used to read "ONE DOOR: every member's first appearance is
+    // pair 0, new entries are never diluted across pairs". That single door is what FROZE
+    // every pair but pair 0 (T1.2 MatA 127/127 at 0 rotations, live 2026-09-03): a full
+    // MatA rotates only when it RECEIVES an entry, and nothing ever reached pair 1. The
+    // law is now: THE FRONT DOOR IS THE LEAST-ROTATED FULL MatA — never a pair whose MatA
+    // is not full (so entries are still never thin-spread below MATRIX_SIZE), but every
+    // full pair keeps receiving entries. In THIS drive the loop stops at pair 1's FIRST
+    // arrival, so pair 1's MatA is never full here and pair 0 is the only door: the
+    // assertion below is therefore unchanged and still exact for this run. The general
+    // law — full later pairs DO receive front-door entries, non-full ones never — is
+    // asserted where it can be driven to that state: test/V8_52_FrozenPair.test.js F1/F3.
     for (const [member, idx] of firstAt) {
       expect(routed[idx].args.pairId,
         `member ${member} entered through pair ${routed[idx].args.pairId}, not the front door`

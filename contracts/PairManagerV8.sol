@@ -163,8 +163,10 @@ contract PairManagerV8 is Ownable2Step {
     // configured number. Both are deleted, along with their setter and
     // `overflowActive()`. Nothing reads them any more:
     //
-    //   entry routing  — `_findExternalPair()` returns 0. ONE DOOR. New members are
-    //                    never diluted across pairs (item 10b).
+    //   entry routing  — `_findExternalPair()`: V8.52, the FULL MatA that has rotated
+    //                    least (pair 0 until it is full). Never a non-full pair, so new
+    //                    members are still never diluted below MATRIX_SIZE (item 10b's
+    //                    point); but every full pair keeps receiving entries (R1).
     //   expansion      — `_tryAdvancePair()` reads LIVE OCCUPANCY: 90% of the newest
     //                    MatB, or the newest pair full (item 33).
     //
@@ -638,11 +640,11 @@ contract PairManagerV8 is Ownable2Step {
 
         _tryAdvancePair();
 
-        // V8.48: ONE DOOR — _findExternalPair() returns 0. Entering a full MatA is
-        // correct, not a compromise: the entry rotates the root out, which crosses into
-        // the pair's own MatB and frees the seat for the entrant (V8.41 /
+        // V8.52: the door is the least-rotated FULL MatA (see _findExternalPair). Entering
+        // a full MatA is correct, not a compromise: the entry rotates the root out, which
+        // crosses into the pair's own MatB and frees the seat for the entrant (V8.41 /
         // MatrixLogicLib:407). Diverting new members away from a full pair is what
-        // FREEZES it.
+        // FREEZES it -- which V8.48's single door did to every pair but pair 0.
         uint256 routingIdx = _findExternalPair();
         Pair storage p = pairs[routingIdx];
         address matA   = p.matrixA;
@@ -829,7 +831,8 @@ contract PairManagerV8 is Ownable2Step {
     //
     // It returned "the oldest pair whose MatA still has available seats, else the
     // newest". After item 10b that is no longer where anybody goes: `registerDirectFor`
-    // routes through `_findExternalPair()`, which returns 0. ONE DOOR.
+    // routes through `_findExternalPair()` -- one door in V8.48, the least-rotated FULL
+    // MatA since V8.52.
     //
     // The two rules AGREE only while pair 0's MatA has a free seat — and a full pair 0
     // is the DESIGNED STEADY STATE, because concentrating the front door is what holds
@@ -851,7 +854,9 @@ contract PairManagerV8 is Ownable2Step {
     // One rule, one place: everything reads _findExternalPair().
 
 
-    /// @notice V8.48 item 10b — ONE POINT OF ENTRY. Every new member enters pair 0's
+    /// @notice V8.48 item 10b — ONE POINT OF ENTRY (SUPERSEDED BY V8.52, see the @notice on
+    ///         `_findExternalPair` below; the history in this block is kept because R1's
+    ///         table cites it). As written for V8.48: every new member enters pair 0's
     ///         MatA. Existing members circulate: own MatA -> own MatB -> own MatA, or on
     ///         to the next pair, or up a tier. New entries never divert.
     ///
@@ -912,14 +917,42 @@ contract PairManagerV8 is Ownable2Step {
         return live >= cap;
     }
 
-    function _findExternalPair() internal pure returns (uint256) {
-        // ONE POINT OF ENTRY. Every new member enters pair 0's MatA, always. New entries
-        // are never diluted across pairs: concentrating them is what keeps pair 0 at
-        // MATRIX_SIZE and rotating, and a full MatA only rotates when it RECEIVES an entry
-        // (MatrixLogicLib:407). Later pairs are populated by EXISTING members cycling --
-        // own MatA by default, the next free pair when the member already holds a seat here
-        // (see rescueReentry) -- and by upgrades. Not by splitting the front door.
-        return 0;
+    /// @notice V8.52 (2026-09-03, REGRESSION_REGISTER R1 addendum) -- THE DOOR IS THE FULL
+    ///         MatA THAT HAS ROTATED LEAST. Pair 0 until pair 0's MatA is full; after that,
+    ///         whichever FULL MatA has the lowest rotationCount (a full matrix at 0 rotations
+    ///         always wins; ties go to the lowest index). If no MatA is full, pair 0.
+    ///
+    ///         WHY: a full MatA rotates ONLY when an ENTRY arrives at it (MatrixLogicLib:517).
+    ///         V8.48 item 10b made pair 0 the only door, which gave every OTHER pair no entry
+    ///         source; item S then SEATED overflow rescues into those pairs' MatAs, which fill
+    ///         without ever being entered and stop dead. Measured live 2026-09-03: T1.2 MatA
+    ///         127/127 with 0 rotations, T1.2 MatB 0/127, 127 members frozen. The V8.48
+    ///         comment this replaces was right that "diverting new members away from a full
+    ///         pair is what FREEZES it" -- and never considered that it does so to every pair
+    ///         it does not feed. This is the same defect cured for the third time; see R1's
+    ///         table for the two earlier coats. `test/V8_52_FrozenPair.test.js` F1 was RED on
+    ///         `return 0` and is the regression for this line.
+    ///
+    ///         NOT "pair 0 until physically full, then the next" (the rule the doc block above
+    ///         `_pairFull` describes): a full pair is the DESIGNED STEADY STATE (every entry
+    ///         seats one and rotates one out, so occupancy stays at size), so "then the next"
+    ///         would starve pair 0 -- the freeze relocated a fourth time. F2 guards that.
+    ///         NOT naive round-robin: a pair whose MatA is not full is never a door, so
+    ///         entries are never thin-spread below MATRIX_SIZE where nothing rotates. F3
+    ///         guards that. Reads LIVE occupancy()/rotationCount() only: no cursor, no
+    ///         threshold, no cumulative counter (R3), no storage.
+    function _findExternalPair() internal view returns (uint256) {
+        uint256 n = pairs.length;
+        uint256 best = 0;
+        uint256 bestRot = 0;
+        bool found = false;
+        for (uint256 i = 0; i < n; i++) {
+            IFigureEightMatrixV8PM a = IFigureEightMatrixV8PM(pairs[i].matrixA);
+            if (a.occupancy() < a.MATRIX_SIZE()) continue;   // not full: never a door
+            uint256 rot = a.rotationCount();
+            if (!found || rot < bestRot) { found = true; best = i; bestRot = rot; }
+        }
+        return best; // no full MatA anywhere -> pair 0 (the bootstrap)
     }
 
     /// @notice V8.41 FIFO: Factory deployment trigger.

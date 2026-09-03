@@ -268,3 +268,74 @@ rotation** - and a frontend endpoint is never also a keeper endpoint.
 `awk '!/^[ \t]*#/ && NF' | wc -l`, `grep -c <token>`, and
 `tail -40 <log> | sed -E 's#https?://[^ ,")]*#<URL>#g'` for reading a log safely.
 **Note `grep -c` counts matching LINES, not matches, even with `-o` - it yields a FLOOR.**
+
+---
+
+## R11 - A test retargeted to pass is a deleted test
+
+**THE INVARIANT:** *An assertion may be weakened or removed ONLY with an entry in this file
+naming the law it enforced, the replacement law, and the check that now enforces it. A test
+whose title still names the old law is a lie to the next reader.*
+
+**WHY, AND IT IS THE CENTRE OF THE "we fix and refix the same thing" CIRCLE:**
+`test/V8_44_Overflow.test.js` O4 is titled *"DESIGN-LAW GATE - keepers OFF, both MatBs
+rotate from pure member-driven flow."* Its body no longer asserts that pair 1 rotates. It was
+**retargeted twice**: V8.48 item 10b dropped the pair-1 rotation assertion (*"an EMPTY STANDBY
+pair is not a frozen pair - the law is about members who are waiting, and pair 1 has none"*),
+and V8.50 item S dropped the *"pair 1 is empty"* assertion because item S had just started
+filling pair 1 - at which point the 10b reasoning was false (pair 1 now HAD members waiting)
+and nobody restored the rotation check. Each edit carried a persuasive paragraph. **The gate
+that would have gone red on the 2026-09-03 freeze (R1) was talked out of existence in two
+steps by two sessions.** A comment explaining why an assertion was removed is the same
+failure as R2's comment explaining a root cause: prose where a check should be.
+
+**THE RULE:** when a test goes red after a change, the ONLY two honest outcomes are (a) the
+code is wrong, fix the code; or (b) the LAW changed - record here what the old law was, what
+the new law is, and add the assertion that enforces the new one. Weakening the assertion so
+the suite is green is neither.
+
+**CHECKED BY:** NOT AUTOMATED. Partial mechanical guard worth adding: a test whose title
+contains "GATE" or "LAW" must contain at least one `expect(` on a `rotationCount` - crude,
+but it would have flagged O4 as retargeted.
+
+---
+
+## R1 - ADDENDUM: the planned cure (session 62), recorded BEFORE the code
+
+**THE DEFECT LINE:** `PairManagerV8._findExternalPair()` returns 0 - one door, forever - since
+commit `4122949`. Its own doc block above it still describes a different rule (*"one point of
+entry until that pair is physically full, then the next pair opens"*) and warns that *"strict
+one-door would have left pairs 1+ permanently inert"* - the function ignores its own doc.
+
+**THE CURE:** the front door is **the FULL MatA that has rotated LEAST** (pair 0 until pair 0
+is full; thereafter whichever full pair is most starved; a full matrix at 0 rotations always
+wins; ties to the lowest index; if no MatA is full, pair 0). Reads live `occupancy()` and
+`rotationCount()` only - no cursor, no threshold, no cumulative counter (R3), no storage.
+
+**WHY THIS SHAPE AND NOT THE DOC'S:** the doc's rule ("pair 0 until physically full, then the
+next") would freeze PAIR 0 instead - a full pair is the designed steady state (every entry
+seats one and rotates one out, so occupancy stays at size), so "then the next" means pair 0
+never receives another entry. That is the freeze relocated a fourth time. "Least rotated
+among the full" keeps every full pair moving by construction, and never thin-spreads (the
+doc's correct objection to naive round-robin): a pair that is not full is never a door.
+
+**THE DECLARED DESIGN CHANGE (R11 applies):** O7's law *"pair 1 fills from existing members
+cycling, NEVER from the front door"* is replaced by *"the front door NEVER reaches a pair
+whose MatA is not full"*. O7 will go red on its "never" assertions; they are to be replaced
+by the new law's assertion, not deleted. O8's routing views must report the new door.
+
+**THE TEST THAT MUST BE RED ON TODAY'S CODE FIRST:** `test/V8_52_FrozenPair.test.js` - two
+pairs, registrations + selfRescue only, drive until pair 1's MatA is full, keep driving, and
+assert R1 directly (no matrix at size with 0 rotations; MatB not empty while MatA full),
+while ALSO asserting pair 0 keeps rotating (the relocated-freeze guard) and that no not-full
+pair ever receives a front-door member (the thin-spread guard).
+
+**DONE, MEASURED (2026-09-03, session 62):** `test/V8_52_FrozenPair.test.js` ran 3 passing /
+1 failing on `return 0` (F1: "pair 1 MatA is 4/4 with rotationCount 0 after 16 further
+front-door entries"), then 4 passing after the one-function change; `V8_44_Overflow` 9/9
+including O7 (its drive stops at pair 1's FIRST arrival, so pair 1 is never full there and
+its assertions were exact for both laws - only its title and LIMB 1 text were restated, per
+R11); `sizes.js`: PairManagerV8 16,855 / headroom 7,721. Full suite: see handoff 62.6.
+
+**CHECKED BY:** `frozen_matrix_check.js` hourly on chain (R1), and F1-F3 in the suite.
+
