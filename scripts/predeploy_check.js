@@ -1639,6 +1639,47 @@ sep("V8.51 item S — rescue overflow (UNFLAGGED: live the moment we deploy)");
   ok("NOTE: item S has NO FLAG. It is ACTIVE from the first block after deploy. Do not tell anyone the deploy is inert until the switch is flipped — that is true of item G only.");
 }
 
+// ═══════════════════════════════════════════════════════════════════════════════
+// V8.52 — THE FRONT DOOR (REGRESSION_REGISTER R1 addendum). ONE FUNCTION, and the
+// defect it cures has been reintroduced three times, so this section exists to make
+// the fourth time a red line instead of a paragraph. Reads stripped source only (R8).
+// ═══════════════════════════════════════════════════════════════════════════════
+sep("V8.52 front door — the least-rotated FULL MatA (R1)");
+{
+  const pm52 = stripComments(read("contracts/PairManagerV8.sol"));
+
+  // The signature: it must be VIEW (it reads live matrices), never pure.
+  if (pm52 && /function _findExternalPair\(\) internal view returns \(uint256\)/.test(pm52)) {
+    ok("PairManagerV8.sol: _findExternalPair() is `internal view` — it reads live state");
+  } else {
+    fail("PairManagerV8.sol: _findExternalPair() is not `internal view` — the V8.48 `pure { return 0; }` one-door (which froze every pair but pair 0, 2026-09-03) may be back");
+  }
+
+  // The one-door body must be GONE.
+  if (pm52 && /function _findExternalPair\(\)[^{]*\{\s*return 0;\s*\}/.test(pm52)) {
+    fail("PairManagerV8.sol: _findExternalPair() body is `return 0` — ONE DOOR. Every pair except pair 0 will fill by overflow and never rotate (R1, measured live 2026-09-03: T1.2 MatA 127/127 rot 0)");
+  } else {
+    ok("PairManagerV8.sol: _findExternalPair() is not the one-door `return 0` body");
+  }
+
+  // The rule: full check, rotation read, least-rotated selection, in that function.
+  const body52 = pm52 && (pm52.match(/function _findExternalPair\(\)[\s\S]*?\n    \}/) || [""])[0];
+  if (body52 && /occupancy\(\) < a\.MATRIX_SIZE\(\)\) continue;/.test(body52) && /rotationCount\(\)/.test(body52) && /rot < bestRot/.test(body52)) {
+    ok("PairManagerV8.sol: _findExternalPair() skips non-full MatAs and picks the lowest rotationCount among the full ones");
+  } else {
+    fail("PairManagerV8.sol: _findExternalPair() does not implement 'least-rotated FULL MatA' — F1/F2/F3 in test/V8_52_FrozenPair.test.js are the regression; run them");
+  }
+
+  // The regression test itself must exist and still assert rotation (R11: a test whose
+  // title names a law must assert it).
+  const f52 = read("test/V8_52_FrozenPair.test.js");
+  if (f52 && /expect\(r\.rotA2End/.test(f52) && /expect\(r\.rotA0End/.test(f52) && /expect\(r\.thinSpread\.length/.test(f52)) {
+    ok("test/V8_52_FrozenPair.test.js: F1 (later pair rotates), F2 (pair 0 keeps rotating), F3 (no thin-spread) all still assert");
+  } else {
+    fail("test/V8_52_FrozenPair.test.js is missing or one of F1/F2/F3 no longer asserts — R11: a retargeted test is a deleted test");
+  }
+}
+
 sep("V8.51 item G — graduation (FLAGGED, ships FALSE)");
 {
   // Comments stripped — see the note in the item S block above. It matters most for

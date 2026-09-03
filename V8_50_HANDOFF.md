@@ -94,7 +94,49 @@ owner-set, and the session that earned it got five things wrong by ignoring what
 ##      new scope. Every session ends with something he can see moved.**
 ##      ⚠ **NOT YET: the FULL suite (Step 8, running at time of writing), the commit, the
 ##      predeploy gate, and the V8.52 deploy itself — the deploy is the owner's timing call.**
+## 62.7 ✅✅✅ **V8.52 IS GREEN ON THE FULL SUITE — 669 passing / 7 pending / 0 failing (5m) — AND
+##      THE PREDEPLOY GATE NOW CHECKS IT: `predeploy_check.js` V8.52 section, 4 checks (169 -> 173),
+##      MUTATION-PROVEN: with the `pure { return 0; }` body planted in a scratch copy, 3 of 4 go red
+##      (the 4th checks the test file, which the mutant does not touch).** Contracts commit `1740343`
+##      holds the fix; the gate section is in the working tree at time of writing (commit below).
+## 62.8 ▶ **THE OWNER'S DECISION TONIGHT, VERBATIM: "keep this running and do a private but fully
+##      deployed on admin so i can test alongside you bcuz when only you do it we do not have the
+##      customer type experience."** ✅ **AGREED, AND IT IS THE V8.49/V8.50 PRIVATE PATTERN.** Members
+##      stay on V8.51 untouched (keepers, crontab, `.env`, main/early domains). V8.52 goes up as a
+##      PRIVATE chain, SMALL ON PURPOSE — `MATRIX_SIZE=15`, `DEPLOY_TIERS=1,2,3` — so a pair fills and
+##      the second pair visibly opens and ROTATES within an hour, with him registering from Rabby on
+##      `admin.crypto-nova.app` (Vercel-protected, owner-only) while Claude reads the chain.
+##      ▶ **A member ticket says "nothing is happening" — that IS the freeze, seen from a seat in T1.2.**
+##      Reply in the owner's voice once the private chain shows the second pair turning (read
+##      [[community-comms]] first): the cause in one sentence, a fix built and tested, when they hear.
+##      **THE CARD — every block runs in `C:\CryptoNite-Smart-Contracts\CryptoNova` in ONE PowerShell
+##      window (the session variables are load-bearing, 28.2b):**
+##      1. `$env:ADDRESSES_FILE="deployed_addresses_v8_52_private.json"` ·
+##         `$env:MATRIX_SIZE="15"` · `$env:DEPLOY_TIERS="1,2,3"`
+##      2. `node scripts/predeploy_check.js` -> **All 173 checks passed**.
+##      3. `npx hardhat run scripts/preflight_v851.js` -> it is the COMMUNITY preflight, so EXPECT two
+##         deliberate objections (file name is not `_v8_51`, size is not 127) and read the rest:
+##         deployer ETH, `USDC_ADDRESS` set and has code (reuse `0x2D8B7b5e…`, or balances strand).
+##      4. `Start-Transcript v852_private_deploy_transcript.txt` then
+##         `npx hardhat run scripts/deploy_v8.js --network baseSepolia`. Banner must read
+##         **`V8.52 Deploy`**, `MatrixSize 15`, `Tiers T1..T3`, `Existing USDC`. ⛔ **`0x NO CODE` +
+##         `node saw code after N probes` is rpc_resilience working — do not Ctrl-C. If it dies
+##         partway: STOP, do not re-run (addresses are written only at the END).** ~30-45 min est.
+##      5. `npx hardhat run scripts/verify_all_v850.js` then `node scripts/check_verification_v850.js`
+##         (both read `ADDRESSES_FILE`) — verified BEFORE anyone connects a wallet (Blockaid, twice).
+##      6. `npx hardhat run scripts/set_graduation.js --network baseSepolia` with
+##         `CONFIRM_TIER_ROUTER` = the NEW router from the addresses file (item G ON, as V8.51).
+##      7. Frontend: Claude derives `update_addrs_v8_52_private.py` from `update_addrs_v8_51.py` with the
+##         guard set to the NEW `tierRouter`; run it; `git add` ONLY the files it reports (NEVER `-A` in
+##         `CryptoNova-Testnet-App`); push **`admin` only**. `preview`/`main` do not move.
+##      8. Seed: scp the addresses file to `/root/keeper/`; on the VPS, per-command
+##         `ADDRESSES_FILE=deployed_addresses_v8_52_private.json` for `pool_primer` (`HDR_OFFSET=400000`,
+##         a range no other chain uses) and `FORCE_RUN=1 ONLY=A MAX_REG=…` chunks — **never in `.env`**.
+##         Then the owner registers from Rabby and we watch `pair_saturation.js` TIER=T1 on the private
+##         book: PASS = T1.2 MatA fills, then ROTATES on the next front-door entry, T1.2 MatB > 0.
+##         `frozen_matrix_check.js` with the private `ADDRESSES_FILE` must read PASS (exit 0).
 ## 62.5 ▶ **WHAT IS OPEN, IN ORDER, FOR SESSION 63.**
+##      -1. **THE 62.8 CARD, steps 1-8, in that order.** Members untouched throughout.
 ##      0. **FULL SUITE RESULT for V8.52, then COMMIT `contracts/PairManagerV8.sol`,
 ##         `test/V8_52_FrozenPair.test.js`, `test/V8_44_Overflow.test.js`,
 ##         `REGRESSION_REGISTER.md`, this handoff. Then the predeploy gate. Then deploy V8.52
