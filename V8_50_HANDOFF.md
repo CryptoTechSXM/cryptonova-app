@@ -10,7 +10,302 @@ owner-set, and the session that earned it got five things wrong by ignoring what
 
 ---
 
-# ⬛ SESSION 60 STATE — 2026-09-02. LATEST. READ THIS FIRST.
+# ⬛ SESSION 62 STATE — 2026-09-03 evening. LATEST. READ THIS FIRST.
+# ✅✅✅ **61.9 ITEM 1 PASSED ON CHAIN. THE DOUBLE ROUTE UNFROZE T1.2 WITH NO REDEPLOY.**
+# One member (the owner, $53.61 withdrawable, cycles 1 -> 2) cycled out of T1.1 MatB and his
+# DOUBLE seat landed in the FULL T1.2 MatA at position 127, forcing its first rotation ever:
+# **T1.2 MatA rotations 0 -> 1, T1.2 MatB 0 -> 1/127.** Five links in 61.0-61.2, all confirmed
+# by the one experiment that could refute them. ~50 minutes from arming to result, because we
+# ramped registrations instead of waiting for the 1/20min cron.
+## 62.0 ✅✅✅ **THE PROOF, EACH READ OFF THE CHAIN AFTER THE FACT (2026-09-03 ~18:50Z):**
+##      **`check_member_options.js`: T1 cycles 2** (was 1 at 18:30Z). **`matrixPos` on T1.2 MatA
+##      `0x8c139A1a…` for `0x1d3e33aa…` = 127, and `posToMember(127)` = the owner** — the newest
+##      seat, i.e. the entry that arrived at a full matrix. **T1.2 MatB `0xfaFfc997…`
+##      `posToMember(1)` = `0x19a59fbD6d2c1289668795D41453e1505B7B8102`** — T1.2 MatA's old root,
+##      crossed into MatB; **he is one of the two members 61.1 found "armed and unable to ever use
+##      it"** (double true, $36.59). `pair_saturation.js` TIER=T1: T1.1 MatA 127/127 rot 368 -> 387
+##      · T1.1 MatB 127/127 rot 241 -> 260, parked 12 -> 28 · **T1.2 MatA 127/127 rot 0 -> 1 ·
+##      T1.2 MatB 0 -> 1/127** · T1.3 MatA 97 -> 100 · window `NO-SEAT 0 · FUNDING 51`.
+##      ▶ **The hourly `frozen_matrix_check` should now read T1.2 MatA rule A CLEAR (rot 1) and
+##      rule B CLEAR (MatB occ 1) on its next tick. VERIFY IN `frozen.log` — an instrument that
+##      fires must also be seen to stop firing.**
+## 62.1 ✅ **HOW IT WAS DONE, so it can be repeated: the owner armed `0x1D3E–93AB` from the
+##      Dashboard (`setMemberOptions(false,true,true)` — flags read back `optionsSet true,
+##      autoReentryEnabled true, doubleReentryEnabled true`, R4 trap did NOT fire). His seat was
+##      T1.1 MatB position 16 (`matrixPos`, :822 — the real getter; `check_reporters.js`'s
+##      `memberPosition` does not exist). Primed 58 wallets at `HDR_OFFSET=300772` (budget cut it
+##      at 58/100, cursor file resumes), then ONE manual chunk:
+##      `flock /tmp/rr_reg.lock bash -c 'cd /root/keeper && FORCE_RUN=1 ONLY=A MAX_REG=20
+##      REG_TAPER_AT=0 POOL_OFFSET=300000 POOL_SIZE=872 node rr_keeper.js'` — wrapped in JOB A's
+##      OWN cron lock (blocking form), so the live 1/20min cron cannot overlap it. Cron untouched.
+##      ⚠ **The manual run's output went to stdout and was lost to a Ctrl-C on the display pipe,
+##      so its own log is NOT in `rr_keeper.log`. The chain is the record: MatA +19 rotations.**
+##      ▶ **A rotation is a SHIFT QUEUE (`MatrixLogicLib:826-830`: everyone moves up one), so
+##      wait = `matrixPos - 1` rotations of the matrix you sit in. Position 16 = 15 rotations.**
+## 62.2 ⚠⚠ **TWO THINGS MEASURED THAT THE MODEL DID NOT PREDICT — OPEN, NOT EXPLAINED:**
+##      **(a) THE RE-ENTRY SEAT WENT TO T1.3 MatA, NOT THE OWN PAIR.** After cycle-out the owner
+##      holds T1.2 MatA (the double, pos 127), **T1.3 MatA (reserve $5.00 + withdrawable $4.75)**
+##      and T2.1 MatA (unchanged). 61.3's route table says "re-entry -> own pair"; the own pair
+##      is T1.1, whose MatA is full, and the seat landed in the pair WITH ROOM instead. Which
+##      code path chose T1.3 is NOT traced (`_sameTierTarget` vs a room-scan). Trace it before
+##      quoting the route table again.
+##      **(b) $16.61 OF THE OWNER'S T1.1 MatB BALANCE IS UNLOCATED.** Before: withdrawable $53.61
+##      in T1.1 MatB. After: two $10 seats + reserves $5.00 + $5.00 + withdrawable $2.25 + $4.75
+##      = $37.00. `check_member_options.js` lists only matrices the member is SEATED in, so the
+##      remainder may simply still sit in T1.1 MatB's per-matrix ledger (61.1: `withdrawableOf`
+##      is where a cycled member's money lives). **`ADDR=0x1d3e… node member_ledger.js` answers
+##      it — not run. Do not assume either way.**
+## 62.3 ✅ **INSTRUMENT DEFECT FIXED, REGISTER R5 EXTENDED FIRST: `check_member_options.js`
+##      evaluated every cycle-out gate on the CURRENT `tierCycles`; the contract increments FIRST
+##      (`TierRouter:1259`) and reads the incremented value into the gates (`:1260`, `:1369-1380`).
+##      Its verdict column printed `doubleOn false` for the armed wallet at cycles 1 — which was
+##      about to fire. Now prints `now` and `next` and computes on `next`, header explains.**
+##      `node --check` clean. ⚠ **NOT YET COMMITTED and NOT YET ON THE VPS** — see 62.5.
+## 62.4 ⚠ **RATE NOTE, ONE INTERVAL: this chunk gave MatB +19 for MatA +19 — 1:1, not the 2:3 I
+##      estimated from lifetime totals (368 vs 241 includes the initial fill, which is not
+##      rotations). Parked in T1.1 MatB 12 -> 28 (+16): FUNDING parks happen at MatB CYCLE-OUT,
+##      not at the MatA->MatB crossing. So 19 MatB cycle-outs = 16 parked + the owner + 2
+##      others.** Lifetime ratios are not rates. Measure the interval.
+## 62.5 ▶ **WHAT IS OPEN, IN ORDER, FOR SESSION 63.**
+##      1. ⚠ **COMMIT. The whole SESSION 61 block (220 lines) and `REGRESSION_REGISTER.md`
+##         (untracked) were NEVER committed — found at the start of session 62. Plus this block,
+##         and `check_member_options.js` in the keepers repo (then scp to the VPS).**
+##      2. **Verify `frozen.log` clears T1.2 on the next hourly tick** (62.0).
+##      3. **62.2 (a) and (b)** — trace the re-entry destination; run `member_ledger.js`.
+##      4. **THE OWNER'S DECISION (61.9 item 2), now with a measured result behind it: should
+##         registration set `enableDouble=true`?** Price it first. Today the site opts everyone OUT.
+##      5. **The cron's `POOL_SIZE=772` is now ~16 slots from the pool cursor (~756).** When it
+##         hits, job A prints `pool exhausted` and registers nothing — not a fault, but the paced
+##         run stops. Raising it is a crontab edit on the box (`s#POOL_SIZE=772#POOL_SIZE=872#`,
+##         verified by `grep -c` and the blank-URL md5 check of R9). The 58 primed wallets at
+##         300772+ are already waiting for it; prime the other 42 first (cursor file resumes).
+##      6. **T1.3 MatA is 27 seats from the frozen state.** The double route is now PROVEN to be
+##         the unfreeze lever, so the question becomes how many members can fire it — 61.1: 238
+##         at cycles 1, and the site has opted them all out. Item 4 decides this.
+##      7. 61.9 items 3, 5, 6 unchanged (QuickNode restriction; rotation-credit vs $5; 60.8 tail).
+##      ⚠ **`rr_keeper.OFF` IS STILL GONE AND ALL THREE JOBS ARE RUNNING.**
+##      **`touch /root/keeper/rr_keeper.OFF` stops them within a tick.**
+
+# ⬛ SESSION 61 STATE — 2026-09-03. ⚠ 61.9 ITEM 1 RESOLVED (PASSED) IN SESSION 62 ABOVE; 61.3's "re-entry -> own pair" is contradicted by 62.2(a).
+# (Opened on 60.9. 60.x is still correct EXCEPT 60.9's "throttled by a TIMER", corrected in 61.0.)
+# ⛔⛔⛔ THE HEADLINE: **T1.2 IS NOT THROTTLED, IT IS STOPPED. A FULL MatA THAT
+# RECEIVES NO ENTRY CAN NEVER ROTATE, AND EVERY PAIR EXCEPT PAIR 0 IS NOW IN THAT STATE
+# OR HEADING THERE. THAT FREEZE PINS ALL 238 CYCLED MEMBERS AT cycles 1, WHICH MAKES THE
+# ONE ROUTE THAT COULD UNFREEZE IT UNREACHABLE — AND THE WEBSITE HAS ALREADY SWITCHED
+# THAT ROUTE OFF FOR EVERY MEMBER AT REGISTRATION. FIVE LINKS, ALL MEASURED.**
+# ✅ **AND THE PROJECT NOW HAS THE THING IT NEVER HAD: AN HOURLY INVARIANT THAT FAILS
+# LOUDLY ON THIS WHOLE FAMILY OF DEFECT, IN ANY COAT. `frozen_matrix_check.js`, cron `7 * * * *`.**
+## 61.0 ⛔⛔⛔ **THE FREEZE, MEASURED AND SOURCE-EXPLAINED. 60.9's "throttled by a TIMER,
+##      not by a routing defect" IS WRONG — and 60.9 could not have seen it, because T1.2
+##      MatA was 21/127 then. The freeze is only observable AT capacity.**
+##      **`pair_saturation.js` TIER=T1, 2026-09-03: T1.1 MatA 127/127 rot 364 · T1.1 MatB
+##      127/127 rot 237, 18 parked · T1.2 MatA 127/127 **rot 0** · T1.2 MatB **0/127** ·
+##      T1.3 MatA 91/127 rot 0 · T1.3 MatB 0/127.**
+##      ✅ **MECHANISM, `MatrixLogicLib:517`: `if (self.occupancy >= cfg.matrixSize)
+##      _cycleOutRoot(self, cfg);` sits INSIDE THE ENTRY PATH. A ROTATION HAPPENS ONLY WHEN
+##      AN *ENTRY* ARRIVES AT A FULL MATRIX. Nothing else in the tree causes one.**
+##      ⛔ **AND NOTHING CAN DELIVER AN ENTRY THERE: `_findExternalPair()` (:915) returns 0;
+##      item S's `_pairWithRoomFor` (:331) and item G's `graduationTargetFor` (:350) BOTH
+##      require `occ < size`, so both SKIP a full MatA by design.**
+##      ▶▶ **OVERFLOW SEATS, ENTRIES ROTATE, AND ONLY PAIR 0 GETS ENTRIES. So every later
+##      MatA fills to capacity and stops dead. 127 members hold paid seats in T1.2 MatA that
+##      can never cycle; T1.3 is 36 seats from the same state.**
+##      ⛔ **`_findExternalPair`'s own comment — "Diverting new members away from a full pair
+##      is what FREEZES it" — is right about pair 0 (364 rotations prove it) and never
+##      considered what it does to every OTHER pair.**
+## 61.1 ⛔⛔⛔ **THE DEADLOCK. `cycle_census.js` over V8.51's whole life (46224187..46344187,
+##      14 chunks, 0 failed): `CycleRecorded` 238 · `MemberReentered` 55 · distinct T1 members
+##      with >= 1 cycle: 238. EVERY ONE IS AT EXACTLY `cycles 1`. NOT ONE HAS EVER REACHED 2.
+##      `reentryMinCycles` IS 2.**
+##      ▶▶ **THE FREEZE IS WHAT PREVENTS THE SECOND CYCLE: cycle out of T1.1 MatB (cycle 1)
+##      -> cannot fund the crossing -> park -> item S overflow-rescues into T1.2/T1.3 MatA
+##      -> WHICH NEVER ROTATES -> pinned at cycles 1 forever.** ⛔ **The DOUBLE could unfreeze
+##      T1.2, but it needs 2 cycles, and the 2nd cycle is unreachable because you are sitting
+##      in the matrix the double would have unfrozen. THAT is why the system looks alive —
+##      482 members, 238 cycles — while going nowhere.**
+##      ✅ **THE 183 GAP IS THE SAME STORY FROM THE OTHER SIDE: 238 cycles vs 55 re-entries.
+##      183 members completed a cycle and were NOT re-seated in T1.1. They are the 127 in
+##      T1.2 MatA and 91 in T1.3 MatA. The numbers line up with the overflow route.**
+##      ✅✅ **MONEY IS NOT THE BLOCKER, AND THIS MATTERS: cycled members hold up to $53.10 and
+##      $52.84 withdrawable; several hold $18-$37. A CYCLE-OUT PAYS PROPERLY.** ⚠ The $6.80
+##      ceiling measured earlier that day was the UNCYCLED cohort mid-accrual — a different
+##      population, do not quote the two together. `crossingReserveOf` reads $0.00 for all 25
+##      shown (consumed at the crossing); `withdrawableOf` is where a cycled member's money is.
+## 61.2 ⛔⛔⛔ **THE WEBSITE OPTS EVERY NEW MEMBER *OUT* OF THE DOUBLE, AUTOMATICALLY.**
+##      `index.html`, immediately after `register()` / `registerWithCoupon()` confirms:
+##      *"Auto-enable reentry for new members … enableDouble=false"* then
+##      **`trOpts.setMemberOptions(false, true, false, { gasLimit: 120_000 })`**.
+##      ▶ **So every web-registered member carries `doubleReentryEnabled=false` AND
+##      `optionsSet=true` from their first minute. The 238 are not un-opted-in — THEY ARE
+##      OPTED OUT, BY THE PRODUCT, ON THEIR BEHALF.**
+##      ✅ **THE INTENT WAS GOOD AND MUST NOT BE UNDONE BLINDLY: it forces
+##      `autoReentryEnabled=true`, which protects the member from the `optionsSet` trap. IT IS
+##      THE THIRD ARGUMENT THAT IS WRONG, NOT THE CALL.**
+##      ✅ **AND IT MAKES THE `reentryMinCycles` LEVER SAFER THAN 61.3 FIRST WARNED: with
+##      optionsSet=true AND autoReentryEnabled=true, `reentryOn` resolves TRUE either way, so
+##      lowering `reentryMinCycles` would NOT switch re-entry off for them.** ⚠ Verify
+##      per-member before acting.
+##      ▶▶ **THE DECISION IS THE OWNER'S: should registration set `enableDouble=true`? It
+##      costs a member an extra fee per cycle for a second seat and it is the only thing that
+##      makes the self-sustaining loop possible at scale. PRICE IT BEFORE RECOMMENDING.**
+## 61.3 ✅✅ **THE UNFREEZE LEVER IS ALREADY DEPLOYED AND NEEDS NO REDEPLOY — THE DOUBLE.**
+##      **`PairManagerV8:672`: re-entry -> own pair · **Double (same tier) -> `freePairFor()`
+##      (TierRouter:1382)** · upgrade -> tier's pair 0.** ▶ **`_freePairFor` (:278) checks ONLY
+##      `isActiveInMatrix`, NEVER occupancy — `_hasRoomAndFree`'s own comment says so in
+##      writing. So a double lands in T1.2 EVEN THOUGH IT IS FULL, and an entry into a full
+##      MatA is exactly what forces a rotation.**
+##      ✅ **This is the owner's remembered "self sustaining loop and extra pairs opening up
+##      for double entry positions", verbatim, still in the tree.**
+##      ⛔ **THE PERMANENT ROUTING FIX DOES NEED A REDEPLOY: `_findExternalPair()` is
+##      `internal pure { return 0; }`, a compiled-in literal with no setter.** `setActivePairIndex`
+##      (:820, onlyOwner) exists but V8.48 deleted `_findRoutingPair`, so `activePairIndex` is no
+##      longer the routing rule — ⚠ **its remaining uses are NOT traced; do not assume it is inert.**
+##      ⛔⛔ **THE TRAP, documented independently by `check_member_options.js`:
+##      `setDoubleEntry(true)` sets `optionsSet=true` but NEVER touches `autoReentryEnabled`
+##      (default FALSE). Once optionsSet is true and cycles >= reentryMinCycles, the member's
+##      own flag governs — so the legacy toggle SILENTLY DISABLES RE-ENTRY, and because the
+##      double requires `anySeat`, IT KILLS THE VERY THING IT WAS CALLED TO ENABLE.
+##      `optionsSet` NEVER FLIPS BACK. THE CORRECT CALL IS `setMemberOptions(false, true, true)`.**
+##      ⛔ **`setMemberOptions` (:879) and `setDoubleEntry` (:905) BOTH act on `msg.sender`
+##      ONLY. THERE IS NO OWNER OR GOVERNANCE OVERRIDE.** For real members this is a product
+##      decision, not an admin one.
+##      ✅✅✅ **THE TEST IS ARMED ON THE OWNER'S OWN WALLET. `0x1d3e33aaffdb694e5a45d793b6946120467e93ab`
+##      (`0x1D3E…93AB`, Rabby) — cycles 1, seated in T1.1 MatB, withdrawable $53.10, the
+##      best-funded candidate in the deployment. `MODE=find` could not locate it because it is
+##      NOT a harness wallet — he signs for it himself from the Dashboard's Double Re-entry
+##      toggle.** ⚠ **AUTO RE-ENTRY MUST READ ON BEFORE SAVING, or the trap above fires.**
+##      ▶ **PASS = T1.2 MatA rotations 0 -> 1 AND T1.2 MatB 0 -> 1, at his next cycle-out.
+##      The hourly check will catch it unattended. NOT instant: job A is at 1 registration per
+##      20 min since the taper, so a cycle-out may take hours.**
+##      ⚠ **The other two census candidates — `0x6512e9b5…` ($52.84) and `0xaada7ef0…`
+##      ($36.46) — are also NOT in child@ or std@ 300000..300799. Their keys are not derived
+##      from FILL_MNEMONIC. Do not conclude they are unsignable without widening the range.**
+## 61.4 ✅✅✅ **`frozen_matrix_check.js` — BUILT, PROVEN BOTH WAYS, LIVE HOURLY. Keepers
+##      `bae3ed9` -> `3651868` on `main`, pushed. md5 `33954c5d697cedbf4e261cb7ce2c4291`.**
+##      **RULES: A) no matrix at MATRIX_SIZE with 0 rotations · B) no MatB at occupancy 0 while
+##      its own MatA is FULL.** Exit 0 pass / 2 violation / 3 incomplete. SUSPECTED on first
+##      sight, CONFIRMED only on an unchanged repeat (it writes `frozen_matrix_state.json`,
+##      gitignored, **and says so in its header and output — an undocumented side effect is
+##      the `DRY_RUN` cursor trap**).
+##      ✅✅ **NEGATIVE TEST FIRST: run with no network, every read failed — it did NOT print
+##      PASS and did NOT let a failed `occupancy()` satisfy `occ == 0` and invent a starved-MatB
+##      alarm. Exit 3, "an unread matrix is not a passing matrix".** **POSITIVE: live output
+##      matched a prediction written BEFORE the run, exit 2.**
+##      ✅ **CRON `7 * * * *`, installed backup-first with refuse-if-empty, verified by COUNTS
+##      AND HASHES ONLY: 14 -> 15 active lines, new job 1, and the rest of the crontab hashing
+##      `08d8cf7cdc130ad417ef16708e1b363a` before and after — the same md5 60.0 recorded, so
+##      nothing else has moved since the RPC rotation.** Rollback
+##      `crontab /root/keeper/crontab_pre_frozen_20260903.txt`.
+##      ▶▶ **THIS IS THE ANSWER TO THE OWNER'S "we fix, we relaunch, the same problem comes
+##      back". THE KNOWLEDGE WAS ALWAYS DOCUMENTED AND WAS STILL LOST — see 61.7. A COMMENT IS
+##      A NOTE TO WHOEVER HAPPENS TO LOOK; IT IS NOT A CHECK.**
+## 61.5 ✅✅ **THE TIERS TABLE WAS REPORTING THE FROZEN MatB AS FULL. Frontend `5c98d4c` ->
+##      `223c6d0`, FULL LADDER (admin/preview/main), VERIFIED LIVE.**
+##      ⛔ **`index.html renderPairSubRows()`: `const aFull = !isActive && occA >= 127;` and
+##      `const fillB = (aFull || occB > 0) ? (aFull ? '127/127' : occB + '/127') : '—';`
+##      — MatB's displayed fill AND the pair's status label were BOTH derived from MatA.**
+##      ▶ **Live on the member-facing site: T1.2 read `127/127 · 127/127 · ✅ Full` while the
+##      chain read MatB `0/127` and the pair bar LOWER DOWN THE SAME PAGE read the true 0/127.
+##      The page contradicted itself and the half a member sees first was the wrong one — on
+##      the one screen that would have exposed the freeze.**
+##      ✅ **FIXED: each half prints its OWN occupancy; `bothFull` requires BOTH halves; a full
+##      MatA with an empty MatB now reads "⏳ Awaiting crossings" with a tooltip saying the pair
+##      is not rotating. A genuinely empty matrix reads 0/127, never a dash, never its partner's
+##      number.** **Verified live by count: `SESSION 61 FIX` -> 1, old line -> 0.**
+##      ▶ **NOT CHANGED, OWNER'S CALL: whether a stalled pair deserves a stronger member-facing
+##      warning than "Awaiting crossings".**
+## 61.6 ✅✅✅ **60.8 ITEM 4 IS CLOSED. THE DEPLOYED SITE DOES SERVE LIVE QUICKNODE KEYS.**
+##      `curl -s https://www.crypto-nova.app/status.html | grep -coE 'quiknode\.pro/[0-9a-zA-Z]{8,}'`
+##      **-> 5**, and `/index.html` **-> 5**. Not a repo-only exposure.
+##      ⚠ **`grep -c` COUNTS MATCHING LINES, NOT MATCHES, EVEN WITH `-o`. 5 IS A FLOOR, NOT A
+##      COUNT** — the repo carries 12 URLs across three files.
+##      ✅ **The instrument held: it printed a number and never a key. NEVER fetch these pages
+##      into a chat, a browser pane or a model context — the page body IS the credential.**
+##      ▶▶ **THE REMAINING WORK IS RESTRICTION, NOT ROTATION: a browser dApp cannot hide its
+##      endpoint, so rotating just publishes a new key. QuickNode domain/referrer allowlist +
+##      rate limits on the five frontend endpoints. And a frontend endpoint is NEVER also a
+##      keeper endpoint.**
+## 61.7 ⛔⛔⛔ **MY OWN ERRORS TODAY — THREE, ALL THE SAME SHAPE: I TRUSTED A FILTER OVER THE
+##      RAW DATA, AND EACH TIME THE FILTER WAS THE THING THAT WAS WRONG.**
+##      **(1)** Checking the taper I grepped `A: [0-9]+/450 members[^0-9]*cap [0-9]+/tick`. The
+##      taper line is `A: 450/450 members >= 450 — cap 1/tick` — a `450` sits in the gap, so
+##      `[^0-9]*` CANNOT match it. **The pattern excluded the exact line it was written to find.**
+##      **(2)** I "fixed" it to `A: [0-9]+/450 members` and it failed WORSE: the real post-taper
+##      format DROPS THE DENOMINATOR (`A: 475 members >= 450 — cap 1/tick`). Both patterns
+##      stopped at the last pre-taper line (449), **which reads exactly like the job dying one
+##      member short of the boundary. I REPORTED A HEALTHY ENGINE AS DEAD FOR 9h20m.**
+##      ▶▶▶ **RULE: WHEN A SYSTEM TRANSITIONS, THE LOG LINE'S SHAPE CHANGES AT THE MOMENT OF
+##      THE TRANSITION. A pattern derived from the PRE-transition format is GUARANTEED to miss
+##      the event, and its last match sits right at the boundary — the most convincing possible
+##      false negative. MATCH THE STABLE STEM (`A: [0-9]+ members`), NEVER THE FORMATTED MIDDLE.**
+##      **(3)** The first candidate scan filtered on "seated in T1.1 MatB" — but a member only
+##      earns a cycle by cycling OUT of MatB, so the filter excluded BY CONSTRUCTION every
+##      member who could pass the cycles gate. It returned 91 wallets all reading `cycles 0`.
+##      ▶▶ **RULE: A FILTER THAT CORRELATES WITH THE THING YOU ARE MEASURING RETURNS A CLEAN,
+##      CONFIDENT, USELESS ANSWER.** ✅ **The cure was to stop enumerating by DERIVED WALLET and
+##      enumerate from EVENTS (`CycleRecorded`), which cannot miss a population nobody thought
+##      to derive — child@300000..300399 returned 0 joined wallets because the child pool's
+##      registered range starts ~300401 and older members came in via `MODE=std` or the
+##      direct/onramp keepers.**
+##      ✅ **THE CONTROL THAT SHOULD HAVE RUN FIRST: `tail -40 rr_keeper.log | sed -E
+##      's#https?://[^ ,")]*#<URL>#g'` — the raw log with URLs neutralised. One `tail` answered
+##      in one shot what two greps got wrong, and it prints no secret. A FILTERED READ IS NOT A
+##      READING OF THE LOG.**
+## 61.8 ✅ **LIVE STATE AND THE THINGS THAT ARE FINE.** **60.8 item 1 CLOSED, PASSED: the taper
+##      fired.** `A: 475 members >= 450 — cap 1/tick`, exactly 1 registration on eight
+##      consecutive ticks 13:40-16:00Z. **Members 482, run #2761.** Jobs B and C alive, no
+##      `rr_keeper.OFF`. **Pool 728/772 — 44 slots left, ~14.5h at 1/tick; next prime
+##      `HDR_OFFSET=300772`.**
+##      ⛔ **60.8 item 2: THE COPAY TEST HAS STILL NOT HAPPENED AND MAY NEVER — THAT IS THE
+##      FINDING, NOT A DELAY.** 15:54Z: `0 rescued ($0.00 advanced), 18 still in grace | SF
+##      $250.21 -> $250.21`, floor $100 from chain, budget $150.21. `fastlane_rescue`:
+##      `0 fast-laned` every tick. **Parked fell 42 -> 18 and NEITHER RESCUE KEEPER DID IT; the
+##      fund spent $0.00** — item S overflow clears parks for free BEFORE the 24h grace expires.
+##      ▶ **So copay is CONTINGENT, not scheduled: it fires only once overflow runs out of room
+##      — which is the same moment the freeze completes and parks turn NO-SEAT, the kind the
+##      fund CANNOT fix. WATCH `NO-SEAT` in `pair_saturation.js`: 0 today. The first non-zero is
+##      the real alarm, not the copay log.**
+##      ⚠ **"OVERFLOW IS FREE" WAS CLAUDE'S WORDING AND IT IS WRONG.
+##      `rescueReentry` :513: `usdc.safeTransferFrom(msg.sender, dest, entryFee)` where
+##      `msg.sender` IS THE CALLING MATRIX. T1.1 MatB PAYS THE $10; the SF pays nothing and
+##      GAINS ~$0.30. It is a TRANSFER FROM ONE COHORT'S POOL TO ANOTHER'S ENTRY ECONOMICS.**
+##      ▶ **"costs the fund nothing" and "is free" are different claims. NAME THE PAYER, never
+##      just the non-payer. The 45%-cost-nothing figure carries the same trap.**
+##      ⚠ **T2.1 MatA is 90/127 — 60.4's cascade stop note lifts as it nears 127. Re-run
+##      `cascade_chain.js` before then.**
+##      ✅ **INFRA, RECORDED BECAUSE NO REPO FILE HELD IT AND IT COST THIS SESSION THREE ROUND
+##      TRIPS: the VPS is `root@167.99.0.250` (hostname `cryptonova-keeper`, which does NOT
+##      resolve from Windows). There is no `~/.ssh/config`; the key is `~\.ssh\do_keeper` and
+##      MUST be passed with `-i`: `scp -i $HOME\.ssh\do_keeper <file> root@167.99.0.250:/root/keeper/`.
+##      A plain scp fails `Permission denied (publickey)`, which reads like a revoked key and is
+##      not.** ⛔ **A PLACEHOLDER INSIDE A FENCED CODE BLOCK GETS RUN VERBATIM — `root@YOUR-TARGET`
+##      was pasted and executed. Commands needing substitution go INLINE IN PROSE, never in a fence.**
+## 61.9 ▶ **WHAT IS OPEN, IN ORDER, FOR SESSION 62.**
+##      1. **THE DOUBLE-ENTRY TEST RESULT.** Owner arms `0x1D3E…93AB` via the Dashboard
+##         (Auto Re-entry ON first). **PASS = T1.2 MatA rotations 0 -> 1 and T1.2 MatB 0 -> 1.**
+##         Read `/root/keeper/frozen.log` — the hourly check records it unattended.
+##         **If it FIRES, one member with $53 unfreezes 127 people and the loop is proven on
+##         chain with no redeploy. If it does NOT, the failure names which of the five links
+##         in 61.0-61.2 is wrong.**
+##      2. **THE OWNER'S DECISION: should registration set `enableDouble=true` (61.2)?** Price
+##         it first — it is an extra fee per cycle per member. **Do not change it unilaterally.**
+##      3. **QuickNode domain/referrer restriction + rate limits on the five frontend endpoints
+##         (61.6).** Console work, no code. **Do NOT delete `cosmopolitan-still-fire`.**
+##      4. **THE REGRESSION REGISTER, `REGRESSION_REGISTER.md`** — started this session in the
+##         contracts repo. Every historical defect, what cured it, what quietly undid it, and
+##         the invariant that proves it still holds. **Extend it before any fix, not after.**
+##      5. **60.9's ORIGINAL MEASUREMENT IS STILL NOT DONE: what a rotation CREDITS a
+##         rotated-out root against the $5 its crossing reserve must reach.** 61.1 measured a
+##         DIFFERENT pot against a DIFFERENT price — do not substitute one for the other.
+##      6. **60.8 items 5 and 6 UNCHANGED:** re-run `cascade_chain.js` as T2.1 MatA nears 127;
+##         re-run the allowance scan over the 233 unreadable wallets; `diag_parked_census.js`
+##         block-0 read; `pair_saturation.js` missing dotenv; the 38 read-only diagnostics with
+##         stale `ADDRESSES_FILE` defaults; the two `DRY_RUN` defects (59.6); MT5-Bots dirty
+##         files; local `C:\CryptoNova-Keepers\.env` still holds the dead `fluent-neat-moon` URL.
+##      ⚠ **`rr_keeper.OFF` IS STILL GONE AND ALL THREE JOBS ARE RUNNING.**
+##      **`touch /root/keeper/rr_keeper.OFF` stops them within a tick.**
+
+# ⬛ SESSION 60 STATE — 2026-09-02.
 # (Opened on 59.8 item 1. 59.x is still correct EXCEPT 59.3's blast radius, widened in 60.2.)
 # ⛔⛔⛔ THE HEADLINE: **BOTH LEAKED KEYS ARE ROTATED AND VERIFIED LIVE — BUT ONE OF
 # THEM WAS ALREADY PUBLIC IN THREE DEPLOYED FRONTEND PAGES, SO THE CRONTAB DIFF WAS
