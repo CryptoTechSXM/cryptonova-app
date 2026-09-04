@@ -157,12 +157,14 @@ async function drive(SIZE, extra) {
   const wallets = sigs.slice(10, 200);
   let wi = 0;
   const thinSpread = []; // { member, pairId, occA } — a front-door arrival at a non-full MatA
+  let frontDoorToPair1 = 0; // F4: registrations whose FIRST seat is pair 1 (must be 0: ONE DOOR)
 
   const oneReg = async (w) => {
     const occBefore = [await matA.occupancy(), await matA2.occupancy()];
     const pairId = await reg(ctx, w, W1.address);
     if (pairId !== null) {
       const idx = Number(pairId);
+      if (idx === 1) frontDoorToPair1++;
       // Thin-spread = sent to a NON-full MatA while some MatA WAS full. Routing to a
       // non-full MatA when nothing is full yet (the bootstrap of pair 0) is correct.
       const anyFull = occBefore.some((o) => o >= BigInt(SIZE));
@@ -187,7 +189,7 @@ async function drive(SIZE, extra) {
   for (let i = 0; i < extra; i++) await oneReg(wallets[wi++]);
 
   return {
-    ctx, filled, thinSpread, registrations: wi,
+    ctx, filled, thinSpread, frontDoorToPair1, registrations: wi,
     rotA0AtFill, rotA2AtFill, occB2AtFill,
     rotA0End: await matA.rotationCount(),  rotB0End: await matB.rotationCount(),
     rotA2End: await matA2.rotationCount(), occB2End: await matB2.occupancy(),
@@ -220,6 +222,20 @@ describe("V8.52 — REGRESSION_REGISTER R1: a matrix with no entry source freeze
     expect(r.rotA0End, "pair 0 MatA stopped rotating once pair 1 filled — the freeze has been RELOCATED, not cured")
       .to.be.gt(r.rotA0AtFill);
     expect(r.rotB0End, "pair 0 MatB must rotate WITHOUT any keeper").to.be.gt(0n);
+  });
+
+  it("F4: ONE DOOR — no registration ever takes its first seat in pair 1; pair 1 turns from the CIRCULATION (owner's design, 2026-09-04)", async function () {
+    // The owner, verbatim: "only one door. then the parked or rotating out should enter,
+    // fill and rotate T1.2." New members enter pair 0, always. Pair 1 is filled AND ROTATED
+    // by existing members re-entering / being rescued (rescueReentry ends in enterFor — a real
+    // entry — so aiming it at a FULL later MatA is exactly what rotates that MatA). Together
+    // with F1 (pair 1 rotates) and F2 (pair 0 keeps rotating) this is R1 satisfied without a
+    // routing counter (R3) and with O7's original law restored as an assertion.
+    expect(r.frontDoorToPair1,
+      `${r.frontDoorToPair1} registration(s) took their FIRST seat in pair 1 — the front door left pair 0. ONE DOOR means new members always enter pair 0; later pairs are fed by the circulation, never by registrations`)
+      .to.equal(0);
+    expect(r.rotA2End, "pair 1 MatA must still rotate — fed by re-entries/rescues entering it while full").to.be.gt(0n);
+    expect(r.rotA0End, "pair 0 MatA must keep rotating — it keeps every registration").to.be.gt(r.rotA0AtFill);
   });
 
   it("F3: while any MatA is full, the front door never reaches a non-full one — the thin-spread guard", async function () {

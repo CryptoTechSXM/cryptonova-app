@@ -113,8 +113,16 @@ members sitting in MatB), and `_findExternalPair` (V8.48 item 10b).
 **LESSON:** V8.46 fixed one site and missed two. **When a root cause is named, sweep for
 siblings in the same file before closing it.** The same failure recurs at R7.
 
-**CHECKED BY:** NOT AUTOMATED. A grep for threshold comparisons against cumulative counters
-would be cheap and does not exist.
+**FOURTH SITE, MINE, 2026-09-04 (session 62):** the V8.52 front-door selector chose the full MatA
+with the lowest `rotationCount` — a counter that only increments. Measured on the private chain:
+5 entries, pair 1 stayed at 30, pair 2 went 1 → 6 — pair 1 starved until pair 2 catches up.
+**I wrote the R1 addendum naming the rule and did not read this entry against it.** Cure:
+select on `lastRotationTimestamp` (the pair that has WAITED longest, a never-rotated one first),
+which is a clock, not a count. Handoff 62.14.
+
+**CHECKED BY:** NOT AUTOMATED. A grep for `rotationCount|totalRegistered|totalRegistrations`
+inside any function whose name contains `find`, `route`, `target` or `door` would have flagged
+this in seconds; it still does not exist — add it to `predeploy_check.js`.
 
 ---
 
@@ -337,5 +345,44 @@ including O7 (its drive stops at pair 1's FIRST arrival, so pair 1 is never full
 its assertions were exact for both laws - only its title and LIMB 1 text were restated, per
 R11); `sizes.js`: PairManagerV8 16,855 / headroom 7,721. Full suite: see handoff 62.6.
 
+**THE CURE AS SHIPPED — V8.52b (2026-09-04, the owner's design, handoff 62.15/62.16):** the
+front door stays pair 0 (ONE DOOR). When the circulation (re-entry / rescue, which ends in a real
+`enterFor`) finds no pair with room, it ENTERS the full pair that has waited longest
+(`_fullPairWaitingLongest`: lowest `lastRotationTimestamp`, MatB must have room) — that entry
+rotates it. No counter (R3). F4 = no registration's first seat is pair 1 AND pair 1 rotates AND
+pair 0 rotates. The V8.52a front-door selector below was measured, found to starve pair 1, and
+replaced; its record stays here as the history.
+
+**PROVEN ON A LIVE CHAIN, OWNER AS A MEMBER (2026-09-04 06:50Z, private V8.52a, size 15):** pair 2
+filled to 15/15 by overflow only (rotations 0 — the freeze reproduced), then ONE front-door
+registration → pair 2 rotations 0 → 1, MatB 0 → 1, pair 1 unchanged. Handoff 62.12.
+
 **CHECKED BY:** `frozen_matrix_check.js` hourly on chain (R1), and F1-F3 in the suite.
+
+---
+
+## R13 - A redirect truncates its target before the command reads
+
+**THE INVARIANT:** *Never write a file beside the file you are reading it from, never with a
+relative path, and never in a block that can be pasted into a shell whose working directory
+you did not set on the same line. Write to `<dest>/<name>.new` by absolute path, then `mv`.*
+
+**WHY:** 2026-09-04 05:34Z: the sandbox-build block for the private V8.52 chain contained
+`sed '...' /root/keeper/.env > .env`. The block was pasted into the wrong window, its error
+text was pasted back into the VPS shell, and that line executed with the shell still in
+`/root/keeper`. The shell opened `> .env` (truncating the LIVE keeper `.env` to 0 bytes) before
+`sed` read it, so `sed` read nothing and wrote nothing. **Every live keeper job lost its RPC,
+keys and address book for ~35 minutes; the ADDRESSES_FILE guards (R6) held and nothing ran on
+a dead default.** Restored from `.env.bak_roster41_20260828` + the V8.51 repoint, proven by
+`frozen_matrix_check.js` reading 26 matrices. ⚠ Anything changed in the live `.env` between
+2026-08-28 and 09-04 other than `ADDRESSES_FILE` is LOST and unknown - watch for a keeper that
+behaves differently from before and check this first.
+
+Same family as session 56's `io.open(P,"w")` truncation: the destructive step happened before
+the productive one, and an error in between left nothing. The cure is the same: produce the
+new content somewhere harmless first, then swap it in atomically.
+
+**CHECKED BY:** NOT AUTOMATED. Every future block that builds a config from another config
+uses absolute paths and the `.new` + `mv` form. A daily `test -s /root/keeper/.env` in the
+health report would have alarmed within a tick and does not exist yet.
 

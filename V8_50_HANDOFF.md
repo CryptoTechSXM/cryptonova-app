@@ -135,7 +135,156 @@ owner-set, and the session that earned it got five things wrong by ignoring what
 ##         Then the owner registers from Rabby and we watch `pair_saturation.js` TIER=T1 on the private
 ##         book: PASS = T1.2 MatA fills, then ROTATES on the next front-door entry, T1.2 MatB > 0.
 ##         `frozen_matrix_check.js` with the private `ADDRESSES_FILE` must read PASS (exit 0).
+## 62.9 ✅ **THE RAMP IS LIVE (owner: "stress reg 5 every 10 mins ... 254").** Job A cron `*/20` ->
+##      `*/10`, `REG_TAPER_AT` 450 -> **783** (529 members + 254), `POOL_SIZE` 772 -> **1072**; pool
+##      primed 300772..301071 (300 wallets, 0 failed; next prime `HDR_OFFSET=301072`). Edited on the
+##      box by anchored `sed` on the `ONLY=A` line, verified by counts (15/15 active, 1/1/1/1) and the
+##      R9 equivalence hash (URLs + the three fields neutralised: identical pre/post). Live md5
+##      `8f724232a3d169eb787fe84ce4f54610`. Rollback `crontab /root/keeper/crontab_pre_ramp_20260903.txt`
+##      (key-bearing). ⚠ Before the edit the cron was standing down on `pool 774/772`. Taper ETA ~05:30Z.
+##      ✅ **ANSWERED THE SAME EVENING, from the live site ~21:20Z: T1.3 MatA reached 127/127 (MatB 0)
+##      and T1.4 APPEARED, filling by overflow (12/127). So a frozen pair filling does NOT produce
+##      NO-SEAT parks — `_forceExpand` spawns the next pair and it freezes in turn. On V8.51 the
+##      system will spawn frozen pairs indefinitely.** ⚠ Frontend label: T1.2 (MatA 127, MatB 1) reads
+##      "New" — the label treats MatB > 0 as new; it should read the "Awaiting crossings" family (R5).
+##      ⚠ Owner, on seeing it: "this is still not doing what it suppose to do" — correct; this is V8.51,
+##      V8.52 is not deployed anywhere yet (62.8 in progress).
+##      ⛔ **STOPPED 21:45Z at the owner's call ("should we just stop it as it is wasting time"):
+##      `/root/keeper/rr_keeper.OFF` IS BACK. Jobs A/B/C stand down; the ramped crontab line
+##      (`*/10`, 783, 1072) stays installed for when the switch is lifted. `direct_keeper`, copay,
+##      fastlane, `frozen_matrix_check` and the rest are separate lines and keep running.**
+## 62.10 ▶ **JOB C TO 100% — OWNER'S ASK ("b should be good but c maybe we make it 100%"), AGREED,
+##      BUT ORDERED: THE 60.4 REORDER LANDS FIRST.** `UPG_MANUAL_PCT` defaults to 100 in `rr_keeper.js`
+##      (:221); the 5 is an override on the live job C line or in `.env` — find it with `grep -c`, never
+##      by printing the line. ⛔ **Why not flip it tonight: job C approves BEFORE the `staticCall` and
+##      never revokes on refusal (60.4, measured: 3 standing allowances). At 100% that is every
+##      candidate per productive pass (~120), i.e. the 2026-07-29 cascade ingredient at scale, while
+##      100% upgrades are what fill T2.1 MatA (90/127) to the point where cascades go live.**
+##      ✅ **THE CLEAN FIX IS AVAILABLE, VERIFIED IN SOURCE: `TierRouter.manualUpgrade` runs
+##      `_requireUpgradeEligible` (:966) BEFORE `safeTransferFrom` (:972), so an ineligible member returns
+##      the real TRGate verdict from the dry call WITHOUT any allowance; only an eligible one reverts on
+##      allowance.** ▶ **Reorder `rr_keeper.js` :739-800: staticCall FIRST with no approve; TRGate/TRState
+##      revert = refused, grant nothing; ERC20InsufficientAllowance revert (or success) = eligible ->
+##      approve just-in-time -> send.** Register entry first (R12: no keeper grants a TierRouter allowance
+##      to a wallet the chain has not just declared eligible). Then `_stage` + atomic `mv` + md5 on the
+##      box, THEN the one-field crontab change to 100%. Job B unchanged.
+## 62.11 ⛔⛔⛔ **I TRUNCATED THE LIVE `/root/keeper/.env` TO 0 BYTES (2026-09-04 05:34Z) — REGISTER R13.**
+##      The private-sandbox block had `sed … /root/keeper/.env > .env`; a mis-paste ran it with the shell
+##      in `/root/keeper`; the redirect emptied the live file before sed read it. ~35 min with every live
+##      keeper refusing to start (guards held). **Restored from `.env.bak_roster41_20260828` (15 lines, all
+##      keys) + `ADDRESSES_FILE=deployed_addresses_v8_51.json`; endpoint `thrilling-newest-seed`; proven by
+##      `frozen_matrix_check.js`: 26 matrices, T1.3 CONFIRMED frozen, T1.2 CLEARED (62.0's last proof).**
+##      ⚠ **Any other change made to the live `.env` between 08-28 and 09-04 is lost and unknown.**
+##      ✅ Also learned: the live `ADDRESSES_FILE` for cron jobs comes from ONE crontab environment line
+##      (`grep -c` = 1), not from `.env` — 56.x's "it is in .env" was imprecise.
+##      ✅ **PRIVATE V8.52 CHAIN IS UP:** deploy 21:41Z–21:58Z clean, `deployed_addresses_v8_52_private.json`,
+##      router `0x72DAF5647Dff8E71D0c4ECB768B19E77DcBcba63`, 25/25 verified on BaseScan, item G ON,
+##      `admin` repointed (`ba22fa8`, 12 files + `update_addrs_v8_52_private.py`, T4–T10 carried over
+##      from V8.51 by design). Owner registered 5 accounts from the site. Sandbox `/root/keeper_private/`
+##      (own state files, own `.env`, no kill switch) for seeding. ⚠ Frontend hardcodes `/127` — a size-15
+##      chain reads 5/127 (R5 instance, fix after the test). ⚠ Contracts `.env` and keepers `.env` on the
+##      owner's PC both pointed at the deleted `fluent-neat-moon`; owner created `deploy-tooling` (R10:
+##      the key never passed through chat).
+## 62.12 ✅✅✅ **V8.52 PASSED ON CHAIN, OWNER AS A MEMBER, 2026-09-04 06:50Z. THE SECOND PAIR TURNED.**
+##      Private chain (size 15, tiers 1-3), read by `pair_saturation.js` after each step, all
+##      registrations through the ONE front door, no double, no keeper trick:
+##      · 5 owner wallets + W1 + 10 pool → T1.1 MatA 15/15 rot 0 (one entry short, stepped alone)
+##      · +1 → **rot 1, MatB 1/15** (W1 crossed on its reserve, no park)
+##      · +14 → MatA rot 15, MatB 15/15, **T1.2 SPAWNED at the 90% trigger**, zero parks
+##      · +5 → MatB rot 5: W1 re-entered → seated in T1.2 MatA by OVERFLOW (own pair full both halves,
+##        item S); the owner's 4 wallets cycled out and PARKED (`FUNDING 4` — one 15-seat cycle earned
+##        $6.20, re-entry is $10, gap $3.80). **He rescued them himself from the Dashboard** — approve
+##        $10 / only $3.80 taken / Self Rescue — and each landed in T1.2 MatA. Customer experience recorded
+##        in 62.13.
+##      · +10, job B rescuing the pool parks → **T1.2 MatA 15/15, rotations 0, MatB 0/15: THE V8.51
+##        FREEZE, REPRODUCED ON PURPOSE**, the owner's five wallets at seats 2-6.
+##      · **+1 registration → T1.2 MatA rotations 0 → 1, T1.2 MatB 0 → 1/15, T1.1 MatA unchanged at 30.**
+##        The door went to the full, least-rotated pair. **The owner's Matrix view: "T1 Matrix A (pair 2)
+##        Position #1 Cycle 1"** — W1 rotated out, he moved up to the root seat.
+##      ▶ **THE OWNER'S MODEL HELD IN EVERY STEP EXCEPT THE LAST, AND THE LAST IS THE FIX:** one entrance,
+##      overflow fills 1.2 — exactly as he described — and then the entrance reaches the full pair so it
+##      can turn. Overflow alone reproduced the freeze (measured); the front door reaching it cured it
+##      (measured). 61.9 item 1 (double) and this are two proofs of the same physics: only an ENTRY rotates.
+## 62.13 ▶ **CUSTOMER-EXPERIENCE FINDINGS FROM THE OWNER'S OWN SCREEN (fix after, not during):**
+##      1. **Tiers table denominator is a hardcoded `/127`** — reads `15/127 · 1/127` on a size-15 chain
+##         while the Matrix view correctly says `15 seats` (reads MATRIX_SIZE). R5: read it from the chain.
+##      2. Tiers table label: a pair with MatA full and MatB > 0 reads "New"; MatB 0 reads "Awaiting
+##         crossings". "New" is wrong for a full MatA (61.5's fix covered only the MatB=0 case).
+##      3. Matrix view "Cycle 0/1" is THIS MATRIX's count for the member, not tier cycles — ambiguous.
+##      4. Rabby on Base Sepolia shows "Simulation Not Supported / Unknown Signature Type / Custom
+##         Network" on every CryptoNova tx — not a fault, but every member sees it; FAQ line.
+##      5. Self-rescue flow copy is clear ("Approving $10.00 — only $3.80 is taken"); the "About 6 days
+##         left before this position can be evicted" line and the $5.00 lend cap both rendered correctly.
+##      6. Dashboard "Withdraw Earnings $0.00" while in-matrix withdrawable was $6.20 — the known
+##         in-matrix vs claimable split, still confusing on first sight.
+##      7. Keeper sandbox lessons: `rr_keeper_state.json` and `rescue_index_map.json` are per-directory
+##         caches — a private run MUST live in its own directory (`/root/keeper_private/`) and job B needs
+##         `UPGRADE_RANGES="child:400000:100"` explicitly (the cached map ignores POOL_OFFSET). Two pool
+##         wallets hit "replacement fee too low" once (stuck nonce) and cleared on retry.
+## 62.14 ⛔⛔ **THE V8.52 SELECTOR IS RIGHT ABOUT *WHICH KIND* OF PAIR AND WRONG ABOUT THE TURN ORDER —
+##      MEASURED 07:04Z, PREDICTED BEFORE THE RUN.** "Lowest rotationCount among full MatAs" sends EVERY
+##      entry to pair 2 until it catches pair 1: 5 registrations → T1.1 MatA stayed at 30, T1.2 MatA 1 → 6,
+##      T1.2 MatB 1 → 6. Not a freeze (pair 1 resumes when the counts meet) but on a community chain the
+##      gap is hundreds of rotations = days of "nothing is happening" in the pair most real members sit in.
+##      ⛔ **AND IT IS AN R3 VIOLATION BY THE REGISTER'S OWN WORDS — "no routing decision may be gated on a
+##      counter that only ever increments." I wrote R3's addendum for R1 and did not read R3 against it.**
+##      ✅ **THE CURE, NAMED BEFORE THE CODE (R1/R3):** among FULL MatAs, pick the one that has WAITED
+##      LONGEST — lowest `lastRotationTimestamp()` (the matrix already exposes it, `:835`); a never-rotated
+##      matrix reads 0 and wins first, which preserves tonight's PASS; after it turns its timestamp is the
+##      newest, so the next entry goes to the other full pair — natural alternation, stateless, no counter,
+##      no cursor. Ties → lowest index; no full MatA → pair 0. **Test-first: add F4 to
+##      `V8_52_FrozenPair.test.js` — after pair 1 becomes a door, N further entries must be SHARED (pair 0's
+##      rotationCount must advance by ≥ N/3) — RED on the count rule, green on the timestamp rule.** F1–F3
+##      must stay green. Then predeploy section update (its "rot < bestRot" check must move to the new
+##      shape), sizes, full suite, then the private chain can be REDEPLOYED to prove F4 live before members.
+##      ⚠ Two more pool registrations printed in 0.2s (`0x289A782E…`, `0x3BAafF45…`) — same shape as the two
+##      that later hit "replacement fee too low". Pattern, not yet explained: a stuck nonce on wallets whose
+##      registration tx returned instantly. Measure before the next seeding run.
+## 62.15 ✅✅ **THE OWNER'S DESIGN SUPERSEDES 62.14's CURE — RECORDED VERBATIM: "that was my point
+##      exactly only one door. then the parked or rotating out should enter, fill and rotate T1.2."**
+##      ▶ **IN CODE TERMS: front door stays pair 0 (V8.48's `return 0` — restore it). The fix moves to
+##      the OVERFLOW TARGET: today item S / `_pairWithRoomFor` / `_freePairFor` / `graduationTargetFor` only
+##      ever target a pair WITH ROOM (`occ < size`), so a full later pair is skipped, pair N+1 fills, pair
+##      N+2 spawns — never entered, never rotated. New rule: no pair with room → ENTER the full pair that
+##      has WAITED LONGEST (`lastRotationTimestamp`, never-rotated = 0 first) — an entry into a full MatA is
+##      exactly what rotates it. Later pairs turn from the circulation stream; their own members re-enter
+##      them; pair 0 never loses a registration; nothing starves.** Why it is better than 62.14: no R3
+##      counter anywhere; O7's ORIGINAL law ("pair 1 fills from existing members, never from the front
+##      door") is RESTORED rather than rewritten; R2's two questions are answered in the rule itself (the
+##      destination MatA is entered when full; its MatB gets the crossings). Live evidence the stream is
+##      big enough: V8.51 measured ~266 overflow seats vs 387 pair-1 rotations in three days — every one
+##      after T1.2 filled would have rotated T1.2 instead of piling into T1.3/T1.4.
+##      ⚠ **CASCADE NOTE (R2 discipline): entering a pair that is full in BOTH halves triggers a cycle-out
+##      on entry — the same thing every front-door registration already does to pair 0 daily. Same risk
+##      class, not a new one; re-run `cascade_chain.js` on the private chain after the change.**
+##      ▶ **TEST-FIRST, F4: registrations + selfRescue only, two pairs: pair 0 keeps rotating AND pair 1
+##      rotates AND no front-door member ever reaches pair 1 (O7's law as an assertion again). RED today
+##      (pair 1 fills and freezes). Then the change, F1–F3 stay green, gate, suite, fresh private chain,
+##      owner walks it as a member.**
+## 62.16 ✅✅✅ **V8.52b IS BUILT, TEST-FIRST, AND GREEN — 670 passing / 7 pending / 0 failing (6m).**
+##      **THE CHANGE (`contracts/PairManagerV8.sol`):** `_findExternalPair()` back to `internal pure
+##      { return 0; }` — ONE DOOR. New `_fullPairWaitingLongest(member, avoid)` (view, never reverts):
+##      among pairs ≠ avoid where the member holds no seat, MatA FULL, MatB has room — pick the lowest
+##      `lastRotationTimestamp()` (never-rotated = 0 first; ties → lowest index). Wired into
+##      `rescueReentry`'s both-halves-full branch AFTER `_pairWithRoomFor` and BEFORE `_forceExpand`,
+##      and as the fallback in `graduationTargetFor`. Sibling comments swept (R7); item S's sentence
+##      "routing a rescue into a second full pair would reproduce the defect" corrected in place.
+##      **ORDER:** F4 written (no registration's first seat is pair 1; pair 1 rotates; pair 0 rotates) →
+##      RED on V8.52a ("10 registration(s) took their FIRST seat in pair 1") → change → F1–F4 5/5,
+##      `V8_44_Overflow` 9/9 (O7's ORIGINAL title and law restored, history kept — R11), sizes
+##      PairManagerV8 17,479 / headroom 7,097 → `predeploy_check.js` V8.52b section (7 checks, 176
+##      total) incl. the R3 grep over the five routing helpers; mutation-proven: a counter in the
+##      selector trips 3, a split front door trips 1; one V8.51 item-G check restated (room-first law
+##      unchanged, literal `return _pairWithRoomFor` → `uint256 alt = …`) → full suite 670 green.
+##      ⚠ **NOT yet on any chain.** The private chain on the box is V8.52a. Next: commit, then a FRESH
+##      private deploy (`deployed_addresses_v8_52b_private.json`), admin repoint (the repoint script's
+##      OLD book must become `_v8_52_private`), seed, and the owner walks it again: pair 2 must fill by
+##      overflow AND TURN with the front door never leaving pair 1 — F4 live.
 ## 62.5 ▶ **WHAT IS OPEN, IN ORDER, FOR SESSION 63.**
+##      -3. **62.15/62.16 (supersedes 62.14's selector): F4 RED → overflow target enters the longest-waiting FULL
+##          pair, front door back to pair 0 → green → gate → suite → fresh private deploy → owner test.
+##          BEFORE any community V8.52.**
+##      -2. **62.10: register R12 -> `rr_keeper.js` reorder -> stage/mv/md5 on the box -> job C to 100%.**
 ##      -1. **THE 62.8 CARD, steps 1-8, in that order.** Members untouched throughout.
 ##      0. **FULL SUITE RESULT for V8.52, then COMMIT `contracts/PairManagerV8.sol`,
 ##         `test/V8_52_FrozenPair.test.js`, `test/V8_44_Overflow.test.js`,

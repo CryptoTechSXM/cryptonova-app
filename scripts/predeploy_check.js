@@ -1644,39 +1644,59 @@ sep("V8.51 item S — rescue overflow (UNFLAGGED: live the moment we deploy)");
 // defect it cures has been reintroduced three times, so this section exists to make
 // the fourth time a red line instead of a paragraph. Reads stripped source only (R8).
 // ═══════════════════════════════════════════════════════════════════════════════
-sep("V8.52 front door — the least-rotated FULL MatA (R1)");
+sep("V8.52b — ONE DOOR + the circulation enters the full pair that waited longest (R1, R3)");
 {
   const pm52 = stripComments(read("contracts/PairManagerV8.sol"));
 
-  // The signature: it must be VIEW (it reads live matrices), never pure.
-  if (pm52 && /function _findExternalPair\(\) internal view returns \(uint256\)/.test(pm52)) {
-    ok("PairManagerV8.sol: _findExternalPair() is `internal view` — it reads live state");
+  // ONE DOOR: the front door is pair 0, pure. (V8.52a's view/rotationCount selector was an R3
+  // violation measured on the private chain 2026-09-04 — see handoff 62.14/62.15.)
+  if (pm52 && /function _findExternalPair\(\) internal pure returns \(uint256\) \{\s*return 0;\s*\}/.test(pm52)) {
+    ok("PairManagerV8.sol: _findExternalPair() is `pure { return 0; }` — ONE DOOR (owner's design, 62.15)");
   } else {
-    fail("PairManagerV8.sol: _findExternalPair() is not `internal view` — the V8.48 `pure { return 0; }` one-door (which froze every pair but pair 0, 2026-09-03) may be back");
+    fail("PairManagerV8.sol: _findExternalPair() is not the one-door `return 0` — the front door has been split again (V8.52a starved pair 1: 5 entries, pair 1 stayed at 30, pair 2 1 -> 6)");
   }
 
-  // The one-door body must be GONE.
-  if (pm52 && /function _findExternalPair\(\)[^{]*\{\s*return 0;\s*\}/.test(pm52)) {
-    fail("PairManagerV8.sol: _findExternalPair() body is `return 0` — ONE DOOR. Every pair except pair 0 will fill by overflow and never rotate (R1, measured live 2026-09-03: T1.2 MatA 127/127 rot 0)");
+  // The cure lives in the overflow target: a clock, not a count.
+  const helper = pm52 && (pm52.match(/function _fullPairWaitingLongest\(address member, uint256 avoid\) internal view returns \(uint256\) \{[\s\S]*?\n    \}/) || [""])[0];
+  if (helper && /lastRotationTimestamp\(\)/.test(helper) && /aOcc < aSize\) continue;/.test(helper) && /bOcc >= bSize\) continue;/.test(helper)) {
+    ok("PairManagerV8.sol: _fullPairWaitingLongest() selects on lastRotationTimestamp among FULL MatAs whose MatB has room");
   } else {
-    ok("PairManagerV8.sol: _findExternalPair() is not the one-door `return 0` body");
+    fail("PairManagerV8.sol: _fullPairWaitingLongest() is missing or no longer selects on lastRotationTimestamp / full-MatA / MatB-has-room — R1's cure is gone");
+  }
+  if (helper && /rotationCount\(|totalRegistered|totalRegistrations/.test(helper)) {
+    fail("PairManagerV8.sol: _fullPairWaitingLongest() reads a cumulative counter — R3 (a full pair with a big history would be starved until the others catch up)");
+  } else {
+    ok("PairManagerV8.sol: _fullPairWaitingLongest() reads no cumulative counter (R3)");
   }
 
-  // The rule: full check, rotation read, least-rotated selection, in that function.
-  const body52 = pm52 && (pm52.match(/function _findExternalPair\(\)[\s\S]*?\n    \}/) || [""])[0];
-  if (body52 && /occupancy\(\) < a\.MATRIX_SIZE\(\)\) continue;/.test(body52) && /rotationCount\(\)/.test(body52) && /rot < bestRot/.test(body52)) {
-    ok("PairManagerV8.sol: _findExternalPair() skips non-full MatAs and picks the lowest rotationCount among the full ones");
+  // Both overflow callers use it, and rescueReentry tries it BEFORE force-expanding.
+  const rr = pm52 && (pm52.match(/uint256 alt = _pairWithRoomFor\(member, fromPairIndex\);[\s\S]{0,600}?_forceExpand\(\);/) || [""])[0];
+  if (rr && /alt = _fullPairWaitingLongest\(member, fromPairIndex\);/.test(rr)) {
+    ok("PairManagerV8.sol: rescueReentry overflow tries _fullPairWaitingLongest BEFORE _forceExpand");
   } else {
-    fail("PairManagerV8.sol: _findExternalPair() does not implement 'least-rotated FULL MatA' — F1/F2/F3 in test/V8_52_FrozenPair.test.js are the regression; run them");
+    fail("PairManagerV8.sol: rescueReentry's overflow branch no longer enters the longest-waiting full pair before spawning — a full later pair fills by overflow and freezes again (R1)");
+  }
+  if (pm52 && /if \(alt == type\(uint256\)\.max\) alt = _fullPairWaitingLongest\(member, fromPairIndex\);/.test(pm52)) {
+    ok("PairManagerV8.sol: graduationTargetFor falls back to _fullPairWaitingLongest");
+  } else {
+    fail("PairManagerV8.sol: graduationTargetFor lost its _fullPairWaitingLongest fallback");
   }
 
-  // The regression test itself must exist and still assert rotation (R11: a test whose
-  // title names a law must assert it).
+  // R3 grep the register asked for: no routing helper may read a cumulative counter.
+  const routers = pm52 ? (pm52.match(/function (_findExternalPair|_pairWithRoomFor|_freePairFor|_fullPairWaitingLongest|graduationTargetFor)\b[\s\S]*?\n    \}/g) || []) : [];
+  const bad = routers.filter(f => /rotationCount\(|totalRegistered|totalRegistrations/.test(f));
+  if (routers.length >= 4 && bad.length === 0) {
+    ok(`PairManagerV8.sol: ${routers.length} routing helpers read no cumulative counter (R3 grep)`);
+  } else {
+    fail(`PairManagerV8.sol: R3 grep — ${bad.length} routing helper(s) read a cumulative counter (or fewer than 4 helpers found: ${routers.length})`);
+  }
+
+  // The regression tests themselves must still assert (R11).
   const f52 = read("test/V8_52_FrozenPair.test.js");
-  if (f52 && /expect\(r\.rotA2End/.test(f52) && /expect\(r\.rotA0End/.test(f52) && /expect\(r\.thinSpread\.length/.test(f52)) {
-    ok("test/V8_52_FrozenPair.test.js: F1 (later pair rotates), F2 (pair 0 keeps rotating), F3 (no thin-spread) all still assert");
+  if (f52 && /expect\(r\.rotA2End/.test(f52) && /expect\(r\.rotA0End/.test(f52) && /expect\(r\.thinSpread\.length/.test(f52) && /expect\(r\.frontDoorToPair1/.test(f52)) {
+    ok("test/V8_52_FrozenPair.test.js: F1 (later pair rotates), F2 (pair 0 keeps rotating), F3 (no thin-spread), F4 (ONE DOOR) all still assert");
   } else {
-    fail("test/V8_52_FrozenPair.test.js is missing or one of F1/F2/F3 no longer asserts — R11: a retargeted test is a deleted test");
+    fail("test/V8_52_FrozenPair.test.js is missing or one of F1/F2/F3/F4 no longer asserts — R11: a retargeted test is a deleted test");
   }
 }
 
@@ -1754,10 +1774,16 @@ sep("V8.51 item G — graduation (FLAGGED, ships FALSE)");
     fail("PairManagerV8.sol: graduationTargetFor not found or its gate is unrecognised — re-read it before trusting this check");
   }
 
-  if (gtBody && /return _pairWithRoomFor\(member, fromPairIndex\);/.test(gtBody)) {
-    ok("PairManagerV8.sol: graduationTargetFor returns _pairWithRoomFor — room is CHECKED, not inferred (50.3 rejected the occ+1>=size proxy)");
+  // LAW RESTATED, V8.52b (REGRESSION_REGISTER R11): this used to require the literal
+  // `return _pairWithRoomFor(...)`. The law — ROOM IS CHECKED FIRST, not inferred (50.3 rejected
+  // the occ+1>=size proxy) — is unchanged and still asserted below. What changed is the sentence
+  // after it: "graduating into a second FULL pair moves the defect one pair along" was WRONG —
+  // entering a full MatA whose MatB has room is what ROTATES it (R1, measured 2026-09-04). So
+  // when no pair has room, the fallback is _fullPairWaitingLongest, and that is asserted too.
+  if (gtBody && /uint256 alt = _pairWithRoomFor\(member, fromPairIndex\);/.test(gtBody)) {
+    ok("PairManagerV8.sol: graduationTargetFor checks ROOM FIRST via _pairWithRoomFor (50.3 law, unchanged)");
   } else {
-    fail("PairManagerV8.sol: graduationTargetFor no longer routes through _pairWithRoomFor — graduating into a second FULL pair moves the defect one pair along instead of fixing it");
+    fail("PairManagerV8.sol: graduationTargetFor no longer checks room first via _pairWithRoomFor — a member with a free seat waiting would be diverted (the more damaging error, 50.3)");
   }
 
   // The emit lives in the LINKED library, so an unlinked or stale TierRouterLib
