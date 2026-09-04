@@ -373,6 +373,17 @@ owner-set, and the session that earned it got five things wrong by ignoring what
 ##      ⚠ **Job A is still behind `rr_keeper.OFF`.** Before it runs on the new chain: a NEW pool range +
 ##      priming, `rr_keeper_state.json` backed up and reset (its poolCursor/refCursor are V8.51's), and
 ##      the ramped crontab line (`*/10`, taper 783, pool 1072) reset for a fresh chain.
+## 62.24 ✅ **MONITORING LANDED (owner: "go", policy in memory [[cryptonova-monitoring]]), keepers `438169a`, `d00f7b5`.**
+##      `topup_keeper.js` hourly (`17 * * * *`): faucet `0xE5F5cc91…` MIN 0.1 ETH/$2,000 → 0.5/$10,000; keeper EOA
+##      `0xd419…` 0.05 → 0.2 ETH; deployer floor 10 ETH; daily cap 1 ETH/$30,000 per recipient; honest DRY_RUN; ⚡/WARNING/
+##      FAIL to the private channel + alerts.jsonl. **Proven live:** faucet drained to 0.051/$1,796 → 0.449 ETH + $8,204
+##      sent (blocks 46390547/46390549). `tg_send.js` = shell-callable sender; `frozen_watch.sh` runs
+##      `frozen_matrix_check.js` every 4h (`23 */4`), silent on PASS. Faucet wallet measured = FILL_MNEMONIC std:4 →
+##      `EXCLUDE_ADDRS` in rr_keeper (`4bd8e5e`). Crontab now 72 lines (backups `crontab_pre_topup_…`,
+##      `crontab_pre_frozenwatch_…`). ▶ Backlog: silent-job detector (stress_status logic on cron), RPC endpoint probe,
+##      site + /api/faucet probe, R14 grant read in the post-deploy verify. Census: topup_keeper is a SPENDER (deployer).
+##      [stated] Stress on V8.52 NOT started — "members first, after a few hours we do the stress"; `rr_keeper.OFF` stays;
+##      start = `rm /root/keeper/rr_keeper.OFF` (cursor 1072, pool 1372, taper 254, plan live-check, all prepped).
 ## 62.5 ▶ **WHAT IS OPEN, IN ORDER, FOR SESSION 63.**
 ## 62.23 ✅ **CUTOVER DONE 2026-09-04 (owner local afternoon): `preview`+`main` at `00b4690`** (V8.52 repoint
 ##      + `DEFAULT_SPONSOR_POOL` = the owner's revised 10-leader roster, two swapped, dead `run_bigfill_rr.ps1`
