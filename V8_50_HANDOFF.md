@@ -280,8 +280,30 @@ owner-set, and the session that earned it got five things wrong by ignoring what
 ##      private deploy (`deployed_addresses_v8_52b_private.json`), admin repoint (the repoint script's
 ##      OLD book must become `_v8_52_private`), seed, and the owner walks it again: pair 2 must fill by
 ##      overflow AND TURN with the front door never leaving pair 1 — F4 live.
+## 62.17 ✅✅✅ **V8.52b PROVEN LIVE, OWNER AS A MEMBER — 2026-09-04 09:08Z. ONE DOOR, AND THE SECOND
+##      PAIR TURNED FROM THE CIRCULATION ALONE.** Fresh private chain `deployed_addresses_v8_52b_private.json`
+##      (router `0xfC95CB575D2728F7db0eEc1E9A6b13385553D3c9`, size 15, tiers 1-3, PairManagerV8 17,479 on
+##      chain, 25/25 verified, item G ON, admin `15aa752`). Walked step for step as 62.12: T1.1 filled and
+##      rotated; MatB filled; **T1.2 spawned**; cycle-outs parked; owner rescued his 4 from the Dashboard;
+##      pool parks rescued by B → **T1.2 MatA 15/15 rot 0, MatB 0 — the freeze state**. Then:
+##      · **+1 registration → T1.1 MatA 30 → 31 (the door stayed home), MatB 15 → 16, one member parked.**
+##      · **job B rescued that one member → no pair had room → it ENTERED pair 2 → T1.2 MatA rotations
+##        0 → 1, T1.2 MatB 0 → 1/15. T1.1 unchanged at 31.**
+##      ▶ **F4 live: no registration's first seat was pair 2; pair 2 rotated anyway; pair 1 kept rotating.
+##      The owner's design, verbatim, measured.** Sandbox notes: pool `HDR_OFFSET=600000` (42 primed;
+##      priming ran at ~11 s/wallet tonight), job B needs `UPGRADE_RANGES="child:600000:100"`; the same
+##      two-wallet "replacement fee too low" stragglers cleared on retry; one of the owner's 5 wallets did
+##      not register (15 = W1 + 4 + 10) — unexplained, low priority.
+##      ✅ **SECOND CONFIRMATION 09:13Z:** one more registration (T1.1 MatA 31 → 32, MatB 16 → 17, one
+##      parked) + one rescue → **T1.2 MatA rotations 1 → 2, MatB 1 → 2.** Two registrations home, two
+##      members circulated, two rotations of pair 2. ⚠ Pool exhausted at 42 (priming ran slow); the
+##      5-and-5 steady-state reading (both pairs advancing on the same 5 entries) is NOT yet taken —
+##      prime first (`HDR_OFFSET=600000 COUNT=100`, cursor resumes at 42), then 5 regs + B + read.
 ## 62.5 ▶ **WHAT IS OPEN, IN ORDER, FOR SESSION 63.**
-##      -3. **62.15/62.16 (supersedes 62.14's selector): F4 RED → overflow target enters the longest-waiting FULL
+##      -4. **COMMIT this handoff (62.17 is uncommitted). Then the 5-and-5 steady-state reading on the
+##          V8.52b private chain. Then the 62.13 frontend fixes, 62.10 job C, the member reply, and the
+##          community V8.52b deploy (size 127, 10 tiers, full re-registration) — owner's timing.**
+##      -3. **62.15/62.16/62.17 DONE (supersedes 62.14's selector): F4 RED → overflow target enters the longest-waiting FULL
 ##          pair, front door back to pair 0 → green → gate → suite → fresh private deploy → owner test.
 ##          BEFORE any community V8.52.**
 ##      -2. **62.10: register R12 -> `rr_keeper.js` reorder -> stage/mv/md5 on the box -> job C to 100%.**
