@@ -1,0 +1,79 @@
+﻿**********************
+Windows PowerShell transcript start
+Start time: 20260831223532
+Username: CryptoTech-LT01\CryptoTech
+RunAs User: CryptoTech-LT01\CryptoTech
+Configuration Name: 
+Machine: CRYPTOTECH-LT01 (Microsoft Windows NT 10.0.26200.0)
+Host Application: C:\WINDOWS\System32\WindowsPowerShell\v1.0\powershell.exe
+Process ID: 17152
+PSVersion: 5.1.26100.9168
+PSEdition: Desktop
+PSCompatibleVersions: 1.0, 2.0, 3.0, 4.0, 5.0, 5.1.26100.9168
+BuildVersion: 10.0.26100.9168
+CLRVersion: 4.0.30319.42000
+WSManStackVersion: 3.0
+PSRemotingProtocolVersion: 2.3
+SerializationVersion: 1.1.0.1
+**********************
+Transcript started, output file is C:\CryptoNite-Smart-Contracts\CryptoNova\v851_deploy_transcript.txt
+PS C:\CryptoNite-Smart-Contracts\CryptoNova> npx hardhat run scripts/deploy_v8.js --network baseSepolia
+  T05 PM:0x001D50a7 MatA:0xA4Ca9886 MatB:0x1D5Eec4F
+  T06 PM:0xDabe1da7 MatA:0x691174A5 MatB:0xFFb1141D
+  T07 PM:0xa110eB4E MatA:0xa1088Cb9 MatB:0xdbE3114d
+  T08 PM:0xebB18fa4 MatA:0x2d503d03 MatB:0x8A63DEA2
+  T09 PM:0xfB8c7722 MatA:0x324A2650 MatB:0x67DbF81D
+  T10 PM:0xaaE9f548 MatA:0x6Fa6a4fD MatB:0xb824F701
+  ────────────────────────────────────────────────────────────
+  Addresses file: deployed_addresses_v8_51.json
+  V8.51 Deploy complete.
+
+  NEXT STEP: run scripts/seed_w1.js then scripts/bigfill_v8.js
+
+  ────────────────────────────────────────────────────────────
+
+  run log: logs/runs/deploy_v8/2026-09-01T02-35-34-337Z_deployed_addresses_v8_51.log  (OK)
+
+  transport retries this run: 1 (1 served by a fallback after a failure, 0 routed straight to a fallback by the circuit
+breaker)
+PS C:\CryptoNite-Smart-Contracts\CryptoNova> Stop-Transcriptcls
+Stop-Transcriptcls : The term 'Stop-Transcriptcls' is not recognized as the name of a cmdlet, function, script file, or 
+operable program. Check the spelling of the name, or if a path was included, verify that the path is correct and try 
+again.
+At line:1 char:1
++ Stop-Transcriptcls
++ ~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : ObjectNotFound: (Stop-Transcriptcls:String) [], CommandNotFoundException
+    + FullyQualifiedErrorId : CommandNotFoundException
+Stop-Transcriptcls : The term 'Stop-Transcriptcls' is not recognized as the name of a cmdlet, function, script file,
+or operable program. Check the spelling of the name, or if a path was included, verify that the path is correct and
+try again.
+At line:1 char:1
++ Stop-Transcriptcls
++ ~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : ObjectNotFound: (Stop-Transcriptcls:String) [], CommandNotFoundException
+    + FullyQualifiedErrorId : CommandNotFoundException
+
+PS C:\CryptoNite-Smart-Contracts\CryptoNova> Stop-Transcriptcls
+Stop-Transcriptcls : The term 'Stop-Transcriptcls' is not recognized as the name of a cmdlet, function, script file, or 
+operable program. Check the spelling of the name, or if a path was included, verify that the path is correct and try 
+again.
+At line:1 char:1
++ Stop-Transcriptcls
++ ~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : ObjectNotFound: (Stop-Transcriptcls:String) [], CommandNotFoundException
+    + FullyQualifiedErrorId : CommandNotFoundException
+Stop-Transcriptcls : The term 'Stop-Transcriptcls' is not recognized as the name of a cmdlet, function, script file,
+or operable program. Check the spelling of the name, or if a path was included, verify that the path is correct and
+try again.
+At line:1 char:1
++ Stop-Transcriptcls
++ ~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : ObjectNotFound: (Stop-Transcriptcls:String) [], CommandNotFoundException
+    + FullyQualifiedErrorId : CommandNotFoundException
+
+PS C:\CryptoNite-Smart-Contracts\CryptoNova> Stop-Transcript
+**********************
+Windows PowerShell transcript end
+End time: 20260901020453
+**********************

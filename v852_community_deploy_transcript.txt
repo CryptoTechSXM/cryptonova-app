@@ -1,0 +1,70 @@
+﻿**********************
+Windows PowerShell transcript start
+Start time: 20260904054026
+Username: CryptoTech-LT01\CryptoTech
+RunAs User: CryptoTech-LT01\CryptoTech
+Configuration Name: 
+Machine: CRYPTOTECH-LT01 (Microsoft Windows NT 10.0.26200.0)
+Host Application: C:\WINDOWS\System32\WindowsPowerShell\v1.0\powershell.exe
+Process ID: 9996
+PSVersion: 5.1.26100.9168
+PSEdition: Desktop
+PSCompatibleVersions: 1.0, 2.0, 3.0, 4.0, 5.0, 5.1.26100.9168
+BuildVersion: 10.0.26100.9168
+CLRVersion: 4.0.30319.42000
+WSManStackVersion: 3.0
+PSRemotingProtocolVersion: 2.3
+SerializationVersion: 1.1.0.1
+**********************
+Transcript started, output file is v852_community_deploy_transcript.txt
+PS C:\CryptoNite-Smart-Contracts\CryptoNova> npx hardhat run scripts/deploy_v8.js --network baseSepolia
+  ✓  CNOVAToken                   0x4726b2d0EcF0de43F953Bc2Badde1C192cf06f6C  (13671 bytes)
+
+  ── Treasury ────────────────────────────────────────────────
+  ��  provider.getCode(0xD8353687…) CNOVATreasury returned 0x.
+      asking quaint-patient-haze directly:
+        raw eth_getCode latest : 0x NO CODE
+        raw eth_getCode safe   : 0x NO CODE
+        node block             : 46373283
+  ⏳⏳  node saw code at 0xD8353687… CNOVATreasury after 2 probes
+  ✓  CNOVATreasury                0xD8353687bD007514ee626F0e08f50d1F6eAfD753  (7293 bytes)
+
+  ── StabilityFund ───────────────────────────────────────────
+  ��  provider.getCode(0xD9fD9EBB…) StabilityFund returned 0x.
+      asking quaint-patient-haze directly:
+        raw eth_getCode latest : 0x NO CODE
+        raw eth_getCode safe   : 0x NO CODE
+        node block             : 46373289
+  ⏳⏳  node saw code at 0xD9fD9EBB… StabilityFund after 2 probes
+  ✓  StabilityFund                0xD9fD9EBB654FE9570c1D81F6cb2224Fa780cc211  (16119 bytes)
+PS C:\CryptoNite-Smart-Contracts\CryptoNova> TerminatingError(): "The pipeline has been stopped."
+>> TerminatingError(): "The pipeline has been stopped."
+>> TerminatingError(): "The pipeline has been stopped."
+>> TerminatingError(): "The pipeline has been stopped."
+PS C:\CryptoNite-Smart-Contracts\CryptoNova> clear
+PS C:\CryptoNite-Smart-Contracts\CryptoNova> cd C:\CryptoNite-Smart-Contracts\CryptoNova
+PS C:\CryptoNite-Smart-Contracts\CryptoNova> $env:ADDRESSES_FILE="deployed_addresses_v8_52.json"
+PS C:\CryptoNite-Smart-Contracts\CryptoNova> npx hardhat run scripts/preflight_v851.js --network baseSepolia 2>&1 | Select-String -Pattern "MATRIX_SIZE|DEPLOY_TIERS|Deployer ETH|USDC reused|BLOCKER"
+node.exe :   Γ£ù  ADDRESSES_FILE is 'deployed_addresses_v8_52.json' ΓÇö expected deployed_addresses_v8_51.json
+At line:1 char:1
++ & "C:\Program Files\nodejs/node.exe" "C:\Users\CryptoTech\AppData\Roa ...
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (  Γ£ù  ADDRESSE...sses_v8_51.json:String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+  Γ£ù  deployed_addresses_v8_51.json ALREADY EXISTS ΓÇö guardAddressesFile() will refuse. A previous run may have 
+completed; do not overwrite it blindly.
+
+  MATRIX_SIZE                : (default)
+  DEPLOY_TIERS               : (default)
+  Deployer ETH               : 59.566051
+  Γ£ô  USDC reused at 0x2D8B7b5eDec96bE441b6fb0D45D74a2BcE2C639a (code present, 6 decimals) ΓÇö members keep their
+balances, re-registration is approve-and-register
+  Γ¢ö  2 BLOCKER(S) ΓÇö DO NOT DEPLOY.
+  Γ¢ö  2 BLOCKER(S) ΓÇö DO NOT DEPLOY.
+
+
+PS C:\CryptoNite-Smart-Contracts\CryptoNova> Start-Transcript -Path v852_community_deploy_transcript.txt
+**********************
+Windows PowerShell transcript end
+End time: 20260904054147
+**********************

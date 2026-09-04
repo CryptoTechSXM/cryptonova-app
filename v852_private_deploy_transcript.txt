@@ -1,0 +1,52 @@
+﻿**********************
+Windows PowerShell transcript start
+Start time: 20260903174141
+Username: CryptoTech-LT01\CryptoTech
+RunAs User: CryptoTech-LT01\CryptoTech
+Configuration Name: 
+Machine: CRYPTOTECH-LT01 (Microsoft Windows NT 10.0.26200.0)
+Host Application: C:\WINDOWS\System32\WindowsPowerShell\v1.0\powershell.exe
+Process ID: 9408
+PSVersion: 5.1.26100.9168
+PSEdition: Desktop
+PSCompatibleVersions: 1.0, 2.0, 3.0, 4.0, 5.0, 5.1.26100.9168
+BuildVersion: 10.0.26100.9168
+CLRVersion: 4.0.30319.42000
+WSManStackVersion: 3.0
+PSRemotingProtocolVersion: 2.3
+SerializationVersion: 1.1.0.1
+**********************
+Transcript started, output file is v852_private_deploy_transcript.txt
+PS C:\CryptoNite-Smart-Contracts\CryptoNova> npx hardhat run scripts/deploy_v8.js --network baseSepolia
+
+  ── Deploy Complete ─────────────────────────────────────────
+  Network       : baseSepolia
+  MockUSDC      : 0x2D8B7b5eDec96bE441b6fb0D45D74a2BcE2C639a
+  CNOVAToken    : 0x0DB48e7Aa5a972627bFA2f69f518328c053B0832
+  Treasury      : 0xe023917172Aa120D707FD6a0f447e6266A47c716
+  StabilityFund : 0x24507164a2bc854950DB0DB91125Ed3C0ef9313C
+  BuybackReserve: 0x05b085ab17dE8921dCFe093214DE44B89909253D
+  TierRouter    : 0x72DAF5647Dff8E71D0c4ECB768B19E77DcBcba63
+  MatrixFactory : 0x12174474ab86ad0f074Db639d6EE45F30e469801
+  PairFactory   : 0xAed78BA44AA7D6DCea5562c464959B7A49670420
+  MatrixKeeper  : 0xe5Cc6b6A4D780e6B12606940b55dDA5AF18412FB
+  V8Governance  : 0x7BD29c4ea3164AFA33b9B5877FdeDbb5a0e14D88
+  CommunityWallet:0xC5Fa6ECc7584Ac0718590Db1830A0c15daA09223
+  T01 PM:0x3d1B3Ebd MatA:0x9879a3f7 MatB:0xD7c221ce
+  T02 PM:0xEa9Ee8C2 MatA:0x982D6c1F MatB:0x9aB9Db58
+  T03 PM:0xc19eb6a4 MatA:0x3Cd734Ad MatB:0x608670E3
+  ────────────────────────────────────────────────────────────
+  Addresses file: deployed_addresses_v8_52_private.json
+  V8.52 Deploy complete.
+
+  NEXT STEP: run scripts/seed_w1.js then scripts/bigfill_v8.js
+
+  ────────────────────────────────────────────────────────────
+
+  run log: logs/runs/deploy_v8/2026-09-03T21-41-46-231Z_deployed_addresses_v8_52_private.log  (OK)
+PS C:\CryptoNite-Smart-Contracts\CryptoNova> cls
+PS C:\CryptoNite-Smart-Contracts\CryptoNova> Stop-Transcript
+**********************
+Windows PowerShell transcript end
+End time: 20260903212133
+**********************

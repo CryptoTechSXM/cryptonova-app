@@ -299,10 +299,108 @@ owner-set, and the session that earned it got five things wrong by ignoring what
 ##      members circulated, two rotations of pair 2. ⚠ Pool exhausted at 42 (priming ran slow); the
 ##      5-and-5 steady-state reading (both pairs advancing on the same 5 entries) is NOT yet taken —
 ##      prime first (`HDR_OFFSET=600000 COUNT=100`, cursor resumes at 42), then 5 regs + B + read.
+## 62.18 ✅✅ **THE STEADY STATE, MEASURED 09:21Z: 5-AND-5.** Five registrations + one rescue pass:
+##      **T1.1 MatA 32 → 37, T1.1 MatB 17 → 22, T1.2 MatA 2 → 7, T1.2 MatB 2 → 7.** Both pairs advanced by
+##      the same five. (62.14's count rule gave 5-to-0 on the same drive.) **And T2.1 MatA 0 → 3: members
+##      cycling out with funds are auto-upgrading into T2 unassisted.** Handoff committed `fcd72cc`.
+## 62.19 ▶ **THE COMMUNITY V8.52b DEPLOY IS SCHEDULED — OWNER, 2026-09-04: "we do the new deploy on
+##      the 5th site goes dark 10am, 11am early 12pm main"** (local UTC-4 → dark 14:00Z · EARLY 15:00Z ·
+##      MAIN 16:00Z on Sat 2026-09-05). Gate epochs: **EARLY_MS 1788620400000 · MAIN_MS 1788624000000**
+##      (replace V8.51's 1788282000000 / 1788285600000). The member post ("date soon") went out 2026-09-04.
+##      **PREP LIST FOR 09-04 (do BEFORE the deploy, in this order):**
+##      1. **The deploy itself should NOT start at 10:00 — it is ~1h25m at size 127 / 10 tiers.** Run it
+##         the evening of 09-04 or early 09-05 (start by 07:30 local), so verify + graduation + keeper
+##         repoint are done before the site goes dark. Members are unaffected until the frontend moves.
+##      2. `scripts/preflight_v851.js` hardcodes the target name — make it read the name from
+##         `ADDRESSES_FILE` (or clone to `preflight_v852.js`). Target `deployed_addresses_v8_52.json`,
+##         `MATRIX_SIZE` default 127, `DEPLOY_TIERS` default all 10, USDC reused.
+##      3. Frontend: `update_addrs_v8_52.py` (community) from `update_addrs_v8_51.py`: OLD `_v8_51`, NEW
+##         `_v8_52`, guard = the NEW community router (known only after the deploy), gate epochs above,
+##         labels V8.51 → V8.52. ⚠ The admin branch currently points at the PRIVATE b-chain (`15aa752`) —
+##         the community repoint must be applied on top and the private labels/addresses replaced.
+##      4. 62.13 frontend fixes (the `/127` denominator, the "New" label, the Cycle label) — ideally in the
+##         same push so members see them on day one. 62.10 job C reorder — separate, can follow.
+##      5. Keepers on deploy day: copy `deployed_addresses_v8_52.json` into `C:\CryptoNova-Keepers` and
+##         `/root/keeper/`; the live jobs get `ADDRESSES_FILE` from ONE CRONTAB ENV LINE (62.11) — edit that
+##         line on the box by anchored sed + counts/hash (R9/R10), and `/root/keeper/.env` if it has one.
+##         `rr_keeper.OFF` STAYS until the repoint is done; job A's ramped line (`*/10`, taper 783, pool
+##         1072) must be reset for a fresh chain (taper from 0 members; new pool range).
+##      6. BaseScan verify all 46 → Blockaid address table → announcement with the times (owner's voice).
+## 62.20 ▶ **COMMUNITY DEPLOY STARTED ~10:15Z 2026-09-04 (owner asleep; PC rebooted once before it —
+##      verified NO partial run existed: no transcript, no run log, no `_v8_52` book). First screen
+##      correct: `MatrixSize 127`, `Tiers T1..T10`, `Existing USDC`, target `deployed_addresses_v8_52.json`.
+##      `Start-Transcript` refused (stale session) — the committed record is `logs/runs/deploy_v8/`.**
+##      **PREP DONE WHILE IT RUNS (uncommitted, frontend working tree on `admin`):**
+##      · `update_addrs_v8_52.py` (community): reads TWO old books (`_v8_52b_private` for T1–T3 + core,
+##        `_v8_51` for T4–T10) and sweeps both; guards: CONFIRM_TIER_ROUTER must match the new book and
+##        must not be V8.51's or either private router; new book must be size 127 with 10 tiers; branch
+##        admin; gate epochs → Sat 09-05 EARLY 1788620400000 / MAIN 1788624000000; labels
+##        `V8.52b PRIVATE`/`v8.52b-private`/`V8.51` → V8.52. Env guards proven (missing router, old router).
+##      · `index.html renderPairSubRows()`: new **"🔄 Rotating"** state — full MatA with a partly filled
+##        MatB (the healthy V8.52 shape) no longer reads "New". +6 lines, all 5 inline script blocks parse.
+##      · **DEFERRED, reasoned:** the `/127` denominator is a literal in ~30 places (HTML + JS); on the
+##        community chain it is TRUE, so members never see a wrong number — it misleads only on a 15-seat
+##        private chain. A `MATRIX_SIZE()`-fed constant is a separate refactor, not deploy-eve work. Same
+##        for the Matrix-view "Cycle N" label. ⚠ The blanket label swaps have been mangling history
+##        comments (e.g. "V8.52b PRIVATE SESSION 61 FIX", "USDC reused from V8.52b PRIVATE") — cosmetic,
+##        but the next repoint tool should exclude comment lines from label swaps.
+##      **WHEN THE OWNER IS BACK (in order):** paste the deploy tail → verify all 46 (`verify_all_v850.js`
+##      + `check_verification_v850.js`) → `set_graduation.js` ENABLE=true CONFIRM=<new router> →
+##      `update_addrs_v8_52.py` with CONFIRM_TIER_ROUTER → commit the 12 pages + tool + the Rotating fix →
+##      push `admin` → owner registers and tests on admin (127 seats: he will NOT see rotations, only
+##      registration/dashboard flow) → keepers repoint (62.19 item 5) → Blockaid table → announcement.
+## 62.21 ✅ **COMMUNITY V8.52 DEPLOYED 2026-09-04 09:42Z–~11:10Z, CLEAN.** `deployed_addresses_v8_52.json`,
+##      **router `0xBacE079aDB755Ea42b32310FE2E414CF036dd318`**, 10 tiers, size 127, USDC reused, W1 root.
+##      Run log `logs/runs/deploy_v8/2026-09-04T09-41-58-199Z_deployed_addresses_v8_52.log`.
+##      ▶ **RELEASE MOVED FORWARD — owner, 2026-09-04 morning: "change the release to today sit goes dark
+##      2pm, 3pm early, 4pm main"** (local UTC-4 → dark 18:00Z · **EARLY 19:00Z = 1788548400000 · MAIN
+##      20:00Z = 1788552000000**). `update_addrs_v8_52.py` updated to these. 62.19's Saturday epochs are void.
+## 62.22 ✅ **CUTOVER PREP DONE BY ~15:30Z (11:30 local):** 46/46 verified (two passes), item G ON on
+##      `0xBacE07…`, `update_addrs_v8_52.py` run (two old books; a case bug in the new tool left the
+##      checksummed occurrences untouched on the first pass — the residue sweep caught it, fixed, second
+##      pass clean: 24 files / 69 superseded / 0 stale), `admin` on **`7036817`** (pages + bot + Rotating
+##      label + today's gate epochs). `BLOCKAID_UPDATE_V852_1390129.md` generated from the book (46 rows)
+##      — SEND AFTER `main` is live. Community notice with the times posted by the owner.
+##      ✅ **SPONSOR PLAN (owner's request, verbatim: "list of 40 Round robin; all wallets but 10 gets only 3
+##      regs; from the 10, 7 goes to 10 regs [amended to 6]; then the last 3 continues with the RR").**
+##      `rr_keeper.js` job A now prefers `sponsor_plan.txt` (beside it; `SPONSOR_PLAN` env overrides) over
+##      `SPONSORS`: `# cap N` / `# unlimited` headers, one address per line; round-robin over sponsors with
+##      cap left; counts persist in `rr_keeper_state.json` (`sponsorCounts`); a FAIL or DRY_RUN hands the
+##      turn back; refuses (falls back to SPONSORS/W1, logged) if no unlimited sponsor. Sandbox lifted the
+##      real code: 400 picks → 30×3 exactly, 7×10 exactly, unlimited 80/80/80, fallback 0. The owner's
+##      file parses **31 at cap 3, 6 at cap 10, 4 unlimited (W1 first)** — 41 addresses. Keepers `4f6e2f4`,
+##      both files on the box, `rr_keeper.js` md5 `b754405f12213143a40ed3bb88959dde`, plan md5 `f1f65407…`.
+##      ⚠ **Job A is still behind `rr_keeper.OFF`.** Before it runs on the new chain: a NEW pool range +
+##      priming, `rr_keeper_state.json` backed up and reset (its poolCursor/refCursor are V8.51's), and
+##      the ramped crontab line (`*/10`, taper 783, pool 1072) reset for a fresh chain.
 ## 62.5 ▶ **WHAT IS OPEN, IN ORDER, FOR SESSION 63.**
-##      -4. **COMMIT this handoff (62.17 is uncommitted). Then the 5-and-5 steady-state reading on the
-##          V8.52b private chain. Then the 62.13 frontend fixes, 62.10 job C, the member reply, and the
-##          community V8.52b deploy (size 127, 10 tiers, full re-registration) — owner's timing.**
+## 62.23 ✅ **CUTOVER DONE 2026-09-04 (owner local afternoon): `preview`+`main` at `00b4690`** (V8.52 repoint
+##      + `DEFAULT_SPONSOR_POOL` = the owner's revised 10-leader roster, two swapped, dead `run_bigfill_rr.ps1`
+##      pointer dropped; the no-link round-robin idea was discussed and the owner said LEAVE IT OUT — hash spread
+##      stays). Blockaid ticket 1390129 sent with the 46-row list. **K2 done:** crontab env line + `.env`
+##      → `deployed_addresses_v8_52.json` (68/68 and 15/15 lines, neutralised hashes equal, backups
+##      `crontab_pre_k2_20260904.txt` / `.env.bak_pre_k2_20260904` on the box, key-bearing), `frozen_matrix_check`
+##      20/20 PASS. ⚠ The first K2 block died on `set -e` + `grep -c` (a 0 count exits 1) and on `^…$` anchors the
+##      crontab line does not satisfy (trailing whitespace) — unanchored match, guards kept. Keepers **`be34581`**:
+##      job A sponsor plan now requires the sponsor to be REGISTERED on this chain (`memberHighestTier>0`; the
+##      contract's `_resolveRef` :783 sends an unregistered referrer's member to W1, so a cap would burn for
+##      nothing — on launch day 1/41 are live); logs `registered on-chain X/41, eligible now Y`. On the box, md5
+##      `8988b5185527909e0320e54c55442ce7`. Pool priming `HDR_OFFSET=301072 COUNT=300` on the V8.52 book
+##      (4-min budget per run, resumes; POOL_SIZE will be 1372).
+##      ⛔ **MISSED POST-DEPLOY STEP, CAUGHT BY TELEGRAM AT 2:25 PM local:** `direct_keeper` FAIL `performUpkeep
+##      error`, reason null. `MatrixKeeper.performUpkeep` (:911) allowlists `upkeepCaller`; the grant is PER
+##      DEPLOYMENT, the deploy scripts never make it, and nobody ran `scripts/set_upkeep_caller.js` for V8.52.
+##      `diag_upkeep_callers.js`: 0 grants ever on `0x6fEee431…`. Granted: tx `0x9b227fe6…`, block 46389132,
+##      `AUTHORIZED OK`. Register **R14**. Until then NO rescue/evict/velocity work ran on the new chain (~4h).
+##      ▶ TO DO: add the `upkeepCaller[0xd419…]` read to the post-deploy verification so the next deploy cannot
+##      skip it; the diag's VERDICT prose assumes a driven chain and misreads a fresh one.
+##      ▶ NEXT: confirm the next `direct_keeper` tick is quiet, finish priming, crontab job A `783→254`,
+##      `1072→1372` (5 per 10 min until T1.1 A+B full, then 1/tick — Claude's call, owner may override),
+##      `rm rr_keeper.OFF`. Then the owner's monitoring/automation asks (faucet + deployer top-up threshold,
+##      what else to watch).
+##      -4. **DONE: commit, 5-and-5. NEXT: the member reply (a result exists now), the 62.13 frontend
+##          fixes, 62.10 job C, then the community V8.52b deploy (size 127, 10 tiers, full re-registration)
+##          — owner's timing.**
 ##      -3. **62.15/62.16/62.17 DONE (supersedes 62.14's selector): F4 RED → overflow target enters the longest-waiting FULL
 ##          pair, front door back to pair 0 → green → gate → suite → fresh private deploy → owner test.
 ##          BEFORE any community V8.52.**

@@ -386,3 +386,21 @@ new content somewhere harmless first, then swap it in atomically.
 uses absolute paths and the `.new` + `mv` form. A daily `test -s /root/keeper/.env` in the
 health report would have alarmed within a tick and does not exist yet.
 
+---
+
+## R14 - A per-deployment grant is not a deploy step until a script makes it one
+
+**THE INVARIANT:** *Every authorisation the running system needs — an allowlist entry, a
+role, a caller grant — is either made BY the deploy run or CHECKED by the post-deploy
+verification, so that "deployed and verified" cannot be true while the keeper is locked out.*
+
+**WHY:** 2026-09-04: the V8.52 community deploy was verified 46/46, graduation on, frontend
+cut over, keepers repointed — and `MatrixKeeper.performUpkeep` (:911) refused the keeper
+wallet with `MK: not authorized keeper` because `upkeepCaller[0xd419…]` is a mapping on the
+NEW contract and nobody ran `scripts/set_upkeep_caller.js`. The V8.51 grant (block 45433132)
+was made by hand and remembered by nobody. For ~4 hours after cutover no rescue, eviction or
+velocity work ran, and the only signal was a Telegram FAIL with `reason=null` (the revert
+string does not survive the send path). **CHECKED BY:** `diag_upkeep_callers.js` — read it
+against the new book before the frontend is pointed at any deployment; the grant belongs in the
+deploy runbook between "verified" and "cut over", and the verification script should read the
+mapping for the keeper EOA and fail without it (not yet done).
