@@ -402,5 +402,15 @@ was made by hand and remembered by nobody. For ~4 hours after cutover no rescue,
 velocity work ran, and the only signal was a Telegram FAIL with `reason=null` (the revert
 string does not survive the send path). **CHECKED BY:** `diag_upkeep_callers.js` — read it
 against the new book before the frontend is pointed at any deployment; the grant belongs in the
-deploy runbook between "verified" and "cut over", and the verification script should read the
-mapping for the keeper EOA and fail without it (not yet done).
+deploy runbook between "verified" and "cut over".
+
+**SECOND INSTANCE, 2026-09-05 (handoff 62.26):** `StabilityFund.stabilityFloor` is a stored
+value, $0 on every fresh fund. The owner's rule ($100, 58.4) had been applied by hand on
+V8.51 only; on V8.52 the fund lent with no buffer for ~29h until `sf_floor_probe.js` printed
+DRIFT. Re-applied with `set_stability_floor.js --from-t1` (tx `0x13c5edcb…`).
+
+**CHECKED BY (since 2026-09-05): `scripts/postdeploy_check.js`** — reads
+`upkeepCaller[keeper EOA]`, `stabilityFloor == tierEntryFees[0] x sfTargetMultiplier[0]`, and
+`graduationEnabled` off the NEW book; exits 1 on any FAIL or failed read. Runbook line: run it
+after BaseScan verification and before any frontend/keeper repoint. A setting added to a
+future deployment that the deploy run does not make goes INTO this script the same day.

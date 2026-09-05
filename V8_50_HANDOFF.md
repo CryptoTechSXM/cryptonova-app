@@ -398,6 +398,19 @@ owner-set, and the session that earned it got five things wrong by ignoring what
 ##      new classic PAT `repo`-only, expires **2026-12-04**, owner pasted it himself. ▶ NEXT: watch parked count fall and
 ##      the SF after the 24h advances begin (~14:40Z 09-06); monitor backlog (silent-job detector, RPC probe, site probe);
 ##      62.10 job C reorder; 62.13 `/127` denominators.
+## 62.26 ✅ **2026-09-05 18:07Z BASELINE before the first 24h SF advances (~14:40Z 09-06), V8.52 book, block 46431670:**
+##      T1.1 MatA 127/127 rot 167 · T1.1 MatB 127/127 rot 40, **parked 9 now, FUNDING parks in the 20k-block window 30**
+##      · T1.2 MatA 31/127 rot 0 · T1.2 MatB 0/127. NO-SEAT 0, CYCLE-OUT-FAILED 0 everywhere. **SF totalBalance
+##      $184.40** (was $156.20 at 62.25), healthBps 73.75%, sfTarget $250, insolvencyFloorBps 5000.
+##      ⛔ **FOUND BY THE PROBE: `stabilityFloor` on V8.52 is $0.00 — *** DRIFT *** vs the owner's rule $100.** 58.4 set
+##      $100 BY HAND on V8.51 (tx `0x90b6e5a3…`); it is a stored value on the NEW StabilityFund and no deploy step or
+##      verify reads it — **the R14 shape a second time** (first: upkeepCaller, 62.23). 62.25's "SF $156.20 / floor
+##      $100" quoted the RULE, not the chain. Until re-applied the fund lends down to $0 (copay_rescue reads the chain
+##      floor live, so the keeper had NO buffer either). ✅ **RE-APPLIED 18:2xZ: `set_stability_floor.js --from-t1`,
+##      tx `0x13c5edcb3badd4e15000d080baaf286c6f6ea7a099c793ab53d9ae4663dfd309`, floor $100.00 confirmed on read;
+##      balance $185.00 → spendable $85.00.** ✅ **NEW `scripts/postdeploy_check.js`** (read-only, plain ethers,
+##      `.env` RPC): upkeepCaller[keeper EOA] · stabilityFloor == T1 rule · graduationEnabled, exit 1 on FAIL;
+##      register R14 now names it as CHECKED BY. Runbook: BaseScan verify → postdeploy_check → cut over.
 ## 62.5 ▶ **WHAT IS OPEN, IN ORDER, FOR SESSION 63.**
 ## 62.23 ✅ **CUTOVER DONE 2026-09-04 (owner local afternoon): `preview`+`main` at `00b4690`** (V8.52 repoint
 ##      + `DEFAULT_SPONSOR_POOL` = the owner's revised 10-leader roster, two swapped, dead `run_bigfill_rr.ps1`
