@@ -411,6 +411,17 @@ owner-set, and the session that earned it got five things wrong by ignoring what
 ##      balance $185.00 → spendable $85.00.** ✅ **NEW `scripts/postdeploy_check.js`** (read-only, plain ethers,
 ##      `.env` RPC): upkeepCaller[keeper EOA] · stabilityFloor == T1 rule · graduationEnabled, exit 1 on FAIL;
 ##      register R14 now names it as CHECKED BY. Runbook: BaseScan verify → postdeploy_check → cut over.
+##      ✅ **62.13 `/127` CLOSED — frontend `e48bdab` on admin/preview/main:** every seat denominator (Tiers table 20 spans +
+##      fill/pct/bars, pair sub-rows' Full/Rotating/Awaiting thresholds, home card sides, pair strip) reads `MATRIX_SIZE`
+##      off T1 MatA via `readMatrixSize()` (one memoised read per load, `_MATRIX_SIZE` null until read — prints '—' and
+##      never claims Full on a failed read). Verified live on admin against the chain, two loads, 0 console errors:
+##      size 127, T1.1 127/127·127/127 Full, T1.2 36/127·0/127. Remaining literal 127s are prose about T1's design.
+##      ⚠ Device-shell git leaves a 0-byte `.git/HEAD.lock` + `tmp_obj_*` (no unlink permission) — delete permission
+##      was granted this session for both repos and they were removed; check `ls .git/HEAD.lock` if git ever refuses.
+##      ▶ NEXT (Sun 09-06): the ~14:40Z reading (pair_saturation T1 + sf_floor_probe — compare to this baseline: parked 9,
+##      SF $184.40→$187.10, floor now $100); then 62.10 job C reorder + 100%; then the monitor backlog (silent-job
+##      detector first). Still open from 62.13's UX list: "Cycle N" per-matrix label, Rabby simulation notice, Dashboard
+##      "Withdraw Earnings $0.00" vs in-matrix earnings.
 ## 62.5 ▶ **WHAT IS OPEN, IN ORDER, FOR SESSION 63.**
 ## 62.23 ✅ **CUTOVER DONE 2026-09-04 (owner local afternoon): `preview`+`main` at `00b4690`** (V8.52 repoint
 ##      + `DEFAULT_SPONSOR_POOL` = the owner's revised 10-leader roster, two swapped, dead `run_bigfill_rr.ps1`
