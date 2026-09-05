@@ -384,6 +384,20 @@ owner-set, and the session that earned it got five things wrong by ignoring what
 ##      site + /api/faucet probe, R14 grant read in the post-deploy verify. Census: topup_keeper is a SPENDER (deployer).
 ##      [stated] Stress on V8.52 NOT started — "members first, after a few hours we do the stress"; `rr_keeper.OFF` stays;
 ##      start = `rm /root/keeper/rr_keeper.OFF` (cursor 1072, pool 1372, taper 254, plan live-check, all prepped).
+## 62.25 ✅ **2026-09-05 (session 62, day 2): STRESS LIVE, FIRST CYCLES, LEDGER 19 → 9.** Stress started 08:38Z; T1.1
+##      MatA filled and rotated (153 rot by 15:43Z), MatB filled and cycled (25 rot), **T1.2 opened by circulation (11
+##      seated)** — the R1 cure on the community chain with real members. 15 real members parked FUNDING at their first
+##      cycle-out (`reentryMinCycles = 2` → first cycle-out always parks; self-rescue or the 24h SF advance clears it; SF
+##      $156.20 / floor $100). Owner keeps the 24h grace; explainer post sent (sign-off "Team CryptoNova"). Home page:
+##      System Clock card (UTC + viewer local + started/active from `pairs(0).deployedAt`), Withdrawable fee line white,
+##      Reserve-target badge says "a hold on your earnings, not spendable cash" (Kira), registration banner points
+##      upgrades/rescues/earnings to the Dashboard — frontend **`29bc6c3`** on admin/preview/main.
+##      **Bug ledger 19 → 9 open**, ten closed each on its own chain read (see memory [[cryptonova-bug-ledger]] 2026-09-05);
+##      the 9 left each carry a named next step (F2 last-good holder, rescue-panel empty state, Sherwyn ×3, Deborah,
+##      ronnienic, Koach100 T3 display). ⛔ Keeper `GITHUB_TOKEN` was lost in the 09-04 `.env` restore (R13 casualty);
+##      new classic PAT `repo`-only, expires **2026-12-04**, owner pasted it himself. ▶ NEXT: watch parked count fall and
+##      the SF after the 24h advances begin (~14:40Z 09-06); monitor backlog (silent-job detector, RPC probe, site probe);
+##      62.10 job C reorder; 62.13 `/127` denominators.
 ## 62.5 ▶ **WHAT IS OPEN, IN ORDER, FOR SESSION 63.**
 ## 62.23 ✅ **CUTOVER DONE 2026-09-04 (owner local afternoon): `preview`+`main` at `00b4690`** (V8.52 repoint
 ##      + `DEFAULT_SPONSOR_POOL` = the owner's revised 10-leader roster, two swapped, dead `run_bigfill_rr.ps1`
