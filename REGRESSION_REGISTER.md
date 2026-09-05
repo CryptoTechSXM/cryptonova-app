@@ -361,6 +361,40 @@ registration → pair 2 rotations 0 → 1, MatB 0 → 1, pair 1 unchanged. Hando
 
 ---
 
+## R12 - No keeper grants a TierRouter allowance to a wallet the chain has not just declared eligible
+
+**THE INVARIANT:** *The eligibility dry-call comes FIRST, with no allowance in place. An
+allowance is granted only after the chain has answered "eligible" (revert
+`ERC20InsufficientAllowance`, or success), is granted for exactly the fee, and is revoked if the
+send that was meant to consume it fails. No wallet ever carries a TierRouter allowance between
+ticks.*
+
+**WHY:** `rr_keeper.js` jobs C/D approved the TierRouter (:812) and topped the wallet up BEFORE
+the `staticCall` that asks whether the member may upgrade at all, and never revoked on refusal.
+Measured 2026-09-03 (handoff 60.4): three standing allowances on wallets the contract had
+refused. A standing allowance is the 2026-07-29 cascade ingredient — `onCrossToMatB`
+(TierRouter:1136) auto-upgrades any crossing member whose `allowance >= fee` — and at
+`UPG_MANUAL_PCT=100` job C would have left one on every refused candidate per pass (~120).
+That is why the owner's "make C 100%" (62.10) could not be a one-field crontab change.
+
+**WHY THE REORDER IS SOUND (verified in source, not assumed):** `TierRouter._manualUpgrade`
+(:966) and `bulkUpgrade` (:1119) both run `_requireUpgradeEligible` — and every TRState /
+TRBadValue / TRGate check — BEFORE `usdc.safeTransferFrom` (:972 / :1142). OpenZeppelin
+`ERC20.transferFrom` spends the allowance before it checks the balance, so a dry call with no
+allowance answers one of exactly three ways: a TR* / string revert = refused, grant nothing;
+`ERC20InsufficientAllowance` = every gate passed, the only thing missing is our approval;
+success = a standing allowance already exists (the 60.4 residue). Reverts that live AFTER the
+transfer (`_walletFold` rescue-debt fold, seat placement) are still possible on the real send —
+which is why the allowance is revoked on a failed send rather than left standing.
+
+**CHECKED BY:** `rr_keeper.js` jobs C/D order (dry-call → approve → fund → send → revoke on
+FAIL), and `diag_allowances.js`-style read: `usdc.allowance(wallet, tierRouter)` over the pool
+must be 0 for every wallet between ticks. A DRY_RUN now classifies `ERC20InsufficientAllowance`
+and `ERC20InsufficientBalance` both as ELIGIBLE (before this entry, DRY_RUN skipped every wallet
+without a standing allowance and could only ever see pre-approved ones).
+
+---
+
 ## R13 - A redirect truncates its target before the command reads
 
 **THE INVARIANT:** *Never write a file beside the file you are reading it from, never with a
