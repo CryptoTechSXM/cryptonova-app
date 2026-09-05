@@ -488,6 +488,27 @@ owner-set, and the session that earned it got five things wrong by ignoring what
 ##      `SEND FAILED … REVOKED` lines; then `diag_allowances.js` once more (must stay 0); (2) the owner's Blockaid response
 ##      — check and test; (3) Sun afternoon: the post-advance reading vs 62.26; (4) monitor backlog (silent-job detector
 ##      first); (5) 62.13 leftovers ("Cycle N" label, Rabby notice, Dashboard $0.00 vs in-matrix).
+## 62.29 ✅ **2026-09-05 22:22Z–22:40Z: JOB C AT 100% — MEASURED ON THE FIRST TICKS, AND THE ONE DEFECT IT SURFACED, FIXED.**
+##      Ticks at 100: 22:27Z **16 upgraded / $400 / 23 checked**, 22:32Z **18 / $450 / 19**, 22:37Z **11 / $275 / 40** — every
+##      upgrade preceded by `approved $25.00 just-in-time (chain said eligible)`, the one TRGate wallet refused with nothing
+##      granted, budget fully used (~150s), gas ~2.1M per T1→T2. All pushed: keepers `origin/main` = `54a4ae1`.
+##      ⛔ **THREE WALLETS (child:301085 `0xFf8eDE0C`, 301090 `0x87ECb6Cc`, 301091 `0x9Eb5854a`) went approve →
+##      `SEND FAILED replacement fee too low` → `REVOKE FAILED` (same error) → $25 STANDING each — R12 violated by the new
+##      path itself.** Measured: their approves DID mine (blocks 46439522 / 46439535), nonce latest == pending == 8 afterwards
+##      (nothing stuck); the keeper's `approved` line printed ~0.2s after the previous item where every other approve took
+##      ~4s. Same shape as 62.19's "four registrations printed in 0.2s, two hit replacement fee too low" — second sample.
+##      Why the node disagreed about the nonce is NOT established and is deliberately not theorised.
+##      ✅ **FIX (keepers `54a4ae1`, live 22:40Z md5 `14dec487…`, backup `rr_keeper.js.bak_pre_nonce_20260905`): after its
+##      own JIT approve the keeper never asks the node for a nonce again** — `sendWithNonce()` sends the upgrade at
+##      `approve.nonce + 1` explicitly; approve, upgrade and revoke all go through it; a nonce-shaped error (`replacement`/
+##      `nonce`) waits 2s·n, re-reads `latest`, retries (max 3) and LOGS `… nonce N rejected … re-reading nonce, retry k/2`.
+##      Sandbox dry run on the pool clean (the three wallets read ELIGIBLE because the allowance stands — job C consumes
+##      them on its next pass over cursor 1085–1091; then `diag_allowances.js` must read 0 again).
+##      ▶ VERIFY NEXT SESSION (or later tonight): `grep -E 'nonce|SEND FAILED|REVOKE' rr_upgrade.log` after 22:40Z — zero
+##      `SEND FAILED`; any `rejected … retry` line followed by a `T1->T2` is the fix working. Then diag → 0.
+##      ⚠ Spend at 100%: ~$275–450 of pool USDC per 5-min tick while T1 candidates last (`UPGRADE_SPEND` $2,000/run cap,
+##      `MAX_UPG` 40). T2.1 MatA will fill fast now — that is the cascade-live condition 62.10 named; the allowance
+##      invariant is the guard, keep reading the diag.
 ## 62.5 ▶ **WHAT IS OPEN, IN ORDER, FOR SESSION 63.**
 ## 62.23 ✅ **CUTOVER DONE 2026-09-04 (owner local afternoon): `preview`+`main` at `00b4690`** (V8.52 repoint
 ##      + `DEFAULT_SPONSOR_POOL` = the owner's revised 10-leader roster, two swapped, dead `run_bigfill_rr.ps1`
