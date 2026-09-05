@@ -422,6 +422,25 @@ owner-set, and the session that earned it got five things wrong by ignoring what
 ##      SF $184.40→$187.10, floor now $100); then 62.10 job C reorder + 100%; then the monitor backlog (silent-job
 ##      detector first). Still open from 62.13's UX list: "Cycle N" per-matrix label, Rabby simulation notice, Dashboard
 ##      "Withdraw Earnings $0.00" vs in-matrix earnings.
+## 62.27 ✅✅ **2026-09-05 evening: BUG LEDGER 9 → 0 OPEN — every closure on its own evidence, none bulk.**
+##      Sherwyn 08-29 ×2 (six MatrixLogicLib:529 no-seat parks measured in session 48 on HIS wallet; cured by items G+S,
+##      T1 NO-SEAT 0 today) · CryptoJan22 07-29 rescue-panel vanish (NEW `#rescue-done` green card, frontend `4cd678f`) ·
+##      Sherwyn 08-05 unlock wording (already fixed `6f71565` 08-06; plus `605d884` today: a FAILED lockedBalanceOf no
+##      longer says "nothing to unlock") · Sherwyn 08-13 withdraw-all silence (already fixed `41aaa2e` 08-12) · bevmawire
+##      08-22 (already fixed `cbeedfd` F2 08-29 + `af94619` 08-24 — memory's "F2 not built" line was STALE) · Deborah 08-10
+##      (BaseScan: two withdrawPartial reverts to V8.47 T4 MatA, 8.03/8.17 USDC, blocks 45317696/45317749; fixed
+##      `bc96ea2` 08-11) · ronnienic 08-08 (BaseScan: NO tx from his wallet reached the chain that day; 08-24 the same
+##      flow took 14s and 72s; V8.52 rescue is one permit signature) · Koach100 07-27 (member_history on the V8.45 book:
+##      entered T3.1 MatA 44662447, first T3 cycle 44678721 ~9h later — a true 0, not a display fault).
+##      ⛔ **FOUR of nine were fixed weeks ago with the reporter's name in the commit and never closed in the ledger.**
+##      Rule for the next triage: `git log -S<reporter>` / `--grep` BEFORE building anything.
+##      ⚠ `bug_manager close` matches the WHOLE ticket block, not the title: 'Continuous self rescue loop' closed BOTH
+##      Sherwyn tickets in one call (the dry run said `closing 2`; I read it after the real run). Treat any dry-run count
+##      above the expected as a STOP. Frontend now `605d884` on admin/preview/main. Keepers `55c88ef` (member_history:
+##      `TO=<block>` cap + progress every 10 chunks) — committed on the PC, NOT pushed, NOT on the VPS.
+##      ⛔ The PC keepers `.env` `BASE_SEPOLIA_RPC_URL` fails TLS ("tlsv1 alert internal error") — override with
+##      `$env:BASE_SEPOLIA_RPC_URL="https://sepolia.base.org"` for PC-side reads until it is replaced (same shape as the
+##      09-04 dead `fluent-neat-moon` endpoint; not yet identified as the same host — check before replacing).
 ## 62.5 ▶ **WHAT IS OPEN, IN ORDER, FOR SESSION 63.**
 ## 62.23 ✅ **CUTOVER DONE 2026-09-04 (owner local afternoon): `preview`+`main` at `00b4690`** (V8.52 repoint
 ##      + `DEFAULT_SPONSOR_POOL` = the owner's revised 10-leader roster, two swapped, dead `run_bigfill_rr.ps1`
