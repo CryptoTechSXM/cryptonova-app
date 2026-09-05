@@ -441,6 +441,53 @@ owner-set, and the session that earned it got five things wrong by ignoring what
 ##      ⛔ The PC keepers `.env` `BASE_SEPOLIA_RPC_URL` fails TLS ("tlsv1 alert internal error") — override with
 ##      `$env:BASE_SEPOLIA_RPC_URL="https://sepolia.base.org"` for PC-side reads until it is replaced (same shape as the
 ##      09-04 dead `fluent-neat-moon` endpoint; not yet identified as the same host — check before replacing).
+## 62.28 ✅✅ **2026-09-05 (session 63, started early — the 24h-advance reading is still TOMORROW): 62.10 DONE END TO END —
+##      R12 filed, job C reordered and live, the standing-allowance pile measured and swept to ZERO, job C at 100%.**
+##      ▶ Owner: not at his desk 10:40 AM Sun 09-06; back in the afternoon — the ~14:40Z pair_saturation + sf_floor_probe
+##      reading against 62.26's baseline moves to then. He also has a Blockaid RESPONSE to check and test — NEXT after this.
+##      **Interim reading 21:04Z (block ~46437002), vs 18:07Z:** T1.1 MatA rot 167→186, MatB rot 40→59 (1:1 holds), parked
+##      9→12 (all T1.1 MatB; FUNDING parks in window 47), T1.2 MatA 31→47/127 (rot 0, MatB 0 — circulation only), NO-SEAT 0,
+##      CYCLE-OUT-FAILED 0; SF $185.00→$205.85, floor $100.00 IN STEP, spendable $105.85, healthBps 82.33%. No action needed.
+##      ✅ **REGISTER R12 WRITTEN** (contracts `9f19d28`; the number was reserved in 62.10 and the register jumped R11→R13).
+##      Sound in source: `_manualUpgrade` :966 and `bulkUpgrade` :1119 gate BEFORE `safeTransferFrom` :972/:1142; OZ
+##      `transferFrom` spends allowance before balance → a no-allowance dry-call answers TR* = refused / InsufficientAllowance
+##      = eligible / success = a standing allowance exists.
+##      ✅ **`rr_keeper.js` jobs C/D REORDERED** (keepers `96795c3`): dry-call FIRST with nothing granted → DRY_RUN reports
+##      ELIGIBLE and stops → approve JIT → fund → send; `revokeTR()` on failed top-up / failed send. Prefix+suffix of the
+##      file byte-identical to before (diffed); only the candidate block changed. ⛔ DRY_RUN before this skipped every wallet
+##      without a standing allowance ("skipped BEFORE funding") — a job C dry run could only ever see pre-approved wallets.
+##      Deployed via `_stage` + sandbox dry run (own copied `.env`, fresh state — live cursor untouched) + atomic `mv`; live
+##      md5 `24bd1d4d…` 21:24Z, backup `rr_keeper.js.bak_pre_r12_20260905` (`77f87ad2…`). Sandbox: 10 checked, 8 ELIGIBLE,
+##      1 `TRGate (nothing approved, nothing funded)`; cron ticks 21:53Z/21:57Z print the same suffix = the new file runs.
+##      ⛔ **CRONTAB SHAPE, learned the slow way:** rr_keeper is THREE lines — A `*/10`, B `3-59/5`, C `2-59/5` — each with
+##      its own `UPGRADE_RANGES`; `head -1` over the whole crontab grabbed B's line twice (and once a commented one, POOL_SIZE
+##      3000), so the first two dry runs walked unregistered wallets and tested nothing. Filter `grep -v '^\s*#' | grep 'ONLY=C'`.
+##      ✅ **THE PILE, MEASURED (new `diag_allowances.js`, keepers `61ed7fc`): 12 pool wallets, $425.00** — 5×$50 (T2 refused
+##      for T3) + 7×$25 (T1 refused for T2), all child:301076–301223, i.e. exactly the refused candidates of old-order ticks.
+##      First run at CONC=8 had 2,999/7,800 reads fail on the public RPC and counted 9 (a FLOOR, R6) — **CONC=2 for pool-wide
+##      reads.** Job C's own 21:22Z tick (old code) had refused 6 of these with NO `approved just-in-time` line = they
+##      already carried the allowance.
+##      ✅✅ **SWEPT (new `revoke_allowances.js`, keepers `be8073f`, DRY_RUN default): 12 × `approve(TierRouter,0)` signed as
+##      each pool wallet, blocks 46438405–46438428 (21:51:38–21:52:24Z); diag after: `allowance > 0 : 0` → R12 INVARIANT
+##      HOLDS.** ⛔ **THE APPLY BLOCK RAN TWICE** (VPS history #2111 = the sweep, #2117 = the pasted 22:00Z run that found 0).
+##      I read the pasted zero as "something else consumed them" and spent two steps on it — the Approval events (12 × value
+##      $0.00, spender TierRouter, ascending index order = the script's own sort) and `history | grep APPLY=1` settled it.
+##      ▶ Rule: before theorising about a zero, `history`. ⚠ An OLDER `revoke_allowances.js` (OFFSET/COUNT, v8_51 book,
+##      VPS-only, never committed — history #1575) was overwritten by the scp. Gone; recorded.
+##      ✅ **JOB C → `UPG_MANUAL_PCT=100`** (owner's 62.10 ask), 22:2xZ: backup `crontab_pre_c100_20260905.txt` (72 lines,
+##      key-bearing, on the box), `sed 's/UPG_MANUAL_PCT=5\b/…=100/' | crontab -`, verified by counts (PCT=5 1→0, PCT=100
+##      0→1, 72 lines both sides) and `diff` vs the edited backup = only that field. Guards unchanged: `UPGRADE_SPEND` $2,000
+##      /run, `MAX_UPG` 40/pass, `MAX_SCAN` 400/pass. First 100% ticks 22:22Z+; cursor reaches the pool (1072–1371) on the
+##      22:27Z/22:32Z ticks — that log is the next thing to read. Expect `candidates checked` to jump (117 were "left to
+##      auto-upgrade" at 5) and the `(UPG_MANUAL_PCT=5)` suffix to vanish.
+##      ⚠ Cosmetic, parked: job C's summary prints `pool 1245/100` — C's line sets no `POOL_SIZE` (default 100) against A's
+##      cursor. Harmless; not a pool overrun.
+##      ⛔ NOT PUSHED (device shell/VM cannot reach GitHub): keepers `55c88ef`→`be8073f` (5 commits), contracts `9f19d28` +
+##      this handoff commit. Push from the PC: `git push origin main` (keepers) / `git push origin v8.1` (contracts).
+##      ▶ NEXT, IN ORDER: (1) read `rr_upgrade.log` for the first 100% ticks — upgrades landing, spend per run, any
+##      `SEND FAILED … REVOKED` lines; then `diag_allowances.js` once more (must stay 0); (2) the owner's Blockaid response
+##      — check and test; (3) Sun afternoon: the post-advance reading vs 62.26; (4) monitor backlog (silent-job detector
+##      first); (5) 62.13 leftovers ("Cycle N" label, Rabby notice, Dashboard $0.00 vs in-matrix).
 ## 62.5 ▶ **WHAT IS OPEN, IN ORDER, FOR SESSION 63.**
 ## 62.23 ✅ **CUTOVER DONE 2026-09-04 (owner local afternoon): `preview`+`main` at `00b4690`** (V8.52 repoint
 ##      + `DEFAULT_SPONSOR_POOL` = the owner's revised 10-leader roster, two swapped, dead `run_bigfill_rr.ps1`
