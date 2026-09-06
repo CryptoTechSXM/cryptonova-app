@@ -602,6 +602,24 @@ owner-set, and the session that earned it got five things wrong by ignoring what
 ##      ▶ NEXT SESSION, IN ORDER: (1) Peter's reply → Blockaid re-test (62.30/62.31 flow); (2) drop the duplicate
 ##      `frozen_matrix_check` cron line (62.33); (3) site + faucet reachability probe; (4) 62.13 leftovers ("Cycle N" label,
 ##      Rabby notice, Dashboard $0.00 vs in-matrix); (5) verify `debtors ever booked : 874` in sf_invariant_check (62.31).
+## 62.35 ✅ **2026-09-06 19:52Z–20:26Z: THE DETECTOR'S FIRST REAL CATCH — JOB A STALLED (pool walked) — AND JOB A IS NOW OFF.**
+##      Telegram 19:52Z: `STALLED rr_keeper.js A — last 3 ticks A:0 reg + "pool exhausted"`. **Measured before deciding:**
+##      every tick since ≤20:00Z reads `pool 1372/1372` (state `poolCursor` 1372 == cron `POOL_SIZE=1372`), `446 members >=
+##      254 — cap 1/tick` (taper reached), `A:0 reg`. 62.23's plan for A ("5/10min until T1.1 A+B full, then 1/tick") is
+##      complete: T1.1 A+B full, T1.2 A full, T2.1 MatB 107/127 (heartbeat #1751, 20:11Z). ▶ **Claude's call (62.23 said
+##      owner may override): job A OFF, not re-primed** — a job that ticks and does nothing is the 08-30 shape, priming spends
+##      USDC for load nothing needs, and the line is one `#` to restore. Done 20:26Z: crontab line 59 prefixed
+##      `#OFF20260906 pool 1372/1372 walked, taper reached — `, 74 lines both sides, `ONLY=A live lines: 0`, backup
+##      `crontab_pre_jobA_off_20260906.txt` (key-bearing). silent_watch then reads 17 jobs / 0 not OK (A out, rpc_probe in).
+##      ⚠ NOT MEASURED, PARKED: whether funded wallets sit stranded behind cursor 1372 (the 08-31 `cursor++`-before-checks
+##      defect, 153/401 then). If job A is ever turned back on, run `probe_pool_slots.js` on 1072–1371 FIRST and rewind the
+##      cursor rather than priming above 1372.
+##      ⚠ Telegram noise explained: 💓 `Keeper alive quiet_runs=5/10/15 last_active 16:25Z` = direct_keeper's normal 50-min
+##      heartbeat — copay does the rescues now, so direct_keeper has no work. `NO-LOG rpc_probe.js` 18:22Z → ⚡ 18:52Z = MY
+##      install order (first run went to the screen, log born at the 18:43Z tick). ▶ RULE for every future cron install:
+##      the proving run goes INTO the job's log (`node x.js >> x.log 2>&1; tail x.log`), never to the screen.
+##      ⚠ Owner pasted a previous OUTPUT back into the VPS shell once (bash "command not found" on log lines): harmless,
+##      nothing executed — but a pasted line starting with `*/10` globs the cwd; keep blocks self-contained and short.
 ## 62.5 ▶ **WHAT IS OPEN, IN ORDER, FOR SESSION 63.**
 ## 62.23 ✅ **CUTOVER DONE 2026-09-04 (owner local afternoon): `preview`+`main` at `00b4690`** (V8.52 repoint
 ##      + `DEFAULT_SPONSOR_POOL` = the owner's revised 10-leader roster, two swapped, dead `run_bigfill_rr.ps1`
