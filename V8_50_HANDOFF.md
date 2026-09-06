@@ -584,6 +584,24 @@ owner-set, and the session that earned it got five things wrong by ignoring what
 ##      ⚠ Seen while reading the table, PARKED: `frozen_matrix_check.js` runs BOTH on its own line (`7 * * * *`) AND inside
 ##      `frozen_watch.sh` (`23 */4`). Probably the pre-wrapper line left in place on 09-04 — confirm on the box and drop one.
 ##      ▶ NEXT monitor items: RPC endpoint health probe hourly; site + `/api/faucet` reachability probe. Then 62.13 leftovers.
+## 62.34 ✅✅ **2026-09-06 18:14Z: RPC ENDPOINT HEALTH PROBE LIVE — monitor backlog item 5 DONE. SESSION 64 CLOSES HERE.**
+##      `rpc_probe.js` (keepers `b11e7d6`, md5 `ae3e748f…` on the box), cron `43 * * * *` under `/tmp/rpc_probe.lock` →
+##      `rpc_probe.log`; crontab 73→74, backup `crontab_pre_rpcprobe_20260906.txt` (key-bearing, on the box). Same shape as
+##      silent_watch: NO list — every `https://` inside any `*RPC*=` variable in the LIVE crontab and `.env` (comma lists
+##      too) plus public `sepolia.base.org`; `eth_chainId` (must be 84532 → else WRONG-CHAIN) + `eth_blockNumber`; LAG =
+##      >30 blocks behind the best; DEAD = error/timeout. Named by host nickname only — the key is in the path and is never
+##      printed (tested: 0 fragments). Telegram on change / 4h reminder / ⚡ recovery. Node v20.20.2 on the box (fetch OK).
+##      ✅ **FIRST LIVE READINGS 18:13Z + 18:14Z: 7 endpoints, all chain 84532, all at the same height (46475059 / 46475085),
+##      63–153 ms.** Hosts: fabled-delicate-leaf, summer-silent-crater, morning-proud-wish, thrilling-newest-seed (also the
+##      box `.env`), autumn-rough-sky, autumn-clean-fire, sepolia.base.org. **`fluent-neat-moon` (dead 09-04) is GONE from
+##      the box** — crontab and `.env` both. ⚠ The PC's `C:\CryptoNova-Keepers\.env` still names it (stale copy; only
+##      matters for scripts run from the PC) — owner: copy the box's `BASE_SEPOLIA_RPC_URL` line over it when convenient.
+##      ▶ Monitor backlog now: ✅ balance/top-up · ✅ frozen-pair on schedule · ✅ silent-job · (item 4 `frozen_matrix_check`
+##      on a schedule is ALREADY covered by frozen_watch.sh, and the duplicate hourly line is parked in 62.33) · ✅ RPC probe ·
+##      remaining: site + `/api/faucet` reachability probe; R14 `upkeepCaller` read is in `postdeploy_check.js` (62.26).
+##      ▶ NEXT SESSION, IN ORDER: (1) Peter's reply → Blockaid re-test (62.30/62.31 flow); (2) drop the duplicate
+##      `frozen_matrix_check` cron line (62.33); (3) site + faucet reachability probe; (4) 62.13 leftovers ("Cycle N" label,
+##      Rabby notice, Dashboard $0.00 vs in-matrix); (5) verify `debtors ever booked : 874` in sf_invariant_check (62.31).
 ## 62.5 ▶ **WHAT IS OPEN, IN ORDER, FOR SESSION 63.**
 ## 62.23 ✅ **CUTOVER DONE 2026-09-04 (owner local afternoon): `preview`+`main` at `00b4690`** (V8.52 repoint
 ##      + `DEFAULT_SPONSOR_POOL` = the owner's revised 10-leader roster, two swapped, dead `run_bigfill_rr.ps1`
