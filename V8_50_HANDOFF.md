@@ -522,6 +522,30 @@ owner-set, and the session that earned it got five things wrong by ignoring what
 ##      ⚠ Our 08-28 correction to Blockaid listed CouponRegistry/Treasury/matrices as extra spenders but never named the
 ##      PairManagers — the registration spender. If a future document lists spenders, take them from `grep -n '\.approve('
 ##      index.html`, not from memory.
+## 62.31 ✅✅ **2026-09-06 17:17Z–17:25Z (session 64): THE NIGHT AT JOB C 100% WAS CLEAN, THE NONCE FIX IS PROVEN, AND THE
+##      FIRST 24h ADVANCES HAVE STARTED — every number reconciles, nothing to act on.**
+##      **Job C since the 22:40Z fix (rr_upgrade.log + rr_upgrade.log.1.gz, rotated 23:57Z daily — ⛔ plain `grep` reads a
+##      `.gz` as 0 lines; use `zgrep`, my first gap check "found 0" for that reason):** SEND FAILED **0**, REVOKE FAILED
+##      **0**, STANDING **0**; the three in the .gz are the 22:28–22:29Z trio of 62.29, all BEFORE the fix. Upgrades 53
+##      (22:40–23:57Z) + 132 (09-06 to 17:17Z) = 185, JIT approves == upgrades (132/132 today). **Nonce fix, two samples:**
+##      14:13Z `0x9898Cd1a` and 15:03Z `0xD938C1c0` both `upgrade nonce 10 rejected (replacement fee too low) — re-reading
+##      nonce, retry 1/2` → 6s later `T2->T3 $50.00` landed. T1 candidates are exhausted: 17:12Z ticks read `0 upgraded,
+##      0 checked`, cursor walking the unregistered ranges (5352→6152/7800).
+##      ✅ **`diag_allowances.js` CONC=2, block 46473372: 7,800 scanned, 0 failed reads, allowance > 0 : 0 — R12 HOLDS.**
+##      ✅ **Post-advance reading vs 62.26/21:04Z (pair_saturation T1, blocks 46453544..46473544; sf_floor_probe block
+##      46473545):** T1.1 MatA 127/127 rot 186→**308**, MatB 127/127 rot 59→**181** (+122 each, 1:1 holds), **parked
+##      12→32, all T1.1 MatB, FUNDING 54 in the 20k window, NO-SEAT 0, CYCLE-OUT-FAILED 0**; T1.2 MatA 47→**127/127**
+##      rot 22, T1.2 MatB 0→**22/127** — T1.2 is flowing. **SF $205.85→$500.41, stabilityFloor $100.00 IN STEP, sfTarget
+##      auto $250→$500 (T3 members exist now), healthBps 100%, spendable $400.41.** No drift (R14 shape not repeated).
+##      ✅ **Why parked rose while spendable rose — MEASURED, not theorised:** the batch is inside the 24h grace. copay_rescue
+##      (`4-59/10`, live, reads the floor from the chain) logs `35 still in grace` at 16:44Z → `30` at 17:24Z and has
+##      advanced exactly TWO members: 16:44Z $1.74, 17:24Z $1.46. `sf_invariant_check` live at block 46473599: `loaned
+##      $4.48698 − repaid $1.290344 = $3.196636` = $1.74 + $1.46 to the cent; hourly reads up to 16:30Z were still $0.00
+##      outstanding. Fund fully backed, $499.55. fastlane_rescue also on cron (`3-59/10`, fastlane.log — not read).
+##      ⚠ PARKED, NOT CHASED: `sf_invariant_check` prints `debtors ever booked : 874` against $4.49 ever loaned on this
+##      book — the 51.2 shape (a state-file lifetime list beside live figures). Verify what `list` is built from before
+##      quoting it as a V8.52 count.
+##      ▶ NEXT: Peter's Blockaid reply → the registration-approval re-test (62.30), then the other four domains.
 ## 62.5 ▶ **WHAT IS OPEN, IN ORDER, FOR SESSION 63.**
 ## 62.23 ✅ **CUTOVER DONE 2026-09-04 (owner local afternoon): `preview`+`main` at `00b4690`** (V8.52 repoint
 ##      + `DEFAULT_SPONSOR_POOL` = the owner's revised 10-leader roster, two swapped, dead `run_bigfill_rr.ps1`
