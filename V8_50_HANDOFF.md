@@ -545,7 +545,14 @@ owner-set, and the session that earned it got five things wrong by ignoring what
 ##      ⚠ PARKED, NOT CHASED: `sf_invariant_check` prints `debtors ever booked : 874` against $4.49 ever loaned on this
 ##      book — the 51.2 shape (a state-file lifetime list beside live figures). Verify what `list` is built from before
 ##      quoting it as a V8.52 count.
-##      ▶ NEXT: Peter's Blockaid reply → the registration-approval re-test (62.30), then the other four domains.
+##      ⛔ **BLOCKAID RE-TEST 17:32Z 2026-09-06 (1:32 PM local): STILL FLAGGED.** Peter has NOT replied to the owner's 09-05
+##      follow-up (Gmail thread read via Chrome — his 07:57Z clearance is Blockaid's last message). Re-ran the 62.30 flow
+##      anyway (labels propagate without an email): crypto-nova.app clean, wallet `0xb41A…617c`, Register → Continue with
+##      Default → Approve $10 → MetaMask side panel "Spending cap 10 ⚠ Malicious — Review alert", spender `0xc2fCD…d42c7`
+##      (T1 PairManager), cancelled unsigned. Identical to 09-05. ▶ Nothing to do until Peter answers; the label is on the
+##      CONTRACT, so the other four domains would show the same tag — not worth a step until the label moves.
+##      ▶ NEXT: monitor backlog (silent-job detector first, [[cryptonova-monitoring]]); 62.13 leftovers; verify the
+##      `debtors ever booked : 874` line in `sf_invariant_check.js` before it is ever quoted.
 ## 62.5 ▶ **WHAT IS OPEN, IN ORDER, FOR SESSION 63.**
 ## 62.23 ✅ **CUTOVER DONE 2026-09-04 (owner local afternoon): `preview`+`main` at `00b4690`** (V8.52 repoint
 ##      + `DEFAULT_SPONSOR_POOL` = the owner's revised 10-leader roster, two swapped, dead `run_bigfill_rr.ps1`
