@@ -509,6 +509,19 @@ owner-set, and the session that earned it got five things wrong by ignoring what
 ##      ⚠ Spend at 100%: ~$275–450 of pool USDC per 5-min tick while T1 candidates last (`UPGRADE_SPEND` $2,000/run cap,
 ##      `MAX_UPG` 40). T2.1 MatA will fill fast now — that is the cascade-live condition 62.10 named; the allowance
 ##      invariant is the guard, keep reading the diag.
+## 62.30 ✅⚠ **BLOCKAID TICKET 1390129: CLEARED FOR THE SITE + ROUTER (Peter, 2026-09-05 07:57Z) — BUT THE REGISTRATION
+##      APPROVAL IS STILL FLAGGED; follow-up SENT by the owner ~23:10Z.** Peter: label updated, "no malicious indicators"
+##      for crypto-nova.app and `0xBacE079a…`. Test (owner's MetaMask `0xb41A…617c`, unregistered on V8.52; Claude drove
+##      Chrome, read the popup via a screen grant): root domain loads CLEAN; Register → Approve $10 → MetaMask **"Spending
+##      cap request … Malicious — Review alert"**, spender **`0xc2fCD4aF…d42c7` = T1 PairManager** (`index.html:4953`
+##      approves `ADDRS.T1.pm`; T1 MatA on the coupon path). Blockaid cleared the router only; the contract a new member
+##      signs to FIRST is still labelled. Spender set the site asks for (all in the 09-04 46-row table): 10 PairManagers,
+##      20 matrices, TierRouter, CouponRegistry, Treasury. Reply asks for the full set. Memory [[cryptonova-blockaid]].
+##      ▶ NEXT: when Peter answers, RE-TEST the same flow (Register → Approve, expect no red tag), then the other four
+##      domains (www/early/admin/v8). Untested tonight: early/admin/v8/www load, Rabby.
+##      ⚠ Our 08-28 correction to Blockaid listed CouponRegistry/Treasury/matrices as extra spenders but never named the
+##      PairManagers — the registration spender. If a future document lists spenders, take them from `grep -n '\.approve('
+##      index.html`, not from memory.
 ## 62.5 ▶ **WHAT IS OPEN, IN ORDER, FOR SESSION 63.**
 ## 62.23 ✅ **CUTOVER DONE 2026-09-04 (owner local afternoon): `preview`+`main` at `00b4690`** (V8.52 repoint
 ##      + `DEFAULT_SPONSOR_POOL` = the owner's revised 10-leader roster, two swapped, dead `run_bigfill_rr.ps1`
