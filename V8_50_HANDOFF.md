@@ -553,6 +553,21 @@ owner-set, and the session that earned it got five things wrong by ignoring what
 ##      CONTRACT, so the other four domains would show the same tag — not worth a step until the label moves.
 ##      ▶ NEXT: monitor backlog (silent-job detector first, [[cryptonova-monitoring]]); 62.13 leftovers; verify the
 ##      `debtors ever booked : 874` line in `sf_invariant_check.js` before it is ever quoted.
+## 62.32 ✅ **2026-09-06 ~18:00Z: status page Reserve column dropped (owner's ask); keepers strays closed.**
+##      ✅ [stated] Owner: "I do not think we need the reserve on the status page anymore" — every row read `—` (V8.52 consumes
+##      the crossing reserve at cycle-out). Frontend `af58978` on admin=preview=main: `<th>Reserve</th>` + its `<td>` removed
+##      from the parked-queue table; the read (`crossingReserveOf`) and `effectiveContrib = withdrawable + crossingReserve`
+##      are UNCHANGED, so Shortfall still nets it. Verified live on crypto-nova.app/status.html after the Vercel build:
+##      Wallet · Withdrawable · Shortfall · Parked · Rescue Status, same figures as the owner's screenshot (queue 30→31).
+##      ✅ **Keepers strays (all left by earlier sessions, each identified before it was touched), `5207ee3` + `906850e`:**
+##      `cycle_census.js` = the session-61 instrument of 61.1, never committed → committed; `crontab_live_2026-09-01.txt` =
+##      a PowerShell (UTF-16) `crontab -l` snapshot with 10 QuickNode-URL lines → key-bearing, now `.gitignore crontab_*.txt`,
+##      file stays on the PC; `sponsor_plan.txt` "modified" = CRLF-only (`git diff -w` empty, roster identical) → normalised
+##      to LF; `diag_register_block.js` (session 57) + `set_member_options.js` (session 61) → syntax-checked, committed;
+##      `deployed_addresses_v8_50/_v8_51_private/_v8_51_gate2.json` → md5-identical to `contracts/scripts/`, committed.
+##      ⚠ The device shell's git cannot unlink; delete permission was granted for all three repos this session and the
+##      0-byte `HEAD.lock`/`index.lock`/`tmp_obj_*` were removed after each commit. `git status` is clean in all three.
+##      ▶ NEXT: monitor backlog — silent-job detector first ([[cryptonova-monitoring]]).
 ## 62.5 ▶ **WHAT IS OPEN, IN ORDER, FOR SESSION 63.**
 ## 62.23 ✅ **CUTOVER DONE 2026-09-04 (owner local afternoon): `preview`+`main` at `00b4690`** (V8.52 repoint
 ##      + `DEFAULT_SPONSOR_POOL` = the owner's revised 10-leader roster, two swapped, dead `run_bigfill_rr.ps1`
