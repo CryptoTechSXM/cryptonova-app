@@ -568,6 +568,22 @@ owner-set, and the session that earned it got five things wrong by ignoring what
 ##      ⚠ The device shell's git cannot unlink; delete permission was granted for all three repos this session and the
 ##      0-byte `HEAD.lock`/`index.lock`/`tmp_obj_*` were removed after each commit. `git status` is clean in all three.
 ##      ▶ NEXT: monitor backlog — silent-job detector first ([[cryptonova-monitoring]]).
+## 62.33 ✅✅ **2026-09-06 18:09Z: SILENT-JOB DETECTOR LIVE — monitor backlog item 3 ([[cryptonova-monitoring]]) DONE.**
+##      `silent_watch.js` (keepers `9bc7684`, md5 `eb426281…` on the box), cron `7-59/15 * * * *` under `/tmp/silent_watch.lock`
+##      → `silent_watch.log`; crontab 72→73 lines, backup `crontab_pre_silentwatch_20260906.txt` (key-bearing, on the box).
+##      **Design, and why:** NO hand-kept job table — `stress_status.js`'s table was already wrong by 09-01 (job A */20→*/10,
+##      four jobs added since). It reads the LIVE `crontab -l`, takes every line appending to a `*.log`, derives the expected
+##      interval from the schedule itself (max gap between fire times over 8 days: `21,51`→30, `52 0,6,12,18`→360, `23 */4`
+##      →240, `32 8`→1440), and grades the log's last write: OK · LATE (>1.5×+3m) · SILENT (>3×+10m) · NO-LOG. Second layer =
+##      the 2026-08-30 lesson, applied ONLY where measured: rr_keeper.log job A with 3 consecutive `A:0 reg` + `pool
+##      exhausted` → STALLED. Telegram via `tg_send.js --source silent_watch`: WARNING when the bad set changes, reminder
+##      every 4h while bad, one ⚡ on recovery; healthy = silent. State `silent_watch_state.json` (gitignored).
+##      Tested offline on a synthetic crontab (LATE/STALLED/recovery/no-repeat all exercised) and on the box: **17 jobs,
+##      0 not OK** — it found fastlane_rescue, hourly frozen_matrix_check, topup_keeper and frozen_watch, none of which the
+##      09-01 snapshot had. `NO_TG=1` = print only; `CRONTAB_FILE=` = parse a saved crontab.
+##      ⚠ Seen while reading the table, PARKED: `frozen_matrix_check.js` runs BOTH on its own line (`7 * * * *`) AND inside
+##      `frozen_watch.sh` (`23 */4`). Probably the pre-wrapper line left in place on 09-04 — confirm on the box and drop one.
+##      ▶ NEXT monitor items: RPC endpoint health probe hourly; site + `/api/faucet` reachability probe. Then 62.13 leftovers.
 ## 62.5 ▶ **WHAT IS OPEN, IN ORDER, FOR SESSION 63.**
 ## 62.23 ✅ **CUTOVER DONE 2026-09-04 (owner local afternoon): `preview`+`main` at `00b4690`** (V8.52 repoint
 ##      + `DEFAULT_SPONSOR_POOL` = the owner's revised 10-leader roster, two swapped, dead `run_bigfill_rr.ps1`
