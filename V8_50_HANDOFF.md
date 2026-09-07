@@ -693,6 +693,16 @@ owner-set, and the session that earned it got five things wrong by ignoring what
 ##      (local preview/main fast-forwarded first — they had been left at 605d884 while origin was pushed as admin:preview).
 ##      ✅ crypto-nova.app checked 13:58Z: index.html + faq.html serve 367a614 (first faq load was the pre-build cached copy;
 ##      a fresh fetch/reload has it). **SESSION 65 LIST FULLY CLOSED except the Blockaid nudge (from 09-08 morning local).**
+##      ✅ **OWNER'S ASK 14:05Z, FROM HIS OWN SCREEN — the Withdrawable card's reserve badge was "too much information":**
+##      the 09-05 Kira sentence ("⚙ Reserve target $35.00 — a hold on your earnings, not spendable cash · $1.10 held right
+##      now") + "Ready to claim". His layout: numbers only, one per line, words in the "?" tip. Shipped `eced861`→`4c5025b`→
+##      `ba87505` (admin, preview, main all at ba87505 14:40Z; public verified serving `readyToClaimRow`): headline stays;
+##      rows `Reserve target $35.00` / `Held right now $16.11` (`paintReserveRows`, one writer; interim paint shows target
+##      only) / `Ready to claim  after the 1.5% fee  $35.71` (`readyToClaimRow`; fee unread → gross "before the fee");
+##      `dash.withdrawable_tip` extended in `locales/en.json` AND inline (⚠ nine other locales keep the short tip);
+##      held-in-matrix note under Withdraw Earnings shortened to the same row shape. Label is "Held right now", not
+##      "from current tier" — the hold is on the HIGHEST tier (freeWithdrawable nets it there). `readyToClaimLabel()` is
+##      now unused (kept). Owner confirmed the card on admin with his member wallet ($36.25 / $35.00 / $16.11 / $35.71).
 ##      ▶ NEXT SESSION, IN ORDER: (1) Blockaid — Gmail thread; if Peter still silent, nudge in-thread (full 46-contract
 ##      set, T1 PairManager `0xc2fCD…d42c7` still flagged); re-test the 62.30 flow after any reply. (2) Nothing else is
 ##      owed from 62.36/62.37 — pick from the open threads in 62.13/62.31 or the frontend-truth latent list
