@@ -657,6 +657,29 @@ owner-set, and the session that earned it got five things wrong by ignoring what
 ##      (2) 62.13 leftovers ("Cycle N" label, Rabby notice, Dashboard $0.00 vs in-matrix); (3) verify `debtors ever
 ##      booked : 874` in sf_invariant_check (62.31); (4) PC `C:\CryptoNova-Keepers\.env` still names the dead
 ##      `fluent-neat-moon` (62.34) — copy the box's `BASE_SEPOLIA_RPC_URL` line over.
+## 62.37 ✅ **2026-09-07 13:27Z– (session 65, continued): 62.31's `874` EXPLAINED AND FIXED, 62.13 LEFTOVERS DONE.**
+##      ✅ **`debtors ever booked : 874` (62.31, parked) — MEASURED FROM THE CODE:** `sf_invariant_check.js` builds `list`
+##      as `state.debtors ∪ new MemberDebtIncreased events`, and `sf_invariant_state.json` (box only; none on the PC) carried
+##      NO deployment identity — so the set is the lifetime union since the V8.47 seed block 45060000 across V8.47→V8.50→
+##      V8.51→V8.52. 874 is that union, NOT a V8.52 count. I1 was never wrong (old addresses read `memberDebt 0` on the new
+##      SF — hence 62.31 reconciling to the cent) but every hourly run read ~874 balances for nothing. **Fix, keepers
+##      `1aaa79d`+`de2a0bb` (md5 `362b2231…`):** state now carries `sf`; on mismatch the old state is archived beside
+##      itself (`sf_invariant_state.pre_<sf10>_<ms>.json`) and the cursor rewinds to SEED_BLOCK; a progress line every 20
+##      scan windows (only visible on a long rescan). Every future redeploy resets itself. ▶ PENDING THE OWNER'S BOX STEP:
+##      scp + md5 + one proving run INTO `sf_invariant.log` (62.36 rule) — expected `state was for SF 0x… with 874
+##      debtors -> archived …` then the TRUE V8.52 count. Record that number here when it lands.
+##      ✅ **62.13 leftovers, frontend `admin` `367a614`:** (3) matrix-view banner `Cycle N` was `mc.rotationCount()` — the
+##      MATRIX's rotation count, not tier cycles — now reads `This matrix has cycled N×`, and both `.catch(()=>0n)` reads
+##      (`:8704`, `:8799`) are `null` → unknownBadge, never "0" (the [[cryptonova-frontend-truth]] shape). (6) `Withdraw
+##      Earnings $0.00` beside in-matrix money: new `withdraw-held-note` painted by `paintHeldNote(headline)` from
+##      `totalW − headline` (raw in-matrix minus freeWithdrawable) at all three headline writers (`:5939`, `:6627`, `:6670`);
+##      no data-i18n, one writer. (4) `faq.html` "Which wallet" answer gains an un-keyed `<p>` explaining Rabby's
+##      "Simulation Not Supported / Unknown Signature Type / Custom Network" on Base Sepolia. All 5 inline script blocks
+##      pass `node --check`. NOT yet pushed (shell has no GitHub creds) and NOT yet on preview/main — owner pushes `admin`,
+##      then the ladder.
+##      ▶ REMAINING FROM 62.36's LIST: (1) Blockaid — nudge from 09-08 morning local if Peter still silent; (4) PC
+##      `C:\CryptoNova-Keepers\.env` still `fluent-neat-moon` — block prepared (ssh-pull the box's line straight into
+##      the file, no key through chat), waits on step 1's report.
 ## 62.5 ▶ **WHAT IS OPEN, IN ORDER, FOR SESSION 63.**
 ## 62.23 ✅ **CUTOVER DONE 2026-09-04 (owner local afternoon): `preview`+`main` at `00b4690`** (V8.52 repoint
 ##      + `DEFAULT_SPONSOR_POOL` = the owner's revised 10-leader roster, two swapped, dead `run_bigfill_rr.ps1`
