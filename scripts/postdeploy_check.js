@@ -105,6 +105,19 @@ async function read(label, fn) {
     verdict(grad === true, 'graduationEnabled (item G)', grad ? 'ON' : 'OFF -> setGraduationEnabled(true)');
   }
 
+  // 4. T4 (MAINNET_READINESS §3): every contract verified on BaseScan BEFORE any repoint.
+  //    verify_gate.js is read-only and exits 0 only when all rows are VERIFIED; ~30-40 s for 46 rows.
+  //    SKIP_VERIFY_GATE=1 skips it (local hardhat books have no explorer) and says so.
+  if (process.env.SKIP_VERIFY_GATE === '1') {
+    console.log('  SKIP  verify_gate (SKIP_VERIFY_GATE=1) — NOT a pass; never skip on a real network');
+  } else {
+    console.log('  --- BaseScan verification gate (T4) — running scripts/verify_gate.js ---');
+    const r = require('child_process').spawnSync(process.execPath, [path.join(__dirname, 'verify_gate.js')],
+      { stdio: 'inherit', env: process.env });
+    verdict(r.status === 0, 'verify_gate: all contracts verified',
+      r.status === 0 ? 'exit 0 (gate OPEN)' : `exit ${r.status} (gate BLOCKED) -> npx hardhat run scripts/verify_all.js --network <net>`);
+  }
+
   console.log('  --- VERDICT ---');
   if (fails === 0) {
     console.log('  ALL PASS — the settings a deploy does not make are in place. Safe to cut over.');

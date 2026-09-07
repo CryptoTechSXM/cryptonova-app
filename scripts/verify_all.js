@@ -1,7 +1,11 @@
-// verify_all_v850.js — verify EVERY V8.50 contract on BaseScan. Continues past
-// already-verified entries and past failures, then prints a summary.
+// verify_all.js (was verify_all_v850.js) — SUBMITS every contract in ADDRESSES_FILE to BaseScan
+// for verification. Continues past already-verified entries and failures, prints a summary.
+// Generic since session 66 (2026-09-07, MAINNET_READINESS §3 T4): the book is required (no
+// default), and chain_guard refuses a book whose chainId ≠ the --network you passed. This script
+// SUBMITS; scripts/verify_gate.js is the read-only CHECK with the exit code — run the gate after.
 //
-//   npx hardhat run scripts/verify_all_v850.js --network baseSepolia
+//   $env:ADDRESSES_FILE="deployed_addresses_v8_52.json"; npx hardhat run scripts/verify_all.js --network baseSepolia
+//   (mainnet: --network baseMainnet with the mainnet book)
 //
 // ⛔ WHY THIS EXISTS AND WHY IT IS URGENT (session 44, 2026-08-27).
 // MetaMask shows "Malicious site detected — you could lose all your assets" on
@@ -32,9 +36,11 @@ const fs   = require("fs");
 const path = require("path");
 
 async function main() {
-  const file = process.env.ADDRESSES_FILE || "deployed_addresses_v8_50.json";
+  const file = process.env.ADDRESSES_FILE;
+  if (!file) { console.error("ADDRESSES_FILE not set — refusing to verify a default book."); process.exit(2); }
   const A = JSON.parse(fs.readFileSync(path.join(__dirname, file), "utf8"));
-  console.log(`\nVerifying from ${file}  (deployed ${A.deployedAt || "?"})\n`);
+  await require("./chain_guard").assertChain(A, hre.ethers.provider, file);   // T2: book vs --network
+  console.log(`\nVerifying from ${file}  (deployed ${A.deployedAt || "?"}, chainId ${A.chainId})\n`);
 
   // ── constants, mirroring scripts/deploy_v8.js :131-166 and :862-865 ────────
   const MSIZE  = Number(process.env.MATRIX_SIZE || 127);
@@ -126,8 +132,8 @@ async function main() {
       console.log("    file against scripts/deploy_v8.js before debugging anything else.");
     }
   }
-  console.log("\n  NEXT, ONLY ONCE THIS IS CLEAN: submit the domains + these addresses to");
-  console.log("  report.blockaid.io/mistake so the re-scan sees verified contracts.\n");
+  console.log("\n  NEXT: run the read-only gate — node scripts/verify_gate.js — it must exit 0 before the");
+  console.log("  frontend is repointed or Blockaid is written to.\n");
 }
 
 main().then(() => process.exit(0)).catch((e) => { console.error(e); process.exit(1); });

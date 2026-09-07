@@ -1,8 +1,17 @@
 /**
- * check_verification_v850.js — READ-ONLY. Asks BaseScan whether every V8.50
- * contract in the address book has verified source, and prints a pass/fail table.
+ * verify_gate.js — READ-ONLY GATE (was check_verification_v850.js, session 45; made generic
+ * + exit-coded for MAINNET_READINESS.md §3 T4, session 66, 2026-09-07). Asks BaseScan whether
+ * every contract in the address book has verified source and prints a pass/fail table.
+ * EXIT CODE IS THE VERDICT: 0 only when every contract row is VERIFIED; 1 when any row is
+ * UNVERIFIED or UNKNOWN (a read failure is not a pass); 2 on a setup error. postdeploy_check.js
+ * runs it and refuses "safe to cut over" on a non-zero exit — the rule that ended the Blockaid
+ * flags (verify every contract BEFORE any member is pointed at it) is now a script, not a memory.
  *
- *   node scripts/check_verification_v850.js
+ *   $env:ADDRESSES_FILE="deployed_addresses_v8_52.json"; node scripts/verify_gate.js
+ *
+ * Chain comes from the book's `chainId` (84532 → sepolia.basescan.org, 8453 → basescan.org).
+ * A book without chainId is refused unless ALLOW_LEGACY_BOOK=1 (then Sepolia is assumed and
+ * said out loud).
  *
  * ⛔ WHY (session 45, 2026-08-28). We are about to tell Blockaid, in an appeal
  * against a "malicious site" flag, that every contract is verified on BaseScan.
@@ -19,13 +28,17 @@ const fs   = require('fs');
 const path = require('path');
 
 const KEY  = process.env.BASESCAN_API_KEY || '';
-const API  = 'https://api.etherscan.io/v2/api?chainid=84532';
-const BROWSER = 'https://sepolia.basescan.org/address/';
-const FILE = process.env.ADDRESSES_FILE || 'deployed_addresses_v8_50.json';
+const FILE = process.env.ADDRESSES_FILE;
+const EXPLORERS = { 84532: 'https://sepolia.basescan.org/address/', 8453: 'https://basescan.org/address/' };
+let API = '', BROWSER = '';   // set from the book's chainId in main()
+
+/** Pure verdict so it can be unit-tested without a network: 0 clean, 1 blocked. */
+function exitCodeFor({ missing, unknown }) { return (missing > 0 || unknown > 0) ? 1 : 0; }
+module.exports = { exitCodeFor };
 
 // Wallets and plain values are NOT contracts — never report them as unverified.
 const SKIP_KEYS = new Set([
-  'network','deployedAt','matrixSize','deployer','admin','accountOne',
+  'network','chainId','deployedAt','matrixSize','deployer','admin','accountOne',
   'devWallet','opsWallet'
 ]);
 
@@ -95,11 +108,25 @@ async function isVerified(addr) {
   return { ok: null, name: 'READ FAILED' };   // null = unknown, not a fail
 }
 
-(async () => {
+async function main() {
   if (!KEY) { console.error('BASESCAN_API_KEY missing from .env — aborting rather than guessing.'); process.exit(2); }
+  if (!FILE) { console.error('ADDRESSES_FILE not set — refusing to gate a default book.'); process.exit(2); }
   const A = JSON.parse(fs.readFileSync(path.join(__dirname, FILE), 'utf8'));
+  let chainId = A.chainId;
+  if (chainId === undefined || chainId === null) {
+    if (process.env.ALLOW_LEGACY_BOOK !== '1') {
+      console.error(`${FILE} has no chainId field (network "${A.network}"). Add it (84532 Sepolia / 8453 mainnet) or set ALLOW_LEGACY_BOOK=1 for a known-Sepolia book.`);
+      process.exit(2);
+    }
+    chainId = 84532;
+    console.warn(`  ⚠ legacy book without chainId; ALLOW_LEGACY_BOOK=1 so assuming Base Sepolia (84532)`);
+  }
+  chainId = Number(chainId);
+  if (!EXPLORERS[chainId]) { console.error(`No explorer known for chainId ${chainId} — add it to EXPLORERS in verify_gate.js.`); process.exit(2); }
+  API = `https://api.etherscan.io/v2/api?chainid=${chainId}`;
+  BROWSER = EXPLORERS[chainId];
   const list = collect(A);
-  console.log(`\nChecking ${list.length} addresses from ${FILE} (deployed ${A.deployedAt}) on ${A.network}\n`);
+  console.log(`\nverify_gate: checking ${list.length} addresses from ${FILE} (deployed ${A.deployedAt}) on ${A.network} chainId ${chainId}\n`);
 
   const verified = [], missing = [], unknown = [], wallets = [];
   for (const [label, addr] of list) {
@@ -131,19 +158,25 @@ async function isVerified(addr) {
   console.log(`  UNVERIFIED : ${missing.length}`);
   console.log(`  unknown    : ${unknown.length}  (read failed — re-run, do not report as either)`);
   if (missing.length) {
-    console.log(`\n⛔ DO NOT SEND THE APPEAL YET. Run verify_all_v850.js for these first:`);
+    console.log(`\n⛔ GATE BLOCKED — do not repoint the frontend, do not write to Blockaid. Run verify_all.js for these first:`);
     for (const [l, a] of missing) console.log(`   ${l}  ${a}`);
   }
   if (unknown.length) {
     console.log(`\n⚠ Unknown (not a verdict):`);
     for (const [l, a] of unknown) console.log(`   ${l}  ${a}`);
   }
+  if (unknown.length) console.log(`\n⛔ GATE BLOCKED on ${unknown.length} unread row(s) — re-run; a read failure is not a pass.`);
   if (!missing.length && !unknown.length) {
-    console.log(`\n✅ ALL ${verified.length} CONTRACTS VERIFIED. BaseScan links for the Blockaid reply:\n`);
+    console.log(`\n✅ GATE OPEN — ALL ${verified.length} CONTRACTS VERIFIED on chainId ${chainId}. BaseScan links for the Blockaid update:\n`);
     for (const [l, a, n] of verified) console.log(`   ${(n||l).padEnd(22)} ${BROWSER}${a}#code`);
     if (wallets.length) {
       console.log(`\n   (not contracts, listed for completeness:)`);
       for (const [l, a] of wallets) console.log(`   ${l.padEnd(22)} ${BROWSER}${a}`);
     }
   }
-})();
+  const code = exitCodeFor({ missing: missing.length, unknown: unknown.length });
+  console.log(`\nverify_gate exit ${code} (${code === 0 ? 'OPEN' : 'BLOCKED'})`);
+  process.exit(code);
+}
+
+if (require.main === module) main().catch(e => { console.error(e); process.exit(2); });

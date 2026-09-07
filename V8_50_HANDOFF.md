@@ -780,6 +780,14 @@ owner-set, and the session that earned it got five things wrong by ignoring what
 ##      lines, 1,857/9,134 unique lines shared → T7 = copy-and-repoint the current app at cutover, never patch.
 ##      Push `d562336` DONE by the owner (v8.1). ▶ NEXT SESSION READS `C:\CryptoNova-Mainnet-App\MAINNET_READINESS.md`
 ##      FIRST for mainnet; this handoff stays the entry point for the testnet/V8.5x line.
+##      ✅ **T2-contracts + T5 TICKED (owner ran `postdeploy_check.js` on V8.52, block 46525181, 22:04Z: no chain_guard
+##      line, `PASS upkeepCaller`, ALL PASS).** ✅ **T4 BUILT:** `check_verification_v850.js` → `git mv` → `scripts/
+##      verify_gate.js` (read-only; chain + explorer from the book's chainId; EXIT 0 only when every contract row is
+##      VERIFIED, 1 on any UNVERIFIED **or UNKNOWN**, 2 on setup; `exitCodeFor` proven 4/4 offline); `verify_all_v850.js`
+##      → `verify_all.js` (submitter; ADDRESSES_FILE required; `assertChain` vs --network). `postdeploy_check.js` step 4
+##      now SPAWNS verify_gate and fails its verdict on non-zero (`SKIP_VERIFY_GATE=1` for local books, printed as
+##      SKIP not PASS). ⚠ UNRUN LIVE: the gate against V8.52 (needs BaseScan API from the PC) — expect 46 VERIFIED /
+##      wallets listed / exit 0. Old names survive only in this handoff's history.
 ## 62.5 ▶ **WHAT IS OPEN, IN ORDER, FOR SESSION 63.**
 ## 62.23 ✅ **CUTOVER DONE 2026-09-04 (owner local afternoon): `preview`+`main` at `00b4690`** (V8.52 repoint
 ##      + `DEFAULT_SPONSOR_POOL` = the owner's revised 10-leader roster, two swapped, dead `run_bigfill_rr.ps1`
