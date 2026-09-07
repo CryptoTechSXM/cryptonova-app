@@ -372,7 +372,13 @@ async function main() {
       console.log(`  ⚠️  Signer ${rawSigner.address} is EIP-7702 delegated to 0x${code.slice(8)} (testnet-accepted)`);
     }
     const expected = (process.env.EXPECTED_DEPLOYER || "").toLowerCase();
-    if (expected && rawSigner.address.toLowerCase() !== expected) {
+    // 2026-09-07: the guard is for REAL networks. On the in-process/local chain the signer is
+    // Hardhat's built-in account #0 by design, so the guard is skipped there (and says so).
+    const _localNet = ["hardhat", "localhost"].includes(require("hardhat").network.name);
+    if (expected && _localNet) {
+      console.log(`  ℹ  local network ${require("hardhat").network.name}: EXPECTED_DEPLOYER guard skipped (signer ${rawSigner.address})`);
+    }
+    if (expected && !_localNet && rawSigner.address.toLowerCase() !== expected) {
       throw new Error(`Signer ${rawSigner.address} != EXPECTED_DEPLOYER ${process.env.EXPECTED_DEPLOYER} — fix .env before deploying.`);
     }
   }
@@ -484,12 +490,30 @@ async function main() {
   // ── 1. USDC ────────────────────────────────────────────────────────────────
   sep("USDC");
   let usdc;
-  if (process.env.USDC_ADDRESS) {
+  // MAINNET_READINESS §3 T1b (2026-09-07, measured on a local run): USDC_ADDRESS must hold a
+  // contract ON THIS CHAIN. .env carries the Sepolia MockUSDC; on the in-process chain there is
+  // nothing at that address and every read came back "0x". On a REAL network that is a hard
+  // stop (wrong chain / typo would wire 46 contracts to nothing). On hardhat/localhost we say
+  // so and deploy a MockUSDC instead — never silently.
+  let useExternalUsdc = !!process.env.USDC_ADDRESS;
+  if (useExternalUsdc) {
+    const usdcCode = await ethers.provider.getCode(process.env.USDC_ADDRESS);
+    if (usdcCode === "0x") {
+      const net = require("hardhat").network.name;
+      if (["hardhat", "localhost"].includes(net)) {
+        console.log(`  ℹ  USDC_ADDRESS ${process.env.USDC_ADDRESS} has no code on local network ${net} — deploying MockUSDC instead`);
+        useExternalUsdc = false;
+      } else {
+        throw new Error(`USDC_ADDRESS ${process.env.USDC_ADDRESS} has NO contract code on network ${net} (chainId ${(await ethers.provider.getNetwork()).chainId}). Wrong chain or typo — fix .env before deploying.`);
+      }
+    }
+  }
+  if (useExternalUsdc) {
     usdc = await ethers.getContractAt("MockUSDC", process.env.USDC_ADDRESS, deployer);
     console.log(`  ↳  Existing USDC       ${process.env.USDC_ADDRESS}`);
   } else {
     const MockUSDC = await ethers.getContractFactory("MockUSDC", deployer);
-    usdc = await deploy(MockUSDC, [], "MockUSDC");
+    usdc = await deploy(MockUSDC, [deployerAddr], "MockUSDC");   // constructor(address admin) — arg was missing, branch had not run since the shared Sepolia MockUSDC took over (found 2026-09-07)
     await (await usdc.mint(deployerAddr, 10_000_000_000_000n)).wait();
     console.log("  ↳  Minted 10M USDC to deployer");
   }
@@ -1052,7 +1076,7 @@ async function main() {
         // MAINNET_READINESS §3 T1 (2026-09-07): real USDC has no public mint(). When USDC_ADDRESS
         // points at an external token, W1 must ALREADY hold the T1 fee — fail loud, never mint.
         const w1Usdc = await usdc.balanceOf(W1_ADDR);
-        if (process.env.USDC_ADDRESS) {
+        if (useExternalUsdc) {
           if (w1Usdc < T1_FEE) {
             throw new Error(
               `W1 ${W1_ADDR} holds $${Number(w1Usdc) / 1e6} USDC on external USDC ${usdcAddr}; ` +

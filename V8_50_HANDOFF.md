@@ -739,6 +739,18 @@ owner-set, and the session that earned it got five things wrong by ignoring what
 ##      proving runs are the owner's from PowerShell on `--network hardhat` with `ADDRESSES_FILE=deployed_addresses_
 ##      localtest.json` (scratch, delete after). ▶ NEXT: run 1 (MockUSDC path, expect `Minted $10 USDC to W1 (MockUSDC)`
 ##      + W1 registered), then run 2 on a `hardhat node` for the external-USDC path (expect the loud balance error).
+##      ✅ **RUN 1 PROVEN 18:42Z (owner, PowerShell, `--network hardhat`, log `logs/runs/deploy_v8/2026-09-07T18-42-18-396Z_*`):**
+##      four fixes were needed to get there, each found by the run that preceded it — (1) `EXPECTED_DEPLOYER` guard now
+##      SKIPPED on hardhat/localhost with an `ℹ` line (`:374`; PowerShell `$env:X=""` DELETES a var, so it cannot be
+##      cleared for a run — and dotenv then loads .env); (2) **NEW GAP T1b:** `USDC_ADDRESS` is now `getCode`-checked at
+##      step 1 — no code on a REAL network = hard stop naming the chainId; no code on local = `ℹ` + deploy MockUSDC
+##      (`.env:16` carries the shared Sepolia MockUSDC `0x2D8B…`, which is why run 1 first died with `balanceOf` → `0x`);
+##      (3) the MockUSDC deploy branch had NOT run since the shared token took over — `constructor(address admin)` arg
+##      was missing (`deploy(MockUSDC, [deployerAddr])`); (4) the W1 block keys off `useExternalUsdc`, not the raw env.
+##      Result: MockUSDC first at `0x5FbDB…`, 46 contracts up, `Minted $10 USDC to W1 (MockUSDC)`, W1 registered as T1
+##      MatA root, `setDefaultReferrer → W1`. Scratch `scripts/deployed_addresses_localtest.json` deleted after.
+##      ⚠ STILL UNRUN: the external-USDC BALANCE guard branch itself (needs a chain where USDC_ADDRESS has code and W1
+##      is short — a `hardhat node` two-window run, or the mainnet fork). Marked UNVERIFIED in MAINNET_READINESS §3 T1.
 ## 62.5 ▶ **WHAT IS OPEN, IN ORDER, FOR SESSION 63.**
 ## 62.23 ✅ **CUTOVER DONE 2026-09-04 (owner local afternoon): `preview`+`main` at `00b4690`** (V8.52 repoint
 ##      + `DEFAULT_SPONSOR_POOL` = the owner's revised 10-leader roster, two swapped, dead `run_bigfill_rr.ps1`

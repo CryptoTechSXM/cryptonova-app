@@ -76,13 +76,18 @@ RUN on the target it names. A box that has not been run is not ticked.
 
 ## 3. MEASURED GAPS IN THE TOOLING (Claude fixes; each needs a run to tick)
 
-- [ ] **T1 `deploy_v8.js` is not mainnet-safe at the W1 seed.** `:1052` calls
-      `usdc.mint(W1_ADDR, T1_FEE)` unconditionally inside the W1 try/catch. Real Base USDC
-      (`0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913`) has no public mint → revert → caught → W1 NOT
-      registered, `setDefaultReferrer` skipped, script continues as if fine. Fix: when
-      `USDC_ADDRESS` is set, require W1 to already hold ≥ T1_FEE USDC (read balance, fail LOUD
-      otherwise) instead of minting. Also `:488` uses the MockUSDC ABI for a real token — fine for
-      approve/balanceOf, but grep the script for any other `.mint(`/`faucet` call.
+- [~] **T1 `deploy_v8.js` W1 seed — FIXED 2026-09-07, mock path PROVEN, external path UNVERIFIED.**
+      Was: `usdc.mint(W1_ADDR, T1_FEE)` unconditional inside the W1 try/catch → on real Base USDC
+      (`0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913`, no public mint) revert → swallowed → W1 NOT
+      registered, `setDefaultReferrer` skipped. Now: external USDC → require W1 balance ≥ T1_FEE,
+      fail loud; non-testnet W1 failure rethrows; `seed_w1.js` same guard. PROVEN on `--network
+      hardhat` 18:42Z (MockUSDC path, W1 registered). ⚠ The balance-guard branch itself has not
+      been exercised — needs a chain where USDC_ADDRESS has code (hardhat node or mainnet fork).
+- [x] **T1b `USDC_ADDRESS` code check — ADDED + PROVEN 2026-09-07.** Step 1 reads `getCode`; no
+      code on a real network = hard stop naming the chainId (wrong chain / typo can no longer wire
+      46 contracts to nothing); on hardhat/localhost = notice + MockUSDC deploy. Also fixed on the
+      way: `EXPECTED_DEPLOYER` guard skipped on local networks; MockUSDC constructor arg (`admin`)
+      restored in the deploy branch, which had not run since the shared Sepolia token took over.
 - [ ] **T2 Network guard.** Every keeper, diag and deploy script that reads `ADDRESSES_FILE` must
       refuse to run if the file's chainId ≠ the provider's chainId. Measure first: grep the
       keepers + `scripts/` for `chainId` checks; list what has none.
