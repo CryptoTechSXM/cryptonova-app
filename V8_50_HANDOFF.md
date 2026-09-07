@@ -686,8 +686,17 @@ owner-set, and the session that earned it got five things wrong by ignoring what
 ##      (gitignored, key-bearing). ✅ **PUSHED 13:46Z:** keepers `main` c2bdc9c→de2a0bb, contracts `v8.1` 99558d1→211a20d,
 ##      frontend `admin` af58978→367a614 (Vercel builds the admin project from it; preview/main NOT yet laddered).
 ##      ▶ REMAINING FROM 62.36's LIST: (1) Blockaid — nudge from 09-08 morning local if Peter still silent.
-##      ▶ NEXT: eyeball 367a614 on admin.crypto-nova.app (Withdraw card note, matrix banner "This matrix has cycled N×",
-##      FAQ Rabby line), then ladder admin → preview → main.
+##      ✅ **VERIFIED ON admin.crypto-nova.app 13:52Z (Claude via Chrome; owner's Vercel login + MetaMask 0xb41A…617c):**
+##      deployed index.html carries `withdraw-held-note`, `This matrix has cycled`, zero `rotationCount().catch(()=>0n)`;
+##      FAQ Rabby `<p>` rendered; `paintHeldNote` test-fired in the live page with `_inMatrixTotal=6200000n`, headline 0 →
+##      "🔒 $6.20 more sits in your matrix balance…", hides again at 0. ✅ **LADDERED 13:56Z:** preview + main af58978→367a614
+##      (local preview/main fast-forwarded first — they had been left at 605d884 while origin was pushed as admin:preview).
+##      ✅ crypto-nova.app checked 13:58Z: index.html + faq.html serve 367a614 (first faq load was the pre-build cached copy;
+##      a fresh fetch/reload has it). **SESSION 65 LIST FULLY CLOSED except the Blockaid nudge (from 09-08 morning local).**
+##      ▶ NEXT SESSION, IN ORDER: (1) Blockaid — Gmail thread; if Peter still silent, nudge in-thread (full 46-contract
+##      set, T1 PairManager `0xc2fCD…d42c7` still flagged); re-test the 62.30 flow after any reply. (2) Nothing else is
+##      owed from 62.36/62.37 — pick from the open threads in 62.13/62.31 or the frontend-truth latent list
+##      (`index.html:5710-5714` four `catch(()=>0n)` dollar cards) if the day is quiet.
 ## 62.5 ▶ **WHAT IS OPEN, IN ORDER, FOR SESSION 63.**
 ## 62.23 ✅ **CUTOVER DONE 2026-09-04 (owner local afternoon): `preview`+`main` at `00b4690`** (V8.52 repoint
 ##      + `DEFAULT_SPONSOR_POOL` = the owner's revised 10-leader roster, two swapped, dead `run_bigfill_rr.ps1`
