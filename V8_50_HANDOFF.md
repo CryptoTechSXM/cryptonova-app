@@ -707,6 +707,28 @@ owner-set, and the session that earned it got five things wrong by ignoring what
 ##      set, T1 PairManager `0xc2fCD…d42c7` still flagged); re-test the 62.30 flow after any reply. (2) Nothing else is
 ##      owed from 62.36/62.37 — pick from the open threads in 62.13/62.31 or the frontend-truth latent list
 ##      (`index.html:5710-5714` four `catch(()=>0n)` dollar cards) if the day is quiet.
+## 62.38 ✅ **2026-09-07 14:44Z– (session 66): MAINNET PREP OPENED — `MAINNET_READINESS.md` IS THE ENTRY POINT.**
+##      Context not in 62.37: late in session 65 the owner said "we might be ready to start looking at mainnet deploy"
+##      and asked for readiness feedback; Claude's answer (Blockaid HALF cleared, organic measurement not closed, posture
+##      decisions owed, audit sizing ~7k nSLOC deployed / ~4k custody core) and the owner's stance (explore audit cost;
+##      if out of reach, small soft launch + audit later) are in memory `cryptonova-mainnet-readiness`. Agreed path:
+##      gated go/no-go ~2026-09-21.
+##      ✅ **`MAINNET_READINESS.md` written + committed `73c7cd5`** (supersedes `MAINNET_TODO.md` 07-23 and the
+##      DEPLOY_RUNBOOK "Mainnet Differences" table): §1 hard gates G1 Blockaid / G2 organic measurement / G3 audit
+##      decision; §2 owner posture decisions P1 caps, P2 pause plan, P3 key custody, P4 incident playbook, P5 disclosure;
+##      §3 measured tooling gaps T1–T10; §4 the runbook still to write; §5 next actions in order.
+##      ⛔ **MEASURED GAP (§3 T1): `deploy_v8.js:1052` calls `usdc.mint(W1_ADDR, T1_FEE)` unconditionally inside the W1
+##      seed try/catch. Real Base USDC has no public mint → revert → swallowed → W1 unregistered AND `setDefaultReferrer`
+##      skipped while the script reports success.** Fix = when `USDC_ADDRESS` is set, require W1's balance ≥ T1_FEE and
+##      fail loud. NOT yet fixed.
+##      ⛔ **MEASURED (§2 P1): there is NO on-chain "max open tier" or deposit cap.** Fees fixed at deploy T1 $10…T10
+##      $10,000 (`deploy_v8.js:143-152`); only `tierGateThreshold[5..10]` (1..50) and the whale gate exist. "T1-only
+##      launch" is a policy or new code, not a switch. Option (c) — deploy only T1–T3 PMs — needs a fork test of
+##      `manualUpgrade` against an unset `tierPairManagers[i]` before it is offered.
+##      ✅ Delete permission granted this session; stale `HEAD.lock` + tmp objects from the first commit removed.
+##      ▶ NEXT, IN ORDER (= `MAINNET_READINESS.md` §5): (1) Blockaid nudge from 09-08 morning local, re-test after any
+##      reply; (2) fix T1 + census T2 (chainId guards across keepers/scripts); (3) `AUDIT_SCOPE.md`; (4) fork-test P1(c);
+##      (5) agree the G2 measurement window. Nothing else from 62.36/62.37 is open.
 ## 62.5 ▶ **WHAT IS OPEN, IN ORDER, FOR SESSION 63.**
 ## 62.23 ✅ **CUTOVER DONE 2026-09-04 (owner local afternoon): `preview`+`main` at `00b4690`** (V8.52 repoint
 ##      + `DEFAULT_SPONSOR_POOL` = the owner's revised 10-leader roster, two swapped, dead `run_bigfill_rr.ps1`
