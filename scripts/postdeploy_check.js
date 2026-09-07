@@ -43,6 +43,7 @@ if (!process.env.BASE_SEPOLIA_RPC_URL) {
 const A = require(path.join(__dirname, process.env.ADDRESSES_FILE));
 const KEEPER_EOA = process.env.KEEPER_WALLET || '0xd419681BA72992636f05e256168681c939826B4b';
 const provider = new ethers.JsonRpcProvider(process.env.BASE_SEPOLIA_RPC_URL);
+const { assertChain } = require('./chain_guard');
 
 const MK = new ethers.Contract(A.matrixKeeper, [
   'function upkeepCaller(address) view returns (bool)',
@@ -69,6 +70,7 @@ async function read(label, fn) {
 }
 
 (async () => {
+  await assertChain(A, provider, process.env.ADDRESSES_FILE); // T2 guard: book chainId must equal the RPC's
   const blk = await provider.getBlockNumber();
   console.log(`=== post-deploy check ${new Date().toISOString()} (${process.env.ADDRESSES_FILE}) block=${blk} ===`);
   console.log(`  matrixKeeper  ${A.matrixKeeper}`);

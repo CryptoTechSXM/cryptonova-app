@@ -1026,6 +1026,7 @@ async function main() {
     for (const t of DEPLOY_TIERS) tierAddresses[`T${t}`] = deployed[t];
     const out = {
       network: (await ethers.provider.getNetwork()).name,
+      chainId: Number((await ethers.provider.getNetwork()).chainId), // T2: every reader must compare this to its provider (scripts/chain_guard.js)
       deployedAt: new Date().toISOString(),
       matrixSize: Number(MATRIX_SIZE),
       deployer: deployerAddr, admin, accountOne, devWallet, opsWallet,

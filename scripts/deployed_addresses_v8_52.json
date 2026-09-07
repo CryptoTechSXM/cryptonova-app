@@ -1,5 +1,6 @@
 {
   "network": "baseSepolia",
+  "chainId": 84532,
   "deployedAt": "2026-09-04T11:06:17.236Z",
   "matrixSize": 127,
   "deployer": "0xCd0Af6a4116f2062c1594aDf34c1821D45175506",

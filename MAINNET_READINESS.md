@@ -91,17 +91,37 @@ RUN on the target it names. A box that has not been run is not ticked.
       46 contracts to nothing); on hardhat/localhost = notice + MockUSDC deploy. Also fixed on the
       way: `EXPECTED_DEPLOYER` guard skipped on local networks; MockUSDC constructor arg (`admin`)
       restored in the deploy branch, which had not run since the shared Sepolia token took over.
-- [ ] **T2 Network guard.** Every keeper, diag and deploy script that reads `ADDRESSES_FILE` must
-      refuse to run if the file's chainId ≠ the provider's chainId. Measure first: grep the
-      keepers + `scripts/` for `chainId` checks; list what has none.
+- [ ] **T2 Network guard — MEASURED 2026-09-07 (session 66), contracts side BUILT, keeper side
+      folded into T9.** Census: contracts repo `scripts/` 223 of 353 scripts read an addresses
+      book, ONE real guard (`deploy_v8.js` T1b getCode), `keeper_w1.js` only detects testnet vs
+      mainnet; the book itself carried only `"network": "baseSepolia"`, no chainId; no shared
+      loader (each script opens the file itself, 15 different spellings) — so a per-script fix is
+      ~130 edits and NOT owed for read-only diags. Keepers repo: 82 of 105 read a book, ZERO check
+      the chain; 64 hard-code `new JsonRpcProvider(RPC_URL, 84532, {staticNetwork:true})`,
+      `rpcProvider.js` falls back to Sepolia-only public RPCs, and ALL 12 scripts on the live
+      crontab (`crontab_live_mirror.txt`: rr_keeper ×3, system_keeper, sf_invariant_check,
+      onramp_keeper, monitor_v8, integrity_check, growth_snapshot, fastlane_rescue, dupe_watch,
+      direct_keeper, copay_rescue, channel_pulse) are Sepolia-bound by literal or URL. So the
+      keeper fleet cannot run on mainnet at all as written — that is T9's job, not a guard.
+      BUILT: `deploy_v8.js` now writes `chainId` into every book (`:1029`); new
+      `scripts/chain_guard.js` `assertChain(book, provider, label)` — match → continue, mismatch
+      → throw naming both chainIds, book without chainId → throw unless `ALLOW_LEGACY_BOOK=1`
+      (warns); PROVEN 4/4 branches on a fake provider (no RPC). Wired into `postdeploy_check.js`
+      (`:46`, `:73`) so the post-deploy step refuses a wrong-chain book. `deployed_addresses_
+      v8_52.json` given `"chainId": 84532` (repo copy only; the box copy is unchanged and the
+      keepers do not read the field). ⚠ UNRUN: `postdeploy_check.js` live against V8.52 with the
+      new guard (owner, PowerShell — this proves the match branch on a real RPC and closes T5's
+      "on a run against V8.52"). Still to wire before mainnet: `verify_all.js` (T4) and the
+      frontend repoint tool (`update_addrs` in the app repo) — both are new/edited anyway.
 - [ ] **T3 Grace period default** — already fails safe: unknown network → 48h mainnet policy
       (`deploy_v8.js:947-951`). Tick after one dry run prints `172800` for `baseMainnet`.
 - [ ] **T4 Verify-before-repoint as a script gate.** `verify_all_v850.js` exists; make a
       `verify_all.js` that reads the addresses file, verifies every contract, and EXITS NON-ZERO
       if any is unverified — and put it in `postdeploy_check.js` so the frontend repoint step
       cannot start on an unverified set (the rule that ended the Blockaid flags).
-- [ ] **T5 `postdeploy_check.js` must read `upkeepCaller`** (R14, 62.23) — confirm it does, on a
-      run against V8.52, before trusting it on mainnet.
+- [ ] **T5 `postdeploy_check.js` must read `upkeepCaller`** (R14, 62.23) — CODE CONFIRMED
+      2026-09-07: it does (`MK.upkeepCaller(KEEPER_EOA)`, `:48`). Tick after the one live run
+      against V8.52 that T2 also needs.
 - [ ] **T6 Faucet must not exist on mainnet.** `api/faucet.js` holds a funded key on the testnet
       app; the mainnet Vercel project must have NO faucet env/key and the site's faucet UI must be
       hidden by chain. `site_probe.js` expects `/api/faucet` → 400; on mainnet expect 404.
@@ -112,7 +132,7 @@ RUN on the target it names. A box that has not been run is not ticked.
       tracks branch `mainnet` = the 23-file June-19 marketing tree. Anything from `v8.1` merged
       into `mainnet` publishes the handoff to the world. The mainnet app needs its OWN project +
       domain plan written BEFORE any push; do not reuse that project casually.
-- [ ] **T9 Keepers.** The box's crontab/`.env` point at `deployed_addresses_v8_52.json` on
+- [ ] **T9 Keepers (absorbs T2's keeper half).** MEASURED: 64/105 scripts hard-code chainId 84532 with `staticNetwork:true`, `rpcProvider.js` fallbacks are Sepolia-only, all 12 live-crontab scripts are Sepolia-bound. Fix shape when the time comes: one `keeper_env.js` (RPC + chainId + book from `.env`, `assertChain` on start) required by the 12 live scripts; the other ~50 stay Sepolia-only and are never installed on the mainnet box. The box's crontab/`.env` point at `deployed_addresses_v8_52.json` on
       Sepolia. Mainnet keepers = a separate box or a separate user + `.env` + addresses file, with
       their own key (P3), their own Telegram source tags, and job A (stress fill) NEVER installed.
 - [ ] **T10 Gas ceiling.** The measured Sepolia per-tx cap is 2^24 (memory
@@ -131,8 +151,9 @@ keeper start order, and the owner human test with a $10 real registration + with
 ## 5. NEXT ACTIONS, IN ORDER
 
 1. Blockaid nudge from 09-08 morning local (G1). Re-test after any reply.
-2. Prove the T1 fix (deploy_v8.js + seed_w1.js W1 seed — edited, NOT yet run) with the two local
-   runs, then the T2 chainId-guard census — pure tooling, no policy.
+2. ~~T1 proven, T2 census done + contracts guard built (09-07).~~ OWED: one live
+   `ADDRESSES_FILE=deployed_addresses_v8_52.json node scripts/postdeploy_check.js` from the PC
+   (ticks T2-contracts + T5), then T4 `verify_all.js` with the guard.
 3. P2 pause plan + P3 key custody options → owner picks (policy); P4 incident page.
 4. G4 disclosure line + G5 bounty text — drafted in the owner's voice, owner sets the amounts.
 5. G2 measurement window: agree start block (V8.52 first organic registration) and run it.

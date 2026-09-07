@@ -761,6 +761,17 @@ owner-set, and the session that earned it got five things wrong by ignoring what
 ##      minting. `deploy_v8.js` carries the same guard with the same shape (`:1079`), exercised only via seed_w1 — noted.
 ##      **T1 is CLOSED.** Scratch `deployed_addresses_localtest.json` deleted; `t1_run*.log` + `logs/runs/` are gitignored.
 ##      Owner's mainnet posture, for the record, is 62.38's "Ok A, B" — nothing in the T1 work changes it.
+##      ✅ **T2 CENSUS + CONTRACTS GUARD (session 66, later, 2026-09-07 ~22:00Z):** measured across both repos —
+##      contracts `scripts/` 223/353 read a book, 1 real chain check; keepers 82/105 read a book, 0 checks, 64 hard-code
+##      chainId 84532 `staticNetwork:true`, `rpcProvider.js` fallbacks Sepolia-only, ALL 12 live-crontab scripts
+##      Sepolia-bound. Books carried no chainId at all. Built: `deploy_v8.js:1029` writes `chainId`; new
+##      `scripts/chain_guard.js` (`assertChain`, PROVEN 4/4 branches on a fake provider — device shell has no RPC);
+##      wired into `postdeploy_check.js:46/:73`; `deployed_addresses_v8_52.json` +`"chainId": 84532` (repo copy).
+##      `postdeploy_check.js` already reads `upkeepCaller` (`:48`) — T5 half-ticked. Keeper half of T2 FOLDED INTO T9
+##      (`keeper_env.js` for the 12 live scripts). Full write-up in `MAINNET_READINESS.md` §3 T2/T5/T9, §5 item 2.
+##      ▶ NEXT: owner runs `postdeploy_check.js` live on V8.52 (proves the match branch, ticks T2-contracts + T5);
+##      then T4 `verify_all.js` (verify every contract, exit non-zero if any unverified, guard on start). Blockaid
+##      nudge from 09-08 morning local unchanged.
 ## 62.5 ▶ **WHAT IS OPEN, IN ORDER, FOR SESSION 63.**
 ## 62.23 ✅ **CUTOVER DONE 2026-09-04 (owner local afternoon): `preview`+`main` at `00b4690`** (V8.52 repoint
 ##      + `DEFAULT_SPONSOR_POOL` = the owner's revised 10-leader roster, two swapped, dead `run_bigfill_rr.ps1`
