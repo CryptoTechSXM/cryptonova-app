@@ -620,6 +620,43 @@ owner-set, and the session that earned it got five things wrong by ignoring what
 ##      the proving run goes INTO the job's log (`node x.js >> x.log 2>&1; tail x.log`), never to the screen.
 ##      ⚠ Owner pasted a previous OUTPUT back into the VPS shell once (bash "command not found" on log lines): harmless,
 ##      nothing executed — but a pasted line starting with `*/10` globs the cwd; keep blocks self-contained and short.
+## 62.36 ✅✅ **2026-09-07 12:50Z–13:19Z (session 65): BLOCKAID STILL FLAGGED (Peter silent), DUPLICATE FROZEN LINE OFF,
+##      SITE + FAUCET PROBE LIVE — THE 2026-09-04 MONITOR BACKLOG IS COMPLETE.**
+##      ⛔ **BLOCKAID RE-TEST 12:50Z (8:50 AM local), third sample:** Gmail thread read via Chrome — Peter's 09-05 07:57Z
+##      clearance is still Blockaid's last message; the owner's 09-05 22:49 local follow-up is unanswered. Same 62.30 flow
+##      (crypto-nova.app clean, wallet `0xb41A…617c`, Register → Continue with Default → Approve $10; MetaMask was locked,
+##      owner unlocked it himself): side panel **"Spending cap 10 ⚠ Malicious — Review alert", spender `0xc2fCD…d42c7`**,
+##      cancelled unsigned. Identical to 09-05 and 09-06. ▶ Nudge is fair from 09-08 morning local if still silent.
+##      ✅ **62.33's parked duplicate CONFIRMED and DROPPED 13:09Z:** crontab line 68 `7 * * * * … node frozen_matrix_check.js
+##      >> frozen.log` (the pre-wrapper line from 09-04) sat beside line 72 `23 */4 … frozen_watch.sh`. Line 68 now prefixed
+##      `#OFF20260907 duplicate of frozen_watch.sh 23 */4 — `; 74/74 lines; live standalone lines 0, wrapper lines 1;
+##      backup `crontab_pre_frozendup_20260907.txt` (key-bearing, on the box). silent_watch: **16 jobs / 0 not OK** (17→16
+##      = the dropped row). `frozen.log` is now a dead log — no job writes it; leave it.
+##      ✅✅ **SITE + `/api/faucet` PROBE LIVE 13:18Z (monitor backlog, last item):** `site_probe.js` (keepers `ec40ad2` →
+##      `c2bdc9c`, md5 `eab9d69a…` on the box), cron `11-59/15 * * * *` under `/tmp/site_probe.lock` → `site_probe.log`;
+##      crontab 74→75, backup `crontab_pre_siteprobe_20260907.txt`. Seven targets: GET root/www/early/v8 + root
+##      `/status.html` (OK = 200 + "CryptoNova" in body); **admin.crypto-nova.app graded INVERTED** (OK = Vercel login
+##      page via vercel.com, the 09-02 protection; **EXPOSED** = the real site served to an anonymous client — alerts;
+##      DOWN = no answer); **POST `/api/faucet` with the invalid address `0x1` → must be `400 "Invalid wallet address"`**
+##      (api/faucet.js validates before touching key or RPC — proves deploy + cold start + code path, no spend, no key).
+##      ⛔ The probe NEVER prints a body — the pages carry live QuickNode keys ([[cryptonova-vercel-exposure]]).
+##      Telegram on change / 4h reminder / ⚡ recovery via `tg_send.js --source site_probe`; healthy = silent.
+##      **First live run 13:15Z: 6/7 OK, admin DOWN** — "200, 337,725 bytes, served by vercel.com, no marker" = the
+##      login page, i.e. the protection working; the script had no rule for it. Inverted rule added, second run 13:18Z
+##      **7/7 OK** (root 752,915 bytes 684 ms · status.html 121,756 bytes · faucet 400 in 109 ms), ⚡ recovery sent.
+##      ⚠ TWO MISTAKES OF MINE, RECORDED SO THEY ARE NOT REPEATED: (1) the first install block did `git pull` on the box —
+##      **`/root/keeper` is NOT a git checkout; files reach it by scp from the PC** (`KEEPER_VPS_CONFIG.md` line 14,
+##      key `do_keeper`), verify by md5 after every copy; the cron line was installed before the file existed (one crash
+##      line in `site_probe.log` 13:15Z, harmless). (2) `git push` from the Cowork device shell fails (`could not read
+##      Username`) — the shell has no GitHub credentials; pushes are the owner's, from PowerShell. Commits + lock cleanup
+##      from the shell work (delete permission granted per session).
+##      ▶ **MONITOR BACKLOG (2026-09-04) — ALL SIX DONE:** ✅ balance/top-up · ✅ frozen-pair on schedule · ✅ silent-job
+##      · ✅ frozen_matrix_check on a schedule (= frozen_watch.sh; duplicate dropped) · ✅ RPC probe · ✅ site + faucet probe.
+##      Crontab now 75 lines; silent_watch will list `site_probe.js` from its first cron tick (13:26Z).
+##      ▶ NEXT SESSION, IN ORDER: (1) Peter's reply → Blockaid re-test (62.30 flow; nudge from 09-08 if silent);
+##      (2) 62.13 leftovers ("Cycle N" label, Rabby notice, Dashboard $0.00 vs in-matrix); (3) verify `debtors ever
+##      booked : 874` in sf_invariant_check (62.31); (4) PC `C:\CryptoNova-Keepers\.env` still names the dead
+##      `fluent-neat-moon` (62.34) — copy the box's `BASE_SEPOLIA_RPC_URL` line over.
 ## 62.5 ▶ **WHAT IS OPEN, IN ORDER, FOR SESSION 63.**
 ## 62.23 ✅ **CUTOVER DONE 2026-09-04 (owner local afternoon): `preview`+`main` at `00b4690`** (V8.52 repoint
 ##      + `DEFAULT_SPONSOR_POOL` = the owner's revised 10-leader roster, two swapped, dead `run_bigfill_rr.ps1`
