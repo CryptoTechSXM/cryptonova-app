@@ -4,10 +4,18 @@ Written 2026-09-07 (session 66) for a future session of Claude and the owner. En
 mainnet work. `MAINNET_TODO.md` (2026-07-23, V4 era) and `DEPLOY_RUNBOOK.md` "Mainnet Differences"
 (2026-06-17) are superseded by this file; keep them as history only.
 
-Owner's stance (2026-09-07): take the readiness feedback seriously; explore an independent audit; if
-it is out of reach, "go with a small soft launch and do an independent audit in the future".
-Claude's standing position: audit before real funds; if unaffordable, the mitigations in §3 are
-NOT optional. Target: go/no-go review **~2026-09-21**, gated on §1.
+OWNER'S DECISION (2026-09-07, session 66, final — "Ok A, B"): **ONE mainnet deploy, the WHOLE
+project, all ten tiers. No soft launch, no caps, no second deploy or migration.** Earn income first,
+then an independent audit when affordable, "on the confidence of what we built"; if that audit finds
+shortcomings, live with them or rebuild THEN. Reasons given: a soft launch would cost another
+launch + migration; audit firms charge "an arm and a leg"; small firms are not trusted with
+pre-launch code. Plus option B: a small bug bounty and a plain "not yet independently audited"
+line on the site from day one.
+Claude's position on record: launching first then auditing removes the pre-launch code-exposure
+worry (the source is public on BaseScan after launch anyway); the risk of an unaudited ~4k-nSLOC
+custody core is real and UNMEASURED and was stated to the owner plainly; the no-cost conditions
+in §1/§2 are what stand between a green testnet and real money. Target: go/no-go review
+**~2026-09-21**, gated on §1.
 
 The two rules apply here more than anywhere: nothing in this file is "ready" until it has been
 RUN on the target it names. A box that has not been run is not ticked.
@@ -27,26 +35,26 @@ RUN on the target it names. A box that has not been run is not ticked.
       rate REAL members produce, organic wallets only, on V8.52 (live since 09-04)? Needs the
       window stated (start block, end block, wallets counted) and the number, not a feel.
       Instrument: `diag_rescue_seat_outcome.js` / SF debt book (memory `cryptonova-rescue-exposure`).
-- [ ] **G3 Audit decision made** — one of: (a) quote accepted for the ~4k-nSLOC custody core
-      (MatrixLogicLib, FigureEightMatrixV8, PairManagerV8, TierRouter, StabilityFund,
-      MatrixKeeper); (b) soft launch with §3 mitigations in force, audit deferred and DATED.
-      Sizing on record: unique deployed V8.52 money-moving source ~7,000 nSLOC; whole `contracts/`
-      ~10,356 incl. legacy/mocks. Published ranges (not quotes): boutique/solo ~$8k–25k for a
-      2-week core review; mid-tier $15k–70k; contests from ~$37.5k; top firms $60k–150k+.
-      ▶ Next artefact: `AUDIT_SCOPE.md` (file list, nSLOC per file, trust assumptions, known
-      limitations from `SECURITY_REVIEW.md`) so a quote request is one email.
+- [x] **G3 Audit decision — DECIDED 2026-09-07: post-launch, funded from income.** Scope when the
+      time comes: the ~4k-nSLOC custody core (MatrixLogicLib, FigureEightMatrixV8, PairManagerV8,
+      TierRouter, StabilityFund, MatrixKeeper); unique deployed money-moving source ~7,000 nSLOC;
+      whole `contracts/` ~10,356 incl. legacy/mocks. Published ranges (not quotes): boutique/solo
+      ~$8k–25k for a 2-week core review; mid-tier $15k–70k; contests from ~$37.5k; top firms
+      $60k–150k+. `AUDIT_SCOPE.md` is NOT owed before launch; write it when income is there.
+- [ ] **G4 Disclosure line live before the first real registration** (option B): a plain sentence
+      on the site — the contracts are verified on BaseScan but not yet independently audited; an
+      audit is planned from project income. Owner's voice, no legalese, on index.html + faq.html.
+- [ ] **G5 Bug bounty published before launch** (option B): amount tiers set by the owner (policy),
+      what counts (a reproducible bug in the live mainnet contracts or a way to take funds), how to
+      report (cryptocounsels@gmail.com), paid on a confirmed fix. Text on the site + faq.html.
 
 ## 2. POSTURE DECISIONS THE OWNER OWNS (Claude gives options + a recommendation, owner picks)
 
-- [ ] **P1 Launch caps.** MEASURED 2026-09-07: tier fees are fixed at deploy — T1 $10 … T9
-      $5,000, T10 $10,000 (`deploy_v8.js:143-152`). There is NO on-chain "max open tier" or
-      per-member deposit cap; the only gates are `tierGateThreshold[5..10]` (1..50 first-entries,
-      `TierRouter.sol:434-441`, setters `:558-563`) and the whale gate. **So "T1-only launch" is
-      not a switch that exists today.** Options: (a) launch with the current gates and a PUBLISHED
-      soft policy (small tiers only, monitored); (b) add a `maxOpenTier` guard in TierRouter —
-      new code = new audit surface + full suite; (c) deploy only T1–T3 pair managers and leave the
-      upper `tierPairManagers` unset — needs a measured test of what `manualUpgrade` does when the
-      target tier's PM is address(0). ▶ Claude to MEASURE (c) on a local fork before recommending.
+- [x] **P1 Launch caps — DECIDED 2026-09-07: NONE.** All ten tiers open from day one with the
+      deploy-time fees T1 $10 … T9 $5,000, T10 $10,000 (`deploy_v8.js:143-152`) and the existing
+      gates only (`tierGateThreshold[5..10]`, whale gate). MEASURED for the record: there is no
+      on-chain max-open-tier or deposit cap, so the "T1-only" and "deploy only T1–T3 PMs" options
+      were code changes, not switches — both dropped, no fork test owed.
 - [ ] **P2 Pause plan.** `TierRouter.pauseSystem(reason)` / `unpauseSystem()` are `onlyOwner`
       (`:720/:730`) and gate register/upgrade paths (`whenNotPaused`). Decide: who can call it (the
       deployer key today), from where (PC? box?), the trigger list (SF insolvency floor, keeper
@@ -115,7 +123,9 @@ keeper start order, and the owner human test with a $10 real registration + with
 ## 5. NEXT ACTIONS, IN ORDER
 
 1. Blockaid nudge from 09-08 morning local (G1). Re-test after any reply.
-2. Fix T1 (deploy_v8.js W1 seed) + T2 audit (network guard census) — pure tooling, no policy.
-3. Write `AUDIT_SCOPE.md` (G3) so the owner can request quotes.
-4. Measure P1 option (c) on a local fork; bring the owner options + a recommendation.
+2. Prove the T1 fix (deploy_v8.js + seed_w1.js W1 seed — edited, NOT yet run) with the two local
+   runs, then the T2 chainId-guard census — pure tooling, no policy.
+3. P2 pause plan + P3 key custody options → owner picks (policy); P4 incident page.
+4. G4 disclosure line + G5 bounty text — drafted in the owner's voice, owner sets the amounts.
 5. G2 measurement window: agree start block (V8.52 first organic registration) and run it.
+6. `MAINNET_DEPLOY_RUNBOOK.md` (§4) once T1/T2/T4 are landed.

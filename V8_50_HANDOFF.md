@@ -729,6 +729,16 @@ owner-set, and the session that earned it got five things wrong by ignoring what
 ##      ▶ NEXT, IN ORDER (= `MAINNET_READINESS.md` §5): (1) Blockaid nudge from 09-08 morning local, re-test after any
 ##      reply; (2) fix T1 + census T2 (chainId guards across keepers/scripts); (3) `AUDIT_SCOPE.md`; (4) fork-test P1(c);
 ##      (5) agree the G2 measurement window. Nothing else from 62.36/62.37 is open.
+##      ⛔ **OWNER DECISION 14:55Z–15:20Z local afternoon (overrides the §5 order above): "Ok A, B" — ONE mainnet deploy,
+##      the WHOLE project, all ten tiers, NO soft launch / caps / second deploy; audit POST-launch from income; plus a
+##      bug bounty (B) and a plain "not yet independently audited" line on the site. His reasons + Claude's stated risk
+##      position are in `MAINNET_READINESS.md` (rewritten: G3 decided, G4 disclosure, G5 bounty added, P1 = none,
+##      §5 reordered; AUDIT_SCOPE.md and the P1(c) fork test are DROPPED). ✅ T1 fix EDITED in `deploy_v8.js` (external
+##      USDC → require W1 balance ≥ T1_FEE, fail loud; non-testnet W1 failure now rethrows) and `seed_w1.js` (same
+##      guard); `node --check` clean on both; **NOT YET RUN** — the device shell cannot fetch solc (proxy 403), so the
+##      proving runs are the owner's from PowerShell on `--network hardhat` with `ADDRESSES_FILE=deployed_addresses_
+##      localtest.json` (scratch, delete after). ▶ NEXT: run 1 (MockUSDC path, expect `Minted $10 USDC to W1 (MockUSDC)`
+##      + W1 registered), then run 2 on a `hardhat node` for the external-USDC path (expect the loud balance error).
 ## 62.5 ▶ **WHAT IS OPEN, IN ORDER, FOR SESSION 63.**
 ## 62.23 ✅ **CUTOVER DONE 2026-09-04 (owner local afternoon): `preview`+`main` at `00b4690`** (V8.52 repoint
 ##      + `DEFAULT_SPONSOR_POOL` = the owner's revised 10-leader roster, two swapped, dead `run_bigfill_rr.ps1`

@@ -1049,8 +1049,21 @@ async function main() {
           await (await deployer.sendTransaction({ to: W1_ADDR, value: ethers.parseEther("0.02") })).wait();
           console.log(`  ↳  Funded W1 with 0.02 ETH for gas`);
         }
-        await (await usdc.mint(W1_ADDR, T1_FEE)).wait();
-        console.log(`  ↳  Minted $${Number(T1_FEE) / 1e6} USDC to W1`);
+        // MAINNET_READINESS §3 T1 (2026-09-07): real USDC has no public mint(). When USDC_ADDRESS
+        // points at an external token, W1 must ALREADY hold the T1 fee — fail loud, never mint.
+        const w1Usdc = await usdc.balanceOf(W1_ADDR);
+        if (process.env.USDC_ADDRESS) {
+          if (w1Usdc < T1_FEE) {
+            throw new Error(
+              `W1 ${W1_ADDR} holds $${Number(w1Usdc) / 1e6} USDC on external USDC ${usdcAddr}; ` +
+              `needs $${Number(T1_FEE) / 1e6}. Fund W1 first — this script never mints a real token.`
+            );
+          }
+          console.log(`  ↳  W1 holds $${Number(w1Usdc) / 1e6} USDC on external USDC — no mint`);
+        } else if (w1Usdc < T1_FEE) {
+          await (await usdc.mint(W1_ADDR, T1_FEE)).wait();
+          console.log(`  ↳  Minted $${Number(T1_FEE) / 1e6} USDC to W1 (MockUSDC)`);
+        }
         await (await usdc.connect(w1Wallet).approve(T1_PM_ADDR, T1_FEE)).wait();
         console.log(`  ↳  W1 approved T1 PM (${T1_PM_ADDR.slice(0,10)})`);
         await (await tierRouter.connect(w1Wallet).register(ethers.ZeroAddress, { gasLimit: 3_000_000 })).wait();
@@ -1063,6 +1076,8 @@ async function main() {
       console.log(`  ⚠  W1 registration failed: ${e.reason || e.message}`);
       if (e.data) console.log(`     Revert data: ${e.data}`);
       console.log(`     Run scripts/seed_w1.js manually after deploy.`);
+      // On a non-testnet a silent W1 miss leaves defaultReferrer unset for real members. Stop.
+      if (!_isTestnet) throw e;
     }
   }
 

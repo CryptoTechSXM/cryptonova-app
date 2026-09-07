@@ -96,7 +96,10 @@ async function main() {
 
   // ── 2. Mint USDC to W1 ─────────────────────────────────────────────────────
   const usdcBal = await usdc.balanceOf(W1_ADDR);
-  if (usdcBal < T1_FEE) {
+  if (usdcBal < T1_FEE && process.env.USDC_ADDRESS) {
+    // MAINNET_READINESS §3 T1: external USDC cannot be minted — fund W1 first.
+    throw new Error(`W1 holds $${Number(usdcBal) / 1e6} USDC on external USDC ${addrs.usdc}; needs $${Number(T1_FEE) / 1e6}. Fund W1, then rerun.`);
+  } else if (usdcBal < T1_FEE) {
     console.log(`── Minting $${Number(T1_FEE) / 1e6} USDC to W1…`);
     await (await usdc.mint(W1_ADDR, T1_FEE)).wait();
     console.log(`   ✓ Minted`);
