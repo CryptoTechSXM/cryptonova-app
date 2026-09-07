@@ -788,6 +788,19 @@ owner-set, and the session that earned it got five things wrong by ignoring what
 ##      now SPAWNS verify_gate and fails its verdict on non-zero (`SKIP_VERIFY_GATE=1` for local books, printed as
 ##      SKIP not PASS). ⚠ UNRUN LIVE: the gate against V8.52 (needs BaseScan API from the PC) — expect 46 VERIFIED /
 ##      wallets listed / exit 0. Old names survive only in this handoff's history.
+##      ✅ T4 LIVE-PROVEN (owner, 46 VERIFIED / 1 wallet / exit 0), pushed `30532f2`. ✅ P2 + P3 DECIDED by the owner
+##      (automated pause via pause-only role; hardware-wallet owner now, Safe later) — full record in
+##      `C:\CryptoNova-Mainnet-App\MAINNET_READINESS.md` §2 (`533c889`, `f648729`, `483748e`, `28c6a70`).
+##      ✅ **V8.53 PAUSER ROLE BUILT + PROVEN (`f8cd4b3`):** `TierRouter.pauser` + `setPauser()` (onlyOwner) +
+##      `pauseSystem()` owner-or-pauser (`TRAuth` otherwise; unpause/resume stay onlyOwner). 6/6 `V8_53_Pauser.test.js`
+##      + full Elevator suite green (146 passing, owner's PC 23:50Z). ⛔ SIZE: 24,345 → **24,509 bytes, 67 under EIP-170** —
+##      TierRouter is AT ITS CEILING (R15); anything further goes in TierRouterLib. NOT yet pushed.
+##      ▶ NEXT, IN ORDER: (1) `postdeploy_check.js` gains a `pauser == watchdog key` row (R15, owed); (2) the VPS watchdog
+##      keeper (`sf_floor_watchdog.js` in CryptoNova-Keepers: read SF totalBalance vs stabilityFloor, call pauseSystem
+##      from the PAUSER key, Telegram alert) — needs the T9 chain-parametrised env; (3) hardhat test that withdrawals
+##      still work while paused (P2 promise to members); (4) `transfer_ownership.js` — NOTE TierRouter is Ownable2Step
+##      (transferOwnership + acceptOwnership from the hardware wallet); census which of the 46 are Ownable/2Step first;
+##      (5) P4 incident page; (6) G4/G5 text. Blockaid nudge from 09-08 morning local unchanged.
 ## 62.5 ▶ **WHAT IS OPEN, IN ORDER, FOR SESSION 63.**
 ## 62.23 ✅ **CUTOVER DONE 2026-09-04 (owner local afternoon): `preview`+`main` at `00b4690`** (V8.52 repoint
 ##      + `DEFAULT_SPONSOR_POOL` = the owner's revised 10-leader roster, two swapped, dead `run_bigfill_rr.ps1`
