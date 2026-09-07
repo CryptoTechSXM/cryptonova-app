@@ -772,6 +772,14 @@ owner-set, and the session that earned it got five things wrong by ignoring what
 ##      ▶ NEXT: owner runs `postdeploy_check.js` live on V8.52 (proves the match branch, ticks T2-contracts + T5);
 ##      then T4 `verify_all.js` (verify every contract, exit non-zero if any unverified, guard on start). Blockaid
 ##      nudge from 09-08 morning local unchanged.
+##      ✅ **MAINNET HOME MOVED (owner, 2026-09-07 ~22:10Z: "we have a mainnet file folder we need to do everything for
+##      mainnet there"):** `MAINNET_READINESS.md` now LIVES in `C:\CryptoNova-Mainnet-App` (`18154e5`, branch `main`,
+##      NOT yet pushed); this repo's copy is a pointer. Its new §0 says what stays here (code + deploy scripts, one
+##      source) and inventories that repo (July/V8.38-era: mainnet/ ea/ admin/ Vercel roots, two .env templates,
+##      mainnet_wallet_setup.md). ⛔ MEASURED: `mainnet/index.html` = V8.15, 4,216 lines vs Testnet-App V8.52 11,674
+##      lines, 1,857/9,134 unique lines shared → T7 = copy-and-repoint the current app at cutover, never patch.
+##      Push `d562336` DONE by the owner (v8.1). ▶ NEXT SESSION READS `C:\CryptoNova-Mainnet-App\MAINNET_READINESS.md`
+##      FIRST for mainnet; this handoff stays the entry point for the testnet/V8.5x line.
 ## 62.5 ▶ **WHAT IS OPEN, IN ORDER, FOR SESSION 63.**
 ## 62.23 ✅ **CUTOVER DONE 2026-09-04 (owner local afternoon): `preview`+`main` at `00b4690`** (V8.52 repoint
 ##      + `DEFAULT_SPONSOR_POOL` = the owner's revised 10-leader roster, two swapped, dead `run_bigfill_rr.ps1`
