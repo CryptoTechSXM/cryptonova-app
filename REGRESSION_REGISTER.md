@@ -448,3 +448,19 @@ DRIFT. Re-applied with `set_stability_floor.js --from-t1` (tx `0x13c5edcb…`).
 `graduationEnabled` off the NEW book; exits 1 on any FAIL or failed read. Runbook line: run it
 after BaseScan verification and before any frontend/keeper repoint. A setting added to a
 future deployment that the deploy run does not make goes INTO this script the same day.
+
+## R15 - TierRouter is at its EIP-170 ceiling; a per-deployment role is a postdeploy_check row
+
+**WHAT (2026-09-07, session 66, V8.53 pauser role — MAINNET_READINESS.md §2 P2):** adding a
+pause-only `pauser` address + `setPauser()` + owner-or-pauser `pauseSystem()` to `TierRouter`
+cost 164 bytes: 24,345 → **24,509 bytes, 67 under 24,576**. That is the ceiling. Any further
+TierRouter addition goes into `TierRouterLib` (delegatecall) or replaces something; do not try
+to fit it in the router. `pauseSystem` non-owner now reverts `TRAuth` (was
+`OwnableUnauthorizedAccount`) — `test/V8Elevator.test.js` updated.
+
+**WHY IT IS A REGISTER ENTRY:** `pauser` is a PER-DEPLOYMENT setting the deploy script does not
+make (same shape as R14's `upkeepCaller`). A fresh deploy has `pauser == address(0)` and the
+VPS watchdog's pause silently reverts `TRAuth`. **CHECKED BY:** `scripts/postdeploy_check.js`
+must gain a `pauser == <watchdog key>` row before the mainnet deploy (owed; not yet added).
+Tests: `test/V8_53_Pauser.test.js` (6) — pauser pauses, cannot unpause/resume, cannot touch
+setters, owner clears it, double-pause reverts.

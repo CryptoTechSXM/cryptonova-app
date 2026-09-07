@@ -266,6 +266,11 @@ contract TierRouter is Ownable2Step {
     /// @notice DAO governance contract. Co-governs params below alongside owner --
     ///         neither replaces the other (owner keeps emergency backstop).
     address public governance;
+    /// @notice V8.53 (MAINNET_READINESS P2): pause-ONLY key. May call pauseSystem() and nothing
+    ///         else -- never unpause, never a setter. Held by the VPS watchdog keeper so the SF-floor
+    ///         breach can pause automatically without the owner key leaving the hardware wallet.
+    ///         address(0) = disabled. No event, no zero-check: TierRouter is ~230 bytes under EIP-170.
+    address public pauser;
 
     // ─── V8.35: Autonomous pair factory ──────────────────────────────────────
     /// @notice MatrixPairFactory. When wired, factory can call registerMatrix()
@@ -465,6 +470,11 @@ contract TierRouter is Ownable2Step {
         if (_gov == address(0)) revert TRZero();
         governance = _gov;
         emit GovernanceSet(_gov);
+    }
+
+    /// @notice V8.53: set or clear (address(0)) the pause-only key. Owner only.
+    function setPauser(address _p) external onlyOwner {
+        pauser = _p;
     }
 
     // ─── Admin: setup ─────────────────────────────────────────────────────────
@@ -717,7 +727,9 @@ contract TierRouter is Ownable2Step {
     /// without waiting for the inactivity thresholds to trip on their own.
     /// Does NOT block withdrawals -- members can still withdraw funds already
     /// in the matrices while paused; this only stops NEW entries/upgrades.
-    function pauseSystem(string calldata reason) external onlyOwner {
+    /// V8.53: callable by the owner OR the pause-only `pauser` key (P2 watchdog).
+    function pauseSystem(string calldata reason) external {
+        if (msg.sender != owner() && msg.sender != pauser) revert TRAuth();
         if (systemPaused) revert TRState();
         systemPaused = true;
         emit SystemPaused(reason, 0, 0);

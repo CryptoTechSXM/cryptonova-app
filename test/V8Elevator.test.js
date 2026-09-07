@@ -502,8 +502,9 @@ describe("V8Elevator — T1 → T2 upgrade cycle (MSIZE=7)", function () {
     it("rejects pauseSystem() from a non-owner", async function () {
       const { tierRouter, w1 } = await loadFixture(deployV8Fixture);
 
+      // V8.53: pauseSystem is owner-or-pauser, so the contract's own TRAuth fires, not Ownable's.
       await expect(tierRouter.connect(w1).pauseSystem("not the owner"))
-        .to.be.revertedWithCustomError(tierRouter, "OwnableUnauthorizedAccount");
+        .to.be.revertedWithCustomError(tierRouter, "TRAuth");
     });
 
     it("rejects pauseSystem() when already paused", async function () {
