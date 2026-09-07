@@ -667,7 +667,11 @@ owner-set, and the session that earned it got five things wrong by ignoring what
 ##      itself (`sf_invariant_state.pre_<sf10>_<ms>.json`) and the cursor rewinds to SEED_BLOCK; a progress line every 20
 ##      scan windows (only visible on a long rescan). Every future redeploy resets itself. ▶ PENDING THE OWNER'S BOX STEP:
 ##      scp + md5 + one proving run INTO `sf_invariant.log` (62.36 rule) — expected `state was for SF 0x… with 874
-##      debtors -> archived …` then the TRUE V8.52 count. Record that number here when it lands.
+##      debtors -> archived …` then the TRUE V8.52 count. ✅ **LANDED 13:38Z (owner, box, md5 match):** `state was for SF
+##      (unkeyed) with 874 debtors -> archived sf_invariant_state.pre_unkeyed_1788788331497.json`, rescan 45060000→46510021
+##      in ~50s, **`debtors ever booked : 24`** (all after block 46320000 = V8.52's life), `sum(memberDebt) $32.739016 ==
+##      loaned $39.776182 − repaid $7.037166`, totalBalance == SF USDC $786.809844, INVARIANTS OK. **874 → 24.** The
+##      archive (39 KB) stays on the box as the record of the old union; the new state is 1.2 KB.
 ##      ✅ **62.13 leftovers, frontend `admin` `367a614`:** (3) matrix-view banner `Cycle N` was `mc.rotationCount()` — the
 ##      MATRIX's rotation count, not tier cycles — now reads `This matrix has cycled N×`, and both `.catch(()=>0n)` reads
 ##      (`:8704`, `:8799`) are `null` → unknownBadge, never "0" (the [[cryptonova-frontend-truth]] shape). (6) `Withdraw
