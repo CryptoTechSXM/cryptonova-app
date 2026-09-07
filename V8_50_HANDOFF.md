@@ -751,6 +751,16 @@ owner-set, and the session that earned it got five things wrong by ignoring what
 ##      MatA root, `setDefaultReferrer → W1`. Scratch `scripts/deployed_addresses_localtest.json` deleted after.
 ##      ⚠ STILL UNRUN: the external-USDC BALANCE guard branch itself (needs a chain where USDC_ADDRESS has code and W1
 ##      is short — a `hardhat node` two-window run, or the mainnet fork). Marked UNVERIFIED in MAINNET_READINESS §3 T1.
+##      ✅ **RUN 2 PROVEN (owner, two windows, `npx hardhat node` + `--network localhost`):** 2a = full deploy onto the
+##      persistent local chain (log `2026-09-07T20-05-48-112Z_*`, OK, MockUSDC `0x5FbDB…` with code) — **took 1h13m by the
+##      owner's clock**, NOT the 1–3 min Claude quoted (the in-process `--network hardhat` run is ~1 min); cause of the
+##      slowdown UNVERIFIED and parked (ethers' 4s receipt polling alone would give ~15 min, so something else adds to it).
+##      ▶ RULE: use `--network hardhat` for any proof that does not need the chain to outlive the run. 2b = `seed_w1.js`
+##      against that chain with `SEED_W1_KEY` = hardhat account #9 (public test key, $0 USDC) → **`Error: W1 holds $0 USDC
+##      on external USDC 0x5FbDB…; needs $10. Fund W1, then rerun.`** — the external-USDC balance guard REFUSES instead of
+##      minting. `deploy_v8.js` carries the same guard with the same shape (`:1079`), exercised only via seed_w1 — noted.
+##      **T1 is CLOSED.** Scratch `deployed_addresses_localtest.json` deleted; `t1_run*.log` + `logs/runs/` are gitignored.
+##      Owner's mainnet posture, for the record, is 62.38's "Ok A, B" — nothing in the T1 work changes it.
 ## 62.5 ▶ **WHAT IS OPEN, IN ORDER, FOR SESSION 63.**
 ## 62.23 ✅ **CUTOVER DONE 2026-09-04 (owner local afternoon): `preview`+`main` at `00b4690`** (V8.52 repoint
 ##      + `DEFAULT_SPONSOR_POOL` = the owner's revised 10-leader roster, two swapped, dead `run_bigfill_rr.ps1`
