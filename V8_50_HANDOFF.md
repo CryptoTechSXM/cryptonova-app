@@ -681,9 +681,13 @@ owner-set, and the session that earned it got five things wrong by ignoring what
 ##      "Simulation Not Supported / Unknown Signature Type / Custom Network" on Base Sepolia. All 5 inline script blocks
 ##      pass `node --check`. NOT yet pushed (shell has no GitHub creds) and NOT yet on preview/main — owner pushes `admin`,
 ##      then the ladder.
-##      ▶ REMAINING FROM 62.36's LIST: (1) Blockaid — nudge from 09-08 morning local if Peter still silent; (4) PC
-##      `C:\CryptoNova-Keepers\.env` still `fluent-neat-moon` — block prepared (ssh-pull the box's line straight into
-##      the file, no key through chat), waits on step 1's report.
+##      ✅ **PC `.env` FIXED 13:45Z (owner, PowerShell):** the box's `BASE_SEPOLIA_RPC_URL` line ssh-pulled straight into
+##      `C:\CryptoNova-Keepers\.env` (key never on screen); host now `thrilling-newest-seed`, backup `.env.bak_pre_rpcfix_20260907`
+##      (gitignored, key-bearing). ✅ **PUSHED 13:46Z:** keepers `main` c2bdc9c→de2a0bb, contracts `v8.1` 99558d1→211a20d,
+##      frontend `admin` af58978→367a614 (Vercel builds the admin project from it; preview/main NOT yet laddered).
+##      ▶ REMAINING FROM 62.36's LIST: (1) Blockaid — nudge from 09-08 morning local if Peter still silent.
+##      ▶ NEXT: eyeball 367a614 on admin.crypto-nova.app (Withdraw card note, matrix banner "This matrix has cycled N×",
+##      FAQ Rabby line), then ladder admin → preview → main.
 ## 62.5 ▶ **WHAT IS OPEN, IN ORDER, FOR SESSION 63.**
 ## 62.23 ✅ **CUTOVER DONE 2026-09-04 (owner local afternoon): `preview`+`main` at `00b4690`** (V8.52 repoint
 ##      + `DEFAULT_SPONSOR_POOL` = the owner's revised 10-leader roster, two swapped, dead `run_bigfill_rr.ps1`
