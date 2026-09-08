@@ -10,7 +10,11 @@ const { deployTwoTiers } = require("./V8_48_BulkPartial.test.js");
 const { run } = require("../scripts/transfer_ownership.js");
 const { accept } = require("../scripts/accept_ownership.js");
 
-const quiet = () => {};
+// capture the scripts' output; on a failed assertion the FAIL lines are in the message, never guessed
+const lines = [];
+const quiet = (l) => { lines.push(String(l)); };
+const failsOf = (r) => `${r.fails} FAIL: ${lines.filter((l) => l.includes("FAIL ")).join(" | ") || "-"}`;
+beforeEach(() => { lines.length = 0; });
 
 async function bookFixture() {
   const ctx = await deployTwoTiers();
@@ -41,7 +45,7 @@ describe("V8.53 — ownership hand-over rehearsal (transfer_ownership.js + accep
     const { book, owner } = await bookFixture();
     const r = await run({ mode: "census", book, signer: owner, log: quiet });
     expect(r.rows).to.equal(11);
-    expect(r.fails).to.equal(0);
+    expect(r.fails, failsOf(r)).to.equal(0);
   });
 
   it("OT2: propose from the owner → every 2-step row pending, 1-step row moved, roles granted; a stranger cannot propose", async () => {
@@ -51,7 +55,7 @@ describe("V8.53 — ownership hand-over rehearsal (transfer_ownership.js + accep
     expect(bad.txs).to.equal(0);
 
     const r = await run({ mode: "propose", addr: hw.address, book, signer: owner, log: quiet });
-    expect(r.fails).to.equal(0);
+    expect(r.fails, failsOf(r)).to.equal(0);
     expect(r.txs, "9 transferOwnership (2-step) + 1 transferOwnership (1-step) + 1 grantRole").to.equal(11);
     expect(await ctx.tr.owner(), "2-step: owner unchanged until accept").to.equal(owner.address);
     expect(await ctx.tr.pendingOwner()).to.equal(hw.address);
@@ -68,7 +72,7 @@ describe("V8.53 — ownership hand-over rehearsal (transfer_ownership.js + accep
     const { ctx, book, hw, owner, stranger } = await bookFixture();
     await run({ mode: "propose", addr: hw.address, book, signer: owner, log: quiet });
     const before = await run({ mode: "verify", addr: hw.address, book, signer: owner, log: quiet });
-    expect(before.fails, "9 two-step rows still owned by the old owner").to.equal(9);
+    expect(before.fails, "9 two-step rows still owned by the old owner — " + failsOf(before)).to.equal(9);
 
     const wrong = await accept({ book, signer: stranger, log: quiet });
     expect(wrong.fails, "a stranger cannot accept").to.equal(9);
@@ -82,7 +86,7 @@ describe("V8.53 — ownership hand-over rehearsal (transfer_ownership.js + accep
     expect(await ctx.matB2.owner()).to.equal(hw.address);
 
     const after = await run({ mode: "verify", addr: hw.address, book, signer: owner, log: quiet });
-    expect(after.fails).to.equal(0);
+    expect(after.fails, failsOf(after)).to.equal(0);
     const a2 = await accept({ book, signer: hw, log: quiet });
     expect(a2.done, "idempotent accept").to.equal(0);
     expect(a2.skipped).to.equal(9);
@@ -104,7 +108,7 @@ describe("V8.53 — ownership hand-over rehearsal (transfer_ownership.js + accep
     await run({ mode: "propose", addr: hw.address, book, signer: owner, log: quiet });
     await accept({ book, signer: hw, log: quiet });
     const selfie = await run({ mode: "renounce-roles", addr: hw.address, book, signer: hw, log: quiet });
-    expect(selfie.fails, "refuses to revoke the signer's own role").to.equal(1);
+    expect(selfie.fails, "refuses to revoke the signer's own role — " + failsOf(selfie)).to.equal(1);
     const fromOld = await run({ mode: "renounce-roles", addr: owner.address, book, signer: owner, log: quiet });
     expect(fromOld.fails, "refuses when signer == the address being revoked").to.equal(1);
     const ok = await run({ mode: "renounce-roles", addr: owner.address, book, signer: hw, log: quiet });

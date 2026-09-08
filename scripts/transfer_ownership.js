@@ -69,10 +69,14 @@ async function probe(c, row, who) {
   const r = { owner: null, pending: null, roles: {} };
   if (row.kind !== "roles") {
     r.owner = await c.owner();
-    if (row.kind === "2step") r.pending = await c.pendingOwner();   // a 1-step contract has no pendingOwner → BAD_DATA = table wrong
+    if (row.kind === "2step") r.pending = await c.pendingOwner();   // a 1-step contract has no pendingOwner → the call throws = table wrong
     else {
-      try { await c.pendingOwner(); throw new Error(`${row.label}: table says Ownable but pendingOwner() answered — it is Ownable2Step; fix the table`); }
-      catch (e) { if (e.code !== "BAD_DATA" && e.code !== "CALL_EXCEPTION") throw e; }
+      // a 1-step Ownable has no pendingOwner(); the call must FAIL. Any error shape counts (ethers gives
+      // BAD_DATA/CALL_EXCEPTION on a live node; hardhat's in-process node wraps the revert differently —
+      // measured 2026-09-08, the code-specific check produced a false FAIL on MatrixKeeper).
+      let answered = false;
+      try { await c.pendingOwner(); answered = true; } catch (_) { /* expected */ }
+      if (answered) throw new Error(`${row.label}: table says Ownable but pendingOwner() answered — it is Ownable2Step; fix the table`);
     }
   } else {
     for (const name of row.roles) {
