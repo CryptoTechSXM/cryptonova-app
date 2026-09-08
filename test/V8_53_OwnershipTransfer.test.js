@@ -14,7 +14,9 @@ const quiet = () => {};
 
 async function bookFixture() {
   const ctx = await deployTwoTiers();
-  const mk = await (await ethers.getContractFactory("MatrixKeeper")).deploy(await ctx.tr.getAddress(), await ctx.sf.getAddress());
+  const mkLib = await (await ethers.getContractFactory("MatrixKeeperLib")).deploy();
+  const mk = await (await ethers.getContractFactory("MatrixKeeper", { libraries: { MatrixKeeperLib: await mkLib.getAddress() } }))
+    .deploy(await ctx.tr.getAddress(), await ctx.sf.getAddress());   // linked like deploy_v8.js does
   const book = {
     chainId: 31337,
     treasury: await ctx.treasury.getAddress(),
