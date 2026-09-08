@@ -96,7 +96,7 @@ async function deployTwoTiers() {
   await tr.setTierVelocityGreen(1, true);       // T2 open for upgrade
   await tr.setStabilityFund(await sf.getAddress());
 
-  return { usdc, tr, pm1, pm2, matA1, matB1, matA2, matB2, sf, owner, W1, devOps, sigs };
+  return { usdc, tr, pm1, pm2, matA1, matB1, matA2, matB2, sf, owner, W1, devOps, sigs, treasury, cnova };
 }
 
 async function reg(ctx, signer, referrer) {
@@ -259,6 +259,7 @@ describe("V8.48 item 3 — bulkWithdraw(uint256): one-signature partial withdraw
   });
 });
 
-// Fixture reuse (V8_53_WithdrawWhilePaused.test.js). Node caches this module, so requiring it from
-// another test file does NOT register the describe() above a second time.
+// Fixture reuse (V8_53_WithdrawWhilePaused.test.js). Requiring this file registers the describe()
+// above ONCE (Node's module cache) — so running the V8.53 file alone also runs the 6 BP cases
+// (measured 2026-09-08: 6 BP + 6 WP + 6 pauser = 18 passing); it never registers them twice.
 module.exports = { deployTwoTiers, reg, completeCycle, seedTwoTierEarnings, FEE1, FEE2 };

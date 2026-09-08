@@ -463,6 +463,18 @@ async function main() {
   const opsWallet        = process.env.OPS_WALLET_ADDRESS        || deployerAddr;
   const admin            = process.env.ADMIN_WALLET_ADDRESS      || deployerAddr;
   const liquidityReserve = process.env.LIQUIDITY_RESERVE_ADDRESS || opsWallet;
+  // ⛔ R16 (2026-09-08, session 67): `admin` becomes owner() of ~40 contracts at birth, and this
+  // script then WIRES them with onlyOwner setters signed by `deployer` (StabilityFund.setMatrixKeeper
+  // :770 is the first). An admin that is not the deployer — the old template's "or a Gnosis Safe
+  // address" — would therefore die mid-deploy with 46 half-wired contracts. Ownership goes to the
+  // hardware wallet / Safe AFTER deploy, via scripts/transfer_ownership.js (P3). Refuse up front.
+  if (admin.toLowerCase() !== deployerAddr.toLowerCase()) {
+    throw new Error(
+      `ADMIN_WALLET_ADDRESS (${admin}) is not the deployer (${deployerAddr}). The deploy wires contracts with ` +
+      `onlyOwner calls signed by the deployer, so a different owner at birth breaks the deploy mid-way. ` +
+      `Leave ADMIN_WALLET_ADDRESS unset (= deployer) and hand ownership over afterwards with scripts/transfer_ownership.js.`
+    );
+  }
 
   // ⛔ THE RELEASE NAME IS READ FROM ADDRESSES_FILE, NOT HARDCODED — fixed 2026-08-31.
   // It said "V8.50 Deploy" while deploying V8.51, so the run log named the wrong release.
