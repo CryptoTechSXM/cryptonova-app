@@ -801,6 +801,28 @@ owner-set, and the session that earned it got five things wrong by ignoring what
 ##      still work while paused (P2 promise to members); (4) `transfer_ownership.js` — NOTE TierRouter is Ownable2Step
 ##      (transferOwnership + acceptOwnership from the hardware wallet); census which of the 46 are Ownable/2Step first;
 ##      (5) P4 incident page; (6) G4/G5 text. Blockaid nudge from 09-08 morning local unchanged.
+##      ✅ **SESSION 67 (2026-09-08, 14:26Z–): items (1)(2)(3) of that list BUILT.** (1) `postdeploy_check.js`
+##      pauser row `abe4ce9`: `n/a` on a pre-V8.53 router (empty return → BAD_DATA, the V8.52 shape), PASS/FAIL vs
+##      `PAUSER_WALLET`, and on chainId 8453 a FAIL unless pauser == PAUSER_WALLET; `scripts/set_pauser.js` (owner
+##      setter, refuses the owner/keeper addresses, bounded read-back like set_upkeep_caller). PROVEN 8/8 branches
+##      OFFLINE with `scripts/harness/postdeploy_offline.js` — a `-r` preload that patches ethers'
+##      `JsonRpcProvider.prototype._send` with canned answers (the device shell has no RPC and cannot fetch solc;
+##      `send` alone is not enough because `getNetwork()` goes through `_send`). (2) keepers `b61c6a6`:
+##      `keeper_env.js` (T9 — chain from the book, assertChain, Telegram) + `sf_floor_watchdog.js` (P2 automated
+##      pause from `PAUSER_PRIVATE_KEY`; never unpauses; refuses if on-chain pauser ≠ its key); 7/7 offline via
+##      `harness/watchdog_offline.js`. ⚠ The live `pauseSystem` tx is UNRUN until a V8.53 chain exists (Sepolia
+##      private deploy first — `deployed_addresses_v8_53_private`). Keepers' `deployed_addresses_v8_52.json`
+##      +`chainId: 84532` (repo copy). (3) `test/V8_53_WithdrawWhilePaused.test.js` `c63f194` (6 cases on the
+##      V8_48_BulkPartial two-tier fixture, now exported) — OWNER RUNS; result to be recorded here.
+##      ⛔ MEASURED T9 owner-key census (in `MAINNET_READINESS.md` §3 T9): the only owner-only call in the 11 live
+##      cron jobs is `system_keeper` T2_AUTO_GATE → `setTierVelocityGreen` (owner or the MatrixKeeper CONTRACT).
+##      Mainnet box gets NO deployer key; owner decides how T2 opens (80% rule vs one hardware-wallet tx).
+##      Blockaid: Peter still silent (thread last = owner's 09-05 follow-up); nudge DRAFTED with the mainnet /
+##      new-domain heads-up, awaiting the owner's "send". Git leftovers (HEAD.lock, tmp_obj_*) appear after EVERY
+##      commit through the device mount in all three repos — rm them after each commit (delete permission per repo).
+##      ▶ NEXT, IN ORDER: (a) record the test result; (b) `transfer_ownership.js` — census which of the 46 book rows
+##      are Ownable / Ownable2Step first; (c) wire the 11 live keepers to `keeper_env.js`; (d) owner's T2-open
+##      decision; (e) P4 incident page; (f) G4/G5 text. Nothing pushed by Claude this session (no credentials).
 ## 62.5 ▶ **WHAT IS OPEN, IN ORDER, FOR SESSION 63.**
 ## 62.23 ✅ **CUTOVER DONE 2026-09-04 (owner local afternoon): `preview`+`main` at `00b4690`** (V8.52 repoint
 ##      + `DEFAULT_SPONSOR_POOL` = the owner's revised 10-leader roster, two swapped, dead `run_bigfill_rr.ps1`
