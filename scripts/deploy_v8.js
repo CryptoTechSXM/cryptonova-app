@@ -168,6 +168,8 @@ function tierChainPay(tierNum) { return CHAIN_PAY_ALL; }
 // ── Helpers ───────────────────────────────────────────────────────────────────
 const fmt   = a   => `${a.slice(0,10)}…`;
 const sleep = ms  => new Promise(r => setTimeout(r, ms));
+
+const { nonceVerdict } = require("./nonce_verdict");   // R17 — pure, proven by scripts/harness/nonce_verdict_test.js
 function sep(label = "") {
   if (label) console.log(`\n  ── ${label} ${"─".repeat(Math.max(1, 56 - label.length))}`);
   else        console.log("  " + "─".repeat(60));
@@ -387,6 +389,21 @@ async function main() {
   const _origSend = nonceMgr.sendTransaction.bind(nonceMgr);
   nonceMgr.sendTransaction = async (tx) => {
     await sleep(8000);
+
+    // ⛔ R17 (2026-09-08): the deployer wallet must be QUIET for the whole run. NonceManager
+    // numbers our transactions locally; if ANOTHER process (the VPS keepers sign with
+    // DEPLOYER_PRIVATE_KEY — rr_keeper, system_keeper) sends from this wallet mid-deploy, the
+    // chain's pending count runs AHEAD of ours and our next send dies as "replacement
+    // transaction underpriced" (attempt 1 of the V8.53 private deploy, 488 s in). Measure it
+    // before every send: chain ahead = foreign transaction, abort with the cause; chain behind
+    // = a lagging node (rpc_resilience territory), say so and continue on the local nonce.
+    if (!["hardhat", "localhost"].includes(require("hardhat").network.name)) {
+      const expectedNext = Number(await nonceMgr.getNonce("pending"));
+      const chainPending = Number(await ethers.provider.getTransactionCount(rawSigner.address, "pending"));
+      const v = nonceVerdict(expectedNext, chainPending);
+      if (v.action === "foreign") throw new Error(v.msg);
+      if (v.action === "lag")     console.log(`  ⚠️  ${v.msg}`);
+    }
 
     // ⛔ 28.1 guard: only for CONTRACT CALLS (a deployment has no `to`, and those
     // never failed). Deployments keep ethers' own estimate untouched.

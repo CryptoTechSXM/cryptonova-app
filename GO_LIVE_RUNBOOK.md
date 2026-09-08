@@ -29,6 +29,19 @@ crontab -l | grep -v "^#"
 Should print nothing.
 *Why: keepers sign transactions; any that fires mid-deploy corrupts the deploy nonce.*
 
+**0.2-PRIVATE (R17, 2026-09-08) — for a PRIVATE/gate deploy where the community keepers must keep
+running, the crontab stays; silence only the DEPLOYER-signing jobs with their kill switches:**
+```
+cd /root/keeper && touch rr_keeper.OFF system_keeper.OFF && ls -la rr_keeper.OFF system_keeper.OFF && grep -c '^KEEPER_PRIVATE_KEY=' .env && date -u
+```
+🌐VPS — the `grep -c` must print `1` (copay/fastlane then sign with the keeper key, not the deployer).
+**Then WAIT 5 FULL MINUTES before deploying** — the switch is read only at the START of a keeper run
+(`rr_keeper.js:387`), so a rescue/upgrade tick already running keeps sending until its budget ends.
+After the deploy: `rm /root/keeper/rr_keeper.OFF /root/keeper/system_keeper.OFF`.
+*Why: attempt 1 of the V8.53 private deploy died 488 s in on `replacement transaction underpriced` —
+`rr_keeper` job B/C USDC transfers from the deployer wallet at :17 took the deploy's next nonce
+(BaseScan, blocks 46565193-202). See REGRESSION_REGISTER.md R17.*
+
 **0.3** Verify the signing wallet:
 ```powershell
 npx hardhat run scripts/whoami.js --network baseSepolia

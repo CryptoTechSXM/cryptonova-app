@@ -1,0 +1,94 @@
+﻿**********************
+Windows PowerShell transcript start
+Start time: 20260908160941
+Username: CryptoTech-LT01\CryptoTech
+RunAs User: CryptoTech-LT01\CryptoTech
+Configuration Name: 
+Machine: CRYPTOTECH-LT01 (Microsoft Windows NT 10.0.26200.0)
+Host Application: C:\WINDOWS\System32\WindowsPowerShell\v1.0\powershell.exe
+Process ID: 6948
+PSVersion: 5.1.26100.9168
+PSEdition: Desktop
+PSCompatibleVersions: 1.0, 2.0, 3.0, 4.0, 5.0, 5.1.26100.9168
+BuildVersion: 10.0.26100.9168
+CLRVersion: 4.0.30319.42000
+WSManStackVersion: 3.0
+PSRemotingProtocolVersion: 2.3
+SerializationVersion: 1.1.0.1
+**********************
+Transcript started, output file is v853_private_deploy_transcript.txt
+PS C:\CryptoNite-Smart-Contracts\CryptoNova> npx hardhat run scripts/deploy_v8.js --network baseSepolia
+  ✓  MatA T1                      0xd365658f1767e8cDD1Ed68846F76fe0A5079c6fB  (14252 bytes)
+  ��  provider.getCode(0xb27aFD83…) MatB T1 returned 0x.
+      asking quaint-patient-haze directly:
+        raw eth_getCode latest : 0x NO CODE
+        raw eth_getCode safe   : 0x NO CODE
+        node block             : 46565126
+  ⏳⏳  node saw code at 0xb27aFD83… MatB T1 after 2 probes
+  ✓  MatB T1                      0xb27aFD83737E1A42E700Ed875ade1F7D2136a044  (14252 bytes)
+       MatrixFactory.registerPair T1 OK
+ProviderError: replacement transaction underpriced
+    at HttpProvider.request (C:\CryptoNite-Smart-Contracts\CryptoNova\node_modules\hardhat\src\int
+ernal\core\providers\http.ts:116:21)
+    at processTicksAndRejections (node:internal/process/task_queues:105:5)
+    at HardhatEthersSigner.sendTransaction (C:\CryptoNite-Smart-Contracts\CryptoNova\node_modules\
+@nomicfoundation\hardhat-ethers\src\signers.ts:185:18)
+    at NonceManager.sendTransaction (C:\CryptoNite-Smart-Contracts\CryptoNova\node_modules\ethers\
+src.ts\providers\signer-noncemanager.ts:84:16)
+    at send (C:\CryptoNite-Smart-Contracts\CryptoNova\node_modules\ethers\src.ts\contract\contract
+.ts:313:20)
+    at Proxy.setLiquidityReserve (C:\CryptoNite-Smart-Contracts\CryptoNova\node_modules\ethers\src
+.ts\contract\contract.ts:352:16)
+    at main (C:\CryptoNite-Smart-Contracts\CryptoNova\scripts\deploy_v8.js:709:12)
+
+  run log: logs/runs/deploy_v8/2026-09-08T20-09-43-756Z_deployed_addresses_v8_53_private.log  (FAI
+LED)
+PS C:\CryptoNite-Smart-Contracts\CryptoNova> Stop-Transcriptcls
+Stop-Transcriptcls : The term 'Stop-Transcriptcls' is not recognized as the name of a cmdlet, function, script file, or 
+operable program. Check the spelling of the name, or if a path was included, verify that the path is correct and try 
+again.
+At line:1 char:1
++ Stop-Transcriptcls
++ ~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : ObjectNotFound: (Stop-Transcriptcls:String) [], CommandNotFoundException
+    + FullyQualifiedErrorId : CommandNotFoundException
+Stop-Transcriptcls : The term 'Stop-Transcriptcls' is not recognized as the name of a cmdlet,
+function, script file, or operable program. Check the spelling of the name, or if a path was
+included, verify that the path is correct and try again.
+At line:1 char:1
++ Stop-Transcriptcls
++ ~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : ObjectNotFound: (Stop-Transcriptcls:String) [], CommandNotFoundExc
+   eption
+    + FullyQualifiedErrorId : CommandNotFoundException
+
+PS C:\CryptoNite-Smart-Contracts\CryptoNova> cls
+PS C:\CryptoNite-Smart-Contracts\CryptoNova> cd C:\CryptoNite-Smart-Contracts\CryptoNova
+PS C:\CryptoNite-Smart-Contracts\CryptoNova> Start-Transcript v853_private_deploy_transcript_2.txt
+Transcript started, output file is v853_private_deploy_transcript_2.txt
+PS C:\CryptoNite-Smart-Contracts\CryptoNova> npx hardhat run scripts/deploy_v8.js --network baseSepolia
+  MatrixKeeper  : 0xF1D4A4204FbBcb666c1540a6B39ac5a075591856
+  V8Governance  : 0xcDE0E9dbe89FB7e2709F58Af225C64B06D37cbe5
+  CommunityWallet:0x1fdC2DD4407ea8a296B900F0bF2C5B7D5b6F7B00
+  T01 PM:0x7D998F24 MatA:0x409856e1 MatB:0x6738fAe5
+  T02 PM:0xbbdE887E MatA:0x0A4d0822 MatB:0xB60D3226
+  T03 PM:0xe7641ea3 MatA:0x1C6A73A2 MatB:0x2a22Ef35
+  T04 PM:0xe86518cf MatA:0x694526EC MatB:0xB2DdBBC5
+  T05 PM:0x5e4fB38A MatA:0xBeF223F6 MatB:0xfEF25a0c
+  T06 PM:0xF38499fA MatA:0xA301A2bf MatB:0x99AC3694
+  T07 PM:0x994D7665 MatA:0x9552dC55 MatB:0x9cB07e01
+  T08 PM:0x62f31591 MatA:0x3D6DEf25 MatB:0xde6B24B6
+  T09 PM:0xD89abf87 MatA:0x7fa324eE MatB:0x21F3CDE7
+  T10 PM:0x9BB82B9A MatA:0x13D3f5fb MatB:0x5589a666
+  ────────────────────────────────────────────────────────────
+  Addresses file: deployed_addresses_v8_53_private.json
+  V8.53 Deploy complete.
+
+  NEXT STEP: run scripts/seed_w1.js then scripts/bigfill_v8.js
+
+  ────────────────────────────────────────────────────────────
+
+  run log: logs/runs/deploy_v8/2026-09-08T21-35-54-407Z_deployed_addresses_v8_53_private.log
+  (OK)
+PS C:\CryptoNite-Smart-Contracts\CryptoNova> Stop-Transcript
+Transcript stopped, output file is C:\CryptoNite-Smart-Contracts\CryptoNova\v853_private_deploy_transcript_2.txt

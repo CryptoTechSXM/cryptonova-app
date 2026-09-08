@@ -481,3 +481,33 @@ explanation. The hand-over is `scripts/transfer_ownership.js` (`--census / --pro
 --renounce-roles`) + `scripts/accept_ownership.js` (the new owner's 37 `acceptOwnership`), census:
 37 Ownable2Step, 3 Ownable, 2 AccessControl-admin rows. Rehearsed in-process:
 `test/V8_53_OwnershipTransfer.test.js` (5, owner's PC 2026-09-08, 11 passing with the fixture's 6).
+
+## R17 - The deployer wallet must be QUIET for the whole deploy; a runbook line did not make it so
+**Registered 2026-09-08 (session 68, V8.53 Sepolia private deploy, attempt 1).** The deploy died at
+20:17:51Z, 488 s in, 13 contracts up, with `replacement transaction underpriced` on T1's matrix
+wiring (`deploy_v8.js` `setLiquidityReserve`). MEASURED on BaseScan (deployer `0xCd0A…5506` tx
+list): the last deploy tx (`Set Liquidity Reserve` → MatA, block 46565189) is followed at
+46565193/197/202 and again at 46565323/329/333 by plain USDC `Transfer` calls on `0x2D8B…639a` —
+`rr_keeper.js:935` (`usdcD.transfer`) on the VPS, signing with `DEPLOYER_PRIVATE_KEY` on its
+5-minute cadence (jobs B `3-59/5` and C `2-59/5` both tick at :17). The keeper read the wallet's
+nonce from the chain and took the number the deploy's local `NonceManager` was about to use.
+The V8.52 private deploy of 09-01 shared the wallet the same way and got lucky.
+
+**WHY IT IS A REGISTER ENTRY:** `GO_LIVE_RUNBOOK.md` 0.2/0.4 have said "stop every keeper,
+confirm the nonce is quiet" since July. The private-deploy card in `V8_50_HANDOFF.md` (62.x)
+never carried the line, and session 68 handed the owner the deploy step without it. Knowledge in
+one document does not protect a step written from another — the same shape as R1/61.4.
+
+**WHO SIGNS WITH THE DEPLOYER (measured, crontab mirror 2026-09-08):** `rr_keeper.js` ×3 lines
+(kill switch `rr_keeper.OFF`, read at START of a run only, `:387`); `system_keeper.js`
+(SF_AUTOFUND / W1_WITHDRAW; own switch `system_keeper.OFF`); `copay_rescue.js` and
+`fastlane_rescue.js` fall back to the deployer ONLY if `KEEPER_PRIVATE_KEY` is unset (it is set: 1).
+`topup_keeper.js` (08:32Z daily) signs with it too — avoid that minute.
+
+**CHECKED BY:** (1) runbook step, every deploy on a chain the keepers serve: on the VPS
+`touch /root/keeper/rr_keeper.OFF /root/keeper/system_keeper.OFF`, then WAIT 5 MINUTES (a run
+already started finishes its own budget first — attempt 2 started 46 s after the touch, inside
+that window), deploy, `rm` both after. (2) OWED (session 68): a foreign-transaction guard inside
+`deploy_v8.js`'s send wrapper — before every send compare the chain's pending nonce with
+base + sent; a HIGHER chain count = someone else is signing → abort with the diagnosis, before
+the collision; a lower count is node lag, log and proceed. Proven offline before it is trusted.
