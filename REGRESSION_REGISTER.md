@@ -461,6 +461,23 @@ to fit it in the router. `pauseSystem` non-owner now reverts `TRAuth` (was
 **WHY IT IS A REGISTER ENTRY:** `pauser` is a PER-DEPLOYMENT setting the deploy script does not
 make (same shape as R14's `upkeepCaller`). A fresh deploy has `pauser == address(0)` and the
 VPS watchdog's pause silently reverts `TRAuth`. **CHECKED BY:** `scripts/postdeploy_check.js`
-must gain a `pauser == <watchdog key>` row before the mainnet deploy (owed; not yet added).
+has the row since 2026-09-08 (`abe4ce9`): `n/a` on a pre-V8.53 router, `pauser set` on
+testnet, and on chainId 8453 a FAIL unless `pauser == PAUSER_WALLET`; the setter is
+`scripts/set_pauser.js`; the watchdog `sf_floor_watchdog.js` REFUSES to run if the on-chain
+pauser is not its key, so a missed grant is loud from the first tick, not silent.
 Tests: `test/V8_53_Pauser.test.js` (6) — pauser pauses, cannot unpause/resume, cannot touch
 setters, owner clears it, double-pause reverts.
+
+## R16 - The deploy must be OWNED BY THE DEPLOYER at birth; ownership moves afterwards
+**Registered 2026-09-08 (session 67, mainnet prep P3).** `deploy_v8.js` passes
+`ADMIN_WALLET_ADDRESS` as `owner()` to ~40 contracts (treasury, SF, router, PMs, matrices via
+`DeployParams.admin`, …) and then WIRES them with `onlyOwner` setters signed by the DEPLOYER
+(`StabilityFund.setMatrixKeeper` :770 is the first). The mainnet `.env` template said the admin
+could be "a Gnosis Safe address" — that run would die at the first setter with 46 half-wired
+contracts on a real chain. Code-read only (never run that way); the guard is the fix.
+
+**CHECKED BY:** `deploy_v8.js` now REFUSES when `ADMIN_WALLET_ADDRESS` ≠ deployer, with the
+explanation. The hand-over is `scripts/transfer_ownership.js` (`--census / --propose / --verify /
+--renounce-roles`) + `scripts/accept_ownership.js` (the new owner's 37 `acceptOwnership`), census:
+37 Ownable2Step, 3 Ownable, 2 AccessControl-admin rows. Rehearsed in-process:
+`test/V8_53_OwnershipTransfer.test.js` (5, owner's PC 2026-09-08, 11 passing with the fixture's 6).

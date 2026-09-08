@@ -823,6 +823,24 @@ owner-set, and the session that earned it got five things wrong by ignoring what
 ##      ▶ NEXT, IN ORDER: (a) record the test result; (b) `transfer_ownership.js` — census which of the 46 book rows
 ##      are Ownable / Ownable2Step first; (c) wire the 11 live keepers to `keeper_env.js`; (d) owner's T2-open
 ##      decision; (e) P4 incident page; (f) G4/G5 text. Nothing pushed by Claude this session (no credentials).
+##      ✅ **SESSION 67, LATER (to ~20:30Z):** (a) `V8_53_WithdrawWhilePaused` — OWNER RAN, **18 passing** (6 WP + 6
+##      pauser + 6 BP fixture cases that ride along via the require; registered once, never twice). (b) **P3 BUILT +
+##      REHEARSED:** `scripts/transfer_ownership.js` (census 37 Ownable2Step / 3 Ownable / 2 AccessControl; modes
+##      --census/--propose/--verify/--renounce-roles; on-chain probe per row; idempotent; exports `run()`) +
+##      `scripts/accept_ownership.js` (new owner's side; exports `accept()`); `test/V8_53_OwnershipTransfer.test.js`
+##      **11 passing** on the owner's PC after two fixture fixes (MatrixKeeperLib link; 1-step probe must accept ANY
+##      error shape from `pendingOwner()` — hardhat wraps the revert, a code-specific check gave a false FAIL on
+##      MatrixKeeper). Commits `3a790be` `6825c81` `6c3a71b`. **R16** registered: `deploy_v8.js` refuses
+##      `ADMIN_WALLET_ADDRESS` ≠ deployer (wiring is onlyOwner signed by the deployer; the template's "Safe address"
+##      hint would have killed a mainnet deploy mid-way). Mainnet doc `f02ad51` `e084710`; memory updated.
+##      ▶ NEXT SESSION, IN ORDER: (1) Blockaid — owner SENT the nudge 09-08 (with the cryptonova.ai + mainnet
+##      heads-up); re-test the T1 PM spending cap after any reply. (2) **V8.53 Sepolia PRIVATE deploy**
+##      (`deployed_addresses_v8_53_private.json`, `--network baseSepolia`, owner runs; verify_gate before anything)
+##      to run FOR REAL: `set_pauser.js` → `postdeploy_check` pauser row → `sf_floor_watchdog.js` live pause tx
+##      (dry-run first) → `transfer_ownership --census`. (3) `admin/accept_ownership.html` (Mainnet-App) — the 37
+##      Trezor accepts. (4) wire the 11 live keepers to `keeper_env.js`. (5) owner's T2-open decision (T9).
+##      (6) P4 incident page. (7) G4/G5 text. Owner pushes: contracts `v8.1` (abe4ce9..6c3a71b + this), keepers
+##      `b61c6a6`, Mainnet-App `main` (f02ad51, e084710).
 ## 62.5 ▶ **WHAT IS OPEN, IN ORDER, FOR SESSION 63.**
 ## 62.23 ✅ **CUTOVER DONE 2026-09-04 (owner local afternoon): `preview`+`main` at `00b4690`** (V8.52 repoint
 ##      + `DEFAULT_SPONSOR_POOL` = the owner's revised 10-leader roster, two swapped, dead `run_bigfill_rr.ps1`
