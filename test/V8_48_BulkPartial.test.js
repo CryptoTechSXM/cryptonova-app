@@ -258,3 +258,7 @@ describe("V8.48 item 3 — bulkWithdraw(uint256): one-signature partial withdraw
     expect(await ctx.matA1.freeWithdrawable(ctx.W1.address), "T1 free is exactly zero after").to.equal(0n);
   });
 });
+
+// Fixture reuse (V8_53_WithdrawWhilePaused.test.js). Node caches this module, so requiring it from
+// another test file does NOT register the describe() above a second time.
+module.exports = { deployTwoTiers, reg, completeCycle, seedTwoTierEarnings, FEE1, FEE2 };
