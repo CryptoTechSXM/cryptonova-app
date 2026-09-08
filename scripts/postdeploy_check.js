@@ -56,7 +56,10 @@ const SF = new ethers.Contract(A.stabilityFund, [
 ], provider);
 const TR = new ethers.Contract(A.tierRouter, [
   'function graduationEnabled() view returns (bool)',
+  'function pauser() view returns (address)',   // V8.53+; absent on V8.52 and earlier
 ], provider);
+const PAUSER_WALLET = process.env.PAUSER_WALLET || '';   // the VPS watchdog's pause-only key (P2/P3)
+const REAL_MONEY = Number(A.chainId) === 8453;           // Base mainnet: the pauser row is mandatory there
 
 const usd = (x) => '$' + (Number(x) / 1e6).toFixed(2);
 let fails = 0;
@@ -103,6 +106,34 @@ async function read(label, fn) {
   const grad = await read('graduationEnabled', () => TR.graduationEnabled());
   if (grad !== undefined) {
     verdict(grad === true, 'graduationEnabled (item G)', grad ? 'ON' : 'OFF -> setGraduationEnabled(true)');
+  }
+
+  // 3b. V8.53 pauser (R15, P2). `pauser()` does not exist before V8.53: on such a router the
+  //     call returns empty data. That is printed as `n/a` — NOT a pass, NOT a fail — because
+  //     the row cannot apply to a contract that has no such slot. On any router that HAS the
+  //     slot: mainnet REQUIRES pauser == PAUSER_WALLET (unset env or zero pauser = FAIL);
+  //     testnet prints what it finds and fails only on a mismatch against a set PAUSER_WALLET.
+  let pauser;
+  try { pauser = await TR.pauser(); }
+  catch (e) {
+    const c = e.code || '';
+    if (c === 'BAD_DATA' || c === 'CALL_EXCEPTION') {
+      if (REAL_MONEY) verdict(false, 'pauser (V8.53)', 'TierRouter has no pauser() — a pre-V8.53 router must NOT go to mainnet');
+      else console.log('  n/a   pauser (V8.53)                 TierRouter has no pauser() — pre-V8.53 deployment');
+    } else {
+      verdict(false, 'pauser (V8.53)', `read failed: ${(e.shortMessage || e.message || String(e)).slice(0, 120)}`);
+    }
+  }
+  if (pauser !== undefined) {
+    const zero = pauser === ethers.ZeroAddress;
+    if (PAUSER_WALLET) {
+      const match = pauser.toLowerCase() === PAUSER_WALLET.toLowerCase();
+      verdict(match, 'pauser == PAUSER_WALLET', match ? pauser : `stored ${pauser} · want ${PAUSER_WALLET} -> node scripts/set_pauser.js`);
+    } else if (REAL_MONEY) {
+      verdict(false, 'pauser == PAUSER_WALLET', `PAUSER_WALLET not set in env; stored ${pauser} — mainnet requires the watchdog key`);
+    } else {
+      verdict(!zero, 'pauser set', zero ? 'ZERO — no watchdog can pause -> PAUSER_WALLET=0x.. node scripts/set_pauser.js' : `${pauser} (PAUSER_WALLET unset, not compared)`);
+    }
   }
 
   // 4. T4 (MAINNET_READINESS §3): every contract verified on BaseScan BEFORE any repoint.
