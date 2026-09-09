@@ -1015,7 +1015,26 @@ owner-set, and the session that earned it got five things wrong by ignoring what
 ##      admin's key in a hardhat signer — on mainnet that is a Trezor signature; decide the mechanism with the
 ##      Safe/Trezor step, not now). Mainnet lesson from the wrong-account moment: the page must be opened in the
 ##      browser profile that holds the Trezor-backed account, and the address line checked BEFORE Accept.
-##      ▶ **NEXT SESSION, IN ORDER:** (1) Blockaid reply (owner asked twice this session, no answer recorded);
+##      ✅ **LATE ADDITION 2 (21:30Z–22:30Z 09-09) — BLOCKAID ANSWERED, AND THE FLAG IS PROBABLY ON THE TOKEN, NOT THE
+##      PAIRMANAGER.** Nimrod (Blockaid, 05:58 local): "I don't see any blocked transactions. Can you please provide the TX
+##      hash or use the Report an issue from the MetaMask wallet." (Read via Chrome/Gmail at the owner's request.) Nothing
+##      had ever been signed, hence no hash. Re-test 21:5xZ: Chrome MetaMask `0xb41A…617c` still "Spending cap 10 ⚠
+##      Malicious — Review alert" → "Malicious address … you will probably lose your assets to a scammer" (no "Report an
+##      issue" link in this MetaMask build). Owner then went THROUGH it in Brave with a fresh MetaMask
+##      `0x81684ec54967D9c7953CD4cD267684b3F58fcC9D` ("BlockAid Test 02"): approve `0x7b9d98ce…60883` (to MockUSDC
+##      `0x2D8B…639a`, spender T1 PM `0xc2fCD…d42c7`), register `0x0ea06678…6dae0`, setMemberOptions `0xf37fbf51…7bb3`
+##      (the last two via MetaMask "Added protection" = DelegationManager `0xdb9B1e94…7dB3`, "Redeem Delegations" — a
+##      MetaMask feature, not ours; the wallet is now member seat 127 of T1.1 MatA). ▶ **THE READING (from where the ⚠
+##      sits, both screens): on approve the ⚠ is on the TOKEN ("10 ⚠", "Interacting with ⚠"); on register the ROUTER
+##      `0xBacE0…` carries NO ⚠ while "You send −10 ⚠" does. BaseScan: `0x2D8B…639a` is named "USD Coin" / "USDC",
+##      13,451 holders — a non-Circle contract wearing Circle's name = counterfeit-token shape. HYPOTHESIS (marked so to
+##      Blockaid): the label is on the MOCK USDC, which is why Peter's router+site clearance changed nothing.** Mainnet
+##      uses Circle USDC → cannot follow to mainnet. [stated] Owner SENT the reply ~22:30Z: three hashes, screenshots,
+##      the observation, two questions (which address carries the label; clear a testnet mock named USDC or must it be
+##      redeployed under a non-Circle name). If Blockaid confirms the token: a renamed test token = full testnet
+##      redeploy (settlement token is deploy-time) — owner's timing call vs mainnet. Record in memory
+##      `cryptonova-blockaid`.
+##      ▶ **NEXT SESSION, IN ORDER:** (1) Blockaid's answer to the 09-09 reply → re-test with a fresh wallet;
 ##      (2) wire the 11 live keepers to `keeper_env.js`; (3) owner's T2-open decision (T9); (4) P4 incident page;
 ##      (5) G4/G5 text; (6) the self-sustaining-loop measurement (62.39); (7) `--renounce-roles` mechanism for a
 ##      hardware-wallet admin (page button, same shape as accept). Everything this session was pushed from the
