@@ -915,6 +915,13 @@ owner-set, and the session that earned it got five things wrong by ignoring what
 ##      Mirror updated. 455 → 700 at 1/30 min ≈ 5 days; the cursor (1372) continues into the new range unchanged.
 ##      ▶ Watch: first tick's `A:1 reg | pool 1373/1622`; `silent_watch` will count job A again. When the ceiling hits,
 ##      the log reads `… >= REG_STOP_AT 700 — ceiling reached` every tick — that is not a stall.
+##      ⚠ [stated] OWNER-RAISED 2026-09-09 ~01:00Z, NOT YET MEASURED: "status page the display for parked members
+##      only shows T1 parked members the other tiers are not visible." Frontend-truth family (R6/R5 shape — a page
+##      telling members less than the chain does). FIRST FRONTEND ITEM NEXT SESSION: in `CryptoNova-Testnet-App`
+##      `status.html`, read the parked section — does it QUERY only T1's matrices, or query all and RENDER only T1?
+##      Fix = walk every deployed tier's MatA+MatB; verify live against a per-tier parked count read from chain (the
+##      08-30 census read T1 186 · T2 81 · T3 63 · T4 40 · T5 40 on V8.50 — the hidden number can be large).
+##      Ship admin → preview → main, verify on both domains by count (R9), never by eye alone.
 ## 62.5 ▶ **WHAT IS OPEN, IN ORDER, FOR SESSION 63.**
 ## 62.23 ✅ **CUTOVER DONE 2026-09-04 (owner local afternoon): `preview`+`main` at `00b4690`** (V8.52 repoint
 ##      + `DEFAULT_SPONSOR_POOL` = the owner's revised 10-leader roster, two swapped, dead `run_bigfill_rr.ps1`
