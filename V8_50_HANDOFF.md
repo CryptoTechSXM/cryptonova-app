@@ -922,6 +922,105 @@ owner-set, and the session that earned it got five things wrong by ignoring what
 ##      Fix = walk every deployed tier's MatA+MatB; verify live against a per-tier parked count read from chain (the
 ##      08-30 census read T1 186 · T2 81 · T3 63 · T4 40 · T5 40 on V8.50 — the hidden number can be large).
 ##      Ship admin → preview → main, verify on both domains by count (R9), never by eye alone.
+## 62.40 ✅✅ **2026-09-09 14:55Z – (session 69): THE PARKED CARD TOLD MEMBERS 1 OF 68, THEN "69 OF 69 CAN BE
+##      RESCUED" — BOTH FIXED AND LIVE ON ALL THREE DOMAINS; `accept_ownership.html` BUILT; JOB A HEALTHY.**
+##      ⚠ Cowork device shell could not mount the repos this session (Plan9 share error, retried) — every file
+##      edit went through stage/commit and every git command was the owner's. Chrome (Claude in Chrome) DID
+##      work and was used to verify crypto-nova.app by reading the page, not by eye.
+##      ✅ **VPS after 62.39's OFF dance (owner ran read-only blocks, 15:0xZ):** no `rr_keeper.OFF` /
+##      `system_keeper.OFF`; job A `*/30` at exactly 1 reg/tick, 6 s runs, members 481→486 over six ticks, pool
+##      1400/1622, line 59 correct; B `rr_rescue.log` / C `rr_upgrade.log` ticking; `system_keeper` writes
+##      `health.log` (cron `11-59/30`, 14:41Z). `route_rr.OFF` (Aug 9) is INERT — both `route_rr` crontab lines
+##      are `# TRIM-2026-08-06`. `frozen.log` 0 bytes is the RETIRED file: the check moved to `frozen_watch.sh`
+##      `23 */4` on 09-07 (`#OFF20260907` on the hourly line), PASS at 04:23/08:23/12:23Z — and it read 28
+##      matrices at 04:23 and 30 at 08:23: a pair spawned overnight (T5.2, see below).
+##      ⛔⛔ **OWNER-RAISED (62.39 tail) MEASURED FIRST: `pair_saturation.js LOGS=0` on V8.52, 30 matrices, 0
+##      unreadable: parked T1 1 · T2 12 · T3 5 · T4 1 · T5 49 = 68, every one in its tier's pair-1 MatB;
+##      T2.2/T3.2/T4.2/T5.2 exist.** `status.html loadParked` had TWO defects: (a) T2–T10 COUNTS read the
+##      book's pair-0 addresses only (a spawned `.2` pair invisible) while T1 walked `allPairsStatus`; (b) the
+##      wallet LIST, avg shortfall and the session-58 SF-capacity walk were built from `allT1Pairs` only and
+##      priced at T1's fee (the `10_000_000n` fallback flagged 09-02) — the card listed 1 of 68 and priced
+##      capacity off one $10 member while 49 waited at $250. → **frontend `bdcd19f`**: PMs via
+##      `TierRouter.tierPairManagers` (the tiers table's own discovery) → `allPairsStatus` → every MatA/MatB
+##      (`allMats`), PM-read failure falls back to the book pair AND sets `_parkedReadFail`; each matrix's
+##      `ENTRY_FEE` read once (unread → shortfall UNKNOWN); Tier column; MatA park priced at 50% of fee
+##      (`CROSSING_RESERVE_BPS`). Proven offline on a scratch harness (fake ethers over the measured chain: 68 /
+##      by-tier string exact / spawned-pair counted / PM-fallback still 68), then live on admin by the owner.
+##      ⛔ **THE 09-02 RULE BIT ME THE SAME DAY:** the info-note sentence I edited inline is a `data-i18n`
+##      element — i18n.js overwrote it on the live page. `7c1a37a`: all TEN `locales/*.json`
+##      `statusPage.parked_info_note` tier-neutral. Same commit: SF card `sf-rescue-cap` row printed `—` on
+##      first paint while its header used `_lastParkedStats.capacity` — same fallback now.
+##      ⛔⛔⛔ **THEN THE OWNER READ THE LIST AND CAUGHT THE BIGGER ONE** ("three are there waiting for 2 days
+##      with a greater shortfall than the SF will cover so they should be evicted in 3 to 5 days — verify on
+##      code"): "69 of 69 can be rescued now" walked shortfalls against the fund BALANCE and ignored the
+##      keeper's refusal rules — session 58's wrong-arithmetic class again. CODE-READ `MatrixKeeperLib
+##      _triageParked`, in order: GHOST (seated → dequeue) → RATIO (`withdrawn/(withdrawn+withdrawable) >
+##      rescueRatioBps` 70%) → LADDER (`(withdrawable+reserve)/crossingCost` below the lowest
+##      `sfRescueThresholds` rung, 40% on preset 1) → FLOOR (`StabilityFund.loanEligibleFor(member, tier,
+##      advance)`: advance ≤ fee×`insolvencyFloorBps` 50% − debt). Refused → `WORK_EVICT_PARKED` at
+##      `evictionGracePeriod` 7 d. Net for a MatB park with no debt: **held ≥ 50% of the fee, or eviction.**
+##      ✅ **INSTRUMENT BEFORE FIX: keepers `diag_parked_verdict.js` (`879facd`)** — every parked member, every
+##      tier/pair, the four rules in the keeper's order, every parameter READ from the chain via `keeper_env`,
+##      `loanEligibleFor` asked with the keeper's own advance. Smoke-tested on a fake provider first.
+##      **MEASURED V8.52 block 46600179: 68 parked → 64 RESCUE ($3,326.31 of advances vs $4,914.73 spendable) ·
+##      4 LADDER (all T2.1 MatB, holding 21–29% of $25; eviction in 4d17h–6d18h) · 0 ratio · 0 floor · 0 ghost;
+##      grace 1d / eviction 7d / buffer 0% / gate INERT (baseAdvance 100%).** The owner's read was exact.
+##      → **frontend `4f4b559` + `e2819c6`, ladder admin→preview→main all at `e2819c6`, VERIFIED ON
+##      crypto-nova.app VIA CHROME (page text, then the toggle clicked):** `loadParked` reads the triage
+##      params once per page load (`_triageCfg`), +3 reads/member (`getMemberTotalWithdrawn`, `isInMatrix`,
+##      `loanEligibleFor`), verdict per member in the keeper's order; capacity = **"64 of 68 waiting can be
+##      rescued · 4 refused → eviction"** (walks VERDICTS + the fund's ladder-capped advance; refused counted over
+##      the whole queue; an unknown verdict stops the count → "at least"); row status "⛔ Eviction in 4d 17h"
+##      with the reason on hover. [stated] Owner's layout: **5 rows + "▼ Show all N"** toggle (re-renders from
+##      the last poll, no RPC). Dropped `getParkedMember` reads retried ×3 and COUNTED ("N not loaded this poll
+##      — retrying"), never a silently shorter list. NOT replicated: the partner-matrix half of the ghost test.
+##      Cross-tier rescue ORDER is still the page's estimate (longest-waiting first), UNVERIFIED vs the keeper.
+##      ⚠ Poll is 30 s and the card now does ~6 reads/member on a PUBLIC QuickNode key (60.2) — if
+##      "not loaded this poll" recurs, lengthen the parked poll, do not add retries.
+##      ✅ **P3 ACCEPT SIDE BUILT: Mainnet-App `admin/accept_ownership.html` (`23810cb`, + `/accept_ownership`
+##      vercel route).** Mirrors `scripts/accept_ownership.js` (same TWO_STEP + tiers walk, owner/pendingOwner per
+##      row, one `acceptOwnership()` per pending row, re-read after); holds no key; refuses unless wallet chainId
+##      == book.chainId; 1-step + role rows read-only as the `--verify` view; book by file or paste; "Accept all
+##      pending → me" stops on the first failure, idempotent. Proven offline (fake DOM + fake ethers over the
+##      V8.53 private book): 37 pending → 37 accepted → "NEXT: --verify"; wrong chain → nothing sent; not
+##      proposed → nothing sent. ▶ REHEARSAL on the V8.53 private chain planned this session (see late addition
+##      if it ran): R17 OFF dance → `TO_MODE=propose TO_ADDR=<owner's Rabby 0x1D3E…93AB>` (42 deployer txs, so
+##      the switches ARE required) → serve the page on localhost (`python -m http.server` in
+##      `C:\CryptoNova-Mainnet-App\admin`; wallets do not inject on `file://`) → 37 Rabby confirms →
+##      `TO_MODE=verify` green → `rm` switches. Consequence: the Rabby wallet then OWNS the V8.53 private
+##      chain; later deployer-signed admin scripts there are refused (that is P3 working).
+##      ▶ Leftovers seen, NOT chased (record for whoever cleans): Testnet-App untracked `BUGS_data_2026-09-01.md`,
+##      `BUGS_snapshot.md`, `community_reply_2026-09-02_*.txt` ×2, `__pycache__/` — earlier sessions' scratch;
+##      `frozen.log` (retired, 0 bytes) and `route_rr.OFF` (inert) on the VPS. Blockaid reply: owner asked, no
+##      answer recorded at write time.
+##      ✅✅ **LATE ADDITION (17:23Z–20:12Z 09-09) — P3 REHEARSED END TO END ON THE V8.53 PRIVATE CHAIN, ALL GREEN.**
+##      R17 dance: `touch` both switches 17:23:01Z; job C's run #5482 (started 17:22:02, BEFORE the touch) finished
+##      17:23:35 with 5 upgrades — the "a run in progress finishes its budget" case, exactly why the 5-min wait
+##      exists; every A/B/C tick 17:27→20:00Z logged `kill switch present — standing down`, `health.log` silent.
+##      `TO_MODE=propose TO_ADDR=0x1D3E…93AB` 17:28+Z: **42 rows, 43 tx, 0 FAIL** (37 → PENDING, 3 one-step DONE,
+##      cnova DEFAULT_ADMIN + communityWallet DEFAULT_ADMIN/GOVERNOR granted). Page served with
+##      `python -m http.server 8787` in `C:\CryptoNova-Mainnet-App\admin`; ⚠ Claude drove it in Chrome first and
+##      Rabby there connected the WRONG account (`0xb41A…617c`) — the page showed 0 pending and sent nothing, as
+##      designed; the owner then ran it in the browser that holds `0x1D3E…93AB` (Chrome's Rabby does not hold that
+##      wallet), file-picked the book (42 rows / 37 two-step, chain OK, read 42 rows 0 failed, pending → you 37),
+##      clicked **Accept all → 37/37 accepted 19:31:36–19:38:15Z**, every receipt `status 1`, blocks
+##      46607006–46607204 (`tierRouter` accept `0xbc613ce7…`, tx list in the page log). `TO_MODE=verify` from the
+##      contracts repo: **42 rows, 0 tx, 0 FAIL**. Switches removed ~20:05Z (the `rm` block was pasted twice —
+##      history 1952/1954 — the second run's "No such file" caused a 10-minute hunt; nothing on the box deletes
+##      switches by itself, verified: no cron, no script, logs show the switch present through 20:00:02Z).
+##      ▶ CONSEQUENCE, RECORD IT: **the V8.53 private chain is now OWNED by the owner's Rabby wallet
+##      `0x1D3E33aAFFDb694E5a45d793B6946120467e93AB`, roles included; the deployer `0xCd0A…5506` has no owner
+##      power there.** Any further V8.53-private admin action (set_pauser, pause_control unpause, set_graduation,
+##      renounce-roles) must be signed from that wallet. `--renounce-roles 0xCd0A…5506` NOT run (needs the new
+##      admin's key in a hardhat signer — on mainnet that is a Trezor signature; decide the mechanism with the
+##      Safe/Trezor step, not now). Mainnet lesson from the wrong-account moment: the page must be opened in the
+##      browser profile that holds the Trezor-backed account, and the address line checked BEFORE Accept.
+##      ▶ **NEXT SESSION, IN ORDER:** (1) Blockaid reply (owner asked twice this session, no answer recorded);
+##      (2) wire the 11 live keepers to `keeper_env.js`; (3) owner's T2-open decision (T9); (4) P4 incident page;
+##      (5) G4/G5 text; (6) the self-sustaining-loop measurement (62.39); (7) `--renounce-roles` mechanism for a
+##      hardware-wallet admin (page button, same shape as accept). Everything this session was pushed from the
+##      owner's PowerShell as it landed (frontend `e2819c6`, keepers `879facd`, Mainnet-App `23810cb`); this
+##      handoff + `MAINNET_READINESS.md` were committed at session close.
 ## 62.5 ▶ **WHAT IS OPEN, IN ORDER, FOR SESSION 63.**
 ## 62.23 ✅ **CUTOVER DONE 2026-09-04 (owner local afternoon): `preview`+`main` at `00b4690`** (V8.52 repoint
 ##      + `DEFAULT_SPONSOR_POOL` = the owner's revised 10-leader roster, two swapped, dead `run_bigfill_rr.ps1`
