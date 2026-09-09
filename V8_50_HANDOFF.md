@@ -841,6 +841,66 @@ owner-set, and the session that earned it got five things wrong by ignoring what
 ##      Trezor accepts. (4) wire the 11 live keepers to `keeper_env.js`. (5) owner's T2-open decision (T9).
 ##      (6) P4 incident page. (7) G4/G5 text. Owner pushes: contracts `v8.1` (abe4ce9..6c3a71b + this), keepers
 ##      `b61c6a6`, Mainnet-App `main` (f02ad51, e084710).
+## 62.39 ✅✅ **2026-09-08 20:09Z – 2026-09-09 00:1xZ (session 68): V8.53 SEPOLIA PRIVATE CHAIN IS UP AND THE WHOLE
+##      P2/P3 REHEARSAL RAN FOR REAL. One new register entry on the way (R17).**
+##      ⛔ **ATTEMPT 1 DIED (20:17:51Z, 488 s, 13 contracts up) — `replacement transaction underpriced` on T1's
+##      matrix wiring. MEASURED on BaseScan (not inferred): the deployer's tx list shows USDC `Transfer` calls on
+##      `0x2D8B…639a` at blocks 46565193/197/202 and 46565323/329/333 — `rr_keeper.js:935` on the VPS signing with
+##      `DEPLOYER_PRIVATE_KEY` at its :17 tick (jobs B `3-59/5`, C `2-59/5`), taking the nonce the deploy's local
+##      NonceManager was about to use. `GO_LIVE_RUNBOOK.md` 0.2/0.4 said "stop every keeper" since July; the
+##      private-deploy card (62.8) never carried it and this session handed the step over without it. → R17
+##      (`15a7548`): `GO_LIVE_RUNBOOK.md` **0.2-PRIVATE** = `touch /root/keeper/rr_keeper.OFF system_keeper.OFF`,
+##      WAIT 5 MIN (switch is read at run START only, `rr_keeper.js:387`), deploy, `rm` both; plus
+##      `scripts/nonce_verdict.js` (pure; 4/4 via `scripts/harness/nonce_verdict_test.js`) wired into
+##      `deploy_v8.js`'s send wrapper — before EVERY send, chain pending count > ours = FOREIGN TRANSACTION, abort
+##      with the cause; < ours = node lag, warn and continue. ⚠ The wiring itself has not run on a live network yet
+##      (attempt 2 predates it); the next real deploy exercises the `ok` branch on every send. Other deployer
+##      signers (measured): `system_keeper` (own switch), `copay_rescue`/`fastlane_rescue` only if
+##      `KEEPER_PRIVATE_KEY` unset (it is set), `topup_keeper` 08:32Z daily. The 13 orphans stay on Sepolia, unreferenced.
+##      ✅ **ATTEMPT 2 (switches on 21:34:49Z, deploy 21:35:54Z–23:07Z, ~92 min at size 15 / 10 tiers): CLEAN.**
+##      `scripts/deployed_addresses_v8_53_private.json` (committed; carries `chainId: 84532` — T2's write proven on
+##      a real deploy), router **`0x70c292be76694Aa6842f86F5f09039ab56381B96`**, SF `0x0d55…EFB4`, MatrixKeeper
+##      `0xF1D4…1856`. Transcripts `v853_private_deploy_transcript.txt` (failed) / `_2.txt` (ok), both committed.
+##      **verify_all + verify_gate: 46 VERIFIED, exit 0 (T4 live, second time).**
+##      ✅ **PER-DEPLOYMENT GRANTS, ALL RUN LIVE:** `set_pauser.js` → pauser `0x8295fc6Ae3c3E07F2a40D4Ee85157341d2068531`
+##      (hot REHEARSAL key, generated on the owner's PC straight into `C:\CryptoNova-Keepers\.env` as
+##      `PAUSER_PRIVATE_KEY`, only the address ever printed; funded 0.01 ETH from the deployer) · `set_upkeep_caller`
+##      → keeper EOA AUTHORIZED · `set_stability_floor --from-t1` → $100.00 (= sfTarget on this deploy; fund $0.30) ·
+##      `set_graduation` ENABLE=true → ON (⚠ the script REQUIRES `$env:ENABLE`, the card must say so) ·
+##      **`postdeploy_check.js` → ALL PASS, the pauser row reading PASS on a live chain for the first time (R15 CHECKED BY
+##      is now live-proven).** The check also caught graduation OFF on the fresh chain before ENABLE — as designed.
+##      ✅✅ **P2 AUTOMATED PAUSE PROVEN END TO END ON CHAIN:** `sf_floor_watchdog.js` dry-run → `DRY-RUN would call
+##      pauseSystem("watchdog: SF $0.30 < floor $100.00 …")`; two live runs with an UNFUNDED pauser → `PAUSE FAILED
+##      insufficient funds` cleanly, no crash, no loop (free negative test); funded → **`PAUSING … tx
+##      0x579b7eb8…ed77 mined block 46571871 status 1`**; next run **`ALREADY PAUSED`** (never sends twice, never
+##      unpauses). Owner side: NEW `scripts/pause_control.js` (`ACTION=status|pause|unpause`, owner-signed, bounded
+##      read-back, refuses a non-owner signer — the P2 item-3 "ready-to-paste commands") → `status` read paused=true,
+##      `unpause` tx `0x6d4d078d…441e` block 46571938 → `RUNNING OK`. Front door closed by the pause-only key and
+##      reopened by the owner, both measured.
+##      ✅ **P3 CENSUS LIVE:** `TO_MODE=census npx hardhat run scripts/transfer_ownership.js --network baseSepolia` →
+##      42 rows (37 Ownable2Step `pending -` + 3 Ownable + 2 role admins), every owner = deployer, 0 FAIL, 0 tx.
+##      ⚠ Run it under `npx hardhat run … --network baseSepolia`, NOT plain `node`: plain node attached to the
+##      in-process chain (31337) and `chain_guard` REFUSED — the T2 guard's first live catch, and the right outcome.
+##      ✅ Git leftovers: `git stash` through the mount left `.git/index.lock` — delete permission granted for all
+##      three repos this session; lock + `tmp_obj_*` removed after each commit.
+##      ✅ [stated] Owner's side question (deploy running): "the self sustaining loop is not really implemented and
+##      causes rotations to be much slower." Answered from source, no measurement yet: the loop IS the re-entry
+##      (`TierRouter:1400`, `escrow + withdrawable >= curFee` → own MatA, which rotates it); it is gated on money —
+##      crossing reserve is 50% of the fee, the member must EARN the other half during the cycle, else FUNDING park →
+##      rescue path = the slowness. V8.51 measured 238 cycle-outs / 55 self-funded re-entries (23%). V6 had an explicit
+##      `SPLIT_ESCROW_BPS = 15%` re-entry fund (`FigureEightMatrix.sol:78`). The real question is whether the reserve
+##      should be sized to the WHOLE re-entry fee, at the cost of the other splits — owner's economic call, but NOT
+##      before the number: withdrawable-at-cycle-out distribution on V8.52 (`cycle_census.js` + a per-member read, VPS).
+##      PARKED, not chased. If pursued it is its own release, not V8.53.
+##      ▶ **NEXT SESSION, IN ORDER:** (1) VPS: confirm both OFF files are gone and jobs A/B/C + system_keeper ticked
+##      (they were off 21:34Z → ~00:1xZ). (2) Blockaid — any reply to the 09-08 nudge; re-test the T1 PM cap after.
+##      (3) `admin/accept_ownership.html` (Mainnet-App) — walk the book, one `acceptOwnership` per Ownable2Step row via
+##      the injected wallet; rehearse on THIS chain: `--propose <hot key B>` → page accepts 37 → `--verify` green →
+##      `--renounce-roles`. (4) wire the 11 live keepers to `keeper_env.js`. (5) the self-sustaining-loop measurement
+##      (above) — one VPS block, then options + recommendation. (6) owner's T2-open decision (T9). (7) P4 incident page.
+##      (8) G4/G5 text. Private-deploy card fixes owed: kill-switch step, `$env:ENABLE`, `TO_MODE` under hardhat run.
+##      Owner pushes: contracts `v8.1`, keepers `main` (no keeper code changed this session — only the book copy,
+##      untracked), Mainnet-App `main`.
 ## 62.5 ▶ **WHAT IS OPEN, IN ORDER, FOR SESSION 63.**
 ## 62.23 ✅ **CUTOVER DONE 2026-09-04 (owner local afternoon): `preview`+`main` at `00b4690`** (V8.52 repoint
 ##      + `DEFAULT_SPONSOR_POOL` = the owner's revised 10-leader roster, two swapped, dead `run_bigfill_rr.ps1`
