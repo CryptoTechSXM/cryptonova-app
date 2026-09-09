@@ -901,6 +901,20 @@ owner-set, and the session that earned it got five things wrong by ignoring what
 ##      (8) G4/G5 text. Private-deploy card fixes owed: kill-switch step, `$env:ENABLE`, `TO_MODE` under hardhat run.
 ##      Owner pushes: contracts `v8.1`, keepers `main` (no keeper code changed this session — only the book copy,
 ##      untracked), Mainnet-App `main`.
+##      ✅ **LATE ADDITION (00:15Z–01:00Z 09-09) — JOB A BACK ON, PACED, WITH A CEILING.** [stated] Owner: "new regs
+##      job a is doing nothing … resume abc but make a do 1 reg every 30 mins … until maybe 700" (no member post yet).
+##      Done: OFF files removed 00:15:31Z (B, C, system_keeper resumed). `rr_keeper.js` **`REG_STOP_AT`** (keepers
+##      `e519d53`, md5 on the box `14861061d20c59f34ead4da1df4abfc3`): job A registers nobody once
+##      `globalJoinedCount >= REG_STOP_AT`; failed read = stop. ⚠ `REG_TAPER_TO=0` is NOT a stop — regCap 0 means
+##      UNCAPPED (`:496`) — hence a separate switch. PROVEN live: `DRY_RUN=1 … REG_STOP_AT=1` → `455 members >=
+##      REG_STOP_AT 1 — ceiling reached, 0 registrations`. Pool: `probe_pool_slots` 1072–1371 → ALL 300 already
+##      members (nothing stranded; 62.35's parked question CLOSED for that range); `pool_primer HDR_OFFSET=301372
+##      COUNT=250` → 250/250 primed, 0 failed ($40 + 0.002 ETH each; state `pool_primer_state_child_301372.json`).
+##      Crontab line 59: `*/30 … MAX_REG=1 REG_STOP_AT=700 … POOL_SIZE=1622` (was `#OFF20260906 … */10 MAX_REG=5
+##      POOL_SIZE=1372`); 75→75 lines, 10→10 URL vars, one changed line, backup `crontab_pre_jobA_on_20260909.txt`.
+##      Mirror updated. 455 → 700 at 1/30 min ≈ 5 days; the cursor (1372) continues into the new range unchanged.
+##      ▶ Watch: first tick's `A:1 reg | pool 1373/1622`; `silent_watch` will count job A again. When the ceiling hits,
+##      the log reads `… >= REG_STOP_AT 700 — ceiling reached` every tick — that is not a stall.
 ## 62.5 ▶ **WHAT IS OPEN, IN ORDER, FOR SESSION 63.**
 ## 62.23 ✅ **CUTOVER DONE 2026-09-04 (owner local afternoon): `preview`+`main` at `00b4690`** (V8.52 repoint
 ##      + `DEFAULT_SPONSOR_POOL` = the owner's revised 10-leader roster, two swapped, dead `run_bigfill_rr.ps1`
