@@ -1040,6 +1040,86 @@ owner-set, and the session that earned it got five things wrong by ignoring what
 ##      hardware-wallet admin (page button, same shape as accept). Everything this session was pushed from the
 ##      owner's PowerShell as it landed (frontend `e2819c6`, keepers `879facd`, Mainnet-App `23810cb`); this
 ##      handoff + `MAINNET_READINESS.md` were committed at session close.
+## 62.41 ✅✅ **2026-09-10 (session 70): BLOCKAID IS CLEARED AND VERIFIED — G1 IS GREEN. AND WRITING
+##      THE P4 PAGE FOUND THREE GAPS IN THINGS ALREADY RECORDED AS DONE.**
+##      ⚠ Cowork device shell STILL cannot mount the repos (Plan9 share error, retried twice after an
+##      MCP reconnect) — second session running. Every file edit went through stage/commit; git is the
+##      owner's. Chrome (Claude in Chrome) worked and was used for Gmail + the wallet test.
+##      ✅✅ **G1 CLOSED.** Nimrod (Blockaid) 11:02Z: *"Only the **token** is labeled malicious.
+##      PairManager is not. Both are involved in the approval, but the engine is reacting to the token-
+##      0x2D8B7b5eDec96bE441b6fb0D45D74a2BcE2C639a. I have cleared the flagging."* — the 09-09
+##      hypothesis exactly. So Peter's 09-05 clearance of the SITE and the ROUTER changed nothing
+##      because **neither was ever flagged**; five days of re-testing the T1 PairManager were spent on
+##      the wrong address. What found it was reading WHERE the ⚠ sat in the wallet, not what the alert
+##      text named. ⛔ NOT closed on the email — the 09-05 lesson (a clearance is a WALLET test) was
+##      applied: fresh MetaMask `0x03BE…03E3` on crypto-nova.app, Claude drove Register → Continue with
+##      Default → Approve $10, owner screenshotted the WHOLE MetaMask panel top→bottom and cancelled.
+##      **No ⚠ on the spending cap, the spender, or "Interacting with" — same site/token/spender/chain
+##      as the four red runs, only Blockaid's label changed. First clean run since 08-27.** Closing
+##      reply sent by the owner; two follow-ups still with Blockaid: (a) is the clearance permanently
+##      bound to that token ADDRESS — [stated] the owner reuses the same mock across redeploys and will
+##      keep doing so, so a rename is NOT the plan and the question is whether a rescan can re-apply the
+##      label; (b) the cryptonova.ai / mainnet heads-up, still unanswered since 09-08.
+##      ✅ Loose end closed: `0xb41A…617c` showing as registered is not a frontend false claim —
+##      [stated] "i was testing and registered the wallet ...617c".
+##      ⚠ NEW, open, NOT measured: [stated] "on chrome it hangs a bit i need to refresh but in brave it
+##      seems to work fine" on the register/approve path. Members are on Chrome → customer-facing.
+##      Filed in memory [[cryptonova-frontend]]; reproduce and read the console before theorising.
+##      ⛔⛔ **R18 — THE LIVE CHAIN HAD NO WORKING PAUSE COMMAND.** `pause_control.js` read owner/pauser/
+##      systemPaused in ONE `Promise.all`; `pauser` is V8.53-only (R15), so on V8.52 the script died.
+##      MEASURED (owner, `ACTION=status` vs `deployed_addresses_v8_52.json`): `ProviderError: execution
+##      reverted … at Proxy.pauser … at async Promise.all (index 1) … pause_control.js:30`. ▶ Precisely:
+##      `pauseSystem()` ALWAYS worked on V8.52 (owner-only) — **the contract was never unpausable, the
+##      tooling could not reach it.** ✅ FIXED: `pauser()` probed alone → `n/a — pre-V8.53 router` + a
+##      warning that the watchdog cannot arm there; both branches proven offline against a fake contract.
+##      `sf_floor_watchdog.js` deliberately unchanged — it needs the role, refusing is correct.
+##      ⛔⛔ **`sf_floor_watchdog.js` IS NOT ON THE VPS** (`ls: cannot access … No such file or
+##      directory`), no cron line. Built 09-07 `b61c6a6`, proven 7/7 offline, live-tested on the V8.53
+##      private chain FROM THE PC — never scp'd. Harmless today (V8.52 has no pauser role → exit 2 every
+##      tick) so its absence is CORRECT for this chain, but `MAINNET_READINESS.md` P2 read as though it
+##      were operational. It is an INSTALL step on the mainnet checklist, not a build step.
+##      ✅ **CRON SURFACE MEASURED 19:08Z:** md5 `4b00cdc5ef2a64703b5f7a050617af74`, **19 live job
+##      lines**, full table in `INCIDENT_PLAYBOOK.md` §1.3. Only switch present is `route_rr.OFF`
+##      (Aug 9, inert — both route_rr lines TRIM-commented); no `rr_keeper.OFF`, A/B/C live.
+##      `crontab_live_mirror.txt` was 8 days stale (synced 09-02) — RE-SYNC OWED.
+##      ⛔⛔ **THE CHANNEL IS 98% ONE MESSAGE.** `alerts.jsonl` (2.89 MB, rotates at 8 MB): by source
+##      direct_keeper 8684 · system_keeper 636 · silent_watch 5 · topup_keeper 2 · site_probe 2 ·
+##      tg_send 1. By severity warning 6606 · info 2669 · unknown 55 · fail 14. **6477 of the 6606
+##      warnings are `WARNING Keeper ignored a halt-price estimate` — which `ALERT_PLAYBOOK.md` already
+##      grades 🟢 IGNORE, "the GUARD WORKING"** — logged `warning` and delivered ~3×/min (last 24 h:
+##      warning 4388 · info 974 · fail 0 · unknown 0). The playbook's own standing rule says such an
+##      alert earns *a fix or an explicit 🟢 row*; it got the row and nothing changed, because **the row
+##      is a note to a human and the LOGGER's severity was never reconciled with it.**
+##      ⛔ And all 55 `"severity":"unknown"` rows (**2026-08-27 → 09-05**, not just 09-05 — Claude first
+##      said 09-05 off a `tail -10` and corrected it) are `system_keeper`'s "🟡 ALERT: WARNING / SF
+##      WARNING — below $100" band, which `alert_log.js` has no classifier row for, while it DOES
+##      classify CRITICAL (the 14 `fail`, one episode 09-04 19:11→21:11Z during the V8.52 fill,
+##      self-resolved). ▶▶ **On mainnet SF-below-floor is the AUTOMATIC PAUSE trigger, so the band that
+##      most directly precedes an automated pause is the one the logger cannot classify — sitting inside
+##      the query meant to surface new alert types.**
+##      ⚠ Zero rows ever from `integrity_check`, `sf_invariant_check`, `dupe_watch`, `rpc_probe`,
+##      `frozen_watch`, `onramp_keeper`. Mostly means healthy (PASS is silent) — but their alert path
+##      has never run in production. `channel_pulse`/`monitor_v8` sendChannel are excluded by design.
+##      ✅ **SHIPPED THIS SESSION:** `C:\CryptoNova-Mainnet-App\INCIDENT_PLAYBOOK.md` (P4 — DETECT /
+##      DECIDE / ACT / TELL / REVIEW; §1.2 rows for the 7 senders ALERT_PLAYBOOK never covered, §1.3
+##      measured cron, §1.4 measured channel, §3 real paste-ready blocks + R18, §4 four member notices
+##      in the owner's voice, §5 unpause gated on the write-up, §6 what it still owes, §7 the pattern);
+##      `MAINNET_READINESS.md` P2 corrected + P4 ticked + §5 item 1 closed; `scripts/pause_control.js`
+##      fixed; `REGRESSION_REGISTER.md` R18.
+##      ▶▶ **THE PATTERN, AND IT IS THE POINT OF THE SESSION:** three gaps, all in things recorded as
+##      DONE — pause script proven on the PRIVATE chain and broken on the live one; watchdog proven
+##      offline and never INSTALLED; classifier handling the emergency band but not the band that leads
+##      into it. One habit: **proving a thing works and never checking that it works WHERE IT HAS TO
+##      WORK.** Every open item in the playbook §6 is written as an install-and-run-it-there step.
+##      ⚠ CLAUDE SLIP: an owner block used `&&` after `ls` of a possibly-missing file — the missing
+##      watchdog aborted the chain and three queries never ran (a wasted round trip). This exact trap is
+##      already in memory from 09-04. `;` + `|| true` in owner blocks, always.
+##      ▶ **NEXT SESSION, IN ORDER:** (1) ONE keepers pass — `alert_log.js` classifier row for the
+##      system_keeper WARNING band + drop the halt-price alert to `info`/aggregate, fold the playbook
+##      §1.2 rows into `ALERT_PLAYBOOK.md`, re-sync `crontab_live_mirror.txt`; scp + md5 + a proving run
+##      into the job's own log. (2) wire the 11 live keepers to `keeper_env.js`. (3) owner's T2-open
+##      decision (T9). (4) G4/G5 text. (5) Blockaid's answer on the two follow-ups. (6) the Chrome-hang
+##      report. (7) self-sustaining-loop measurement (62.39). (8) `--renounce-roles` page button.
 ## 62.5 ▶ **WHAT IS OPEN, IN ORDER, FOR SESSION 63.**
 ## 62.23 ✅ **CUTOVER DONE 2026-09-04 (owner local afternoon): `preview`+`main` at `00b4690`** (V8.52 repoint
 ##      + `DEFAULT_SPONSOR_POOL` = the owner's revised 10-leader roster, two swapped, dead `run_bigfill_rr.ps1`

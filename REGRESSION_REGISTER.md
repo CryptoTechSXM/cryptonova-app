@@ -511,3 +511,38 @@ that window), deploy, `rm` both after. (2) OWED (session 68): a foreign-transact
 `deploy_v8.js`'s send wrapper — before every send compare the chain's pending nonce with
 base + sent; a HIGHER chain count = someone else is signing → abort with the diagnosis, before
 the collision; a lower count is node lag, log and proceed. Proven offline before it is trusted.
+
+## R18 - Emergency tooling written for the NEWEST deployment silently stopped working on the LIVE one
+**Registered 2026-09-10 (session 70, while writing the P4 incident playbook — not during an incident,
+which is the only reason it cost nothing.)** `scripts/pause_control.js` — the owner's pause/unpause
+switch, the single most time-critical script in the repo — read `owner()`, `pauser()` and
+`systemPaused()` in ONE `Promise.all`. `pauser` was added in V8.53 (R15). The LIVE community chain is
+V8.52, which predates it, so the missing method took the whole script down before it could do anything.
+
+**MEASURED** on the live V8.52 router `0xBacE079aDB755Ea42b32310FE2E414CF036dd318`, owner ran
+`ADDRESSES_FILE=deployed_addresses_v8_52.json ACTION=status`:
+`ProviderError: execution reverted ... at Proxy.pauser ... at async Promise.all (index 1) ...
+pause_control.js:30:35`.
+
+**SAY IT PRECISELY:** `pauseSystem()` itself has always worked on V8.52 — it is owner-only there.
+**The contract was never unpausable. The TOOLING could not reach it.** In an incident the owner would
+have opened the runbook, pasted the command, and received a stack trace.
+
+**WHY IT IS A REGISTER ENTRY:** the script was written, reviewed and rehearsed against the V8.53
+PRIVATE chain, where it works perfectly. Nobody ran it against the book the members are on. The same
+session found the twin: `sf_floor_watchdog.js` was built, proven 7/7 offline and live-tested on the
+private chain, and was NEVER `scp`'d to the VPS — measured by `ls` on the box. Both are one habit:
+**proving a thing works, and never checking that it works WHERE IT HAS TO WORK.**
+
+**FIXED:** `pauser()` probed on its own; a revert prints `n/a - pre-V8.53 router, no pauser role on
+this deployment (pause is owner-only here)` plus a line warning that the automated SF-floor watchdog
+cannot arm on that chain; `owner` and `systemPaused` are read separately and the script carries on.
+Both branches proven offline against a fake contract before shipping. Same tolerance
+`postdeploy_check.js` already had for its pauser row. `sf_floor_watchdog.js` deliberately KEEPS the
+strict shape - it genuinely needs the role, so failing loudly at install time is correct for it.
+
+**CHECKED BY:** (1) every script that may be run in an emergency is exercised with `ACTION=status`
+(or its read-only equivalent) against the LIVE address book after each community deploy - add it to
+the post-deploy card beside the R14 `upkeepCaller` read. (2) Any new contract method a script reads
+goes in its OWN probe, never in a shared `Promise.all` with methods that predate it. (3) A script
+that must NOT degrade (the watchdog) states so in its header, as it already does.
