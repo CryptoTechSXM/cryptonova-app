@@ -546,3 +546,78 @@ strict shape - it genuinely needs the role, so failing loudly at install time is
 the post-deploy card beside the R14 `upkeepCaller` read. (2) Any new contract method a script reads
 goes in its OWN probe, never in a shared `Promise.all` with methods that predate it. (3) A script
 that must NOT degrade (the watchdog) states so in its header, as it already does.
+
+## R19 - A written verdict and the code that classifies it drifted apart, unnoticed for a fortnight
+**Registered 2026-09-10 (session 71, while doing the keepers pass R18's playbook asked for - again
+not during an incident, which is again the only reason it cost nothing.)**
+
+`ALERT_PLAYBOOK.md` is the human verdict table: one row per alert type, 🟢 IGNORE / 🟡 WATCH /
+🔴 ACT. `alert_log.js`'s `classify()` is what actually stamps `severity` on every row of
+`alerts.jsonl`, and therefore what every count, grep and future census reads. **Nothing ever
+required the two to agree, and they did not.**
+
+**MEASURED** over the live file, 9,613 rows:
+- `WARNING Keeper ignored a halt-price estimate` was graded **🟢 IGNORE - "the GUARD WORKING"** in
+  the playbook on 2026-08-26, and logged **`warning`** by the classifier for the next fortnight.
+  It is **6,695 rows - 70% of every alert the fleet has ever sent, and 97% of everything labelled
+  `warning`**. So `grep '"severity":"warning"'`, the query that is supposed to surface what needs
+  watching, was 97% noise.
+- `system_keeper` picks ONE header emoji per report (`system_keeper.js:850`): 🔴 CRITICAL /
+  🟡 WARNING / 🟢 healthy. 🔴 and 🟢 had classifier rules from day one. **🟡 never did**, so 47
+  real reports sat in `unknown` from 2026-08-27 to 09-05 - **and 🟡 is the SF-below-floor band,
+  which on mainnet is the automatic-pause trigger.** The band that leads into an automated pause
+  was the one band the logger could not name.
+- Underneath those 47 sat **7 rows of `🚀 T2 Velocity Gate Opened!`** - a genuinely new alert type,
+  no rule, no playbook row, never triaged by anyone. **The `unknown` bucket worked exactly as
+  designed and caught it. Nobody ran the query for a fortnight**, and 47 known-shape rows were
+  piled on top of it.
+
+**SAY IT PRECISELY:** no alert was ever lost and no keeper ever misbehaved. What broke is the
+INSTRUMENT - the severity field meant one thing in the playbook and another in the file, so every
+count taken from it was wrong in the same direction, and the one query designed to surface novelty
+was buried by rows that were merely unclassified.
+
+**FIXED:** classifier rows for 🟡 (`warning`), 🚀 (`info`) and the halt-price text (`info`, matching
+the 🟢 row it always had, placed ABOVE the generic `^WARNING` rule with the ordering asserted in the
+selftest). `alert_log.selftest.js` 27 -> 38 checks, with a new §2b that replays the three text shapes
+the census found in `unknown`. **The old 27/27 passed while the classifier was wrong about 97% of the
+live file, because every case was quoted from the SENDING code and none from the RECEIVING file.**
+Proven by replaying the live 9,613-row file through the new classifier ON THE BOX: `unknown` 55 -> 0,
+`warning` 6,770 -> 180, `fail` 14 -> 14 unchanged.
+
+**CHECKED BY:** (1) **a verdict in `ALERT_PLAYBOOK.md` is not finished until `classify()` agrees with
+it** - new row here, new case in the selftest, rule in `alert_log.js`, replay the live file, scp, md5.
+All five, same session. Written into both files' headers. (2) When a sender picks its own severity,
+classify ALL of its bands or none. (3) `unknown` is only worth having if somebody reads it -
+`ALERT_PLAYBOOK.md` now names a cadence (monthly, and after every deploy) and carries the census and
+replay commands. (4) Test cases are quoted from BOTH ends: what the code can send, and what the file
+actually contains.
+
+## R20 - A comment named a kill switch that no longer existed, so the file described a brake that was not there
+**Registered 2026-09-10 (session 71).** The live crontab's header band said the three `rr_keeper`
+stress lines (jobs A, B, C) are *"held down ONLY by the kill-switch file
+/root/keeper/rr_keeper.OFF"*. **MEASURED: that file does not exist.** The only switch present is
+`route_rr.OFF` (Aug 9), and it is inert - both `route_rr` lines are `TRIM-2026-08-06` comments. So
+jobs A, B and C are LIVE AND RUNNING, while the header reads to any reader as "currently stood down".
+
+**WHY IT IS A REGISTER ENTRY, and it is the second time in this exact band:** session 58 fixed this
+same class on 2026-09-02, when the COMMENT was wrong (a banner said "STRESS ENGINE - DISABLED" above
+two dead lines while three live ones ran below). **It reopened from the other side: this time the
+comment was right when written and the SWITCH went away.** Two more comments had drifted the same
+way - the header said "V8.51 LIVE" on a V8.52 chain, and job A was labelled "every 20 min" against a
+`*/30` schedule, having been corrected from "10 min" to "20 min" by that same 09-02 pass.
+
+**FIXED** comment-only, on the box, session-58 recipe: dated backup
+`/root/keeper/crontab_backup_pre_s71_20260910.txt` (md5 `4b00cdc5ef2a64703b5f7a050617af74`), then the
+md5 of the ACTIVE lines - comments and blanks stripped - proven **IDENTICAL before and after**: 19
+lines, `5b27df4f010b42c7e0f02a1eb090bcb5` both sides. New full-file md5
+`a39c614480eb726cfc22b0eaa289a1ff`. A dated CORRECTION block was inserted ABOVE the offending band
+rather than the band being rewritten, so the history stays readable.
+
+**CHECKED BY:** (1) **A comment that names a kill switch is a claim about a FILE, and files
+disappear.** Whenever a doc says "held down by X.OFF", `ls` X.OFF in the same breath - the label was
+checked repeatedly, the thing it pointed at never was. (2) Any comment-only crontab edit proves
+itself with the active-line md5: that is the one number a comment change cannot fake, and it is now
+recorded in `crontab_live_mirror.txt`'s header. (3) `crontab_live_mirror.txt` records BOTH hashes -
+the full-file md5 and the active-line md5 - so a future session can tell "somebody edited comments"
+from "somebody changed a schedule" without reading a diff.

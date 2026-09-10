@@ -1120,6 +1120,106 @@ owner-set, and the session that earned it got five things wrong by ignoring what
 ##      into the job's own log. (2) wire the 11 live keepers to `keeper_env.js`. (3) owner's T2-open
 ##      decision (T9). (4) G4/G5 text. (5) Blockaid's answer on the two follow-ups. (6) the Chrome-hang
 ##      report. (7) self-sustaining-loop measurement (62.39). (8) `--renounce-roles` page button.
+## 62.42 ✅✅ **2026-09-10 (session 71): THE KEEPERS PASS 62.41 ORDERED, DONE AND PROVEN ON THE BOX.
+##      THREE MEASUREMENTS CORRECTED THINGS 62.41 HAD RECORDED AS FACT. R19 + R20 REGISTERED.**
+##      ⚠ Cowork device shell STILL cannot mount the repos (Plan9 share error) — THIRD session.
+##      Every file edit via stage/commit; git, ssh and scp were the owner's.
+##      ⛔⛔ **62.41 SAID ALL 55 `unknown` ROWS WERE THE SF WARNING BAND. THEY WERE NOT.** Per-text
+##      census of the live file: **47** = 🟡 SF WARNING · **7** = `🚀 *T2 Velocity Gate Opened!*`
+##      (`system_keeper.js:632`) · **1** = a 🟢 Heartbeat pre-dating the 🟢 rule added the same day.
+##      ▶▶ The 🚀 rows are a GENUINELY NEW alert type — no rule, no playbook row, never triaged.
+##      **The `unknown` bucket did its job and caught it on the day it first fired. Nobody ran the
+##      query for a fortnight.** The defect is not the missing rule, it is that **a working detector
+##      with no reading cadence is not a detector.** `ALERT_PLAYBOOK.md` now names one.
+##      ⛔ Also corrected: the playbook said "the four senders" write to `alerts.jsonl`. **SEVEN do**
+##      (direct_keeper 8,832 · system_keeper 637 · monitor_v8 14 · silent_watch 5 · topup_keeper 2 ·
+##      site_probe 2 · tg_send 1); `onramp_keeper` IS wired and has never written a row.
+##      ⛔⛔ **R19 — THE PLAYBOOK'S VERDICT AND `classify()` HAD DRIFTED APART.** `WARNING Keeper
+##      ignored a halt-price estimate` was graded 🟢 IGNORE on 2026-08-26 and logged `warning` ever
+##      since — **6,695 rows = 70% of all alerts, 97% of everything labelled `warning`.** And 🟡, the
+##      band that on mainnet precedes the AUTOMATIC PAUSE, had no rule at all. ✅ FIXED: 🟡→warning,
+##      🚀→info, halt-price→info (above the generic `^WARNING` rule, ordering asserted). Selftest
+##      27→**38**, new §2b replaying the three census shapes. ⚠ **The old 27/27 passed while the
+##      classifier was wrong about 97% of the live file, because every case was quoted from the
+##      SENDING code and none from the RECEIVING file.** PROVEN BY REPLAY ON THE BOX (R18's lesson):
+##      `unknown 55→0`, `warning 6,770→180`, `fail 14→14`. ⚠ NOT retroactive — severity is stamped at
+##      write time; the replay command is in `ALERT_PLAYBOOK.md`.
+##      ✅ **`ALERT_PLAYBOOK.md` IS NOW THE ONE VERDICT TABLE** — the seven senders written after
+##      2026-08-26 folded in from `INCIDENT_PLAYBOOK.md` §1.2 (which now POINTS at it), plus the
+##      reconciliation rule, a reading cadence, and the census/replay commands.
+##      ✅✅ **THE HALT-PRICE FLOOD IS THROTTLED — AND THE MEASUREMENT IS THE POINT.** 772 cron slots
+##      had fired it; median 2, but **126 slots sent exactly 40** (`DRAIN_MAX_TICKS`, one per drain
+##      tick) = 75% of all occurrences; **peak hour 240**, four Telegram messages a minute. ⛔ **AND
+##      `FAIL Keeper did NO work — batch halted on gas` — the condition the playbook says makes it
+##      worth reading — HAS NEVER FIRED, 0 in 9,613 rows.** It had been actionable exactly never.
+##      NEW `alert_throttle.js` (+ selftest 24/24): generic per-KEY window throttle, state in
+##      `keeper_state.json` (must persist — the bursts span cron RUNS as well as ticks), one send an
+##      hour carrying `⏳ +N more`. ⛔ **EVERY failure mode resolves to SEND** — missing module,
+##      missing/corrupt state, clock stepped backwards, zero window — and there is deliberately **no
+##      setting that means "never"**. **Nothing is lost:** `log("GAS "+reason)` is unconditional, so
+##      every halt with its rejected estimate stays in `keeper.log`.
+##      ✅ **NEW KIND OF TEST, and it is the R18 answer: `harness/halt_alert_wiring_offline.js`
+##      (16/16).** `direct_keeper.js` calls `main()` at load and cannot be require()d, so the harness
+##      READS THE REAL SOURCE and asserts the wiring: guarded require whose fallback SENDS · the
+##      unconditional keeper.log line still ahead of the branch and still unconditional ·
+##      **`saveState()` BEFORE the `await sendTelegram`** (a send not recorded re-sends and rebuilds
+##      the flood) · the persisted bag is the one passed to `decide()` · the alert TEXT unchanged so
+##      `alert_log.js` and the playbook still match it. **Run on the VPS against the INSTALLED engine.**
+##      ✅✅✅ **PROVEN LIVE 20:25Z: that cron slot produced ONE alert where it would have produced 40.**
+##      `keeper.log` carried the rest as `throttled (+14 … +20)`; state showed `suppressed 19` rising
+##      mid-drain. Same output showed the classifier going live at the 20:05 tick — every halt row
+##      before 20:05 is `warning`, every one after is `info`.
+##      ⛔⛔ **AND STOPPING THE FLOOD REVEALED THE NEXT LOUDEST THING — the owner spotted it in the
+##      channel within the hour.** `⚡ Keeper active — non-rescue work`: MEASURED **47 messages in
+##      one hour** (1,299 lifetime, 316 slots, median 1, MAX 8) while the just-throttled halt-price
+##      alert sent exactly **1** in that same hour. ▶▶ **THE LESSON, and it is the durable one:
+##      that alert ALREADY HAD A GUARD — `% HEARTBEAT_EVERY`, one message per 5 active-work ticks —
+##      and the guard was working exactly as written. A COUNT GATE CANNOT BOUND A RATE.** "One in
+##      five" says nothing about how long five takes; the busier the fleet gets the faster the count
+##      runs, so a count gate thins the channel MOST when nothing is happening and LEAST when you
+##      need to read it. It is backwards. ✅ Now throttled by TIME too, own key `keeper-active` so a
+##      busy drain can never mute the halt-price guard or the reverse (proved for real in harness
+##      §2b, not just asserted from source). Harness 16→**22, ALL PASS on the box against the
+##      INSTALLED engine**. `ALERT_PLAYBOOK.md` carries the standing rule: **bound a new alert by
+##      TIME; if you are writing `% N` that is a sampler, not a throttle.**
+##      ⛔⛔ **R20 — THE CRONTAB'S HEADER NAMED A KILL SWITCH THAT DOES NOT EXIST.** It said the three
+##      `rr_keeper` lines are "held down ONLY by `/root/keeper/rr_keeper.OFF`". **That file is not
+##      there** (only the inert `route_rr.OFF`), so **jobs A, B and C are LIVE** while the header reads
+##      as "stood down". Session 58 closed this class on 09-02 when the COMMENT was wrong; it reopened
+##      when the SWITCH went away. Two more drifts: header "V8.51 LIVE" on a V8.52 chain; job A
+##      labelled "every 20 min" against `*/30`. ✅ FIXED ON THE BOX, comment-only, session-58 recipe:
+##      backup `crontab_backup_pre_s71_20260910.txt` (md5 `4b00cdc5…`), **active-line md5 IDENTICAL
+##      before and after — 19 lines, `5b27df4f010b42c7e0f02a1eb090bcb5`**; new full-file md5
+##      `a39c614480eb726cfc22b0eaa289a1ff`. A dated CORRECTION block sits ABOVE the band rather than
+##      the band being rewritten. `crontab_live_mirror.txt` re-synced and now records BOTH hashes, so a
+##      future session can tell "comments edited" from "schedule changed" without a diff.
+##      ⛔ **NEW BRIDGE FAULT, TWICE IN ONE SESSION: `device_commit_files` returned
+##      `{"written":[…]}` while the PC file was UNCHANGED — and `force:true` did not prevent the
+##      second one.** Both were a second write to a path already written this session; both landed on
+##      an immediate retry. ▶ **After any bridge write that matters: re-stage and md5 it against what
+##      was sent. "written" is not proof.** All other files this session were verified and matched.
+##      ⚠ CLAUDE SLIPS, both already in memory as rules: (1) **a rollback command was put in the same
+##      message as the success path and the owner ran it**, reverting the freshly installed engine
+##      (harmless, re-scp'd) — the recorded rule is that a rollback goes in a message of its own, and
+##      if a message contains a rollback it contains NOTHING else. (2) a verification block printed
+##      every matching row of a 2-hour window uncapped, ~300 near-identical lines on screen.
+##      ⛔ **THE CHANNEL, MEASURED BEFORE AND AFTER (last hour, 2026-09-10 ~21:40Z):** before this
+##      session an hour like that one carried up to 240 halt-price + ~47 keeper-active. After:
+##      **halt-price 1, keeper-active 1**, plus 6 drain-tick-cap, 2 heartbeats and the real
+##      `SUCCESS Keeper rescued` lines. Deliberately NOT throttled: `SUCCESS Keeper rescued`
+##      (788 rows, median 2 — that is member money moving and is the thing you want to see) and
+##      `WARNING Keeper drain hit its tick cap` (141 rows, once per run, and it means backlog).
+##      ✅ **PUSHED:** keepers `main` `879facd..adcb2fb` → `..91e165f` → `..1c14430` →
+##      **`..a25fd11`**; Mainnet-App `main` `7cc867a..9f0c06d` → **`..5fde65b`**; contracts `v8.1`
+##      = this block + R19/R20.
+##      ▶ **NEXT SESSION, IN ORDER, unchanged from 62.41 except item 1 is now done:** (1) wire the 11
+##      live keepers to `keeper_env.js` (T9) — touches every live job, do it as its own session.
+##      (2) owner's T2-open decision. (3) G4/G5 text. (4) Blockaid's two follow-ups. (5) the Chrome-hang
+##      report on register/approve. (6) self-sustaining-loop measurement (62.39).
+##      (7) `--renounce-roles` page button. ⚠ Also open, from the playbook: exercise the six
+##      never-fired alert paths once deliberately (`integrity_check`, `sf_invariant_check`,
+##      `dupe_watch`, `rpc_probe`, `frozen_watch`, `onramp_keeper`) so the first real firing is not the
+##      first test.
 ## 62.5 ▶ **WHAT IS OPEN, IN ORDER, FOR SESSION 63.**
 ## 62.23 ✅ **CUTOVER DONE 2026-09-04 (owner local afternoon): `preview`+`main` at `00b4690`** (V8.52 repoint
 ##      + `DEFAULT_SPONSOR_POOL` = the owner's revised 10-leader roster, two swapped, dead `run_bigfill_rr.ps1`
