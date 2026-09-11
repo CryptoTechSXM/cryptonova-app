@@ -1337,6 +1337,106 @@ owner-set, and the session that earned it got five things wrong by ignoring what
 ##      `sf_invariant_check.js`, `dupe_watch.js`, `growth_snapshot.js`, `frozen_matrix_check.js`,
 ##      `channel_pulse.js`, `monitor_v8.js`, `harness/chain_binding_offline.js`, `README.md`.
 ##      Contracts `v8.1` — `REGRESSION_REGISTER.md` (R21, R22) + this handoff block.
+## 62.44 ✅✅ **2026-09-11 (session 73): SHIPMENT C LANDED AND T9 IS COMPLETE. EVERY CHAIN-TOUCHING
+##      JOB IN THE LIVE CRONTAB NOW TAKES ITS CHAIN FROM THE ADDRESS BOOK. HARNESS 95/95 ON THE BOX.**
+##      ⛔ **CORRECTION TO 62.43 ABOVE, READ THIS FIRST: its closing line says "PUSHES OWED (nothing
+##      was pushed this session)". THAT LINE IS WRONG.** It was typed before the push happened.
+##      MEASURED at the start of this session by reading the git refs on disk, not by asking:
+##      contracts `v8.1` local == `origin/v8.1` == **`b58cf34`**; keepers `main` == `origin/main` ==
+##      **`d84765e`**. Session 72 was fully pushed and nothing was owed. ▶▶ **A handoff block can
+##      never report the push that follows it, any more than it can carry the SHA of the commit that
+##      creates it. Memory is the SHA record; the handoff is the story.** When a handoff says a push
+##      is owed, CHECK THE REFS before re-pushing.
+##      ⚠ Cowork device shell STILL cannot mount the repos — FIFTH session, same Windows-update cause
+##      named in 62.43. Every file edit went through stage/commit, then re-stage + byte + md5 verify
+##      (7/7 clean this time, no truncation, no no-op). git, ssh and scp were the owner's.
+##      ✅ **PARITY FIRST, AGAIN, AND CLEAN: 8/8 IDENTICAL repo↔box** before a line was edited —
+##      the five signing keepers plus `keeper_env`, `rpcProvider` and the harness, CR-normalised both
+##      ends. Session 45's landmine stays closed. `keeper_env` and `rpcProvider` came back at exactly
+##      the md5s memory recorded for them yesterday, which is the check working as designed.
+##      ⛔⛔ **THE CENSUS OF THE FIVE (measured from source, 2,276 lines): SIX provider sites, every
+##      one with the literal `84532` typed as an ARGUMENT.** `direct_keeper:211`, `rr_keeper:399` AND
+##      `:605`, `copay_rescue:86`, `fastlane_rescue:84`, `topup_keeper:121`. All five read
+##      `process.env.BASE_SEPOLIA_RPC_URL` directly. And `direct_keeper:33` still carried
+##      `|| "https://sepolia.base.org"` — **the last hard-coded testnet endpoint in the live fleet,
+##      sitting in the keeper that drives `performUpkeep`.** It had never fired, because the cron line
+##      always sets the endpoint; that is exactly what made it invisible. On a mainnet box with one
+##      missing env var it would have silently driven the TESTNET. R21's shape, one more time.
+##      ▶▶ **A DELIBERATE DIFFERENCE FROM SHIPMENTS A AND B, AND THE REASON MATTERS.** A and B went
+##      through `createProvider`, which brings a fallback ladder with it. **Shipment C does NOT get
+##      fallbacks.** Falling through to a public node is a behaviour change for a job that moves
+##      member money — public-node rate limits turn a full pass into a half pass — and nothing in R21
+##      asks for it. The five take `KENV.provider` (pinned to the book's chainId, one endpoint, the
+##      same one they always had) and call `await KENV.assertChain()` BEFORE the first spend.
+##      **Fixing the chain binding is not a licence to change the spending path.** Giving the signing
+##      keepers fallbacks is its own change, with its own measurement, if it is ever wanted.
+##      ✅ **THE ONE PLACE THAT DID NEED PER-ENDPOINT VERIFICATION: `rr_keeper` job B's `RESCUE_RPCS`.**
+##      A comma-separated list typed into `.env`, previously mapped straight to providers pinned at
+##      the literal 84532 and used without a word — and job B SIGNS `setMemberOptions` and
+##      `selfRescue` through them. Now every entry is asked `eth_chainId`; a wrong-chain one is
+##      REFUSED and named, a dead one is SKIPPED and named, one bad entry does not kill the rest, and
+##      if none verify job B stands down and the rotation moves on to C. **R21's rule applied to a
+##      list rather than a single endpoint.**
+##      ✅ **HARNESS: 63 → 95 checks, ALL PASS on the box against the INSTALLED copies.** `WIRED`
+##      grows to seventeen and T9 is declared complete in the file itself; a new `SIGNING` list holds
+##      the five to two extra rules the watchers are not held to (take keeper_env's provider, do not
+##      build one; `await assertChain()` must be present in the source, not merely satisfiable via
+##      `createProvider`); two new `RESCUE_RPCS` checks. ▶ **And one repair to an existing check: the
+##      ADDRESSES_FILE-guard-order test matched the guard's MESSAGE TEXT.** The seven scripts word
+##      that message five different ways, so extending it would have meant either rewording five
+##      files or five special cases. It now matches `if (!process.env.ADDRESSES_FILE)` — the guard
+##      itself. **A check that depends on prose is a check that rots.**
+##      ✅ **LIVE ON THEIR OWN CRON, all five, install stamped 15:21:04Z:** `rr_keeper` job C 15:22,
+##      `fastlane_rescue` 15:23, **job B 15:23 — `deployer gas 59.16 ETH · 3 RPC × 5`, and that 3 is
+##      now a MEASURED number**: three RESCUE_RPCS endpoints each asked and each verified on 84532,
+##      where yesterday it was three endpoints assumed. `copay_rescue` 15:24 (0 rescued, 98 in grace,
+##      SF $3,456.29), `direct_keeper` 15:26, **`rr_keeper` job A 15:30 — `registered 0x5687838a…`,
+##      a real on-chain registration signed through the new path.** `topup_keeper` run by hand with
+##      `DRY_RUN=1` at 15:28 (its cron slot is :17, before the swap): balances read, chain proven,
+##      nothing sent. No `assertChain` failure, no `RPC REFUSED`, no FATAL anywhere.
+##      ✅ **A RISK MEASURED RATHER THAN ASSUMED, and it could have quietly undone `RPC_ASSIGNMENT.md`.**
+##      The five used to read `BASE_SEPOLIA_RPC_URL` only; `keeper_env` PREFERS `RPC_URL` when both
+##      exist. If a bare `RPC_URL` were set anywhere on this box, all five would have collapsed onto
+##      one endpoint and the per-job spread would have vanished with nothing to show for it.
+##      MEASURED (counts only, no URLs printed): `.env` has **0** lines starting `RPC_URL` and **1**
+##      starting `BASE_SEPOLIA_RPC_URL`; the crontab mentions `RPC_URL` on **10** lines and
+##      `BASE_SEPOLIA_RPC_URL` on **10** — equal, so every one is the long name. Nothing moved.
+##      ▶ **This is a MAINNET TRAP, not a closed question:** the mainnet env templates name the
+##      mainnet endpoint `BASE_SEPOLIA_RPC_URL` (62.38). If a mainnet box ever sets both names, the
+##      short one wins. Pick ONE name on the mainnet box and put it on the deploy checklist.
+##      ✅ **PARKED ITEM FROM 62.43, CLOSED:** `frozen_matrix_check.js` now says in its header that
+##      `STATE` is a SWITCH, not a path — only the exact string `"0"` disables the state file, and
+##      `STATE=/tmp/x.json` reads as truthy and writes the normal file. Comment only; no code changed,
+##      so no live run was owed for it.
+##      ⚠ CLAUDE SLIPS, session 73: (1) the first parity block piped a here-string into `ssh … "bash -s"`
+##      and the remote shell died on nested quotes — `syntax error: unexpected end of file`, box column
+##      empty, one wasted round trip. **The fix that works from PowerShell is a remote command with NO
+##      quote characters in it at all**, passed as a single argument (`tr -d \\r`, `cut -c1-32`,
+##      `$(…)` unquoted, wrapped in PowerShell single quotes). That recipe is now proven twice.
+##      (2) A block labelled "runs in PowerShell" was pasted into an SSH session the owner already had
+##      open, so it tried to SSH from the droplet to itself. **Once he is on the box, blocks must be
+##      written for the box.** Say which PROMPT, not just which folder.
+##      ▶ **NEXT SESSION, IN ORDER:** (1) owner's T2-open decision. (2) G4/G5 text. (3) Blockaid's two
+##      follow-ups. (4) the Chrome-hang report on register/approve. (5) self-sustaining-loop
+##      measurement (62.39). (6) `--renounce-roles` page button. (7) exercise the six never-fired alert
+##      paths once deliberately. ⛔ Plus the one still carried from session 71 and belonging on the
+##      pre-mainnet list: the LIVE crontab's header says the three `rr_keeper` stress lines are held
+##      down by `/root/keeper/rr_keeper.OFF`, **which does not exist** — comment-only fix on the box,
+##      session-58 backup-and-hash recipe, owner's timing (R20).
+##      ▶ **ON THE MAINNET DEPLOY CHECKLIST, from T9 as a whole:** the address book on any box MUST
+##      carry `chainId`; `sf_floor_watchdog.js` is an INSTALL step, not a build step; `keeper_env.js`
+##      must actually be scp'd (it was missing on this box until session 72); one RPC env-var name
+##      only; and `node harness/chain_binding_offline.js` runs on the box after every deploy, beside
+##      the R14 `upkeepCaller` read and the R18 `ACTION=status` read.
+##      ✅ **INSTALLED md5s (all verified on the box after the swap, backups in `/root/keeper/_pre_s73/`):**
+##      `direct_keeper` `985c286d9619bca191f955fcbd1e18cd` · `rr_keeper` `9f7f1360291e7704c3b8f6aefed0d2ea`
+##      · `copay_rescue` `a37b73fe55c2eb44e7d74c24ee901c9d` · `fastlane_rescue`
+##      `57e4cb39cf28a8ee0aa11fcf5cf9dadd` · `topup_keeper` `389c9cec083616b44b9ea3c1a0fdb9b4` ·
+##      `frozen_matrix_check` `75939a1a5ef78730579440a2eb038cd8` · `harness/chain_binding_offline`
+##      `1dc8ea9de1c5cbcdaa21a7ebeff06648`. Swapped in with `mv` from `_incoming_s73/` so a live
+##      keeper tick could never read a half-written file — worth keeping as the recipe.
+##      ⚠ MEASURED in passing, not chased: 593 members, pool 1491/1622, parked 98, SF $3,456.29,
+##      deployer 59.16 ETH, T2 gate open, nothing paused.
 ## 62.5 ▶ **WHAT IS OPEN, IN ORDER, FOR SESSION 63.**
 ## 62.23 ✅ **CUTOVER DONE 2026-09-04 (owner local afternoon): `preview`+`main` at `00b4690`** (V8.52 repoint
 ##      + `DEFAULT_SPONSOR_POOL` = the owner's revised 10-leader roster, two swapped, dead `run_bigfill_rr.ps1`

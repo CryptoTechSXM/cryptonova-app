@@ -675,6 +675,24 @@ list. (3) A fallback list is keyed by chain, always: an endpoint for another cha
 reachable, not merely unlikely. (4) The address book on any box carries `chainId`; keeper_env
 still accepts a book without one but says out loud that it is assuming.
 
+**COMPLETED 2026-09-11 (session 73): Shipment C landed and T9 IS COMPLETE.** The five signing
+keepers - direct_keeper, rr_keeper (A/B/C), copay_rescue, fastlane_rescue, topup_keeper - now take
+the chain from the book and call assertChain() before they spend. Deliberately WITHOUT the
+createProvider fallback ladder: fixing a chain binding is not a licence to change the spending path
+of a keeper that moves member money. direct_keeper's `|| "https://sepolia.base.org"` default - the
+last hard-coded testnet endpoint in the live fleet - is gone. rr_keeper job B's RESCUE_RPCS list is
+the rule applied to a LIST: every entry asked eth_chainId, a wrong one refused by name, one bad
+entry does not kill the rest. Harness WIRED is now all seventeen chain-touching cron jobs and reads
+**95 passed, 0 failed** on the box against the installed copies; all five proven on their own cron
+ticks after the swap. (5) **A check that depends on PROSE is a check that rots** - the
+ADDRESSES_FILE-guard-order test matched the guard's message text, which the seven scripts word five
+different ways; it now matches `if (!process.env.ADDRESSES_FILE)`, the guard itself. (6) Mainnet
+trap left open on purpose, so it is written down: keeper_env PREFERS `RPC_URL` over
+`BASE_SEPOLIA_RPC_URL`, and the mainnet env templates use the LONG name for the MAINNET endpoint.
+MEASURED on this box - 0 bare RPC_URL lines in .env, crontab counts equal at 10/10, so nothing
+moved - but a mainnet box that sets both names will silently collapse every job onto one endpoint.
+Pick one name and put it on the deploy checklist.
+
 ## R22 - A redaction tested only against a shape this fleet does not use
 **Registered 2026-09-11 (session 72). Found by reading what a block we were about to hand over
 would print on screen - which is the only reason it was found at all.**
