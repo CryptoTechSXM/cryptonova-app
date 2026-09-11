@@ -1220,6 +1220,123 @@ owner-set, and the session that earned it got five things wrong by ignoring what
 ##      never-fired alert paths once deliberately (`integrity_check`, `sf_invariant_check`,
 ##      `dupe_watch`, `rpc_probe`, `frozen_watch`, `onramp_keeper`) so the first real firing is not the
 ##      first test.
+## 62.43 ✅✅ **2026-09-11 (session 72): T9 STARTED AND TWO THIRDS LANDED. THE FLEET NO LONGER
+##      DECIDES FOR ITSELF WHICH CHAIN IT IS ON. R21 + R22 REGISTERED.**
+##      ⚠ Cowork device shell STILL cannot mount the repos — FOURTH session — but the error now
+##      NAMES THE CAUSE: **a Windows update released 2026-09-08.** Sessions 69-71 logged it as an
+##      uninvestigated Cowork fault; it has an answer now. Every file edit went through
+##      stage/commit; git, ssh and scp were the owner's.
+##      ✅ **THE SSH LOGIN IS FINALLY WRITTEN DOWN** (owner asked): DigitalOcean droplet
+##      `cryptonova-keeper`, **167.99.0.250**, key `C:\Users\CryptoTech\.ssh\do_keeper`,
+##      keeper dir `/root/keeper`. Now at the TOP of `CryptoNova-Keepers/README.md` and in memory
+##      [[cryptonova-chain-binding]] / fleet-ops. ⛔ **CLAUDE COST TWO INSTALL ROUNDS BY PUTTING A
+##      PLACEHOLDER IN A RUNNABLE BLOCK** (`root@YOUR-VPS-HOST`, then the example `root@1.2.3.4`).
+##      He runs blocks exactly as written — that is the POINT of copy-paste-ready. A block with a
+##      blank in it is not a block. Ask in prose, then hand it over filled in.
+##      ✅ **PARITY MEASURED BEFORE ANY EDIT, for the first time across the whole live fleet:
+##      23/23 IDENTICAL repo↔box**, `rr_keeper.js` included — session 45's divergence is closed and
+##      stayed closed. CR-normalised both ends so Windows line endings could not fake a difference.
+##      `keeper_env.js` was MISSING on the box (built 09-07, never scp'd — same class as
+##      `sf_floor_watchdog.js`, and the second instance of that habit).
+##      ⛔⛔ **THE CENSUS, and it is worse than "some scripts hard-code 84532".** 19 live job lines,
+##      15 touch the chain (`silent_watch` and `site_probe` do not). **13 of the 15 passed the
+##      literal `84532` as an ARGUMENT** to their provider; `monitor_v8:210` passed no chainId at
+##      all. Every chain-touching job gets its RPC from its cron line or `.env`, so the
+##      `|| 'https://sepolia.base.org'` defaults in the source were never used live — which is why
+##      deleting them was safe, and it was MEASURED, not assumed.
+##      ⛔⛔ **R21 — `rpcProvider.js` FELL BACK TO PUBLIC BASE SEPOLIA NODES AND PINNED NO CHAINID.**
+##      Six seconds of silence from the primary was enough. Used by `system_keeper` (the 30-min
+##      health report) and `onramp_keeper` (partner payouts). On Sepolia it was invisible because
+##      **the fallbacks were the right chain BY ACCIDENT.** On mainnet a blip moves the health
+##      report to the testnet — **and that report is the reading P2's automatic SF-floor pause is
+##      built on.** Two more of the same: `rpc_probe.js:39` hard-coded `CHAIN_ID = 84532` **as its
+##      WRONG-CHAIN test** (on mainnet the detector inverts — every healthy endpoint flagged), and
+##      `onramp_keeper:242` named the network by testing the RPC URL for the string `"mainnet"`,
+##      while every endpoint here is a QuickNode random slug (`autumn-rough-sky`), so every mainnet
+##      payout would have announced itself as "Base Sepolia".
+##      ▶▶ **THE SHAPE: correctness that depends on the environment never changing, inside the very
+##      code whose job is to know the environment.** R18 one layer down. No test catches it, because
+##      on the right chain every path passes.
+##      ⛔ **THE BOX'S ADDRESS BOOK HAD NO `chainId` FIELD** — so every keeper ran down keeper_env's
+##      "assume Base Sepolia" path, right by luck. The repo copy (which has it) was shipped after
+##      proving the two books identical apart from that line. ⚠ A book hash disagreement on the way
+##      was chased rather than explained: the file simply **ends without a trailing newline**, which
+##      `grep` adds. Settled, benign. ▶ **Any mainnet box's book MUST carry `chainId`** — onto the
+##      deploy checklist beside the `sf_floor_watchdog` INSTALL step.
+##      ✅ **SHIPMENT A (installed + proven on the box):** `keeper_env.js` (provider now **LAZY** —
+##      requiring it reads the book and settles the chain but builds nothing and demands no RPC_URL,
+##      which is what lets `rpc_probe`, which has no ethers at all, share one definition of the
+##      chain; `KNOWN[chain].publicRpc` added), `rpcProvider.js` (chainId REQUIRED, **every endpoint
+##      INCLUDING THE PRIMARY asked `eth_chainId` before acceptance**, fallbacks keyed by chain,
+##      provider returned pinned), `rpc_probe.js`, `system_keeper.js`, `onramp_keeper.js`.
+##      ✅ **SHIPMENT B (installed + proven the same day):** `integrity_check`, `sf_invariant_check`,
+##      `dupe_watch`, `growth_snapshot`, `frozen_matrix_check`, `channel_pulse`, `monitor_v8`.
+##      MEASURED first, not assumed: all seven are **signerless** — zero `new ethers.Wallet`,
+##      `PRIVATE_KEY`, `.connect(` or `sendTransaction` across the set — which is what made
+##      "read-only watchers" a fact rather than a grouping.
+##      ✅✅ **`harness/chain_binding_offline.js` — 63/63 ON THE BOX AGAINST THE INSTALLED COPIES**
+##      (35 after A, 63 after B). §2 **stands up real JSON-RPC servers on 127.0.0.1 that LIE about
+##      their chainId** and makes `createProvider` talk to them: a wrong-chain primary is refused and
+##      never asked for work, a verified fallback is used instead. **Mocking the chain away would
+##      have been mocking away the bug.** §3 reads the live scripts' SOURCE for what a green run on
+##      the RIGHT chain can never catch, over a `WIRED` list of twelve files that **grows with each
+##      shipment** — Shipment C's five are named there as owed, so the list cannot quietly stop.
+##      ✅ **LIVE CONFIRMATION ON THEIR OWN CRON, not just by hand:** `rpc_probe` 13:43Z now prints
+##      `7 endpoint(s) on base-sepolia (chain 84532, from deployed_addresses_v8_52.json)` — 0 not OK;
+##      `onramp_keeper` 13:51Z logged `✓ RPC: …quiknode.pro/*** (chain 84532)`; `system_keeper`
+##      13:41Z reported healthy. The three too slow to wait for were run by hand with every Telegram
+##      destination emptied so nothing reached a member: `frozen_matrix_check` PASS over 38 matrices,
+##      `channel_pulse` console-only, `monitor_v8` clean — all exit 0.
+##      ⛔⛔ **R22 — `redact()` MASKED A URL SHAPE THIS FLEET DOES NOT USE.** It replaced `/v2/<key>`,
+##      which is **ALCHEMY's** shape; this fleet is **entirely QuickNode**, where the key is the bare
+##      first path segment. It matched nothing and printed the key in full, every run, into
+##      `health.log` and `onramp.log`. MEASURED, counts only, never printing a line: **54 log lines
+##      carried a live key** (health 27, onramp 26, monitor 1), exposing two endpoints. **Found by
+##      reading what a block we were about to hand over would put on screen — nothing else would
+##      have found it.** ✅ Fixed: keep scheme+host, mask everything after (host kept on purpose —
+##      `fabled-delicate-leaf` is how `RPC_ASSIGNMENT.md` names an endpoint). Harness §2b tests
+##      against the real QuickNode shape and asserts both copies agree. The 54 lines were masked in
+##      place (backups in `_pre_s72/`), recount zero. **Keys NOT rotated** — exposure is
+##      root-on-his-own-box, the repo mirror was always redacted, R10's sed blanks pasted URLs;
+##      rotate only if one of those logs ever leaves the box raw. ▶▶ **THE SHAPE: a redaction is
+##      worth exactly what it was tested against, and an untested one is WORSE than none, because
+##      the caller believes the line is safe to paste.** Sibling of session 45's redaction that hid
+##      the STRUCTURE of a crontab line.
+##      ⛔⛔⛔ **NEW AND FAR WORSE BRIDGE FAULT — `device_commit_files` TRUNCATED THIS FILE TO ZERO
+##      BYTES AND REPORTED `written`.** Not the familiar silent no-op: a silent DESTRUCTION. THIS
+##      file, 1.43 MB, the project's main working document, was 0 bytes on disk after a commit that
+##      reported success. Caught within seconds only because every bridge write this session was
+##      verified by re-stage + md5 — the rule session 71 wrote after the no-op is what turned a
+##      data-loss event into a 40-second inconvenience. Recovered by re-committing from a NEW staged
+##      path: 1,432,064 bytes, md5 `fda542a79e4d421629b76dff434b8824`, verified. (git held the
+##      pre-session copy as a second net.) ▶▶ **THE RULE IS NOW ABSOLUTE, AND IT IS NOT ABOUT
+##      CORRECTNESS OF CONTENT — IT IS ABOUT WHETHER THE FILE STILL EXISTS: after EVERY
+##      `device_commit_files`, re-stage and check BYTES AND md5. A large file deserves the check
+##      most, and `{"written":[…]}` means nothing.** The familiar no-op also struck once (3rd known
+##      occurrence, again a second write to a path already written this session); same workaround,
+##      a NEW staged path, worked for both.
+##      ⚠ CLAUDE SLIPS: (1) the placeholder-in-a-block one above, twice. (2) a stray closing XML tag
+##      left at the end of a shell block, which bash rejected — read the block back before sending.
+##      (3) `STATE=/tmp/…` was passed to `frozen_matrix_check` as if it were a path; `STATE` is a
+##      BOOLEAN there (`STATE=0` disables), so it wrote its normal state file. Harmless — identical
+##      to a cron run on a PASS — but the block claimed something it did not do.
+##      ▶ **PARKED, deliberately, for Shipment C's batch:** a one-line header clarification in
+##      `frozen_matrix_check.js` saying `STATE` is a switch, not a path.
+##      ▶ **NEXT SESSION, IN ORDER:** (1) **Shipment C — the five signing keepers**
+##      (`direct_keeper`, `rr_keeper` A/B/C, `copay_rescue`, `fastlane_rescue`, `topup_keeper`).
+##      These move member money: own session, own proving run, parity re-measured first, and add
+##      them to the harness `WIRED` list in the same commit. ⚠ `rr_keeper` carries the VPS-only
+##      `patch_rr.js` history — re-read session 45 before touching it. (2) owner's T2-open decision.
+##      (3) G4/G5 text. (4) Blockaid's two follow-ups. (5) the Chrome-hang report on register/approve.
+##      (6) self-sustaining-loop measurement (62.39). (7) `--renounce-roles` page button. (8) exercise
+##      the six never-fired alert paths once deliberately.
+##      ⚠ MEASURED in passing, not chased: **Parked 96** (13:41Z report), SF $3,335.24, 591 members,
+##      2,040 cycles, T6 MatA 68/127, T7-T10 empty, system not paused.
+##      ✅ **PUSHES OWED (nothing was pushed this session):** keepers `main` — `keeper_env.js`,
+##      `rpcProvider.js`, `rpc_probe.js`, `system_keeper.js`, `onramp_keeper.js`, `integrity_check.js`,
+##      `sf_invariant_check.js`, `dupe_watch.js`, `growth_snapshot.js`, `frozen_matrix_check.js`,
+##      `channel_pulse.js`, `monitor_v8.js`, `harness/chain_binding_offline.js`, `README.md`.
+##      Contracts `v8.1` — `REGRESSION_REGISTER.md` (R21, R22) + this handoff block.
 ## 62.5 ▶ **WHAT IS OPEN, IN ORDER, FOR SESSION 63.**
 ## 62.23 ✅ **CUTOVER DONE 2026-09-04 (owner local afternoon): `preview`+`main` at `00b4690`** (V8.52 repoint
 ##      + `DEFAULT_SPONSOR_POOL` = the owner's revised 10-leader roster, two swapped, dead `run_bigfill_rr.ps1`

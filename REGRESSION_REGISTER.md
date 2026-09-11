@@ -621,3 +621,98 @@ itself with the active-line md5: that is the one number a comment change cannot 
 recorded in `crontab_live_mirror.txt`'s header. (3) `crontab_live_mirror.txt` records BOTH hashes -
 the full-file md5 and the active-line md5 - so a future session can tell "somebody edited comments"
 from "somebody changed a schedule" without reading a diff.
+
+## R21 - A fallback that was the right chain by accident, in the file whose job is choosing the chain
+**Registered 2026-09-11 (session 72, doing T9 - wiring the live keepers to `keeper_env.js`. Found
+by census before writing a line of the fix, not by a failure.)**
+
+`rpcProvider.js` tried the primary RPC, and on any error inside 6 seconds fell through to a
+hard-coded list of three PUBLIC BASE SEPOLIA endpoints. The provider it returned **pinned no
+chainId at all**, so ethers had nothing to object to. Two live cron jobs use it: `system_keeper.js`
+(the 30-minute health report) and `onramp_keeper.js` (partner-fee distribution).
+
+**MEASURED** across the 19 live job lines, by reading the source of every one:
+- **13 of the 15 chain-touching jobs build their provider with the literal `84532` as an argument** -
+  not a default, an argument. `direct_keeper:211`, `rr_keeper:399` and `:605`, `copay_rescue:86`,
+  `dupe_watch:107`, `growth_snapshot:46`, `channel_pulse:95`, `integrity_check:114`,
+  `sf_invariant_check:62`, `fastlane_rescue:84`, `topup_keeper:121`, `frozen_matrix_check:123`.
+- `monitor_v8:210` builds one with **no chainId at all**.
+- `rpc_probe.js:39` hard-coded `CHAIN_ID = 84532` **as its WRONG-CHAIN test**.
+- `onramp_keeper:242` named the network by testing whether the RPC URL contains the string
+  `"mainnet"`. Every endpoint this fleet uses is a QuickNode random slug (`autumn-rough-sky`).
+
+**SAY IT PRECISELY:** nothing was ever wrong on Base Sepolia, and nothing had ever misbehaved.
+The fallbacks were the right chain **by accident** - because the only chain this fleet has ever
+run on is the one they were typed for. Moved to a mainnet box unchanged: a six-second blip on the
+primary endpoint silently moves the health report to the testnet, and the health report is the
+reading the automatic SF-floor pause is built on (`MAINNET_READINESS.md` P2). The WRONG-CHAIN
+detector inverts - every healthy mainnet endpoint flagged, a genuine stray testnet endpoint passed
+as OK. And every mainnet payout announces itself as "Base Sepolia".
+
+**WHY IT IS A REGISTER ENTRY, and it is R18's shape one layer down:** R18 was a script proven on
+the private chain and broken on the live one. This is the same habit at rest - **correctness that
+depends on the environment never changing, in the very code whose job is to know the environment.**
+A test suite cannot catch it, because on the right chain every path passes.
+
+**FIXED:** `keeper_env.js` is the single definition (book -> `chainId` -> everything), its provider
+made LAZY so a script with no ethers can still use it for chain facts; `rpcProvider.createProvider`
+now REQUIRES a chainId, asks **every** endpoint including the primary `eth_chainId` before
+accepting it, keys its fallbacks by chain, and returns a provider pinned with staticNetwork;
+`rpc_probe.js` takes both its chain and its public-node target from the book; `system_keeper.js`
+and `onramp_keeper.js` pass the book's chain and lost their `|| 'https://sepolia.base.org'`
+defaults. The box's address book had **no `chainId` field** - measured, then shipped.
+
+**PROVEN:** `harness/chain_binding_offline.js`, run ON THE BOX against the INSTALLED copies -
+35/35. Its §2 stands up real JSON-RPC servers on 127.0.0.1 that **lie about their chainId** and
+makes `createProvider` talk to them: a wrong-chain primary is refused and never asked for work, and
+a verified fallback is used instead. Mocking the chain away would have been mocking away the bug.
+Then a live read against the real endpoint: chain 84532, block 46,682,214.
+
+**CHECKED BY:** (1) the harness runs on the box after every deploy, beside the R14 `upkeepCaller`
+read and the R18 `ACTION=status` read. (2) **A literal chainId anywhere but `keeper_env.js` is a
+defect** - §3 asserts it from source across the wired scripts, and Shipments B and C extend that
+list. (3) A fallback list is keyed by chain, always: an endpoint for another chain must not be
+reachable, not merely unlikely. (4) The address book on any box carries `chainId`; keeper_env
+still accepts a book without one but says out loud that it is assuming.
+
+## R22 - A redaction tested only against a shape this fleet does not use
+**Registered 2026-09-11 (session 72). Found by reading what a block we were about to hand over
+would print on screen - which is the only reason it was found at all.**
+
+`redact()`, in both `rpcProvider.js` and `keeper_env.js`, was:
+
+    String(url).replace(/\/v2\/[^/]+/, "/v2/***")
+
+That is **Alchemy's** URL shape. This fleet is **entirely QuickNode**, where the API key is the
+bare first path segment: `https://<slug>.base-sepolia.quiknode.pro/<KEY>/`. The pattern matched
+nothing, and `redact()` returned the key in full. `createProvider` prints `RPC: <url>` on every
+run, and `system_keeper` and `onramp_keeper` redirect stdout into `health.log` and `onramp.log`.
+
+**MEASURED** on the box, counts only, never printing a matching line: **54 log lines carried a
+live QuickNode key** - `health.log` 27, `onramp.log` 26, `monitor.log` 1 - exposing two endpoints
+(`summer-silent-crater`, `thrilling-newest-seed`). The third site is separate and still open:
+`monitor_v8.js:210` prints `console.log('RPC: ', RPC_URL)` with **no redaction attempted at all**.
+
+**SAY IT PRECISELY:** this predates the T9 work and was live the whole time. The repo's own rule -
+*"the QuickNode key IS the URL path, never let a raw URL into the repo"* - was written into
+`crontab_live_mirror.txt` and `RPC_ASSIGNMENT.md` and enforced by a `sed` at the far end (R10),
+and **never by the code that does the printing**. Exposure is root-on-the-owner's-own-box, so the
+keys were NOT rotated; the 54 historical lines were masked in place (backups in `_pre_s72/`) and
+the recount is zero. Rotate if any of those logs ever leaves the box raw.
+
+**WHY IT IS A REGISTER ENTRY:** session 45 already registered the sibling - a redaction that hid
+the STRUCTURE of a crontab line, so the owner approved a change he could not actually see. Same
+root: **a redaction is worth exactly what it has been tested against, and an untested one is worse
+than none, because the caller believes the line is safe to paste.** It fails silently and in the
+dangerous direction.
+
+**FIXED:** keep the scheme and host, mask everything after -
+`replace(/^(https?:\/\/[^/?#]+)(?:[/?#].*)?$/, "$1/***")`. The host is kept deliberately:
+`fabled-delicate-leaf` is how `RPC_ASSIGNMENT.md` names an endpoint, and a log line you cannot
+trace back to one is not much of a log.
+
+**CHECKED BY:** (1) `harness/chain_binding_offline.js` §2b tests `redact()` against **the shape the
+fleet actually uses**, a QuickNode URL with a planted key, and asserts both implementations agree -
+the R19 rule (two halves of a system must agree, not merely each pass its own test) applied to two
+copies of one function. (2) Any new code that prints a URL uses `redact()` and gets a §2b case.
+(3) When adding a provider, add its URL shape to §2b - the next leak will be a shape nobody tested.
