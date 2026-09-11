@@ -1497,6 +1497,52 @@ owner-set, and the session that earned it got five things wrong by ignoring what
 ##      setting on a real chain before mainnet, which is worth more than the tidy drift report.
 ##      ⚠ Cowork device shell STILL cannot mount the repos — SIXTH session, same Windows-update
 ##      cause. All four file edits went stage -> commit -> re-stage + bytes + md5 (4/4 clean).
+##      ✅ **APPLIED TO THE LIVE V8.52 CHAIN 2026-09-11 16:4xZ — tx `0x296de43ad676470afdd2bfbc37f1d9b59b6249c72219c9bc33f2c1303b83db11`,
+##      VERIFIED FROM CHAIN: window 14400s, threshold 1.** Only `setVelocityThreshold` was sent —
+##      the window was already 14400, and the script is idempotent about that. ⚠ Worth noting for
+##      any future live setter: **the read-back needed TWO attempts — the RPC served stale state on
+##      attempt 1.** The retry loop already in the script is what turned that into a non-event; a
+##      script that read back once would have printed the OLD value and looked like a failed write.
+##      ⛔⛔ **THE PRE-STATE, MEASURED BEFORE THE WRITE (block 46,688,303 @ 16:41:34Z), and it is
+##      the reason this was worth doing on a real chain rather than only in source:** entries in
+##      window / gate were T1 8 OPEN · T2 9 OPEN · T3 11 OPEN · T4 14 OPEN · T5 8 OPEN ·
+##      **T6 1 OPEN** · T7 0 AUTO-PAUSED · T8 0 AP · T9 0 AP · T10 0 AP, `highestOpenTier` 6, last
+##      velocity check 2.4h before the read. **T6 was sitting at exactly the case the change was
+##      made for: one entry against a bar of two, with the next tick ~1.6h away.** Under threshold 2
+##      that tick closes T6; under 1 it does not. ▶ **THE OWED MEASUREMENT: re-run
+##      `diag_velocity_gate.js` after the next velocity tick and record whether T6 held.** That is
+##      the change proving itself on a live chain, and it has not been read yet.
+##      ⚠ **SAY WHAT THE DATA DID NOT SAY.** Session 36 pre-registered the reversal condition in
+##      `set_velocity_gate.js`'s own header — *"if any tier with a NON-ZERO wide-window count is
+##      sitting closed, the periodic check is beating the escape hatch — go to threshold 1"* — and
+##      **that condition was NOT satisfied at this block.** T6 is non-zero but OPEN; T7..T10 are
+##      closed at ZERO. The owner's decision stands on its own reasoning, not on that trigger firing.
+##      The diag itself rules T8/T9/T10 NOT A FAULT: the tier below each has never had a MatB
+##      crossing, so opening them would promote nobody.
+##      ⛔ **PARKED, THE ONE AMBIGUOUS ROW: T7.** Zero entries, gate closed — but T6 has 295 LIFETIME
+##      MatB rotations, and `TierRouter:1205` force-opens a gate on a MatB crossing. So either no T6
+##      crossing has happened recently, **or the velocity check re-closed T7 after one did** — and
+##      the second is the feedback loop itself, one tier higher than session 36 went looking. Those
+##      are different faults. Separate them with `VelocityUpdated` / `VelocityGateSet` event
+##      timestamps before acting. Not chased here: threshold 1 does nothing for a ZERO-entry tier.
+##      ⛔ **UNCOMMITTED AT THE TIME OF WRITING (rides with the next commit):**
+##      `scripts/set_velocity_gate.js` took `THRESHOLD` from the environment with a bare default of
+##      **2** — so running it without `THRESHOLD=1` would have silently set the chain BACK, with the
+##      very command whose purpose is applying the decision. Changed to 1, tied by comment to
+##      `MatrixKeeper.sol:227`. ▶▶ **A script's default must track the contract's default, or the
+##      tool that applies a decision becomes the tool that reverts it.** Found by reading the script
+##      before writing the block to run it — which is the only reason it was found at all.
+##      ⚠ **THE BRIDGE LIED TWICE THIS SESSION, a new failure mode.** `device_commit_files` returned
+##      `written` and left a version BEHIND on disk: `MAINNET_READINESS.md` (32,950 vs 33,441 bytes,
+##      missing the second of two edits) and `set_velocity_gate.js` (11,300 vs 11,674). Session 72's
+##      was a 1.44 MB file truncated to ZERO; **this one is quieter and worse, because the size looks
+##      plausible.** A plain re-commit landed both. UNVERIFIED (2 samples, not a measurement): both
+##      were commits issued immediately after an edit with no intervening shell read of the file.
+##      ▶▶ **`written` means nothing and neither does a sane byte count — re-stage and compare md5,
+##      every file, every time.** That step is the only reason either was caught.
+##      ⚠ **PARKED, uncommitted in the contracts repo root and left by the 09-09 ownership
+##      rehearsal:** twelve untracked `Test Sept 9*.png` screenshots and a MODIFIED
+##      `v853_private_deploy_transcript.txt`. Decide keep-or-drop and land them.
 ##      ▶ **NEXT SESSION, IN ORDER, unchanged except item 1 is now closed:** (1) G4/G5 text.
 ##      (2) Blockaid's two follow-ups. (3) the Chrome-hang report on register/approve.
 ##      (4) self-sustaining-loop measurement (62.39). (5) `--renounce-roles` page button.

@@ -82,7 +82,11 @@ const VALID_WINDOW    = [1800, 3600, 7200, 14400];
 const VALID_THRESHOLD = [1, 2, 3, 5];
 
 const WINDOW    = Number(process.env.WINDOW    || 14400);
-const THRESHOLD = Number(process.env.THRESHOLD || 2);
+// ⛔ 2026-09-11 (62.45): this default was 2 and MUST track MatrixKeeper.sol's source default,
+//    which is now 1. A script whose bare default disagrees with the contract's is a loaded gun:
+//    run it without THRESHOLD set and it silently UNDOES the owner's decision on the chain.
+//    If MatrixKeeper.sol:227 ever changes again, change this line in the same session.
+const THRESHOLD = Number(process.env.THRESHOLD || 1);
 const DRY       = process.env.DRY_RUN === "1";
 
 const KEEPER_ABI = [
