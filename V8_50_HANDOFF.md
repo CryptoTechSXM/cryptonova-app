@@ -1578,6 +1578,89 @@ owner-set, and the session that earned it got five things wrong by ignoring what
 ##      ▶ **ON THE MAINNET DEPLOY CHECKLIST, added by this item:** velocity ships 14400 / 1 from
 ##      source — confirm it on the live chain with `diag_velocity_gate.js` after every deploy, beside
 ##      the R14 `upkeepCaller` read, the R18 `ACTION=status` read and the T9 harness run.
+## 62.46 ✅ **2026-09-11 (session 74, second half): G4 IS WRITTEN AND IT TURNED OUT TO BE A CORRECTION,
+##      NOT AN ADDITION. THE FAQ HAS BEEN DODGING THE AUDIT QUESTION IN TEN LANGUAGES.**
+##      ⛔⛔ **THE FINDING, AND IT IS A NEW SUB-SHAPE OF THE FRONTEND-TRUTH CLASS.** Looking for
+##      somewhere to ADD the "not yet independently audited" line, I found `faq.html:684` already
+##      asks **"Are the smart contracts audited?"** — and the answer never says yes or no. Verbatim:
+##      *"...have undergone extensive internal testing including a comprehensive unit test suite and
+##      large-scale stress tests... Source code is verified and publicly readable on BaseScan.
+##      Despite all efforts, smart contracts may still contain undiscovered bugs..."*
+##      ▶▶ **Every sentence is TRUE and the answer is still misleading.** A member asks "is it
+##      audited", is shown testing credentials plus a generic risk caveat, and leaves believing it
+##      effectively is. **No false statement, no failed read, nothing to grep for — the defect is the
+##      missing word "no".** The item's own search terms made it worse: `audited safe secure tested`.
+##      ▶ **THE HUNT, extending the class:** previous shapes were a claim no read backs. This one is
+##      **a question the page invites and then declines to answer.** Look for FAQ answers that change
+##      the subject to something adjacent and true.
+##      ✅ **FIXED IN ALL TEN LANGUAGES.** The answer now opens "Not yet, and we want to be straight
+##      with you about that", then says what we DO have (public verified source, a large automated
+##      suite, testnet-first), what an audit IS ("an outside firm paid to try to break it" — a
+##      disclosure that relies on a word the reader cannot define has disclosed nothing), why we have
+##      not bought one, and what it means for them. Search terms widened to `audit independent
+##      security review not audited risk`.
+##      ⛔ **AND IT WAS ×10, NOT ×1. `i18n.js:52` does `el.innerHTML = v` for EVERY `[data-i18n]`,
+##      ENGLISH INCLUDED** — so `locales/en.json` is what an English reader actually sees and editing
+##      `faq.html` alone would have changed NOTHING on screen. **This is the 2026-09-02 rule for the
+##      THIRD time** (it bit the rescue-count heading, then the parked info-note on 09-09).
+##      ⚠ **GERMAN WAS WRONG ON FORMALITY AND I CAUGHT IT BY COUNTING, NOT BY FEEL.** I wrote it in
+##      formal *Sie*; the rest of `de.json` uses `du/dein` **123 times against Sie 8**. Rewritten
+##      informal. `es` (tú), `pt` (você) and `fr` (vous) were checked the same way and already
+##      matched. ▶ **Before writing copy in a language, COUNT the register the file already uses.**
+##      ⛔⛔ **THE NEAR-MISS WORTH THE MOST: ORPHAN KEYS AND A SILENT DUPLICATE.** For the two NEW
+##      items I took the next free question number from **`faq.html`**, which tops out at **q29**.
+##      **The locale files go to q32.** `q30` ("What is the Whale Gate?"), `q31` ("Can I upgrade
+##      multiple tiers at once?") and `q32` are defined in all ten locales and **referenced by no
+##      page** — leftovers from items removed from the HTML. So my new `"q30"` went into a file that
+##      already had one. **JSON permits duplicate keys and `JSON.parse` keeps the LAST**, which was
+##      the old one: the page would have rendered a "Who is behind CryptoNova?" item whose every line
+##      was replaced by Whale Gate text. **Valid JSON, no error, wrong page.**
+##      ▶▶ **`json.load` CANNOT SEE THIS** — parsing succeeds and the key list looks right, because
+##      the duplicates have already collapsed. The check that works is an `object_pairs_hook` that
+##      counts keys BEFORE collapse; run across all ten it reported `en.json DUPLICATES
+##      ['q30','q30_a1','q31','q31_a1']` and the other nine clean.
+##      ▶▶ **THE RULE: the HTML is not the index of what exists — `locales/en.json` is. Take a new
+##      key number from the JSON, never from the page, and run a duplicate scan before committing.**
+##      ▶ **WHAT SURFACED IT: the post-commit md5 re-check.** Box and local differed by ONE byte, so
+##      I read the file back and found the wrong text under my key. **The verification written for a
+##      flaky bridge caught a content collision instead. Cheap checks catch what they were not aimed
+##      at — keep it.** Renumbered to **q33** (P5) and **q34** (G5); duplicate scan clean after.
+##      ✅ **OWNER'S THREE DECISIONS, 2026-09-11, all recorded in `G4_G5_SITE_TEXT.md` §3:**
+##      **(1) The bounty amount stays $1 for ordinary bugs and there are NO published security
+##      tiers** — Claude pushed back ONCE on publishing "Critical: funds can be drained — $1" (a site
+##      pricing a drain at a dollar tells a finder to stay quiet or sell it elsewhere, and G5 exists
+##      as a condition of launching UNAUDITED). The owner took a third option: **security findings get
+##      a reward agreed directly with the reporter and paid.** Nothing unpayable is published, no
+##      dollar is advertised as the price of a drain, each case judged when it arrives — honest for an
+##      unincorporated four-person team. ⚠ Cost, stated: an unspecified reward is a WEAKER incentive
+##      than a published one; researchers filter by advertised maximum. Publishing a real ceiling is
+##      the upgrade if there is ever cash. **(2) Paid in USDC**, and the site says so. **(3) P5 ships
+##      WITH G4** — a reader just told there is no audit will ask who they are dealing with.
+##      ✅ **NEW FAQ ITEMS (English done): q33 "Who is behind CryptoNova?"** — CryptoCounsel, four
+##      people, no registered company, no licence (one intended), **no company standing behind your
+##      position, no regulator, no deposit protection**, not a bank/broker/exchange/investment
+##      service, nothing here is financial advice. **q34 "Do you pay for bug reports?"** — $1 always
+##      for ordinary bugs; security issues private first, reward agreed directly, USDC on a confirmed
+##      fix, first report wins, do not drain anything to prove it.
+##      ▶ **WHERE THE TEXT LIVES AND WHY NOT THE MAINNET REPO:** T7 says the mainnet app is built by
+##      COPYING the current Testnet-App at cutover, never by patching `CryptoNova-Mainnet-App\mainnet\
+##      index.html` (V8.15-era, 4,216 lines vs the live app's 11,674). **So it goes in
+##      `C:\CryptoNova-Testnet-App`, where it is also TRUE today**, and flows to mainnet with the copy.
+##      ✅ **COMMITTED ON `admin`, NOT PUSHED, NOT DEPLOYED** (owner rule: the app and the announcement
+##      go together, and the change is not complete): **`4a59ce5`** (faq.html + all ten locales, the
+##      corrected audit answer, +45/-12) and **`c166741`** (faq.html + en.json, q33/q34, +34).
+##      `G4_G5_SITE_TEXT.md` in the Mainnet-App repo holds every text block, the reasoning and the
+##      decisions — **read it before touching this**.
+##      ▶ **WHAT IS LEFT ON G4/G5/P5, IN ORDER:** (1) translate q33/q34 into the nine non-English
+##      locales. (2) `index.html` — the G4 short line on the landing view plus a short G5 block; it is
+##      773 KB, so find the insertion point carefully. (3) ladder `admin -> preview -> main` and READ
+##      IT BACK on the live domain. (4) only then the Telegram post, owner's voice, emoji, sign-off
+##      "Team CryptoNova", crediting "the dev team and I". (5) tick G4/G5 in `MAINNET_READINESS.md`
+##      §1 and P5 in §2 with the commit and the live URL.
+##      ⚠ **PARKED, both small and both real:** q30/q31/q32 are DEAD KEYS in all ten locales — delete
+##      them or keep taking numbers from the JSON. And the contracts repo still has twelve untracked
+##      `Test Sept 9*.png` screenshots plus a MODIFIED `v853_private_deploy_transcript.txt` from the
+##      09-09 ownership rehearsal; decide keep-or-drop and land them.
 ## 62.5 ▶ **WHAT IS OPEN, IN ORDER, FOR SESSION 63.**
 ## 62.23 ✅ **CUTOVER DONE 2026-09-04 (owner local afternoon): `preview`+`main` at `00b4690`** (V8.52 repoint
 ##      + `DEFAULT_SPONSOR_POOL` = the owner's revised 10-leader roster, two swapped, dead `run_bigfill_rr.ps1`
