@@ -38,8 +38,12 @@
  *   block that reverts. So they are discarded too.
  *
  *   That leaves a precise harm band, and G3 below is built on it. Per window:
+ *   (⚠ the threshold in these three lines was 3 when this was written; the source default
+ *    is 1 since 2026-09-11, 62.45 — the band WIDENS to 1..9, so G3's 5-entry fixture still
+ *    sits inside it and every assertion below still holds. The tests set nothing here, they
+ *    read the live values from the fixture.)
  *     entries >= deflationThreshold (10)      -> green branch, no layer call, check passes
- *     entries <  velocityThreshold  (3)       -> tier is correctly red anyway
+ *     entries <  velocityThreshold  (3 -> 1)  -> tier is correctly red anyway
  *     entries in 3..9  <- THE BAND            -> the tier QUALIFIES for a green velocity
  *                                                gate, and cannot be given one, because
  *                                                the same transaction reverts on the

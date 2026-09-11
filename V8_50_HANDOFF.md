@@ -1437,6 +1437,76 @@ owner-set, and the session that earned it got five things wrong by ignoring what
 ##      keeper tick could never read a half-written file — worth keeping as the recipe.
 ##      ⚠ MEASURED in passing, not chased: 593 members, pool 1491/1622, parked 98, SF $3,456.29,
 ##      deployer 59.16 ETH, T2 gate open, nothing paused.
+## 62.45 ✅✅ **2026-09-11 (session 74): THE VELOCITY THRESHOLD IS NOW 1, AS THE SOURCE DEFAULT.
+##      AND THE QUESTION WE HAD BEEN CARRYING ABOUT T2 WAS THE WRONG QUESTION.**
+##      ✅ **REFS CHECKED FIRST, because 62.44 says to.** Read off disk, not asked for: contracts
+##      `v8.1` local == `origin/v8.1` == **`d487cee`**; keepers `main` == `origin/main` ==
+##      **`455d11c`**; Mainnet-App `main` == `origin/main` == **`5fde65b`**. Nothing was owed.
+##      ⛔⛔ **ITEM 1 ON THE LIST WAS "the owner's T2-open decision", FRAMED BY 62.38 AS: T2 opens
+##      either by MatrixKeeper's 80% rule or by one hardware-wallet `setTierVelocityGreen(1,true)`
+##      on launch day. BOTH HALVES OF THAT ARE WRONG, and the second one could not have worked.**
+##      MEASURED from source (TierRouter.sol, MatrixKeeper.sol, MatrixKeeperLib.sol, deploy_v8.js):
+##        · A RED TIER DOES NOT BLOCK REGISTRATION. `tierVelocityGreen` appears at TierRouter :262
+##          :286 :435 :605 :608 :1205 :1206 :1423 :1925 :1938 and NOWHERE in a register path —
+##          those are guarded by `whenNotPaused` and the WHALE gate. Red blocks the auto-upgrade
+##          INTO the tier (:1423) and lowers the SF target via `highestOpenTier()` (:1938). That is
+##          the entire cost, and it is smaller than the name "Auto-Paused" suggests to a member.
+##        · **THREE THINGS OPEN A TIER, and a manual call is the weakest of them.** The TierRouter
+##          constructor opens all ten (:435) — but `deploy_v8.js:738` then CLOSES T2..T10 on purpose
+##          ("keeper opens at 80% MatB fill"), so a real deploy ships T1 green and the rest red.
+##          After that a tier opens by: a member crossing to MatB (:1205, PERMISSIONLESS, inside the
+##          member's own transaction), the 80% rule (MatrixKeeperLib:351 -> `_doVelocityGate`), or a
+##          manual `setTierVelocityGreen`.
+##        · **ONE THING CLOSES A TIER, every `velocityWindow` = 4 HOURS**: `_doVelocityCheck`
+##          (MatrixKeeper:1227-1235), queued by `discover` :240-243. It sets
+##          `green = (entries in that tier during the trailing 4h >= velocityThreshold)`.
+##          ▶▶ **SO NO MANUAL OPENING IS DURABLE.** A launch-day `setTierVelocityGreen(1,true)` would
+##          have been undone by the next tick if fewer than 2 people entered T2 in four hours — which
+##          on a launch day is the expected case, not the unlucky one. We would have watched the gate
+##          close and had no idea why. The 80% rule's opening has exactly the same lifespan.
+##      ▶ **THE REAL DECISION, put to the owner as an economic one:** should the 4-hour check be
+##      allowed to close tiers during the opening weeks of mainnet, when thin volume is normal?
+##      Options given: (a) leave 14400/2, rely on `onCrossToMatB` to re-open; (b) threshold 1.
+##      ⛔ **OWNER'S DECISION, 2026-09-11: (b), AND MAKE IT PERMANENT.** His words: *"b is good and
+##      can stay as default can be voted to change, so make option b permanent."* So it is not a live
+##      setting this time — **it is the SOURCE DEFAULT**, which is the only form that survives a
+##      redeploy (`deploy_v8.js` sets neither velocity value, so source IS what ships — the trap that
+##      nearly reverted the owner's 2026-08-24 decision four days after he made it).
+##      ✅ **SHIPPED — one code line, everything else comment:** `contracts/MatrixKeeper.sol`
+##      `velocityThreshold = 2` -> **`= 1`** (now line 227). `scripts/set_velocity_gate.js` header
+##      marked SUPERSEDED — and its session-36 argument FOR threshold 2 (promotion into a thin HIGH
+##      tier carries the largest crossing shortfall, 36.5: T1 $4.48 · T2 $11.20 · T3 $20.70 ·
+##      T4 $44.80) is KEPT DELIBERATELY. It is not wrong; it is the cost side of a trade the owner
+##      has now taken knowingly, and it is where a future session arguing for a return to 2 should
+##      start. `scripts/diag_velocity_gate.js` and `test/V8_50_VelocityCheck.test.js` had stale
+##      "shipped defaults 3600 / 3" prose — corrected, with the live values named.
+##      ⚠ **1 IS THE LOOSEST LEGAL VALUE. There is no "always green".** `setVelocityThreshold`
+##      enumerates 1/2/3/5 and `setVelocityWindow` 1800/3600/7200/14400 — zero is not reachable, so
+##      this dial is now fully open and the only way further is a contract change. Still votable back
+##      via `onlyOwnerOrGovernance`.
+##      ✅ **PROVEN: `npx hardhat compile` clean (1 file, evm cancun) and the FULL SUITE
+##      687 passing / 7 pending / 0 failing in 5m on the owner's PC.** Ran the three velocity-named
+##      files first (15 passing) and then everything, on purpose: **a source DEFAULT can ripple into
+##      tests that never mention the parameter**, and only the full run can say it did not.
+##      ▶ 687 is the current full-suite baseline; earlier handoffs quoting ~146 were quoting a subset.
+##      ⚠ **`diag_param_drift.js` WILL NOW FLAG THE LIVE V8.52 CHAIN** — source 1 vs live 2 — and it
+##      is right to. It discovers governed parameters by PARSING the .sol for an initializer plus a
+##      matching `set<Name>`, so these two were covered automatically and no list needed editing.
+##      ▶ Clearing it is an owner-signed tx: `scripts/set_velocity_gate.js` on the live chain (it
+##      validates against the enums before sending and has a DRY_RUN). Doing it also EXERCISES the
+##      setting on a real chain before mainnet, which is worth more than the tidy drift report.
+##      ⚠ Cowork device shell STILL cannot mount the repos — SIXTH session, same Windows-update
+##      cause. All four file edits went stage -> commit -> re-stage + bytes + md5 (4/4 clean).
+##      ▶ **NEXT SESSION, IN ORDER, unchanged except item 1 is now closed:** (1) G4/G5 text.
+##      (2) Blockaid's two follow-ups. (3) the Chrome-hang report on register/approve.
+##      (4) self-sustaining-loop measurement (62.39). (5) `--renounce-roles` page button.
+##      (6) exercise the six never-fired alert paths once deliberately. ⛔ Plus R20, still carried:
+##      the LIVE crontab's header says the three `rr_keeper` stress lines are held down by
+##      `/root/keeper/rr_keeper.OFF`, **which does not exist** — comment-only fix on the box,
+##      session-58 backup-and-hash recipe, owner's timing.
+##      ▶ **ON THE MAINNET DEPLOY CHECKLIST, added by this item:** velocity ships 14400 / 1 from
+##      source — confirm it on the live chain with `diag_velocity_gate.js` after every deploy, beside
+##      the R14 `upkeepCaller` read, the R18 `ACTION=status` read and the T9 harness run.
 ## 62.5 ▶ **WHAT IS OPEN, IN ORDER, FOR SESSION 63.**
 ## 62.23 ✅ **CUTOVER DONE 2026-09-04 (owner local afternoon): `preview`+`main` at `00b4690`** (V8.52 repoint
 ##      + `DEFAULT_SPONSOR_POOL` = the owner's revised 10-leader roster, two swapped, dead `run_bigfill_rr.ps1`

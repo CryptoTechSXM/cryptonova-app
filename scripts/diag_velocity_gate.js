@@ -10,8 +10,12 @@
 //    `MatrixKeeper._doVelocityCheck()` runs every tier through:
 //        cnt   = tierRouter.getTierEntryCount(t, now - velocityWindow)
 //        green = cnt >= velocityThreshold
-//    Shipped defaults: velocityWindow 3600s, velocityThreshold 3 — **three entries an
-//    hour, per tier.** A tier that goes quiet is set NOT GREEN.
+//    Source defaults AS THEY STOOD IN SESSION 33: velocityWindow 3600s, velocityThreshold
+//    3 — **three entries an hour, per tier.** A tier that goes quiet is set NOT GREEN.
+//    ▶ TODAY (2026-09-11, 62.45) THEY ARE 14400 / 1 — one entry per 4h holds a tier open,
+//    the loosest the enumerated setter allows. The loop below is still the loop; the bar
+//    it applies is now 12x lower than the numbers in this paragraph. Read the live values
+//    with this script rather than trusting any prose, including this prose.
 //    And `TierRouter:1398` makes the auto-upgrade at cycle-out conditional on
 //    `tierVelocityGreen[nextIndex]`. So:
 //

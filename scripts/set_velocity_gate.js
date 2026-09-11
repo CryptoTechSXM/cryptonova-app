@@ -1,11 +1,29 @@
 // set_velocity_gate.js — set the velocity gate's window and threshold. WRITES TO CHAIN.
 //
-// THE DECISION THIS EXECUTES (session 36, 2026-08-24, owner). 33.8 established that the
+// ⛔⛔ READ THIS FIRST — THE SESSION-36 DECISION BELOW WAS SUPERSEDED ON 2026-09-11 (62.45).
+//    CURRENT SETTING: window 14400, THRESHOLD 1, and it is now the SOURCE DEFAULT in
+//    MatrixKeeper.sol:227, not just a live setting — so a fresh deploy ships it and cannot
+//    silently revert it. Owner's words: "b is good and can stay as default can be voted to
+//    change." What changed the answer was a measurement, not a preference:
+//      · A red tier does NOT block registration. No register path in TierRouter reads this
+//        gate. It blocks the auto-upgrade INTO that tier (TierRouter:1423) and lowers the
+//        SF target through highestOpenTier() (TierRouter:1938). That is the whole cost.
+//      · `deploy_v8.js:738` CLOSES T2..T10 at deploy anyway, so on mainnet the opening
+//        weeks start red by design and are thin by definition — exactly when a 2-entry bar
+//        per 4h bites hardest and buys least.
+//      · Threshold 1 is the LOOSEST LEGAL VALUE. The enum has no 0: "always green" is not
+//        configurable, so 1 is as open as this dial goes, and governance can vote it back.
+//    The session-36 argument below (promotion into a thin HIGH tier carries the largest
+//    crossing shortfall) is NOT wrong and is kept deliberately — it is the cost side of the
+//    trade the owner has now taken knowingly. If a future session proposes returning to 2,
+//    that argument is where to start, and 62.45 is the counter-argument.
+//
+// THE DECISION THIS EXECUTES (session 36, 2026-08-24, owner) — HISTORICAL, see above. 33.8 established that the
 // velocity gate binds only the AUTOMATIC upgrade at cycle-out — the path real members use
 // — while bigfill upgrades through `manualUpgrade`, which never reads it. So the gate
 // throttles roughly a dozen organic leaders today and would throttle EVERYONE at community
-// launch. Shipped defaults are `velocityWindow 3600` / `velocityThreshold 3`: three entries
-// an hour, per tier.
+// launch. Source defaults AS THEY STOOD THAT DAY were `velocityWindow 3600` /
+// `velocityThreshold 3`: three entries an hour, per tier. (They are 14400 / 1 today.)
 //
 // OWNER'S CALL: window 14400 (4h), threshold 2 — one entry per two hours, 6x looser than
 // the shipped 3/hour, and not the loosest available. The reasoning, kept because the

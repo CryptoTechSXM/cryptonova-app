@@ -185,26 +185,46 @@ contract MatrixKeeper is Ownable {
     ///         pending pool just grows.
     uint8 public constant WORK_ADVANCE_EPOCH = 9;
 
-    /// @notice THE VELOCITY GATE — 14400 / 2, the owner decision of 2026-08-24 (36.7),
-    ///         applied and verified on the live V8.48 chain that same day
-    ///         (`setVelocityWindow(14400)` 0x089eab36…, `setVelocityThreshold(2)`
-    ///         0x78bb337a…). Together: 0.50 entries/hour required, 6.0x looser than the
-    ///         3600 / 3 these lines used to declare.
+    /// @notice THE VELOCITY GATE — 14400 / 1 as of 2026-09-11 (62.45). History: the
+    ///         owner's 2026-08-24 decision (36.7) made it 14400 / 2, applied and verified
+    ///         on the live V8.48 chain that same day (`setVelocityWindow(14400)`
+    ///         0x089eab36…, `setVelocityThreshold(2)` 0x78bb337a…), which was already
+    ///         6.0x looser than the 3600 / 3 these lines declared before that.
+    ///         ▶ 2026-09-11 the owner took the threshold to 1 AS THE PERMANENT DEFAULT —
+    ///         "b is good and can stay as default can be voted to change". One entry per
+    ///         4-hour window now holds a tier open. WHY, measured that day: mainnet launch
+    ///         weeks are thin by definition, and a red tier blocks auto-upgrades into it
+    ///         (TierRouter:1423) and shrinks the SF target through `highestOpenTier()`
+    ///         (TierRouter:1938). It does NOT block registration — no register path reads
+    ///         this gate. 1 is the LOOSEST LEGAL SETTING: the setter's enum has no 0, so
+    ///         "always green" cannot be configured at all. Still votable afterwards via
+    ///         `setVelocityThreshold` (onlyOwnerOrGovernance).
     /// @dev    ⛔ THESE DEFAULTS WERE 3_600 AND 3 UNTIL 2026-08-25, AND THE DECISION THAT
     ///         MOVED THEM WAS FOUR DAYS OLD BY THEN. `deploy_v8.js` does not set either
     ///         one, so the source default IS what a fresh deploy ships — which means a
     ///         V8.50 deploy would have silently reverted the owner's last open decision
     ///         back to 3600 / 3, and nothing anywhere would have said a word. Found by
     ///         `scripts/diag_param_drift.js` (session 39), which reads every governed
-    ///         parameter off the chain and diffs it against these declarations.
+    ///         parameter off the chain and diffs it against these declarations — and it
+    ///         finds them by PARSING this file for an initializer plus a matching setter,
+    ///         so these two are covered automatically and no list needs editing there.
     ///         Same shape as 38.2's loan clock. If a live setter changes behaviour,
     ///         CHANGE THE SOURCE DEFAULT IN THE SAME SESSION.
+    /// @dev    ⛔ WHAT THIS GATE DOES NOT DO, measured 2026-09-11 so it is never guessed
+    ///         at again: it does not open T2 on launch day, and it never did.
+    ///         `deploy_v8.js:738` CLOSES T2..T10 at deploy on purpose ("keeper opens at
+    ///         80% MatB fill"), overriding the TierRouter constructor, which opens all ten
+    ///         (TierRouter:435). A tier then OPENS by any of three paths: a member
+    ///         crossing to MatB (TierRouter:1205 — permissionless, inside the member's own
+    ///         transaction), the 80% rule (MatrixKeeperLib:351 -> `_doVelocityGate`), or a
+    ///         manual `setTierVelocityGreen`. THIS CHECK IS THE ONLY THING THAT CLOSES
+    ///         ONE, and it runs every `velocityWindow` — so no manual opening is durable.
     /// @dev    ⛔ BOTH SETTERS ARE ENUMERATED — window 1800/3600/7200/14400, threshold
     ///         1/2/3/5. Read the require() before naming a value; 36.7 records a
     ///         recommendation of 86400 that would have reverted on chain in front of
     ///         the owner.
     uint256 public velocityWindow      = 14_400;
-    uint256 public velocityThreshold   = 2;
+    uint256 public velocityThreshold   = 1;
     uint256 public deflationThreshold  = 10;
     uint256 public recoveryThreshold   = 3;
     uint256 public idleSlotTimeout     = 259_200;   // V8.33: 3 days (was 43200 = 12h)
