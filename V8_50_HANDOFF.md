@@ -1509,9 +1509,21 @@ owner-set, and the session that earned it got five things wrong by ignoring what
 ##      **T6 1 OPEN** · T7 0 AUTO-PAUSED · T8 0 AP · T9 0 AP · T10 0 AP, `highestOpenTier` 6, last
 ##      velocity check 2.4h before the read. **T6 was sitting at exactly the case the change was
 ##      made for: one entry against a bar of two, with the next tick ~1.6h away.** Under threshold 2
-##      that tick closes T6; under 1 it does not. ▶ **THE OWED MEASUREMENT: re-run
-##      `diag_velocity_gate.js` after the next velocity tick and record whether T6 held.** That is
-##      the change proving itself on a live chain, and it has not been read yet.
+##      that tick closes T6; under 1 it does not.
+##      ⛔⛔ **THE OWED MEASUREMENT IS IN, AND THE ANSWER IS "NOT EXERCISED" — SAY IT THAT WAY.**
+##      New instrument `scripts/diag_velocity_history.js` reads `VelocityUpdated(tier, green,
+##      entryCount)`, the event carrying the exact number each check compared. Three checks in
+##      11.1h, all ten tiers each: **10:15:40Z T6 = 2 · 14:15:46Z T6 = 4 · 18:15:50Z T6 = 2.**
+##      T6 held — **at 2, so it would have held under the old bar of 2 as well.** No check anywhere
+##      in the window landed on exactly 1, so not one outcome differed. The change is live, correct,
+##      and **has not yet changed anything.** ▶▶ An open gate is not evidence that we are why.
+##      ⚠ **IT ALSO CORRECTS THE PRE-STATE FRAMING ABOVE, WRITTEN BY ME FOUR HOURS EARLIER.** T6 read
+##      ONE entry at 16:41Z and I called it "the live case the change was made for, next tick decides
+##      it". `entries/window` is a SLIDING WINDOW: by the 18:15Z check it was 2. **A live window
+##      sampled between ticks does not predict what the tick will see.** Only the event emitted BY
+##      the tick does. ▶▶ **Measure at the moment of decision, not at a moment near it.**
+##      ⛔ `diag_velocity_live.js` has queried `VelocityUpdated` since session 41 and only ever
+##      COUNTED the results — the number that settled this was fetched and discarded every run.
 ##      ⚠ **SAY WHAT THE DATA DID NOT SAY.** Session 36 pre-registered the reversal condition in
 ##      `set_velocity_gate.js`'s own header — *"if any tier with a NON-ZERO wide-window count is
 ##      sitting closed, the periodic check is beating the escape hatch — go to threshold 1"* — and
@@ -1519,12 +1531,25 @@ owner-set, and the session that earned it got five things wrong by ignoring what
 ##      closed at ZERO. The owner's decision stands on its own reasoning, not on that trigger firing.
 ##      The diag itself rules T8/T9/T10 NOT A FAULT: the tier below each has never had a MatB
 ##      crossing, so opening them would promote nobody.
-##      ⛔ **PARKED, THE ONE AMBIGUOUS ROW: T7.** Zero entries, gate closed — but T6 has 295 LIFETIME
-##      MatB rotations, and `TierRouter:1205` force-opens a gate on a MatB crossing. So either no T6
-##      crossing has happened recently, **or the velocity check re-closed T7 after one did** — and
-##      the second is the feedback loop itself, one tier higher than session 36 went looking. Those
-##      are different faults. Separate them with `VelocityUpdated` / `VelocityGateSet` event
-##      timestamps before acting. Not chased here: threshold 1 does nothing for a ZERO-entry tier.
+##      ⛔⛔ **T7 WAS NEVER AMBIGUOUS — `diag_velocity_gate.js` HAD AN OFF-BY-ONE TIER, AND IT SENT
+##      THIS SESSION CHASING T7 THREE TIMES.** Its line 182 read `rows[r.i - 1].belowRot` — but
+##      `belowRot` is ALREADY "the tier below this row", built from `tierPairManagers(i - 1)` at the
+##      top of the loop. So it fetched the tier below the tier below: TWO down. For T7 it printed
+##      *"T6 HAS crossed members into MatB (302 rotations lifetime)"* — **302 is T5's number. T6's is
+##      0, and it was sitting in T7's own row of the table twenty lines above.**
+##      ✅ **CORRECT VERDICT: T7 is the same plain NOT A FAULT as T8/T9/T10** — T6 has never had a
+##      MatB crossing, so opening T7 would promote nobody. Fixed logic replayed against the measured
+##      row (T2 546 · T3 511 · T4 402 · T5 365 · T6 302 · T7-T10 0): all four now read NOT A FAULT.
+##      Corroborated independently: `diag_velocity_history.js` found **VelocityGateSet = 0 across
+##      11.1h**, so nothing opened T7 and nothing re-closed it. There is no feedback loop here.
+##      ▶ **WHY IT HID:** the bug only shows when two ADJACENT tiers have different rotation counts.
+##      T8/T9/T10 read 0 either way. ▶ **WHY IT SURVIVED A FIX TO THE SAME THREE LINES:** session 36
+##      fixed a DIFFERENT defect there (`!== null` treating 0 as "moving"), wrote a careful comment
+##      about it, and never questioned which ROW was being indexed.
+##      ▶▶ **THE RULE: when a tool's summary disagrees with its own table, the table is the
+##      measurement and the summary is an opinion.** The row printed `r.belowRot` and was right all
+##      along; only the prose reached for the wrong row. Same family as the frontend "claim no read
+##      backs" class — a tool asserting something its own data contradicts.
 ##      ⛔ **UNCOMMITTED AT THE TIME OF WRITING (rides with the next commit):**
 ##      `scripts/set_velocity_gate.js` took `THRESHOLD` from the environment with a bare default of
 ##      **2** — so running it without `THRESHOLD=1` would have silently set the chain BACK, with the

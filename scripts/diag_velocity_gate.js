@@ -179,7 +179,23 @@ async function main() {
     console.log("  ✅ Every deployed tier is OPEN. The velocity gate is not throttling anything.");
   } else {
     for (const r of stuck) {
-      const below = r.i > 0 ? rows[r.i - 1] : null;
+      // ⛔⛔ FIXED session 74, 2026-09-11 — AN OFF-BY-ONE TIER THAT SURVIVED THE SESSION-36
+      // FIX TO THESE SAME THREE LINES. It read `rows[r.i - 1].belowRot`. But `belowRot` is
+      // ALREADY "the tier below this row" — it is built from `tierPairManagers(i - 1)` at
+      // the top of the loop. So `rows[r.i - 1].belowRot` is the tier below the tier below:
+      // TWO down. On V8.52 that printed, for T7: "⚠ T6 HAS crossed members into MatB (302
+      // rotations lifetime)" — **302 is T5's number. T6's is 0, and it was sitting in T7's
+      // own row of the table printed twenty lines above.** The verdict inverted with it:
+      // T7 was reported as an ambiguous possible-feedback-loop needing event forensics,
+      // when it is the same plain NOT A FAULT as T8/T9/T10. It sent session 74 chasing it
+      // three times before `diag_velocity_history.js` (VelocityGateSet = 0) contradicted
+      // the prose and the two readings were put side by side.
+      // ▶▶ IT WAS INVISIBLE EVERYWHERE ELSE because the bug only shows when two adjacent
+      // tiers have DIFFERENT rotation counts. T8/T9/T10 all read 0 either way.
+      // ▶▶ AND THE TABLE WAS RIGHT THE WHOLE TIME. The row prints `r.belowRot`; only the
+      // verdict prose reached for the wrong row. **When a tool's summary disagrees with
+      // its own table, the table is the measurement and the summary is an opinion.**
+      const below = r.i > 0 ? r : null;          // r.belowRot IS the tier below r
       // ⛔ FIXED session 36, 2026-08-24. This read `belowRot !== null`, which is TRUE for a
       // tier-below with ZERO rotations — so the run printed "T5 HAS crossed members into
       // MatB (0 rotations lifetime)", a claim contradicted by the number inside its own
@@ -193,7 +209,7 @@ async function main() {
       console.log(`     Auto-upgrades INTO T${r.i + 1} at cycle-out are blocked while this is false ` +
                   `(TierRouter:1398).`);
       if (r.i > 0 && belowMoving) {
-        console.log(`     ⚠ T${r.i} HAS crossed members into MatB (${rows[r.i - 1].belowRot} rotations ` +
+        console.log(`     ⚠ T${r.i} HAS crossed members into MatB (${r.belowRot} rotations ` +
                     `lifetime). TierRouter:1180 force-opens this gate on a MatB crossing, so a gate ` +
                     `that is STILL closed means either no crossing has happened recently, or the ` +
                     `velocity check re-closed it afterwards. Those are different faults — separate ` +
