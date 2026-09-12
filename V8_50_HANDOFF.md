@@ -1661,6 +1661,111 @@ owner-set, and the session that earned it got five things wrong by ignoring what
 ##      them or keep taking numbers from the JSON. And the contracts repo still has twelve untracked
 ##      `Test Sept 9*.png` screenshots plus a MODIFIED `v853_private_deploy_transcript.txt` from the
 ##      09-09 ownership rehearsal; decide keep-or-drop and land them.
+## 62.47 ✅✅ **2026-09-12 (session 75): G4 + G5 + P5 ARE LIVE ON crypto-nova.app IN TEN
+##      LANGUAGES. AND THE G5 CARD CREATED ITS OWN DEFECT THE MOMENT IT SHIPPED.**
+##      ⚠ **THE DEVICE SHELL STILL CANNOT MOUNT THE REPOS — SEVENTH SESSION, same Sept-8 Windows
+##      cause.** So git went back to owner-run blocks (the 2026-09-02 "Claude runs git push itself"
+##      note does not apply while the mount is down). Every file write went stage -> commit ->
+##      re-stage + md5: **9/9, then 11/11, then 11/11, then 13/13 — all clean.** The bridge also
+##      DROPPED mid-session and reconnected on its own; nothing was lost.
+##      ✅ **SHIPPED, laddered admin -> preview -> main, all three rungs at `30ea3b0`:**
+##        · **q33/q34 translated into the nine non-English locales.** Register MEASURED per file,
+##          not guessed (62.46's rule, applied to six more languages): de du/dein 47 vs Sie 1 ->
+##          informal · es tu 29 -> informal · **fr vous 35, tu 0 -> FORMAL** · pt você ·
+##          **tr siz 4, sen 0 -> FORMAL** · vi bạn 55 · **zh 您 48 vs 你 6 -> FORMAL** · ko
+##          -(스)ㅂ니다 90 -> formal · th คุณ 53 with **zero ครับ/ค่ะ, so no gendered particles.**
+##          ▶ tr, zh and ko are the ones intuition would have got wrong.
+##        · **`index.html`: the G4 card + the G5 card**, plus six new `idx.*` keys in ALL TEN
+##          locales, English included (the 09-02 rule for the fourth time: `i18n.js:52` sets
+##          `innerHTML` for every `[data-i18n]` regardless of language, so HTML-only copy never
+##          renders). **en.json's values were EXTRACTED FROM THE HTML and asserted IDENTICAL**, so
+##          a switch back to English cannot change the wording.
+##        · **G4's POSITION IS MEASURED, NOT CHOSEN.** `G4_G5_SITE_TEXT.md` §1a requires "visible
+##          without scrolling"; a screenshot of the live landing view put **the fold INSIDE the
+##          "What is CryptoNova?" at-a-glance card**, so every slot after that card fails —
+##          including directly above the Join button, which was my first instinct and would have
+##          been wrong. The card sits under `idx.hero_sub`, above the explainer. Comment in the
+##          file says re-measure if the hero is reordered.
+##      ⛔⛔ **THE FINDING OF THE SESSION — A NEW SHAPE: SHIPPING AN HONEST BLOCK MADE AN EXISTING
+##      SLOPPY LINE DANGEROUS.** `index.html:11683`'s footer strip read **"accepted finds earn $1"**
+##      with NO scope. On its own for months: harmless. A few hundred pixels below the brand-new G5
+##      card: the page now **priced a fund-drain at one dollar** — verbatim the collision §2 of
+##      `G4_G5_SITE_TEXT.md` exists to prevent ("worse than having no bounty at all"). Fixed to
+##      "ordinary bugs earn $1". ▶▶ **When you add member-facing text, audit what it now sits NEXT
+##      TO. The defect was adjacency, which no file-level check can see.**
+##      ⛔ It also carried **NO `data-i18n` at all**, so it rendered in English in all ten
+##      languages. New key `idx.footer_bug` ×10. ▶ **A member-facing sentence with no key is
+##      invisible to every locale audit that works from the JSON — grep the HTML for member-facing
+##      text WITHOUT `data-i18n`, not only for stale keys.**
+##      ▶▶ **HOW BOTH WERE FOUND, and this is the transferable part: BY SCREENSHOTTING THE LIVE
+##      PAGE IN GERMAN.** Every offline check had passed — JSON parsed, keys present, tags
+##      balanced, md5 matched — and not one of them could see either problem. The English page hid
+##      it too. **Read the deployed page in a non-English locale; it surfaces untranslated strings
+##      and bad neighbours in a single look.**
+##      ✅ **THEN THE REWARD WORDING, owner-approved the same day.** [stated] Owner: *"let's soften
+##      the wording for rewards if you think it will be better."* ⛔ **What was wrong was NOT that
+##      the promise was too strong — the site published the promise WITHOUT its condition.** §3
+##      records the decision as judging each case "on what it is actually worth **and what the
+##      project can then afford**"; the site said only "We will agree a reward with you directly,
+##      and we will pay it." ▶ **So the promise was KEPT and the constraint ADDED:** "...based on
+##      how serious the issue is and what the project can afford, and we will pay it."
+##      **The unconditional "we will pay it" stays deliberately** — it is the entire reason G5
+##      counts as a mitigation for launching unaudited, and a researcher who doubts payment does
+##      not report. A vaguer "a fair reward" was considered and REJECTED: vagueness is what G4
+##      exists to remove. ▶▶ **Same class as everything else in this family: a page stating a
+##      policy minus the condition that governs it. The internal doc was honest; the published
+##      text was the lossy copy.** `G4_G5_SITE_TEXT.md` §2a amended so it cannot drift back.
+##      ⛔ **62.46 OVERSTATED THE ORPHAN KEYS — MEASURED: `q30/q31/q32` are in `en.json` ONLY,
+##      not "all ten locales".** The nine others top out at q29 and never had them; consistent with
+##      session 74's own evidence (only en.json reported duplicates). Confirmed from the live page:
+##      `document.querySelector('[data-i18n="faqPage.q30"]')` -> **null**. ▶ The rule stands (take
+##      new key numbers from the JSON, never the page) but the hazard is **en.json-only**, which is
+##      exactly where a new key gets added first.
+##      ⚠ **STANDING TRANSLATION DEBT, MEASURED AND PARKED: the nine locales are 55 `faqPage` keys
+##      behind `en.json` (124 vs 179), IDENTICALLY** — so they were last topped up together, not
+##      drifting apart. **`q18` and `q19` are absent ENTIRELY**, so those two answers render in
+##      English for every non-English reader. Not false, so not urgent; 39 non-G4/G5 keys still owed.
+##      ⛔ **AND A STALE GATE CAUGHT ON THE WAY PAST: `MAINNET_READINESS.md` G1 still described the
+##      09-05/07 Blockaid RED state and an unanswered follow-up — resolved 09-10 and the doc never
+##      caught up.** Nimrod cleared the label on the **TOKEN** (`0x2D8B…639a`), never the
+##      PairManager, and a wallet test on 09-10 came back clean top-to-bottom. Entry rewritten from
+##      measurement; **left UNTICKED on purpose** because the gate's own proof condition is "no red
+##      tag on EVERY spender the site asks for" and only the registration flow was exercised. ▶ The
+##      argument for ticking (the label was on the SHARED settlement token, so clearing it clears
+##      every flow) is sound but is an INFERENCE, not the measurement asked for. **Either run the
+##      full-spender sweep or amend the condition — deliberately, not by drift.**
+##      ⚠ **TWO READING ERRORS I MADE, worth not repeating.** (1) `git show --stat`'s
+##      `de.json | 17 ++++++++++++++++-` is the **TOTAL** changed lines, NOT insertions — 16 + 1.
+##      I read 17 as insertions and invented a reconciliation for the missing line. Read the
+##      summary line or `--numstat`, never the bar. (2) A first per-object duplicate scan shared one
+##      Counter across all nested objects and reported `title`/`badge`/`step1` as duplicates —
+##      **false positives; a duplicate only counts WITHIN the same object.**
+##      ⚠ **Local `diff` against a pre-edit copy shows the WHOLE FILE changed** — the bridge edits
+##      convert CRLF -> LF (Python universal newlines in, `\n` out). Git normalises and shows only
+##      the real change. `sed 's/\r$//'` both sides first, or just trust git.
+##      ⚠ **A `javascript_tool` gotcha:** an `async`-IIFE wrapper returns `{}` (the REPL does not
+##      await it) — use TOP-LEVEL `await` with a bare final expression. Also `computer key End` did
+##      not scroll and `scroll` overshot into blank space: **`querySelector().textContent` is more
+##      reliable than scroll-and-screenshot for verifying one specific string.**
+##      ✅ **VERIFIED LIVE ON crypto-nova.app** (not on a ref, not on the dashboard — the 51.x
+##      rule): the reward basis present in `faqPage.q34_a3` AND `idx.bounty_p` in **all ten**
+##      locales; the old bare promise served nowhere; G4 card, G5 card and the scoped footer all
+##      render; `admin.` and `early.` checked the same way at the earlier commits.
+##      ✅ **TICKED IN `MAINNET_READINESS.md`: G4 + G5 in §1, P5 in §2**, each with `30ea3b0` and
+##      the live URL, and §5 re-cut.
+##      ▶ **NEXT, IN ORDER:** (1) the Telegram post — DRAFTED and rule-checked at
+##      `CryptoNova-Testnet-App\community_post_2026-09-12_g4_g5_p5.txt`, owner to send; the app is
+##      live so the owner's "app and announcement go together" rule is satisfied. (2) **G1's proof
+##      condition — full-spender wallet sweep OR amend the condition.** (3) Blockaid's two
+##      informational follow-ups. (4) G2 the organic self-funding measurement (62.39). (5) the
+##      Chrome-hang report on register/approve. (6) `--renounce-roles` page button. (7) exercise the
+##      six never-fired alert paths once deliberately. ⛔ Plus R20, still carried: the live crontab
+##      header says the three `rr_keeper` stress lines are held down by `/root/keeper/rr_keeper.OFF`,
+##      **which does not exist** — comment-only fix on the box, owner's timing.
+##      ⚠ **STILL PARKED, both from 62.45/62.46 and untouched:** `q30/q31/q32` are dead keys in
+##      `en.json`; and the contracts repo root still has twelve untracked `Test Sept 9*.png` plus a
+##      MODIFIED `v853_private_deploy_transcript.txt` from the 09-09 ownership rehearsal — decide
+##      keep-or-drop and land them.
 ## 62.5 ▶ **WHAT IS OPEN, IN ORDER, FOR SESSION 63.**
 ## 62.23 ✅ **CUTOVER DONE 2026-09-04 (owner local afternoon): `preview`+`main` at `00b4690`** (V8.52 repoint
 ##      + `DEFAULT_SPONSOR_POOL` = the owner's revised 10-leader roster, two swapped, dead `run_bigfill_rr.ps1`
