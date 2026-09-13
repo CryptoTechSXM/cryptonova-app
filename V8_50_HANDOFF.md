@@ -1766,6 +1766,57 @@ owner-set, and the session that earned it got five things wrong by ignoring what
 ##      `en.json`; and the contracts repo root still has twelve untracked `Test Sept 9*.png` plus a
 ##      MODIFIED `v853_private_deploy_transcript.txt` from the 09-09 ownership rehearsal — decide
 ##      keep-or-drop and land them.
+## 62.48 ▶ **2026-09-13 (session 75, close): G2 IS SCOPED AND DESIGNED. NOT MEASURED — ON PURPOSE.**
+##      ▶▶ **G2 has its own memory file now: [[cryptonova-g2-selffunding]]. READ IT BEFORE BUILDING
+##      OR RUNNING ANYTHING** — it holds the metric definition, the event map, the unsettled fork
+##      and the confound. This block is the pointer, not the content.
+##      ✅ **THE METRIC:** a member cycles out, then must re-enter at the entry fee, funded from the
+##      50% crossing reserve plus earnings accrued in-cycle. **`MemberParked(member, shortfall)`
+##      with `shortfall > 0` IS "the loop did not fund itself for this member at this cycle-out"** —
+##      session 53 proved the split is perfect by half (every MatA park no-seat, every funding park
+##      in a MatB), so no guesswork is needed to separate them. ▶ **Self-funding rate = 1 −
+##      (funding parks ÷ cycle-outs), organic only** — and the `shortfall` DISTRIBUTION matters more
+##      than the rate, because missing by $0.10 and missing by $5.00 imply different fixes.
+##      ⚠ **Baseline to beat: V8.51 was 238 cycle-outs / 55 self-funded = 23%. The organic/synthetic
+##      split has NEVER been done for V8.52**, so no V8.52 aggregate may be quoted as an answer.
+##      ⛔ **EVENT MAP, measured from working code:** `CycleRecorded` + `MemberReentered` are on
+##      **TierRouter** (one address, cheap, already read by `cycle_census.js`) — but **`MemberParked`
+##      is emitted by EACH MATRIX** (`noseat_witness.js:113`), so the funding-park half needs the
+##      full `tierPairManagers -> allPairsStatus -> every MatA/MatB` enumeration (~38 on V8.52).
+##      **Do NOT shortcut it with the book's pair-0 addresses — that is exactly the defect fixed in
+##      session 69**, where the parked card reported 1 of 68.
+##      ⛔⛔ **THE FORK THAT MUST BE SETTLED FIRST, AND IT DECIDES THE HEADLINE NUMBER: ~45% of V8.50
+##      rescues cost the fund NOTHING and emitted NO `MemberDebtIncreased`.** So "re-entry with no
+##      debt booking" is NOT a safe proxy for self-funded — it silently absorbs the whole no-cost
+##      rescue population. ▶ **Read the contract for where that money comes from** (the member's own
+##      crossing reserve -> genuinely self-funded; the matrix pool's -> assisted). **Until that is
+##      read from SOURCE, any self-funding percentage is UNVERIFIED.** This is why no instrument was
+##      written this session: building on an unsettled definition produces a confident number that
+##      means something other than its label.
+##      ⛔⛔ **THE CONFOUND THAT MUST BE PRINTED ON THE RESULT: jobs B and C churn ~15,000 synthetic
+##      wallets, and every synthetic registration pays chain-pay INTO organic members' balances
+##      above them.** Organic members here are SUBSIDISED by load that will not exist on mainnet.
+##      ▶▶ **So the figure is an UPPER BOUND, not an estimate — and that is exactly why it is worth
+##      having first: if the loop does not self-fund even WITH the subsidy, mainnet is strictly
+##      worse and the gate is answered without perturbing anything.** [stated] Owner 2026-09-12 chose
+##      this route over standing down jobs B/C for a clean window.
+##      ✅ **HARNESS SET VERIFIED CURRENT, not assumed:** `derive_harness_addresses.js` is OFFLINE
+##      (no RPC/provider/signer), derives 15,000 addresses in ~30 s, and its defaults were checked
+##      against `crontab_live_mirror.txt` — **the live job B `UPGRADE_RANGES` match EXACTLY, and job
+##      A's pool (`child:300000` + cursor, `POOL_SIZE=1622`) sits inside `child:300000:3000`.**
+##      Runs ON THE VPS (needs `FILL_MNEMONIC`); the phrase never leaves the box. ⚠ Re-check if
+##      `POOL_SIZE` ever passes 3000 — the next prime was `HDR_OFFSET=301622`.
+##      ⛔ **CLAUDE CANNOT READ THE CHAIN FROM THE COWORK CONTAINER — MEASURED:** curl to
+##      `sepolia.base.org` and `base-sepolia-rpc.publicnode.com` both fail **exit 56, connection
+##      reset**; the egress allowlist excludes Base Sepolia RPCs. ▶ **Every G2 chain read is an
+##      owner-run block.** Claude builds and selftests; the owner runs. Do not plan otherwise.
+##      ▶ **NEXT SESSION, IN ORDER:** (1) settle the no-cost-rescue fork FROM SOURCE. (2) write the
+##      read-only census on `cycle_census.js`'s conventions — `ADDRESSES_FILE` required with NO
+##      default, `CHUNK=9000`, RPC host printed never the URL, **offline selftest against synthetic
+##      fixtures before it touches the chain**, and a failed chunk COUNTED and NAMED with the verdict
+##      INCOMPLETE rather than "none found" (here a silent failure-as-zero reads as "nobody cycles").
+##      (3) derive the harness CSV on the VPS. (4) run it, state the window, report the rate as an
+##      upper bound plus the shortfall distribution. (5) tick G2 or record what it says.
 ## 62.5 ▶ **WHAT IS OPEN, IN ORDER, FOR SESSION 63.**
 ## 62.23 ✅ **CUTOVER DONE 2026-09-04 (owner local afternoon): `preview`+`main` at `00b4690`** (V8.52 repoint
 ##      + `DEFAULT_SPONSOR_POOL` = the owner's revised 10-leader roster, two swapped, dead `run_bigfill_rr.ps1`
