@@ -4,6 +4,35 @@ Read this file at the start of every session before touching contracts, scripts,
 
 ---
 
+## ⛔ SESSION-START CHECK — MEMBER BUG REPORTS (owner rule, 2026-09-14)
+
+**Read the member bug ledger at the START of every session, before any other work, whatever the
+session's actual task is.** Owner's reason: a member's message must not sit unanswered for days.
+Sherwyn's 2026-09-11 ticket waited until 2026-09-14 before anyone measured it — that is the gap this
+rule closes.
+
+- **Where it is:** `BUGS.md` on the **`data` branch of `cryptonova-testnet-app`** — NOT this repo, and
+  NOT `main`. Read it with:
+  `git fetch origin data && git show origin/data:BUGS.md`
+- ⛔ **WebFetch is blocked on crypto-nova.app by robots.txt.** Do not plan to read the ledger over the
+  web; use the git command above.
+- ⛔ **A BRANCH POINTER MOVING IS NOT A READING OF THE BRANCH.** `origin/data` advancing is usually our
+  OWN triage commits. Claude once announced "new member reports have landed" on that alone. **Read the
+  file before claiming member activity.**
+- **Parsing rule:** everything ABOVE the Resolved heading counts as OPEN (one ticket per `### [date]`);
+  only pipe-table rows with 5+ cells below it count as resolved. A prose write-up below the split is
+  invisible to the page. ⛔ **Never quote either heading verbatim inside a file in that repo** —
+  `api/submit-bug.js` takes the FIRST match and would file live member reports inside documentation.
+- **Say what is open in the first reply of the session**, even when the work is something else. An open
+  ticket nobody names is an open ticket that waits another day. If a reply is owed and Claude cannot
+  post it, say so plainly — Claude cannot post to members; the owner sends.
+- ⛔ **Triage policy unchanged and non-negotiable: DO NOT BULK-CLOSE.** A closure rests on a specific
+  line of current code or a chain read explaining THAT reporter's mechanism — never "it's old" or "the
+  chain was replaced". Full policy, plus the four ways `bug_manager.js` was dangerous (one of which
+  wiped all 17 open tickets): memory `cryptonova-bug-ledger`.
+
+---
+
 ## STANDING DESIGN POLICY — THE STABILITY FUND AND THE PARKED CLOCKS (owner, 2026-08-13)
 
 Owner statement, on V8.48 deploy day, correcting a session that proposed the opposite:
