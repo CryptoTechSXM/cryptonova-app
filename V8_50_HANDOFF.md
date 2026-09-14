@@ -2035,6 +2035,110 @@ owner-set, and the session that earned it got five things wrong by ignoring what
 ##      two follow-ups. (7) The Telegram post for G4/G5/P5, still owed. (8) R20 — the crontab header names
 ##      an `rr_keeper.OFF` that does not exist.
 
+## 62.51 ✅✅✅ **2026-09-14 (session 78): G2 IS FULLY ANSWERED — SYSTEM 40.0%, T1 32.7%, T2+ 43.5%,
+##      ALL UPPER BOUNDS. BOTH INSTRUMENT DEFECTS FIXED AND DEPLOYED. MY RECOMMENDATION: NO-GO AS-IS.**
+##
+##      ▶ **THE INSTRUMENT — 62.50's two defects are closed, selftest 58/58 -> 101/101 PASS.**
+##      `g2_selffund.js` md5 `ccbd0b5d6f5e0140883ec0ab3e76a8d8` (43,165 b), selftest `1b768a0722a9938e9e6312889d5db74c`
+##      (20,959 b). **Verified at the SAME md5 on the laptop AND on `/root/keeper`, with the selftest re-run ON THE
+##      VPS (101/101)** — 62.50's "fixed means fixed on the host that runs it" rule, applied. Committed `4479a6e`,
+##      pushed.
+##
+##      ▶ **FIX 1 — `TIER` now filters BOTH sides.** The filter moved INTO the pure core: `classify(ev, harness,
+##      tierNum)` applies one rule to all six event populations, so numerator and denominator always come from the
+##      same population. Matrix events inherit their tier from the enumerating matrix. `parseTierFilter` REFUSES
+##      garbage rather than matching nothing (a filter matching nothing yields denom 0, which reads as "nothing to
+##      measure" — a lie shaped like a finding). The book-key -> tier-index mapping is **asserted against the chain**
+##      at startup via `tierPairManagers(n-1)` vs the book's `pm`, not trusted.
+##      ⛔⛔ **THE TRAP INSIDE THE FIX, READ FROM SOURCE: THE THREE TierRouter EVENTS DO NOT NUMBER TIERS ALIKE.**
+##      `TierRouter.sol:1275` emits `CycleRecorded(member, tierIndex, ...)` **0-BASED**; `:1405` `MemberReentered`
+##      and `:1507` `MemberParked` emit `tierIndex + 1` **1-BASED** (`:1214 fromTierNum` names the convention;
+##      `:178 MAX_TIERS = 10`). **A uniform filter would have read `CycleRecorded` one whole tier low and printed it
+##      as fact.** Normalised in ONE exported place (`TIER_NUM_OF`) and pinned in the selftest.
+##
+##      ▶ **FIX 2 — a cross-check disagreement is now a VETO, not an annotation.** Checked FIRST in `verdictFor`,
+##      ahead of every other branch; suppresses the rate in the headline block, in the verdict, and via **exit 3**.
+##      62.50's defect was that the machinery fired correctly (`DISAGREE by 247`) and the reporting layer printed
+##      64.8% anyway, twice. Also new: decode failures are COUNTED (`undecodable`) and force INCOMPLETE.
+##      ✅ **A SELFTEST FIXTURE WAS ITSELF UNREALISTIC AND THE VETO CAUGHT IT.** Old TRAP 7 supplied a matrix park
+##      with no matching TierRouter park; `TierRouter:1506-1507` calls `parkCycledOut()` and emits `MemberParked` on
+##      CONSECUTIVE LINES, so a real funding park emits both. Fixture corrected, veto NOT weakened. ⚠ Worth keeping:
+##      `parkCycledOut` is wrapped in try/catch, so the TierRouter side CAN legitimately exceed the matrix side.
+##
+##      ▶▶ **THE MEASUREMENTS.** V8.52 `TIER=T1`, blocks 46389132..46783092 (the SAME window as the 40.0%),
+##      88/88 calls 0 failed, cross-check 140 = 140, `CycleRecorded` 208 = denominator, graduations 0:
+##      **68 re-entered / 140 parked / denom 208 = 32.7%.** Log `/root/keeper/g2_selffund_v852_t1_fixed.log`.
+##      V8.51 `TIER=T1`, blocks 46224187..46344187, 28/28 calls 0 failed, cross-check 79 = 79:
+##      **55 / 79 / 134 = 41.0%.** Log `/root/keeper/g2_selffund_v851_t1.log`.
+##      ✅✅ **A FREE CONTROL, AND THE FIXED INSTRUMENT PASSED IT:** V8.51 T1-only returned numbers IDENTICAL to the
+##      V8.51 all-tier run (55/79/134, 79=79) while dropping 18 of 26 matrices from the sweep. Filtering to T1 on a
+##      chain whose activity was entirely T1 MUST return the same figures — and it did. That also upgrades
+##      "V8.51 was EFFECTIVELY T1-only" from an assumption to a **measurement**.
+##
+##      ⛔⛔⛔ **THE FINDING: T1 SELF-FUNDING REGRESSED 41.0% -> 32.7% (8.3 POINTS) AND THE FLAT ALL-TIER HEADLINE
+##      (41.0 -> 40.0) WAS HIDING IT** behind stronger higher tiers entering the mix. By exact subtraction of event
+##      counts, **T2+ = 190 re-entered / 247 parked / denom 437 = 43.5%** (68+190=258 ✓, 140+247=387 ✓, 208+437=645 ✓).
+##      ▶ **The ladder runs the right way up: T1 32.7% < system 40.0% < T2+ 43.5%.** Members who get PAST T1 fund
+##      themselves better. **T1 — the tier every new member must pass — is the worst part of the system.**
+##      ⚠ **DISTINCT-MEMBER COUNTS DO NOT SUBTRACT** (a member can park in T1 and T2), so the after-the-park lines
+##      cannot be differenced; a T2+ figure there needs its own run. SF advances to T1 went **0 (V8.51) -> 41 (V8.52)**;
+##      per 61.1, V8.51's "79 cured, 0 advances" was item-S overflow rescue into FROZEN MatAs, NOT the loop working.
+##      ⚠ **UNVERIFIED HYPOTHESIS, stated as required:** V8.51's T1 was ONE circulating pair with T1.2/T1.3 frozen at
+##      0 rotations; V8.52b unfroze them (T1.2 MatA 160, T1.3 44). Members in younger pairs have far fewer rotations
+##      beneath them paying chain-pay, so they reach MatB cycle-out with less. **The 8.3 points may be a COMPOSITION
+##      effect — V8.52 admitting to cycle-out a younger, poorer population V8.51's freeze excluded — not a mechanism
+##      regression.** Discriminator: a per-PAIR split of V8.52 T1. **It does NOT change the G2 answer either way.**
+##
+##      ⛔ **TWO CORRECTIONS TO THE RECORD, both mixed-basis errors of the same family as the 64.8%.**
+##      (1) 62.49/62.50 blamed the old "23%" on the DENOMINATOR (`CycleRecorded` swallowing graduations). Measured
+##      false on both chains: graduations 0 and `CycleRecorded` equals the correct denominator EXACTLY (238=238,
+##      645=645, 134=134, 208=208). **The real defect was the POPULATION — 23% never excluded the synthetic wallets.**
+##      (2) 62.49 read the ALL-TIER median shortfall ($6.65) against the **T1** $10 fee and concluded the median
+##      member "got a third of the way". Two different populations. **On one basis: T1 median shortfall $2.17 of $10,
+##      so the median member held ~$7.83 — about 78% of the way, not a third.** The all-tier p90 $55 / max $196.95 are
+##      HIGHER-TIER figures and must never be quoted against the $10 T1 fee.
+##      ✅ **SANITY INVARIANT, holds twice:** a shortfall cannot exceed the entry fee — T1 max $9.23 < $10, and
+##      V8.51 (T1-only) maxed at $9.99 < $10.
+##
+##      ▶▶▶ **THE G2 RECOMMENDATION — NO-GO FOR AN UNMODIFIED MAINNET LAUNCH. The gate call itself is the owner's.**
+##      All three figures are UPPER BOUNDS: ~15,000 synthetic wallets pay chain-pay into organic balances and that
+##      subsidy does not exist on mainnet, so **the true mainnet figures are BELOW these by an unmeasured amount.**
+##      **A mainnet launch starts with T1 only populated — i.e. at the 32.7% end, with no higher tiers to blend it up
+##      and no synthetic subsidy. So a "T1-only soft launch" is the WORST option, not the cautious one.**
+##      ✅ **THE ENCOURAGING HALF, and it is real:** 0 members left stuck; **~90% of failing T1 members are short by
+##      $3.24 or less** on a $10 fee; the median holds ~78% of what they need. **This is a small-gap problem, not
+##      broken economics.**
+##      ▶ **THE STRUCTURAL CAUSE IS ALREADY IN THE RECORD:** a MatA entry is 50% pre-paid by the crossing reserve,
+##      but **a MatB member holds reserve 0** (consumed crossing; `skipReserveCarve` blocks a re-carve,
+##      `MatrixLogicLib:1113-1143`) — their re-entry must come **100% from earnings**. The failing population is
+##      exactly the one the design gives no reserve to.
+##
+##      ⚠ **THE NEXT MEASUREMENT, and it is ONE run, not a programme: ARE THE FAILING MEMBERS SHORT BECAUSE THEY
+##      NEVER EARNED THE FEE, OR BECAUSE THEY EARNED IT AND WITHDREW IT BEFORE CYCLE-OUT?** Those need opposite
+##      fixes (more chain-pay vs a re-entry reserve carve or a withdrawal hold), and **a reserve carve creates NO new
+##      money — it only withholds the member's own earnings earlier.** ⛔ **DO NOT DESIGN A FIX BEFORE THIS IS
+##      MEASURED.** That is rule 2, and this is exactly the point where it is tempting to skip it.
+##
+##      ✅ **REPO FACT CLOSED (cost a failed push to find): `C:\CryptoNova-Keepers` IS A SINGLE-BRANCH `main` REPO.**
+##      `git push origin admin` fails `src refspec admin does not match any`. Read from `.git`: `refs/heads/` holds
+##      only `main`, `refs/remotes/origin/` only `origin/main`, no `packed-refs`. **The admin -> preview -> main
+##      ladder is the FRONTEND/APP repo convention only** (where `admin` gates what members see); it never applied to
+##      the keepers repo. **Correct command there is `git push origin main`.** And it ships nothing: the VPS is not a
+##      git checkout, keeper files arrive by `scp`, so a keepers push is BACKUP ONLY.
+##
+##      ⚠ **HOUSEKEEPING FOR THE NEXT SESSION:** this file is now **1.5 MB** and memory
+##      `cryptonova-g2-selffunding` is at **42 KB of a 48 KB cap** — both need condensing/splitting soon, and a few
+##      large edits beat many small trims.
+##
+##      ▶▶ **OPEN, IN ORDER, FOR SESSION 79:** (1) **the owner's G2 call — my recommendation is NO-GO as-is, with
+##      the small-gap finding as the reason it is fixable.** (2) The earned-vs-withdrew measurement above — the only
+##      thing that should shape a fix. (3) Per-pair split of V8.52 T1 (composition vs regression; a "why", not a
+##      gate). (4) Measure what feeds T1.3 before touching `setActivePairIndex`. (5) Send Sherwyn's reply and check
+##      his dashboard for the display half. (6) G1's proof condition (62.47 item 2). (7) Blockaid's two follow-ups.
+##      (8) The Telegram post for G4/G5/P5, still owed. (9) R20 — the crontab header names an `rr_keeper.OFF` that
+##      does not exist. (10) PARKED: whether the 09-11-and-earlier keeper files match `/root/keeper` (one
+##      `md5sum /root/keeper/*.js` answers it); session 76's own edits are confirmed to be only the g2 pair.
+
 ## 62.5 ▶ **WHAT IS OPEN, IN ORDER, FOR SESSION 63.**
 ## 62.23 ✅ **CUTOVER DONE 2026-09-04 (owner local afternoon): `preview`+`main` at `00b4690`** (V8.52 repoint
 ##      + `DEFAULT_SPONSOR_POOL` = the owner's revised 10-leader roster, two swapped, dead `run_bigfill_rr.ps1`
