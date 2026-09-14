@@ -1817,6 +1817,94 @@ owner-set, and the session that earned it got five things wrong by ignoring what
 ##      INCOMPLETE rather than "none found" (here a silent failure-as-zero reads as "nobody cycles").
 ##      (3) derive the harness CSV on the VPS. (4) run it, state the window, report the rate as an
 ##      upper bound plus the shortfall distribution. (5) tick G2 or record what it says.
+## 62.49 ✅✅✅ **2026-09-13 (session 76): G2 IS MEASURED. SELF-FUNDING RATE 40.0%, UPPER BOUND —
+##      AND THE INSTRUMENT I BUILT TO AVOID FAILURE-AS-ZERO SHIPPED ONE.**
+##      ▶▶ **[[cryptonova-g2-selffunding]] IS THE RECORD. READ IT BEFORE RE-RUNNING OR QUOTING
+##      ANYTHING** — it holds the source reads, the four traps, the result and the caveats. This
+##      block is the pointer plus what a future session must not have to rediscover.
+##      ⚠ **DEVICE SHELL STILL CANNOT MOUNT THE REPOS — EIGHTH SESSION**, same Sept-8 Windows
+##      cause. All file writes went stage -> commit -> re-stage + md5.
+##
+##      ✅ **THE NUMBER, WITH ITS BASIS (62.48 asked for a window and a number, not a feel):**
+##        book `deployed_addresses_v8_52.json`, chain 84532, matrixSize 127 · blocks
+##        **46389132..46783092** (start = the `upkeepCaller` grant of 62.23, i.e. the first block
+##        V8.52 ran as designed; end = head at run time) · **15,000 synthetic wallets excluded** ·
+##        **40 matrices enumerated (20 MatB), 0 unreadable** · **264/264 calls, 0 FAILED.**
+##        A CLEAN SWEEP, so the rate is a rate and not a floor. Log: `/root/keeper/g2_selffund_run1.log`.
+##        ▶▶ **258 re-entered (self-funded on time) · 387 funding-parked · denominator 645 · 40.0%.**
+##      ✅✅ **THREE INSTRUMENTS AGREED, AND THE THIRD WAS AN ACCIDENT.** The planned cross-check
+##        matched exactly (**TierRouter reason-tagged 387 = per-matrix shortfall>0 387**). Then
+##        `CycleRecorded` came in at **645 = the denominator exactly, graduations 0** — a number
+##        printed only as CONTEXT turned out to be a third independent confirmation. Organic MatA
+##        funding parks **0** and no-seat parks **0**, exactly as the source reading predicted.
+##      ⛔ **THE SHORTFALL SPREAD IS THE DECISION-USEFUL HALF, NOT THE PERCENTAGE:**
+##        n 387 · total **$6,338.10** · min $0.03 · **median $6.65** · p90 $55.00 · max $196.95.
+##        ▶ At a $10 T1 fee the median member had earned ~**$3.35 of the $10 they needed** — a
+##        THIRD of the way, not nearly there. ▶▶ **So this is NOT a rounding problem, and the
+##        whole family of fixes that shave the fee or nudge a threshold cannot close it.**
+##      ✅ **AFTER THE PARK: 161 DISTINCT members behind those 387 parks (2.4 each)** — 88
+##        self-cured with the fund paying NOTHING, 73 needed an advance, **0 still stuck** at
+##        window end. ⚠ The denominator counts cycle-out EVENTS (the right unit for "did the loop
+##        fund THIS cycle-out"); repeat-parking is the norm, so the member-level picture is smaller.
+##
+##      ⛔⛔ **THE FINDING OF THE SESSION, AND IT IS ABOUT MY OWN TOOL: `g2_selffund.js` PRINTED
+##      `from EARNINGS $0.00` BESIDE 258 SUCCESSFUL RE-ENTRIES AND LABELLED IT "the real signal".**
+##        **That zero was never a measurement.** `CrossingFunded` is emitted ONLY by
+##        `MatrixLogicLib:989` — the matrix's own rotation crossing. A TierRouter RE-ENTRY runs
+##        `:1400 -> _takeSeat -> TierRouterLib.takeSeat:243-248`, which computes `fromEscrow`/`fromW`
+##        internally and calls `registerForMatB`/`registerFor`, **emitting nothing.** Zero was the
+##        only answer that path could ever give.
+##        ▶▶ **This is verbatim the class in [[cryptonova-frontend-truth]], committed INSIDE the
+##        instrument written to avoid it, in a file whose own header sets out the honesty rules.**
+##        ⛔ **AND IT PASSED 50/50 SELFTESTS — because every fixture I wrote supplied crossings.
+##        A SELFTEST ONLY PINS THE SHAPES YOU THOUGHT TO WRITE.** The missing case was the trivial
+##        one: re-entries with NO crossings. It is now test 58 of 58.
+##        ✅ FIXED same session: the report branches on `funding.n === 0` and says NOT OBSERVABLE
+##        with the reason. ⚠ **The split is NOT recoverable from logs at all** — it needs a
+##        per-member state read or a new event in `takeSeat`. Structurally a crossed-in MatB member
+##        holds escrow 0 (item A) so their re-entry IS earnings-funded, but a member seeded straight
+##        into a MatB (`registerForMatB`, or a legacy pre-item-A seat) can still hold a real reserve
+##        (`TierRouter:1525-1527`), so it is not 100% by construction either.
+##        ✅ Also added: **distinct parked members** printed beside the event count — without it the
+##        after-the-park lines (88+73+0=161) looked like they did not reconcile against 387.
+##      ⚠ **FILES: `g2_selffund.js` md5 `b2e9bccd5867866af6dbb7296b296032` (29,943 b) ·
+##        `g2_selffund.selftest.js` `7bbc090610f9f2362829ae4b07340249` (12,090 b), 58/58 PASS.**
+##        The run above was produced by the earlier `7558b8ce`/`ffd07de1` pair — **same headline
+##        arithmetic, only the reporting changed**, so the 40.0% does not need re-running.
+##
+##      ⚠⚠ **A CORRECTION TO MY OWN CLAIM, EARNED BY THE MEASUREMENT.** Earlier the same session I
+##        argued `CycleRecorded` is the wrong denominator (it swallows graduations) and therefore
+##        that V8.51's 23% is not comparable. **The structural argument stands, but the MEASURED
+##        contamination on V8.52 is ZERO** — graduations 0, and `CycleRecorded` equals the correct
+##        denominator exactly. ▶ So on V8.52 the two coincide and **23% -> 40% is very probably a
+##        real like-for-like near-doubling.** ⛔ **UNVERIFIED until the same graduation check is run
+##        on the V8.51 window.** Do not let the earlier caution stand as if the comparison had been
+##        refuted — it was never measured, and now half of it has been.
+##
+##      ⛔ **A BRIDGE GOTCHA THAT COST TWO COMMITS AND WILL BITE AGAIN: `device_commit_files`
+##        SERVED A CACHED COPY KEYED ON `stagedPath`.** After editing both files I re-copied them to
+##        the SAME `/mnt/user-data/outputs/` names and committed: the device got a **fresh mtime but
+##        the OLD bytes** (27,829 — byte-identical to the previous version). ▶▶ **The tell is the
+##        byte count not moving when the content did.** ✅ Fix: copy to a NEW staged filename
+##        (`*.v2.js`) and commit that to the same devicePath. ▶ **So the md5 re-check is not
+##        ceremony — it is the only thing standing between an edit and a silent no-op**, which is
+##        the same lesson 62.47 recorded when the md5 caught a locale key collision it was not
+##        aimed at.
+##
+##      ▶▶ **WHAT G2 NOW SAYS, PLAINLY: six in ten organic cycle-outs could not fund the next entry
+##      EVEN WITH ~15,000 synthetic wallets subsidising them, and the median miss is two-thirds of
+##      the fee. The true mainnet figure is BELOW 40% by an unmeasured amount.**
+##      ⛔ **G2 IS DELIBERATELY LEFT UNTICKED.** The gate asked for a number with a stated window
+##      and the number is in. **Whether 40% passes is an economic judgement that belongs to the
+##      owner, not to the instrument** — recorded as open, not as failed, and not as drifted.
+##      ▶ **NEXT, IN ORDER:** (1) the owner's call on whether 40% is a pass. (2) If it is not —
+##      and this is the direction the shortfall spread points — the question stops being "does the
+##      loop fund itself" and becomes **"what raises EARNINGS PER CYCLE"**, because the median
+##      member is short two-thirds of the fee and no threshold tweak reaches that. (3) The V8.51
+##      graduation check, to settle the 23% comparison. (4) G1's proof condition (62.47 item 2).
+##      (5) Blockaid's two informational follow-ups. (6) The Telegram post for G4/G5/P5, still owed.
+##      ⛔ Plus R20, still carried from 62.47: the live crontab header says the three `rr_keeper`
+##      stress lines are held down by `/root/keeper/rr_keeper.OFF`, **which does not exist**.
 ## 62.5 ▶ **WHAT IS OPEN, IN ORDER, FOR SESSION 63.**
 ## 62.23 ✅ **CUTOVER DONE 2026-09-04 (owner local afternoon): `preview`+`main` at `00b4690`** (V8.52 repoint
 ##      + `DEFAULT_SPONSOR_POOL` = the owner's revised 10-leader roster, two swapped, dead `run_bigfill_rr.ps1`
