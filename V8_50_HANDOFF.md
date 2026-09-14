@@ -1905,6 +1905,136 @@ owner-set, and the session that earned it got five things wrong by ignoring what
 ##      (5) Blockaid's two informational follow-ups. (6) The Telegram post for G4/G5/P5, still owed.
 ##      ⛔ Plus R20, still carried from 62.47: the live crontab header says the three `rr_keeper`
 ##      stress lines are held down by `/root/keeper/rr_keeper.OFF`, **which does not exist**.
+## 62.50 ⛔⛔⛔ **2026-09-14 (session 77): G2's HEADLINE SURVIVES BUT ITS COMPARISON IS REVERSED —
+##      41.0% -> 40.0%, FLAT. PLUS A LIVE ROUTING DEFECT, A BLOCKED DEPLOY PIPELINE, AND THE
+##      INSTRUMENT'S `TIER` FILTER PROVEN BROKEN.** Nine threads; read the memory files named
+##      against each — this block is the index, not the record.
+##      ⚠ **DEVICE SHELL STILL CANNOT MOUNT THE REPOS — NINTH SESSION**, same Sept-8 Windows cause.
+##
+##      ✅✅✅ **1. THE V8.51 RE-MEASUREMENT, AND IT REFUTES 62.49's OWN CONCLUSION.**
+##        Same instrument, V8.51 book, blocks 46224187..46344187, 15,000 synthetics excluded,
+##        26 matrices, 70/70 calls 0 failed, cross-check **79 = 79**, graduations **0**:
+##        **55 re-entered / 79 funding-parked / denominator 134 = 41.0%.**
+##        ▶▶ **LIKE-FOR-LIKE IS 41.0% -> 40.0%. FLAT. V8.52 unfroze the pairs and did NOT move
+##        self-funding.** 62.49's "23% -> 40% is very probably a real near-doubling" is WRONG.
+##      ⛔ **AND I WAS WRONG ABOUT *WHY* 23% WAS WRONG.** 62.49 blamed the DENOMINATOR. Measured
+##        false: graduations 0 on BOTH windows. **The 23% never excluded the synthetic wallets —
+##        it is an ALL-WALLETS rate.** `HARNESS_FILE=NONE` on the same window reproduces
+##        238 / 55 / 23.1% exactly. ✅ Bonus: the synthetic population self-funds at **ZERO** —
+##        all 55 re-entries organic, all 104 synthetic cycle-outs parked, each short **exactly
+##        $3.20** (an identical-balance-history signature, and a third proof the harness list is tight).
+##      ✅ `cycle_census.js`'s 238 vs `g2_selffund.js`'s 134 was never a conflict — 238 is all
+##        wallets, 134 organic. ⛔ **`cycle_census.js` APPLIES NO HARNESS FILTER: every figure ever
+##        taken from it on a stress-loaded chain is an all-wallets figure.** Re-check any that matter.
+##      ▶ [[cryptonova-g2-selffunding]] · `MAINNET_READINESS.md` §1 G2 corrected this session.
+##
+##      ⛔⛔ **2. `g2_selffund.js` HAS TWO DEFECTS — ONE FOUND BY ITS OWN CROSS-CHECK.**
+##        (a) **`TIER=` IS BROKEN.** `TIER_ONLY` is referenced in ONE place (`:326`), inside the
+##        MATRIX enumeration. It never touches the TierRouter side. So `TIER=T1` divided all-tier
+##        re-entries (258) by T1-only parks (140) and printed **64.8%** — an all-tier numerator over
+##        a T1-only denominator. **IGNORE 64.8%.** The tell: re-entries 258, reason-tagged 387 and
+##        `CycleRecorded` 645 were IDENTICAL to the unfiltered run.
+##        (b) ⛔⛔ **A DISAGREEING CROSS-CHECK STILL PRINTS A HEADLINE RATE.** It correctly shouted
+##        `DISAGREE by 247` — then printed 64.8% anyway, twice, with no INCOMPLETE stamp. A failed
+##        chunk forces exit 3; a broken basis does not. **SAME FAMILY AS THE FAILURE-AS-ZERO.**
+##        ▶ FIX BOTH: the tier is IN the events (`MemberReentered(address,uint8)`, TierRouter
+##        `MemberParked(address,uint8,string)`, `CycleRecorded(address,uint8,uint256)`) so filter the
+##        TierRouter side too — or refuse to run with TIER set. And a disagreement must SUPPRESS the
+##        rate. **NOT DONE. The per-tier split of G2 remains UNMEASURED.**
+##      ⛔ **3. 62.49's "FIXED" FAILURE-AS-ZERO WAS NEVER ON THE BOX.** The V8.51 run printed
+##        `from EARNINGS $0.00  <- the real signal` and no distinct-members line — the PRE-fix report.
+##        VPS md5 read **`7558b8ce…`**; the laptop has the fixed `b2e9bccd…`. ▶▶ **"FIXED" MEANS FIXED
+##        ON THE HOST THAT RUNS IT. A repo commit is not a deployment.** ⚠ `/root/keeper` is **NOT a
+##        git checkout** (`fatal: not a git repository`) — files reach it by scp only.
+##        ⚠ **OPEN: audit whether other session-76 keeper edits are also laptop-only.**
+##
+##      ✅✅ **4. ALL THREE MAINNET VERCEL DEPLOYS WERE BLOCKED — CAUSED BY THE 09-14 REPO-PRIVACY
+##      FLIP, FIXED AND PROVEN SAME DAY.** Vercel verbatim: *"the commit author did not have
+##        contributing access… The Hobby Plan does not support collaboration for private repositories."*
+##        ▶ **On Hobby a PRIVATE repo builds ONLY for commits authored by the Vercel account owner;
+##        a PUBLIC repo never checks.** Git name `CryptoTechSXM` always matched; the EMAIL was
+##        `magicctouch@gmail.com` (double c), which is not on the GitHub account at all —
+##        `CryptoCounsels@gmail.com` is its only verified address. **GitHub attributes by EMAIL.**
+##        ✅ Control group in the same screenshot: `cryptonova-app` + `cryptonova-mainnet` (CONTRACTS
+##        repo, still public) went **Ready** on the same push. ✅ Fixed by setting `user.email`
+##        (global + local) and pushing empty commit **`eafdb94`**; all three went Ready/Production
+##        within a minute, each verified on its own page. ▶ **A VISIBILITY CHANGE SILENTLY CHANGES WHO
+##        MAY BUILD — re-measure the pipeline after one, not just the exposure.** [[cryptonova-vercel-exposure]]
+##
+##      ⛔⛔⛔ **5. A LIVE MEMBER-FACING ROUTING DEFECT, FOUND FROM THE OWNER'S OWN TEST REGISTRATION.**
+##        He registered and landed in **T1.3**, not T1.1. `member_history.js` returned exactly ONE
+##        event (`MemberEntered` T1.3 MatA, block 46786767) — no prior seat, no park, so NOT a rescue.
+##        BaseScan: method **`Register With Coupon`**, his wallet -> the V8.52 router.
+##        ▶▶ **`TierRouter.registerWithCoupon():863` NEVER CALLS `_findExternalPair()`. It calls
+##        `currentMatA()` = `pairs[activePairIndex].matrixA` (`PairManagerV8:1069`) — the most recently
+##        DEPLOYED pair.** `register()` uses the front door and lands in pair 0; the coupon path does not.
+##        **And `registerWithCoupon` is what the site calls for every referral-code signup.**
+##        ⛔ ORIGIN: V8.48's one-door change migrated `_register` and MISSED the coupon path (coupon
+##        routing is V8.31, from when `activePairIndex` WAS the rule). **`PairManagerV8:863` asserts
+##        *"One rule, one place: everything reads `_findExternalPair()`"* — measurably FALSE, inside the
+##        comment block warning about exactly this class.** ▶ Session 61 flagged `activePairIndex`'s
+##        "remaining uses NOT yet traced" and nobody followed up. **NOW TRACED:** `currentMatA()` has
+##        ONE consumer (the coupon path), `currentMatB()` none, `_checkExpansion()` only emits an
+##        advisory event, and the real expansion trigger uses `pairs.length - 1`. **So
+##        `setActivePairIndex(0)` (onlyOwner) would fix routing with that as its entire blast radius —
+##        but it resets on the next pair deploy, and T1.3 MatA is FULL and ROTATING (44), so it may be
+##        living on these misrouted entries.** ⚠ **UNVERIFIED which feeds T1.3 — measure before pulling
+##        the lever. NOT PULLED.** Proper fix needs a redeploy + F4 extended to BOTH doors.
+##        [[cryptonova-coupon-routing]]
+##
+##      ✅✅ **6. THE MEMBER TICKET (Sherwyn, 09-11) IS ANSWERED BY MEASUREMENT — HE IS MOVING.**
+##        `matrixPos` at block 46796570: 0 everywhere except **T1.2 MatB position 25**. He reported
+##        **#59**; T1.2 MatB has **34** rotations. **59 - 34 = 25.** He entered MatB at 59 when it had
+##        zero rotations and has advanced on every one since. ✅ **His structural question was RIGHT:**
+##        a matrix rotates only when an ENTRY arrives, the front door feeds pair 0, later pairs are fed
+##        by the overflow path — so 454 -> 600 registrations genuinely need not move a T1.2 seat.
+##        ⚠ He is in MatB, not MatA, and quotes a MatA-sounding seat — **if his dashboard shows 59 or
+##        shows MatA that is a DISPLAY defect and a separate ticket.** ⛔ **NO TIMEFRAME WAS GIVEN:**
+##        24 rotations remain but 34 is LIFETIME and `growth.log` is aggregate-only, so no per-matrix
+##        rate exists. Reply drafted in owner's voice, Telegram format. [[cryptonova-bug-ledger]]
+##      ✅ **LIVE T1, blocks 46776271..46796271:** T1.1 A 127/127 rot 886 · B 127/127 rot 759 parked 8 ·
+##        T1.2 A 127/127 rot **160** · B 126/127 rot 34 parked 20 · T1.3 A 127/127 rot 44 · B 44/127 rot 0.
+##        **NO-SEAT 0 · FUNDING 37.** ▶▶ **THE LATER-PAIR FREEZE IS OVER — T1.2 and T1.3 both rotate;
+##        on V8.51 they were 0.** ⚠ Those are LIFETIME counts; only parks are windowed. **A second
+##        reading 6 MINUTES later proved nothing — my error, a window too short to contain a rate.**
+##
+##      ✅✅ **7. THE OWNER'S REMEMBERED FEATURE IS REAL, THE NUMBER IS EXACT, AND THE CONCLUSION
+##      DRAWN FROM IT IS NOT.** [stated] *"a pair with members going up to 400 before another would
+##        start receiving the spill overs… generating alot more rotations… i think that was a winner."*
+##        ▶ It is **`routeEntryThreshold` = 400** (+ `deployEntryThreshold` = 375), CUMULATIVE
+##        `pair.totalRegistered`, deleted in **V8.48 item 30**.
+##        ⛔ **The rotations were real and were a TREADMILL. Measured 2026-08-09: T2.1 MatA 581 vs
+##        MatB 5,684 (9.8x); 466 of 714 parked (65%) sitting in MatB.** Source: *"cycled out of MatB,
+##        could not fund, parked, was rescued — and was put straight back into the same MatB. MatB
+##        churned while MatA crawled and nobody climbed the ladder."* The threshold also chose the
+##        RESCUE destination (`:413`).
+##        ⛔⛔ **THE DEFECT IS MONOTONICITY, NOT THE NUMBER: `totalRegistered` only increments, so a
+##        pair past it was excluded from registrations FOREVER even after seats freed. `route_rr.js`
+##        existed purely to walk the threshold around and MASK it; switched off 2026-08-06, 254 members
+##        froze in T1.1 MatA within three days.** ▶▶ **So 400 -> 260/270/275 FREEZES A PAIR SOONER.**
+##        Any revival must key on a NON-MONOTONIC measure (live occupancy). Source carries an explicit
+##        *"Do NOT reintroduce either as a routing input"*. ⚠ Today's front door is ALREADY more
+##        concentrated than 400 (`_findExternalPair` returns 0 always). ▶ **THE METRIC THAT WOULD
+##        SETTLE IT: rotations that ADVANCED someone toward cycle-out vs rotations that RECYCLED
+##        someone in place. NOT BUILT.** [[cryptonova-entry-thresholds]]
+##
+##      ⚠ **8. `growth.log` CORRECTION: it is ONE AGGREGATE LINE PER RUN, not per-pair**, so it can
+##        never answer a per-matrix question. **It is NOT truncated — logrotate, daily, 7 archives
+##        (`growth.log.1.gz`..`.7.gz`).** Check for the .gz siblings before calling history lost.
+##        09-14 00:01->04:31: rotations 7712->7860, seated flat ~3214-3220, parked ~110,
+##        **SF spendable $6181.81 -> $5550.40**. ⚠ One 4.5h window is not a rate — a flag, not a burn rate.
+##      ⚠ **9. `member_history.js` DEFAULTS TO `deployed_addresses_v8_45.json`** — a long-dead book.
+##        Run unset it reads dead contracts and reports the silence as fact. **Always pass ADDRESSES_FILE.**
+##        It is also not `keeper_env`-wired (reads `BASE_SEPOLIA_RPC_URL` directly), so T9 does not cover it.
+##
+##      ▶▶ **OPEN, IN ORDER, FOR SESSION 78:** (1) **the owner's G2 call — 40.0%, upper bound, FLAT vs
+##      V8.51; the median member is short two-thirds of the fee, so no threshold tweak reaches it.**
+##      (2) Fix `g2_selffund.js` TIER + cross-check refusal, scp to the box, re-run for the per-tier split.
+##      (3) Measure what feeds T1.3 before touching `setActivePairIndex`. (4) Send Sherwyn's reply and
+##      check his dashboard for the display half. (5) G1's proof condition (62.47 item 2). (6) Blockaid's
+##      two follow-ups. (7) The Telegram post for G4/G5/P5, still owed. (8) R20 — the crontab header names
+##      an `rr_keeper.OFF` that does not exist.
+
 ## 62.5 ▶ **WHAT IS OPEN, IN ORDER, FOR SESSION 63.**
 ## 62.23 ✅ **CUTOVER DONE 2026-09-04 (owner local afternoon): `preview`+`main` at `00b4690`** (V8.52 repoint
 ##      + `DEFAULT_SPONSOR_POOL` = the owner's revised 10-leader roster, two swapped, dead `run_bigfill_rr.ps1`
