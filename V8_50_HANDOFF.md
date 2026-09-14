@@ -2130,14 +2130,37 @@ owner-set, and the session that earned it got five things wrong by ignoring what
 ##      `cryptonova-g2-selffunding` is at **42 KB of a 48 KB cap** — both need condensing/splitting soon, and a few
 ##      large edits beat many small trims.
 ##
-##      ▶▶ **OPEN, IN ORDER, FOR SESSION 79:** (1) **the owner's G2 call — my recommendation is NO-GO as-is, with
-##      the small-gap finding as the reason it is fixable.** (2) The earned-vs-withdrew measurement above — the only
-##      thing that should shape a fix. (3) Per-pair split of V8.52 T1 (composition vs regression; a "why", not a
-##      gate). (4) Measure what feeds T1.3 before touching `setActivePairIndex`. (5) Send Sherwyn's reply and check
-##      his dashboard for the display half. (6) G1's proof condition (62.47 item 2). (7) Blockaid's two follow-ups.
-##      (8) The Telegram post for G4/G5/P5, still owed. (9) R20 — the crontab header names an `rr_keeper.OFF` that
-##      does not exist. (10) PARKED: whether the 09-11-and-earlier keeper files match `/root/keeper` (one
-##      `md5sum /root/keeper/*.js` answers it); session 76's own edits are confirmed to be only the g2 pair.
+##      ▶▶ **THE OWNER GAVE HIS G2 CALL THE SAME DAY — LEAN GO, WITH MEASUREMENT FIRST.** [stated] *"The G2 I think
+##      it can go to Mainnet bcuz it is expected but if you want to do some measurements before we can go for it."*
+##      ▶ **His position has real merit and is NOT to be re-litigated: a sub-100% self-funding rate is EXPECTED BY
+##      DESIGN** — the SF, copay and self-rescue exist precisely because not everyone self-funds, and 40% with **0
+##      members left stuck** is a system carrying its own rescues rather than a broken one.
+##      ⛔⛔ **CLAUDE'S REMAINING CONCERN IS NARROWER THAN THE RATE, AND IT IS WHAT SHOULD ACTUALLY GATE MAINNET:**
+##      if 4 in 10 cycle-outs pay their own way, the SF carries the other 6 — **can it afford to, indefinitely, with
+##      REAL money?** That is a SOLVENCY question, and it has never been measured organically on V8.52.
+##      ⛔⛔⛔ **EVERY SF EXPOSURE FIGURE IN THE RECORD IS SUSPECT FOR EXACTLY THE REASON THE OLD 23% WAS WRONG:**
+##      `diag_parked_growth.js`, `cycle_census.js` and their relatives **do NOT exclude the 15,000 synthetic
+##      wallets.** Robots both FEED the fund (300bps per registration) and DRAIN it (they take advances). **Which
+##      side dominates is unmeasured and it cuts BOTH ways** — the ~$125/day drain seen on V8.48 may be worse than
+##      mainnet, or the fund may only look survivable because robot registrations prop it up.
+##      ✅ **DECISION RULE AGREED IN ADVANCE, so the result is not argued after the fact:** fund holds its own
+##      organically -> **40% is a working system and Claude's no-go is WITHDRAWN**; fund drains organically -> **the
+##      rescue mechanism runs out of money on mainnet**, the one failure mode that costs members REAL funds.
+##
+##      ▶▶ **OPEN, IN ORDER, FOR SESSION 79:** (0) **SESSION-START: read the member bug ledger and say what is open
+##      BEFORE other work** — owner rule 2026-09-14, now a standing section at the top of `CLAUDE.md`
+##      (`git fetch origin data && git show origin/data:BUGS.md`). (1) **BUILD AND RUN THE SF ORGANIC-ONLY BALANCE
+##      TRAJECTORY on V8.52** — the agreed gate above. Same harness-filter pattern as `g2_selffund.js`
+##      (`HARNESS_FILE` required, cross-check, failure-as-zero refusal, progress lines); events `MemberDebtIncreased`,
+##      repayments, `FundDeposit`, plus SF balance at window ends. (2) The earned-vs-withdrew measurement above — the
+##      only thing that should shape a T1 fix. (3) Per-pair split of V8.52 T1 (composition vs regression; a "why",
+##      not a gate). (4) Measure what feeds T1.3 before touching `setActivePairIndex`. (5) Sherwyn — **reply SENT
+##      2026-09-14, awaiting his answer**; the open half is whether his DASHBOARD shows the T1.2 MatB seat (he
+##      described a MatA seat at #59), which would be a display defect and a separate ticket. (6) G1's proof
+##      condition (62.47 item 2). (7) Blockaid's two follow-ups. (8) The Telegram post for G4/G5/P5, still owed.
+##      (9) R20 — the crontab header names an `rr_keeper.OFF` that does not exist. (10) PARKED: whether the
+##      09-11-and-earlier keeper files match `/root/keeper` (one `md5sum /root/keeper/*.js` answers it); session 76's
+##      own edits are confirmed to be only the g2 pair.
 
 ## 62.5 ▶ **WHAT IS OPEN, IN ORDER, FOR SESSION 63.**
 ## 62.23 ✅ **CUTOVER DONE 2026-09-04 (owner local afternoon): `preview`+`main` at `00b4690`** (V8.52 repoint
