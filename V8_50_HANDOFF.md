@@ -2310,6 +2310,106 @@ owner-set, and the session that earned it got five things wrong by ignoring what
 ##      `cryptonova-sf-solvency` rather than growing it further. **This handoff needs the same treatment —
 ##      split or condense it, and a few large edits beat many small trims.**
 
+## 62.58 ✅✅✅✅ **2026-09-15 (session 83, part 2): 62.57 ITEM 8 IS FIXED AND ON `preview` — BUT
+##      THE PAGE HAD THE SAME LIE TWICE AND ONLY THE OWNER'S SCREENSHOTS FOUND THE SECOND ONE.
+##      T4.3's HELD WINDOW MEASURED AT 29.3 DAYS. THE PIONEER INVERSION IS DEAD, SETTLED BY
+##      BYTECODE RATHER THAN BY WAITING FOR THE 25th.**
+##
+##      ▶ **SESSION-START BUG CHECK: ZERO OPEN.** `_No open issues._` on `origin/data`.
+##
+##      ✅✅ **1. THE MEMBER-FACING FIX, LANDED. Testnet-App `admin` `5056f05` then `93a3f58`,
+##      both owner-pushed, then `admin:preview` → `71458d7..93a3f58`. `early.crypto-nova.app` is
+##      serving it; `main` NOT yet promoted — stage 3 still owed and needs his explicit go.**
+##      ⛔ **FIRST, A CORRECTION TO 62.57 ITEM 8 AND TO MEMORY: "no crossing can EVER arrive" was
+##      TOO STRONG.** 62.57's own census says T4.3 self-clears once T4.4's MatA fills. Writing
+##      "never" would have replaced one false string with another. **The honest state is "held,
+##      and here is what it is held behind".**
+##      **The label set is now DEDUCED from `PairManagerV8.sol`, zero extra RPC, all of it from
+##      `occupancyA`/`occupancyB`/`active` the renderers already hold:** `active[i] == (i ==
+##      _findExternalPair())` and that returns 0 (`:977`) → "Active" means EXACTLY "pair 0, the
+##      front door" · stage 1 `_hasRoomAndFree` (`:319`) reads room on **matrixA only** · stage 2
+##      `_fullPairWaitingLongest` runs only if stage 1 found nothing and skips on `bOcc >= bSize`
+##      (`:1012`). ▶ later pair + MatA full + **any** pair in the tier has a free MatA seat →
+##      **"⏸️ Waiting on T4.4"**, naming it · both halves full → **"⛔ Full — not receiving"** ·
+##      MatA full and **no** pair has room → the ONLY case that still says "Awaiting crossings".
+##      ⛔⛔ **2. THE LESSON OF THE DAY: FIXING ONE RENDERER IS NOT FIXING THE PAGE.** The table
+##      was corrected and the owner's screenshots immediately showed the **tier strip three lines
+##      below still calling T4.3 "open"** — i.e. telling members there was room in a pair that
+##      cannot take them. T4.2 and T5.2 too. ▶ **`_pairStateOf()` now holds the decision ONCE and
+##      each renderer only picks its own words.** Also killed: the strip's `b >= MS - 1` "full"
+##      fudge (census run 2 measured T4.1 MatB at a true 127/127), and the front door reading
+##      "taking new entries … 0 still open". **T1.1 now reads "Active", not "✅ Full" — a
+##      judgement call, flagged to the owner, not forced.**
+##      ✅ `pair_status_selftest.mjs` **slices `_pairStateOf` out of the shipped `index.html` and
+##      runs THAT text**, and asserts every state has words in BOTH label maps. **41/41**, pinning
+##      all 16 live pairs from the owner's own render plus both-full, in-line, 126/127 and two
+##      unread-MATRIX_SIZE cases (62.13). ⚠ Parked, named: `doCancelCoupon` is defined TWICE,
+##      identically, at `index.html:5476` and `:7063`. Harmless, pre-existing, separate commit.
+##
+##      ⛔⛔ **3. HOW LONG IS A HELD PAIR HELD? `unfreeze_eta.js` (NEW, md5
+##      `476f403adc01dbe1b7b2d35065f20d20`), book v8_52, blocks 46819003..46862203 = 24.00 h
+##      MEASURED FROM BLOCK TIMESTAMPS, 0 unreadable.**
+##      **T4.4 MatA 10/127, 117 free, took 4 `MemberEntered` in 24 h = 0.167/h → ETA 29.3 DAYS.
+##      T4.2 (115 rot) and T4.3 (0 rot) receive nothing until then. T5.3 took ZERO in 24 h — no
+##      ETA exists at the observed rate, so T5.2 is not released at all.**
+##      ⚠⚠ **THE CAVEAT THAT MUST TRAVEL WITH THOSE NUMBERS: the window overlapped the job A
+##      ceiling stall** (count pinned at 702 against `REG_STOP_AT=700` for days). **These rates
+##      were measured on a system with its registration engine OFF — a FLOOR on the rate, so a
+##      PESSIMISTIC ETA.** ▶ **RE-RUN AFTER ~24 H OF JOB A FEEDING; the second run also arms the
+##      delta rate, so the next reading is two independent measurements, not one.**
+##      ▶▶▶ **AND IT CHANGES THE V8.54 CALCULUS — SAY SO PLAINLY. 62.55's "bundle it, do not
+##      redeploy for it alone" rested on the held window being short. 29 days is not short and
+##      T5.2's is unbounded. Do NOT carry that recommendation forward unexamined — re-measure,
+##      then revisit.** The owner asked the right question and it is what produced this number.
+##
+##      ✅✅ **4. JOB A: 702 WAS THE CEILING WORKING, NOT A STALL.** Owner: *"run job A until we
+##      get to 1k"*, *"can we make it happen in 2 days"*. ⛔⛔ **THE TAPER, NOT `MAX_REG`, CAPS IT
+##      (`rr_keeper.js:509-515`): above `REG_TAPER_AT` (254) `regCap` is forced to `REG_TAPER_TO`
+##      (1) whatever `MAX_REG` says — raising MAX_REG buys SIX SILENT DAYS OF NOTHING. The
+##      SCHEDULE is the lever.** Live line 68 now `*/10 … REG_STOP_AT=1000 … POOL_SIZE=1922`
+##      ≈ 50 h. ⛔ `BUDGET=150` is **150 SECONDS of run time, not money**; job A has no spend cap.
+##      ⛔ **POOL CURSOR TRAP: `pool_primer` signs off with "POOL_OFFSET=<HDR> POOL_SIZE=<COUNT>" —
+##      DO NOT FOLLOW IT.** The keeper derives `POOL_OFFSET + poolCursor` and the cursor persists
+##      (1597 at the time); taking that advice derives 303219, never funded. **Keep
+##      `POOL_OFFSET=300000`, raise `POOL_SIZE`.** Primed `COUNT=300 HDR_OFFSET=301622` → **300/300,
+##      0 failed**, measured `0.002 ETH + $40.00 USDC` per wallet (batch 0.6 ETH / $12,000 against a
+##      deployer holding 59.1 ETH / $19.23M).
+##      ⛔⛔ **FIVE cron jobs sign with the deployer key, not three** (a truncated `head -20` hid
+##      two): rr_keeper **A `*/10`, B `3-59/5`, C `2-59/5`**, `copay_rescue`, `fastlane_rescue`.
+##      ✅ `rr_keeper.OFF` is a SHARED kill switch BY DESIGN (`system_keeper.js:95-97`) — one touch
+##      stops A/B/C and system_keeper. ⛔ **BUT `copay_rescue.js` AND `fastlane_rescue.js` CONTAIN
+##      NO `.OFF` CHECK, so the documented guarantee is FALSE and they must be commented by hand.**
+##      ▶ **NAMED FIX FOR THE NEXT SESSION: add the shared guard to both — it matters at every
+##      deploy, not just priming.** ✅ The silent-job detector caught the 38-minute stand-down gap
+##      and both resumed on restore. ⛔ Stale note corrected: those two were **re-enabled 09-02**,
+##      not still paused.
+##
+##      ✅✅✅ **5. THE "501+ PIONEER CUT" IS A CONTRACT MATTER, NOT FRONTEND — AND IT IS ALREADY
+##      DEAD.** `CommunityWallet.sol:308-330` records the defect: dividing each cohort's share by
+##      the LIVE MEMBER COUNT made a half-empty cohort richer — measured 2026-08-09 at Genesis 500 /
+##      Pioneer 146, **each Pioneer $5.11 against each Genesis $2.24, 2.3x, inverting seniority.**
+##      V8.48 changed the divisor to the fixed `COHORT_SIZE`.
+##      **On chain (`cw_cohort_check.js`, NEW, md5 `9fe549558b85b51248935e17ea2f4f72`): Genesis 500
+##      (FULL) · Pioneer 203 · totalEnrolled 703 · availablePool $20,978.88 · `distributionCount`
+##      = 0.** ▶ **NO DISTRIBUTION HAS EVER RUN ON V8.52, and the first is due on the 25th** —
+##      so the ratio test had no record, and the deadline to be sure was ten days out.
+##      ✅✅ **SETTLED SAME DAY BY BYTECODE (`cw_bytecode_diff.js`, md5
+##      `d78a9f0ba3076c644c6889594ca42a6c`): 9,093 bytes both sides, SIX differing runs, ALL SIX
+##      exactly the 20-byte `usdc` immutable. Nothing unexplained → the deployed contract IS the
+##      current source, so the fixed divisor is what runs on the 25th.**
+##      ⛔⛔ **METHOD LESSON, EARNED: A PLAIN md5 OF RUNTIME BYTECODE IS THE WRONG TEST WHEN A
+##      CONTRACT HAS `immutable` FIELDS.** The first attempt read same length, different md5, and
+##      looked like a mismatch. Solidity writes an immutable's VALUE into runtime code at deploy;
+##      the artifact carries zeros. **Diff and CLASSIFY the differing runs; never conclude from a
+##      whole-file hash.** ✅ Owner's two sample wallets are enrolled exactly as he labelled them.
+##
+##      ▶ **NEXT, IN ORDER:** (1) **re-run `unfreeze_eta.js` after ~24 h of job A** — two rates,
+##      then revisit V8.54 with a number that was not taken during a stall. (2) Stage 3 to `main`
+##      when he gives it. (3) The `.OFF` guard for the two rescue scripts. (4) T3.1's `+3`.
+##      (5) `doCancelCoupon` duplicate. (6) THIS FILE IS 1.56 MB — the split is overdue.
+##      ⚠ **PARKED, contracts working tree, unchanged since 62.56:** `v853_private_deploy_transcript.txt`
+##      modified and uncommitted; 12 untracked `Test Sept 9*.png` in the repo root.
+
 ## 62.57 ✅✅✅✅ **2026-09-15 (session 83): THE FULL-PAIR FREEZE IS **NOT** HAPPENING ON THE LIVE CHAIN —
 ##      BUT TWO OTHER PAIRS ARE STOPPED, AND ONE OF THEM WAS INVISIBLE TO EVERY CHECK WE HAD.
 ##      INVARIANT C BUILT, SHIPPED, PUSHED, LIVE ON CRON, AND IT CAUGHT T5.2 ON ITS FIRST RUN.**
