@@ -2310,6 +2310,120 @@ owner-set, and the session that earned it got five things wrong by ignoring what
 ##      `cryptonova-sf-solvency` rather than growing it further. **This handoff needs the same treatment —
 ##      split or condense it, and a few large edits beat many small trims.**
 
+## 62.57 ✅✅✅✅ **2026-09-15 (session 83): THE FULL-PAIR FREEZE IS **NOT** HAPPENING ON THE LIVE CHAIN —
+##      BUT TWO OTHER PAIRS ARE STOPPED, AND ONE OF THEM WAS INVISIBLE TO EVERY CHECK WE HAD.
+##      INVARIANT C BUILT, SHIPPED, PUSHED, LIVE ON CRON, AND IT CAUGHT T5.2 ON ITS FIRST RUN.**
+##
+##      ▶ **SESSION-START BUG CHECK: ZERO OPEN.** `_No open issues._`, Sherwyn's 09-11 ticket now a
+##      resolved row dated 2026-09-15. ✅ **CHEAPER ROUTE, USE THIS FROM NOW ON:** `curl
+##      https://raw.githubusercontent.com/CryptoTechSXM/cryptonova-testnet-app/data/BUGS.md` from
+##      `device_bash` — HTTP 200, 33,263 b, **no browser pane and no site granting.**
+##
+##      ✅✅ **THE DEVICE PICTURE CHANGED — THE MOUNT IS BACK after thirteen sessions.** `device_bash`
+##      mounted both repos first try; `git`, `node v22.23.2`, `ethers 6.16.0` all run. ⚠ **BUT THREE
+##      LIMITS, ALL MEASURED THE HARD WAY, NOT ASSUMED:**
+##      1. ⛔ **NO CHAIN READS FROM EITHER SHELL.** Cloud container and device shell both refused on
+##         **five** RPC hosts (sepolia.base.org, alchemy, publicnode, ankr, thirdweb) — all `exit 56`
+##         — while `github.com` returned 200. **Live-chain runs stay owner-run on the VPS.**
+##      2. ⛔ **CLAUDE CANNOT `git push`:** `could not read Username for 'https://github.com'`. The
+##         remote is HTTPS and the Linux VM has no credential helper; the SSH key is outside every
+##         mounted folder. ▶ **Claude commits, the owner pushes.** ⛔ **AND 62.55's "git push said
+##         Everything up-to-date" PROVED NOTHING — it was a no-op that never had to authenticate.**
+##      3. ⛔ **A git WRITE on the mount leaves a `.git/index.lock` git cannot delete** ("Operation
+##         not permitted"), and every later git command dies with *"Another git process seems to be
+##         running"*. **Request `device_request_delete_permission` on the repo folder BEFORE any git
+##         write**, then `rm -f .git/index.lock` once. Granted for `C:\CryptoNova-Keepers`.
+##
+##      **1. THE CENSUS — THREE RUNS, 42 MATRICES, 0 UNREADABLE EACH TIME.** `frozen_matrix_check.js`,
+##      book `deployed_addresses_v8_52.json`, logs `fleet_20260915/freeze_census_run{1,2,3}.log`.
+##      ▶▶▶ **ANSWER TO 62.55 ITEM 6: NO LATER PAIR IS FULL IN BOTH HALVES. The fixture's deadlock is
+##      not occurring.** The only both-full pair is **T4.1 — which is pair 0**, and pair 0 is exempt
+##      because `_findExternalPair()` feeds it regardless of fullness.
+##
+##      ⛔⛔ **2. BUT T4.3 IS FROZEN, CONFIRMED: MatA 127/127 rotations 0, MatB 0/127. 127 members who
+##      have never moved a seat.** Cause is 62.54's capture live: T4.4 opened with an empty MatA, so
+##      stage 1 takes the whole T4 overflow and stage 2 never runs. **Across the runs T4.4 grew
+##      7 → 10 while T4.3 stayed at 0.** It self-clears only when T4.4's MatA fills (117 more
+##      entries). ⛔ **No admin lever: the coupon door (`TierRouter.sol:863`) is hardcoded to
+##      `tierPairManagers[0]`, i.e. T1, so `setActivePairIndex` cannot be pointed at a T4 pair.**
+##
+##      ✅✅✅ **3. THE LAW — `MatB occupancy + MatB rotations = MatA rotations`. EXACT on 16 of 17
+##      pairs in ALL THREE RUNS.** The cheapest integrity check we have: no logs, no block range,
+##      three chain reads per pair. ⛔ **T3.1 is `+3` in every run — identical, so NOT a read-timing
+##      artefact.** A direct-to-MatB entry path exists (`PairManagerV8:583`) and would explain it.
+##      **NOT MEASURED. Parked, named.**
+##
+##      ⛔⛔ **4. A CORRECTION I OWE THE RECORD, AND THE SECOND RUN KILLED IT IN 25 MINUTES: I wrote
+##      that "every rotating MatB rests at exactly 126/127". IT DOES NOT.** Run 2 read **T4.1 MatB
+##      127/127 with 655 rotations**. Occupancy takes 126 **or** 127; it is a transient, not a
+##      resting place, and **the LAW is what holds**. ▶▶ **This is the "one sample is not a
+##      measurement" rule catching me one session after I quoted it at the fixture — a pattern across
+##      seven matrices in ONE snapshot is still one snapshot.** ▶ And it matters for the design:
+##      **the both-full state is ORDINARY, not exotic** — it happens whenever an entry lands in a
+##      MatB that was one seat short. For a LATER pair that same state is a trap door.
+##
+##      ✅✅✅✅ **5. INVARIANT C — BUILT, SELFTESTED, SHIPPED, AND IT EARNED ITS PLACE ON ITS FIRST
+##      LIVE RUN.** A fires only at `rotationCount == 0`; B only at `MatB occupancy == 0`. **A pair
+##      that filled, TURNED, then STOPPED has neither.**
+##        * **C1 STRUCTURAL** — a later pair full in BOTH halves. **Fires on ONE reading**, because it
+##          is deductive: `_hasRoomAndFree:319-332` reads room on matrixA only, `_fullPairWaiting
+##          Longest:1012` skips on `bOcc >= bSize`, `_findExternalPair:977` returns 0.
+##        * **C2 STALLED** — later pair, MatA full, `rotationCount` unchanged since the previous
+##          reading. ⛔ **ITS ACTIVITY CONTROL IS THE WHOLE POINT: the SAME TIER'S pair 0 must have
+##          rotated over the same interval.** Otherwise the tier was quiet and **C2 is WITHHELD,
+##          never quietly passed.** A quiet tier is not a stalled pair.
+##        * Pair 0 exempt throughout. Grading mirrors A (SUSPECTED once, CONFIRMED on an unchanged
+##          repeat) via a `stall` flag on the existing per-matrix state file.
+##      ✅ **`gradeStall()` is PURE and EXPORTED and `frozen_matrix_check.selftest.js` REQUIRES THE
+##      SHIPPED FILE**, not a copy, so the two cannot drift. **24/24**, including six regression
+##      fixtures taken from the live census.
+##      ⛔⛔ **AND ON RUN 3 IT FOUND `T5.2 pair *** STALLED (C2 SUSPECTED) ***` — MatA 127/127 with
+##      116 rotations, frozen, while T5.1 rotated +1 in the same interval.** ▶▶▶ **T5.2 HAD ALREADY
+##      TURNED 116 TIMES, so invariant A could never fire, and its MatB is not empty, so B could
+##      never fire. This is precisely the case C was built for, and it is a SECOND live instance of
+##      the capture the V8.54 inversion cures — T4.3 caught at rotation 0, T5.2 at rotation 116.**
+##      ✅ **The control paid for itself immediately: SEVEN pairs printed `(C2 WITHHELD)`** (T1.3,
+##      T2.2, T2.3, T3.2, T3.3, T4.2, T4.3) because their own pair 0 had not rotated. **Without it
+##      every one would have been a false alarm on the first run.**
+##      ⚠ Cosmetic: C lines print after all of a tier's matrix rows (C is evaluated per tier).
+##
+##      ✅ **6. DELIVERED AND IN SERVICE.** Keepers `main` **`eb1b6e8..8286619`** (owner-pushed).
+##      scp'd to the VPS, **md5 matched both ends** (`9a88ed26b49abbfe01241388e352bde3` /
+##      `c61b133f3432ade9ef0f6173b593e26f`), selftest 24/24 on the box. ✅✅ **`23 */4 * * *
+##      frozen_watch.sh` ALREADY RUNS IT — so C is in service now and will post to the private
+##      Telegram channel on any CONFIRMED.** ✅ Verified that cron reads the CURRENT book by
+##      evidence, not assumption: its 13:05Z state entries matched run 3's live readings, and the
+##      state is keyed by MATRIX ADDRESS — a stale book writes different keys.
+##
+##      ⛔⛔ **7. HOW CODE REACHES THE VPS — AND IT WAS ALREADY WRITTEN DOWN.** `/root/keeper` is **NOT
+##      a git checkout** (`git pull` → *"fatal: not a git repository"*; the only clone on the box is
+##      `/root/cryptonova-testnet-app`), and the keepers repo is **private** (unauthenticated raw
+##      → 404 vs 200 for the public app repo), so the box cannot curl a file either.
+##      **`CryptoNova-Keepers/README.md:14` says it plainly: *"Keeper dir `/root/keeper` (NOT a git
+##      checkout — `scp` then `md5` is the only way in)"*, with the command at line 23.**
+##      ▶▶ **I handed over a `git pull` block without reading the repo's own README. READ THE README
+##      BEFORE INVENTING A DELIVERY ROUTE, and md5 both ends after every scp — nothing else checks
+##      that the file arrived.**
+##
+##      ⛔ **8. MEMBER-FACING, FROM THE OWNER'S OWN SCREENSHOTS — THE 62.56 CLASS AGAIN.** The Live
+##      Stats table labels **T4.3 (127/127 · 0/127, frozen, CONFIRMED) as "⏳ Awaiting crossings".**
+##      ▶▶ **It is not awaiting a crossing; no crossing can ever arrive.** A patient-sounding string
+##      standing in front of a dead pair — the same shape as *"measuring this matrix's rate…"*
+##      forever. **127 members are being told to wait for something the chain cannot deliver**, and
+##      T5.2's 127 are behind them. ⚠ Milder, same table: **T3.2 reads "Rotating" while its MatB has
+##      rotated ZERO times** (MatA 126, MatB 0) — true of the A half only. **NOT FIXED.** The honest
+##      states are already in the data the page reads: filling · turning · **full and unable to
+##      receive**.
+##
+##      ▶ **NEXT, IN ORDER (revised from 62.56):** (1) the status page's "Awaiting crossings" — free,
+##      member-facing, and now wrong on two pairs rather than one. (2) The stage inversion — it now
+##      has **two live instances** behind it instead of a fixture; still bundle it, still the
+##      owner's call. (3) T3.1's `+3`. (4) per-event stage attribution. (5) the −1 residual, which
+##      item 4 above partly reframes.
+##      ⚠ **PARKED, contracts working tree:** `v853_private_deploy_transcript.txt` modified and
+##      uncommitted; 12 untracked `Test Sept 9*.png` in the repo root. Unchanged since 62.56.
+
+
 ## 62.56 ✅✅✅ **2026-09-15 (session 82, part 2): SHERWYN'S DASHBOARD FIX IS LIVE ON ALL DOMAINS AND HIS
 ##      TICKET IS CLOSED — THE LEDGER IS BACK TO ZERO OPEN. The defect was a FIFTH sub-shape of the
 ##      frontend-truth class: THE FRIENDLY STRING THAT SWALLOWS THE BAD ANSWER.**
