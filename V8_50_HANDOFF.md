@@ -2394,10 +2394,23 @@ owner-set, and the session that earned it got five things wrong by ignoring what
 ##      (3) the stuck-matrix alert (FULL but `rotationCount` flat for N hours; gate on occupancy
 ##      == capacity so a filling matrix is not alarmed) — it would catch BOTH T1.3 MatB and the
 ##      item-6 freeze. (4) the −1 residual. (5) per-event stage attribution.
-##      ⚠ **UNPUSHED, CONTRACTS REPO (branch `v8.1`): `contracts/PairManagerV8.sol`,
-##      `contracts/test/PairManagerV8_StageInverted.sol`, `test/V8_54_StageInversion.test.js`,
-##      `v854_stage_inversion.txt`, `suite_session82.txt`. Also still unpushed in the KEEPERS
-##      repo: `rotation_timeline.js`, `path_census.js`, `path_census.selftest.js`.**
+##      ✅ **ALL PUSHED 2026-09-15. Contracts repo branch `v8.1`, commit `f71881d`
+##      (`5284b3d..f71881d`): PairManagerV8.sol, PairManagerV8_StageInverted.sol,
+##      V8_54_StageInversion.test.js, V8_50_HANDOFF.md, v854_stage_inversion.txt.
+##      ⚠ `suite_session82.txt` is GITIGNORED and stays local — suite logs are not in the repo.**
+##      ⛔⛔ **AND A CORRECTION TO 62.54: its "UNPUSHED: rotation_timeline.js / path_census.js /
+##      path_census.selftest.js" WAS WRONG — THEY WERE ALREADY COMMITTED AND PUSHED.** Measured:
+##      clean `git status` in `C:\CryptoNova-Keepers`, `git add` raised no error and no ignore
+##      warning (so: tracked), `git push origin main` said "Everything up-to-date", and the files
+##      on disk are byte-identical to the recorded v2 md5s. ▶▶ **THE LESSON: "I could not run
+##      git" was carried forward into "therefore it is unpushed" — an inference written into a
+##      handoff as a state. A push status that has not been READ is not a result. Check the tree
+##      before writing UNPUSHED, or the next session redoes work that is already done.**
+##      ✅ **COMMIT IDENTITY AUDITED (the `magicctouch@gmail.com` trap that blocked the three
+##      mainnet builds on 09-14): contracts ✅ · keepers ✅ · Testnet-App was still WRONG and was
+##      FIXED 2026-09-15 to `cryptocounsels@gmail.com`.**
+##      ⚠ **PARKED, not chased, contracts working tree:** `v853_private_deploy_transcript.txt`
+##      modified and uncommitted; 12 untracked `Test Sept 9*.png` screenshots in the repo root.
 ##      ⛔ Claude cannot run git while the mount is down — pushes are owner-run blocks.
 
 
