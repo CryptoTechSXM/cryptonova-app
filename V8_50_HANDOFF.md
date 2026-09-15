@@ -2310,6 +2310,97 @@ owner-set, and the session that earned it got five things wrong by ignoring what
 ##      `cryptonova-sf-solvency` rather than growing it further. **This handoff needs the same treatment —
 ##      split or condense it, and a few large edits beat many small trims.**
 
+## 62.55 ✅✅✅✅ **2026-09-15 (session 82): THE STAGE-INVERSION FIXTURE IS BUILT AND HAS RUN. 16/16
+##      PASS, BOTH GEOMETRIES. THE CAPTURE IS REPRODUCED ON DEMAND AND THE INVERSION CURES IT —
+##      BUT IT BUYS NO EXTRA THROUGHPUT. IT BUYS TIMING. FULL SUITE 703 PASSING / 7 PENDING /
+##      0 FAILING, SO THE REFACTOR IT RESTS ON IS INERT.**
+##
+##      ▶ **SESSION-START BUG CHECK: ONE open ticket — Sherwyn 2026-09-11, already replied to.**
+##      No new member reports since session 81. Read live off `origin/data` in the built-in
+##      browser pane (github.com needed granting again — assume that every session).
+##      ⚠ `device_bash` mount STILL down (THIRTEENTH session). ✅ **BUT RE-MEASURED AND WORTH
+##      KNOWING: `device_request_folder_access` / `device_list_dir` / `device_stage_files` /
+##      `device_commit_files` ALL WORK, so Claude CAN read and WRITE repo files directly — only
+##      git, hardhat and chain reads are out of reach.** Folder access came back empty and had
+##      to be re-granted, as always.
+##
+##      **1. THE INSTRUMENT EXTRACTION — `PairManagerV8._overflowTargetFor`, NO BEHAVIOUR CHANGE.**
+##      The two-stage escape hatch was written out TWICE (`graduationTargetFor` and inside
+##      `rescueReentry`). Both call sites now call one `internal view virtual` function carrying
+##      TODAY'S ORDER UNCHANGED. `rescueReentry`'s third stage (`_forceExpand` + retry) stays at
+##      its call site, because `graduationTargetFor` is a view and must not expand.
+##      ✅ **COMPILE-CHECKED CLAUDE-SIDE** with standalone solc 0.8.26 + OZ 5.0.2 at the repo's
+##      own settings — **PairManagerV8.sol imports ONLY OpenZeppelin, so it compiles with no repo
+##      and no node_modules while the mount is down. Same family of trick as the offline selftest.**
+##      ✅ **BYTECODE DELTA MEASURED: 17,774 → 17,769, five bytes SMALLER** — the shape of
+##      de-duplicating a sequence emitted twice. ⚠ Not identical, so not a proof; **the 703/0
+##      suite is the proof, and it is green.**
+##
+##      **2. THE FIXTURE.** `test/V8_54_StageInversion.test.js` + `contracts/test/
+##      PairManagerV8_StageInverted.sol` (overrides that ONE function, order reversed, nothing
+##      else). Three hand-wired pairs, SI_SIZE=8, no keepers, no factory; front-door
+##      registrations + selfRescue only. **Pair 2 is wired at deploy but `addPair`ed only at the
+##      chosen moment — how a factory pair actually arrives.** Two open-points: LIVE (pair 1 MatB
+##      at 90%, the `factoryExpandThresholdBps` geometry = the live 115/127) and EARLY (50%).
+##      ✅✅ **A FREE CONTROL FALLS OUT AND IS ASSERTED (R2): with only TWO pairs both stage
+##      orders provably return the same pair, so the arms must be identical up to the open. They
+##      were, in both geometries. Any difference there would have voided everything downstream.**
+##
+##      **3. R3 — THE PLANTED POSITIVE FIRED (R8's rule).** Control sent **ZERO** front-door
+##      overflow into pair 1 while the new pair had room, in BOTH geometries (0→1 = 0, 0→2 = 8).
+##      **Control, capture window, pair 1 MatA: 0 seats advanced, 8 of 8 members FROZEN.**
+##      That is 62.54's 09-10/09-11 two zero days, and Sherwyn's six days, reproduced in 46s.
+##
+##      **4. THE RESULT.** LIVE: inverted 0→1 = 1, pair 1 MatA **7 seats, 7 moved, 0 frozen**.
+##      EARLY: inverted 0→1 = 4, pair 1 MatA **16 seats, 4 moved, 0 frozen**. Control 0 and 0.
+##      ✅ **SELF-LIMITING CONFIRMED BY MEASUREMENT, NOT ARGUMENT (G1 green both arms):** inverted
+##      filled pair 1's MatB first, pair 1 then dropped out of stage 1 on its own, and pair 2's
+##      MatA still filled — one registration later than control, never starved.
+##
+##      ⛔⛔ **5. THE FINDING THAT MUST LEAD ANY TELLING OF THIS: OVER THE WHOLE RUN THE TWO ARMS
+##      ARE IDENTICAL IN EVERY LADDER METRIC.** LIVE rung 1 **354 = 354**, rung 2 **178 = 178**,
+##      parked **178 = 178**, rotations **369 = 369**, end state identical. EARLY **264 = 264**,
+##      **130 = 130**, **276 = 276**. ▶▶▶ **THE INVERSION IS NOT A THROUGHPUT FIX. IT IS A
+##      FAIRNESS / LATENCY FIX — the same members climb the same rungs; what changes is who moves
+##      WHEN.** Do not sell it as "more rotations" or "a faster system": it is neither, and saying
+##      so would be the August mistake wearing new clothes.
+##      ⚠ **AND THE UNFLATTERING PART: the LIVE geometry is where it buys LEAST** (1 entry vs 4),
+##      and T1.2 MatB was 12 short of 127 = 9.4%, squarely the LIVE case. ⚠ **ARITHMETIC ON THE
+##      MECHANISM, NOT A LIVE MEASUREMENT: at 127 that means T1.2's ~115 members each advance ~12
+##      seats about two days sooner and T1.2 MatB completes ~2 days sooner — Sherwyn #59 → ~#47
+##      earlier. Real, modest, and NOT a cycle-out for him.**
+##
+##      ⛔⛔ **6. A SECOND FREEZE THE FIXTURE EXPOSED BY ACCIDENT — NAMED, NOT EXPLAINED, AND THE
+##      INVERSION DOES NOT TOUCH IT.** Every run, every arm ended `P1 A 8/8 rot 8 · B 8/8 rot 0`
+##      and `P2 A 8/8 rot 8 · B 8/8 rot 0` while P0 read rot 175 / 178. **A later pair fills both
+##      halves and then NEVER ROTATES AGAIN.** Mechanism from source: entries reach a later pair
+##      only through the hatch — stage 1 needs a free MatA seat, stage 2 needs *MatA full AND MatB
+##      has room* — so **a pair full in BOTH halves qualifies for neither and receives nothing.**
+##      Pair 0 is exempt only because `_findExternalPair()` sends every registration to it
+##      regardless of fullness. ▶▶ **SO THE DESIGN KEEPS EXACTLY ONE PAIR PERMANENTLY TURNING.**
+##      ✅ Consistent with the live fleet table (T1.1 1053/926 · T1.2 308/181 · T1.3 176/49) but
+##      ⚠ **NOT confirmed on the live chain, and the rig had no factory so `_forceExpand` never
+##      opened a pair 3.** ⛔ **This is bigger than the stage order. It is the owner's "something
+##      is missing" as a measurable statement, and it is the next measurement.**
+##
+##      ▶ **RECOMMENDATION PUT TO THE OWNER (his call — it is a redeploy): take the inversion but
+##      BUNDLE it into the next release; do not redeploy for it alone.** One function, no
+##      threshold, no configured number, self-limiting, proved — but zero throughput gain and the
+##      live geometry is the weak one.
+##
+##      ▶ **NEXT, IN ORDER (revised from 62.54):** (1) the dashboard line telling a member their
+##      pair is filling (X of 254) — free, and it is what Sherwyn actually needed; moved AHEAD of
+##      the redeploy. (2) the full-pair freeze in item 6 — measure it on the live chain.
+##      (3) the stuck-matrix alert (FULL but `rotationCount` flat for N hours; gate on occupancy
+##      == capacity so a filling matrix is not alarmed) — it would catch BOTH T1.3 MatB and the
+##      item-6 freeze. (4) the −1 residual. (5) per-event stage attribution.
+##      ⚠ **UNPUSHED, CONTRACTS REPO (branch `v8.1`): `contracts/PairManagerV8.sol`,
+##      `contracts/test/PairManagerV8_StageInverted.sol`, `test/V8_54_StageInversion.test.js`,
+##      `v854_stage_inversion.txt`, `suite_session82.txt`. Also still unpushed in the KEEPERS
+##      repo: `rotation_timeline.js`, `path_census.js`, `path_census.selftest.js`.**
+##      ⛔ Claude cannot run git while the mount is down — pushes are owner-run blocks.
+
+
 ## 62.54 ✅✅✅✅ **2026-09-14 (session 81): THE 09-10/09-11 T1.2 DROUGHT IS SOLVED. IT WAS NEVER A
 ##      STOPPAGE — THE OVERFLOW STREAM WAS DIVERTED TO T1.3 THE DAY AFTER T1.3 OPENED, AND THE
 ##      CAUSE IS ONE LINE: `_hasRoomAndFree` MEASURES ROOM ON MatA ONLY.**

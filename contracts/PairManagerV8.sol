@@ -340,6 +340,40 @@ contract PairManagerV8 is Ownable2Step {
         return type(uint256).max;
     }
 
+    /// @notice V8.54 INSTRUMENT EXTRACTION — 2026-09-14, session 82. NO BEHAVIOUR CHANGE.
+    ///         The two-stage escape hatch used to be written out twice, at
+    ///         `graduationTargetFor` and inside `rescueReentry`. It is now in ONE place so
+    ///         that the ORDER of the two stages is a single decision that can be inverted in
+    ///         a test subclass and MEASURED, instead of two copies that can drift apart.
+    ///
+    ///         ⛔ THE ORDER HERE IS TODAY'S ORDER, UNCHANGED: room first, waited-longest
+    ///         second. If the full suite does not stay green across this extraction then the
+    ///         extraction is wrong — it is a move, not an edit.
+    ///
+    ///         ▶ WHY IT IS `virtual`: handoff 62.54 measured that stage 1 (any pair with a
+    ///         free MatA seat) OUTRANKS stage 2 (`_fullPairWaitingLongest`), so the moment a
+    ///         brand-new pair opens it captures the whole overflow stream and the older
+    ///         pair's MatB stops being fed — T1.2 MatB sat at 115/127 right through 09-10
+    ///         and 09-11 while 107 members were pushed into T1.3.
+    ///         `contracts/test/PairManagerV8_StageInverted.sol` overrides THIS ONE FUNCTION
+    ///         with the order reversed, and `test/V8_54_StageInversion.test.js` drives the
+    ///         SAME arrival sequence through both and scores them on LADDER PROGRESS.
+    ///
+    ///         ⛔ THE THIRD STAGE IS DELIBERATELY NOT IN HERE. `rescueReentry` falls through
+    ///         to `_forceExpand()` + `_pairWithRoomFor` when this returns max; that stage
+    ///         stays at its call site because `graduationTargetFor` is a view and must not
+    ///         expand anything.
+    ///
+    ///         ⛔ VIEW, NEVER REVERTS — both helpers are fully try-wrapped and fail toward
+    ///         "no change". rescueReentry runs inside a cycle-out with no try/catch above it.
+    function _overflowTargetFor(address member, uint256 avoid)
+        internal view virtual returns (uint256)
+    {
+        uint256 alt = _pairWithRoomFor(member, avoid);
+        if (alt == type(uint256).max) alt = _fullPairWaitingLongest(member, avoid); // V8.52b
+        return alt;
+    }
+
     /// @notice V8.50 ITEM G — GRADUATION. Where should a MatB root cycling out of
     ///         `fromPairIndex` re-enter? Returns type(uint256).max for "nowhere else —
     ///         keep today's own-MatA behaviour", which is the answer whenever the pair
@@ -385,9 +419,8 @@ contract PairManagerV8 is Ownable2Step {
         catch { return type(uint256).max; }        // unreadable → own MatA, as before
         if (!contested) return type(uint256).max;
 
-        uint256 alt = _pairWithRoomFor(member, fromPairIndex);
-        if (alt == type(uint256).max) alt = _fullPairWaitingLongest(member, fromPairIndex); // V8.52b
-        return alt;
+        // V8.54: the two stages moved into _overflowTargetFor, unchanged in order.
+        return _overflowTargetFor(member, fromPairIndex);
     }
 
     /// @notice V8.44 overflow rework (replaces V8.43 rescueOverflow, which
@@ -501,15 +534,14 @@ contract PairManagerV8 is Ownable2Step {
             // Every read is wrapped; an unreadable matrix is skipped, never assumed; and
             // if no pair has room the member falls through to the own MatA and parks
             // exactly as they do today. This can improve the outcome, never break it.
-            uint256 alt = _pairWithRoomFor(member, fromPairIndex);
-            if (alt == type(uint256).max) {
-                // V8.52b (handoff 62.15, REGRESSION_REGISTER R1): no pair has room, so ENTER
-                // the full pair that has waited longest — that entry is what rotates it, and
-                // its MatB has room for the root the rotation pushes out. Before V8.52b this
-                // fell straight through to _forceExpand, so a full later pair was never
-                // entered: it filled by overflow and froze (T1.2 127/127 rot 0, 2026-09-03).
-                alt = _fullPairWaitingLongest(member, fromPairIndex);
-            }
+            // V8.52b (handoff 62.15, REGRESSION_REGISTER R1): when no pair has room, ENTER
+            // the full pair that has waited longest — that entry is what rotates it, and its
+            // MatB has room for the root the rotation pushes out. Before V8.52b this fell
+            // straight through to _forceExpand, so a full later pair was never entered: it
+            // filled by overflow and froze (T1.2 127/127 rot 0, 2026-09-03).
+            // V8.54: both stages now live in _overflowTargetFor, in the SAME order as before;
+            // only the test subclass inverts them. See that function's comment.
+            uint256 alt = _overflowTargetFor(member, fromPairIndex);
             if (alt == type(uint256).max) {
                 // Last resort, unchanged: spawn a standby pair and look for room again.
                 _forceExpand();
