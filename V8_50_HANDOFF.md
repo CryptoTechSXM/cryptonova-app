@@ -2310,6 +2310,36 @@ owner-set, and the session that earned it got five things wrong by ignoring what
 ##      `cryptonova-sf-solvency` rather than growing it further. **This handoff needs the same treatment —
 ##      split or condense it, and a few large edits beat many small trims.**
 
+## 62.59 ✅✅ **2026-09-15 (session 83, part 3): THE RESCUE SCRIPTS NOW HONOUR `rr_keeper.OFF` — LIVE ON
+##      THE VPS AND PROVEN THERE. `unfreeze_eta.js` DELIBERATELY NOT RE-RUN YET.**
+##
+##      ▶ **SESSION-START BUG CHECK: ZERO OPEN** (`_No open issues._`, `origin/data` `b39e709`).
+##
+##      ⛔ **1. WHY THE ETA RE-RUN WAITS.** Its window is the last 24 h. Job A only resumed ~17:15Z
+##      today after the priming stand-down, so a run today re-measures the stall and would hand back
+##      the same 29.3 days on the wrong basis. ▶ **Earliest clean run: 2026-09-16 after ~17:30Z
+##      (1:30 PM owner time), `HOURS=24`, state ON so the delta rate arms.**
+##      ✅ **Precondition MEASURED, not assumed:** VPS `rr_keeper.log` 18:10Z→18:50Z = 708→712, one
+##      registration per `*/10` tick, 4.3 s median. 1000 reached ≈ **2026-09-17 ~18:50Z**.
+##
+##      ✅✅ **2. 62.58 ITEM 3 DONE.** `copay_rescue.js` + `fastlane_rescue.js` gain the shared
+##      `rr_keeper.OFF` guard (right after dotenv, BEFORE keeper_env/provider — a stood-down run reads
+##      nothing, signs nothing; exit 0; `FORCE_RUN=1` overrides, same as rr_keeper). Keepers `main`
+##      **`85daa66`**, owner-pushed. Scratch test **8/8**. VPS: pre-scp md5s matched repo HEAD
+##      (`a37b73fe…` / `57e4cb39…`, no drift), scp'd, post-scp md5 **`6215ce1bcac43c8f96bc04c2db539013`
+##      / `df3c8c4830122ddd6760dafa12e37343`** both ends, then `touch rr_keeper.OFF` → both printed
+##      `kill switch present … — standing down` → `rm`, verified gone. ▶ **The `#PRIMING` hand-commenting
+##      of those two cron lines is no longer needed.**
+##      ⛔⛔ **CORRECTION TO 62.58 ITEM 4 AND TO MEMORY: `system_keeper.js` does NOT share
+##      `rr_keeper.OFF`.** It was DECOUPLED 2026-09-01 (session 55) to its own `system_keeper.OFF`
+##      (`system_keeper.js:121`; `:95-97` is the older comment above the decoupling note). ▶ **Deploy
+##      stand-down stays `touch /root/keeper/rr_keeper.OFF /root/keeper/system_keeper.OFF`.**
+##
+##      ▶ **NEXT, IN ORDER:** (1) `unfreeze_eta.js` on 09-16 after 17:30Z, then revisit V8.54 with two
+##      rates. (2) Stage 3 `preview`→`main` for the pair-status fix — owner's go. (3) T3.1 `+3`.
+##      (4) `doCancelCoupon` duplicate. (5) Split this 1.56 MB file. (6) Be at the keyboard for the
+##      CommunityWallet's first distribution on the 25th.
+
 ## 62.58 ✅✅✅✅ **2026-09-15 (session 83, part 2): 62.57 ITEM 8 IS FIXED AND ON `preview` — BUT
 ##      THE PAGE HAD THE SAME LIE TWICE AND ONLY THE OWNER'S SCREENSHOTS FOUND THE SECOND ONE.
 ##      T4.3's HELD WINDOW MEASURED AT 29.3 DAYS. THE PIONEER INVERSION IS DEAD, SETTLED BY
