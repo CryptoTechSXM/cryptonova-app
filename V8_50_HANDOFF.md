@@ -2310,6 +2310,80 @@ owner-set, and the session that earned it got five things wrong by ignoring what
 ##      `cryptonova-sf-solvency` rather than growing it further. **This handoff needs the same treatment —
 ##      split or condense it, and a few large edits beat many small trims.**
 
+## 62.56 ✅✅✅ **2026-09-15 (session 82, part 2): SHERWYN'S DASHBOARD FIX IS LIVE ON ALL DOMAINS AND HIS
+##      TICKET IS CLOSED — THE LEDGER IS BACK TO ZERO OPEN. The defect was a FIFTH sub-shape of the
+##      frontend-truth class: THE FRIENDLY STRING THAT SWALLOWS THE BAD ANSWER.**
+##
+##      **1. THE DEFECT.** V8.52 item 39's cycle row — added FOR Sherwyn (08-08) and CryptoJan22
+##      (08-10) — renders `seat 59 of 127 · 58 rotations until you cycle · <rate>`. `_rotationRate`
+##      samples `rotationCount` into localStorage; for a matrix that has NEVER rotated the delta is
+##      0, so it returns a real measurement of **`perDay: 0`**. The render tested `_rate.perDay > 0`,
+##      which is false, and fell into **the SAME string used when there is no data at all**:
+##      *"measuring this matrix's rate…"*. ▶▶ **A MATRIX MEASURED AS DEAD FOR SIX DAYS REPORTED
+##      "measuring…" FOREVER.** No failed read, no hardcoded claim, no wrong arithmetic — **the ZERO
+##      case and the UNKNOWN case shared one branch and the shared string was the friendly one.**
+##      ▶ **THE HUNT: find `if (x > 0)` whose else-branch is worded for "not known yet".**
+##      ⛔ **AND THE ROW NEVER READ `occupancy()`** — it read MATRIX_SIZE and rotationCount three
+##      lines apart but not occupancy, so it could not say the one thing that answered him: **the
+##      matrix had not rotated because it was not FULL.** `occupancy()` was in the page's ABI
+##      (`index.html:2570`) the whole time — the same shape as the `stabilityFloor` "blocker".
+##
+##      **2. THE FIX (frontend `952a9c4` + `71458d7`, laddered admin → preview → main).** Three
+##      states where there were two: **still filling** (`seat 121 of 127 · still filling — 126 of 127
+##      seats taken · rotations begin when it is full, then 120 rotations until you cycle`) ·
+##      **full, not turning** (`· no rotations here in the last 6 days`) · **full and turning**
+##      (unchanged rate line). A **0.25-day minimum window** before claiming "no rotations", so the
+##      claim is never made off 29 minutes of samples. `occUnknown` SUPPRESSES the filling sentence
+##      rather than printing "0 of 127". Plus a ⓘ answering his actual question, and a fix to the
+##      pre-existing "about under an hour at the recent rate".
+##
+##      ⛔⛔ **3. THE TOOLTIP SHIPPED HARDCODED TO T1 AND THE LIVE PAGE CAUGHT IT.** It said
+##      "T1.1, T1.2 and T1.3" on EVERY position row; the owner's dashboard holds **T2.3 · T3.3 ·
+##      T4.1 · T5.1**, so four of five rows explained a tier he was not looking at — **a false claim
+##      on every row but one, inside the tooltip added to stop false claims.**
+##      ▶▶▶ **A NOTE ATTACHED TO A REPEATED ROW MUST DERIVE EVERY LABEL IT NAMES FROM THAT ROW.**
+##      ⛔ **THE OFFLINE HARNESS COULD NOT HAVE FOUND IT: it fed the renderer ONE position.** A
+##      per-row defect needs more than one row. **The offline test pins the branch logic; only the
+##      live page has the multiplicity.** Fixed by deriving the tier from `p.label`, with a
+##      label-free fallback; verified live — **5 tooltips, 5 distinct, T1·T2·T3·T4·T5, 0 hardcoded.**
+##
+##      ✅ **4. VERIFICATION DISCIPLINE THAT EARNED ITS KEEP.** The render branch was **EXTRACTED
+##      FROM THE PATCHED FILE BY STRING INDEX** (never retyped, so it cannot drift from what ships)
+##      and driven with 8 fake positions — that is what caught the "about under an hour" wording.
+##      All five inline `<script>` blocks `node --check` clean. Live reads returned **BOOLEANS ONLY**,
+##      never the page body: those pages carry 12 live QuickNode keys (60.2).
+##
+##      ⛔⛔ **5. `device_commit_files` RETURNED SUCCESS TWICE AND WROTE NOTHING.** The tooltip fix
+##      and a handoff edit both reported `{"written":[…], "rejected":[]}` and the device still held
+##      the previous bytes. **`git commit` saying "nothing added to commit" is what caught the
+##      first; the second was only found by checking on a hunch.** ▶▶ **A `written` RESPONSE IS NOT
+##      EVIDENCE THE FILE CHANGED. Stage → commit → RE-STAGE + md5 after EVERY write, no exception.**
+##      ▶ And pick a DISCRIMINATING marker: "T1.1, T1.2 and T1.3" was useless (it survives in the
+##      fix's own comment, count 1 in both); `_tierNum` (0 vs 3) settled it instantly.
+##
+##      ✅ **6. TICKET CLOSED, LEDGER AT ZERO.** Verdict: **NOT A BUG plus a frontend fix.** T1.2
+##      MatB had not finished filling — capacity 127 from chain, zero rotations 09-06→09-11, first
+##      rotation 09-12, and cumulative entries − 127 equals measured rotations EXACTLY at that
+##      boundary. **VERIFIED ON THE BRANCH, not from the push response: 0 open, `_No open issues._`,
+##      110 resolved rows, 1 closed today.** ✅ New cheaper ledger route:
+##      `raw.githubusercontent.com/<repo>/data/BUGS.md` + `javascript_tool` returning COUNTS.
+##      [stated] Owner: Sherwyn was already responded to, and the $1 bounty goes onto his login.
+##
+##      ▶ **NEXT, IN ORDER:** (1) the full-pair freeze from 62.55 item 6 — a later pair full in BOTH
+##      halves receives nothing and never rotates again; measure it on the live chain. (2) the
+##      stuck-matrix alert (FULL and `rotationCount` flat for N hours) — it would catch that AND
+##      T1.3 MatB. (3) the stage-inversion redeploy decision, bundled, not alone. (4) the −1
+##      residual. (5) per-event stage attribution.
+##      ⚠ **PARKED, contracts working tree:** `v853_private_deploy_transcript.txt` modified and
+##      uncommitted; 12 untracked `Test Sept 9*.png` in the repo root. **Testnet-App working tree:**
+##      `BUGS_live_check.md`, `BUGS_snapshot.md`, `BUGS_data_2026-09-01.md`, `__pycache__/` and two
+##      `community_reply_*` files untracked — the BUGS copies drift against the real ledger on
+##      `data` and should be gitignored.
+##      ⚠ **The cycle-row family still has NO `data-i18n`** (written by `posList.innerHTML`), so it
+##      renders in English in all ten locales, the new tooltip included. Pre-existing; fix the
+##      family together or not at all.
+
+
 ## 62.55 ✅✅✅✅ **2026-09-15 (session 82): THE STAGE-INVERSION FIXTURE IS BUILT AND HAS RUN. 16/16
 ##      PASS, BOTH GEOMETRIES. THE CAPTURE IS REPRODUCED ON DEMAND AND THE INVERSION CURES IT —
 ##      BUT IT BUYS NO EXTRA THROUGHPUT. IT BUYS TIMING. FULL SUITE 703 PASSING / 7 PENDING /
