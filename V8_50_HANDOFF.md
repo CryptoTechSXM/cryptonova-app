@@ -2374,6 +2374,14 @@ owner-set, and the session that earned it got five things wrong by ignoring what
 ##      The V8.54 inversion is proven on a private chain and BUNDLED into a later release. The redeploy's
 ##      effect on the CommunityWallet (62.60 step 5) is still owed before that release, not before the 25th.
 ##      Supersedes 62.60 item 4's "deploy before the 25th if we have a working solution".
+##      ✅ **7. FRONTEND (next item (e)) — Testnet-App `admin` `8156dc9`, selftest 41/41.** `_pairStateOf`
+##      'full-both' now reads "🔄 Full — rotating on a timer" (table) / "full, rotating on a timer" (strip),
+##      amber, no rate quoted. 'waiting' no longer says it moves "once T4.x fills" (62.60 disproved it).
+##      ⛔ Also found by grep: `#rescue-seat-warn` was STATIC and told every parked member the no-seat
+##      fix "goes out with the next contract release" — it went out with V8.51. Rewritten (amber): the
+##      fix is live, file a bug report rather than paying again. Keeper coverage checked in source:
+##      `activePairCount()` returns `pairs.length` (`PairManagerV8.sol:1098`), so the frozen-MatB scan
+##      reaches every pair; `maxItemsPerUpkeep = 1` caps it at one item per upkeep. ⚠ Not yet on `preview`/`main`.
 ##      ▶ **NEXT, IN ORDER:** (a) scp the corrected checker. (b) measure who pays the self-rescues on
 ##      T2.2B/T3.2B (wallet census vs the rr_keeper/stress key set). (c) re-state the release scope to
 ##      the owner: inversion only; decide deploy-before-the-25th on that. (d) 62.60 step 5 (what a
