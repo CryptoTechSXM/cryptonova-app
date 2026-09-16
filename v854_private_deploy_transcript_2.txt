@@ -1,0 +1,37 @@
+﻿**********************
+Windows PowerShell transcript start
+Start time: 20260916154616
+Username: CryptoTech-LT01\CryptoTech
+RunAs User: CryptoTech-LT01\CryptoTech
+Configuration Name: 
+Machine: CRYPTOTECH-LT01 (Microsoft Windows NT 10.0.26200.0)
+Host Application: C:\WINDOWS\System32\WindowsPowerShell\v1.0\powershell.exe
+Process ID: 10536
+PSVersion: 5.1.26100.9444
+PSEdition: Desktop
+PSCompatibleVersions: 1.0, 2.0, 3.0, 4.0, 5.0, 5.1.26100.9444
+BuildVersion: 10.0.26100.9444
+CLRVersion: 4.0.30319.42000
+WSManStackVersion: 3.0
+PSRemotingProtocolVersion: 2.3
+SerializationVersion: 1.1.0.1
+**********************
+Transcript started, output file is v854_private_deploy_transcript_2.txt
+PS C:\CryptoNite-Smart-Contracts\CryptoNova> npx hardhat run scripts/deploy_v8.js --network baseSepolia
+  T01 PM:0x6ECA832A MatA:0xFEb2ad19 MatB:0xa2E8A10b
+  T02 PM:0x372f13C7 MatA:0x87E61736 MatB:0xFecb5F9A
+  T03 PM:0x9c8dBD90 MatA:0xdA4a2B24 MatB:0xC19B20c5
+  ────────────────────────────────────────────────────────────
+  Addresses file: deployed_addresses_v8_54_private.json
+  V8.54 Deploy complete.
+
+  NEXT STEP: run scripts/seed_w1.js then scripts/bigfill_v8.js
+
+  ────────────────────────────────────────────────────────────
+
+  run log: logs/runs/deploy_v8/2026-09-16T19-46-19-978Z_deployed_addresses_v8_54_private.log  (OK)
+PS C:\CryptoNite-Smart-Contracts\CryptoNova> Stop-Transcript
+**********************
+Windows PowerShell transcript end
+End time: 20260916161912
+**********************

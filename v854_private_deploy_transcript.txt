@@ -1,0 +1,45 @@
+﻿**********************
+Windows PowerShell transcript start
+Start time: 20260916153530
+Username: CryptoTech-LT01\CryptoTech
+RunAs User: CryptoTech-LT01\CryptoTech
+Configuration Name: 
+Machine: CRYPTOTECH-LT01 (Microsoft Windows NT 10.0.26200.0)
+Host Application: C:\WINDOWS\System32\WindowsPowerShell\v1.0\powershell.exe
+Process ID: 10536
+PSVersion: 5.1.26100.9444
+PSEdition: Desktop
+PSCompatibleVersions: 1.0, 2.0, 3.0, 4.0, 5.0, 5.1.26100.9444
+BuildVersion: 10.0.26100.9444
+CLRVersion: 4.0.30319.42000
+WSManStackVersion: 3.0
+PSRemotingProtocolVersion: 2.3
+SerializationVersion: 1.1.0.1
+**********************
+Transcript started, output file is v854_private_deploy_transcript.txt
+PS C:\CryptoNite-Smart-Contracts\CryptoNova> npx hardhat run scripts/deploy_v8.js --network baseSepolia
+      asking quaint-patient-haze directly:
+        raw eth_getCode latest : 0x NO CODE
+        raw eth_getCode safe   : 0x NO CODE
+        node block             : 46909581
+  ⏳⏳  node saw code at 0x70788542… TierRouterLib after 2 probes
+  ✓  TierRouterLib                0x707885425489e997CAF4d4671bfd61E1217063bd  (4892 bytes)
+
+  ── TierRouter ──────────────────────────────────────────────
+Error: R17 FOREIGN TRANSACTION: the chain shows 101491 pending transactions from the deployer but this run has only reac
+hed nonce 101490. Another process is signing with the deployer wallet — on the VPS that is rr_keeper / system_keeper (DE
+PLOYER_PRIVATE_KEY). STOP: touch /root/keeper/rr_keeper.OFF /root/keeper/system_keeper.OFF, wait 5 minutes, then re-run
+(addresses are written only at the end, so nothing from this run is recorded). GO_LIVE_RUNBOOK.md 0.2-PRIVATE.
+    at NonceManager.nonceMgr.sendTransaction (C:\CryptoNite-Smart-Contracts\CryptoNova\scripts\deploy_v8.js:404:41)
+    at processTicksAndRejections (node:internal/process/task_queues:105:5)
+    at ContractFactory.deploy (C:\CryptoNite-Smart-Contracts\CryptoNova\node_modules\ethers\src.ts\contract\factory.ts:1
+11:24)
+    at deploy (C:\CryptoNite-Smart-Contracts\CryptoNova\scripts\deploy_v8.js:350:13)
+    at main (C:\CryptoNite-Smart-Contracts\CryptoNova\scripts\deploy_v8.js:599:23)
+
+  run log: logs/runs/deploy_v8/2026-09-16T19-35-48-241Z_deployed_addresses_v8_54_private.log  (FAILED)
+PS C:\CryptoNite-Smart-Contracts\CryptoNova> Stop-Transcript
+**********************
+Windows PowerShell transcript end
+End time: 20260916153748
+**********************
