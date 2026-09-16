@@ -2310,6 +2310,38 @@ owner-set, and the session that earned it got five things wrong by ignoring what
 ##      `cryptonova-sf-solvency` rather than growing it further. **This handoff needs the same treatment —
 ##      split or condense it, and a few large edits beat many small trims.**
 
+## 62.60 ⛔⛔⛔ **2026-09-16 (session 83, part 4): THE HELD PAIR DID NOT RELEASE WHEN ITS BLOCKER FILLED.
+##      A NEW PAIR OPENED AND CAPTURED THE STREAM AGAIN. 62.57/62.58's "T4.3 self-clears when T4.4
+##      fills" IS DISPROVEN BY THE CHAIN.**
+##
+##      **BASIS:** VPS `fleet_20260916/freeze_check.log` + `unfreeze_eta_run2.log`, book v8_52, quiknode,
+##      **52 matrices read (was 42 — FIVE new pairs opened: T1.4 T2.4 T3.4 T4.5 T5.4)**, 0 unreadable,
+##      eta window 46862910..46906110 = 24.00 h from block timestamps. md5s `9a88ed26…` / `476f403a…`.
+##
+##      ⛔⛔ **1. THE FINDING.** 09-15: T4.4 MatA 10/127, T4.3 rot 0. 09-16: **T4.4 MatA 127/127 rot 0,
+##      T4.3 STILL rot 0, T4.5 OPEN at 2/127.** T4.3 received nothing at the moment its blocker
+##      filled — stage 1 found T4.5 first. **T4.2, T4.3 AND NOW T4.4 are all held behind T4.5.**
+##      ▶ **"ETA to fill the blocker" IS NOT AN ETA TO RELEASE while pairs keep opening.** Same
+##      shape already set up in T5: T5.4 is open (3/127) behind T5.3, so T5.3 filling (~27 h, the
+##      two rates AGREE 1.458 vs 1.435 /h) should hand the capture to T5.4, not release T5.2 —
+##      ⚠ **by source reading; CHECK IT when T5.3 fills.** That is the cheapest live confirmation.
+##      ⛔ **Also: 62.58's 29.3-day ETA was wrong by an order of magnitude** — T4.4 took 117 seats in
+##      ~a day after 4 the day before. Arrival rates are not steady; one window is not a rate.
+##      ⚠ **Event rates for a pair younger than the window are biased LOW** (T4.5 "62.5 days" from 2
+##      events is not a number). Delta rates armed for all tiers by this run.
+##
+##      ⛔ **2. C1 (both halves full) on T2.2 (A rot 223, B 127 rot 96) and T3.2 (A 198, B 127 rot 71),
+##      same reading at 16:23Z and this run.** T1.2 was C1 at 00:23Z and is now **MatB 126** — it left
+##      the state. **HOW is NOT MEASURED** (the source reading says a both-full later pair receives
+##      nothing). Named, not explained. Law Bocc+Brot=Arot holds on all later pairs; **T3.1 now +6
+##      (was +3)** — growing, still parked.
+##
+##      ▶ **3. DECISION FRAME PUT TO THE OWNER (his call — a redeploy):** waiting is not a fix (item 1).
+##      V8.54 inversion addresses item 1 only; C1 needs its own design. Recommendation: build the C1
+##      fix test-first in the V8_54 fixture, ship both in ONE redeploy; timing vs the 25th's first
+##      CommunityWallet distribution is his. ⚠ Member-facing: "Waiting on T4.x" implies release when
+##      it fills — item 1 shows that is not true. Revisit the wording before stage 3 to `main`.
+
 ## 62.59 ✅✅ **2026-09-15 (session 83, part 3): THE RESCUE SCRIPTS NOW HONOUR `rr_keeper.OFF` — LIVE ON
 ##      THE VPS AND PROVEN THERE. `unfreeze_eta.js` DELIBERATELY NOT RE-RUN YET.**
 ##
