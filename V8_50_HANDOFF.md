@@ -2382,12 +2382,18 @@ owner-set, and the session that earned it got five things wrong by ignoring what
 ##      fix is live, file a bug report rather than paying again. Keeper coverage checked in source:
 ##      `activePairCount()` returns `pairs.length` (`PairManagerV8.sol:1098`), so the frozen-MatB scan
 ##      reaches every pair; `maxItemsPerUpkeep = 1` caps it at one item per upkeep. ⚠ Not yet on `preview`/`main`.
-##      ▶ **NEXT, IN ORDER:** (a) scp the corrected checker. (b) measure who pays the self-rescues on
-##      T2.2B/T3.2B (wallet census vs the rr_keeper/stress key set). (c) re-state the release scope to
-##      the owner: inversion only; decide deploy-before-the-25th on that. (d) 62.60 step 5 (what a
-##      redeploy does to CommunityWallet: 703 enrolled, $20,978.88 pool) still stands before any deploy.
-##      (e) member-facing "⛔ Full — not receiving" label (`_pairStateOf` full-both) is now a FALSE
-##      claim for T2.2/T3.2 — they are turning. Fix before stage 3 to `main`.
+##      ▶ **STATE AT SESSION 84 CLOSE:** all pushed — keepers `main 99eeb94`, Testnet-App `admin 8156dc9`,
+##      contracts `v8.1 337151b` (+ this note). (a) scp checker DONE. (b) who pays DONE (item 5). (c) scope
+##      settled by owner (item 6). (e) frontend DONE on admin (item 7) — ⚠ owner has NOT yet eyeballed
+##      T2.2/T3.2 on the admin Live Stats table; do that before `preview`.
+##      ▶ **NEXT SESSION, IN ORDER:** (1) owner visual check of `8156dc9` on admin, then preview → main.
+##      (2) V8.54 inversion on a private size-15 chain (V8.52 private pattern), WITH the MatrixKeeper
+##      wired — 62.55's rig had none, which is exactly what produced the false C1. Pass = zero C2 on
+##      `frozen_matrix_check.js` over two readings + law exact + existing suite green. (3) 62.60 step 5
+##      (redeploy effect on CommunityWallet — enrollment ORDER / cohort membership, not just the pool,
+##      which the owner notes is test funds) before any release. (4) watch the 25th's first distribution
+##      with `cw_cohort_check.js` (ratio must read 1.5). Parked: T3.1 law residual (+6), 62.60's T5.3→T5.4
+##      recapture check when T5.3 fills.
 
 ## 62.60 ⛔⛔⛔ **2026-09-16 (session 83, part 4): THE HELD PAIR DID NOT RELEASE WHEN ITS BLOCKER FILLED.
 ##      A NEW PAIR OPENED AND CAPTURED THE STREAM AGAIN. 62.57/62.58's "T4.3 self-clears when T4.4
