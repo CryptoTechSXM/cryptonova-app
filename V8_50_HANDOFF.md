@@ -2310,6 +2310,60 @@ owner-set, and the session that earned it got five things wrong by ignoring what
 ##      `cryptonova-sf-solvency` rather than growing it further. **This handoff needs the same treatment —
 ##      split or condense it, and a few large edits beat many small trims.**
 
+## 62.61 ✅✅✅ **2026-09-16 (session 84): "FULL IN BOTH HALVES" (C1) IS NOT A FREEZE ON THE LIVE CHAIN.
+##      THE KEEPER TURNS IT. 62.55 ITEM 6 WAS A RIG ARTEFACT (NO KEEPER). THE C1 FIX IS NOT NEEDED.**
+##
+##      ▶ SESSION-START BUG CHECK: `origin/data` BUGS.md — **0 open tickets.**
+##      **INSTRUMENT:** `pair_exit_trace.js` + `abi_v852_trace.json` (keepers; md5 `e40e1150…` /
+##      `7e2b01f7…`, scp'd, md5 matched on the VPS). READ-ONLY. Archive checkpoints of occupancy +
+##      rotationCount, every log on the pair and its PM, full receipts of every MatB tx in the interval
+##      the pair left both-full. **BASIS:** book v8_52, quiknode, VPS logs
+##      `fleet_20260916/t12_exit_trace.log`, `T22_exit_trace.log`, `T32_exit_trace.log`.
+##
+##      ✅✅ **1. HOW T1.2 LEFT BOTH-FULL (62.60 plan step 1):** tx `0xd282a9cf…` 11:35:04Z —
+##      `matrixKeeper.performUpkeep` → `_doForceRotate` → `T1.2B.keeperForceRotateRoot()`. Root
+##      `0x301A…5170` cycled out, re-entry short $7.26 → `MemberParked` → seat freed → MatB 126.
+##      Emitted `FrozenMatBRotated(T1.2B)`. Source: `MatrixKeeperLib.sol:268-276` scans EVERY pair of
+##      every tier for a full MatB idle ≥ `frozenMatBTimeout` (15 min, `MatrixKeeper.sol:507`); a funded
+##      root re-enters its OWN MatA (`TierRouterLib.sol:117-118`), which rotates MatA and crosses its
+##      root into MatB. **Either branch turns the pair.**
+##
+##      ✅✅✅ **2. T2.2 AND T3.2 (the two C1 pairs of 62.60) OVER 26 h, 2026-09-15T16Z..09-16T18Z:**
+##      T2.2 MatA rot **156→224 (+68)**, MatB **30→97 (+67)** · T3.2 MatA **126→199 (+73)**, MatB
+##      **0→72 (+72)**. Both-full at most hourly checkpoints; **~3 rotations/hour per half, steady.**
+##      Law `Bocc+Brot=Arot` exact at all 54 checkpoints. Every MatB-touching tx in the T2.2 exit
+##      intervals is the same pattern: keeper force-rotate (at :05/:25/:45) → root parks → the parked
+##      member `selfRescue()`s within ~3 min → `MemberRouted pairId=1` into own MatA → MatA rotates →
+##      its root crosses back into MatB at pos 127. Log counts T2.2B: 67 CycledOut / 62 Parked / 57
+##      SelfRescue; T3.2B: 72 / 63 / 63. ⚠ **Who runs those self-rescues (organic vs rr_keeper stress
+##      wallets) is NOT MEASURED** — and it matters: if they are stress automation, MatA of a both-full
+##      later pair turns only because a script pays. Named, parked.
+##
+##      ⛔⛔ **3. WHAT THIS OVERTURNS.**
+##      - **62.55 item 6** ("a later pair fills both halves and NEVER ROTATES AGAIN"): the fixture had
+##        **no keepers** — the deadlock it showed is the absence of `MatrixKeeper`, not a live defect.
+##      - **62.57/62.60 C1 "structural, fires on ONE reading"**: wrong deduction — it read PairManager
+##        routing only and missed the keeper's force-rotate. **Every C1 alert so far was false.**
+##      - **62.60 plan steps 2-3 (C1 failing test + fix)**: DROPPED. Nothing to fix. The owner's
+##        option B release reduces to **the V8.54 stage inversion** unless another defect is measured.
+##      ▶ **What IS still a live defect:** the CAPTURE (T4.2/T4.3/T4.4 held behind T4.5, T5.2 behind
+##      T5.3). T4.3 MatB is 0/127, not full, so the keeper's frozen-MatB scan cannot touch it — that
+##      pair truly has no rotation source. That is the inversion's job.
+##
+##      ✅ **4. INSTRUMENT CORRECTED — `frozen_matrix_check.js` C1** (md5 `5ceac010…`, selftest
+##      `03aa5517…` **28/28**): both-full with no baseline → `NO BASELINE` (not a violation); both-full
+##      where MatA rotated → silent; both-full where NEITHER half rotated since the last reading →
+##      SUSPECTED, CONFIRMED on repeat (the keeper should turn MatB within ~15 min, so a 4 h flat reading
+##      is a real "keeper not reaching this pair"); MatB turned but MatA flat → handed to C2. Two new
+##      regression fixtures are the measured T2.2/T3.2 intervals. ⚠ **NOT YET ON THE VPS** — scp + md5.
+##
+##      ▶ **NEXT, IN ORDER:** (a) scp the corrected checker. (b) measure who pays the self-rescues on
+##      T2.2B/T3.2B (wallet census vs the rr_keeper/stress key set). (c) re-state the release scope to
+##      the owner: inversion only; decide deploy-before-the-25th on that. (d) 62.60 step 5 (what a
+##      redeploy does to CommunityWallet: 703 enrolled, $20,978.88 pool) still stands before any deploy.
+##      (e) member-facing "⛔ Full — not receiving" label (`_pairStateOf` full-both) is now a FALSE
+##      claim for T2.2/T3.2 — they are turning. Fix before stage 3 to `main`.
+
 ## 62.60 ⛔⛔⛔ **2026-09-16 (session 83, part 4): THE HELD PAIR DID NOT RELEASE WHEN ITS BLOCKER FILLED.
 ##      A NEW PAIR OPENED AND CAPTURED THE STREAM AGAIN. 62.57/62.58's "T4.3 self-clears when T4.4
 ##      fills" IS DISPROVEN BY THE CHAIN.**
