@@ -95,7 +95,8 @@ const log = (...a) => console.log("      " + a.join(" "));
 /**
  * Three wired pairs. Pairs 0 and 1 are added to the PairManager; pair 2 is fully wired but
  * NOT added — `openPair2()` adds it, which is what a factory deploy does live.
- * `pmName` picks the arm: "PairManagerV8" (control) or "PairManagerV8_StageInverted".
+ * `pmName` picks the arm: "PairManagerV8_StageLegacy" (control, the V8.53 order) or
+ * "PairManagerV8" (treatment — production carries the inversion since V8.54, session 85).
  */
 async function deployThreePairs(size, pmName) {
   const sigs = await ethers.getSigners();
@@ -424,8 +425,8 @@ describe("V8.54 — stage inversion in the overflow escape hatch, scored on LADD
     log(`SIZE=${SIZE}  TAIL=${TAIL}  (override with SI_SIZE / SI_TAIL)`);
     for (const c of cases) {
       R[c.key] = {
-        C: await run("PairManagerV8",               c.openAtB, `${c.key}/control `),
-        T: await run("PairManagerV8_StageInverted", c.openAtB, `${c.key}/inverted`),
+        C: await run("PairManagerV8_StageLegacy", c.openAtB, `${c.key}/control `),
+        T: await run("PairManagerV8",             c.openAtB, `${c.key}/inverted`),
       };
       report(c.name, R[c.key].C, R[c.key].T);
     }

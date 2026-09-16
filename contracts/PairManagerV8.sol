@@ -346,17 +346,19 @@ contract PairManagerV8 is Ownable2Step {
     ///         that the ORDER of the two stages is a single decision that can be inverted in
     ///         a test subclass and MEASURED, instead of two copies that can drift apart.
     ///
-    ///         ⛔ THE ORDER HERE IS TODAY'S ORDER, UNCHANGED: room first, waited-longest
-    ///         second. If the full suite does not stay green across this extraction then the
-    ///         extraction is wrong — it is a move, not an edit.
+    ///         ✅ V8.54 (session 85): THE ORDER IS NOW INVERTED — waited-longest FIRST, room
+    ///         SECOND. Proven in the fixture first (handoff 62.55: capture cured, 16/16, ladder
+    ///         metrics identical — a fairness/latency fix, NOT a throughput fix). The V8.53
+    ///         order survives only as the test control arm
+    ///         `contracts/test/PairManagerV8_StageLegacy.sol`.
     ///
     ///         ▶ WHY IT IS `virtual`: handoff 62.54 measured that stage 1 (any pair with a
     ///         free MatA seat) OUTRANKS stage 2 (`_fullPairWaitingLongest`), so the moment a
     ///         brand-new pair opens it captures the whole overflow stream and the older
     ///         pair's MatB stops being fed — T1.2 MatB sat at 115/127 right through 09-10
     ///         and 09-11 while 107 members were pushed into T1.3.
-    ///         `contracts/test/PairManagerV8_StageInverted.sol` overrides THIS ONE FUNCTION
-    ///         with the order reversed, and `test/V8_54_StageInversion.test.js` drives the
+    ///         `contracts/test/PairManagerV8_StageLegacy.sol` overrides THIS ONE FUNCTION
+    ///         with the OLD order restored, and `test/V8_54_StageInversion.test.js` drives the
     ///         SAME arrival sequence through both and scores them on LADDER PROGRESS.
     ///
     ///         ⛔ THE THIRD STAGE IS DELIBERATELY NOT IN HERE. `rescueReentry` falls through
@@ -369,8 +371,9 @@ contract PairManagerV8 is Ownable2Step {
     function _overflowTargetFor(address member, uint256 avoid)
         internal view virtual returns (uint256)
     {
-        uint256 alt = _pairWithRoomFor(member, avoid);
-        if (alt == type(uint256).max) alt = _fullPairWaitingLongest(member, avoid); // V8.52b
+        // V8.54 STAGE INVERSION (session 85): waited-longest FIRST, room SECOND.
+        uint256 alt = _fullPairWaitingLongest(member, avoid);
+        if (alt == type(uint256).max) alt = _pairWithRoomFor(member, avoid);
         return alt;
     }
 
