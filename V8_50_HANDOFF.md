@@ -2335,6 +2335,14 @@ owner-set, and the session that earned it got five things wrong by ignoring what
 ##      (`system_keeper.js:121`; `:95-97` is the older comment above the decoupling note). ▶ **Deploy
 ##      stand-down stays `touch /root/keeper/rr_keeper.OFF /root/keeper/system_keeper.OFF`.**
 ##
+##      ⛔⛔ **3. LATE ALERT, 2026-09-16 ~00:23Z freeze-watch (owner's TG): rule C1 SUSPECTED on T1.2, T2.2
+##      AND T3.2 — later pairs FULL IN BOTH HALVES.** 42 read, 0 unreadable. ▶ **This contradicts 62.57's
+##      "no later pair is full in both halves" — that was true at its reading, it is NOT true now.** This
+##      is the 62.55 item 6 trap, the one V8.54 does NOT touch, and unlike T4.3 it has no self-clearing
+##      path IF the source reading holds. ⚠ ONE READING ONLY — graded SUSPECTED; the next cron run
+##      re-reads automatically. Same alert: T4.2/T4.3 C2 CONFIRMED and T4.3 A/B CONFIRMED (known, 62.57).
+##      ▶ **Owner said: no decisions until the 09-16 numbers.** Next session reads the freeze check rows
+##      for T1.2/T2.2/T3.2 (occupancy + rotationCount, two readings) alongside `unfreeze_eta.js`.
 ##      ▶ **NEXT, IN ORDER:** (1) `unfreeze_eta.js` on 09-16 after 17:30Z, then revisit V8.54 with two
 ##      rates. (2) Stage 3 `preview`→`main` for the pair-status fix — owner's go. (3) T3.1 `+3`.
 ##      (4) `doCancelCoupon` duplicate. (5) Split this 1.56 MB file. (6) Be at the keyboard for the
