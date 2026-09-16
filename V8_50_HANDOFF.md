@@ -2357,6 +2357,17 @@ owner-set, and the session that earned it got five things wrong by ignoring what
 ##      is a real "keeper not reaching this pair"); MatB turned but MatA flat → handed to C2. Two new
 ##      regression fixtures are the measured T2.2/T3.2 intervals. ⚠ **NOT YET ON THE VPS** — scp + md5.
 ##
+##      ✅ **5. WHO PAYS THE SELF-RESCUES — MEASURED (next item (b), same session).** Addresses in the
+##      trace logs classified against `harness_addresses.csv` (15,000 derived rr_keeper/job B-C wallets,
+##      VPS, 2026-09-13). **T3.2B (clean — no receipt section in that log): SelfRescue 62 harness / 1 not;
+##      MemberParked 62 / 1; MemberCycledOut 66 / 6.** T2.2 figures are CONTAMINATED (the regex also
+##      counted receipt duplicates and `T2.1B` lines) — directionally the same, harness 50 vs 12. ▶▶
+##      **SO THE MatA HALF OF A BOTH-FULL LATER PAIR TURNS BECAUSE THE STRESS HARNESS PAYS.** The keeper's
+##      MatB force-rotate needs no one, but without a paying re-entry each of its rotations just PARKS
+##      the root. On an organic chain a both-full later pair turns at the inflow rate and accumulates
+##      parked members — it is not frozen, and not self-sustaining either. ⚠ "Not harness" is an upper
+##      bound on organic, never proof. Any G2 / SF solvency figure read over this window carries it.
+##      ✅ **scp of the corrected checker DONE** — VPS md5 `5ceac010…` / `03aa5517…`, selftest 28/28 on the box.
 ##      ▶ **NEXT, IN ORDER:** (a) scp the corrected checker. (b) measure who pays the self-rescues on
 ##      T2.2B/T3.2B (wallet census vs the rr_keeper/stress key set). (c) re-state the release scope to
 ##      the owner: inversion only; decide deploy-before-the-25th on that. (d) 62.60 step 5 (what a
