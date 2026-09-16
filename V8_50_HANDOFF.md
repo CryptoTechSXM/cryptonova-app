@@ -2368,6 +2368,12 @@ owner-set, and the session that earned it got five things wrong by ignoring what
 ##      parked members — it is not frozen, and not self-sustaining either. ⚠ "Not harness" is an upper
 ##      bound on organic, never proof. Any G2 / SF solvency figure read over this window carries it.
 ##      ✅ **scp of the corrected checker DONE** — VPS md5 `5ceac010…` / `03aa5517…`, selftest 28/28 on the box.
+##      ✅✅ **6. OWNER DECISION 2026-09-16 (session 84): NO DEPLOY BEFORE THE 25th.** Chosen from options
+##      put to him (no deploy / deploy before the 25th / drop the inversion). ▶ The first CommunityWallet
+##      distribution runs on V8.52 (bytecode-verified fixed divisor, 62.57-era `cw_bytecode_diff.js`).
+##      The V8.54 inversion is proven on a private chain and BUNDLED into a later release. The redeploy's
+##      effect on the CommunityWallet (62.60 step 5) is still owed before that release, not before the 25th.
+##      Supersedes 62.60 item 4's "deploy before the 25th if we have a working solution".
 ##      ▶ **NEXT, IN ORDER:** (a) scp the corrected checker. (b) measure who pays the self-rescues on
 ##      T2.2B/T3.2B (wallet census vs the rr_keeper/stress key set). (c) re-state the release scope to
 ##      the owner: inversion only; decide deploy-before-the-25th on that. (d) 62.60 step 5 (what a
