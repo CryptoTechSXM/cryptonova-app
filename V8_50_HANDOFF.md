@@ -2341,6 +2341,26 @@ owner-set, and the session that earned it got five things wrong by ignoring what
 ##      fix test-first in the V8_54 fixture, ship both in ONE redeploy; timing vs the 25th's first
 ##      CommunityWallet distribution is his. ⚠ Member-facing: "Waiting on T4.x" implies release when
 ##      it fills — item 1 shows that is not true. Revisit the wording before stage 3 to `main`.
+##
+##      ✅✅ **4. OWNER DECISION 2026-09-16: OPTION B.** *"B design a fix and test on private network"*,
+##      *"we can deploy before the 25th if we have a working solution"*. ▶ So the release carries
+##      BOTH the V8.54 stage inversion AND a fix for C1 (later pair full in both halves), proven on a
+##      private chain first. A deploy before the 25th is allowed ONLY with a working, proven fix.
+##      ▶ **PLAN FOR SESSION 84, IN ORDER — measure before building (THE TWO RULES):**
+##      (1) **MEASURE how T1.2 LEFT the both-full state** between the 00:23Z and 16:23Z readings
+##          (events on T1.2 MatA/MatB + T1.x pair manager over that block range). The source reading
+##          says it could not; the chain says it did. **That disagreement is the first finding and may
+##          already show the exit path a fix should use.** Do not design before it is read.
+##      (2) Reproduce C1 in the V8_54 fixture as a FAILING test on current `PairManagerV8.sol` (62.55
+##          item 6 already shows P1/P2 ending 8/8 · 8/8 rot 0 — pin it as an assertion).
+##      (3) Design the fix in the fixture; it must pass C1 AND the inversion tests AND keep the law
+##          `Bocc+Brot=Arot`, SF conservation and the full existing suite green. No configured number.
+##      (4) Private chain (size-15, the V8.52 private pattern), stress fill, `frozen_matrix_check.js`
+##          must read zero C1/C2 over two readings.
+##      (5) ⛔⛔ **BEFORE ANY DEPLOY-BEFORE-THE-25th: MEASURE what a redeploy does to the CommunityWallet**
+##          — 703 enrolled (Genesis 500 / Pioneer 203), `availablePool $20,978.88`, `distributionCount 0`.
+##          If a fresh deploy resets enrollment or strands the pool, that is an owner decision, not a detail.
+
 
 ## 62.59 ✅✅ **2026-09-15 (session 83, part 3): THE RESCUE SCRIPTS NOW HONOUR `rr_keeper.OFF` — LIVE ON
 ##      THE VPS AND PROVEN THERE. `unfreeze_eta.js` DELIBERATELY NOT RE-RUN YET.**
