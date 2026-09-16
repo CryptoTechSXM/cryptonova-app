@@ -2386,6 +2386,11 @@ owner-set, and the session that earned it got five things wrong by ignoring what
 ##      contracts `v8.1 337151b` (+ this note). (a) scp checker DONE. (b) who pays DONE (item 5). (c) scope
 ##      settled by owner (item 6). (e) frontend DONE on admin (item 7) — ⚠ owner has NOT yet eyeballed
 ##      T2.2/T3.2 on the admin Live Stats table; do that before `preview`.
+##      ✅ Owner screenshot (session 84 close): T1.2/T2.2/T3.2 read MatB 126 → "Waiting on T*.4" (not
+##      both-full at that instant, so the new full-both words were not on screen). ⛔ The 'waiting' tooltip
+##      said "is not rotating" — FALSE for those pairs (they turn via own re-entries, item 2). Fixed
+##      Testnet-App `admin` commit after `8156dc9` (see git log). ⚠ The table still cannot tell T4.3 (0 rot,
+##      truly held) from T2.2 (turning) — needs `rotationCount` per pair (+1 RPC each). Open item.
 ##      ▶ **NEXT SESSION, IN ORDER:** (1) owner visual check of `8156dc9` on admin, then preview → main.
 ##      (2) V8.54 inversion on a private size-15 chain (V8.52 private pattern), WITH the MatrixKeeper
 ##      wired — 62.55's rig had none, which is exactly what produced the false C1. Pass = zero C2 on
