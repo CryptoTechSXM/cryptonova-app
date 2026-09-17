@@ -2325,8 +2325,39 @@ owner-set, and the session that earned it got five things wrong by ignoring what
 ##      `set_graduation.js` ENABLE=true ON, block 46922380 → **`postdeploy_check.js` 5 PASS, VERDICT ALL PASS.**
 ##      ⚠ Loose ends seen, parked: 13 untracked `Test Sept 9*.png` in the repo root; `v853_private_deploy_transcript.txt`
 ##      has 21 uncommitted lines of an owner push paste appended (not part of the V8.53 run).
-##      ▶ **NEXT:** 62.62 item 3 — keeper sandbox on the VPS (`/root/keeper_private/` pattern) + fill + two
-##      `frozen_matrix_check.js` readings. Then Noah's T5 debt re-run after 09-17 14:08Z (expect ≈ $103.83).
+##      ✅ **62.62 item 3 STARTED — NEW sandbox `/root/keeper_private_v854/` (NOT the old `/root/keeper_private/`, which
+##      is left untouched as the V8.52 record: its caches — rr_keeper_state, rescue_index_map, pool_primer states — and its
+##      Sept-4 scripts are stale).** Nothing runs from the old folder (measured via `/proc/*/cwd`; the earlier `PROCS 2`
+##      was grep matching its own ssh command line).
+##      - Files scp'd from keepers `a82eea7`, md5 matched on the box: direct_keeper `985c286d`, frozen_matrix_check
+##        `5ceac010`, keeper_env `c0b9cd39`, alert_log `d35e5ce2`, alert_throttle `d242edc7`, keeper_gas_floor `3bea9f93`,
+##        rr_keeper `9f7f1360`, pool_primer `9c75bf2b`, pair_saturation `cd1ef172`; book `aa8046b5` (= PC). node_modules
+##        symlinked to /root/keeper.
+##      - `.env` = `cp -n` of the old sandbox .env, then `sed -i` ON THE COPY (no redirect — R13): ADDRESSES_FILE → v8_54
+##        private; `TELEGRAM_*` renamed `DISABLED_TELEGRAM_*`; **`ALERTS_FILE=/root/keeper_private_v854/alerts.jsonl`**
+##        (⛔ alert_log.js defaults to /root/keeper/alerts.jsonl — without this the sandbox pollutes the LIVE alert log).
+##        Live `/root/keeper/.env` 4348 bytes, untouched. RPC thrilling-newest-seed works.
+##      - ⛔⛔ **NONCE LANDMINES, NAMED BEFORE RUNNING:** (a) the sandbox `direct_keeper.js` signs with the SAME keeper EOA
+##        `0xd419…` as the live one → it must NOT get its own cron; run it by hand under the live lock
+##        `flock /tmp/run_work_queue.lock` (blocking, not -n) so the two never send at once. (b) pool_primer signs with the
+##        DEPLOYER, which live jobs also use. MEASURED after priming: no nonce error in /root/keeper/*.log inside our
+##        03:56-04:00Z window. ⚠ But live **job B shows `replacement fee too low` ~every 45 min** (01:03, 01:48, 02:33,
+##        03:13 ×2 on 09-17) — pre-existing, NOT caused by the sandbox, parked.
+##      - Wallets: **child@700000** (never used on this box; ranges seen: 300xxx, 400000, 500000, 600000, std_0). Primed
+##        700000..700019, 20/0 failed, 12 s each (4.0 min — budget 240 s, so prime ≤20 per call).
+##      - **FILL SO FAR (pair_saturation, book v8_54_private):** baseline T1.1 MatA 1/15 (W1). Chunk 1 `ONLY=A MAX_REG=14
+##        POOL_OFFSET=700000 POOL_SIZE=20` → **MatA 15/15 rot 0, MatB 0/15, parks 0**. Edge step `MAX_REG=1` → **MatA 15/15
+##        rot 1, MatB 1/15, parks 0** — identical to V8.52 private at the same point. Pool cursor 15/20.
+##      - ⚠ **INSTRUMENT DEFECT, frozen_matrix_check rule B:** read 2 printed `STARVED MatB (CONFIRMED)` although read 1
+##        (03:54Z) had MatA at 1/15 — B's "same reading twice" compares MatB occupancy only, not whether MatA was full
+##        before. C1 got the delta fix in session 84; B did not. Fix + selftest fixture later; PASS for this test is C2.
+##      - ⚠ Recipe gotchas: `pair_saturation.js` does NOT load .env → pass `ADDRESSES_FILE=` inline (it then reads via
+##        public sepolia.base.org). Pipe through `sed -u`, not `sed` — plain sed buffers over ssh and hides progress.
+##      ▶ **NEXT, IN ORDER:** (1) re-run Noah's `diag_member_debt.js` after 09-17 14:08Z (expect ≈ $103.83). (2) continue
+##        the fill: prime next 20 at `HDR_OFFSET=700020` (POOL_SIZE → 40), register in chunks with a pair_saturation read
+##        each; step every edge alone (T1.1 MatB 15/15, T1.2 spawn at 90%). (3) start running the sandbox direct_keeper by
+##        hand under the live flock once MatB has members to force-rotate/rescue; the capture scenario needs later pairs
+##        full-and-waiting. (4) PASS = two frozen_matrix_check readings with zero C2 + law Bocc+Brot=Arot exact.
 
 ## 62.62 ✅✅✅ **2026-09-16/17 (session 85): FRONTEND LIVE ON ALL DOMAINS · V8.54 INVERSION IN PRODUCTION SOURCE
 ##      (703/0) · PRIVATE V8.54 CHAIN DEPLOYED (NOT YET SET UP) · NOAH'S TICKET MEASURED, REPLY DRAFTED.**
