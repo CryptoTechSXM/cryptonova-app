@@ -2459,9 +2459,26 @@ owner-set, and the session that earned it got five things wrong by ignoring what
 ##        held cycle-out earnings (the parked one at 46953420 was credited $2.93 and was still $2.01 short).
 ##        **Do not write the mechanism down until it is decoded** — `diag_block_events.js` over the chunk's block
 ##        range would name the events. PARKED, deliberately: it does not block the fill.
-##      ▶ **REVISED ARITHMETIC: ~0.3 T1.2 seats per REGISTRATION directly, plus ~0.5 per RESCUE of the parks it
-##        creates — so roughly 6-7 seats per 10 registrations, not 3.** T1.2 needs 8 more (7→15). 16 primed
-##        wallets left (44/60); next prime `HDR_OFFSET=700060`. Fund ~$190 against ~$2-5 a rescue.
+##      ▶ **ARITHMETIC AS OF RUN 7: T1.2 MatA 13/15 — TWO SEATS SHORT. 1 parked, fund ~$166.84 (unread since;
+##        read it, do not carry it forward — the +$0.90 above is why). 16 primed wallets left (pool 44/60);
+##        next prime `HDR_OFFSET=700060`.**
+##      ✅ **KEEPER RUN 7 (DRAIN_MAX_TICKS=10, 22:31Z): backlog cleared in 8 ticks. 7 RESCUES, $23.12 lent**
+##        ($1.25, $0.47, then five at exactly $4.28; lifetime $29.84 → $52.97, which reconciles to the cent),
+##        plus one non-rescue tx 46958011 (452,676) "force-cross / distribution, active_cycles=15".
+##        AFTER: MatA rot 35→36 · MatB occ 15/15 rot 20→21 · parked 7 → 1 · **T1.2 MatA 7 → 13.**
+##        Law 15+21=36 exact. Reconciles: 6 of the 7 rescues overflowed to T1.2; the 7th re-entered pair 0's
+##        MatA (rot +1), its displaced root crossed into the full MatB, which rotated (rot +1) and parked the
+##        member it cycled out — the single new park.
+##      ⛔⛔ **CLAUDE WAS WRONG, AND THE ERROR IS WORTH MORE THAN THE NUMBER: "THE OVERFLOW RATE IS EXACTLY HALF"
+##        DOES NOT HOLD.** It was called a measured rate off THREE consistent samples (4→2, 2→1, 2→1 = 50%).
+##        Run 7 is **7 → 6 = 86%**, and the prediction written before it ("T1.2 7 → 10 or 11") was wrong by 2-3
+##        seats. ▶▶ **THREE AGREEING SAMPLES ARE STILL NOT A RATE.** The owner's rule says one sample is not a
+##        measurement; this is the same rule one step further out — a ratio that has not been derived from the
+##        code or varied deliberately is a tally, not a law. **What actually governs which way a rescue goes is
+##        UNMEASURED** (the five identical $4.28 advances suggest a shared shortfall class; do not write that
+##        down as the cause). ▶ To settle it: `diag_block_events.js` over 46958011..46958032, where all 7
+##        rescues and their routing events sit in one range.
+##
 ##      ⚠⚠ **THE EDGE IS CLOSE — STEP THE LAST SEAT ALONE.** The V8.51 lesson (memory `cryptonova-stress-fill`)
 ##        is that a linear relation measured inside a range says nothing about its edge: the final seat there
 ##        produced a cascade of +3 MatA rotations, +2 MatB rotations and the first T1.2 seat. **Do not close
