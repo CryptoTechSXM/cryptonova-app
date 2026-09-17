@@ -2479,6 +2479,36 @@ owner-set, and the session that earned it got five things wrong by ignoring what
 ##        down as the cause). ▶ To settle it: `diag_block_events.js` over 46958011..46958032, where all 7
 ##        rescues and their routing events sit in one range.
 ##
+##      ✅ **EDGE STEP 1 — ONE TICK, ONE ITEM (DRAIN_MAX_TICKS=1, 22:42Z): T1.2 MatA 13 → 14.**
+##        tx block 46958337, 991,457 gas, rescue $4.28 (lifetime $52.97 → $57.25). **FULLY DECODED, 34 logs:**
+##        RescueLoanIssued $4.28 forceCrossKeeper → MemberCrossedToPartner → **RescueOverflowed fromPair 0
+##        toPair 1** → MemberEntered **bfsPosition 14** → MemberRouted pairId 1 → ParkedRescued. The $10 entry
+##        split: $0.25 self · $0.50 accountOne · 3×$0.27 chain pay · $0.50 treasury · **$0.30 back to the SF** ·
+##        $0.03 buyback · $0.03 liquidity · $0.20 dev · $0.05 ops · 50 CNOVA minted.
+##        ▶ **NO `MemberParked` IN THE TX.** A rescue-overflow does not park anyone.
+##      ⛔⛔ **INSTRUMENT DEFECT, MEASURED TWICE NOW: `pair_saturation.js` READS AT MIXED BLOCK HEIGHTS AND ITS
+##        PARKED COUNT CAN BE STALE.** After the rescue it printed `T1.1 MatB parked 1` while
+##        `diag_parked_verdict` (QuickNode, block 46958790) read **0 parked** minutes later, and the tx decode
+##        confirms nothing was parked. Note its own header said `blocks …..46958336` — one block BEFORE the
+##        rescue at 46958337 — yet its T1.2 occupancy (14) was POST-rescue. **So different reads inside one run
+##        came from different heights.** Same family as 62.64's 12:12Z public-vs-QuickNode disagreement, and it
+##        is the second sighting.
+##        ▶ **WHY IT MATTERS BEYOND A MISCOUNT: the law check Bocc+Brot=Arot is computed from several reads.**
+##        It has held at every reading so far, but a census whose numbers come from different block heights
+##        cannot GUARANTEE that — it has been lucky, not sound.
+##        ▶ FIX SHAPE, NOT MADE: read the head once and pin every call to that blockTag; print it. It does not
+##        load `.env` (62.63) so it runs on public `sepolia.base.org`, which is load-balanced — the mechanism
+##        (round-robin across nodes at different heights) is a CANDIDATE, **UNMEASURED**.
+##        ⚠ **CLAUDE'S MISS: the stale height was VISIBLE in the tool's own header and was read past.**
+##      ✅ **NON-FINDING, CHECKED BEFORE IT WAS ANNOUNCED:** the decode shows `StabilityFund` emitting
+##        **`FundDeposit` for the $4.28 it was PAYING OUT** (StabilityFund.sol:667 does exactly that). Any
+##        instrument summing FundDeposit as income would overstate the fund by every rescue ever made — which
+##        would land on the G2/solvency mainnet gate. **`sf_trajectory.js` ALREADY documents this as "TRAP 1"
+##        and reclassifies it with sign −1.** A previous session found and handled it. No action.
+##      ✅ **STATE AT THE EDGE (block 46958790): T1.2 MatA 14/15 · T1.2 MatB 0/15 · T1.1 MatA 15/15 rot 36 ·
+##        MatB 15/15 rot 21 · PARKED 0 · fund $173.05, floor $0.** The last seat must therefore come from a
+##        REGISTRATION, not a rescue — there is nobody parked to rescue.
+##
 ##      ⚠⚠ **THE EDGE IS CLOSE — STEP THE LAST SEAT ALONE.** The V8.51 lesson (memory `cryptonova-stress-fill`)
 ##        is that a linear relation measured inside a range says nothing about its edge: the final seat there
 ##        produced a cascade of +3 MatA rotations, +2 MatB rotations and the first T1.2 seat. **Do not close
