@@ -2447,7 +2447,7 @@ owner-set, and the session that earned it got five things wrong by ignoring what
 ##        self-rescue? clawback?) is NOT measured; diag_member_events was built but not run. Ticket is closed; parked.
 ##
 ##      ▶▶ **SESSION 87 STATE AT CLOSE (private V8.54, book v8_54_private):** clocks parkedGrace 300s / evictionGrace 0 · SF floor
-##        $0 · SF ≈$194 after 2 more rescues · T1.1 MatA 15/15 rot 24 · MatB 15/15 rot 9 · **T1.2 MatA 3/15**, MatB 0/15 ·
+##        $0 · SF $202.04 before run 4, $8.23 lent in it, NOT re-read after · T1.1 MatA 15/15 rot 24 · MatB 15/15 rot 9 · **T1.2 MatA 3/15**, MatB 0/15 ·
 ##        pool cursor 34/60 (primed 700000..700059; next prime HDR_OFFSET=700060) · frozen_matrix_check 6 readings, all
 ##        C2 = 0 · law exact at every read. Keeper run BY HAND ONLY, under `flock -w 480 /tmp/run_work_queue.lock`, hex-64 blanked.
 ##      ▶▶ **NEXT, IN ORDER (session 88):**
