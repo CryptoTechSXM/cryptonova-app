@@ -2409,6 +2409,15 @@ owner-set, and the session that earned it got five things wrong by ignoring what
 ##      ⛔ **INSTRUMENT DEFECT: `diag_parked_verdict.js` printed "RESCUE · eligible now" with spendable $0.00** — it mirrors
 ##        loanEligibleFor but not the stabilityFloor check. Same gap as the contract's triage. The owner-requested member
 ##        countdown (62.62) must NOT copy it.
+##      ✅ **Private SF floor $100 → $0** (`set_stability_floor.js 0`, tx 0xc1c2493e…, read-back OK on read 2). Spendable $17.10
+##        vs 5 RESCUEs needing $21.66 — expect the queue to move then meet the NEXT refusal reason.
+##      ✅✅ **SANDBOX KEEPER RUN 3, 13:15Z (floor $0, DRAIN_MAX_TICKS=8) — QUEUE UNBLOCKED:** 6 txs, "backlog cleared in 6 tick(s)".
+##        blocks 46941307 (1.73M, ParkedRescued $4.81) · 310 (484,876, ?) · 313 (1.71M, rescued $3.56) · 316 (1.10M, $4.30) ·
+##        319 (953,868, $4.19) · 321 (95,214, "non-rescue work"). **4 rescues, $16.86 lent.** Fund $17.10 → $2.04.
+##        AFTER: parked 2 — `0x433e9E…471C` RESCUE $4.80 "eligible now" with spendable $2.04 (⚠ likely the next block) and
+##        NEW park `0xD93005…F60c` $3.43. FLOOR member `0x951095…cED4` no longer parked (evicted? — decode).
+##        **T1.1 MatA rot 21→23, MatB rot 7→8 occ 15/15. ✅ T1.2 MatA 0 → 2/15 — FIRST SEATS IN THE LATER PAIR.**
+##        Law T1.1 Bocc 15 + Brot 8 = 23 = Arot exact. frozen_matrix_check reading 5: PASS.
 ##      ▶ **FILL PAUSED HERE ON PURPOSE (session 87):** nothing moves toward T1.2 for 24h; more registrations only add parks.
 ##      ▶ **NEXT, IN ORDER:** (1) after 14:08Z 09-17: Noah `diag_member_debt.js` re-run (expect ≈ $103.83).
 ##        (2) **after ~12:35Z 09-18:** sandbox direct_keeper by hand under the flock (DRAIN_MAX_TICKS=3) → diag_parked_verdict
