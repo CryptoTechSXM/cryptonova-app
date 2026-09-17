@@ -2363,6 +2363,9 @@ owner-set, and the session that earned it got five things wrong by ignoring what
 ##      ▶ **OWNER CALLS OWED:** (a) $1 bounty — Claude recommends yes (clarity defect); (b) his question
 ##      "should any tier's balance cover any re-entry" = contract + economic change, NOT promised in the reply.
 ##      ⛔ Ticket stays OPEN until the owner sends the reply. DO NOT BULK-CLOSE.
+##      ✅ **UPDATE, same night: OWNER SENT THE REPLY.** (b) decided: *"not necessary to go on the list"* —
+##      cross-tier re-entry coverage is NOT a backlog item. (a) bounty still unanswered. Ledger row still open:
+##      close it next session through the normal single-ticket path (see memory `cryptonova-bug-ledger`), one row only.
 ##
 ##      ⚠ **5. FOUND IN THE SAME READOUT, PARKED (owner's economic call, param 59):** T5 at 02:02Z — **47 FLOOR
 ##      refusals with debt $0.00**, advances $125.81–$147.79 against the $125 ceiling (50% of fee), many under $1
