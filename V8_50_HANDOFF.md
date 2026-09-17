@@ -2310,7 +2310,7 @@ owner-set, and the session that earned it got five things wrong by ignoring what
 ##      `cryptonova-sf-solvency` rather than growing it further. **This handoff needs the same treatment —
 ##      split or condense it, and a few large edits beat many small trims.**
 
-## 62.64 ⏳ **2026-09-17 (session 87, IN PROGRESS): PRIVATE V8.54 FILL TO T1.1 FULL-IN-BOTH-HALVES.**
+## 62.64 ✅ **2026-09-17 (session 87): PRIVATE V8.54 FILL TO T1.1 FULL-IN-BOTH-HALVES.**
 ##
 ##      ▶ SESSION-START BUG CHECK: 0 open (origin/data `2833045`, 111 resolved). VPS unreachable from device shell → owner-run blocks.
 ##      ▶ Item 1 (Noah debt re-run) deferred: it was 12:02Z, rescue eligible only after 14:08Z.
@@ -2443,6 +2443,25 @@ owner-set, and the session that earned it got five things wrong by ignoring what
 ##        $100, spendable $7,390.46). ▶ **DISAGREES with 09-17 02:05Z ($23.83 debt, T5 RESCUE due +$80 → expected ≈$103.83,
 ##        T1 LADDER refusal eviction ~09-21).** Not explained. Instrument built: `scripts/diag_member_events.js` (md5
 ##        21aa7ec0) — every INDEXED event naming the member, no address filter, decoded. Run FROM=46910000 on v8_52.
+##        ✅ **OWNER: "he did self rescue"** — accounts for the cleared parks. ⚠ How the $23.83 T4 debt reached $0 (repaid by the
+##        self-rescue? clawback?) is NOT measured; diag_member_events was built but not run. Ticket is closed; parked.
+##
+##      ▶▶ **SESSION 87 STATE AT CLOSE (private V8.54, book v8_54_private):** clocks parkedGrace 300s / evictionGrace 0 · SF floor
+##        $0 · SF ≈$194 after 2 more rescues · T1.1 MatA 15/15 rot 24 · MatB 15/15 rot 9 · **T1.2 MatA 3/15**, MatB 0/15 ·
+##        pool cursor 34/60 (primed 700000..700059; next prime HDR_OFFSET=700060) · frozen_matrix_check 6 readings, all
+##        C2 = 0 · law exact at every read. Keeper run BY HAND ONLY, under `flock -w 480 /tmp/run_work_queue.lock`, hex-64 blanked.
+##      ▶▶ **NEXT, IN ORDER (session 88):**
+##        (1) bug check. (2) Continue the loop to put T1.2 into full-and-waiting: chunk registrations (5) → sandbox keeper
+##            (DRAIN_MAX_TICKS 8) → pair_saturation + frozen_matrix_check; decode any surprise with diag_block_events.js.
+##            T1.2 fills only via rescue overflow (measured) — watch SF balance, top up with topup_sf.js if <$20.
+##            PASS = T1.2 MatA 15/15 AND it rotates (C2 stays 0 over two readings) + law exact for BOTH pairs.
+##        (3) Write the failing test FIRST for the stabilityFloor head-of-line block (triage must ask spendable, not only
+##            loanEligibleFor), then the fix in MatrixKeeperLib._triageParked; measure live V8.52 exposure (read-only).
+##        (4) diag_parked_verdict.js: add the stabilityFloor/spendable check (it said RESCUE with $0 spendable, twice).
+##        Parked: T1.2 creation block; FUNDING-park rate (most MatB rotations park); checker rule A/B "previously read" text;
+##        direct_keeper DRAIN double log line; topup_sf.js stale default + no-retry read-back; decoder CNOVA $ hint (fixed
+##        in diag_member_events only); sandbox .env CRLF; 5 live-job `replacement fee too low` (62.63).
+##        Owner calls still open: none new. Push pending at time of writing — see chat.
 ##      ✅ diag_block_events.js now clamps TO to the chain head (a range past head printed 319 false UNREADABLE lines). md5 bde76d40.
 ##      ▶ **FILL PAUSED HERE ON PURPOSE (session 87):** nothing moves toward T1.2 for 24h; more registrations only add parks.
 ##      ▶ **NEXT, IN ORDER:** (1) after 14:08Z 09-17: Noah `diag_member_debt.js` re-run (expect ≈ $103.83).
