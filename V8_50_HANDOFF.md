@@ -2389,11 +2389,37 @@ owner-set, and the session that earned it got five things wrong by ignoring what
 ##          with an EXPOSED / NOT-EXPOSED verdict instead of leaving it to the reader.
 ##
 ##      ── STILL OPEN ────────────────────────────────────────────────────────────
-##      ⛔ **LIVE V8.52 EXPOSURE IS STILL UNMEASURED — it needs the owner's PC, and it is ONE read-only block:**
-##        `cd C:\CryptoNite-Smart-Contracts\CryptoNova` · `$env:ADDRESSES_FILE="deployed_addresses_v8_52.json"` ·
-##        `node scripts/diag_keeper_queue.js`. Last known live figures (09-17 14:05Z): fund $7,490.46, floor
-##        $100, spendable $7,390.46 — **so exposure is LATENT, not active, and that is an expectation, not a
-##        reading.** Run it and record the verdict line.
+##      ✅ **LIVE V8.52 EXPOSURE — MEASURED 2026-09-17 ~19:25Z, block 46953013, QuickNode, owner's PC.**
+##        `StabilityFund 0x15167d0e…` **balance $6,751.26 · stabilityFloor $100.00 · SPENDABLE $6,651.26.**
+##        `checkUpkeep` → **1 item: FORCE_ROTATE tier 1 `0xBD552a…585D` → simulated OK.**
+##        → **✅ NOT EXPOSED AT THIS BLOCK. The defect is real on live V8.52 and nothing is sitting in it.**
+##        ⚠ **SAY WHAT THIS DOES NOT SHOW: live ships `maxItemsPerUpkeep = 1`, so checkUpkeep returns the HEAD
+##        of the queue and nothing else.** A FORCE_ROTATE at the head proves no parked rescue is ahead of it;
+##        it says nothing about what is behind it. The finding rests on the SPENDABLE figure, not the queue.
+##        ⚠ The prediction written before the run was $7,490.46 (the 14:05Z reading). Measured $6,751.26 —
+##        **the fund fell ~$739 in ~5h**, which is the fund lending, not an error. Do not carry a balance forward.
+##
+##      ── TWO THINGS FOUND WHILE CHECKING WHETHER ANYTHING WATCHES THIS ───────────────────────
+##      ⛔⛔ **`sf_floor_watchdog.js` CANNOT SEE THIS DEFECT, BY CONSTRUCTION. THERE IS A BLIND BAND.**
+##        It fires on `totalBalance < stabilityFloor` — the fund fully UNDER its floor. The head-of-line block
+##        bites at `spendable < advance`, i.e. while the balance is still **ABOVE** the floor by less than one
+##        advance. ▶ **The whole band `[ floor , floor + advance ]` is invisible to the only instrument aimed at
+##        this number**, and on T1 that band is about $10 wide (crossingCost, buffer 0). Not a bug in the
+##        watchdog — it was built for the PAUSE decision (P2), not for this — but nothing else is looking.
+##        ▶ SHAPE OF THE FIX, NOT MADE: a WARN tier below the pause tier, thresholded on the LARGEST tier entry
+##        fee read from the chain rather than on a number anybody typed. Alert only; the pause condition is a
+##        policy call and stays the owner's.
+##      ✅ **LOOSE END CLOSED, NOT WORKED AROUND: `sf_floor_watchdog.state.json` in the keepers repo reads
+##        `lastAlert: "paused"` with tx `0x579b7eb8…` — and that is NOT a live pause.** It is the residue of the
+##        09-09 V8.53 PRIVATE-chain proof run from the PC (block 46571871), which the owner then unpaused with
+##        `pause_control.js` (`0x6d4d078d…`, block 46571938). Both are already recorded at 62.3x.
+##        ⛔ **BUT IT IS A LIVE TRAP FOR THE INSTALL: the state file is COMMITTED, and the script's recovery
+##        branch fires when `!below && lastAlert ∈ {below, paused}`. Install it on a healthy new chain and its
+##        FIRST tick sends "✅ Stability Fund back above floor" — a recovery alert for a recovery that never
+##        happened, on a different chain.** ▶ Fix shape: scope the state to `chainId` + SF address and ignore
+##        state that does not match. ⚠ Also still true (62.3x, measured 09-10): the watchdog is **NOT on the
+##        VPS and has no cron line** — correct for V8.52, which has no pauser role, and an INSTALL step for
+##        mainnet, not a build step.
 ##      ▶▶ **NEXT, IN ORDER (session 89):**
 ##        (1) bug check. (2) The live-exposure block above. (3) **Resume 62.64 item 2** — the private V8.54 loop
 ##            to put T1.2 into full-and-waiting: chunk 5 registrations → sandbox `direct_keeper` under
@@ -2402,7 +2428,10 @@ owner-set, and the session that earned it got five things wrong by ignoring what
 ##            $0 and its SF was $202.04 before run 4 and NOT re-read — read it before the first run.**
 ##            PASS = T1.2 MatA 15/15 AND it rotates (C2 zero over two readings) + law exact for BOTH pairs.
 ##        (4) **The V8.55 contracts are NOT deployed anywhere.** They are source-only and green. Deciding whether
-##            they ride the next redeploy is the owner's call, not a code question.
+##            they ride the next redeploy is the owner's call, not a code question. ▶ Until they do, the live
+##            chain's only protection against the head-of-line block is a human noticing, so (5) matters.
+##        (5) `sf_floor_watchdog.js`: chain-scope the state file, and add the WARN tier for the blind band above.
+##            Offline-testable in full (the repo's `*.selftest.js` pattern); no chain access needed to build it.
 ##        Parked, unchanged from 62.64: T1.2 creation block; the FUNDING-park rate (most MatB rotations park);
 ##        `frozen_matrix_check` rule A/B "previously read the same way" text; `direct_keeper` DRAIN double log
 ##        line; `topup_sf.js` stale `v8_47` default + no-retry read-back; decoder CNOVA `$` hint; sandbox `.env`
