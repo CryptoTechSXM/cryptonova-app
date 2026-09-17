@@ -83,8 +83,29 @@ async function main() {
   console.log("diag_block_events.js — READ-ONLY. Nothing is signed or sent.");
   console.log(`book ${BOOK} | blocks ${FROM}..${TO} | sender ${SENDER} | rpc host ${new URL(RPC).host} | event ABIs ${TOPICS.size}`);
   console.log("=".repeat(96));
+  // ⛔ CLAMP TO THE CHAIN HEAD. RE-APPLIED 2026-09-17 (session 88) — 62.64 recorded this fix
+  // as done (md5 bde76d40) and it was NOT in the file or in git; the only commit is 8d6935b,
+  // the pre-clamp version. A fix that exists only in a handoff line is not a fix.
+  //
+  // WHY IT MATTERS: a range whose TO is past the head prints one "UNREADABLE — this block is
+  // NOT covered" line per missing block (319 of them, measured), which reads exactly like an
+  // RPC failure over real blocks. A block that does not exist yet and a block we failed to
+  // read are different facts and must not share a message.
+  let head = null;
+  for (let t = 1; t <= 3 && head === null; t++) {
+    try { head = await p.getBlockNumber(); } catch { await new Promise(r => setTimeout(r, 400 * t)); }
+  }
+  let to = TO;
+  if (head === null) {
+    console.log("⚠ could not read the chain head — scanning the full range as given; blocks past the head will read UNREADABLE.");
+  } else if (TO > head) {
+    to = head;
+    console.log(`▶ TO ${TO} is past the chain head ${head} — clamped to ${to}. Blocks ${head + 1}..${TO} do not exist yet and are NOT reported as unreadable.`);
+  }
+  if (FROM > to) die(`FROM ${FROM} is past the chain head ${head} — nothing to scan.`);
+
   let txs = 0, unknownBlocks = 0;
-  for (let b = FROM; b <= TO; b++) {
+  for (let b = FROM; b <= to; b++) {
     let blk = null;
     for (let t = 1; t <= 4 && !blk; t++) { try { blk = await p.getBlock(b, true); } catch { await new Promise(r => setTimeout(r, 400 * t)); } }
     if (!blk) { console.log(`block ${b}: UNREADABLE — this block is NOT covered`); unknownBlocks++; continue; }

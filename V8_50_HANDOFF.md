@@ -2420,6 +2420,59 @@ owner-set, and the session that earned it got five things wrong by ignoring what
 ##        state that does not match. ⚠ Also still true (62.3x, measured 09-10): the watchdog is **NOT on the
 ##        VPS and has no cron line** — correct for V8.52, which has no pauser role, and an INSTALL step for
 ##        mainnet, not a build step.
+##      ── THE PRIVATE V8.54 FILL, SESSION 88 (62.64 item 2 resumed) ────────────────────────
+##      ✅ Baseline re-read 19:5xZ, unchanged from 87's close: MatA 15/15 rot 24 · MatB 15/15 rot 9 parked 1 ·
+##        T1.2 MatA 3/15. Fund **$194.71**, floor $0, spendable $194.71. `diag_parked_verdict` (new build):
+##        1 RESCUE $2.74 eligible now, **HELD 0** — the new verdict does not false-positive on a healthy fund.
+##      ⚠ **PREDICTION vs MEASUREMENT on the fund: expected $193.81 ($202.04 − the $8.23 run 4 lent), measured
+##        $194.71 — +$0.90 UNACCOUNTED.** Candidates: a debt repayment crediting the fund on a cycle-out, or
+##        $202.04 itself being loose. **UNMEASURED and PARKED** — ninety cents on a test chain, but a fund that
+##        gains money nobody booked is the shape that matters at scale.
+##      ✅ **KEEPER RUN 5 (DRAIN_MAX_TICKS=3, 19:58Z) — NO RESCUE HAPPENED, and that was NOT a defect.**
+##        3 txs: 46953418 (290,767) = VelocityGateSet/VelocityUpdated tiers 0-2 · 46953420 (484,876) =
+##        **FrozenMatBRotated → MemberCycledOut `0x5027d6…a504` (cycles 1, rotations 10, PoolDistributed
+##        cycleNumber 10, EarningsCredited $2.93) → MemberParked shortfall $2.01** · 46953423 (70,188) =
+##        VelocityGateOpened tier 1. ▶ At `maxItemsPerUpkeep = 1` each tick takes only the HEAD; velocity and the
+##        force-rotation were legitimately ahead of the rescue. `diag_keeper_queue` then showed the head was
+##        **PARKED_RESCUE `0x986126…3002`, simulated OK** — so verdict tool and discovery AGREE. Both right.
+##        ⚠ **The 484,876-gas shape is now confirmed three times as "rotate MatB + park".** Useful, but gas shape
+##        is a guess until the events say so — that is what 62.64 got caught on.
+##      ✅ **KEEPER RUN 6 (DRAIN_MAX_TICKS=8, 20:08Z): backlog cleared in 2 ticks.** 46953716 (1.71M) rescued
+##        `0x986126…3002` $2.74 · 46953719 (0.97M) rescued `0x5027d6…a504` $2.01; lifetime $29.84.
+##        AFTER: MatA rot 24→25 · MatB occ 15/15 rot 10 · **parked 2 → 0** · **T1.2 MatA 3 → 4.** Law 15+10=25 exact.
+##        ▶ **THE TWO RESCUES ARE ATTRIBUTABLE THIS TIME** (62.64 could not attribute them): one overflowed to
+##        T1.2 (+1 seat); the other re-entered pair 0's MatA, forced rot 24→25, and its displaced root took the
+##        MatB seat just vacated — hence MatB occ 14→15 with NO new park.
+##      ✅✅ **OVERFLOW RATE, THREE INDEPENDENT RUNS, SAME NUMBER: run 3 = 4 rescues → 2 seats · run 4 = 2 → 1 ·
+##        run 6 = 2 → 1. EIGHT RESCUES, FOUR T1.2 SEATS. Exactly half.**
+##
+##      ⛔⛔⛔ **CORRECTION TO 62.64, AND IT IS THE FINDING OF THIS ROUND: "T1.2 FILLS ONLY VIA RESCUE OVERFLOW"
+##        IS FALSE. IT ALSO FILLS BY GRADUATION AT CYCLE-OUT, WITH NO KEEPER RUN AT ALL.**
+##        Chunk `FORCE_RUN=1 ONLY=A MAX_REG=10 POOL_OFFSET=700000 POOL_SIZE=60` (20:16Z, 39.9 s of a 170 s budget,
+##        10/10 registered, pool 34 → **44/60**). **NO keeper ran between the two reads.** Result:
+##        MatA rot 25→35 (+10) · MatB rot 10→20 (+10) · MatB occ 15/15 · **parked 0 → 7** ·
+##        **T1.2 MatA 4 → 7 (+3).** Law 15+20=35 exact.
+##        ▶ **10 MatB rotations produced 7 funding parks and 3 SEATS IN T1.2** — three cycled-out members could
+##        afford their own re-entry and were routed FORWARD. 62.64's claim was measured in a window where every
+##        MatB rotation parked; it was true of that window and not of the mechanism.
+##        ⚠ **WHY THOSE THREE COULD AFFORD IT IS UNMEASURED.** Plausible: they had completed a full figure-8 and
+##        held cycle-out earnings (the parked one at 46953420 was credited $2.93 and was still $2.01 short).
+##        **Do not write the mechanism down until it is decoded** — `diag_block_events.js` over the chunk's block
+##        range would name the events. PARKED, deliberately: it does not block the fill.
+##      ▶ **REVISED ARITHMETIC: ~0.3 T1.2 seats per REGISTRATION directly, plus ~0.5 per RESCUE of the parks it
+##        creates — so roughly 6-7 seats per 10 registrations, not 3.** T1.2 needs 8 more (7→15). 16 primed
+##        wallets left (44/60); next prime `HDR_OFFSET=700060`. Fund ~$190 against ~$2-5 a rescue.
+##      ⚠⚠ **THE EDGE IS CLOSE — STEP THE LAST SEAT ALONE.** The V8.51 lesson (memory `cryptonova-stress-fill`)
+##        is that a linear relation measured inside a range says nothing about its edge: the final seat there
+##        produced a cascade of +3 MatA rotations, +2 MatB rotations and the first T1.2 seat. **Do not close
+##        T1.2 MatA 14→15 inside a chunk.**
+##      ✅ **INSTRUMENT, RE-APPLIED NOT RE-RECORDED: `scripts/diag_block_events.js` head clamp.** 62.64's closing
+##        line records it as done at md5 `bde76d40`; **it was not in the file and not in git** (single commit
+##        `8d6935b` = the pre-clamp build, md5 `bcfcabad`, which is what was on disk). Lost at session 87's end.
+##        Re-applied, md5 now `c62e3ae9`; blocks past the head are named as not-yet-existing instead of printing
+##        as UNREADABLE, which is a different fact. ▶▶ **A FIX THAT EXISTS ONLY IN A HANDOFF LINE IS NOT A FIX.
+##        When a handoff claims an md5, CHECK IT.**
+##
 ##      ▶▶ **NEXT, IN ORDER (session 89):**
 ##        (1) bug check. (2) The live-exposure block above. (3) **Resume 62.64 item 2** — the private V8.54 loop
 ##            to put T1.2 into full-and-waiting: chunk 5 registrations → sandbox `direct_keeper` under
