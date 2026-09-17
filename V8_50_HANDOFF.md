@@ -2366,6 +2366,16 @@ owner-set, and the session that earned it got five things wrong by ignoring what
 ##      ✅ **UPDATE, same night: OWNER SENT THE REPLY.** (b) decided: *"not necessary to go on the list"* —
 ##      cross-tier re-entry coverage is NOT a backlog item. (a) bounty still unanswered. Ledger row still open:
 ##      close it next session through the normal single-ticket path (see memory `cryptonova-bug-ledger`), one row only.
+##      ✅ **(a) BOUNTY: OWNER SAID YES** — record +1 for Noah when closing the row.
+##      ▶▶ **OWNER-REQUESTED FRONTEND ITEM (new, next session after the private-chain work or alongside it):**
+##      *"a countdown to the rescue and or eviction on the members page."* Per parked position, show the keeper's
+##      verdict and a live countdown: RESCUE → "re-seated automatically in Xh Ym (advance $N)"; refused
+##      (LADDER/FLOOR/RATIO) → "released in Xd Yh unless you Self Rescue ($N)". ⛔ Must MIRROR
+##      `diag_parked_verdict.js` (MatrixKeeperLib triage order, every parameter read from chain — parkedGracePeriod,
+##      evictionGracePeriod, rescueRatioBps, ladder rungs, loanEligibleFor) — NO hardcoded 24h/7d/40%. A failed read
+##      shows "—", never a countdown (62.13 / failure-as-zero rule). Selftest slices the shipped function, like
+##      `pair_status_selftest.mjs`. Also say plainly that each tier pays its own re-entry (Noah's confusion).
+##      ⚠ Keeper runs every 10 min with cap 1 — a countdown reaching 0 means "eligible", not "done"; word it so.
 ##
 ##      ⚠ **5. FOUND IN THE SAME READOUT, PARKED (owner's economic call, param 59):** T5 at 02:02Z — **47 FLOOR
 ##      refusals with debt $0.00**, advances $125.81–$147.79 against the $125 ceiling (50% of fee), many under $1
