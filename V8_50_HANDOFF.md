@@ -2443,8 +2443,12 @@ owner-set, and the session that earned it got five things wrong by ignoring what
 ##        $100, spendable $7,390.46). ▶ **DISAGREES with 09-17 02:05Z ($23.83 debt, T5 RESCUE due +$80 → expected ≈$103.83,
 ##        T1 LADDER refusal eviction ~09-21).** Not explained. Instrument built: `scripts/diag_member_events.js` (md5
 ##        21aa7ec0) — every INDEXED event naming the member, no address filter, decoded. Run FROM=46910000 on v8_52.
-##        ✅ **OWNER: "he did self rescue"** — accounts for the cleared parks. ⚠ How the $23.83 T4 debt reached $0 (repaid by the
-##        self-rescue? clawback?) is NOT measured; diag_member_events was built but not run. Ticket is closed; parked.
+##        ✅ **OWNER: "he did self rescue"** — and **MEASURED** with diag_member_events (46910000..46943281, 111 indexed events,
+##        0 failed chunks): **02:10:14Z SelfRescue T1** (paid $6.71 from wallet, withdrawable $3.29 used; RescueOverflowed pair 1
+##        → pair 3) · **02:10:38Z SelfRescue T5** (paid $80.00 from wallet, withdrawable $170 used — so NO SF advance; the
+##        ≈$103.83 expectation never applied) · **13:28:10Z T4 MatA cycle-out repaid the T4 debt automatically:
+##        MemberDebtRepaid $12.60 then $11.23 → newTotal 0.** Debt origin confirmed 09-16 21:44Z coPayRescue $23.83.
+##        ▶ Both readings were right for their time; the disagreement was 12h of member + rotation activity.
 ##
 ##      ▶▶ **SESSION 87 STATE AT CLOSE (private V8.54, book v8_54_private):** clocks parkedGrace 300s / evictionGrace 0 · SF floor
 ##        $0 · SF $202.04 before run 4, $8.23 lent in it, NOT re-read after · T1.1 MatA 15/15 rot 24 · MatB 15/15 rot 9 · **T1.2 MatA 3/15**, MatB 0/15 ·
