@@ -2397,6 +2397,18 @@ owner-set, and the session that earned it got five things wrong by ignoring what
 ##        ⚠ decoder cosmetic: 18-decimal CNOVA "amount" printed with the $/1e6 hint. Parked.
 ##      ✅ BUILT (not yet run): `scripts/diag_keeper_queue.js` — checkUpkeep → decoded WorkItem[] (queue ORDER read from chain)
 ##        + eth_call of each onlySelf worker FROM the MatrixKeeper address → OK or the exact revert reason.
+##      ✅✅ **RUN (block 46941216, md5 00151b67): checkUpkeep → 1 item: PARKED_RESCUE T1.1 MatB 0xc64700…82D8 →
+##        simulated FAILS `revert: SF: below floor`.** Fund balance $17.10 < stabilityFloor $100.00.
+##      ⛔⛔⛔ **CONTRACT DEFECT (measured): a Stability Fund below its floor HEAD-OF-LINE-BLOCKS THE WHOLE KEEPER QUEUE.**
+##        MatrixKeeper.sol ~:970 says discovery (MatrixKeeperLib._triageParked) asks the floor first "so a floor refusal
+##        here should be unreachable". It IS reached: triage asks `loanEligibleFor` (insolvency floor / ceiling), NOT the
+##        `stabilityFloor` spendable check, so the item is queued, fails, is swallowed as WorkItemFailed, stays at the head,
+##        and checkUpkeep returns ONLY that item (items=1) — the other RESCUEs, the due EVICTION and all other work types
+##        behind it never run, one wasted tx per tick. ▶ LIVE V8.52 exposure: any time live SF spendable hits $0 while a
+##        RESCUE-verdict member is parked. UNMEASURED on live. Fix belongs in triage (ask spendable too) — TEST FIRST.
+##      ⛔ **INSTRUMENT DEFECT: `diag_parked_verdict.js` printed "RESCUE · eligible now" with spendable $0.00** — it mirrors
+##        loanEligibleFor but not the stabilityFloor check. Same gap as the contract's triage. The owner-requested member
+##        countdown (62.62) must NOT copy it.
 ##      ▶ **FILL PAUSED HERE ON PURPOSE (session 87):** nothing moves toward T1.2 for 24h; more registrations only add parks.
 ##      ▶ **NEXT, IN ORDER:** (1) after 14:08Z 09-17: Noah `diag_member_debt.js` re-run (expect ≈ $103.83).
 ##        (2) **after ~12:35Z 09-18:** sandbox direct_keeper by hand under the flock (DRAIN_MAX_TICKS=3) → diag_parked_verdict
