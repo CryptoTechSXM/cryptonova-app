@@ -2428,6 +2428,11 @@ owner-set, and the session that earned it got five things wrong by ignoring what
 ##      ✅ **diag_keeper_queue after (block 46941401): upkeepNeeded=FALSE.** 0x433e9E (needs $4.80, spendable $2.04) was NOT
 ##        queued — so triage DOES exclude an insufficient BALANCE; it only misses the stabilityFloor. ⚠ diag_parked_verdict
 ##        still said "RESCUE eligible now" for it — confirms the verdict tool's spendable gap.
+##      ✅ **Private SF top-up $200** (`topup_sf.js`, TOPUP_USDC=200): decoded at block 46941509 — USDC Approval + `receiveLayer`
+##        → **FundDeposit tier 0 $200.00 layer 1**, status OK. ⛔ The script's own "After totalBalance $2.03714" was a STALE READ
+##        (same class as set_parked_grace's old false alarm) — NOT re-run. topup_sf.js still has the stale
+##        `|| "deployed_addresses_v8_47.json"` default and a no-retry read-back: parked.
+##      ✅ diag_block_events.js now clamps TO to the chain head (a range past head printed 319 false UNREADABLE lines). md5 bde76d40.
 ##      ▶ **FILL PAUSED HERE ON PURPOSE (session 87):** nothing moves toward T1.2 for 24h; more registrations only add parks.
 ##      ▶ **NEXT, IN ORDER:** (1) after 14:08Z 09-17: Noah `diag_member_debt.js` re-run (expect ≈ $103.83).
 ##        (2) **after ~12:35Z 09-18:** sandbox direct_keeper by hand under the flock (DRAIN_MAX_TICKS=3) → diag_parked_verdict
