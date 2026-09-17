@@ -2418,6 +2418,16 @@ owner-set, and the session that earned it got five things wrong by ignoring what
 ##        NEW park `0xD93005…F60c` $3.43. FLOOR member `0x951095…cED4` no longer parked (evicted? — decode).
 ##        **T1.1 MatA rot 21→23, MatB rot 7→8 occ 15/15. ✅ T1.2 MatA 0 → 2/15 — FIRST SEATS IN THE LATER PAIR.**
 ##        Law T1.1 Bocc 15 + Brot 8 = 23 = Arot exact. frozen_matrix_check reading 5: PASS.
+##      ✅ **DECODED (diag_block_events 46941305..325):** 307 ParkedRescued c64700 ($4.81, rescueType forceCrossKeeper) →
+##        re-routed pairId 0 into T1.1 MatA, which rotated 0x4fB5Dc into MatB · 310 FrozenMatBRotated → 0xD93005 PARKED
+##        $3.43 · 313 rescued 486BCf $3.56 → pair 0, rotated 0xBeBC18 into MatB · **316 rescued 404aED $4.30 →
+##        `RescueOverflowed fromPair 0 toPair 1` → T1.2 MatA bfs 1** · **319 rescued 0924F5 $4.19 → overflow → T1.2 MatA bfs 2**
+##        · **321 `ParkedMemberEvicted` 951095 totalWithdrawn 0** (eviction clock 0 works).
+##        ▶ Overflow to pair 1 began once T1.1 MatB was full again. Rescue → pair-0 MatA entry → MatA rotation is how a rescue
+##          also turns the first pair.
+##      ✅ **diag_keeper_queue after (block 46941401): upkeepNeeded=FALSE.** 0x433e9E (needs $4.80, spendable $2.04) was NOT
+##        queued — so triage DOES exclude an insufficient BALANCE; it only misses the stabilityFloor. ⚠ diag_parked_verdict
+##        still said "RESCUE eligible now" for it — confirms the verdict tool's spendable gap.
 ##      ▶ **FILL PAUSED HERE ON PURPOSE (session 87):** nothing moves toward T1.2 for 24h; more registrations only add parks.
 ##      ▶ **NEXT, IN ORDER:** (1) after 14:08Z 09-17: Noah `diag_member_debt.js` re-run (expect ≈ $103.83).
 ##        (2) **after ~12:35Z 09-18:** sandbox direct_keeper by hand under the flock (DRAIN_MAX_TICKS=3) → diag_parked_verdict
