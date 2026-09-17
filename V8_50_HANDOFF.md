@@ -2310,6 +2310,80 @@ owner-set, and the session that earned it got five things wrong by ignoring what
 ##      `cryptonova-sf-solvency` rather than growing it further. **This handoff needs the same treatment —
 ##      split or condense it, and a few large edits beat many small trims.**
 
+## 62.62 ✅✅✅ **2026-09-16/17 (session 85): FRONTEND LIVE ON ALL DOMAINS · V8.54 INVERSION IN PRODUCTION SOURCE
+##      (703/0) · PRIVATE V8.54 CHAIN DEPLOYED (NOT YET SET UP) · NOAH'S TICKET MEASURED, REPLY DRAFTED.**
+##
+##      ▶ SESSION-START BUG CHECK: 0 open at start. ⛔ NEW TICKET 2026-09-16 20:17Z — Noah, Rabby
+##      `0x1acc02252bfb5c7434771bf848f6d77d11f60949` (harness_addresses.csv count 0 → real member). STILL OPEN.
+##      ⚠ BUGS.md renders the new ticket ABOVE a stale "_No open issues._" line — cosmetic, not chased.
+##
+##      ✅ **1. FRONTEND (62.61 next item 1) DONE.** Owner eyeballed admin (T2.2/T3.2 "Full — rotating on a timer").
+##      `admin:preview` 93a3f58..734627b, verified on early. by the rescue-note string. `admin:main`
+##      71458d7..734627b — ⛔ that was FOUR commits (5056f05, 93a3f58, 8156dc9, 734627b), not the "two" Claude
+##      said; both extras had been on preview since session 84. Owner screenshot of crypto-nova.app confirms.
+##      All three branches at `734627b`.
+##
+##      ✅✅ **2. V8.54 STAGE INVERSION IN PRODUCTION SOURCE — contracts v8.1 `a0a7484` (pushed).**
+##      `PairManagerV8._overflowTargetFor` = `_fullPairWaitingLongest` first, `_pairWithRoomFor` second.
+##      Control arm now `contracts/test/PairManagerV8_StageLegacy.sol` (V8.53 order); the StageInverted override
+##      was git-mv'd to `archive/`. `V8_54_StageInversion` 16/16 with numbers IDENTICAL to 62.55 (LIVE 0→1 = 1,
+##      7 moved 0 frozen; EARLY 4, 16 seats; whole run 354/178/178 and 264/130/276). Full suite **703 passing /
+##      7 pending / 0 failing** (`suite_session85.txt`, gitignored). No size warning at compile.
+##      ⚠ The fixture STILL has no MatrixKeeper — the keeper is exercised on the private chain (item 3), not here.
+##
+##      ✅ **3. PRIVATE V8.54 CHAIN DEPLOYED — `scripts/deployed_addresses_v8_54_private.json` (commit `9a62dc1`,
+##      ⛔ NOT PUSHED).** Size 15, tiers 1-3, router `0x10464879d55A3aAC6b1CD09e21ebE809DDaCa3ED`, MatrixKeeper
+##      `0x647c385f11a35E7F1fde51206E7020e4184333a3`, deployedAt 2026-09-16T20:17:13Z. Transcripts
+##      `v854_private_deploy_transcript.txt` (attempt 1) + `_2.txt` (attempt 2, OK).
+##      ⛔ **Attempt 1 died on the R17 guard** (101491 pending vs 101490 reached) — Claude skipped GO_LIVE_RUNBOOK
+##      **0.2-PRIVATE** because it copied the V8.53 transcript, which does not show that step. Two orphan contracts
+##      (incl. TierRouterLib `0x70788542…`) left on chain, unrecorded, harmless. Attempt 2 ran after
+##      `touch rr_keeper.OFF system_keeper.OFF` (19:42:17Z) + 5 min; **both .OFF removed 20:26:08Z** (verified).
+##      ▶ **NOT YET DONE on the private chain (the V8.53 transcript order):** `verify_all.js` (verify BEFORE use) →
+##      `verify_gate.js` → `set_upkeep_caller.js` → `set_stability_floor.js --from-t1` → `set_graduation.js`
+##      (CONFIRM_TIER_ROUTER=router above) → `postdeploy_check.js` must be ALL PASS. All with
+##      `$env:ADDRESSES_FILE="deployed_addresses_v8_54_private.json"` set in the SAME window.
+##      ▶ **Then the actual test (62.61 next item 2):** a keeper sandbox on the VPS (V8.52 pattern
+##      `/root/keeper_private/`, own .env with this book, own state files) running **`direct_keeper.js`** (the
+##      performUpkeep driver) + a stress fill. PASS = `frozen_matrix_check.js` zero C2 over two readings + law
+##      `Bocc+Brot=Arot` exact. Nothing member-facing; frontend stays on V8.52. Owner decision stands: no deploy
+##      before the 25th.
+##
+##      ✅✅ **4. NOAH'S TICKET — MEASURED 2026-09-16 20:26Z .. 09-17 02:05Z, book v8_52, VPS.** Instruments:
+##      `diag_member_rescue.js` (md5 `b7891cfd…`), `diag_parked_verdict.js` (md5 `49d5012c…` — ⛔ **had NEVER been
+##      scp'd to the VPS since session 69; copied this session**), NEW `diag_member_debt.js` (md5 `b95aebbc…`,
+##      keepers, scp'd, ⛔ NOT COMMITTED). Wallet holds $28,464 test USDC; allowance $0 to every matrix.
+##      - **T1 pair1 MatB** parked 09-14 14:25Z, withdrawable $3.29 / $10 → **LADDER refusal (32.85% < lowest rung
+##        40%)**, eviction in 4d 12h at 20:30Z ≈ **09-21 ~09:00Z** unless he self-rescues ($6.71 from wallet).
+##      - **T4 pair0 MatB** parked 09-15 21:38Z, $76.17 / $100 → **RESCUED by the keeper after the 24h grace**:
+##        no longer parked at 02:05Z, **SF memberDebt $23.833888** (issuing tier index 3).
+##      - **T5 pair0 MatB** parked 09-16 14:08Z, $170 / $250 → **RESCUE, fund advances $80, eligible ~09-17 14:08Z.**
+##      ▶ Root answer: re-entry is paid from THAT matrix's earnings only; other tiers never cover it — working as
+##      designed, the page does not say so. **Reply drafted in chat (owner voice, Telegram), NOT SENT.**
+##      ▶ **OWNER CALLS OWED:** (a) $1 bounty — Claude recommends yes (clarity defect); (b) his question
+##      "should any tier's balance cover any re-entry" = contract + economic change, NOT promised in the reply.
+##      ⛔ Ticket stays OPEN until the owner sends the reply. DO NOT BULK-CLOSE.
+##
+##      ⚠ **5. FOUND IN THE SAME READOUT, PARKED (owner's economic call, param 59):** T5 at 02:02Z — **47 FLOOR
+##      refusals with debt $0.00**, advances $125.81–$147.79 against the $125 ceiling (50% of fee), many under $1
+##      over; 42 LADDER; 107 RESCUE (fund would advance $9,476.69 of $9,729.60 spendable). T4: 9 FLOOR (all with
+##      existing debt), 7 LADDER, 32 RESCUE. Evictions due 3-7 days out. ⚠ Harness vs organic share NOT measured.
+##      ⚠ Also: T5's 107 rescues would take 97% of spendable SF — worth a look before they fire.
+##
+##      ⚠ **6. PROCESS LESSONS.** (a) PowerShell mangles `\"` and inline `node -e` inside an ssh string — twice
+##      this session. Put logic in a script FILE, scp it, run it; keep ssh strings free of inner double quotes
+##      and `$`. (b) grep a SHORTENED address (`1acc02`), never a longer prefix — the verdict tool prints
+##      `0x1acc02…0949`, so `1acc0225` silently matched nothing. (c) Check `main` separately before saying what a
+##      ladder push carries.
+##
+##      ▶ **NEXT SESSION, IN ORDER:** (0) bug check (Noah's ticket will still be open unless the owner replied).
+##      (1) push contracts `9a62dc1` + this note; commit+push keepers `diag_member_debt.js`. (2) private V8.54
+##      post-deploy steps (item 3 list) → ALL PASS. (3) keeper sandbox + fill + two `frozen_matrix_check.js`
+##      readings. (4) Noah: owner's bounty/design calls; after T5's 14:08Z rescue re-run `diag_member_debt.js`
+##      (expect ≈ $103.83). (5) 62.60 step 5 (redeploy effect on CommunityWallet) before any release; watch the
+##      25th with `cw_cohort_check.js` (ratio 1.5). Parked: item 5, T3.1 law residual, T5.3→T5.4 recapture,
+##      rotationCount-per-pair on the Live Stats table.
+
 ## 62.61 ✅✅✅ **2026-09-16 (session 84): "FULL IN BOTH HALVES" (C1) IS NOT A FREEZE ON THE LIVE CHAIN.
 ##      THE KEEPER TURNS IT. 62.55 ITEM 6 WAS A RIG ARTEFACT (NO KEEPER). THE C1 FIX IS NOT NEEDED.**
 ##
