@@ -2335,8 +2335,26 @@ owner-set, and the session that earned it got five things wrong by ignoring what
 ##      ⚠ direct_keeper log printed BOTH "DRAIN: complete — backlog cleared in 2 tick(s)" AND "tick cap 3 reached" — contradictory
 ##        pair of lines. Also "GAS HALT PRICE REJECTED … estimate 102,918" on each tick (handled: sent 14.8M). Parked.
 ##      ⚠ Which tx did what (240k vs 2.04M) is not decoded.
-##      ▶ NEXT: fill T1.2 to full-and-waiting (30 seats → ≥31 wallets; pool has 11 left, prime at HDR_OFFSET=700040),
-##        stepping every edge alone, sandbox keeper by hand under the flock, frozen_matrix_check after each keeper run.
+##      ✅ Primed child@700040..700059, 20/0 failed, 3.8 min. Pool 700000..700059, POOL_SIZE=60. Next prime HDR_OFFSET=700060.
+##      ✅ **CHUNK MAX_REG=5 (12:30Z) with T1.1 full-both-halves: ALL 5 WENT TO T1.1, NONE TO T1.2.** MatA rot 16→21 (+5),
+##        MatB rot 1→6 (+5), MatB occ 15/15, **MatB parked 5 = FUNDING 5** (NO-SEAT 0). T1.2 still 0/0. Law 15+6=21 exact.
+##        frozen_matrix_check reading 3: PASS. Pool cursor 34/60.
+##      ⛔ **FINDING: every MatB rotation after the first produced a FUNDING park (5 of 6).** Measured, not explained.
+##      ⛔ **CONSEQUENCE FOR THE TEST: registrations do not reach T1.2**, so T1.2 cannot become "full-and-waiting" by
+##        registration alone on this path. Whether keeper rescues of these parks feed T1.2 is UNMEASURED —
+##        next: diag_parked_verdict on the private book (verdict + grace clocks, read from chain).
+##      ✅ **diag_parked_verdict (md5 49d5012c, cp'd into sandbox) 12:33Z, block 46940059:** parkedGrace 1d · evictionGrace 7d ·
+##        rescueRatio 70% · ladder preset 1 lowest 40% · **fund balance $17.10, floor $100, spendable $0.00**, insolvencyFloor 50%.
+##        T1.1 MatB parked 5: **RESCUE 4** (advances $4.19–$4.81, total $18.10, eligible ~09-18 12:30Z) · **FLOOR 1**
+##        (`0x951095…cED4` advance $5.37 > ceiling $5.00, debt $0, eviction ~09-24 12:30Z).
+##      ⛔ **DISAGREEMENT, MEASURE IT, DO NOT EXPLAIN IT: verdict says RESCUE (fund lends $18.10) while spendable is $0.00.**
+##        Only a real keeper run after grace settles what happens. ⚠ The private SF has no organic inflow beyond fills.
+##      ▶ **FILL PAUSED HERE ON PURPOSE (session 87):** nothing moves toward T1.2 for 24h; more registrations only add parks.
+##      ▶ **NEXT, IN ORDER:** (1) after 14:08Z 09-17: Noah `diag_member_debt.js` re-run (expect ≈ $103.83).
+##        (2) **after ~12:35Z 09-18:** sandbox direct_keeper by hand under the flock (DRAIN_MAX_TICKS=3) → diag_parked_verdict
+##        → pair_saturation → frozen_matrix_check. Record: did the 4 RESCUEs execute with spendable $0? did any seat in T1.2?
+##        (3) only then decide how T1.2 reaches full-and-waiting. Parked: T1.2 creation block; FUNDING-park rate 5/6;
+##        checker rule-A/B "previously read the same way" defect; keeper DRAIN double log line; sandbox .env line 9.
 
 ## 62.63 ✅ **2026-09-17 (session 86): NOAH CLOSED · PRIVATE V8.54 CHAIN SET UP — postdeploy_check ALL PASS.**
 ##
