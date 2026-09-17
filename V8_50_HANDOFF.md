@@ -2349,6 +2349,12 @@ owner-set, and the session that earned it got five things wrong by ignoring what
 ##        (`0x951095…cED4` advance $5.37 > ceiling $5.00, debt $0, eviction ~09-24 12:30Z).
 ##      ⛔ **DISAGREEMENT, MEASURE IT, DO NOT EXPLAIN IT: verdict says RESCUE (fund lends $18.10) while spendable is $0.00.**
 ##        Only a real keeper run after grace settles what happens. ⚠ The private SF has no organic inflow beyond fills.
+##      ✅✅ **OWNER DECISION (session 87): "reduce the days into hrs or minutes" on the private test chain.** New
+##        `scripts/set_test_clocks.js` (md5 cee2a42a; refuses non-`_private` books + needs CONFIRM_MATRIX_KEEPER; guards 4/4
+##        refused offline). Run from PC: **parkedGracePeriod 86400 → 300** (tx 0x596dcd0a…, block 46940366, read-back OK) ·
+##        **evictionGracePeriod 604800 → 0** (tx 0xe08d8b98…, block 46940368, read-back OK). Contract minimums: parked 0 or
+##        ≥300s; eviction menu 0 or whole days. SF floor deliberately NOT changed yet (measure the spendable-$0 rescue first).
+##        ⛔ The 24h/9-18 wait below is SUPERSEDED by this.
 ##      ▶ **FILL PAUSED HERE ON PURPOSE (session 87):** nothing moves toward T1.2 for 24h; more registrations only add parks.
 ##      ▶ **NEXT, IN ORDER:** (1) after 14:08Z 09-17: Noah `diag_member_debt.js` re-run (expect ≈ $103.83).
 ##        (2) **after ~12:35Z 09-18:** sandbox direct_keeper by hand under the flock (DRAIN_MAX_TICKS=3) → diag_parked_verdict
