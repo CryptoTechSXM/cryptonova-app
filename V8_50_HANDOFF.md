@@ -2432,6 +2432,17 @@ owner-set, and the session that earned it got five things wrong by ignoring what
 ##        → **FundDeposit tier 0 $200.00 layer 1**, status OK. ⛔ The script's own "After totalBalance $2.03714" was a STALE READ
 ##        (same class as set_parked_grace's old false alarm) — NOT re-run. topup_sf.js still has the stale
 ##        `|| "deployed_addresses_v8_47.json"` default and a no-retry read-back: parked.
+##      ✅ **SANDBOX KEEPER RUN 4, 13:58Z (fund $202.04 read by verdict — the top-up confirmed from a 2nd instrument):**
+##        3 txs, backlog cleared. 46942614 (484,876 — same shape as the earlier FrozenMatBRotated+park txs, NOT decoded) ·
+##        46942617 rescued 0xD93005 $3.43 · 46942620 rescued 0x433e9E $4.80 (lifetime $25.09).
+##        RESULT: **T1.1 MatA rot 23→24, MatB rot 8→9 occ 15/15, T1.2 MatA 2→3/15.** Law 15+9=24 exact. Freeze check 6 PASS.
+##        ⛔ **Claude predicted both rescues would overflow (T1.2 → 4). Measured: ONE did (+1 T1.2) and one went to pair 0
+##        (+1 MatA rotation).** Prediction wrong; which rescue went where is undecoded. Rule 1 reminder.
+##      ⛔⛔ **NOAH (62.62 item 4 re-run), ~14:05Z, LIVE book v8_52:** `diag_member_debt.js` → **SF memberDebt $0.0** (highest
+##        issuing tier 0), and `diag_parked_verdict.js` lists **NO parked position for 1acc02 at all** (fund $7,490.46, floor
+##        $100, spendable $7,390.46). ▶ **DISAGREES with 09-17 02:05Z ($23.83 debt, T5 RESCUE due +$80 → expected ≈$103.83,
+##        T1 LADDER refusal eviction ~09-21).** Not explained. Instrument built: `scripts/diag_member_events.js` (md5
+##        21aa7ec0) — every INDEXED event naming the member, no address filter, decoded. Run FROM=46910000 on v8_52.
 ##      ✅ diag_block_events.js now clamps TO to the chain head (a range past head printed 319 false UNREADABLE lines). md5 bde76d40.
 ##      ▶ **FILL PAUSED HERE ON PURPOSE (session 87):** nothing moves toward T1.2 for 24h; more registrations only add parks.
 ##      ▶ **NEXT, IN ORDER:** (1) after 14:08Z 09-17: Noah `diag_member_debt.js` re-run (expect ≈ $103.83).
