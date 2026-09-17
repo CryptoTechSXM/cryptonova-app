@@ -2359,8 +2359,16 @@ owner-set, and the session that earned it got five things wrong by ignoring what
 ##        did `set -a && . ./.env` before `direct_keeper.js`. The sandbox .env has CRLF endings, so KEEPER_PRIVATE_KEY carried
 ##        a trailing `\r`; dotenv does not override an already-set var; ethers threw `invalid BytesLike` and PRINTED THE VALUE.
 ##        Nothing was sent (crash at `new Wallet`, direct_keeper.js:225; verdict/matrices unchanged after). The key is the
-##        keeper EOA `0xd419…6B4b` used by BOTH the live V8.52 fleet and the private sandbox. ▶ **ROTATE IT** (new EOA →
-##        fund → set_upkeep_caller true on live + private → VPS .env KEEPER_PRIVATE_KEY → set old caller false → drain old).
+##        keeper EOA `0xd419…6B4b` used by BOTH the live V8.52 fleet and the private sandbox.
+##        ✅ **DECISION (owner asked, Claude recommended, owner accepted): DO NOT ROTATE on testnet.** Basis: testnet ETH only;
+##        exposure = owner's terminal + his private chat, not a public channel; the key's only on-chain power is `upkeepCaller`
+##        on the testnet keepers (census below). ▶ **ROTATE AT ONCE IF** the output was ever shared (Telegram/screenshot),
+##        the keeper EOA shows txs we did not send, or its balance drops unexpectedly (topup_keeper already watches it).
+##        ⛔ **HARD RULE: this EOA and key are NEVER used on mainnet.** Mainnet keeper keys are generated on the box with
+##        `gen_keeper_key.js` (keepers repo, md5 547bd1d6 — never prints the key, refuses to overwrite) and never displayed.
+##        Census tool `keeper_key_census.sh` (md5 ee4881af) run 12:58Z: key in /root/.env, /root/keeper/.env, both sandbox
+##        .envs + 19 `.env.bak*` files; cron users direct_keeper, copay_rescue, fastlane_rescue, rr_keeper×3; hardcoded
+##        address in topup_keeper.js:47 and scripts/set_upkeep_caller.js default. Rotation plan R2-R7 kept for mainnet prep.
 ##        ⛔ **RULE: NEVER shell-source a keeper .env (`. ./.env`) in a block. Scripts load it via dotenv. A tool that needs env
 ##        and has no dotenv gets the one var it needs passed inline, never the whole file.** (The earlier `wish: command not
 ##        found` at .env line 9 was the same warning sign.)
