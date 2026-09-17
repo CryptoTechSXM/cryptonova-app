@@ -47,6 +47,15 @@ const lab = a => LABEL.get(String(a).toLowerCase()) || `${a.slice(0, 8)}…${a.s
 const NAMES = ["VELOCITY", "GHOST", "RECLAIM", "CHAIN_LINK", "PARKED_RESCUE", "VELOCITY_GATE",
                "EVICT_PARKED", "DISTRIBUTE_CW", "FORCE_ROTATE", "ADVANCE_EPOCH"];
 
+// V8.55 (session 88): the FUND's own reserve, printed with the queue. The head-of-line
+// block measured on 2026-09-17 was invisible from the queue alone — every item read
+// "FAILS revert: SF: below floor" and nothing said what the floor WAS.
+const SF = new ethers.Interface([
+  "function totalBalance() view returns (uint256)",
+  "function stabilityFloor() view returns (uint256)",
+]);
+const usd = (v) => "$" + (Number(v) / 1e6).toFixed(2);
+
 const MK = new ethers.Interface([
   "function checkUpkeep(bytes) view returns (bool upkeepNeeded, bytes performData)",
   "function _doParkedRescueExternal(address matrix, address member, uint8 t)",
@@ -93,6 +102,26 @@ async function main() {
   console.log(`book ${BOOK} | MatrixKeeper ${A.matrixKeeper} | block ${head} | rpc host ${new URL(RPC).host}`);
   console.log("=".repeat(96));
 
+  // ── the fund, first, because it is the reason an item fails ──────────────────
+  // A read that fails prints so and is never reported as a number.
+  let spendable = null;
+  if (A.stabilityFund) {
+    try {
+      const [tb] = SF.decodeFunctionResult("totalBalance",
+        await p.call({ to: A.stabilityFund, data: SF.encodeFunctionData("totalBalance", []), blockTag: head }));
+      const [fl] = SF.decodeFunctionResult("stabilityFloor",
+        await p.call({ to: A.stabilityFund, data: SF.encodeFunctionData("stabilityFloor", []), blockTag: head }));
+      spendable = tb > fl ? tb - fl : 0n;
+      console.log(`StabilityFund ${A.stabilityFund}`);
+      console.log(`  balance ${usd(tb)} · stabilityFloor ${usd(fl)} · SPENDABLE ${usd(spendable)}` +
+                  (spendable === 0n ? "   ⛔ AT THE FLOOR — every loan-bearing rescue will revert 'SF: below floor'" : ""));
+      console.log("=".repeat(96));
+    } catch (e) {
+      console.log("StabilityFund: balance/floor UNREADABLE — " + (e.shortMessage || e.message).slice(0, 80));
+      console.log("=".repeat(96));
+    }
+  }
+
   const raw = await p.call({ to: A.matrixKeeper, data: MK.encodeFunctionData("checkUpkeep", ["0x"]), blockTag: head });
   const [needed, performData] = MK.decodeFunctionResult("checkUpkeep", raw);
   console.log(`checkUpkeep: upkeepNeeded=${needed}  performData ${ (performData.length - 2) / 2 } bytes`);
@@ -101,7 +130,7 @@ async function main() {
   const items = ethers.AbiCoder.defaultAbiCoder().decode(["tuple(uint8 workType,uint8 tierIndex,address addr1,address addr2)[]"], performData)[0];
   console.log(`items the keeper would send now: ${items.length}\n`);
 
-  let i = 0;
+  let i = 0, belowFloor = 0;
   for (const it of items) {
     i++;
     const wt = Number(it.workType), t = Number(it.tierIndex);
@@ -116,8 +145,25 @@ async function main() {
       await p.call({ from: A.matrixKeeper, to: A.matrixKeeper, data, blockTag: head });
       console.log(`${head2}\n     simulated: OK`);
     } catch (e) {
-      console.log(`${head2}\n     simulated: FAILS  ${reasonOf(e)}`);
+      const why = reasonOf(e);
+      if (why.includes("SF: below floor")) belowFloor++;
+      console.log(`${head2}\n     simulated: FAILS  ${why}`);
     }
   }
+
+  // ── the exposure verdict, stated rather than left to the reader ───────────────
+  console.log("\n" + "=".repeat(96));
+  if (belowFloor > 0) {
+    console.log(`⛔⛔ EXPOSED: ${belowFloor} of ${items.length} queued item(s) revert "SF: below floor".`);
+    console.log("   On contracts BEFORE V8.55 the failed item is swallowed as WorkItemFailed and NOT");
+    console.log("   dequeued, so at maxItemsPerUpkeep = 1 it is re-offered at the head every tick and");
+    console.log("   nothing behind it runs. Cure: fund the SF (topup_sf.js) or lower stabilityFloor.");
+  } else if (spendable === 0n) {
+    console.log("⚠ Spendable is $0.00 but no queued item is asking the fund for money right now.");
+    console.log("  NOT exposed at this block; it becomes exposed the moment a loan-bearing rescue is queued.");
+  } else {
+    console.log("✅ No queued item is refused by the fund's floor at this block.");
+  }
+  console.log("Done. Nothing was signed or sent.");
 }
 main().catch(e => die("FAILED: " + (e.shortMessage || e.message)));

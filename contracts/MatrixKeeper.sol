@@ -972,6 +972,18 @@ contract MatrixKeeper is Ownable {
                 //        This is what makes the ladder self-sustaining without SF top-ups.
                 // V8.49 item 1b: added "SF: insolvency floor" and "SF: below floor".
                 //
+                // ⛔ V8.55 — READ THIS BEFORE TRUSTING THE PARAGRAPH BELOW. It was written
+                // about the INSOLVENCY floor (loanEligibleFor, the member's borrowing
+                // ceiling) and it was true of that one. It was NOT true of
+                // `stabilityFloor`, the fund's own reserve, which discovery did not ask
+                // about at all until V8.55 — and "SF: below floor" is that one. Measured
+                // on the private V8.54 chain 2026-09-17: the swallow worked exactly as
+                // designed and the batch did not revert, but the failed item was never
+                // dequeued, so at maxItemsPerUpkeep = 1 it was re-offered at the head of
+                // the queue every tick and the whole keeper stalled behind one member.
+                // ▶▶ SWALLOWING A REFUSAL KEEPS THE BATCH ALIVE; IT DOES NOT KEEP THE
+                // QUEUE MOVING. Only discovery declining to queue the item does that.
+                //
                 // BELT AND BRACES, AND SAY WHY. Discovery now asks the floor about the
                 // exact advance the SF will be asked for (MatrixKeeperLib._triageParked),
                 // so a floor refusal here should be unreachable. "Should be" is the whole
@@ -1163,10 +1175,14 @@ contract MatrixKeeper is Ownable {
         }   // fee, crossingCost, effectiveContrib, sfBps, maxShortfall freed here
 
         uint256 totalSfNeeded = sfShare + crossingBuffer;
-        uint256 sfBal         = IStabilityFundKeeper(stabilityFund).balanceByTier(tierIdx);
-        // Fall back to total SF balance if tier bucket cannot fully cover the rescue cost.
-        // FIX V8.31: was `sfBal > 0` — caused stall when bucket had pennies left (> 0 but < sfShare).
-        uint256 sfAvail       = sfBal >= totalSfNeeded ? sfBal : IStabilityFundKeeper(stabilityFund).totalBalance();
+        // V8.55: SPENDABLE, NOT BALANCE — ONE EXPRESSION, SHARED WITH DISCOVERY.
+        // The correction has to be made on both sides or they can still disagree:
+        // discovery deciding a rescue is affordable does not make the amount THIS
+        // function asks for affordable, because the buffer is added here. The trim below
+        // used to compute "short" from the raw balance, so with a floor in place it
+        // trimmed to a number the lender still refuses with "SF: below floor".
+        // Full measurement and reasoning on MatrixKeeperLib._checkParked.
+        uint256 sfAvail = MatrixKeeperLib.spendableFor(stabilityFund, tierIdx, totalSfNeeded);
 
         // If SF cannot cover both, trim the buffer rather than skip the rescue entirely
         if (sfAvail < totalSfNeeded) {

@@ -69,6 +69,14 @@ interface IStabilityFundKeeper {
     ///      easier question here is how discovery and the lender come to disagree — and
     ///      a disagreement reverts the whole performUpkeep batch, not just one item.
     function loanEligibleFor(address member, uint8 tierIdx, uint256 advance) external view returns (bool);
+    /// @dev V8.55: THE FUND'S OWN RESERVE, and it is a SECOND floor with a second name.
+    ///      loanEligibleFor answers "may this MEMBER borrow this much?" (insolvency
+    ///      ceiling, V8.49 item 1b). It says nothing about whether the FUND may go this
+    ///      low, which every SF payout also requires:
+    ///          require(totalBalance >= amount + stabilityFloor, "SF: below floor")
+    ///      Discovery asked the first question, called it "the floor", and queued
+    ///      rescues the lender refused on the second. See _checkParked.
+    function stabilityFloor() external view returns (uint256);
 }
 
 interface IFigureEightKeeper {
@@ -668,6 +676,37 @@ library MatrixKeeperLib {
         // Falling through leaves evictReason at its default 0 == EVICT_NONE: rescue.
     }
 
+    /**
+     * @dev V8.55: HOW MUCH THE STABILITY FUND MAY ACTUALLY PAY OUT RIGHT NOW, asked the
+     *      way the lender asks it. Shared by discovery (_checkParked) and execution
+     *      (MatrixKeeper._doParkedRescue) so the two cannot answer differently — the
+     *      same reason loanEligibleFor is called with the same amount on both sides.
+     *
+     *      `need` selects the branch only; the return is capped by the floor either way.
+     *      ITS OWN FRAME IS THE POINT: both callers are at their stack limit.
+     */
+    function spendableFor(address stabilityFund, uint8 tierIdx, uint256 need)
+        internal view returns (uint256 sfAvail)
+    {
+        IStabilityFundKeeper sf = IStabilityFundKeeper(stabilityFund);
+        uint256 sfTotal  = sf.totalBalance();
+        // What the fund may actually pay: StabilityFund requires
+        // `totalBalance >= amount + stabilityFloor` on every outward payment.
+        // At floor 0 — the shipping default, and the live setting measured 2026-08-16 —
+        // this is the whole balance and both callers behave exactly as they did pre-V8.55.
+        uint256 spendable = sfTotal > sf.stabilityFloor() ? sfTotal - sf.stabilityFloor() : 0;
+        // Fall back to total SF balance if the tier bucket cannot cover the ask.
+        // FIX V8.31: was `sfBal > 0` — same stall-on-pennies bug; checkUpkeep must agree
+        // with the execution path.
+        uint256 sfBal = sf.balanceByTier(tierIdx);
+        sfAvail = sfBal >= need ? sfBal : sfTotal;
+        // The bucket is internal accounting; payForceCross never consults it and zeroes
+        // it when it is short. The floor is the only hard limit, so it caps BOTH branches
+        // — a tier bucket fatter than the spendable total is exactly the case the old
+        // `sfBal >= need` branch waved through.
+        if (sfAvail > spendable) sfAvail = spendable;
+    }
+
     function _checkParked(address matAddr, uint8 tierIdx, uint256 idx, ScanCfg memory cfg)
         internal view
         returns (address parkedMember, uint8 workType)
@@ -754,11 +793,47 @@ library MatrixKeeperLib {
             return (address(0), type(uint8).max);
         }
 
-        uint256 sfBal   = IStabilityFundKeeper(cfg.stabilityFund).balanceByTier(tierIdx);
-        // Fall back to total SF balance if tier bucket cannot cover the rescue share.
-        // FIX V8.31: was `sfBal > 0` — same stall-on-pennies bug; checkUpkeep must agree with execution path.
-        uint256 sfAvail = sfBal >= sfShare ? sfBal : IStabilityFundKeeper(cfg.stabilityFund).totalBalance();
-        workType = (sfAvail >= sfShare) ? WORK_PARKED_RESCUE : type(uint8).max;
+        // ── V8.55: SPENDABLE, NOT BALANCE. THE HEAD-OF-LINE BLOCK. ───────────────
+        //
+        // MEASURED ON CHAIN FIRST (private V8.54 sandbox, 2026-09-17, handoff 62.64):
+        // fund $17.10, stabilityFloor $100.00, five parked members — four RESCUE
+        // verdicts and one eviction already due. Five consecutive performUpkeep
+        // transactions at an IDENTICAL 154,533 gas emitted one event each:
+        //     WorkItemFailed workType=4 (PARKED_RESCUE) — THE SAME MEMBER EVERY TICK.
+        // diag_keeper_queue (block 46941216): checkUpkeep returned that one item, and an
+        // eth_call of the worker from the keeper address reverted "SF: below floor".
+        // Setting the floor to $0 cleared the backlog in six ticks, $16.86 lent.
+        //
+        // THE DISAGREEMENT, AND IT IS THE WHOLE DEFECT. This line asked "does the fund
+        // HOLD enough?"; StabilityFund.payForceCross asks "may the fund GO THIS LOW?" —
+        //     require(totalBalance >= amount + stabilityFloor, "SF: below floor")
+        // So for every sfShare in [ totalBalance - stabilityFloor , totalBalance ] the
+        // two sides disagreed, and discovery queued a rescue the lender always refuses.
+        //
+        // WHY THAT IS WORSE THAN ONE SKIPPED MEMBER. performUpkeep swallows
+        // "SF: below floor" into a WorkItemFailed (MatrixKeeper.sol ~:986) and NOTHING
+        // DEQUEUES THE ITEM. Discovery fills slots in scan order and production ships at
+        // maxItemsPerUpkeep = 1, so the same refused item is handed back on the next
+        // tick, and the next: the other rescues, the due eviction, the velocity check and
+        // the CW epoch all sit behind it forever, one wasted transaction per tick, until
+        // a human moves the floor. A HEAD-OF-LINE BLOCK, not a skip.
+        //
+        // ⛔ MatrixKeeper.sol ~:970 claimed a floor refusal "should be unreachable
+        // because discovery asks the floor first". Discovery asked loanEligibleFor —
+        // the MEMBER's insolvency ceiling. Two different floors, two different revert
+        // strings, one name. The comment was true of the floor it was about.
+        //
+        // THE FIX IS TO ASK THE LENDER'S QUESTION, NOT A SIMILAR ONE. Scoped so the four
+        // reads die before workType is assigned: this file has blown the stack twice.
+        // ⛔ A BLOCK SCOPE WAS TRIED HERE FIRST AND DID NOT COMPILE — "Stack too deep" on
+        // the four reads, exactly as the notes in this file predict. Four locals is the
+        // whole budget this frame does not have, so the reads live in their own frame,
+        // the same remedy _triageParked exists for. Do NOT inline it back and do NOT
+        // reach for viaIR: that compiles today and leaves the function one local from
+        // the same failure.
+        workType = (spendableFor(cfg.stabilityFund, tierIdx, sfShare) >= sfShare)
+            ? WORK_PARKED_RESCUE
+            : type(uint8).max;
     }
 
     function _scanMatrix(

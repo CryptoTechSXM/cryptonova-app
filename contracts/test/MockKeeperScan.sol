@@ -131,6 +131,22 @@ contract MockStabilityFundK {
     mapping(uint8 => uint256) public tierEntryFees;
     mapping(address => uint256) public memberDebt;
 
+    // ── V8.55: THE SPENDABLE FLOOR. MIRRORED FROM THE REAL LENDER, AND ITS ABSENCE
+    //    HERE IS WHY THE HEAD-OF-LINE DEFECT SHIPPED.
+    //
+    // StabilityFund guards every outward payment twice — loanEligibleFor (the member's
+    // insolvency ceiling) AND `totalBalance >= amount + stabilityFloor` (the fund's own
+    // reserve). This mock modelled only the first, so a rescue the real fund would have
+    // refused with "SF: below floor" was accepted here by every keeper test in the
+    // suite. Measured on the private V8.54 chain 2026-09-17: fund $17.10, floor $100.00,
+    // one PARKED_RESCUE queued, refused, swallowed as WorkItemFailed, re-queued at the
+    // head every tick — five identical 154,533-gas transactions that changed nothing.
+    //
+    // DEFAULT 0, which is "no reserve held back" and exactly what the real SF does at 0,
+    // so every existing fixture in this harness is unchanged.
+    uint256 public stabilityFloor;
+    function setStabilityFloor(uint256 v) external { stabilityFloor = v; }
+
     constructor(uint256 bal) { totalBalance = bal; }
     function setTier(uint8 t, uint256 v) external { balanceByTier[t] = v; }
     function setTotal(uint256 v) external { totalBalance = v; }
@@ -168,5 +184,9 @@ contract MockStabilityFundK {
     ///      performUpkeep batch, not one item).
     function payForceCross(address member, uint8 tierIdx, address, uint256 fee) external view {
         require(loanEligibleFor(member, tierIdx, fee), "SF: insolvency floor");
+        // V8.55: the SECOND guard, in the real lender's order (StabilityFund.sol:655-656).
+        // Two different refusals with two different causes; a mock that models one of them
+        // cannot tell a test which one it is looking at.
+        require(totalBalance >= fee + stabilityFloor, "SF: below floor");
     }
 }

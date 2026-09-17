@@ -2310,6 +2310,105 @@ owner-set, and the session that earned it got five things wrong by ignoring what
 ##      `cryptonova-sf-solvency` rather than growing it further. **This handoff needs the same treatment —
 ##      split or condense it, and a few large edits beat many small trims.**
 
+## 62.65 ✅✅✅ **2026-09-17 (session 88): THE SF-FLOOR HEAD-OF-LINE BLOCK IS FIXED, TEST-FIRST. V8.55.**
+##
+##      ▶ SESSION-START BUG CHECK: **0 open** (origin/data `2833045`, 111 resolved). All three repos clean
+##        and level with origin at session start — session 87's push landed.
+##      ⚠ **MEASURED FIRST, AND IT SHAPED THE WHOLE SESSION: this Cowork device shell can reach github.com and
+##        registry.npmjs.org and NOTHING ELSE.** `sepolia.base.org` → proxy `403 blocked-by-allowlist`, from BOTH
+##        the device shell and the cloud container; the VPS is unreachable (no ssh egress). ▶ **So every on-chain
+##        step — the private-chain fill, every keeper run, every diag against a live book — is an OWNER-RUN
+##        BLOCK. Handoff item 2 was left for him; item 3 (this) was taken because Claude can drive it alone.**
+##      ⚠⚠ **TWO DEVICE-SHELL FACTS THE NEXT SESSION WILL NEED, both measured the hard way:**
+##        (a) **A BACKGROUND PROCESS DOES NOT SURVIVE A `device_bash` CALL.** `nohup ... &` and even
+##            `setsid` both died the moment the call returned. A job must finish inside the 180 s budget.
+##        (b) **`pgrep -f "hardhat compile"` MATCHED ITS OWN COMMAND LINE** and reported STILL RUNNING for
+##            18 minutes against a process that had been dead since minute one. Only `/proc/loadavg` (0.00)
+##            and `utime 0` exposed it. **Same family as the `PROCS 2` ssh false positive in 62.63 and the
+##            bare-`403`-in-a-timestamp scan. NEVER confirm "still running" from pgrep alone.**
+##      ✅ **HOW THE SUITE WAS RUN AT ALL, since `binaries.soliditylang.org` is blocked too:** solc 0.8.26 came
+##        from **npm** (`solc@0.8.26`, version string `0.8.26+commit.8a97fa7a.Emscripten.clang` — read, not
+##        assumed) and was planted in hardhat's compiler cache as the WASM build, with a hand-written
+##        `list.json`; the `linux-amd64` entry is an empty file plus a `.does.not.work` sibling, which is the
+##        documented way to make hardhat fall through to solcjs (`builtin-tasks/compile.js` :359-364).
+##        ⚠ The repo's `cache/solidity-files-cache.json` holds **Windows** paths, so a Linux run is always a
+##        FULL recompile. Test rig lives in the cloud container (`~/rig`), fed by a tarball of
+##        `contracts test scripts hardhat.config.js package*.json`; **the owner's repo stays the only source
+##        of truth — every edit was made there and re-tarred, never the reverse.**
+##
+##      ── THE DEFECT, AND IT IS A CONTRACT DEFECT ───────────────────────────────────────────
+##      ⛔⛔ **DISCOVERY AND THE LENDER ASKED DIFFERENT QUESTIONS ABOUT THE FUND'S MONEY.**
+##        `MatrixKeeperLib._checkParked` queued a rescue when `balanceByTier | totalBalance >= sfShare`.
+##        `StabilityFund.payForceCross` requires `totalBalance >= advance + stabilityFloor` ("SF: below floor").
+##        ▶ For every `sfShare` in `[ totalBalance - stabilityFloor , totalBalance ]` the two disagree, and
+##        discovery queues a rescue the fund always refuses.
+##      ⛔⛔⛔ **AND THE SWALLOW IS NOT A SKIP.** `performUpkeep` (MatrixKeeper ~:986) catches "SF: below floor"
+##        and emits `WorkItemFailed` — **but nothing dequeues the item.** Discovery fills slots in scan order and
+##        production ships `maxItemsPerUpkeep = 1`, so the same item comes back at the head every tick: the other
+##        rescues, the due eviction, velocity and the CW epoch never run. **One burned tx per tick, forever.**
+##        ▶▶ **THE SENTENCE TO KEEP: SWALLOWING A REFUSAL KEEPS THE BATCH ALIVE; IT DOES NOT KEEP THE QUEUE
+##        MOVING. Only discovery declining to queue the item does that.** The V8.49 comment reasoned entirely
+##        about the batch revert and stopped there.
+##      ⛔ **THE COMMENT AT MatrixKeeper ~:970 — "discovery asks the floor first, so a floor refusal here should
+##        be unreachable" — WAS TRUE OF THE FLOOR IT WAS ABOUT.** Discovery asked `loanEligibleFor`, the MEMBER's
+##        insolvency ceiling. `stabilityFloor` is the FUND's own reserve. **Two floors, two revert strings, one
+##        word — and the ambiguity is what let this ship.** Both comments now say which is which.
+##      ⛔ **WHY 703 PASSING TESTS NEVER CAUGHT IT: `MockStabilityFundK` had no `stabilityFloor` and its
+##        `payForceCross` could only ever produce "SF: insolvency floor".** The mock lender could not refuse the
+##        way the real one refuses, so no fixture could see the disagreement. **The mock now carries BOTH guards,
+##        in the real lender's order.** Same class as every "the instrument could not have shown it" finding here.
+##
+##      ── WHAT SHIPPED ──────────────────────────────────────────────────────────
+##      ✅ **TEST FIRST, AND IT FAILED FIRST — `test/V8_55_SpendableFloor.test.js`, 6 tests.** Before the fix:
+##        **BF-1 and BF-5 PASSED, BF-2/3/4/6 FAILED**, each for the predicted reason (BF-2 `expected [ 4 ] to
+##        deeply equal []`; BF-3 the slot held by `thin` not `ghost`; BF-6 `WorkItemFailed` where `ParkedRescued`
+##        was due). **BF-1 (the real StabilityFund refuses a member who is well inside their ceiling) and BF-5
+##        (floor 0 changes nothing) are the controls, and they passed on both sides.**
+##      ✅ **`MatrixKeeperLib.spendableFor(stabilityFund, tierIdx, need)`** — ONE expression, called by
+##        discovery AND by `MatrixKeeper._doParkedRescue`, so the two cannot drift. `spendable = totalBalance -
+##        stabilityFloor`, and it caps BOTH branches: **a tier bucket fatter than the spendable total is exactly
+##        what the old `sfBal >= sfShare` branch waved through.**
+##      ⛔ **IT NEEDED ITS OWN FRAME. A block scope inside `_checkParked` DID NOT COMPILE — "Stack too deep" on
+##        the four reads**, precisely as this file's own notes predict. Do not inline it back, and do not reach
+##        for `viaIR`: that compiles today and leaves the function one local from the same failure.
+##      ✅ **Execution side too:** `_doParkedRescue` trimmed the crossing buffer against the RAW BALANCE, so with
+##        a floor in place it trimmed to a number the lender still refuses. It trims against spendable now —
+##        BF-6 is that test, and it is the case discovery alone would NOT have fixed.
+##      ✅✅ **FULL SUITE, BOTH SIDES, SAME RIG, SAME COMMAND:** baseline (`git archive HEAD`) **703 passing /
+##        7 pending / 0 failing**; with the fix **709 / 7 / 0**. **+6 = exactly the new file. Nothing lost.**
+##        Contract sizes re-read from the artifacts: MatrixKeeper **21,684** bytes (limit 24,576) — the inlined
+##        internal helper cost ~180 bytes; TierRouter 24,509, the one still near the line.
+##      ✅ **INSTRUMENTS, both fixed the same day they were found wrong:**
+##        • `diag_parked_verdict.js` (keepers, md5 `49d5012c` → `814a0561`) — **new verdict `HELD`**: it printed
+##          "RESCUE · eligible now" for four members while its OWN header line read `spendable $0.00`. It had the
+##          number and did not apply it. HELD is **not** an eviction — nothing is wrong with the member, the fund
+##          is empty — and the summary now says so, plus an explicit note that RESCUE/HELD is decided per member
+##          against the CURRENT spendable and is **not** a simulation of one keeper pass.
+##        • `scripts/diag_keeper_queue.js` (contracts, md5 `00151b67` → `dfed5cff`) — prints the fund's
+##          balance/floor/**SPENDABLE** above the queue, counts items refused with "SF: below floor", and ends
+##          with an EXPOSED / NOT-EXPOSED verdict instead of leaving it to the reader.
+##
+##      ── STILL OPEN ────────────────────────────────────────────────────────────
+##      ⛔ **LIVE V8.52 EXPOSURE IS STILL UNMEASURED — it needs the owner's PC, and it is ONE read-only block:**
+##        `cd C:\CryptoNite-Smart-Contracts\CryptoNova` · `$env:ADDRESSES_FILE="deployed_addresses_v8_52.json"` ·
+##        `node scripts/diag_keeper_queue.js`. Last known live figures (09-17 14:05Z): fund $7,490.46, floor
+##        $100, spendable $7,390.46 — **so exposure is LATENT, not active, and that is an expectation, not a
+##        reading.** Run it and record the verdict line.
+##      ▶▶ **NEXT, IN ORDER (session 89):**
+##        (1) bug check. (2) The live-exposure block above. (3) **Resume 62.64 item 2** — the private V8.54 loop
+##            to put T1.2 into full-and-waiting: chunk 5 registrations → sandbox `direct_keeper` under
+##            `flock -w 480 /tmp/run_work_queue.lock` (DRAIN_MAX_TICKS 8) → `pair_saturation` +
+##            `frozen_matrix_check`; decode surprises with `diag_block_events.js`. **The private chain's floor is
+##            $0 and its SF was $202.04 before run 4 and NOT re-read — read it before the first run.**
+##            PASS = T1.2 MatA 15/15 AND it rotates (C2 zero over two readings) + law exact for BOTH pairs.
+##        (4) **The V8.55 contracts are NOT deployed anywhere.** They are source-only and green. Deciding whether
+##            they ride the next redeploy is the owner's call, not a code question.
+##        Parked, unchanged from 62.64: T1.2 creation block; the FUNDING-park rate (most MatB rotations park);
+##        `frozen_matrix_check` rule A/B "previously read the same way" text; `direct_keeper` DRAIN double log
+##        line; `topup_sf.js` stale `v8_47` default + no-retry read-back; decoder CNOVA `$` hint; sandbox `.env`
+##        CRLF + line 9; the 5 live-job `replacement fee too low`. ⚠ Also still open from 62.64: **13 untracked
+##        `Test Sept 9*.png` in the repo root and 21 uncommitted lines in `v853_private_deploy_transcript.txt`.**
+
 ## 62.64 ✅ **2026-09-17 (session 87): PRIVATE V8.54 FILL TO T1.1 FULL-IN-BOTH-HALVES.**
 ##
 ##      ▶ SESSION-START BUG CHECK: 0 open (origin/data `2833045`, 111 resolved). VPS unreachable from device shell → owner-run blocks.
