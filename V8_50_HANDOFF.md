@@ -2355,6 +2355,28 @@ owner-set, and the session that earned it got five things wrong by ignoring what
 ##        **evictionGracePeriod 604800 → 0** (tx 0xe08d8b98…, block 46940368, read-back OK). Contract minimums: parked 0 or
 ##        ≥300s; eviction menu 0 or whole days. SF floor deliberately NOT changed yet (measure the spendable-$0 rescue first).
 ##        ⛔ The 24h/9-18 wait below is SUPERSEDED by this.
+##      ⛔⛔ **CLAUDE'S MISTAKE, 12:4xZ: KEEPER PRIVATE KEY PRINTED ON THE OWNER'S SCREEN (and so into the chat).** Claude's block
+##        did `set -a && . ./.env` before `direct_keeper.js`. The sandbox .env has CRLF endings, so KEEPER_PRIVATE_KEY carried
+##        a trailing `\r`; dotenv does not override an already-set var; ethers threw `invalid BytesLike` and PRINTED THE VALUE.
+##        Nothing was sent (crash at `new Wallet`, direct_keeper.js:225; verdict/matrices unchanged after). The key is the
+##        keeper EOA `0xd419…6B4b` used by BOTH the live V8.52 fleet and the private sandbox. ▶ **ROTATE IT** (new EOA →
+##        fund → set_upkeep_caller true on live + private → VPS .env KEEPER_PRIVATE_KEY → set old caller false → drain old).
+##        ⛔ **RULE: NEVER shell-source a keeper .env (`. ./.env`) in a block. Scripts load it via dotenv. A tool that needs env
+##        and has no dotenv gets the one var it needs passed inline, never the whole file.** (The earlier `wish: command not
+##        found` at .env line 9 was the same warning sign.)
+##      ✅ **SANDBOX KEEPER RUN 2, 12:52Z, clocks 300s/0, DRAIN_MAX_TICKS=6 (output hex-64 blanked):** 6 txs all OK —
+##        block 46940630 gas **486,876**, then blocks 46940633/636/639/642/645 **each exactly 154,533**. Log also printed
+##        "⚡ Keeper active — non-rescue work (force-cross / distribution) active_cycles=5".
+##        RESULT: **T1.1 MatB rot 6→7, occ 15→14, parked 5→6** (new park `0x486BCf…dEf9`, held $6.44, RESCUE verdict).
+##        Law Bocc 14 + Brot 7 = 21 = Arot 21 exact. frozen_matrix_check reading 4: PASS. T1.2 still 0/0.
+##      ⛔⛔ **FINDINGS (measured, NOT explained):**
+##        (a) **none of the 4 "RESCUE eligible now" members was rescued, and the "EVICTION DUE NOW" member was not evicted**
+##            (verdict tool vs chain disagree; fund spendable $0.00 throughout).
+##        (b) **five consecutive performUpkeep txs at an identical 154,533 gas changed nothing readable** — checkUpkeep kept
+##            saying "Work needed" each tick. On a cron that is a drain-to-cap gas loop every slot. Whether the LIVE fleet
+##            does the same is UNMEASURED.
+##        (c) the one real action was a MatB force-rotation that produced ANOTHER FUNDING park (6 of 7 MatB rotations).
+##        ▶ Instrument needed: decode every log in blocks 46940625..46940650 (MatrixKeeper + SF + T1 matrices) by event name.
 ##      ▶ **FILL PAUSED HERE ON PURPOSE (session 87):** nothing moves toward T1.2 for 24h; more registrations only add parks.
 ##      ▶ **NEXT, IN ORDER:** (1) after 14:08Z 09-17: Noah `diag_member_debt.js` re-run (expect ≈ $103.83).
 ##        (2) **after ~12:35Z 09-18:** sandbox direct_keeper by hand under the flock (DRAIN_MAX_TICKS=3) → diag_parked_verdict
