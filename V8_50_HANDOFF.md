@@ -2385,6 +2385,18 @@ owner-set, and the session that earned it got five things wrong by ignoring what
 ##            does the same is UNMEASURED.
 ##        (c) the one real action was a MatB force-rotation that produced ANOTHER FUNDING park (6 of 7 MatB rotations).
 ##        ▶ Instrument needed: decode every log in blocks 46940625..46940650 (MatrixKeeper + SF + T1 matrices) by event name.
+##      ✅ **BUILT + RUN: `scripts/diag_block_events.js` (md5 bcfcabad)** — every log of a sender's txs, decoded against all
+##        artifacts ABIs, emitters labelled from the book. Run 1 (12:19Z): tx1 = VelocityUpdated×3 + T2 VelocityGateSet false;
+##        tx2 (2.04M) = **FrozenMatBRotated**: accountOne cycled out of T1.1 MatB, re-entered MatA; MatA member 0xD4e5c4…541E
+##        cycled + crossed to MatB (T2 UpgradeEligibleAtCross). Run 2 (12:52Z): tx1 (486,876) = FrozenMatBRotated, member
+##        0x486BCf…dEf9 cycled out of MatB and **MemberParked shortfall $3.56 "insufficient funds"**.
+##        ⛔⛔ **THE FIVE 154,533 TXS = ONE EVENT EACH: `WorkItemFailed workType=4 (PARKED_RESCUE) tier 0 matB member
+##        0xc64700…82D8` — THE SAME MEMBER EVERY TICK.** The failed rescue is not dequeued, so it is re-sent at the head of the
+##        queue and the 3 other RESCUEs + the EVICTION-DUE member are never reached: **a head-of-line block**, burning a tx
+##        per tick. The catch (MatrixKeeper.sol ~:986) swallows 6 known revert strings WITHOUT emitting which.
+##        ⚠ decoder cosmetic: 18-decimal CNOVA "amount" printed with the $/1e6 hint. Parked.
+##      ✅ BUILT (not yet run): `scripts/diag_keeper_queue.js` — checkUpkeep → decoded WorkItem[] (queue ORDER read from chain)
+##        + eth_call of each onlySelf worker FROM the MatrixKeeper address → OK or the exact revert reason.
 ##      ▶ **FILL PAUSED HERE ON PURPOSE (session 87):** nothing moves toward T1.2 for 24h; more registrations only add parks.
 ##      ▶ **NEXT, IN ORDER:** (1) after 14:08Z 09-17: Noah `diag_member_debt.js` re-run (expect ≈ $103.83).
 ##        (2) **after ~12:35Z 09-18:** sandbox direct_keeper by hand under the flock (DRAIN_MAX_TICKS=3) → diag_parked_verdict
