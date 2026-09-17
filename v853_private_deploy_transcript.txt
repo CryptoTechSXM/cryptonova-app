@@ -391,3 +391,24 @@ To https://github.com/CryptoTechSXM/cryptonova-mainnet-app.git
    e084710..bf20758  main -> main
 PS C:\CryptoNova-Mainnet-App> scp -i $HOME\.ssh\do_keeper C:\CryptoNova-Keepers\rr_keeper.js root@167.99.0.250:/root/keeper/rr_keeper.js
 
+PS C:\CryptoNova-Mainnet-App> cls
+PS C:\CryptoNova-Mainnet-App> cd C:\CryptoNite-Smart-Contracts\CryptoNova; git push origin v8.1
+Enumerating objects: 10, done.
+Counting objects: 100% (10/10), done.
+Delta compression using up to 8 threads
+Compressing objects: 100% (7/7), done.
+Writing objects: 100% (7/7), 8.49 KiB | 457.00 KiB/s, done.
+Total 7 (delta 4), reused 0 (delta 0), pack-reused 0 (from 0)
+remote: Resolving deltas: 100% (4/4), completed with 2 local objects.
+To https://github.com/CryptoTechSXM/cryptonova-app.git
+   da6699a..f9ee486  v8.1 -> v8.1
+PS C:\CryptoNite-Smart-Contracts\CryptoNova> cd C:\CryptoNova-Keepers; git push origin main
+Enumerating objects: 7, done.
+Counting objects: 100% (7/7), done.
+Delta compression using up to 8 threads
+Compressing objects: 100% (4/4), done.
+Writing objects: 100% (4/4), 1.54 KiB | 1.54 MiB/s, done.
+Total 4 (delta 3), reused 0 (delta 0), pack-reused 0 (from 0)
+remote: Resolving deltas: 100% (3/3), completed with 3 local objects.
+To https://github.com/CryptoTechSXM/CryptoNova-Keepers.git
+   e394db5..e519d53  main -> main
