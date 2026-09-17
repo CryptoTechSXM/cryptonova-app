@@ -2310,6 +2310,34 @@ owner-set, and the session that earned it got five things wrong by ignoring what
 ##      `cryptonova-sf-solvency` rather than growing it further. **This handoff needs the same treatment —
 ##      split or condense it, and a few large edits beat many small trims.**
 
+## 62.64 ⏳ **2026-09-17 (session 87, IN PROGRESS): PRIVATE V8.54 FILL TO T1.1 FULL-IN-BOTH-HALVES.**
+##
+##      ▶ SESSION-START BUG CHECK: 0 open (origin/data `2833045`, 111 resolved). VPS unreachable from device shell → owner-run blocks.
+##      ▶ Item 1 (Noah debt re-run) deferred: it was 12:02Z, rescue eligible only after 14:08Z.
+##      ✅ Primed child@700020..700039, 20/0 failed, 4.0 min. Pool now 700000..700039 (POOL_SIZE=40).
+##      ✅ FILL, book v8_54_private, pair_saturation after every step — 1:1 HELD EXACTLY:
+##        chunk MAX_REG=12 → MatA rot 1→13, MatB 1→13 · single → rot 14, MatB 14 · EDGE single (12:12:13Z) →
+##        **MatA 15/15 rot 15, MatB 15/15 rot 0, parks 0.** Law Bocc+Brot=Arot exact at every read (13/14/15). Pool cursor 29/40.
+##      ⛔ **EDGE DIFFERS FROM V8.51 (size 127): the MatB-filling member produced NO MatB rotation.** Measured, not explained.
+##      ⛔ **INSTRUMENT DISAGREEMENT (claim corrected in chat):** the 12:12Z pair_saturation read (public sepolia.base.org)
+##        listed 2 matrices; frozen_matrix_check minutes later (QuickNode) listed 4 — T1.2 MatA `0xDBAc7f74…` / MatB
+##        `0x1fFe0854…`, both 0/15. Re-read on BOTH nodes back to back: both show 4. ▶ So NOT a node difference now;
+##        whether T1.2 was created by the edge tx or the public node served a pre-edge state is UNMEASURED
+##        (PairManager pair-creation event block vs the edge registration's block would settle it). Parked.
+##      ✅ frozen_matrix_check reading 1 (T1): **C1 0, C2 0**; rule A SUSPECTED T1.1 MatB 15/15 rot 0 (just filled).
+##        ⚠ It says "previously read the same way at 04:16:24Z" though MatB was 1/15 then — same family as the rule-B defect.
+##      ⚠ Sandbox `.env` line 9 is not shell-sourceable (`wish: command not found`) — harmless for dotenv, loose end.
+##      ✅ **FIRST SANDBOX direct_keeper RUN, 12:19Z, under `flock -w 480 /tmp/run_work_queue.lock`, DRAIN_MAX_TICKS=3:**
+##        tx `0x0ac5bd3f…` block 46939636 OK gas 240,405 · tx `0xbb8ecb9c…` block 46939639 OK gas 2,038,040.
+##        Result: **T1.1 MatA rot 15→16, MatB rot 0→1, MatB occ 15/15** (one out, one in). Law 15+1=16 exact.
+##      ✅ **frozen_matrix_check reading 2: PASS (C1 0, C2 0, rule A cleared).** ▶ 62.63's stated PASS (two readings zero C2 +
+##        law exact) is MET — ⚠ but only at T1.1; T1.2 is empty, so C2 (later pair full-and-waiting) is NOT yet exercised.
+##      ⚠ direct_keeper log printed BOTH "DRAIN: complete — backlog cleared in 2 tick(s)" AND "tick cap 3 reached" — contradictory
+##        pair of lines. Also "GAS HALT PRICE REJECTED … estimate 102,918" on each tick (handled: sent 14.8M). Parked.
+##      ⚠ Which tx did what (240k vs 2.04M) is not decoded.
+##      ▶ NEXT: fill T1.2 to full-and-waiting (30 seats → ≥31 wallets; pool has 11 left, prime at HDR_OFFSET=700040),
+##        stepping every edge alone, sandbox keeper by hand under the flock, frozen_matrix_check after each keeper run.
+
 ## 62.63 ✅ **2026-09-17 (session 86): NOAH CLOSED · PRIVATE V8.54 CHAIN SET UP — postdeploy_check ALL PASS.**
 ##
 ##      ▶ SESSION-START BUG CHECK: 1 open (Noah). ✅ **CLOSED** via `bug_manager.js close '1acc02252bfb'` on the VPS,
