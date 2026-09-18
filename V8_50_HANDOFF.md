@@ -2407,6 +2407,17 @@ owner-set, and the session that earned it got five things wrong by ignoring what
 ##        (:441) never calls it.** ▶ PREDICTION (from code, UNVERIFIED until the run): a rescue that takes T1.2 MatB to 14/15
 ##        does NOT create T1.3; **the NEXT REGISTRATION does**, as its first act, then routes itself to pair 0 by the one door.
 ##        So the edge splits cleanly into (a) rescue → MatB 14/15, no T1.3; (b) one registration → T1.3 appears.
+##      ✅✅ **EDGE STEP (a) CONFIRMED — PREDICTION FROM SOURCE HELD.** (Owner cleared the screen mid-output; state re-measured
+##        read-only at 03:01Z, block 46966091, not reconstructed.) Pool cursor **63**, T1.1 MatA 15/15 rot 58 · MatB 15/15 rot 43 ·
+##        **T1.2 MatA rot 14 · T1.2 MatB 14/15 (93.3%, ABOVE the 90% trigger)** · parked 0 · fund $181.36 ·
+##        **still 4 matrices — NO T1.3.** Laws 15+43=58, 14+0=14. ▶ A rescue took the newest MatB past 90% and did not spawn
+##        a pair, exactly as `_tryAdvancePair` being registration-only predicts.
+##        ⚠ `ps` showed `node integrity_check.js` (68 s old) — a process on the box, not from our block; not investigated.
+##      ▶ **THE CAPTURE TEST HAS EXACTLY ONE DECISIVE ARRIVAL, WORKED OUT BEFORE SPENDING IT:** the next registration should
+##        spawn T1.3 at its start (edge b). Then T1.2 is FULL-MatA-and-waiting with ONE MatB seat, T1.3 is empty. The first
+##        overflow after that is the test: **V8.54 → T1.2 (waited-longest full pair) · pre-fix behaviour → T1.3 (room).**
+##        After T1.2 takes it, T1.2 is full in BOTH halves and `_fullPairWaitingLongest` skips it (bOcc >= bSize), so later
+##        overflow going to T1.3 is CORRECT then, not capture. Do not misread it.
 ##      ▶▶ **NEXT, IN ORDER (session 90 or later this session):**
 ##        (1) bug check. (2) ~~Decode the fund inflow~~ DONE this session — reconciled (above).
 ##        (3) The CAPTURE SCENARIO (62.63 item 3) — its precondition, later pairs full-and-waiting AND proven turning, now
