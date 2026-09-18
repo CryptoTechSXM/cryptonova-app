@@ -2350,9 +2350,9 @@ owner-set, and the session that earned it got five things wrong by ignoring what
 ##          neither causes nor clears it. The two-step sequence is source-derived, not measured (separate eth_calls).
 ##        ⛔ **NEW, MEASURED: `isParked` reads TRUE for an EVICTED member** (parkedAt 0, isInMatrix false). The view is
 ##          `hasEverJoined && !isInMatrix` (FigureEightMatrixV8) — it never looks at parkedAt, so every evicted member
-##          reads "parked" forever. index.html carries `isParked` in its ABI (:2587); **where the page uses it is not yet
-##          read.** A page that says "parked, waiting for rescue" to an evicted member is a frontend-truth defect
-##          ([[cryptonova-frontend-truth]] class). Read before calling it one.
+##          reads "parked" forever. ✅ READ: index.html (:2587) and status.html (:733) carry it in the ABI but **NEVER CALL
+##          it** (grep of index/status/pif) — so no page shows it today. A trap for any future page or tool, not a live
+##          defect. Any tool that needs "parked" must read `parkedAt > 0`, not `isParked`.
 ##        ▶ **MEMBER-FACING QUESTION, STILL OPEN (frontend, not contract):** the dashboard prints "Reserve target $25 ·
 ##          currently holding $3.76 …" (index.html :6863). Whether an EVICTED member is told that turning auto-upgrade off
 ##          releases it is NOT yet read. For mainnet (7-day eviction clock) this is the message that matters.
