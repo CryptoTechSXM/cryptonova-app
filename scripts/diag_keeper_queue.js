@@ -59,6 +59,8 @@ const usd = (v) => "$" + (Number(v) / 1e6).toFixed(2);
 
 const MK = new ethers.Interface([
   "function checkUpkeep(bytes) view returns (bool upkeepNeeded, bytes performData)",
+  "function maxItemsPerUpkeep() view returns (uint256)",
+  "function parkedGracePeriod() view returns (uint256)",
   "function _doParkedRescueExternal(address matrix, address member, uint8 t)",
   "function _doEvictParkedExternal(address matrix, address member)",
   "function _doForceRotateExternal(address matB)",
@@ -131,6 +133,20 @@ async function main() {
       console.log("=".repeat(96));
     }
   }
+
+  // Session 92 (62.70): the CAP decides what this tool can show. At maxItemsPerUpkeep = 1 checkUpkeep
+  // returns only the HEAD, and bounded work (velocity, force-rotate, …) is scanned BEFORE parked
+  // members — so an absent PARKED_RESCUE proves nothing at cap 1 while anything else is queued.
+  const rd = async (fn) => { try { return MK.decodeFunctionResult(fn,
+    await p.call({ to: A.matrixKeeper, data: MK.encodeFunctionData(fn, []), blockTag: head }))[0]; } catch (e) { return null; } };
+  const cap = await rd("maxItemsPerUpkeep"), grace = await rd("parkedGracePeriod");
+  console.log(`MatrixKeeper maxItemsPerUpkeep ${cap === null ? "UNREADABLE" : cap} · parkedGracePeriod ${grace === null ? "UNREADABLE" : grace + " s"}`);
+  if (process.env.TX) {
+    const r = await p.getTransactionReceipt(process.env.TX.trim());
+    if (!r) console.log(`TX ${process.env.TX}: NO RECEIPT from this node (not mined, or this node has not seen it)`);
+    else console.log(`TX ${r.hash}: block ${r.blockNumber} · status ${r.status} · from ${r.from} · to ${lab(r.to)} · logs ${r.logs.length} · gas ${r.gasUsed}`);
+  }
+  console.log("=".repeat(96));
 
   const raw = await p.call({ to: A.matrixKeeper, data: MK.encodeFunctionData("checkUpkeep", ["0x"]), blockTag: head });
   const [needed, performData] = MK.decodeFunctionResult("checkUpkeep", raw);
