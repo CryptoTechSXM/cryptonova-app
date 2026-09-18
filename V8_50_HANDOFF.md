@@ -2418,6 +2418,15 @@ owner-set, and the session that earned it got five things wrong by ignoring what
 ##        overflow after that is the test: **V8.54 → T1.2 (waited-longest full pair) · pre-fix behaviour → T1.3 (room).**
 ##        After T1.2 takes it, T1.2 is full in BOTH halves and `_fullPairWaitingLongest` skips it (bOcc >= bSize), so later
 ##        overflow going to T1.3 is CORRECT then, not capture. Do not misread it.
+##      ✅✅✅ **EDGE STEP (b) — T1.3 SPAWNED BY ONE REGISTRATION, 03:09:29Z (block ~46966340).** Pool 64/80. After:
+##        T1.1 MatA rot 59 · MatB rot 44 (15/15, 1 parked `0x9e1A4C…6c60`, RESCUE $4.28) · T1.2 MatA 15/15 rot 14 ·
+##        T1.2 MatB 14/15 · **T1.3 MatA `0x4A4E319b…E9Ab` 0/15 · T1.3 MatB `0xCbB08039…Dac5` 0/15** · 6 matrices · fund $181.96.
+##        Laws 15+44=59, 14+0=14, 0+0=0. ▶ **Both halves of the source prediction confirmed: a rescue past 90% spawned
+##        nothing; the next registration spawned the pair.** The registrant went to pair 0 (one door), as read.
+##      ▶ **THE DECISIVE ARRIVAL, PREDICTIONS WRITTEN BEFORE THE TICK:** rescue of `0x9e1A4C` in the window (MatB rotated 03:09,
+##        no force-rotate due before ~03:24). **PASS (V8.54) = RescueOverflowed toPair 1: T1.2 MatA rot 14→15, T1.2 MatB
+##        14→15/15, T1.3 stays 0/0.** **FAIL (capture) = toPair 2: T1.3 MatA 0→1, T1.2 unchanged.** INCONCLUSIVE = it
+##        re-enters pair 0 (a force-rotate opened a seat) — then repeat the window recipe, do not score it.
 ##      ▶▶ **NEXT, IN ORDER (session 90 or later this session):**
 ##        (1) bug check. (2) ~~Decode the fund inflow~~ DONE this session — reconciled (above).
 ##        (3) The CAPTURE SCENARIO (62.63 item 3) — its precondition, later pairs full-and-waiting AND proven turning, now
