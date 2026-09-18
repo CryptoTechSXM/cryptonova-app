@@ -2443,6 +2443,29 @@ owner-set, and the session that earned it got five things wrong by ignoring what
 ##            Now urgent: B's 96 s runs overlap C's end on most ticks.
 ##        (2) job B works each wallet ONCE per tick; a second park waits for the next tick (`dupNext` counted in the log).
 ##
+##      ✅✅ **BOTH FIXES LIVE 15:04Z** (rr_keeper eecc2816 + state_merge.js f4668ed1 in /root/keeper, selftest 10/10 on the
+##        box, staged dry run clean first; backup `rr_keeper.js.bak_pre_merge_20260918` = 29cee021). **First live B tick
+##        #10899 (15:08Z): funded 7 wallets $498.60 · 12 self-rescued · 0 FAILED · 15 second parks deferred · 33.3 s ·
+##        parked 280 → 255.** ⚠ Average funding rose $24.78 → ~$71/wallet: the cheap (T1) wallets went first; the remaining
+##        171 are higher tiers, so ~7 per tick at the $500 cap. Raise RESCUE_FUND_USD if faster is wanted (owner's call on
+##        pace; deployer holds ~$19.04M test USDC). ⚠ **NOT YET CHECKED: that C's cursor now ADVANCES across ticks** (the
+##        merge fix's live proof) — read `grep cursor rr_upgrade.log | tail` over 3-4 C ticks.
+##
+##      ▶▶ **STATE AT SESSION 90 CLOSE:** private V8.54 untouched since 62.66's close. Live V8.52: job B funding pool wallets
+##        ($500/tick, pool only, no SF loans), A at ceiling, C idle (0 candidates) pending rescued wallets cycling.
+##      ▶▶ **NEXT, IN ORDER (session 91):**
+##        (1) bug check.
+##        (2) Prove the merge fix live: C's cursor must move forward tick to tick (was reset 1600→800). Then watch B drain
+##            the 171 and C start finding candidates; check `pair_saturation` no-seat parks before/after (funding moves
+##            parks toward seat contention).
+##        (3) Re-run the live withdraw sweep at CONC=1 to shrink the 384 unreadable; then scope the CONTRACT fix for the
+##            debt-per-matrix VIEW divergence (49 wallets; freeWithdrawable/netClaimableOf subtract member debt in every
+##            matrix). Check whether hybridUpgrade's drawFreeEarnings reads it (under-draw) before sizing it.
+##        (4) Evicted-member messaging: does the dashboard tell an evicted member that turning auto-upgrade off releases
+##            the held balance? (62.67 top.)
+##        (5) V8.55 contracts still NOT deployed — owner's call. (6) sf_floor_watchdog chain-scope + WARN tier.
+##        Unpushed: contracts v8.1 and keepers main (this session's commits) — owner push block given at close.
+##
 ## 62.66 ✅✅✅ **2026-09-18 (session 89): T1.2 TURNED TWICE (C2 AFFIRMED) · T1.3 SPAWNED · THE CAPTURE TEST PASSED ON-CHAIN.**
 ##
 ##      ▶ SESSION-START BUG CHECK: **0 open** (origin/data). All three repos level with origin at start.
