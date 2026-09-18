@@ -2368,7 +2368,7 @@ owner-set, and the session that earned it got five things wrong by ignoring what
 ##
 ##      ── RESET (private chain back to production settings, before the pause was lifted) ─────────
 ##      maxItemsPerUpkeep 5 → 1: tx `0x0415d220…` block 47000525 status 1 — **read-back died "block not found";
-##        value NOT YET READ.** ▶ First thing next: `diag_keeper_queue.js` must print `maxItemsPerUpkeep 1`.
+##        READ BACK AT BLOCK 47000625: maxItemsPerUpkeep 1 · parkedGracePeriod 86400 s · floor $100 · no work.** ✅ Reset complete. Pushed: contracts v8.1 de4fb84..aac1eab, keepers main 76fae80..cfcc607.
 ##      parkedGracePeriod → 86400 s OK (tx 0xbdd396b3…). stabilityFloor → $100.00 (--from-t1) OK (tx 0xa97efe65…);
 ##        balance $24.99, spendable $0. `0x025336…D714` stays parked on the private chain — harmless, a ready HELD
 ##        subject if one is ever needed again.
@@ -2380,7 +2380,7 @@ owner-set, and the session that earned it got five things wrong by ignoring what
 ##        · V8.54 stage inversion — private V8.54 (62.66).
 ##        · V8.55 SF floor asked by discovery — **private V8.56, blocks 47000203 / 47000246 / 47000252 / 47000436 (62.70).**
 ##        · V8.56 debt netted once — private V8.56, blocks 46998054 / 46998474 (62.69).
-##      ▶ NEXT: (1) read maxItemsPerUpkeep = 1 (above). (2) **The community deploy is now the owner's go/no-go** —
+##      ▶ NEXT: (1) ~~read maxItemsPerUpkeep = 1~~ DONE. (2) **The community deploy is now the owner's go/no-go** —
 ##        every bundled fix is proven; the carried items below are ops/instrument work, none blocks the contracts.
 ##        Before it: GO_LIVE_RUNBOOK + community notice (members re-register; draft in the owner's voice per
 ##        community-comms). (3) Carried from 62.69(b): live withdraw sweep at CONC=1; confirm job B drained;
