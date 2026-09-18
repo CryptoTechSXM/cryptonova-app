@@ -2374,6 +2374,29 @@ owner-set, and the session that earned it got five things wrong by ignoring what
 ##        ⚠ Still owed after that: re-run the live V8.52 SCAN (the 09-05 sweeps were
 ##          pair-0-only) — read-only, but long; not before this single-wallet check passes.
 ##
+##      ── LIVE V8.52 JOBS B/C HEALTH, OWNER ASKED "something looks stuck" (read 14:39:45Z, read-only) ──
+##      ✅ **NOTHING IS HUNG:** no rr_keeper.OFF / system_keeper.OFF; B and C cron lines live; no rr_keeper process
+##        running at read time; both flock locks free; rr_rescue.log written 14:38:21Z, rr_upgrade.log 14:38:05Z; every run
+##        finishes well inside its 150 s budget (B ~20 s, C ~55-70 s).
+##      ✅ **B IS RUNNING BUT HAS ALMOST NOTHING IT CAN DO:** every tick ~281 parked → **212 underfunded + 69 non-pool**,
+##        0-3 self-rescued per tick, 0 failed. B only rescues pool wallets that can pay their own gap; the 212 cannot.
+##        So the parked count sits flat — that is the "stuck" look. Who rescues the 212 is the SF-loan path (direct_keeper /
+##        copay / fastlane), not B — see [[cryptonova-parked-backlog]]. Not chased this session.
+##      ✅ **C IS IDLE, NOT STUCK:** "0 candidates checked" in every slot across all 5 ranges (cursor walked 6800→7600→0→
+##        1600) — nobody passes the pre-filter to even be dry-called. Same shape as 09-06 "T1 candidates exhausted".
+##      ⛔⛔ **REAL DEFECT FOUND IN THE LOG, MECHANISM CONFIRMED FROM SOURCE — SHARED STATE FILE, LAST WRITER WINS.**
+##        Symptom (measured): C's cursor went 800→1600 in run #10883 (14:32-14:33:10Z), then run #10884 (14:37Z) started
+##        at **800 again**. B's run at 14:33:04 carried the **same run number #10883**.
+##        Source (rr_keeper.js md5 9f7f1360 = VPS): ONE `rr_keeper_state.json` (:250); `loadState()` once at start (:414),
+##        `saveState(state)` of the WHOLE object once at the end (:1037). A (*/10), B (3-59/5), C (2-59/5) are separate
+##        processes. C ended 14:33:10, B had loaded at 14:33:04 and saved at 14:33:25 → B wrote back C's OLD
+##        upgradeCursor. Every time C runs past ~60 s its progress is erased by B. The same race can revert A's
+##        `poolCursor` (the pool-wallet cursor) and duplicates `runs`.
+##        ▶ Impact TODAY ≈ nil (C has no candidates; A is at its ceiling). It matters the moment A or C have work.
+##        ▶ Fix shape (not built): each job saves ONLY the fields it owns — re-read the file at save time, merge
+##          (A: poolCursor/refCursor/totals.registrations; C: upgradeCursor; shared: runs/cursor), write tmp + rename.
+##          Or one state file per ONLY. Live keeper change → sandbox-test, then the `_stage` deploy pattern.
+##
 ## 62.66 ✅✅✅ **2026-09-18 (session 89): T1.2 TURNED TWICE (C2 AFFIRMED) · T1.3 SPAWNED · THE CAPTURE TEST PASSED ON-CHAIN.**
 ##
 ##      ▶ SESSION-START BUG CHECK: **0 open** (origin/data). All three repos level with origin at start.
