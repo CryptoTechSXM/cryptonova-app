@@ -2387,6 +2387,16 @@ owner-set, and the session that earned it got five things wrong by ignoring what
 ##      ✅ Fund across the drain, from events: −$21.40 lent, +$16.65 debt repaid (9 repayments), +$3.00 entry shares
 ##        = **−$1.75**. Registration phase then implies **+$16.20 over 10 regs (not decoded — the tx senders are pool
 ##        wallets, not the keeper).** Measured $168.79 → $183.24.
+##      ✅ **STEP 12→13 ATTEMPT (02:15Z): WENT TO PAIR 0 — OUTCOME (B).** Verdict before: 1 parked `0x80f48e…2F7F` RESCUE $4.28,
+##        REFUSED 0. Drain waited **2m44s on the flock** (02:15:49 → 02:18:33 — the live fleet's direct_keeper held
+##        `/tmp/run_work_queue.lock`; working as designed). Tick 1 block 46964814, **452,676 gas, no rescue** (the same gas as
+##        62.65's force-cross tx 46958011) · tick 2 block 46964816, 1.71M, rescue $4.28, lifetime $121.45.
+##        AFTER: T1.1 MatA rot 57 · MatB rot 42, 15/15 · **parked 1** · T1.2 unchanged 12/12. Laws 15+42=57, 12+0=12.
+##        ▶ This matches the force-rotate-then-rescue-into-pair-0 sequence 62.65 MEASURED; **this instance was NOT decoded.**
+##      ⛔ **THE CHECKER WEAK SPOT PREDICTED FROM CODE ABOVE FIRED ON A REAL READING:** `frozen_matrix_check` → **C2 SUSPECTED**
+##        on T1.2 ("pair 0 rotated 1 time, this pair received nothing"). T1.2 is NOT stalled — the one available rescue took
+##        a pair-0 seat the force-rotate had just opened, so nothing COULD overflow. **Pair-0 rotation is not proof an entry
+##        was available to a later pair.** First sighting; the rule is not changed on one. Next T1.2 turn clears it.
 ##      ▶▶ **NEXT, IN ORDER (session 90 or later this session):**
 ##        (1) bug check. (2) ~~Decode the fund inflow~~ DONE this session — reconciled (above).
 ##        (3) The CAPTURE SCENARIO (62.63 item 3) — its precondition, later pairs full-and-waiting AND proven turning, now
