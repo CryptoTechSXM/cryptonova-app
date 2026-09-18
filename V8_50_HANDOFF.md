@@ -2509,6 +2509,33 @@ owner-set, and the session that earned it got five things wrong by ignoring what
 ##        MatB 15/15 rot 21 · PARKED 0 · fund $173.05, floor $0.** The last seat must therefore come from a
 ##        REGISTRATION, not a rescue — there is nobody parked to rescue.
 ##
+##      ✅✅✅ **T1.2 MatA IS FULL — 15/15, SATURATED, 2026-09-18 00:48:30Z, block 46962110.**
+##        Final rescue $4.28 (991,457 gas; lifetime $70.09). **STATE AT THE MILESTONE: T1.1 MatA 15/15 rot 39 ·
+##        T1.1 MatB 15/15 rot 24 · T1.2 MatA 15/15 rot 0 · T1.2 MatB 0/15 · PARKED 0 · fund ~$170 (read it) ·
+##        pool cursor 45/60.** Law 15+24=39 exact at this reading and at EVERY reading of the fill.
+##        ⚠ **THIS IS NOT THE PASS.** T1.2 MatA is full and STILL (rotations 0), which is correct: a matrix
+##        rotates only when it RECEIVES an entry while already full (MatrixLogicLib:407). **Turning it needs ONE
+##        MORE arrival into T1.2**, which then forces rotation 0→1 and puts its displaced root into T1.2 MatB
+##        (0→1). Only then does the C2 test mean anything.
+##
+##      ⛔⛔ **STRUCTURAL FINDING, MEASURED OVER FIVE TICKS: THE KEEPER'S OWN FORCE-ROTATION COMPETES WITH
+##        RESCUE OVERFLOW, AND AT maxItemsPerUpkeep = 1 THE INTERLEAVING DECIDES WHETHER THE LATER PAIR FILLS.**
+##        Overflow into pair 1 requires T1.1 MatB to be FULL AT THE MOMENT OF THE RESCUE. Sequence measured
+##        00:18-00:38Z: force-rotate emptied a MatB seat (occ 15→14, rot 23→24, +1 park) → next rescue found room
+##        and re-entered PAIR 0 (MatA rot +1, its root refilled MatB) → repeat. **Two consecutive rescues went to
+##        pair 0 and T1.2 did not move.** The seat was only won once a window opened with MatB full, 0 other work
+##        queued, and exactly one parked member past grace.
+##        ▶ **NOT CALLED A DEFECT.** Why the force-rotate keeps qualifying is UNMEASURED; read the frozen-MatB
+##        scan's own conditions before judging the ordering. But on a LIVE chain at cap 1 this is the mechanism
+##        that would decide whether later pairs ever fill, so it belongs in the mainnet questions.
+##      ✅ **GRACE CLOCK CONFIRMED IN PRACTICE:** a fresh park is invisible to `checkUpkeep` until
+##        `parkedGracePeriod` (300 s here) elapses — `upkeepNeeded=false` with a parked member present is the
+##        clock, not a fault. Waiting it out with `sleep 200` in the block is how the last seat was taken cleanly.
+##      ⚠ **METHOD NOTE, CLAUDE CORRECTING CLAUDE MID-RUN:** four consecutive single-tick runs were spent to
+##        preserve attribution, and three of them landed on velocity / force-rotate / velocity-gate and moved
+##        nothing. **`diag_block_events.js` gives per-transaction attribution directly, so the one-tick rule was
+##        buying something the decoder already provides.** Batch the ticks, decode the range.
+##
 ##      ⚠⚠ **THE EDGE IS CLOSE — STEP THE LAST SEAT ALONE.** The V8.51 lesson (memory `cryptonova-stress-fill`)
 ##        is that a linear relation measured inside a range says nothing about its edge: the final seat there
 ##        produced a cascade of +3 MatA rotations, +2 MatB rotations and the first T1.2 seat. **Do not close
