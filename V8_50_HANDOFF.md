@@ -2348,8 +2348,13 @@ owner-set, and the session that earned it got five things wrong by ignoring what
 ##          DP2 PREDICTED, HELD: bulkWithdraw(0.3325) REVERTS TRState — the one-signature PARTIAL path reaches none of it.
 ##          DP3 MEASURED: full sweep bulkWithdraw() → wallet +$0.327513 (= net of $0.3325 at 1.5%), debt 0 — CORRECT.
 ##          DP4 MEASURED: withdraw() on T1 MatA alone → succeeds, pays $0, repays $3.10 of debt (debt left $0.3325).
-##        ▶ So: **full withdrawals are right; the partial path is blocked for these members; hybridUpgrade reads the same
-##          view via drawFreeEarnings → predicted to charge the wallet for the whole fee — UNVERIFIED, add DP5 before the fix.**
+##          DP5 PREDICTED, HELD (added after DP1-4): hybridUpgrade, T1 MatA $0.95 + MatB $8.292, debt $8.767 → wallet paid
+##            **$15.767 = whole $7 fee + whole debt**; both earnings untouched ($9.242). Correct would be wallet $6.525.
+##            Setup note: automation must be OFF before the referrals, else the 7th crossing auto-upgrades W1 into T2 and
+##            hybridUpgrade reverts TRState (already seated) — measured in a probe.
+##        ▶ So: **full withdrawals are right; the one-signature PARTIAL is blocked; hybridUpgrade makes the wallet pay fee +
+##          debt while the earnings sit untouched.** Net worth is not reduced (earnings stay withdrawable), but the member
+##          needs far more in the wallet, and an upgrade the earnings could fund reverts if the wallet is short.
 ##        ▶ Fix shape (not built): the per-matrix cap must not subtract the whole member debt in each matrix — e.g. the
 ##          router nets the debt ONCE across the tier walk (repay first, then draw), or claimableOf takes debt only
 ##          against what the other matrices cannot cover. RECOMMENDATION given to owner: fold into V8.55 before its deploy
@@ -2357,8 +2362,7 @@ owner-set, and the session that earned it got five things wrong by ignoring what
 ##
 ##      ▶▶ **NEXT, IN ORDER (session 92):**
 ##        (1) bug check.
-##        (2) DP5 (hybridUpgrade under the same case), then build the fix test-first on V8_56_DebtPerMatrix; decide with
-##            owner whether it rides V8.55.
+##        (2) Build the fix test-first on V8_56_DebtPerMatrix (DP1-DP5 measured); decide with owner whether it rides V8.55.
 ##        (3) Re-run the live withdraw sweep at CONC=1 (384 of 1001 unreadable) — still owed.
 ##        (4) Confirm B finished the 21; watch C start finding candidates (not same-session).
 ##        (5) V8.55 deploy — owner's call. (6) sf_floor_watchdog chain-scope + WARN tier.
