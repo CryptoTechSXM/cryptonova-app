@@ -2366,7 +2366,12 @@ owner-set, and the session that earned it got five things wrong by ignoring what
 ##        V8.54 book on the box `aa8046b5` = PC `scripts/deployed_addresses_v8_54_private.json`, has `pm` per tier.
 ##        ▶ PREDICTION for the first run on `0x404aED…035F`: a `T1.2.MatB` row appears with [1] $3.7618, [2] $0,
 ##          [6] REVERT "balance fully reserved for automation"; verdict ALL FOUR AGREE at $0 — this time about the
-##          matrix he actually sits in. ⚠ Still owed after that: re-run the live V8.52 SCAN (the 09-05 sweeps were
+##          matrix he actually sits in.
+##        ✅✅ **MEASURED, PREDICTION HELD — block 46986499, sandbox, md5 0b4208fd/049019c9, selftest 27/27 ON THE BOX.**
+##          `matrices read: 10 (T1=3 T2=1 T3=1)`; row `T1.2.MatB` [1] $3.7618 · [2] $0 · [4] $0 · [5] $0 · [6] REVERT
+##          "balance fully reserved for automation"; other T1 rows $0 "nothing to withdraw"; ALL FOUR AGREE at $0 — now
+##          about the pair he sits in. **Item 3's tool fix is DONE.**
+##        ⚠ Still owed after that: re-run the live V8.52 SCAN (the 09-05 sweeps were
 ##          pair-0-only) — read-only, but long; not before this single-wallet check passes.
 ##
 ## 62.66 ✅✅✅ **2026-09-18 (session 89): T1.2 TURNED TWICE (C2 AFFIRMED) · T1.3 SPAWNED · THE CAPTURE TEST PASSED ON-CHAIN.**
