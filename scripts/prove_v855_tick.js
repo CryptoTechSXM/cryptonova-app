@@ -68,10 +68,16 @@ async function main() {
   }
   const before = await snap("BEFORE", head);
 
-  const g = await mk.performUpkeep.estimateGas(pd);
-  let gl = (g * 15n) / 10n; if (gl > 16_000_000n) gl = 16_000_000n;
+  // ⛔ MEASURED 2026-09-18 (first run, tx 0xab7e9220…, block 47000359): gasLimit = estimate x 1.5 sent
+  // 143,239 gas and the batch did NOTHING — BatchGasHalted(0, 2, 113061). performUpkeep refuses to START an
+  // item with gasleft() < minGasPerItem (7.5M) and exits cleanly, so estimateGas finds that cheap no-op
+  // path and reports ~95k. AN ESTIMATE OF A SELF-HALTING BATCH IS AN ESTIMATE OF THE HALT.
+  // Fixed limit, as direct_keeper.js does (15M; the measured per-tx ceiling is 2^24 = 16,777,216).
+  const mgpi = await mk.minGasPerItem();
+  const gl = 15_000_000n;
+  console.log(`\nminGasPerItem ${mgpi} · items ${items.length} · gasLimit ${gl} (fixed)`);
   const tx = await mk.performUpkeep(pd, { gasLimit: gl });
-  console.log(`\nperformUpkeep sent ${tx.hash}  (estimate ${g}, limit ${gl})`);
+  console.log(`performUpkeep sent ${tx.hash}`);
   const rc = await tx.wait();
   console.log(`mined block ${rc.blockNumber} · status ${rc.status} · gas ${rc.gasUsed}\n`);
 
@@ -87,7 +93,7 @@ async function main() {
     for (const i of ifaces.filter(Boolean)) {
       try {
         const d = i.parseLog(lg); if (!d) continue;
-        if (["ParkedRescued", "WorkItemFailed", "FrozenMatBRotated", "MemberDebtIncreased", "RescueLoanIssued",
+        if (["ParkedRescued", "RescueOverflowed", "MemberEntered", "WorkItemFailed", "FrozenMatBRotated", "MemberDebtIncreased", "RescueLoanIssued",
              "MemberParked", "MemberCycledOut", "BatchGasHalted"].includes(d.name)) {
           console.log(`  log ${lg.index}: ${d.name}(${d.args.map(x => typeof x === "bigint" && x > 1000n ? `${x} (${usd(x)})` : String(x)).join(", ")})`);
         }
@@ -96,7 +102,13 @@ async function main() {
     }
   }
   console.log(`  (${rc.logs.length} logs, ${n} decoded; only the rescue-relevant names are printed)\n`);
-  const after = await snap("AFTER ", rc.blockNumber);
+  // The first run died here: "block not found" — the read node had not reached the receipt block yet.
+  let after = null;
+  for (let k = 1; k <= 10 && !after; k++) {
+    try { after = await snap("AFTER ", rc.blockNumber); }
+    catch (e) { console.log(`  (AFTER read ${k}: ${(e.shortMessage || e.message).slice(0, 60)} — retrying in 3s)`); await new Promise(r => setTimeout(r, 3000)); }
+  }
+  if (!after) { console.log("⛔ AFTER state UNREAD after 10 tries — the tx above is mined; re-read with diag_parked_verdict, do NOT resend."); return; }
   console.log(`\nΔ SF balance ${usd(after.bal - before.bal)} · Δ member debt ${usd(after.debt - before.debt)} · member parked ${before.parked} -> ${after.parked}`);
 }
 main().catch(e => { console.error("FATAL:", e.shortMessage || e.message); process.exit(1); });
