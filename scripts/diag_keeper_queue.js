@@ -53,6 +53,7 @@ const NAMES = ["VELOCITY", "GHOST", "RECLAIM", "CHAIN_LINK", "PARKED_RESCUE", "V
 const SF = new ethers.Interface([
   "function totalBalance() view returns (uint256)",
   "function stabilityFloor() view returns (uint256)",
+  "function sfTarget() view returns (uint256)",
 ]);
 const usd = (v) => "$" + (Number(v) / 1e6).toFixed(2);
 
@@ -115,6 +116,15 @@ async function main() {
       console.log(`StabilityFund ${A.stabilityFund}`);
       console.log(`  balance ${usd(tb)} · stabilityFloor ${usd(fl)} · SPENDABLE ${usd(spendable)}` +
                   (spendable === 0n ? "   ⛔ AT THE FLOOR — every loan-bearing rescue will revert 'SF: below floor'" : ""));
+      // Session 92: setStabilityFloor requires floor <= sfTarget(), so sfTarget bounds how close to the
+      // balance the floor can be put. Printed because the V8.55 on-chain proof moves the floor.
+      try {
+        const [tg] = SF.decodeFunctionResult("sfTarget",
+          await p.call({ to: A.stabilityFund, data: SF.encodeFunctionData("sfTarget", []), blockTag: head }));
+        console.log(`  sfTarget ${usd(tg)}  (the floor may be set no higher than this)`);
+      } catch (e) {
+        console.log("  sfTarget UNREADABLE — " + (e.shortMessage || e.message).slice(0, 80));
+      }
       console.log("=".repeat(96));
     } catch (e) {
       console.log("StabilityFund: balance/floor UNREADABLE — " + (e.shortMessage || e.message).slice(0, 80));

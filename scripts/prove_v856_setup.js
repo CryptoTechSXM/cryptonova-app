@@ -19,6 +19,11 @@
 //   needs free earnings in AT LEAST TWO matrices (any tier, any half) — READY when that is true.
 //   The state line then walks every pair of T1, T2 and T3.
 //
+// MODE=park (added session 92 for the V8.55 on-chain proof, 62.70): registers referrals until ANY T1
+//   matrix holds a PARKED member, then stops. It does not decide whether that member is a rescue, an
+//   eviction or HELD — diag_parked_verdict.js (keepers repo) does that, read-only, afterwards.
+//   Per-matrix line: occupancy/size · rotations · parked, so the law Bocc+Brot=Arot is visible.
+//
 // Run (PC, contracts repo):
 //   $env:ADDRESSES_FILE="deployed_addresses_v8_56_private.json"; $env:MAX_REG="5"
 //   npx hardhat run scripts/prove_v856_setup.js --network baseSepolia
@@ -111,11 +116,35 @@ async function main() {
     console.log("  mined");
   }
 
+  async function statePark(tag) {
+    await sleep(3000);
+    const n = Number(await pm1.pairCount());
+    const parts = []; let parked = 0;
+    for (let i = 0; i < n; i++) {
+      const [ma, mb] = await pm1.getPairAt(i);
+      const seg = [];
+      for (const [h, addr] of [["A", ma], ["B", mb]]) {
+        const m = await ethers.getContractAt("FigureEightMatrixV8", addr);
+        const occ = await m.occupancy(), rot = await m.rotationCount(), pk = Number(await m.getParkedCount());
+        parked += pk;
+        seg.push(`${h} ${occ} rot ${rot} parked ${pk}`);
+      }
+      parts.push(`T1.${i + 1} ${seg.join(" | ")}`);
+    }
+    const bal = await sf.totalBalance(), fl = await sf.stabilityFloor();
+    console.log(`  [${tag}] ${parts.join(" · ")} · SF $${(Number(bal) / 1e6).toFixed(2)} floor $${(Number(fl) / 1e6).toFixed(2)}`);
+    return { parked };
+  }
+
+  if (MODE === "park") {
+    const p0 = await statePark("start");
+    if (p0.parked > 0) { console.log("✅ READY (park) already — a T1 member is parked. Next: diag_parked_verdict.js"); return; }
+  }
   if (MODE === "dp2") {
     let s2 = await stateDp2("start");
     if (s2.nz >= 2) { console.log("✅ READY (dp2) already — run prove_v856_dp2.js"); return; }
   }
-  let s = MODE === "dp2" ? { seat2: false, activeB: false, a: 0n, b: 0n } : await state("start");
+  let s = (MODE === "dp2" || MODE === "park") ? { seat2: false, activeB: false, a: 0n, b: 0n } : await state("start");
   if (s.seat2) { console.log("⛔ W1 already holds a T2 seat — DP5 shape is impossible on this subject. STOP."); return; }
   if (s.activeB && s.a > 0n && s.b > 0n) { console.log("✅ READY already — run prove_v856_debt.js"); return; }
 
@@ -152,6 +181,11 @@ async function main() {
     const rc = await tx.wait();
     console.log(`  register(W1) ${tx.hash}  block ${rc.blockNumber}  status ${rc.status}  gas ${rc.gasUsed}`);
     done++;
+    if (MODE === "park") {
+      const pk = await statePark(`after #${done}`);
+      if (pk.parked > 0) { console.log(`\n✅ READY (park) — ${pk.parked} T1 member(s) parked. Next: wait out parkedGracePeriod, then diag_parked_verdict.js`); return; }
+      continue;
+    }
     if (MODE === "dp2") {
       const s2 = await stateDp2(`after #${done}`);
       if (s2.nz >= 2) { console.log("\n✅ READY (dp2) — W1 holds earnings in at least two matrices. Next: prove_v856_dp2.js"); return; }
