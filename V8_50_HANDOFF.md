@@ -2448,6 +2448,18 @@ owner-set, and the session that earned it got five things wrong by ignoring what
 ##      ✅ **FIRST MEASURED REFUSAL REASON:** diag_parked_verdict on `0x404aED…035F`: held $3.76 = 37.61% of $10.00, **below the
 ##        lowest ladder rung (40%) → LADDER → EVICTION DUE NOW** (private evictionGrace 0). Held for the member-money read
 ##        (diag_withdraw BEFORE and AFTER eviction) — **no keeper tick until that is done.**
+##      ⛔⛔ **INSTRUMENT BLIND SPOT, MEASURED: `diag_withdraw.js` (md5 5dfe0012) READS ONLY EACH TIER'S PAIR-0 MATRICES.**
+##        It builds its matrix list from the book's `tiers.Tn.matA/matB` (:365-366) — the book names pair 0 only. On
+##        `0x404aEDa38Ff55262424D2DFbddF106240B88035F` (parked in **T1.2** MatB) it printed $0.0000 in all four arithmetics and
+##        "ALL FOUR AGREE" — **about T1.1, where the member no longer sits. T1.2 was never read.**
+##        ▶▶ **CONSEQUENCE FOR PAST WORK: any withdraw finding or population sweep (memory cryptonova-withdrawal-audit) is silent
+##        on every member seated in a LATER pair. Live V8.52 has many later pairs. "ALL FOUR AGREE" on such a member is an
+##        artifact.** Fix shape (not made): enumerate pairs from PairManager (`pairCount` / `pairs(i)`), not from the book.
+##        What the tool DID read correctly: `TierRouter.reservedHeldFor` **$3.7618** (the "held" in diag_parked_verdict is
+##        THIS — the TierRouter automation reserve, not the matrix crossingReserve), reservedFor $25.00, SF debt $0.
+##        ▶ So the eviction question is sharper: `evictParked` releases the MATRIX crossingReserve; **what happens to the
+##        TierRouter reserve on eviction is not in that function at all.** Read before/after with a direct probe (rd_evict.js,
+##        a scratch reader written into the sandbox, not a repo tool).
 ##      ▶▶ **NEXT, IN ORDER (session 90 or later this session):**
 ##        (1) bug check. (2) ~~Decode the fund inflow~~ DONE this session — reconciled (above).
 ##        (3) The CAPTURE SCENARIO (62.63 item 3) — its precondition, later pairs full-and-waiting AND proven turning, now
