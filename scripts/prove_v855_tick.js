@@ -57,12 +57,18 @@ async function main() {
   async function snap(tag, blockTag) {
     const o = { blockTag };
     const bal = await sf.totalBalance(o), fl = await sf.stabilityFloor(o);
+    // ⛔ NOT mat.isParked(): that view is `hasEverJoined && !isInMatrix` for THIS matrix, so a member
+    // rescued INTO the partner MatA reads "parked true" in the MatB they left (measured, block 47000436,
+    // alongside ParkedRescued in the same tx). The parked QUEUE is the list; membership is read from it.
+    const pcount = await mat.getParkedCount(o);
+    let inList = false;
+    for (let i = 0n; i < pcount; i++) if ((await mat.getParkedMember(i, o)).toLowerCase() === MEMBER.toLowerCase()) inList = true;
     const r = {
-      parked: await mat.isParked(MEMBER, o), pcount: await mat.getParkedCount(o),
+      parked: inList, pcount,
       occ: await mat.occupancy(o), rot: await mat.rotationCount(o),
       bal, fl, debt: await sf.memberDebtOf(MEMBER, o),
     };
-    console.log(`  [${tag} @${blockTag}] member parked ${r.parked} · matrix occ ${r.occ} rot ${r.rot} parked ${r.pcount} · ` +
+    console.log(`  [${tag} @${blockTag}] member in parked list ${r.parked} · matrix occ ${r.occ} rot ${r.rot} parked ${r.pcount} · ` +
                 `SF ${usd(bal)} floor ${usd(fl)} spendable ${usd(bal > fl ? bal - fl : 0n)} · member debt ${usd(r.debt)}`);
     return r;
   }
