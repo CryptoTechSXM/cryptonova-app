@@ -2310,6 +2310,34 @@ owner-set, and the session that earned it got five things wrong by ignoring what
 ##      `cryptonova-sf-solvency` rather than growing it further. **This handoff needs the same treatment —
 ##      split or condense it, and a few large edits beat many small trims.**
 
+## 62.67 ▶ **2026-09-18 (session 90): THE EVICTED-MEMBER WITHDRAW QUESTION — PREDICTION FROM SOURCE, WRITTEN BEFORE THE CALL.**
+##
+##      ▶ SESSION-START BUG CHECK: **0 open** (origin/data head 2833045, 2026-09-16 — nothing new since).
+##      ✅ Source checked unchanged since V8.53 (`git log` on MatrixLogicLib/TierRouter/FigureEightMatrixV8: last touch
+##        f8cd4b3 2026-09-07), so the working tree IS what private V8.54 runs for the withdraw path.
+##      ✅ **READ FROM SOURCE — WHY freeWithdrawable IS $0 FOR `0x404aED…035F`:**
+##        `_claimableAndHeld` (MatrixLogicLib :691) and `withdrawCore` (:1361) apply the SAME two holds, in order:
+##        (1) crossing lock — ONLY when `isInMatrix && automationReserve > 0`. An evicted/parked member is NOT in the
+##            matrix, so this lock does NOT apply to him.
+##        (2) automation hold — when the matrix is the member's HIGHEST tier, `automationReserve = TierRouter.reservedFor`;
+##            withdrawCore then `require(automationReserve < available, "F8V8: balance fully reserved for automation")`.
+##        Measured in 62.66: reservedFor **$25.00** vs balance **$3.7618** → hold (2) takes everything. **Eviction does not
+##        touch TierRouter options at all** (evictParked :1847 only releases crossingReserve), so the target survives
+##        eviction: $25 = (autoUpgrade default ON → next tier fee) (+ re-entry fee if enabled) per `reservedFor` :1858.
+##      ▶▶ **PREDICTION (from source, UNVERIFIED until the call):**
+##        CALL 1 `withdraw()` from the member on T1.2 MatB → **REVERTS "F8V8: balance fully reserved for automation".**
+##        CALL 2 `TierRouter.setMemberOptions(true,false,false)` from the member → **ACCEPTED** (only requires globalJoined).
+##        ▶ So: **NOT a no-exit lock — a lock behind a switch the member holds.** `reservedFor` returns 0 when auto-upgrade
+##        and auto-re-entry are both off, and withdrawCore then pays withdrawable − debt − fee.
+##        ⚠ **THE REAL QUESTION THIS LEAVES (member-facing, not contract):** does the frontend tell an evicted member that
+##        his balance is held as an automation reserve and that turning automation off releases it? If not, on mainnet
+##        (7-day clock) he sees money he cannot withdraw and no reason. Also: the same hold applies to ANY member whose
+##        balance is under reservedFor — eviction only makes it permanent, because the tier-up it saves for can no
+##        longer happen from a seat he no longer has. Not a hypothesis to act on until the call is read.
+##      ✅ **INSTRUMENT (new, keepers repo): `diag_evicted_withdraw.js`** — read-only; one pinned block; reads the state
+##        above, eth_calls withdraw() and setMemberOptions from the member, prints REVERTED/ACCEPTED with the reason. Does
+##        NOT prove the two-step sequence (separate eth_calls) — that part is printed as source-derived.
+##
 ## 62.66 ✅✅✅ **2026-09-18 (session 89): T1.2 TURNED TWICE (C2 AFFIRMED) · T1.3 SPAWNED · THE CAPTURE TEST PASSED ON-CHAIN.**
 ##
 ##      ▶ SESSION-START BUG CHECK: **0 open** (origin/data). All three repos level with origin at start.
