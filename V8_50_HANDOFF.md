@@ -2310,7 +2310,7 @@ owner-set, and the session that earned it got five things wrong by ignoring what
 ##      `cryptonova-sf-solvency` rather than growing it further. **This handoff needs the same treatment —
 ##      split or condense it, and a few large edits beat many small trims.**
 
-## 62.66 ✅✅ **2026-09-18 (session 89): T1.2 TURNED A SECOND TIME — THE WITHHELD C2 IS NOW AN AFFIRMATION.**
+## 62.66 ✅✅✅ **2026-09-18 (session 89): T1.2 TURNED TWICE (C2 AFFIRMED) · T1.3 SPAWNED · THE CAPTURE TEST PASSED ON-CHAIN.**
 ##
 ##      ▶ SESSION-START BUG CHECK: **0 open** (origin/data). All three repos level with origin at start.
 ##      ⚠ **POWERSHELL QUOTING, MEASURED (first block failed, nothing ran): Windows PowerShell STRIPS inner
@@ -2427,6 +2427,27 @@ owner-set, and the session that earned it got five things wrong by ignoring what
 ##        no force-rotate due before ~03:24). **PASS (V8.54) = RescueOverflowed toPair 1: T1.2 MatA rot 14→15, T1.2 MatB
 ##        14→15/15, T1.3 stays 0/0.** **FAIL (capture) = toPair 2: T1.3 MatA 0→1, T1.2 unchanged.** INCONCLUSIVE = it
 ##        re-enters pair 0 (a force-rotate opened a seat) — then repeat the window recipe, do not score it.
+##      ✅✅✅ **THE CAPTURE TEST PASSED — 2026-09-18 03:14:58Z, block 46966506, 1,900,669 gas. DECODED, NOT INFERRED:**
+##        `RescueOverflowed member=0x9e1A4C…6c60 fromPair=0 toPair=1` (#42) → `MemberEntered` T1.2 MatA bfsPosition 15 (#113)
+##        → `MemberRouted pairId=1`. **T1.3 (pair 2, created 5 min earlier, EMPTY, with room) received NOTHING.** The overflow
+##        went to the full-and-waiting pair, which is exactly the V8.54 `_overflowTargetFor` order (waited-longest FIRST).
+##        ▶ **This is the on-chain reproduction of the moment Sherwyn's pair froze under the pre-fix code — a fresh empty pair
+##        next to a full waiting one — and the fix held.** Predictions were written and committed (`2bdac04`) before the tick.
+##        T1.2 MatA's displaced root `0x79c48e…59C2` cycled out (cycleNumber 15) and crossed into T1.2 MatB at bfsPosition 15
+##        → **T1.2 MatB 15/15**, debt fully repaid ($2.99 + $1.29), $1.76 carried forward, UpgradeEligibleAtCross T1→T2.
+##      ✅ **TICK 3, block 46966508, 537,907 gas = `FrozenMatBRotated` on T1.2 MatB — two blocks after it became full.** Its root
+##        `0x404aED…035F` cycled out (MatB cycleNumber 1 — **T1.2 MatB's FIRST EVER rotation**, PoolDistributed totalPool $27.00),
+##        repaid $0.27 debt, then **PARKED shortfall $6.24**. After: T1.2 MatA 15/15 rot 15 · MatB 14/15 rot 1 · T1.3 0/0.
+##        Laws 14+1=15, 15+44=59. ▶ With MatB back to 14/15, T1.2 is NOT full in both halves, so it stays the overflow target.
+##        ⚠ **Why the force-rotate fired 2 blocks after fill, not after the ~15-min idle window, is UNMEASURED** (candidate:
+##        idle is counted from the matrix's last activity, and this MatB had never rotated — do not write that down as the rule).
+##        ⚠ **No `EarningsCredited`/`PoolShareCredited` for `0x404aED` in that tx although PoolDistributed shows $27.00** —
+##        other cycle-outs today emit both. Whether their pool share is credited lazily is UNMEASURED.
+##      ⚠ **TICK 2, block 46966507, 124,419 gas, ZERO LOGS** — a keeper tx that emitted nothing. **Second sighting** (46964113,
+##        same 124,419, logged as "non-rescue work"). A burned tx with no event is the head-of-line shape; UNMEASURED, parked.
+##      ✅ **FIRST MEASURED REFUSAL REASON:** diag_parked_verdict on `0x404aED…035F`: held $3.76 = 37.61% of $10.00, **below the
+##        lowest ladder rung (40%) → LADDER → EVICTION DUE NOW** (private evictionGrace 0). Held for the member-money read
+##        (diag_withdraw BEFORE and AFTER eviction) — **no keeper tick until that is done.**
 ##      ▶▶ **NEXT, IN ORDER (session 90 or later this session):**
 ##        (1) bug check. (2) ~~Decode the fund inflow~~ DONE this session — reconciled (above).
 ##        (3) The CAPTURE SCENARIO (62.63 item 3) — its precondition, later pairs full-and-waiting AND proven turning, now
