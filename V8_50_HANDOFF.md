@@ -2310,6 +2310,82 @@ owner-set, and the session that earned it got five things wrong by ignoring what
 ##      `cryptonova-sf-solvency` rather than growing it further. **This handoff needs the same treatment —
 ##      split or condense it, and a few large edits beat many small trims.**
 
+## 62.70 ✅✅✅ **2026-09-18 (session 92, cont.): V8.55 PROVEN ON CHAIN — HELD, RELEASED AT THE BOUNDARY, PAID.**
+##
+##      ▶ SESSION-START BUG CHECK (re-done this session): **0 open** (origin/data `efe72c4`; two pif commits since
+##        2833045, no bug-sync). Read via a fresh `git clone --branch data` in the cloud container.
+##      ▶ Chain: private V8.56 (book `deployed_addresses_v8_56_private.json`, md5 36bcf5ac — now ALSO in the keepers
+##        repo so `diag_parked_verdict.js` can read it). All txs deployer-signed from the PC inside a VPS .OFF window
+##        **21:40:35Z → 22:09:09Z** (rr_keeper.OFF + system_keeper.OFF; `grep -c KEEPER_PRIVATE_KEY` = 1; 300 s wait).
+##
+##      ── THE SUBJECT ─────────────────────────────────────────────────────────────────
+##      `prove_v856_setup.js MODE=park` (new mode): 15 registrations under W1 (std 900016..900030, W1-funded).
+##        #13 (9.64M gas) spawned T1.2. **#15, block 46999409: T1.1 MatB rot 1→2 parked 1.** Law B15+rot2 = A rot 17.
+##        Parked member **`0x9aae493d3048eD07eD545A3fADEc9F7BB3Ff0C79`**, held $5.19, **short $4.81**, verdict HELD.
+##        Fund at start of the proof: **$29.20 balance · $100 floor · spendable $0** · sfTarget $250 (floor ceiling).
+##
+##      ── ⛔ TWO CLAUDE ERRORS, BOTH CAUGHT BEFORE A CLAIM WAS MADE ───────────────────────
+##      (1) **The private chain's parkedGracePeriod is the DEFAULT 24 h, not 300 s** (300 s was V8.54-private's
+##          setting, carried forward unread). The first "queue empty" reading was the GRACE CLOCK, not the fix —
+##          pre-fix code reads the same inside grace. → set_parked_grace 300s (tx 0x5f427769…).
+##      (2) **At maxItemsPerUpkeep = 1 the queue shows only its HEAD, and bounded work (FORCE_ROTATE) is scanned
+##          BEFORE parked members** (MatrixKeeperLib ~:262-300). A lone FORCE_ROTATE at cap 1 proves nothing about
+##          a PARKED_RESCUE behind it — exactly 62.65's warning. → cap raised to 5 (tx 0x70fcff9d…, block 47000097).
+##          ▶ `diag_keeper_queue.js` now PRINTS maxItemsPerUpkeep + parkedGracePeriod at its pinned head, so neither
+##            can be misread again.
+##
+##      ── THE PROOF (all readings diag_keeper_queue, QuickNode, cap 5, grace 300 s, member past grace) ──────
+##      ✅ **HELD, block 47000203: spendable $0.00 vs advance $4.81 → queue = FORCE_ROTATE ONLY.** Pre-fix: a
+##         PARKED_RESCUE failing "SF: below floor" every tick (the head-of-line block). **BF-2 on chain.**
+##      ✅ **BOUNDARY, below, block 47000246: floor $24.50 → spendable $4.70 < $4.81 → FORCE_ROTATE ONLY.**
+##      ✅ **BOUNDARY, above, block 47000252: floor $24.00 → spendable $5.20 → FORCE_ROTATE + PARKED_RESCUE
+##         `0x9aae49…0C79`, both simulated OK.** **BF-4 on chain** (straddled by ±~$0.10, not to the wei — the fixture
+##         owns the wei boundary). Predictions for all three written before each run; all held.
+##      ✅✅ **PAID, tx `0x74ff49a0…ea69b`, block 47000436, status 1, 2,047,528 gas, NO WorkItemFailed.**
+##         `scripts/prove_v855_tick.js` (new): owner-signed performUpkeep (deployer == MatrixKeeper.owner(),
+##         accepted at ~:934 — no keeper EOA, no VPS sandbox needed). In order: MemberCycledOut `0x025336…D714`
+##         → MemberParked shortfall $4.298152 → FrozenMatBRotated (MatB rot 2→3) → **RescueLoanIssued $4.812438
+##         forceCrossKeeper → MemberDebtIncreased 0 → $4.812438** → re-entry T1.1 MatA pos 15 (MatA rot 18; its
+##         displaced `0x6C50…0e60` entered MatB) → **ParkedRescued `0x9aae49…0C79`**.
+##         **SF Δ −$4.212438 = −$4.812438 lent + 2 × $0.30 entry splits. Reconciles to the cent.**
+##      ✅ Confirmation, block 47000519 (diag_parked_verdict): parked list = `0x025336…D714` only (HELD, short
+##         $4.30 vs spendable $0.99); `0x9aae49…` gone. Queue at 47000522: no work (0x0253 inside grace).
+##      ▶▶ **V8.55 IS PROVEN ON CHAIN ON ALL THREE BEHAVIOURS: held when short, released at the spendable
+##         boundary, and paid by a real tick.** The community bundle's three fixes are now ALL proven on chain.
+##
+##      ── INSTRUMENT DEFECTS FOUND AND FIXED THIS ROUND (all committed) ───────────────────
+##      • `prove_v855_tick.js` run 1 (tx 0xab7e9220…, block 47000359) did NOTHING: gasLimit = estimate × 1.5 = 143k →
+##        **BatchGasHalted(0, 2, 113061).** performUpkeep refuses to START an item with gasleft < minGasPerItem
+##        (7.5M) and exits cleanly, so estimateGas measures the halt. ⛔ **AN ESTIMATE OF A SELF-HALTING BATCH IS AN
+##        ESTIMATE OF THE HALT.** Fixed: 15M fixed, as direct_keeper.js. No state changed.
+##      • **`FigureEightMatrixV8.isParked(m)` is `hasEverJoined && !isInMatrix` FOR THAT MATRIX — it means "has left
+##        this matrix", not "is in the parked queue".** It read TRUE for `0x9aae` in MatB in the SAME tx that emitted
+##        ParkedRescued (they were rescued into MatA). The script now reads the parked LIST. ⚠ PARKED, NOT CHECKED:
+##        whether any frontend page or keeper reads `isParked()` as "waiting for rescue" — one grep answers it.
+##      • `set_max_items.js`: stale `v8_30` book fallback + hard-coded 20 → refuses without ADDRESSES_FILE, takes
+##        MAX_ITEMS. Its read-back then returned 1 after a status-1 tx that set 5 (stale node), and the throw invited
+##        a resend → reads at the receipt block, with retry, never throws after a mined write.
+##
+##      ── RESET (private chain back to production settings, before the pause was lifted) ─────────
+##      maxItemsPerUpkeep 5 → 1: tx `0x0415d220…` block 47000525 status 1 — **read-back died "block not found";
+##        value NOT YET READ.** ▶ First thing next: `diag_keeper_queue.js` must print `maxItemsPerUpkeep 1`.
+##      parkedGracePeriod → 86400 s OK (tx 0xbdd396b3…). stabilityFloor → $100.00 (--from-t1) OK (tx 0xa97efe65…);
+##        balance $24.99, spendable $0. `0x025336…D714` stays parked on the private chain — harmless, a ready HELD
+##        subject if one is ever needed again.
+##      Other: 12 `Test Sept 9*.png` = the owner's 09-09 Blockaid walk-through (MetaMask CNOVA spending-cap flag) →
+##        archived to `archive/blockaid_test_2026-09-09/` with a README (owner: "investigate then archive").
+##        The v853 transcript loose end was already closed by 86c5b5e.
+##
+##      ▶ RUNNING LIST OF FIXES IN THE COMMUNITY BUNDLE — **ALL THREE PROVEN ON CHAIN:**
+##        · V8.54 stage inversion — private V8.54 (62.66).
+##        · V8.55 SF floor asked by discovery — **private V8.56, blocks 47000203 / 47000246 / 47000252 / 47000436 (62.70).**
+##        · V8.56 debt netted once — private V8.56, blocks 46998054 / 46998474 (62.69).
+##      ▶ NEXT: (1) read maxItemsPerUpkeep = 1 (above). (2) **The community deploy is now the owner's go/no-go** —
+##        every bundled fix is proven; the carried items below are ops/instrument work, none blocks the contracts.
+##        Before it: GO_LIVE_RUNBOOK + community notice (members re-register; draft in the owner's voice per
+##        community-comms). (3) Carried from 62.69(b): live withdraw sweep at CONC=1; confirm job B drained;
+##        sf_floor_watchdog chain-scope + WARN tier; optional freeWithdrawable view fix. (4) The isParked() grep above.
+
 ## 62.69 ▶ **2026-09-18 (session 92): PRIVATE V8.56 CHAIN DEPLOYED + SET UP — postdeploy_check ALL PASS.**
 ##
 ##      ▶ SESSION-START BUG CHECK: **0 open** (origin/data 2833045 fetched fresh, unchanged since 09-16).

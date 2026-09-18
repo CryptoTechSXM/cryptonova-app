@@ -57,7 +57,14 @@ async function main() {
   // ⛔ MEASURED 2026-09-18 (session 92): the plain read-back returned the OLD value (1) right after a
   // mined status-1 tx; diag_keeper_queue read 5 minutes later. A stale node, not a failed write — and
   // the old "Value did not update!" throw invited sending the tx AGAIN. Read AT the receipt's block.
-  const after = await MK.maxItemsPerUpkeep({ blockTag: rc.blockNumber });
+  // …and that read itself then failed "block not found" (block 47000525): the read node had not reached
+  // the receipt block. Retry; never throw on a read after a mined write — the reflex is to resend.
+  let after = null;
+  for (let k = 1; k <= 10 && after === null; k++) {
+    try { after = await MK.maxItemsPerUpkeep({ blockTag: rc.blockNumber }); }
+    catch (e) { console.log(`read-back ${k}: ${(e.shortMessage || e.message).slice(0, 60)} — retrying in 3s`); await new Promise(r => setTimeout(r, 3000)); }
+  }
+  if (after === null) { console.log('⛔ read-back UNREAD after 10 tries. The tx above is MINED — verify with diag_keeper_queue.js, do NOT resend.'); return; }
   console.log('New maxItemsPerUpkeep   :', after.toString());
 
   if (Number(after) !== NEW_CAP) throw new Error('Value did not update!');
