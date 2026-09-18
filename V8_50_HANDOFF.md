@@ -2413,6 +2413,23 @@ owner-set, and the session that earned it got five things wrong by ignoring what
 ##        ⚠ Synthetic support: label any growth read off it as synthetic-assisted (G2 confound). ⚠ Watch no-seat parks
 ##        (pair_saturation) after enabling — a funding change moves funding parks toward seat contention (memory parked-backlog).
 ##        NOT DEPLOYED. Next: staged DRY_RUN in /root/keeper/_stageB, then the cron line gets RESCUE_FUND_USD.
+##      ✅ **STAGED DRY RUN 14:50Z (/root/keeper/_stageB, live rr_keeper confirmed 9f7f1360, new 29cee021):** deployer USDC
+##        $19,036,963.54 · 279 parked · **WOULD fund 20 wallets $495.58 (≈$24.78 each — mixed tiers), 190 left short by the
+##        $500 cap**, 69 non-pool untouched, 0 failed. ⚠ One wallet (0x40E29816) appears TWICE (parked in two matrices) — it
+##        will be funded twice in one tick (harmless over-fund, stays in the wallet). Rate at $500 × 12 ticks/h ≈ $6k/h.
+##      ── SWEEP TAIL READ (the ranking cut by head -80) ──
+##      ✅ gross-vs-net pairs are the 1.5% fee: [2]v[4] 420, [2]v[5] 437, [3]v[4] 437, [3]v[5] 437 — EXPECTED.
+##      ⛔⛔ **THE REAL DIVERGENCE, FIRST TIME EVER OBSERVED LIVE: [2] card vs [3] MAX on 49 wallets (and [4] vs [5] on the same
+##        49).** Worst: `0x599113…d42e` 18 positions, debt $97.06 — [2] $63.39 · [3] $156.26 · [4] $62.44 · [5] replay $153.91.
+##        `0x463432…79f0` 20 positions, debt $31.88 — [2] $20.53 · [3] $96.57 · [5] $95.12. ▶ This is divergence (a) from
+##        the file header, **DEBT COUNTED PER MATRIX**: the contract's `freeWithdrawable`/`netClaimableOf` subtract the whole
+##        member debt inside EVERY matrix; the page's MAX and withdrawCore (replay) take it once and agree (within the fee).
+##        So **payouts are right; the contract VIEWS under-state multi-matrix debtors** — the dashboard's first paint shows the
+##        low figure, and (memory V8.48) `TierRouterLib.drawFreeEarnings` feeds hybridUpgrade from the same view → it would
+##        under-draw for these members. UNVERIFIED on chain for hybridUpgrade. Contract fix = next release, not now.
+##        ⚠ A FLOOR: 384 of 1001 unreadable. ✅ withdraw() eth_calls: OK 1816 · nothing-to-withdraw 3179 · crossing lock 320 ·
+##        automation reserve 138 · missing revert data 3 · coalesce 1 — **0 of 437 funded members blocked in every matrix.**
+##
 ##
 ## 62.66 ✅✅✅ **2026-09-18 (session 89): T1.2 TURNED TWICE (C2 AFFIRMED) · T1.3 SPAWNED · THE CAPTURE TEST PASSED ON-CHAIN.**
 ##
