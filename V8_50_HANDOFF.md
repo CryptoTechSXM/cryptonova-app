@@ -2383,8 +2383,14 @@ owner-set, and the session that earned it got five things wrong by ignoring what
 ##
 ##      ▶▶ **NEXT, IN ORDER (session 92):**
 ##        (1) bug check.
-##        (2) V8.56 debt-netting fix is BUILT (above). Owner: confirm it rides V8.55. Optional: DP6 for the highest-tier
-##            automation-on limit; dashboard view fix (display only).
+##        ✅ **OWNER DECISION 2026-09-18 (session 91 close):** *"fix the debt but we are only testing on private once we
+##          have all the fixes in we can do a main deploy to the community."* ▶ The debt fix STAYS in with V8.55. **All
+##          contract fixes are proven on the PRIVATE chain first; the community gets ONE main deploy only when every fix
+##          is in.** No community redeploy per fix.
+##        (2) Deploy V8.55 + the V8.56 debt fix to the PRIVATE chain and re-prove DP2/DP5 on chain (a multi-matrix
+##            debtor: partial withdraw pays, hybridUpgrade draws from earnings). Keep a running list of every fix
+##            in the bundle for the eventual community deploy. Optional: DP6 highest-tier automation-on limit;
+##            dashboard view fix (display only).
 ##        (3) Re-run the live withdraw sweep at CONC=1 (384 of 1001 unreadable) — still owed.
 ##        (4) Confirm B finished the 21; watch C start finding candidates (not same-session).
 ##        (5) V8.55 deploy — owner's call. (6) sf_floor_watchdog chain-scope + WARN tier.
