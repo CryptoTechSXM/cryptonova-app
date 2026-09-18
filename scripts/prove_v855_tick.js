@@ -21,8 +21,9 @@ if (BOOK !== "deployed_addresses_v8_56_private.json") {
   console.error(`REFUSING: ADDRESSES_FILE must be deployed_addresses_v8_56_private.json (got "${BOOK}"). Private chain only.`);
   process.exit(1);
 }
-const MEMBER = (process.env.MEMBER || "").trim();
-if (!/^0x[0-9a-fA-F]{40}$/.test(MEMBER)) { console.error("Set MEMBER to the parked member's full address."); process.exit(1); }
+// MEMBER optional: unset = the queue must hold EXACTLY ONE PARKED_RESCUE, and that member is the subject.
+let MEMBER = (process.env.MEMBER || "").trim();
+if (MEMBER && !/^0x[0-9a-fA-F]{40}$/.test(MEMBER)) { console.error("MEMBER must be a full address, or unset."); process.exit(1); }
 const A = require(path.join(__dirname, BOOK));
 const NAMES = ["VELOCITY", "GHOST", "RECLAIM", "CHAIN_LINK", "PARKED_RESCUE", "VELOCITY_GATE",
                "EVICT_PARKED", "DISTRIBUTE_CW", "FORCE_ROTATE", "ADVANCE_EPOCH"];
@@ -42,10 +43,14 @@ async function main() {
   const items = ethers.AbiCoder.defaultAbiCoder().decode(["tuple(uint8 workType,uint8 tierIndex,address addr1,address addr2)[]"], pd)[0];
   console.log(`queue at block ${head}: ${items.length} item(s)`);
   let matrix = null;
-  for (const it of items) {
-    console.log(`  ${NAMES[Number(it.workType)] || it.workType}  tier ${it.tierIndex}  ${it.addr1}  ${it.addr2}`);
-    if (Number(it.workType) === 4 && it.addr2.toLowerCase() === MEMBER.toLowerCase()) matrix = it.addr1;
+  const rescues = items.filter(it => Number(it.workType) === 4);
+  for (const it of items) console.log(`  ${NAMES[Number(it.workType)] || it.workType}  tier ${it.tierIndex}  ${it.addr1}  ${it.addr2}`);
+  if (!MEMBER) {
+    if (rescues.length !== 1) { console.error(`⛔ MEMBER unset and the queue holds ${rescues.length} PARKED_RESCUE items (need exactly 1). Nothing sent.`); process.exit(1); }
+    MEMBER = rescues[0].addr2;
+    console.log(`subject (the one PARKED_RESCUE): ${MEMBER}`);
   }
+  for (const it of rescues) if (it.addr2.toLowerCase() === MEMBER.toLowerCase()) matrix = it.addr1;
   if (!matrix) { console.error(`⛔ no PARKED_RESCUE for ${MEMBER} in the queue. Nothing sent.`); process.exit(1); }
   const mat = await ethers.getContractAt("FigureEightMatrixV8", matrix);
 
