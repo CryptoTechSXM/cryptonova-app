@@ -2357,6 +2357,18 @@ owner-set, and the session that earned it got five things wrong by ignoring what
 ##          currently holding $3.76 …" (index.html :6863). Whether an EVICTED member is told that turning auto-upgrade off
 ##          releases it is NOT yet read. For mainnet (7-day eviction clock) this is the message that matters.
 ##
+##      ✅ **ITEM 3 BUILT (keepers `aae96e0`): `diag_withdraw.js` now reads EVERY PAIR from each tier's PairManager**
+##        (`pairCount`/`getPairAt` at the pinned block, the frozen_matrix_check reads), labels `T1.2.MatB`. A tier whose
+##        PairManager cannot be read falls back to book pair 0 and prints `⛔ GAP` → every verdict CANNOT CONCLUDE. A
+##        book whose pair 0 ≠ PairManager pair 0 is flagged (wrong book for the chain). A failed `getMember` is now
+##        UNKNOWN (it was a silent skip — failure-as-zero). Selftest **27/27** on the PC (was 19; new: case 20 = the
+##        measured evicted member, 21-27 pair enumeration). md5 diag_withdraw `0b4208fd`, selftest `049019c9`.
+##        V8.54 book on the box `aa8046b5` = PC `scripts/deployed_addresses_v8_54_private.json`, has `pm` per tier.
+##        ▶ PREDICTION for the first run on `0x404aED…035F`: a `T1.2.MatB` row appears with [1] $3.7618, [2] $0,
+##          [6] REVERT "balance fully reserved for automation"; verdict ALL FOUR AGREE at $0 — this time about the
+##          matrix he actually sits in. ⚠ Still owed after that: re-run the live V8.52 SCAN (the 09-05 sweeps were
+##          pair-0-only) — read-only, but long; not before this single-wallet check passes.
+##
 ## 62.66 ✅✅✅ **2026-09-18 (session 89): T1.2 TURNED TWICE (C2 AFFIRMED) · T1.3 SPAWNED · THE CAPTURE TEST PASSED ON-CHAIN.**
 ##
 ##      ▶ SESSION-START BUG CHECK: **0 open** (origin/data). All three repos level with origin at start.
