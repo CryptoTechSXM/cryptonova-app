@@ -2310,6 +2310,53 @@ owner-set, and the session that earned it got five things wrong by ignoring what
 ##      `cryptonova-sf-solvency` rather than growing it further. **This handoff needs the same treatment —
 ##      split or condense it, and a few large edits beat many small trims.**
 
+## 62.69 ▶ **2026-09-18 (session 92): PRIVATE V8.56 CHAIN DEPLOYED + SET UP — postdeploy_check ALL PASS.**
+##
+##      ▶ SESSION-START BUG CHECK: **0 open** (origin/data 2833045 fetched fresh, unchanged since 09-16).
+##      ✅ **Deploy = contracts v8.1 `44760e8` (V8.55 SF-floor discovery fix + V8.56 debt-once fix), book
+##        `scripts/deployed_addresses_v8_56_private.json`, size 15, tiers 1-3, deployedAt 2026-09-18T20:06:17Z.**
+##        Router `0xEa2c3Fbe561f04b69692c3B35D4F0Cb282C4233D` · MatrixKeeper `0x7CE258e0425665240944364e93A7347311c5800A`
+##        · SF `0x64857180D833848052c7cB3E37AAd1CE364DFC89` · TierRouterLib (the V8.56 fix) `0x0852f07ecD62347512202dC848d363B28955ADED`
+##        · MatrixKeeperLib (V8.55) `0x5BEdCaA5D0c6383e0E4A45b33F893771383b1eFc`. Transcript `v856_private_deploy_transcript.txt`.
+##      ✅ 0.2-PRIVATE done FIRST this time: rr_keeper.OFF + system_keeper.OFF touched 19:27:19Z, deploy started ≥19:32Z
+##        (run log 19:35:29Z) → one attempt, no R17.
+##      ✅ verify_gate 25 verified / 1 EOA / 0 unverified → set_pauser `0x8295…8531` block 46997126 → set_upkeep_caller
+##        `0xd419…6B4b` block 46997130 → set_stability_floor --from-t1 $100.00 (spendable $0) → set_graduation ON block
+##        46997136 → **postdeploy_check block 46997140: ALL PASS.**
+##      ✅ .OFF files removed 20:17:41Z (live deployer jobs off 19:27:19-20:17:41Z, ~50 min).
+##
+##      ✅✅✅ **DP5 PROVEN ON CHAIN (V8.56 fix, hybridUpgrade path) — block 46998054, tx 0x67f54332…bd20b.**
+##        Subject W1 `0x6512…9435` (T1 root). `scripts/prove_v856_setup.js` (new): automation OFF first, then
+##        referrals under W1 from W1-funded wallets (FILL_MNEMONIC std 900000..900014, never used before) — each
+##        referral +$0.77 to W1 MatA; **15th referral filled T1.1 MatA and W1 crossed: MatA $0.50, MatB $11.48
+##        (active), no T2 seat → READY.** (Measured: a just-funded wallet read ETH 0 once — script now waits until
+##        the node SHOWS the funds before sending.)
+##        `scripts/prove_v856_debt.js` (new), pinned block 46998049, prediction printed before any tx:
+##          DP1 ON CHAIN: debt $11.73 booked → freeWithdrawable A $0 · B $0 while true claimable is $0.25 (view defect,
+##            unchanged by design — display only).
+##          PREDICTED fixed: wallet pays $24.75 (T2 fee $25 − $0.25) · MatA 0 · MatB 0 · debt 0 · tier 2.
+##          PRE-FIX would: $36.73 (fee + whole debt), both matrices untouched.
+##          **MEASURED (wallet @46998053 vs @46998054): paid $24.750000 · MatA $0 · MatB $0 · debt $0 · highestTier 2.
+##          PREDICTION HELD.**
+##        ⚠ Record: the debt ($11.73, block 46997678, 20:34:04Z, deployer → SF.increaseMemberDebt) was booked by a
+##          copy of prove_v856_debt.js the owner ran by mistake in a second window during the .OFF countdown (owner
+##          confirmed; that window was cleared, so why that run stopped after booking is NOT known — not chased: the
+##          proper run went through). The first guard wrongly demanded free == stored with the debt already booked
+##          (the view MUST read stored − debt; that is DP1) — fixed. `scripts/diag_debt_events.js` (new, read-only)
+##          traces every MemberDebtIncreased/Repaid for a member with tx sender — it is how the booking was found.
+##        ⛔ BaseScan pages sit behind a bot check in the browser pane — use a read script, not the browser.
+##
+##      ▶ NEXT: DP2 on chain (bulkWithdraw(amount) partial for a multi-matrix debtor) — needs a NEW subject (W1 is
+##        now in T2 with $0 T1 balances). Then: new sandbox
+##        `/root/keeper_private_v856/` (62.63 recipe: own .env with this book, ALERTS_FILE local, TELEGRAM disabled) →
+##        build the DP2/DP5 multi-matrix debtor on chain and re-prove: partial withdraw pays net of the true claimable;
+##        hybridUpgrade draws from earnings (wallet pays fee − earnings, not fee + debt).
+##      ▶ RUNNING LIST OF FIXES IN THE COMMUNITY BUNDLE (owner decision 62.68: ONE community deploy when all are in):
+##        · V8.54 stage inversion (PairManagerV8._overflowTargetFor) — proven on private V8.54 (62.66).
+##        · V8.55 SF-floor asked by discovery (MatrixKeeperLib._checkParked/_triage) — fixture only; private V8.56 now carries it.
+##        · V8.56 member SF debt netted once across matrices (TierRouterLib) — fixture 714/0; **DP5 (hybridUpgrade) PROVEN
+##          ON CHAIN on private V8.56 (block 46998054)**; DP2 (partial withdraw) on chain still owed.
+
 ## 62.68 ▶ **2026-09-18 (session 91): MERGE FIX PROVEN LIVE · JOB B DRAINING · WITHDRAW MESSAGES FIXED · DEBT-PER-MATRIX MEASURED IN FIXTURE.**
 ##
 ##      ▶ SESSION-START BUG CHECK: **0 open** (origin/data 2833045 fetched fresh, unchanged since 09-16).

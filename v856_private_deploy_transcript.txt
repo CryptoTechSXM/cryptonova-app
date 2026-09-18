@@ -1,0 +1,47 @@
+﻿**********************
+Windows PowerShell transcript start
+Start time: 20260918153458
+Username: CryptoTech-LT01\CryptoTech
+RunAs User: CryptoTech-LT01\CryptoTech
+Configuration Name: 
+Machine: CRYPTOTECH-LT01 (Microsoft Windows NT 10.0.26200.0)
+Host Application: C:\WINDOWS\System32\WindowsPowerShell\v1.0\powershell.exe
+Process ID: 5748
+PSVersion: 5.1.26100.9444
+PSEdition: Desktop
+PSCompatibleVersions: 1.0, 2.0, 3.0, 4.0, 5.0, 5.1.26100.9444
+BuildVersion: 10.0.26100.9444
+CLRVersion: 4.0.30319.42000
+WSManStackVersion: 3.0
+PSRemotingProtocolVersion: 2.3
+SerializationVersion: 1.1.0.1
+**********************
+Transcript started, output file is v856_private_deploy_transcript.txt
+PS C:\CryptoNite-Smart-Contracts\CryptoNova> npx hardhat run scripts/deploy_v8.js --network baseSepolia
+  MatrixFactory : 0xF32cdC7035FA454CeA9F6b69D6310168Aa860a9a
+  PairFactory   : 0x18B462ddc6210A1c89014a5155e453387c7F5DfD
+  MatrixKeeper  : 0x7CE258e0425665240944364e93A7347311c5800A
+  V8Governance  : 0x776B21C2514c756ad71cea67C91f6E23CC756cb3
+  CommunityWallet:0x49ed533f363F05EC9C96ECF434FD9dfCB831ABEc
+  T01 PM:0x5170B98d MatA:0x074dDcA7 MatB:0xbE4De28A
+  T02 PM:0xc9aa19A6 MatA:0x06213aB3 MatB:0x4f722Ac7
+  T03 PM:0xd2bB23d5 MatA:0xd46ff513 MatB:0x67BD7824
+  ────────────────────────────────────────────────────────────
+  Addresses file: deployed_addresses_v8_56_private.json
+  V8.56 Deploy complete.
+
+  NEXT STEP: run scripts/seed_w1.js then scripts/bigfill_v8.js
+
+  ────────────────────────────────────────────────────────────
+
+  run log: logs/runs/deploy_v8/2026-09-18T19-35-29-390Z_deployed_addresses_v8_56_private.log  (OK)
+npm notice
+npm notice New minor version of npm available! 11.6.4 -> 11.19.1
+npm notice Changelog: https://github.com/npm/cli/releases/tag/v11.19.1
+npm notice To update run: npm install -g npm@11.19.1
+npm notice
+PS C:\CryptoNite-Smart-Contracts\CryptoNova> Stop-Transcript
+**********************
+Windows PowerShell transcript end
+End time: 20260918160646
+**********************
