@@ -2346,16 +2346,28 @@ owner-set, and the session that earned it got five things wrong by ignoring what
 ##          traces every MemberDebtIncreased/Repaid for a member with tx sender — it is how the booking was found.
 ##        ⛔ BaseScan pages sit behind a bot check in the browser pane — use a read script, not the browser.
 ##
-##      ▶ NEXT: DP2 on chain (bulkWithdraw(amount) partial for a multi-matrix debtor) — needs a NEW subject (W1 is
-##        now in T2 with $0 T1 balances). Then: new sandbox
-##        `/root/keeper_private_v856/` (62.63 recipe: own .env with this book, ALERTS_FILE local, TELEGRAM disabled) →
-##        build the DP2/DP5 multi-matrix debtor on chain and re-prove: partial withdraw pays net of the true claimable;
-##        hybridUpgrade draws from earnings (wallet pays fee − earnings, not fee + debt).
+##      ✅✅✅ **DP2 PROVEN ON CHAIN (V8.56 fix, partial-withdraw path) — block 46998474, tx 0x0c1eaec2…a3bb.**
+##        Subject W1 again: `prove_v856_setup.js MODE=dp2` (new mode — READY when ≥2 matrices hold earnings; walks
+##        every pair of T1-T3). ONE referral (std 900015) → T1.1.A $0.50 · T1.1.B $0.77 · T2.1.A $0.875 → READY.
+##        `scripts/prove_v856_dp2.js` (new), pinned block 46998468, all fees 150 bps, free == stored (no holds):
+##          PREDICTED fixed: debt D $1.51 (> every balance, < sum $2.145) · bulkWithdraw($0.635) pays $0.625475 ·
+##            debt 0 · every balance 0.   PRE-FIX would: REVERT TRState.
+##          Debt booked block 46998471 (read back $1.51 first probe) inside a .OFF window 20:55:20-21:01:34Z.
+##          **MEASURED (wallet @46998473 vs @46998474): +$0.625475 · T1.1.A $0 · T1.1.B $0 · T2.1.A $0 · debt $0.
+##          PREDICTION HELD.**
+##      ▶▶ **V8.56 IS NOW PROVEN ON CHAIN ON BOTH MONEY PATHS (DP5 upgrade, DP2 partial withdraw).**
+##
+##      ▶ NEXT: (a) V8.55 (SF floor asked by discovery) on chain — needs a parked member + SF near its floor and the
+##        keeper driven by hand from a NEW sandbox `/root/keeper_private_v856/` (62.63 recipe: own .env with this
+##        book, ALERTS_FILE local, TELEGRAM disabled, direct_keeper by hand under the live flock). Re-read 62.65 for
+##        the BF cases before designing it. (b) Carried: live withdraw sweep at CONC=1 (384/1001 unreadable);
+##        confirm job B drained; sf_floor_watchdog chain-scope + WARN tier; optional freeWithdrawable view fix
+##        (display only — DP1 on chain showed $0/$0 vs true $0.25). Community deploy only when every fix is in.
 ##      ▶ RUNNING LIST OF FIXES IN THE COMMUNITY BUNDLE (owner decision 62.68: ONE community deploy when all are in):
 ##        · V8.54 stage inversion (PairManagerV8._overflowTargetFor) — proven on private V8.54 (62.66).
 ##        · V8.55 SF-floor asked by discovery (MatrixKeeperLib._checkParked/_triage) — fixture only; private V8.56 now carries it.
-##        · V8.56 member SF debt netted once across matrices (TierRouterLib) — fixture 714/0; **DP5 (hybridUpgrade) PROVEN
-##          ON CHAIN on private V8.56 (block 46998054)**; DP2 (partial withdraw) on chain still owed.
+##        · V8.56 member SF debt netted once across matrices (TierRouterLib) — fixture 714/0; **DP5 (hybridUpgrade) AND DP2
+##          (partial withdraw) PROVEN ON CHAIN on private V8.56 (blocks 46998054 / 46998474).**
 
 ## 62.68 ▶ **2026-09-18 (session 91): MERGE FIX PROVEN LIVE · JOB B DRAINING · WITHDRAW MESSAGES FIXED · DEBT-PER-MATRIX MEASURED IN FIXTURE.**
 ##

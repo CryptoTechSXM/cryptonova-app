@@ -15,6 +15,10 @@
 // (ranges used elsewhere: std 0.., child 300000-700059). Re-runs resume: wallets already
 // globalJoined are skipped.
 //
+// MODE=dp2 (added session 92 after DP5 passed): W1 is then in T2 with $0 in T1. The DP2 shape only
+//   needs free earnings in AT LEAST TWO matrices (any tier, any half) — READY when that is true.
+//   The state line then walks every pair of T1, T2 and T3.
+//
 // Run (PC, contracts repo):
 //   $env:ADDRESSES_FILE="deployed_addresses_v8_56_private.json"; $env:MAX_REG="5"
 //   npx hardhat run scripts/prove_v856_setup.js --network baseSepolia
@@ -30,6 +34,7 @@ if (BOOK !== "deployed_addresses_v8_56_private.json") {
 const A = require(path.join(__dirname, BOOK));
 const MAX_REG = Number(process.env.MAX_REG || 5);
 const OFFSET  = Number(process.env.OFFSET || 900000);
+const MODE = (process.env.MODE || "dp5").toLowerCase();
 const ETH_EACH = ethers.parseEther(process.env.ETH_EACH || "0.003");
 const usd = v => "$" + (Number(v) / 1e6).toFixed(6);
 const sleep = ms => new Promise(r => setTimeout(r, ms));
@@ -52,6 +57,29 @@ async function main() {
   const block = await provider.getBlockNumber();
   console.log(`prove_v856_setup  book ${BOOK}  block ${block}  router ${A.tierRouter}`);
   console.log(`W1 ${w1.address}  ETH ${ethers.formatEther(await provider.getBalance(w1.address))}  USDC ${usd(await usdc.balanceOf(w1.address))}  T1 fee ${usd(fee1)}`);
+
+  async function stateDp2(tag) {
+    await sleep(3000);
+    const parts = []; let nz = 0;
+    for (const t of ["T1", "T2", "T3"]) {
+      const pm = await ethers.getContractAt("PairManagerV8", A.tiers[t].pm);
+      const n = Number(await pm.pairCount());
+      for (let i = 0; i < n; i++) {
+        const [ma, mb] = await pm.getPairAt(i);
+        for (const [h, addr] of [["A", ma], ["B", mb]]) {
+          const m = await ethers.getContractAt("FigureEightMatrixV8", addr);
+          const w = await m.withdrawableOf(w1.address);
+          const act = await m.isActiveInMatrix(w1.address);
+          if (w > 0n) nz++;
+          if (w > 0n || act) parts.push(`${t}.${i + 1}.${h} ${usd(w)}${act ? "*" : ""}`);
+        }
+      }
+    }
+    const hi = await tr.memberHighestTier(w1.address);
+    const debt = await sf.memberDebtOf(w1.address);
+    console.log(`  [${tag}] ${parts.join(" · ") || "(no balances)"} · highestTier ${hi} · debt ${usd(debt)} · matrices with balance ${nz}   (* = active)`);
+    return { nz };
+  }
 
   async function state(tag) {
     await sleep(3000);
@@ -83,7 +111,11 @@ async function main() {
     console.log("  mined");
   }
 
-  let s = await state("start");
+  if (MODE === "dp2") {
+    let s2 = await stateDp2("start");
+    if (s2.nz >= 2) { console.log("✅ READY (dp2) already — run prove_v856_dp2.js"); return; }
+  }
+  let s = MODE === "dp2" ? { seat2: false, activeB: false, a: 0n, b: 0n } : await state("start");
   if (s.seat2) { console.log("⛔ W1 already holds a T2 seat — DP5 shape is impossible on this subject. STOP."); return; }
   if (s.activeB && s.a > 0n && s.b > 0n) { console.log("✅ READY already — run prove_v856_debt.js"); return; }
 
@@ -120,6 +152,11 @@ async function main() {
     const rc = await tx.wait();
     console.log(`  register(W1) ${tx.hash}  block ${rc.blockNumber}  status ${rc.status}  gas ${rc.gasUsed}`);
     done++;
+    if (MODE === "dp2") {
+      const s2 = await stateDp2(`after #${done}`);
+      if (s2.nz >= 2) { console.log("\n✅ READY (dp2) — W1 holds earnings in at least two matrices. Next: prove_v856_dp2.js"); return; }
+      continue;
+    }
     s = await state(`after #${done}`);
     if (s.seat2) { console.log("⛔ W1 now holds a T2 seat — automation did not stay off? STOP and read."); return; }
     if (s.activeB && s.a > 0n && s.b > 0n) { console.log("\n✅ READY — W1 active in T1 MatB with earnings in MatA and MatB, no T2 seat. Next: prove_v856_debt.js"); return; }
