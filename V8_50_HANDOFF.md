@@ -2397,6 +2397,23 @@ owner-set, and the session that earned it got five things wrong by ignoring what
 ##          (A: poolCursor/refCursor/totals.registrations; C: upgradeCursor; shared: runs/cursor), write tmp + rename.
 ##          Or one state file per ONLY. Live keeper change → sandbox-test, then the `_stage` deploy pattern.
 ##
+##      ── LIVE V8.52 WITHDRAW SWEEP, EVERY PAIR (14:23-14:41Z, block 46986548, /root/withdraw_scan_0918.log) ──
+##      ⚠ **INCOMPLETE — DO NOT QUOTE A RESULT FROM IT.** 1001 swept · 58 matrices (T1=4 T2=4 T3=4 T4=7 T5=5, T6-T10=1)
+##        · 437 with balance, **437 "disagree"** · **384 UNREADABLE (38%)** · 197 carry SF debt (all listed: balance $0,
+##        cannot reproduce the double-count). The pair ranking was cut by `head -80` — only 2 lines seen ([2] vs [5] 437,
+##        [3] vs [4] 437); the rest is being read. ▶ Before any conclusion: (a) read the full ranking — if every pair that
+##        differs is a gross-vs-net pair, the 437 are the 1.5% fee and EXPECTED; (b) find WHY 384 are unreadable (read
+##        load: 58 matrices × CALLS=1 at CONC 3; the new getMember-UNKNOWN rule; or RPC throttling) — re-run at CONC=1.
+##        Old live backup of the tool on the box: /root/diag_withdraw.js.pre0918 (md5 5dfe0012). Live copy now 0b4208fd.
+##      ▶ **OWNER DECISION 2026-09-18: FUND THE UNDERFUNDED POOL WALLETS** — *"fund these account so they can upgrade or
+##        self rescue, the idea was to keep them alive so the system simulate healthy growth."* Built in keepers `7dbaa1f`
+##        (rr_keeper.js md5 29cee021, was 9f7f1360): job B `RESCUE_FUND_USD` per-tick cap (default 0 = unchanged),
+##        `RESCUE_FUND_FLOOR` deployer floor (default $10k), per wallet = ENTRY_FEE − balance, pool wallets only, rides B's
+##        serial deployer chain + the job C nonce retry. Self-rescue on own money = sfShare 0, no SF loan, no debt.
+##        ⚠ Synthetic support: label any growth read off it as synthetic-assisted (G2 confound). ⚠ Watch no-seat parks
+##        (pair_saturation) after enabling — a funding change moves funding parks toward seat contention (memory parked-backlog).
+##        NOT DEPLOYED. Next: staged DRY_RUN in /root/keeper/_stageB, then the cron line gets RESCUE_FUND_USD.
+##
 ## 62.66 ✅✅✅ **2026-09-18 (session 89): T1.2 TURNED TWICE (C2 AFFIRMED) · T1.3 SPAWNED · THE CAPTURE TEST PASSED ON-CHAIN.**
 ##
 ##      ▶ SESSION-START BUG CHECK: **0 open** (origin/data). All three repos level with origin at start.
