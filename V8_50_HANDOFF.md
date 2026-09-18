@@ -2536,6 +2536,28 @@ owner-set, and the session that earned it got five things wrong by ignoring what
 ##        nothing. **`diag_block_events.js` gives per-transaction attribution directly, so the one-tick rule was
 ##        buying something the decoder already provides.** Batch the ticks, decode the range.
 ##
+##      ✅✅✅ **THE SECOND PAIR TURNED. 2026-09-18 00:58:42Z, block 46962416, 1,953,632 gas (the largest tx of
+##        the session — the cascade shape). Rescue $4.28, lifetime $74.37.**
+##        **T1.2 MatA 15/15 rotations 0 → 1 · T1.2 MatB 0 → 1/15 · NO T1.3 SPAWNED · parked 0.**
+##        T1.1 MatA 15/15 rot 40 · T1.1 MatB 15/15 rot 25.
+##        **LAW EXACT FOR BOTH PAIRS: pair 1 → 15+25 = 40 = Arot · pair 2 → 1+0 = 1 = Arot.**
+##      ✅✅ **THIS IS THE FIRST ON-CHAIN PROOF OF THE V8.54 STAGE-INVERSION FIX.** The pre-fix
+##        `_hasRoomAndFree` measured room on **MatA only**, so a FULL later-pair MatA read as "no room" and
+##        overflow ran past it into a brand-new pair — the measured cause behind **Sherwyn's ticket** (T1.1
+##        overflow going 100% into a fresh T1.3 while T1.2 sat still; closed 2026-09-15 on that evidence, with
+##        the fix proven only in fixture V8_54). **Here the overflow arrived at a FULL T1.2 MatA, entered it,
+##        forced its first rotation, and the displaced root crossed into T1.2 MatB. No new pair was created.**
+##        ▶ Stated as the prediction it answers: the run was set up with BOTH outcomes written down first —
+##        "T1.2 turns" vs "a T1.3 appears and T1.2 stays at rot 0" — and the chain chose the first.
+##      ▶ **THE 62.64 PASS CONDITION IS NOW ONE STEP FROM MET:** "T1.2 MatA 15/15 AND it rotates + law exact for
+##        BOTH pairs" — all true. **Outstanding: two `frozen_matrix_check` readings with C2 = 0.** Until those
+##        are on the record the PASS is NOT claimed.
+##      ▶ **HOW THE LAST SEAT AND THE TURN WERE ACTUALLY WON (repeatable recipe):** the overflow condition is
+##        T1.1 MatB FULL at the moment of the rescue, and the keeper's force-rotate keeps breaking it. The
+##        winning window is: MatB 15/15 · no other work queued · exactly ONE parked member past grace. Reach it
+##        by registering ONE wallet (which parks its cycle-out and leaves MatB full), waiting out
+##        `parkedGracePeriod` — `sleep 260` inside the ssh block — then ONE tick.
+##
 ##      ⚠⚠ **THE EDGE IS CLOSE — STEP THE LAST SEAT ALONE.** The V8.51 lesson (memory `cryptonova-stress-fill`)
 ##        is that a linear relation measured inside a range says nothing about its edge: the final seat there
 ##        produced a cascade of +3 MatA rotations, +2 MatB rotations and the first T1.2 seat. **Do not close
