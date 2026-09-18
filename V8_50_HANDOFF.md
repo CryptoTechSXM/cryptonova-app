@@ -2310,6 +2310,60 @@ owner-set, and the session that earned it got five things wrong by ignoring what
 ##      `cryptonova-sf-solvency` rather than growing it further. **This handoff needs the same treatment —
 ##      split or condense it, and a few large edits beat many small trims.**
 
+## 62.68 ▶ **2026-09-18 (session 91): MERGE FIX PROVEN LIVE · JOB B DRAINING · WITHDRAW MESSAGES FIXED · DEBT-PER-MATRIX MEASURED IN FIXTURE.**
+##
+##      ▶ SESSION-START BUG CHECK: **0 open** (origin/data 2833045 fetched fresh, unchanged since 09-16).
+##
+##      ✅✅ **ITEM 2 — STATE-MERGE FIX PROVEN LIVE (rr_upgrade.log, runs #10948-#10956, 16:47-17:22Z):** C's cursor
+##        6800→7200→7600→(wrap at 7800)→0→400→…→3200→…→7200→7600→0 — forward only, 3 slots × 400 per run, correct wrap.
+##        Run numbers now unique per job (C #10953, B #10954, C #10956, B #10957; was B+C both #10883). ⚠ Honest limit: in
+##        the runs read, C finished 1-7 s BEFORE B loaded, so the exact overlap was not exercised live; selftest test 2
+##        covers it. Marked DONE.
+##      ✅ **JOB B DRAIN (rr_rescue.log):** parked 176 (16:13Z) → 117 (17:03Z) → 104 (17:23Z); underfunded 65 → 21.
+##        117 = 38 underfunded + 61 non-pool + 14 dup + 4 rescued (adds up). ~$470-$499/tick, 3-8 wallets funded/tick.
+##      ⚠ **"replacement fee too low", 1-3 per tick (15 sightings 16:18-17:18Z), EVERY ONE A DIFFERENT WALLET, none
+##        repeats** → non-sticky, the wallet is done next tick, no money lost. Cause NOT measured (B's per-wallet sends are
+##        sequential with .wait()). To measure: log the FULL address on FAIL, then read that wallet's latest vs pending
+##        nonce and its last txs. PARKED.
+##      ⚠ **"14 second park(s)" constant for 11+ ticks — SOURCE READ (rr_keeper.js :712-715): the dup check runs BEFORE
+##        the pool lookup**, so a NON-POOL member parked in two matrices is counted as dupNext every tick and B never works
+##        him. Consistent with 14 never moving while ~60 pool wallets cleared. Not verified wallet-by-wallet. The log label
+##        "left for next tick" is wrong for those. One-line fix: move the dup check after `if (!hit)`. PARKED (cosmetic).
+##      ⛔ **pair_saturation no-seat check NOT RUN:** 48.1 says the tool has no selftest and must get one before it is
+##        quoted again. Aggregate parked is falling, so funding is not driving parks up overall. PARKED.
+##
+##      ✅ **ITEM 4 — EVICTED-MEMBER MESSAGING: FOUND AND FIXED (frontend admin `35a7f4f`, pushed, NOT yet preview/main).**
+##        The breakdown modal (index.html :7349) already said turning automation off releases the reserve. But the
+##        WITHDRAW REVERT translation (:9891) mapped BOTH "balance fully reserved" and "must keep crossing reserve" to ONE
+##        message: "locked while you hold an active matrix position … entry fee ($10) … If you have Auto-Reentry disabled".
+##        For the measured evicted member (62.67) that is false three ways: no position, $25 not $10, the switch is Auto
+##        Upgrade. Now two messages, each naming its own hold and the switches that release it (MatrixLogicLib :1408-1433
+##        read: crossing lock only while seated AND automation on; reverts whatever the amount). Inline scripts parse 0 err.
+##        ▶ Owner to check on admin, then preview → main.
+##
+##      ✅✅ **ITEM 3 — DEBT-PER-MATRIX MEASURED IN FIXTURE (contracts `test/V8_56_DebtPerMatrix.test.js`, md5 083cedb8,
+##        cloud rig ~/rig from a tarball of HEAD 0de4f1d; full compile 77 files; 10 passing incl. the 6 BP it requires).**
+##        Case: f1 $3.10, f2 $0.665, debt $3.4325 (bigger than each matrix, smaller than both) → true claimable $0.3325.
+##          DP1 PREDICTED, HELD: freeWithdrawable T1 $0, T2 $0.
+##          DP2 PREDICTED, HELD: bulkWithdraw(0.3325) REVERTS TRState — the one-signature PARTIAL path reaches none of it.
+##          DP3 MEASURED: full sweep bulkWithdraw() → wallet +$0.327513 (= net of $0.3325 at 1.5%), debt 0 — CORRECT.
+##          DP4 MEASURED: withdraw() on T1 MatA alone → succeeds, pays $0, repays $3.10 of debt (debt left $0.3325).
+##        ▶ So: **full withdrawals are right; the partial path is blocked for these members; hybridUpgrade reads the same
+##          view via drawFreeEarnings → predicted to charge the wallet for the whole fee — UNVERIFIED, add DP5 before the fix.**
+##        ▶ Fix shape (not built): the per-matrix cap must not subtract the whole member debt in each matrix — e.g. the
+##          router nets the debt ONCE across the tier walk (repay first, then draw), or claimableOf takes debt only
+##          against what the other matrices cannot cover. RECOMMENDATION given to owner: fold into V8.55 before its deploy
+##          (V8.55 not live, so no extra redeploy). Owner's call.
+##
+##      ▶▶ **NEXT, IN ORDER (session 92):**
+##        (1) bug check.
+##        (2) DP5 (hybridUpgrade under the same case), then build the fix test-first on V8_56_DebtPerMatrix; decide with
+##            owner whether it rides V8.55.
+##        (3) Re-run the live withdraw sweep at CONC=1 (384 of 1001 unreadable) — still owed.
+##        (4) Confirm B finished the 21; watch C start finding candidates (not same-session).
+##        (5) V8.55 deploy — owner's call. (6) sf_floor_watchdog chain-scope + WARN tier.
+##        Parked this session: replacement-fee-too-low cause · dupNext label (non-pool) · pair_saturation selftest.
+##
 ## 62.67 ▶ **2026-09-18 (session 90): THE EVICTED-MEMBER WITHDRAW QUESTION — PREDICTION FROM SOURCE, WRITTEN BEFORE THE CALL.**
 ##
 ##      ▶ SESSION-START BUG CHECK: **0 open** (origin/data head 2833045, 2026-09-16 — nothing new since).
