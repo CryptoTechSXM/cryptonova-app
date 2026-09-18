@@ -51,10 +51,13 @@ async function main() {
   console.log(`Setting → ${NEW_CAP} ...`);
   const tx = await MK.setMaxItemsPerUpkeep(NEW_CAP);
   console.log('TX:', tx.hash);
-  await tx.wait();
-  console.log('Confirmed.');
+  const rc = await tx.wait();
+  console.log(`Confirmed. block ${rc.blockNumber} status ${rc.status}`);
 
-  const after = await MK.maxItemsPerUpkeep();
+  // ⛔ MEASURED 2026-09-18 (session 92): the plain read-back returned the OLD value (1) right after a
+  // mined status-1 tx; diag_keeper_queue read 5 minutes later. A stale node, not a failed write — and
+  // the old "Value did not update!" throw invited sending the tx AGAIN. Read AT the receipt's block.
+  const after = await MK.maxItemsPerUpkeep({ blockTag: rc.blockNumber });
   console.log('New maxItemsPerUpkeep   :', after.toString());
 
   if (Number(after) !== NEW_CAP) throw new Error('Value did not update!');
