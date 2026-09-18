@@ -2397,6 +2397,16 @@ owner-set, and the session that earned it got five things wrong by ignoring what
 ##        on T1.2 ("pair 0 rotated 1 time, this pair received nothing"). T1.2 is NOT stalled — the one available rescue took
 ##        a pair-0 seat the force-rotate had just opened, so nothing COULD overflow. **Pair-0 rotation is not proof an entry
 ##        was available to a later pair.** First sighting; the rule is not changed on one. Next T1.2 turn clears it.
+##      ✅ **STEP 12→13 IN THE WINDOW (02:24:11Z, block 46964983, 1.89M, rescue $4.28, lifetime $125.73): T1.2 MatA rot 13,
+##        MatB 13/15**, parked 0, T1.1 57/42 unchanged. Laws 15+42=57, 13+0=13. **frozen_matrix_check PASS — the C2 SUSPECTED
+##        flag cleared on the next turn, as predicted.** Fund $180.16. The session-88 window recipe (MatB just rotated so
+##        no force-rotate is due, one parked member past grace, one tick) worked first time.
+##      ✅✅ **WHERE A NEW PAIR IS SPAWNED — READ FROM SOURCE BEFORE THE EDGE:** `_tryAdvancePair()` (the 90%-MatB / full
+##        trigger, :1042) is called ONLY from the four REGISTRATION entry points — `registerForMatB` :578, `register` :657,
+##        `registerDirectFor` :686, `registerFor` :734 — and it runs at the START of each, BEFORE routing. **`rescueReentry`
+##        (:441) never calls it.** ▶ PREDICTION (from code, UNVERIFIED until the run): a rescue that takes T1.2 MatB to 14/15
+##        does NOT create T1.3; **the NEXT REGISTRATION does**, as its first act, then routes itself to pair 0 by the one door.
+##        So the edge splits cleanly into (a) rescue → MatB 14/15, no T1.3; (b) one registration → T1.3 appears.
 ##      ▶▶ **NEXT, IN ORDER (session 90 or later this session):**
 ##        (1) bug check. (2) ~~Decode the fund inflow~~ DONE this session — reconciled (above).
 ##        (3) The CAPTURE SCENARIO (62.63 item 3) — its precondition, later pairs full-and-waiting AND proven turning, now
