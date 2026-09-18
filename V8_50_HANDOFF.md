@@ -2310,6 +2310,54 @@ owner-set, and the session that earned it got five things wrong by ignoring what
 ##      `cryptonova-sf-solvency` rather than growing it further. **This handoff needs the same treatment —
 ##      split or condense it, and a few large edits beat many small trims.**
 
+## 62.66 ✅✅ **2026-09-18 (session 89): T1.2 TURNED A SECOND TIME — THE WITHHELD C2 IS NOW AN AFFIRMATION.**
+##
+##      ▶ SESSION-START BUG CHECK: **0 open** (origin/data). All three repos level with origin at start.
+##      ⚠ **POWERSHELL QUOTING, MEASURED (first block failed, nothing ran): Windows PowerShell STRIPS inner
+##        double quotes from the argument it hands to ssh.exe** — `echo "--- VERDICT (fund + parked)"` arrived as a
+##        bare `(` and bash refused the line. ▶ **RULE FOR EVERY VPS BLOCK: outer PowerShell single quotes, NO double
+##        quotes inside, bash single quotes written as `''`.** Parse-check the bash text with `bash -n` before handing it
+##        over. Use `sed -uE` (unbuffered) or a wait loop's progress lines arrive all at once.
+##      ✅ **pair_saturation fed the sandbox's own RPC inline** (`R=$(grep -E ^BASE_SEPOLIA_RPC_URL= .env | cut -d= -f2- |
+##        tr -d '\r')`, never printed, never shell-sourcing .env): every read this session landed within 1-2 blocks of the
+##        verdict's head on QuickNode. The 62.65 mixed-height defect did NOT recur off the public RPC. The tool fix
+##        (pin one blockTag) is still owed; this is a workaround, not the fix.
+##
+##      ✅ BASELINE 01:2xZ, block 46963163: fund **$174.58** (floor $0) · parked 0 · T1.1 A 15/15 rot 40 · B 15/15 rot 25 ·
+##        T1.2 A 15/15 rot 1 · B 1/15. Laws 15+25=40, 1+0=1. Identical to 62.65's close.
+##      ✅ **REGISTER ONE, 01:24:51Z** (`FORCE_RUN=1 ONLY=A MAX_REG=1 POOL_OFFSET=700000 POOL_SIZE=60`, 4.3 s, pool **47/60**):
+##        predicted outcome (a) written first — and measured: T1.1 A rot 41 · B rot 26, 15/15 · **parked 1** (`0x0bc8bf…7B40`,
+##        held $5.72, short $4.28, FUNDING) · T1.2 unchanged. Law 15+26=41. Fund **$175.18 (+$0.60 on a registration — UNMEASURED)**.
+##      ✅✅ **ONE TICK after grace, 01:30:28Z, block 46963371, 1,833,993 gas, ParkedRescued 1, $4.28, lifetime $78.65:**
+##        **T1.2 MatA 15/15 rot 1 → 2 · T1.2 MatB 1 → 2/15** · parked 0 · T1.1 unchanged at 41/26.
+##        **LAWS: pair 1 15+26=41 · pair 2 2+0=2. Exact.** Predicted outcome (A) of three written down first.
+##      ✅✅ **frozen_matrix_check 01:30:3xZ: "PASS -- no frozen matrix, no starved MatB, no stalled later pair" — and NO
+##        WITHHELD line this time.** Read from source (gradeStall, :157-215) why this is the affirmation 62.65 lacked:
+##        the state file held 62.65's last reading (pair 0 rot 40, T1.2 rot 1); this reading had pair 0 at 41 (the tier
+##        WAS active — the activity control) AND T1.2 at 2, so C2 returns "turning", not "withheld". ▶ **ONE reading
+##        spanning an active interval is the test; a second reading 45 s later can only say WITHHELD again** (pair 0 still)
+##        — 62.64's "two readings" wording asked for the wrong thing. **62.64's PASS is now met WITHOUT the caveat:
+##        T1.2 has turned twice and the checker graded it against a live control.**
+##
+##      ⛔ **FUND MOVES NOBODY HAS BOOKED — THIRD SIGHTING, NOW A PATTERN, STILL UNMEASURED:** 62.65 +$0.90 · this session
+##        +$0.60 on one registration · and the rescue lent $4.28 yet the fund fell only **$1.08** ($175.18 → $174.10), so
+##        **+$3.20 came in during the rescue tx.** Candidates (UNVERIFIED): the $0.30-per-entry SF share of the $10 split
+##        (62.65 decode) times the entries a cascade makes; debt repayment at cycle-out. ▶ **Settle it by decoding, not
+##        guessing: `diag_block_events.js` over 46963204..46963371 lists every SF event with its amount.** This lands on the
+##        G2/solvency gate if left as a feeling.
+##      ⚠ **CHECKER WEAK SPOT, FROM READING THE CODE (NOT RUN — UNVERIFIED):** C2's activity control is "pair 0 rotated". A
+##        registration that rotates pair 0 and then PARKS the cycled-out member moves pair 0 without anything being able to
+##        reach pair 1. Had the checker run between the registration and the tick above, it would (by the code) have graded
+##        T1.2 "SUSPECTED" stalled. On a live chain where most rotations park, that is a false-alarm source. Park; do not
+##        change the rule until a reading shows it.
+##
+##      ▶▶ **NEXT, IN ORDER (session 90 or later this session):**
+##        (1) bug check. (2) Decode 46963204..46963371 with diag_block_events.js — the unbooked fund inflow (above).
+##        (3) The CAPTURE SCENARIO (62.63 item 3) — its precondition, later pairs full-and-waiting AND proven turning, now
+##            exists. Re-read what it requires before spending wallets. **13 primed wallets left (pool 47/60); next prime
+##            `HDR_OFFSET=700060`.** (4) V8.55 deploy decision — owner's. (5) sf_floor_watchdog chain-scope + WARN tier.
+##        Parked items from 62.65 unchanged.
+
 ## 62.65 ✅✅✅ **2026-09-17 (session 88): THE SF-FLOOR HEAD-OF-LINE BLOCK IS FIXED, TEST-FIRST. V8.55.**
 ##
 ##      ▶ SESSION-START BUG CHECK: **0 open** (origin/data `2833045`, 111 resolved). All three repos clean
