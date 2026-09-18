@@ -2558,6 +2558,24 @@ owner-set, and the session that earned it got five things wrong by ignoring what
 ##        by registering ONE wallet (which parks its cycle-out and leaves MatB full), waiting out
 ##        `parkedGracePeriod` — `sleep 260` inside the ssh block — then ONE tick.
 ##
+##      ✅✅✅ **62.64's PASS CONDITION IS MET. 2026-09-18 ~01:05Z, two `frozen_matrix_check` readings, 45 s apart,
+##        BOTH "PASS -- no frozen matrix, no starved MatB, no stalled later pair", 8 matrices read, 0 skipped.**
+##        Final state: **T1.1 MatA 15/15 rot 40 · T1.1 MatB 15/15 rot 25 · T1.2 MatA 15/15 rot 1 ·
+##        T1.2 MatB 1/15 rot 0 · T2.1 and T3.1 empty · parked 0.** C2 claimed on neither reading.
+##        ▶ The written condition was "T1.2 MatA 15/15 AND it rotates (C2 stays 0 over two readings) + law exact
+##        for BOTH pairs". All four hold: 15/15 · rot 0→1 measured · C2 never claimed · 15+25=40 and 1+0=1.
+##      ⚠⚠ **BUT READ WHAT READING 2 ACTUALLY SAID, BECAUSE IT IS NOT THE SAME AS "C2 = 0":**
+##        `T1.2 pair (C2 WITHHELD) -- not claimed as a stall`. **The checker DECLINED to evaluate, it did not
+##        evaluate to zero.** That is the session-84 delta rule working exactly as designed — an identical
+##        repeat reading may not be used to claim a stall — and it is the honest behaviour. But it means the
+##        second reading is a WITHHELD, not an affirmation.
+##        ▶▶ **SO THE RESIDUAL GAP, NAMED RATHER THAN PAPERED OVER: nothing entered T1.2 between the two
+##        readings, so T1.2 MatA was "full with rotations unchanged" both times. The pair is PROVEN TO HAVE
+##        TURNED ONCE; it is NOT proven to keep turning.** The stronger evidence is a SECOND rotation
+##        (T1.2 MatA rot 1 → 2, T1.2 MatB 1 → 2) driven by another arrival — one registration + one rescue in
+##        the winning window, i.e. the recipe above run again. **Cheap, and it converts a withheld into an
+##        affirmation. Do it first in session 89.**
+
 ##      ⚠⚠ **THE EDGE IS CLOSE — STEP THE LAST SEAT ALONE.** The V8.51 lesson (memory `cryptonova-stress-fill`)
 ##        is that a linear relation measured inside a range says nothing about its edge: the final seat there
 ##        produced a cascade of +3 MatA rotations, +2 MatB rotations and the first T1.2 seat. **Do not close
@@ -2570,12 +2588,14 @@ owner-set, and the session that earned it got five things wrong by ignoring what
 ##        When a handoff claims an md5, CHECK IT.**
 ##
 ##      ▶▶ **NEXT, IN ORDER (session 89):**
-##        (1) bug check. (2) The live-exposure block above. (3) **Resume 62.64 item 2** — the private V8.54 loop
-##            to put T1.2 into full-and-waiting: chunk 5 registrations → sandbox `direct_keeper` under
-##            `flock -w 480 /tmp/run_work_queue.lock` (DRAIN_MAX_TICKS 8) → `pair_saturation` +
-##            `frozen_matrix_check`; decode surprises with `diag_block_events.js`. **The private chain's floor is
-##            $0 and its SF was $202.04 before run 4 and NOT re-read — read it before the first run.**
-##            PASS = T1.2 MatA 15/15 AND it rotates (C2 zero over two readings) + law exact for BOTH pairs.
+##        (1) bug check. (2) **Turn T1.2 a SECOND time** to convert the WITHHELD C2 into an affirmation: one
+##            registration → wait `parkedGracePeriod` (`sleep 260`) → ONE tick, with T1.1 MatB full and nothing
+##            else queued. Expect T1.2 MatA rot 1→2, T1.2 MatB 1→2, then two `frozen_matrix_check` readings
+##            that are NOT identical to each other. **14 primed wallets left (pool 46/60); next prime
+##            `HDR_OFFSET=700060`. Read the fund first — do not carry ~$170 forward.**
+##        (3) **The capture scenario itself** — the thing the full-and-waiting pair was built FOR. 62.63 item 3
+##            says "the capture scenario needs later pairs full-and-waiting"; that precondition now EXISTS on
+##            the private chain for the first time. Re-read what the scenario requires before spending it.
 ##        (4) **The V8.55 contracts are NOT deployed anywhere.** They are source-only and green. Deciding whether
 ##            they ride the next redeploy is the owner's call, not a code question. ▶ Until they do, the live
 ##            chain's only protection against the head-of-line block is a human noticing, so (5) matters.
