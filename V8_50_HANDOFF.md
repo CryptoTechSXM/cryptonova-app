@@ -2339,12 +2339,22 @@ owner-set, and the session that earned it got five things wrong by ignoring what
 ##        — 62.64's "two readings" wording asked for the wrong thing. **62.64's PASS is now met WITHOUT the caveat:
 ##        T1.2 has turned twice and the checker graded it against a live control.**
 ##
-##      ⛔ **FUND MOVES NOBODY HAS BOOKED — THIRD SIGHTING, NOW A PATTERN, STILL UNMEASURED:** 62.65 +$0.90 · this session
-##        +$0.60 on one registration · and the rescue lent $4.28 yet the fund fell only **$1.08** ($175.18 → $174.10), so
-##        **+$3.20 came in during the rescue tx.** Candidates (UNVERIFIED): the $0.30-per-entry SF share of the $10 split
-##        (62.65 decode) times the entries a cascade makes; debt repayment at cycle-out. ▶ **Settle it by decoding, not
-##        guessing: `diag_block_events.js` over 46963204..46963371 lists every SF event with its amount.** This lands on the
-##        G2/solvency gate if left as a feeling.
+##      ✅✅ **FUND "UNBOOKED INFLOW" — DECODED, AND IT WAS CLAUDE'S ARITHMETIC, NOT THE FUND.** Written above this line
+##        first as "a pattern, still unmeasured"; one decode settled it (`diag_block_events.js` FROM=TO=46963371, 73 logs).
+##        SF flows in the rescue tx: **−$4.28** loan (#162) · **+$0.27** (#171) and **+$2.32** (#205) = `MemberDebtRepaid` by
+##        `0x0924F5…9781`, an EARLIER-rescued member who cycled out of T1.2 MatA in this same tx (its debt $6.51 → $3.92 →
+##        **$1.60 still owed**) · **+$0.30 ×2** (#191, #221) = the SF share of the two $10 entry splits (T1.2 MatB entry
+##        and the rescued member's T1.2 MatA entry). **Net −$1.086219 against a measured −$1.08. Reconciles to the cent.**
+##        ▶ So the "+$3.20" is debt REPAYMENT ($2.59) plus entry shares ($0.60) — booked, evented, correct. The +$0.60 on
+##        the registration is the same 2 × $0.30 shape and the +$0.90 in 62.65 is 3 × $0.30 — **both UNVERIFIED (not
+##        decoded), but no longer a mystery worth a run.** ⛔ **LESSON: a balance delta compared against only the LOAN is
+##        not a reconciliation. Every SF movement is an event; decode before calling a gap.**
+##        ✅ Also read off this tx: **the second T1.2 turn IS this tx** — `0x0924F5` cycled out (PoolDistributed cycleNumber
+##        2), crossed into T1.2 MatB at bfsPosition 2, `UpgradeEligibleAtCross` T1→T2; the rescued member entered T1.2
+##        MatA at bfsPosition 15. Debt repaid TWICE by one member in one tx (#172, #206) — two repayment hooks on one
+##        cycle-out. Correct by the totals; the double hook is a thing to know, not a defect.
+##        ⚠ Known, unchanged: SF emits `FundDeposit` for its own payout (#163, TRAP 1 in sf_trajectory); decoder prints
+##        CNOVA with a `$` (parked).
 ##      ⚠ **CHECKER WEAK SPOT, FROM READING THE CODE (NOT RUN — UNVERIFIED):** C2's activity control is "pair 0 rotated". A
 ##        registration that rotates pair 0 and then PARKS the cycled-out member moves pair 0 without anything being able to
 ##        reach pair 1. Had the checker run between the registration and the tick above, it would (by the code) have graded
@@ -2352,9 +2362,14 @@ owner-set, and the session that earned it got five things wrong by ignoring what
 ##        change the rule until a reading shows it.
 ##
 ##      ▶▶ **NEXT, IN ORDER (session 90 or later this session):**
-##        (1) bug check. (2) Decode 46963204..46963371 with diag_block_events.js — the unbooked fund inflow (above).
+##        (1) bug check. (2) ~~Decode the fund inflow~~ DONE this session — reconciled (above).
 ##        (3) The CAPTURE SCENARIO (62.63 item 3) — its precondition, later pairs full-and-waiting AND proven turning, now
-##            exists. Re-read what it requires before spending wallets. **13 primed wallets left (pool 47/60); next prime
+##            exists. **READ FROM SOURCE this session:** a new pair spawns when the NEWEST pair's MatB reaches 90%
+##            (`PairManagerV8.sol:1071`, factoryExpandThresholdBps 9000) or the newest pair is full. On size 15 that is
+##            **T1.2 MatB 14/15** (13/15 = 86.7% does not fire) — i.e. **12 more T1.2 turns** from 2/15. The test after
+##            T1.3 exists: does overflow still go to FULL-and-waiting T1.2 (V8.54 `_overflowTargetFor`, waited-longest
+##            FIRST) rather than to T1.3's empty MatA? PASS = T1.2 keeps rotating while T1.3 MatA has room. Step the
+##            13→14 spawn edge ALONE. Re-read before spending wallets. **13 primed wallets left (pool 47/60); next prime
 ##            `HDR_OFFSET=700060`.** (4) V8.55 deploy decision — owner's. (5) sf_floor_watchdog chain-scope + WARN tier.
 ##        Parked items from 62.65 unchanged.
 
