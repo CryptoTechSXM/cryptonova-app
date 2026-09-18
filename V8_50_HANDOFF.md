@@ -2460,17 +2460,49 @@ owner-set, and the session that earned it got five things wrong by ignoring what
 ##        ▶ So the eviction question is sharper: `evictParked` releases the MATRIX crossingReserve; **what happens to the
 ##        TierRouter reserve on eviction is not in that function at all.** Read before/after with a direct probe (rd_evict.js,
 ##        a scratch reader written into the sandbox, not a repo tool).
-##      ▶▶ **NEXT, IN ORDER (session 90 or later this session):**
-##        (1) bug check. (2) ~~Decode the fund inflow~~ DONE this session — reconciled (above).
-##        (3) The CAPTURE SCENARIO (62.63 item 3) — its precondition, later pairs full-and-waiting AND proven turning, now
-##            exists. **READ FROM SOURCE this session:** a new pair spawns when the NEWEST pair's MatB reaches 90%
-##            (`PairManagerV8.sol:1071`, factoryExpandThresholdBps 9000) or the newest pair is full. On size 15 that is
-##            **T1.2 MatB 14/15** (13/15 = 86.7% does not fire) — i.e. **12 more T1.2 turns** from 2/15. The test after
-##            T1.3 exists: does overflow still go to FULL-and-waiting T1.2 (V8.54 `_overflowTargetFor`, waited-longest
-##            FIRST) rather than to T1.3's empty MatA? PASS = T1.2 keeps rotating while T1.3 MatA has room. Step the
-##            13→14 spawn edge ALONE. Re-read before spending wallets. **13 primed wallets left (pool 47/60); next prime
-##            `HDR_OFFSET=700060`.** (4) V8.55 deploy decision — owner's. (5) sf_floor_watchdog chain-scope + WARN tier.
-##        Parked items from 62.65 unchanged.
+##      ⛔⛔ **EVICTION MEASURED ON ONE MEMBER — THE MONEY STAYS, BUT THE CONTRACT SAYS HE CAN WITHDRAW NONE OF IT.**
+##        `0x404aEDa38Ff55262424D2DFbddF106240B88035F`, T1.2 MatB, read by `rd_evict.js` (scratch reader in the sandbox, one
+##        pinned block per read):
+##          BEFORE block 46966917: withdrawableOf **$3.761848** · **freeWithdrawable $0.0** · crossingReserve $0 ·
+##                                 parkedAt 1789701304 · TierRouter reservedHeldFor **$3.761848** · SF debt $0
+##          AFTER  block 46966923: withdrawableOf **$3.761848** · **freeWithdrawable $0.0** · crossingReserve $0 ·
+##                                 **parkedAt 0 (EVICTED)** · reservedHeldFor **$3.761848** · SF debt $0
+##        ▶ Facts: (a) nothing moved — no reserve release (crossingReserve was already 0, matching the 4 evictions earlier);
+##        (b) the "held" figure IS the matrix withdrawable, reported through TierRouter as the automation reserve (equal to the
+##        micro-dollar); (c) **freeWithdrawable — the contract's own withdrawCore mirror — is $0 before AND after eviction.**
+##        ⚠ **NOT YET PROVEN: that withdraw() pays $0.** freeWithdrawable is a mirror, not the call. **Settle with an eth_call of
+##        withdraw() on T1.2 MatB FROM this address** (no key needed — a static call with `from`). If it reverts or pays $0,
+##        an evicted member's balance is locked as an automation reserve for a tier-up he can no longer reach, with no exit
+##        — a mainnet-blocking member-money defect candidate (live clock is 7 days, so it would bite a week after the park).
+##        Read the TierRouter reserve-hold path in MatrixLogicLib `_claimableAndHeld` (:692) BEFORE running it, and write the
+##        prediction down.
+##      ✅ The same drain: tick 1 block 46966918 (469,776 gas) · tick 2 block 46966921 (85,113). Which was the eviction and
+##        which the T1.1 MatB force-rotate is **not decoded** — the counts show both happened: T1.1 MatB rot 44→45, occ 15→14,
+##        new park `0x5A8B05…7455` (RESCUE $4.28). Laws: pair 1 14+45=59 · pair 2 14+1=15. direct_keeper printed BOTH
+##        "backlog cleared in 2 tick(s)" and "tick cap 3 reached" again (the parked double-line item).
+##
+##      ▶▶ **STATE AT SESSION 89 CLOSE (private V8.54, 03:29Z block ~46966924):** T1.1 MatA 15/15 rot 59 · MatB 14/15 rot 45,
+##        parked 1 (`0x5A8B05…7455`, RESCUE $4.28, eligible ~03:33Z) · T1.2 MatA 15/15 rot 15 · MatB 14/15 rot 1 ·
+##        **T1.3 MatA 0/15 · MatB 0/15** · fund $182.83, floor $0 · **pool cursor 64/80** (POOL_OFFSET=700000 POOL_SIZE=80;
+##        next prime HDR_OFFSET=700080) · lifetime rescued $134.29 · clocks parkedGrace 300 s / evictionGrace 0.
+##        Scratch file on the VPS: `/root/keeper_private_v854/rd_evict.js` (the reader above; not in any repo).
+##      ▶▶ **NEXT, IN ORDER (session 90):**
+##        (1) bug check.
+##        (2) **The eviction member-money question above** — read `_claimableAndHeld` (:692) and the TierRouter reserve path,
+##            write the prediction, then ONE eth_call of withdraw() from `0x404aEDa38Ff55262424D2DFbddF106240B88035F` on T1.2 MatB
+##            `0x1fFe08542163d7aE99c570B8B5db143DfA1446C0`. This outranks everything below: it is members' money.
+##        (3) **Fix `diag_withdraw.js` to enumerate pairs from PairManager**, selftest it, then re-read what the 09-05 withdraw
+##            sweeps can and cannot have seen on live V8.52 (memory cryptonova-withdrawal-audit).
+##        (4) V8.55 contracts still NOT deployed — owner's call. (5) sf_floor_watchdog chain-scope + WARN tier (offline-buildable).
+##        Capture test: **DONE, PASS** — nothing more is owed on it. Optional later: watch T1.3 take its first overflow only
+##        once T1.2 is full in BOTH halves (that is correct routing, not capture).
+##        Parked (all measured-once or undecoded): the 124,419-gas ZERO-LOG keeper tick (2 sightings) · why the frozen-MatB
+##        force-rotate fired 2 blocks after T1.2 MatB filled · PoolDistributed $27.00 with no credit event for its member ·
+##        frozen_matrix_check C2 activity-control false alarm (1 sighting) · the 4 evictions' refusal reasons (only 0x404aED's
+##        is measured: LADDER) · registration-phase fund inflow (+$16.20 over 10 regs, undecoded) · pair_saturation blockTag
+##        pin · direct_keeper double DRAIN line · decodes of the shared keeper EOA mix live V8.52 txs (read `to`) ·
+##        plus everything parked in 62.65. ⚠ Owner-side: PowerShell strips inner double quotes (see top of 62.66); Ctrl-C does
+##        not stop the VPS job.
 
 ## 62.65 ✅✅✅ **2026-09-17 (session 88): THE SF-FLOOR HEAD-OF-LINE BLOCK IS FIXED, TEST-FIRST. V8.55.**
 ##
