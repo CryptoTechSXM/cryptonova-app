@@ -2361,6 +2361,32 @@ owner-set, and the session that earned it got five things wrong by ignoring what
 ##        T1.2 "SUSPECTED" stalled. On a live chain where most rotations park, that is a false-alarm source. Park; do not
 ##        change the rule until a reading shows it.
 ##
+##      ✅ **BATCH 1 (5 regs, 01:49Z, pool 47→52):** 1 of 5 went FORWARD at registration (T1.2 rot 2→3), 4 parked,
+##        **all 4 rescues overflowed to T1.2** (rot 3→7, MatB 3→7). Laws 15+31=46, 7+0=7. Fund $174.10 → $168.79.
+##      ✅ **BATCH 2 = 10 regs, not 5 — OWNER CTRL-C'D THE FIRST RUN AND THE VPS KEPT GOING.** Screen showed 2 registered;
+##        chain shows T1.1 MatA 46→56, pool 52→62, FUNDING parks 18→28. ▶▶ **RULE: Ctrl-C in PowerShell kills the LOCAL
+##        ssh, not necessarily the remote job. After any interrupted block, MEASURE what completed before re-running.**
+##        Decode (keeper EOA, 46964200..46964410) shows **no keeper tx before 46964387**, so the interrupted run's drain
+##        did NOT execute — only its 5 registrations.
+##        Result: all 10 parked at registration (0 forward) · drain (tick cap 10): **5 rescues, all overflowed → T1.2 MatA
+##        rot 7→12, MatB 7→12/15** · laws 15+41=56, 12+0=12 · frozen check PASS · 1 still parked (`0x80f48e…2F7F`).
+##      ⛔⛔ **THE FOUR 95k-GAS TICKS WERE EVICTIONS.** Blocks 46964389/390/393/396: `MemberEvicted` + `ParkedMemberEvicted`,
+##        `totalWithdrawn=0`, T1.1 MatB members `0x986126…3002` (rescued in 62.65 run 6 — a REPEAT parker), `0xD93005…F60c`,
+##        `0x486BCf…dEf9`, `0xc64700…82D8`. Immediate because the private clocks set evictionGracePeriod = 0 (62.64).
+##        That is why parked went 10 → 1 with only 5 rescues. ⚠ **WHY they were refused (ratio / ladder / floor) is
+##        UNMEASURED** — the verdict was not run between registration and drain. Do not write "repeat parkers with debt
+##        get refused" down as the cause until a verdict read shows it.
+##        ⚠⚠ **MEMBER-MONEY QUESTION, OPEN:** `MatrixLogicLib.evictParked` (:1847) releases `crossingReserve` to
+##        withdrawable and emits `EvictionReserveReleased` when r > 0. **None of the four evictions emitted it** (2 logs
+##        each), so their crossingReserve was 0 — yet parked members show "held $5.72" in diag_parked_verdict. **Where that
+##        $5.72 sits after eviction, and whether the member can still withdraw it, is UNMEASURED.** On live the clock is
+##        7 days, so it matters for mainnet. Instrument: diag_withdraw.js on one evicted address.
+##      ✅ Block 46964408 in the same decode went to `0x6fEee4…DEE2` = the LIVE V8.52 MatrixKeeper (found in
+##        deployed_addresses_v8_52.json) — the live cron tick by the SHARED keeper EOA (62.64), not the sandbox.
+##        ▶ A SENDER-filtered decode of this EOA always mixes both chains; read the `to` address.
+##      ✅ Fund across the drain, from events: −$21.40 lent, +$16.65 debt repaid (9 repayments), +$3.00 entry shares
+##        = **−$1.75**. Registration phase then implies **+$16.20 over 10 regs (not decoded — the tx senders are pool
+##        wallets, not the keeper).** Measured $168.79 → $183.24.
 ##      ▶▶ **NEXT, IN ORDER (session 90 or later this session):**
 ##        (1) bug check. (2) ~~Decode the fund inflow~~ DONE this session — reconciled (above).
 ##        (3) The CAPTURE SCENARIO (62.63 item 3) — its precondition, later pairs full-and-waiting AND proven turning, now
