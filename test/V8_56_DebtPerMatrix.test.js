@@ -17,14 +17,21 @@
  *
  * PREDICTIONS, written before the first run (session 91, from source):
  *   DP1 each matrix's freeWithdrawable reads 0 although f1 + f2 - D > 0.       [view]
- *   DP2 bulkWithdraw(f1 + f2 - D) reverts TRState: every per-matrix cap is 0.   [money path]
+ *   DP2 bulkWithdraw(f1 + f2 - D) reverts TRState: every per-matrix cap is 0.   [money path] — HELD pre-fix
  *   DP3 the full sweep bulkWithdraw() — NOT PREDICTED; measured and printed.
  *   DP4 withdraw() on T1 MatA alone — NOT PREDICTED; measured and printed.
  *   DP5 (added after DP1-DP4 were read) hybridUpgrade with earnings in T1 MatA AND T1 MatB,
  *       debt bigger than each, smaller than both: draws $0 from earnings; the wallet pays the
  *       WHOLE T2 fee plus the WHOLE debt (_walletFold); both matrix balances are untouched.
- * DP3/DP4 assert nothing about the outcome yet; they record it. A later commit turns the
- * measured behaviour into assertions once it is read.
+ * DP3/DP4 record behaviour that was already correct / by design and still assert nothing.
+ *
+ * ▶ THE FIX (V8.56, TierRouterLib only — TierRouter byte-identical, 67 B headroom kept):
+ *   upgrade path  (drawFreeEarnings): repay min(balance, debt) from each matrix BEFORE its draw.
+ *   withdraw path (_drawMatrixToMember): a matrix whose balance <= debt goes through
+ *     withdrawCore's FULL path (repays debt, pays $0 — DP4) instead of being skipped.
+ *   PRE-FIX, MEASURED 2026-09-18 on HEAD 0de4f1d: DP2 reverted TRState; DP5 wallet paid
+ *   $15.767 with $0.95 + $8.292 left in T1. DP2/DP5 below now assert the FIXED behaviour;
+ *   run them against the pre-fix TierRouterLib and both fail (that is the regression proof).
  */
 const { ethers } = require("hardhat");
 const { expect } = require("chai");
@@ -57,10 +64,18 @@ describe("V8.56 measurement — member debt subtracted in EVERY matrix", functio
     expect(f1 + f2 - D).to.be.gt(0n);
   });
 
-  it("DP2: bulkWithdraw(true claimable) reverts TRState — the partial path can reach none of it", async () => {
+  it("DP2 (fixed): bulkWithdraw(true claimable) pays it, net of fee, and clears the debt", async () => {
     const { ctx, f1, f2, D } = await seedDebtBiggerThanEachMatrix();
-    await expect(ctx.tr.connect(ctx.W1)["bulkWithdraw(uint256)"](f1 + f2 - D, { gasLimit: 16_000_000 }))
-      .to.be.revertedWithCustomError(ctx.tr, "TRState");
+    const feeBps = await ctx.matA1.withdrawalFeeBps();
+    const want = f1 + f2 - D;
+    const before = await ctx.usdc.balanceOf(ctx.W1.address);
+    await ctx.tr.connect(ctx.W1)["bulkWithdraw(uint256)"](want, { gasLimit: 16_000_000 });
+    const got = (await ctx.usdc.balanceOf(ctx.W1.address)) - before;
+    console.log(`      DP2: wallet +${usd(got)} · debt left ${usd(await ctx.sf.memberDebtOf(ctx.W1.address))}`);
+    expect(got, "wallet gets the true claimable net of the 1.5% fee").to.equal(want - (want * feeBps) / 10_000n);
+    expect(await ctx.sf.memberDebtOf(ctx.W1.address), "debt fully repaid from earnings").to.equal(0n);
+    expect((await ctx.matA1.withdrawableOf(ctx.W1.address)) + (await ctx.matA2.withdrawableOf(ctx.W1.address)),
+      "nothing left behind").to.equal(0n);
   });
 
   it("DP3 (record only): full sweep bulkWithdraw() — what reaches the wallet, what debt is left", async () => {
@@ -88,7 +103,7 @@ describe("V8.56 measurement — member debt subtracted in EVERY matrix", functio
                 `(f1 ${usd(f1)}, debt was ${usd(D)})`);
   });
 
-  it("DP5: hybridUpgrade draws $0 from earnings in two T1 matrices; the wallet pays the whole fee AND the whole debt", async () => {
+  it("DP5 (fixed): hybridUpgrade nets the debt from BOTH T1 matrices once; the wallet pays only fee minus (earnings - debt)", async () => {
     const ctx = await deployTwoTiers();
     const { usdc, tr, matA1, matB1, sf, owner, W1, sigs } = ctx;
     await reg(ctx, W1, ethers.ZeroAddress);
@@ -109,7 +124,7 @@ describe("V8.56 measurement — member debt subtracted in EVERY matrix", functio
     await sf.connect(owner).increaseMemberDebt(W1.address, 0, D);
     console.log(`      T1 MatA ${usd(a)} · T1 MatB ${usd(b)} · debt ${usd(D)} · earnings net of debt ${usd(a + b - D)} · T2 fee ${usd(FEE2)}`);
 
-    await usdc.mint(W1.address, FEE2 + D);
+    await usdc.mint(W1.address, FEE2 + D);                          // enough for the pre-fix path too
     await usdc.connect(W1).approve(await tr.getAddress(), FEE2 + D);
     const before = await usdc.balanceOf(W1.address);
     await tr.connect(W1).hybridUpgrade(1, { gasLimit: 16_000_000 });
@@ -118,9 +133,10 @@ describe("V8.56 measurement — member debt subtracted in EVERY matrix", functio
     console.log(`      MEASURED DP5: wallet paid ${usd(spent)} · MatA left ${usd(a2)} · MatB left ${usd(b2)} · ` +
                 `debt left ${usd(await sf.memberDebtOf(W1.address))}`);
     expect(await tr.memberHighestTier(W1.address), "upgraded to T2").to.equal(2);
-    expect(spent, "wallet paid the whole fee AND the whole debt").to.equal(FEE2 + D);
-    expect(a2, "MatA untouched").to.equal(a);
-    expect(b2, "MatB untouched").to.equal(b);
-    expect(await sf.memberDebtOf(W1.address), "debt cleared from the wallet").to.equal(0n);
+    // PRE-FIX measured: spent $15.767 (= FEE2 + D), MatA $0.95 and MatB $8.292 untouched.
+    expect(spent, "wallet pays only what earnings net of debt cannot cover").to.equal(FEE2 - (a + b - D));
+    expect(a2, "MatA used").to.equal(0n);
+    expect(b2, "MatB used").to.equal(0n);
+    expect(await sf.memberDebtOf(W1.address), "debt cleared from EARNINGS").to.equal(0n);
   });
 });

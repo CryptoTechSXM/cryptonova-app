@@ -2360,9 +2360,31 @@ owner-set, and the session that earned it got five things wrong by ignoring what
 ##          against what the other matrices cannot cover. RECOMMENDATION given to owner: fold into V8.55 before its deploy
 ##          (V8.55 not live, so no extra redeploy). Owner's call.
 ##
+##      ✅✅ **THE FIX, BUILT TEST-FIRST — `contracts/TierRouterLib.sol` ONLY (+46 lines; TierRouter byte-identical
+##        24509 B, 67 B headroom untouched; TierRouterLib 4892 → 5831 B). Contract md5 145cef9d, test md5 fb8a3c3c.**
+##        · Upgrade path (`drawFreeEarnings`): `_repayDebtHere` repays min(balance, debt) from each matrix BEFORE its
+##          draw (deductForUpgrade → SF.receiveDebtRepayment; the SF call is NOT caught, so a failed repayment
+##          reverts rather than stranding member USDC in the router).
+##        · Withdraw path (`_drawMatrixToMember`): a matrix whose balance ≤ debt goes through withdrawCore's FULL path
+##          (routerWithdrawFor(member,0): repays debt, pays $0, as DP4 measured). ⛔ Deliberately NOT deductForUpgrade
+##          here: MatrixLogicLib :1911 UN-PARKS the member inside deductForUpgrade — an upgrade's side effect, never a
+##          withdrawal's.
+##        · ⚠ KNOWN LIMIT (from source, not measured): in the member's HIGHEST tier with automation ON, withdrawCore's
+##          full path reverts "fully reserved" when nothing is left after the repay → that matrix is skipped (soft),
+##          same as before the fix. Lower tiers are walked first, so it bites only when the debt sits against the
+##          highest tier alone.
+##        · RESULTS: DP2 now pays $0.327513 (= net of $0.3325) and clears the debt; DP5 wallet pays **$6.525** (was
+##          $15.767), both T1 matrices used, debt 0. **Regression proof: the fixed DP2/DP5 FAIL on the pre-fix library
+##          (9 passing / 2 failing) and pass on the fix.** FULL SUITE with the fix: **714 passing / 0 failing / 7
+##          pending** (suite_session91.txt; cloud rig, tarball of HEAD 0de4f1d + the edits, full recompile).
+##        · Views unchanged: `freeWithdrawable` still under-states multi-matrix debtors on the dashboard's first paint
+##          (DP1 still 0). Display only; MAX / withdrawCore are right. Separate item if wanted.
+##        · ▶ It is on `v8.1` alongside V8.55, so it RIDES V8.55 unless the owner says otherwise (revert = this commit).
+##
 ##      ▶▶ **NEXT, IN ORDER (session 92):**
 ##        (1) bug check.
-##        (2) Build the fix test-first on V8_56_DebtPerMatrix (DP1-DP5 measured); decide with owner whether it rides V8.55.
+##        (2) V8.56 debt-netting fix is BUILT (above). Owner: confirm it rides V8.55. Optional: DP6 for the highest-tier
+##            automation-on limit; dashboard view fix (display only).
 ##        (3) Re-run the live withdraw sweep at CONC=1 (384 of 1001 unreadable) — still owed.
 ##        (4) Confirm B finished the 21; watch C start finding candidates (not same-session).
 ##        (5) V8.55 deploy — owner's call. (6) sf_floor_watchdog chain-scope + WARN tier.

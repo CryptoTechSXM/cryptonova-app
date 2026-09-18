@@ -20,6 +20,7 @@ interface ILMat {
     function routerWithdrawFor(address member, uint256 amount) external;
     function withdrawableOf(address member) external view returns (uint256);
     function reservedHeldOf(address member) external view returns (uint256);
+    function stabilityFund() external view returns (address);
 }
 
 interface ILPairRoom {
@@ -27,6 +28,7 @@ interface ILPairRoom {
 }
 
 interface ILSF {
+    function usdc() external view returns (IERC20);
     function memberDebtOf(address member) external view returns (uint256);
     function receiveDebtRepayment(address member, uint256 amount) external;
 }
@@ -132,6 +134,7 @@ library TierRouterLib {
         external returns (uint256)
     {
         if (mat == address(0) || remaining == 0) return remaining;
+        _repayDebtHere(mat, member);
         uint256 avail;
         try ILMat(mat).freeWithdrawable(member) returns (uint256 a) { avail = a; } catch { return remaining; }
         if (avail == 0) return remaining;
@@ -213,10 +216,53 @@ library TierRouterLib {
         try ILMat(mat).routerWithdrawFor(member, 0) {} catch {}
     }
 
+    /// @dev V8.56 — DEBT NETTED ONCE ACROSS MATRICES (upgrade path). The member's SF debt is
+    ///      ONE member-level ledger, but every matrix's freeWithdrawable() subtracts ALL of it.
+    ///      When no single matrix covers the debt, every per-matrix cap reads 0 and the walk
+    ///      reaches none of the earnings — measured V8_56_DebtPerMatrix DP5: hybridUpgrade
+    ///      made the wallet pay the $7 fee + the whole $8.767 debt while $9.242 of T1 earnings
+    ///      sat untouched. Before each draw, repay min(balance, debt) from THIS matrix — the
+    ///      debt-first order withdrawCore uses (MatrixLogicLib :1375); the next matrix's view
+    ///      then sees the reduced debt. deductForUpgrade is the same call the draw itself makes
+    ///      (so its un-park side effect is not new on this path). Soft on reads/deduct, like the
+    ///      draw; once funds leave the matrix the SF call is NOT caught — a failed repayment
+    ///      must revert, never strand member USDC in the router.
+    function _repayDebtHere(address mat, address member) private {
+        (address sf, uint256 debt, uint256 bal) = _debtAndBal(mat, member);
+        uint256 r = bal < debt ? bal : debt;
+        if (r == 0) return;
+        try ILMat(mat).deductForUpgrade(member, 0, r) {} catch { return; }
+        IERC20 u = ILSF(sf).usdc();
+        SafeERC20.forceApprove(u, sf, r);
+        ILSF(sf).receiveDebtRepayment(member, r);
+    }
+
+    /// @dev (sf, member debt, member's pending-inclusive balance in `mat`); zeros on any failed read.
+    function _debtAndBal(address mat, address member) private view returns (address sf, uint256 debt, uint256 bal) {
+        try ILMat(mat).stabilityFund() returns (address a) { sf = a; } catch { return (address(0), 0, 0); }
+        if (sf == address(0)) return (address(0), 0, 0);
+        try ILSF(sf).memberDebtOf(member) returns (uint256 d) { debt = d; } catch { return (address(0), 0, 0); }
+        if (debt == 0) return (sf, 0, 0);
+        try ILMat(mat).withdrawableOf(member) returns (uint256 b) { bal = b; } catch { return (address(0), 0, 0); }
+    }
+
     function _drawMatrixToMember(address mat, address member, uint256 remaining)
         internal returns (uint256)
     {
         if (mat == address(0) || remaining == 0) return remaining;
+        // V8.56 — withdraw path: a matrix whose whole balance is <= the member's debt reads
+        // freeWithdrawable 0, so it was skipped and the debt was never netted (DP2). Send it
+        // through withdrawCore's own FULL path instead: that repays the debt first and pays
+        // the member nothing (measured DP4). NOT deductForUpgrade — that also un-parks the
+        // member (MatrixLogicLib :1911), which is an upgrade's side effect, never a withdrawal's.
+        // Soft: if withdrawCore refuses (e.g. an automation hold in the highest tier), skip.
+        {
+            (, uint256 debt, uint256 bal) = _debtAndBal(mat, member);
+            if (debt > 0 && bal > 0 && bal <= debt) {
+                try ILMat(mat).routerWithdrawFor(member, 0) {} catch {}
+                return remaining;
+            }
+        }
         uint256 avail;
         try ILMat(mat).freeWithdrawable(member) returns (uint256 a) { avail = a; } catch { return remaining; }
         if (avail == 0) return remaining;
