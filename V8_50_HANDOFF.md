@@ -2431,6 +2431,18 @@ owner-set, and the session that earned it got five things wrong by ignoring what
 ##        automation reserve 138 · missing revert data 3 · coalesce 1 — **0 of 437 funded members blocked in every matrix.**
 ##
 ##
+##      ✅✅ **FUNDING LIVE 14:55Z** (rr_keeper 29cee021 installed atomically, backup `rr_keeper.js.bak_pre_fundB_20260918` =
+##        9f7f1360; crontab 84 → 84 lines, exactly 1 changed, `ONLY=B RESCUE_FUND_USD=500`; backup
+##        `/root/crontab_pre_fundB_20260918.txt`). **First live tick #10894 (14:58Z): USDC funded 20 wallets $495.58 ·
+##        18 self-rescued · 2 failed · 190 left for later ticks · 96.5 s of 150 s** (was ~20 s).
+##        Failures: `0x40E29816` "execution reverted" = the wallet parked in TWO matrices, worked twice concurrently;
+##        `0xaEFdEE57` "replacement fee too low" = the wallet's own nonce race, same shape. Money not lost (stays in wallet).
+##      ✅ **TWO FIXES BUILT, NOT YET ON THE BOX (keepers `87e963c`, `76fae80`; rr_keeper md5 eecc2816):**
+##        (1) `state_merge.js` (md5 f4668ed1) + selftest 10/10 — saveState re-reads and writes ONLY what this run changed
+##            (snapshot at load), tmp + rename. Test 2 is the live race and fails under the old whole-object write.
+##            Now urgent: B's 96 s runs overlap C's end on most ticks.
+##        (2) job B works each wallet ONCE per tick; a second park waits for the next tick (`dupNext` counted in the log).
+##
 ## 62.66 ✅✅✅ **2026-09-18 (session 89): T1.2 TURNED TWICE (C2 AFFIRMED) · T1.3 SPAWNED · THE CAPTURE TEST PASSED ON-CHAIN.**
 ##
 ##      ▶ SESSION-START BUG CHECK: **0 open** (origin/data). All three repos level with origin at start.
