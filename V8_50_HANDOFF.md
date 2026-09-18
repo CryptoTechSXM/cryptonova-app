@@ -2338,6 +2338,25 @@ owner-set, and the session that earned it got five things wrong by ignoring what
 ##        above, eth_calls withdraw() and setMemberOptions from the member, prints REVERTED/ACCEPTED with the reason. Does
 ##        NOT prove the two-step sequence (separate eth_calls) — that part is printed as source-derived.
 ##
+##      ✅✅ **MEASURED 2026-09-18 14:07:56Z, block 46986094, QuickNode, sandbox /root/keeper_private_v854, script md5 e3e9e979.
+##        THE PREDICTION HELD ON BOTH CALLS.** `0x404aED…035F` on T1.2 MatB `0x1fFe08…46C0`:
+##          withdrawableOf $3.761848 · freeWithdrawable $0 · crossingReserve $0 · parkedAt 0 · isInMatrix false · SF debt $0
+##          highestTier 1 · reservedFor **$25.00** · reservedHeldFor $3.761848
+##          options: autoUpgradeDisabled false · autoReentryEnabled false · double false · **optionsSet false** (never chosen)
+##          CALL 1 withdraw() → **REVERTED `F8V8: balance fully reserved for automation`**
+##          CALL 2 setMemberOptions(true,false,false) → **ACCEPTED**
+##        ▶▶ **VERDICT: NOT a no-exit lock. The money is held by the DEFAULT auto-upgrade reserve ($25 = the T2 fee alone —
+##          re-entry is off, so it is the upgrade leg only), and the member holds the switch that releases it.** Eviction
+##          neither causes nor clears it. The two-step sequence is source-derived, not measured (separate eth_calls).
+##        ⛔ **NEW, MEASURED: `isParked` reads TRUE for an EVICTED member** (parkedAt 0, isInMatrix false). The view is
+##          `hasEverJoined && !isInMatrix` (FigureEightMatrixV8) — it never looks at parkedAt, so every evicted member
+##          reads "parked" forever. index.html carries `isParked` in its ABI (:2587); **where the page uses it is not yet
+##          read.** A page that says "parked, waiting for rescue" to an evicted member is a frontend-truth defect
+##          ([[cryptonova-frontend-truth]] class). Read before calling it one.
+##        ▶ **MEMBER-FACING QUESTION, STILL OPEN (frontend, not contract):** the dashboard prints "Reserve target $25 ·
+##          currently holding $3.76 …" (index.html :6863). Whether an EVICTED member is told that turning auto-upgrade off
+##          releases it is NOT yet read. For mainnet (7-day eviction clock) this is the message that matters.
+##
 ## 62.66 ✅✅✅ **2026-09-18 (session 89): T1.2 TURNED TWICE (C2 AFFIRMED) · T1.3 SPAWNED · THE CAPTURE TEST PASSED ON-CHAIN.**
 ##
 ##      ▶ SESSION-START BUG CHECK: **0 open** (origin/data). All three repos level with origin at start.
