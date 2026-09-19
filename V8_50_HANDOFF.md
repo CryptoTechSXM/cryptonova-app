@@ -2310,6 +2310,69 @@ owner-set, and the session that earned it got five things wrong by ignoring what
 ##      `cryptonova-sf-solvency` rather than growing it further. **This handoff needs the same treatment —
 ##      split or condense it, and a few large edits beat many small trims.**
 
+## 62.71 ▶ **2026-09-18 (session 93): OWNER SAID GO. COMMUNITY V8.56 DEPLOY — SCHEDULE, NOTICE POSTED, CUTOVER TOOL BUILT.**
+##
+##      ▶ SESSION-START BUG CHECK: **0 open** (origin/data `cd9e84e`, a pif commit; cloud-container clone).
+##      ▶ 62.70 NEXT (4) isParked() grep: CLOSED — see the note under 62.70.
+##
+##      ── OWNER DECISIONS (2026-09-18, all EDT = UTC-4) ─────────────────────────────
+##      • GO on the community deploy of the V8.54/55/56 bundle. Book name: **`deployed_addresses_v8_56.json`**.
+##      • **Sat 09-19 MORNING: deploy the contracts + push the frontend to ADMIN ONLY** so the owner tests all day.
+##        admin.* is UNGATED; preview/main keep serving V8.52 to members until midnight.
+##      • **Sat 09-19 MIDNIGHT: site goes dark** = push preview + main (the gate holds them).
+##      • **Sun 09-20 9:00 AM early/preview · 10:00 AM main.** (EARLY_MS 1789909200000 = 13:00Z, MAIN_MS 1789912800000 = 14:00Z.)
+##      • **Coupons/PIF are WIPED by the move** (new CouponRegistry). PIF_WAITLIST.md (data branch) had 14 entries,
+##        ALL already [GIFTED], 0 waiting → archive it at cutover (git mv, never delete). Unused coupons: the ISSUER can
+##        `cancelCoupon()` on the OLD registry (CouponRegistry.sol:148) and gets the USDC back; the dashboard exposes it
+##        (index.html:5504). The notice tells members to do that before midnight Saturday.
+##      • Community notice POSTED by the owner: `C:\CryptoNova-Testnet-App\community_post_2026-09-18_v856_deploy_notice.txt`.
+##
+##      ── ⛔ THE ORDER DIFFERS FROM GO_LIVE_RUNBOOK PHASE 0 — READ BEFORE THE MORNING ─────────────
+##      Members stay LIVE on V8.52 all Saturday, so this is a community deploy run in the PRIVATE-deploy shape:
+##      • Phase 0.2: **do NOT comment out the crontab.** Use **0.2-PRIVATE** (rr_keeper.OFF + system_keeper.OFF, grep -c
+##        KEEPER_PRIVATE_KEY = 1, WAIT 5 MIN), lift after the deploy. V8.52 members still need rescuing all day.
+##      • Phase 0.5: `.env` currently says **ADDRESSES_FILE=deployed_addresses_v8_50.json** (stale — measured tonight).
+##        Set it to `deployed_addresses_v8_56.json` for the deploy. ⚠ Use a FRESH PowerShell window: a leftover
+##        $env:MATRIX_SIZE=15 / $env:DEPLOY_TIERS / $env:ADDRESSES_FILE=..._private from the private runs would build a
+##        15-seat chain or overwrite a private book. `.env` measured tonight: USDC_ADDRESS = 0x2D8B…639a (same token as
+##        V8.52 ✅ the notice promises this), DEV/OPS/LIQUIDITY wallets = the V8.52 book's, MATRIX_SIZE/DEPLOY_TIERS
+##        UNSET → defaults 127 / all ten tiers ✅. PARKED_GRACE_SECS unset → 86,400 s (community) ✅.
+##      • Phase 1 as written (deploy → commit book → check_state → 1.3c set_upkeep_caller → postdeploy_check →
+##        1.4 integrity_check on the VPS with the NEW book named in the COMMAND, not in /root/keeper/.env — the VPS
+##        fleet stays on V8.52 until midnight).
+##      • Phase 3 on admin: `update_addrs_v8_56.py` (below) → audit_frontend_abi.js → commit the listed files → push admin.
+##      • Phase 5 (keepers → V8.56: VPS .env ADDRESSES_FILE, set_upkeep_caller already done in 1.3c) happens AT MIDNIGHT
+##        with the preview/main push — not before, or the V8.52 community loses its keepers for the day.
+##        ⚠ So during Saturday the new chain has NO keepers — the owner's admin tests of rescues will not auto-tick.
+##
+##      ── BUILT TONIGHT: `C:\CryptoNova-Testnet-App\update_addrs_v8_56.py` (UNCOMMITTED) ─────────────
+##      Derived from update_addrs_v8_52.py. OLD book = v8_52.json ONLY — measured: admin pages carry only V8.52 addresses
+##      (index 41, status 28, governance 8, pif 2, telegram-qa 4 hits; zero private-book hits). Guard refuses the V8.52
+##      router 0xBacE079a… and the private V8.56 router 0xEa2c3Fbe… by value; still requires 127 / 10 tiers + branch admin.
+##      Version labels are TARGETED strings (index.html has ~20 historical "V8.52:" code comments a blanket swap would
+##      rewrite). ✅ SIMULATED tonight in the device VM on copies of every page + a fake 127/10 book: 45 address changes,
+##      158 replacements over 12 files, gate read-back True/True/False/False, RESIDUE SWEEP clean (20 files).
+##      The 22 remaining "V8.52" in locales/en.json are "introduced in V8.52" history — correctly untouched.
+##
+##      ── SAT 09-19 MORNING, MEASURED ─────────────────────────────────────────────
+##      ✅ whoami 0xCd0Af6a4…5506 ✅ (58.48 ETH). check_deploy_rpc 20: 20/20 ×3 calls at 14:12Z AND 14:34Z
+##        (quaint-patient-haze). 0.2-PRIVATE pause at **14:15:58Z** (both .OFF, KEEPER key count 1). Deployer
+##        nonce 0x191e5 twice 30 s apart (14:35Z) = quiet. `.env` ADDRESSES_FILE v8_50 → **v8_56** (Claude edit, LF kept).
+##      ⛔ predeploy_check FIRST RUN: **5 FAILED / 171 passed — ALL FIVE WERE STALE CHECKS, NOT DEFECTS.**
+##        · velocityThreshold asserted 2; source is 1 by OWNER DECISION 62.45 (2026-09-11, commit 4bea49b).
+##        · four PairManagerV8 checks hard-coded the V8.52b ROOM-FIRST text; V8.54 (a0a7484) moved both stages
+##          into `_overflowTargetFor` with WAITED-LONGEST FIRST, proven on chain (62.66). The checks never followed.
+##        ✅ FIXED (predeploy_check.js): each now asserts the CURRENT law — `_overflowTargetFor` body order,
+##          rescueReentry asks it before `_forceExpand` + room RE-CHECK, graduationTargetFor returns it, threshold 1.
+##          NON-VACUITY: the order regex is FALSE on a room-first mutation and threshold regex FALSE on "= 2".
+##          VM run (plain node): **All 176 checks passed.** ⛔ LESSON: a behaviour change must update the
+##          predeploy law in the SAME commit — V8.54 and 62.45 each skipped it and it surfaced on deploy day.
+##        ⚠ PARKED (not touched on deploy day — no contract edits now): PairManagerV8 comments at ~:425 and
+##          ~:545 still say "SAME order as before; only the test subclass inverts them" — STALE, the production
+##          `_overflowTargetFor` IS the inverted order. Comment-only fix, next contracts commit.
+##      ▶ NEXT (Sat morning, one step at a time): whoami → check_deploy_rpc 20 (twice) → 0.2-PRIVATE pause → 0.4 nonce
+##        quiet → .env ADDRESSES_FILE=v8_56 → predeploy_check → deploy_v8.js → … as above.
+
 ## 62.70 ✅✅✅ **2026-09-18 (session 92, cont.): V8.55 PROVEN ON CHAIN — HELD, RELEASED AT THE BOUNDARY, PAID.**
 ##
 ##      ▶ SESSION-START BUG CHECK (re-done this session): **0 open** (origin/data `efe72c4`; two pif commits since
@@ -2385,6 +2448,12 @@ owner-set, and the session that earned it got five things wrong by ignoring what
 ##        Before it: GO_LIVE_RUNBOOK + community notice (members re-register; draft in the owner's voice per
 ##        community-comms). (3) Carried from 62.69(b): live withdraw sweep at CONC=1; confirm job B drained;
 ##        sf_floor_watchdog chain-scope + WARN tier; optional freeWithdrawable view fix. (4) The isParked() grep above.
+##        ✅ (4) CLOSED session 93, 2026-09-18: grep of Testnet-App + Keepers (excl. archive/node_modules). Frontend
+##          index.html:2587 / status.html:733 DECLARE isParked in the ABI but NEVER CALL it. Live keeper reader =
+##          system_keeper.js:699 only — used as a ghost filter on T1 MatA queue entries AFTER an isActiveInMatrix(MatB)
+##          skip; 'has left MatA' is exactly the right test there (rescued-into-MatA → false → skipped). No misuse.
+##          Other readers (manual_rescue, unwedge, withdraw_probe, diag_evicted_withdraw) are trimmed/diagnostic;
+##          seat_audit.js already documents the trap (:130, :179). Nothing to fix.
 
 ## 62.69 ▶ **2026-09-18 (session 92): PRIVATE V8.56 CHAIN DEPLOYED + SET UP — postdeploy_check ALL PASS.**
 ##

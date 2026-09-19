@@ -526,10 +526,13 @@ if (mkText) {
   } else {
     fail("velocityWindow declared default is not 14400. This is the deflation throttle's window - with velocityThreshold it sets how many entries per hour a tier must see before auto-upgrades are gated. Owner decision 2026-08-24: 14400 / 2 = 0.50 entries/hour, 6.0x looser than the 3600 / 3 it replaced.");
   }
-  if (/uint256\s+public\s+velocityThreshold\s*=\s*2\s*;/.test(mkText)) {
-    ok("velocityThreshold declared default is 2 (owner decision 36.7, 2026-08-24, applied on chain)");
+  // LAW RESTATED 2026-09-19 (session 93): the owner moved this 2 -> 1 on 2026-09-11 (handoff 62.45,
+  // commit 4bea49b): "b is good and can stay as default can be voted to change, so make option b
+  // permanent." This check still asserting 2 is what failed the V8.56 community predeploy.
+  if (/uint256\s+public\s+velocityThreshold\s*=\s*1\s*;/.test(mkText)) {
+    ok("velocityThreshold declared default is 1 (owner decision 62.45, 2026-09-11 — permanent source default, votable)");
   } else {
-    fail("velocityThreshold declared default is not 2. 36.7 chose 2 over the loosest value 1 deliberately: threshold 1 auto-promotes members INTO a thin high tier, where 36.5 measured the largest crossing shortfalls in the system (T3 $20.70, T4 $44.80), so an over-open gate is the MORE expensive error.");
+    fail("velocityThreshold declared default is not 1. Owner decision 62.45 (2026-09-11) made 1 the permanent SOURCE default (deploy_v8.js sets no velocity value, so source is what ships). The cost side of that trade (36.5: promotion into a thin high tier) is on record in set_velocity_gate.js. 36.7 chose 2 over the loosest value 1 deliberately: threshold 1 auto-promotes members INTO a thin high tier, where 36.5 measured the largest crossing shortfalls in the system (T3 $20.70, T4 $44.80), so an over-open gate is the MORE expensive error.");
   }
 
   // ── THE RECONCILIATION, and the check that matters most in this block ─────
@@ -1622,7 +1625,9 @@ sep("V8.51 item S — rescue overflow (UNFLAGGED: live the moment we deploy)");
   // Room is CHECKED, and if nothing has room the branch force-expands and asks
   // AGAIN before giving up. Without the re-ask, a full standby pair silently
   // sends the member back to the park they were being rescued from.
-  if (pmS && /_pairWithRoomFor\(member, fromPairIndex\)[\s\S]{0,400}?_forceExpand\(\);[\s\S]{0,200}?_pairWithRoomFor\(member, fromPairIndex\)/.test(pmS)) {
+  // V8.54 (2026-09-19 restated): the first two stages moved into _overflowTargetFor; the
+  // force-expand + room RE-CHECK stays at the call site and is what this asserts.
+  if (pmS && /_overflowTargetFor\(member, fromPairIndex\);[\s\S]{0,400}?_forceExpand\(\);[\s\S]{0,200}?_pairWithRoomFor\(member, fromPairIndex\)/.test(pmS)) {
     ok("PairManagerV8.sol: item S checks room, force-expands, then RE-CHECKS before falling through");
   } else {
     fail("PairManagerV8.sol: item S's force-expand-then-recheck sequence is broken — a saturated standby pair silently re-parks the member");
@@ -1670,14 +1675,19 @@ sep("V8.52b — ONE DOOR + the circulation enters the full pair that waited long
   }
 
   // Both overflow callers use it, and rescueReentry tries it BEFORE force-expanding.
-  const rr = pm52 && (pm52.match(/uint256 alt = _pairWithRoomFor\(member, fromPairIndex\);[\s\S]{0,600}?_forceExpand\(\);/) || [""])[0];
-  if (rr && /alt = _fullPairWaitingLongest\(member, fromPairIndex\);/.test(rr)) {
-    ok("PairManagerV8.sol: rescueReentry overflow tries _fullPairWaitingLongest BEFORE _forceExpand");
+  // V8.54 (restated 2026-09-19): both overflow stages live in _overflowTargetFor, and its law is
+  // WAITED-LONGEST FIRST, ROOM SECOND (handoff 62.54 measured room-first starving the older pair's
+  // MatB; proven on private V8.54, 62.66). rescueReentry must ask it BEFORE _forceExpand.
+  const otf = pm52 && (pm52.match(/function _overflowTargetFor\(address member, uint256 avoid\)[\s\S]*?\n    \}/) || [""])[0];
+  const otfOk = otf && /uint256 alt = _fullPairWaitingLongest\(member, avoid\);\s*if \(alt == type\(uint256\)\.max\) alt = _pairWithRoomFor\(member, avoid\);/.test(otf);
+  const rr = pm52 && (pm52.match(/uint256 alt = _overflowTargetFor\(member, fromPairIndex\);[\s\S]{0,300}?_forceExpand\(\);/) || [""])[0];
+  if (rr && otfOk) {
+    ok("PairManagerV8.sol: rescueReentry asks _overflowTargetFor (waited-longest FIRST, room SECOND — V8.54) BEFORE _forceExpand");
   } else {
     fail("PairManagerV8.sol: rescueReentry's overflow branch no longer enters the longest-waiting full pair before spawning — a full later pair fills by overflow and freezes again (R1)");
   }
-  if (pm52 && /if \(alt == type\(uint256\)\.max\) alt = _fullPairWaitingLongest\(member, fromPairIndex\);/.test(pm52)) {
-    ok("PairManagerV8.sol: graduationTargetFor falls back to _fullPairWaitingLongest");
+  if (pm52 && otfOk && /return _overflowTargetFor\(member, fromPairIndex\);/.test(pm52)) {
+    ok("PairManagerV8.sol: graduationTargetFor routes through _overflowTargetFor (V8.54 order)");
   } else {
     fail("PairManagerV8.sol: graduationTargetFor lost its _fullPairWaitingLongest fallback");
   }
@@ -1780,10 +1790,15 @@ sep("V8.51 item G — graduation (FLAGGED, ships FALSE)");
   // after it: "graduating into a second FULL pair moves the defect one pair along" was WRONG —
   // entering a full MatA whose MatB has room is what ROTATES it (R1, measured 2026-09-04). So
   // when no pair has room, the fallback is _fullPairWaitingLongest, and that is asserted too.
-  if (gtBody && /uint256 alt = _pairWithRoomFor\(member, fromPairIndex\);/.test(gtBody)) {
-    ok("PairManagerV8.sol: graduationTargetFor checks ROOM FIRST via _pairWithRoomFor (50.3 law, unchanged)");
+  // LAW RESTATED AGAIN, V8.54 (2026-09-19): room is still CHECKED (never inferred — 50.3), but it
+  // is now the SECOND stage: the full pair that waited longest takes the arrival first, because
+  // room-first let a brand-new pair capture the whole overflow stream (62.54, proven 62.66).
+  const otfG = pmG && (pmG.match(/function _overflowTargetFor\(address member, uint256 avoid\)[\s\S]*?\n    \}/) || [""])[0];
+  const otfGOk = otfG && /uint256 alt = _fullPairWaitingLongest\(member, avoid\);\s*if \(alt == type\(uint256\)\.max\) alt = _pairWithRoomFor\(member, avoid\);/.test(otfG);
+  if (gtBody && /return _overflowTargetFor\(member, fromPairIndex\);/.test(gtBody) && otfGOk) {
+    ok("PairManagerV8.sol: graduationTargetFor checks room via _pairWithRoomFor as stage 2 of _overflowTargetFor (V8.54 law)");
   } else {
-    fail("PairManagerV8.sol: graduationTargetFor no longer checks room first via _pairWithRoomFor — a member with a free seat waiting would be diverted (the more damaging error, 50.3)");
+    fail("PairManagerV8.sol: graduationTargetFor no longer reaches _overflowTargetFor's checked-room stage — room would be inferred or skipped (50.3)");
   }
 
   // The emit lives in the LINKED library, so an unlinked or stale TierRouterLib
